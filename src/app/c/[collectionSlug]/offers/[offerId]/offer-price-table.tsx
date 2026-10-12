@@ -2,7 +2,7 @@
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
-  describeCatalogueNote,
+  describeCatalogueSource,
   describeEstimateBasis,
   describeEstimateNote,
   formatPriceMargin,
@@ -49,9 +49,13 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
   const setCount = offer.setsTotals.setCount;
   switch (row.key) {
     case "minimum":
-      return `The lowest ${offer.platformName} is worth listing on, set on the platform`;
+      return row.amount === null
+        ? `${offer.platformName} has no minimum price set`
+        : `The lowest ${offer.platformName} is worth listing on, set on the platform`;
     case "catalogue": {
       const parts = ["Average catalogue value per set, in this offer's currency"];
+      const source = describeCatalogueSource(offer.catalogNames);
+      if (source) parts.push(source);
       if (offer.catalogUnpricedSets > 0) parts.push(`${sets(offer.catalogUnpricedSets)} unpriced`);
       if (offer.catalogFaultReducedCount > 0 && offer.catalogFullPrice) {
         parts.push(
@@ -88,13 +92,11 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
   }
 }
 
-/** The short note in brackets after a row's name (#1839): what the figure is, and nothing more. */
+/** The short note in brackets after a row's name (#1839): what the figure is, and nothing more. Since
+ *  #1843 only Estimated, Cost and the offer's own price carry one; the catalogue's book and Market's
+ *  reason for being empty are the tooltip's. */
 function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; warn: boolean } | null {
   switch (row.key) {
-    case "catalogue": {
-      const text = describeCatalogueNote(offer.catalogNames);
-      return text ? { text, warn: false } : null;
-    }
     case "estimated":
       return offer.suggestedEstimate
         ? {
@@ -103,12 +105,8 @@ function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; 
             warn: isStatedSource(offer.suggestedEstimate.source),
           }
         : null;
-    case "market":
-      return row.amount === null
-        ? { text: offer.marketUnconvertible ? "no exchange rate" : "no recorded results", warn: false }
-        : null;
     case "cost":
-      return offer.setsTotals.costEstimated ? { text: "estimate — purchase lot still open", warn: false } : null;
+      return offer.setsTotals.costEstimated ? { text: "estimate", warn: false } : null;
     case "own":
       return offer.priceBase ? { text: `≈ ${offer.priceBase} ${offer.baseCurrency}`, warn: false } : null;
     default:
@@ -129,10 +127,11 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
  * headed columns — the row's name with a short note in brackets, *Price*, *Profit over cost* — the
  * platform's minimum, the catalogue value, Estimated value (the suggestion), what the market paid,
  * what the copies cost, and the offer's own price last. Every figure is per set and in the offer's
- * currency. A figure that does not exist is left out (#1184), except Market, which says why it is
- * empty, and the offer's own price, which is where it is set.
+ * currency. A figure that does not exist is left out (#1184), except Minimum and Market, drawn `—`
+ * (#1843), and the offer's own price, which is where it is set.
  *
- * Every figure in the Price column but the cost and the offer's own price is a link: clicking it
+ * Every figure in the Price column but the offer's own price is a link — the cost too since #1843,
+ * except a cost of zero, which is no price: clicking it
  * writes the figure the seller **states** (`target`) — never an auction's current price, which would
  * be recording a bid nobody placed. A figure that already is that price is drawn plain, since
  * clicking it would change nothing; nothing is a link on an offer that is closed. The offer's own
@@ -190,7 +189,7 @@ export function OfferPriceTable({
         const own = row.key === "own";
         const rowNote = note(row, offer);
         const linked =
-          row.key !== "cost" && !own && row.amount !== null && editable && askingPrice !== row.amount;
+          !own && row.amount !== null && Number(row.amount) > 0 && editable && askingPrice !== row.amount;
         const sign = row.margin ? marginSign(row.margin) : 0;
         return (
           <div key={row.key} style={{ display: "contents" }}>

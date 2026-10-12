@@ -207,14 +207,15 @@ any of them is.
 
 An offer's price sits in a small table with the figures you weigh it against. It has three columns —
 the row's name, **Price** and **Profit over cost** — and every figure is **per set** (an offer's price
-is for the one set a buyer takes) and in the **offer's currency**. A short note in brackets after a
-row's name says what the figure is; hover the name for the rest.
+is for the one set a buyer takes) and in the **offer's currency**. Only two rows carry a short note
+in brackets after their name — Estimated and Cost; hover any name for the rest.
 
 - **Minimum** — the platform's [minimum price](contacts.md): the lowest figure that platform is worth
-  listing on once its fees are paid.
-- **Catalogue (Michel / Online, 100%)** — the copies' **catalogue value**, averaged over the sets that
-  have one, and the catalogue it was read in (*2 catalogues* when the copies come from several). Its
-  hover names any sets with no catalogue value.
+  listing on once its fees are paid. The row is **always there**: on a platform with no minimum set
+  it reads *—*.
+- **Catalogue** — the copies' **catalogue value**, averaged over the sets that have one. Its hover
+  names the catalogue it was read in (or lists them, when the copies come from several) and any sets
+  with no catalogue value.
 - **Estimated** `suggested` **(58% of catalogue)** — **Estimated value**: the catalogue value
   corrected by how far that catalogue runs above what stamps actually fetch — the realisation ratio
   learned from your recorded auction results, or the catalogue's own
@@ -225,9 +226,9 @@ row's name says what the figure is; hover the name for the rest.
   collection's fallback percentage, or how many buckets when your copies were estimated from several.
   The note turns to the warning colour when the share is one you stated rather than one learned.
 - **Market** — what recorded results paid for copies like these; its hover says how many copies they
-  cover. The row is **always there**: with nothing recorded it reads *—* **(no recorded results)**.
-- **Cost** — what the copies cost you, **(estimate — purchase lot still open)** while their purchase
-  lot is open.
+  cover. The row is **always there**: with nothing recorded it reads *—*, and its hover says there
+  are no recorded results (or that none can be converted into the offer's currency).
+- **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open.
 - **Your price** — the offer's own price, last, with the base-currency equivalent in brackets
   (*≈ 0.22 PLN*) when the offer's currency differs from your collection's. It reads as plain text;
   **click it** to type a new one. On an auction this row is the **Current price** — where the
@@ -235,14 +236,17 @@ row's name says what the figure is; hover the name for the rest.
 
 **Profit over cost** is one figure with its percentage — *−0.02 (−29%)* — green when it is a profit
 and in the warning colour when it is a loss. A figure that does not exist is left out rather than
-shown as 0.00 (Market excepted), and so is every profit when the cost is unknown.
+shown as 0.00 (Minimum and Market excepted), and so is every profit when the cost is unknown. Cost
+has no profit of its own — over itself it is always nothing.
 
-**Click a price to use it.** Minimum, Catalogue, Estimated and Market are drawn as links, and hovering
+**Click a price to use it.** Minimum, Catalogue, Estimated, Market and Cost are drawn as links, and
+hovering
 one says *Use as the offer's price*: clicking sets the asking price on a quick buy, and the
 **starting** price on an auction (*Use as the offer's starting price*), since that is the figure you
 state while the current price is wherever the bidding has got to (see
-[below](#auction-or-quick-buy)). A figure that already is your price is shown plain. The cost is not
-a link, and on a sold or withdrawn offer none of the figures are.
+[below](#auction-or-quick-buy)). Clicking Cost prices the set at exactly what it cost you. A figure
+that already is your price is shown plain, so is a cost of 0.00, and on a sold or withdrawn offer none
+of the figures are links.
 
 On an auction that has no starting price yet, and on a platform with a
 [default starting price](contacts.md), the platform's own opening figure sits under the price table as

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  describeCatalogueNote,
+  describeCatalogueSource,
   describeEstimateBasis,
   describeEstimateNote,
   describeEstimateSource,
@@ -13,8 +13,9 @@ import {
   type CopyEstimateInput,
 } from "../../src/lib/offer-price-table";
 
-// The offer's price table (#1829, made to read without its tooltips in #1839): Estimated value per
-// set, the source of its ratio, the notes, the margins, and which rows exist at all.
+// The offer's price table (#1829, made to read without its tooltips in #1839, its notes shrunk in
+// #1843): Estimated value per set, the source of its ratio, the notes, the margins, and which rows
+// exist at all.
 
 const copy = (over: Partial<CopyEstimateInput> = {}): CopyEstimateInput => ({
   catalogueBase: 100,
@@ -83,10 +84,13 @@ describe("the estimate's share of the catalogue and its books (#1839)", () => {
 });
 
 describe("the bracketed notes (#1839)", () => {
-  it("name the catalogue at full value, or count several", () => {
-    assert.equal(describeCatalogueNote(["Michel / Online"]), "Michel / Online, 100%");
-    assert.equal(describeCatalogueNote(["Fischer / 2024", "Michel / Online"]), "2 catalogues, 100%");
-    assert.equal(describeCatalogueNote([]), null);
+  it("leave the catalogue's book to the tooltip, which names it or counts and lists several (#1843)", () => {
+    assert.equal(describeCatalogueSource(["Michel / Online"]), "Read in Michel / Online");
+    assert.equal(
+      describeCatalogueSource(["Fischer / 2024", "Michel / Online"]),
+      "Read in 2 catalogues: Fischer / 2024, Michel / Online"
+    );
+    assert.equal(describeCatalogueSource([]), null);
   });
 
   it("give the estimate's ratio only", () => {
@@ -198,10 +202,10 @@ describe("the table's rows", () => {
     );
   });
 
-  it("leave out a figure that does not exist, and a price of zero (#1184), but always draw Market and the offer's own price", () => {
+  it("leave out a figure that does not exist, and a price of zero (#1184), but always draw Minimum, Market and the offer's own price", () => {
     const rows = offerPriceRows({
-      minimum: "0.00",
-      catalogue: null,
+      minimum: null,
+      catalogue: "0.00",
       estimated: "12.00",
       market: null,
       cost: null,
@@ -210,11 +214,17 @@ describe("the table's rows", () => {
     assert.deepEqual(
       rows.map((r) => [r.key, r.amount]),
       [
+        ["minimum", null],
         ["estimated", "12.00"],
         ["market", null],
         ["own", null],
       ]
     );
+  });
+
+  it("draw a platform minimum of zero as no minimum (#1843)", () => {
+    const rows = offerPriceRows({ minimum: "0.00", catalogue: null, estimated: null, market: null, cost: "5.00", own: null });
+    assert.deepEqual(rows[0], { key: "minimum", amount: null, margin: null });
   });
 
   it("leave out every margin when the cost is unknown", () => {
@@ -241,6 +251,7 @@ describe("the table's rows", () => {
     assert.deepEqual(
       rows.map((r) => [r.key, r.margin]),
       [
+        ["minimum", null],
         ["catalogue", { amount: "40.00", percent: null }],
         ["market", null],
         ["cost", null],

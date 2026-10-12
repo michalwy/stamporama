@@ -24,6 +24,11 @@
 // more, a Market row that is always there (empty, with its reason, when nothing was recorded), and
 // the offer's own price as the last row. What a figure rests on beyond that note — the ratio's
 // bucket and sample, the sets a figure leaves out — is the tooltip's.
+//
+// **#1843 shrank the notes further**: only Estimated (its share of the catalogue) and Cost (*estimate*,
+// while it is one) keep one. The catalogue a value was read in and Market's *no recorded results*
+// moved to their rows' tooltips. Minimum joined the rows that are always drawn — `—` on a platform
+// that sets none — and Cost became a price that can be clicked like the others.
 
 import { isStatedRatio, type RatioBucketLevel } from "./realization-ratio";
 
@@ -185,13 +190,12 @@ export function marginSign(margin: PriceMargin): -1 | 0 | 1 {
   return value < 0 ? -1 : value > 0 ? 1 : 0;
 }
 
-/** The Catalogue row's note (#1839): the book the value was read in, and that it is the catalogue at
- *  full value — the figure the Estimated row's share is a share of. Several books are counted rather
- *  than one named, the rule the estimate's buckets follow; null when none can be named. */
-export function describeCatalogueNote(catalogues: readonly string[]): string | null {
+/** The book the catalogue value was read in, for the Catalogue row's tooltip — a bracketed note on the
+ *  row until #1843. Several books are counted and then listed; null when none can be named. */
+export function describeCatalogueSource(catalogues: readonly string[]): string | null {
   if (catalogues.length === 0) return null;
-  const book = catalogues.length === 1 ? catalogues[0] : `${catalogues.length} catalogues`;
-  return `${book}, 100%`;
+  if (catalogues.length === 1) return `Read in ${catalogues[0]}`;
+  return `Read in ${catalogues.length} catalogues: ${catalogues.join(", ")}`;
 }
 
 /** The Estimated row's note (#1839): the ratio and nothing more — `58% of catalogue`. */
@@ -204,8 +208,9 @@ export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" 
 
 export interface OfferPriceRow {
   key: OfferPriceRowKey;
-  /** 2-dp string in the offer's currency; null only on the two rows that are always drawn — Market
-   *  with nothing recorded, and the offer's own price while it has none. */
+  /** 2-dp string in the offer's currency; null only on the rows that are always drawn — Minimum on a
+   *  platform that sets none, Market with nothing recorded, and the offer's own price while it has
+   *  none. */
   amount: string | null;
   /** Over the cost row; null on the cost row itself and wherever the cost is unknown. */
   margin: PriceMargin | null;
@@ -225,14 +230,15 @@ export interface OfferPriceFigures {
 
 const ROW_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
 
-/** The rows drawn whether or not they have a figure (#1839): Market, whose absence is itself worth
- *  saying, and the offer's own price, which is where it is set. */
-const ALWAYS_DRAWN: ReadonlySet<OfferPriceRowKey> = new Set(["market", "own"]);
+/** The rows drawn whether or not they have a figure: Minimum (#1843) and Market (#1839), whose absence
+ *  is itself worth saying, and the offer's own price, which is where it is set. */
+const ALWAYS_DRAWN: ReadonlySet<OfferPriceRowKey> = new Set(["minimum", "market", "own"]);
 
 /**
  * The table's rows, in the order the collector named them, the offer's own price last. A figure that
  * does not exist is left out, never drawn as `0.00` (#1184) — and a price of zero is no price, so the
- * prices drop out at zero too — except Market and the offer's own price, which are drawn empty.
+ * prices drop out at zero too — except Minimum, Market and the offer's own price, which are drawn
+ * empty.
  * **A cost of zero is kept**: copies that cost nothing are a known cost, and every margin then reads
  * as the whole price.
  */
