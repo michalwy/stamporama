@@ -68,7 +68,8 @@ own and an offer per lot already carries its sale, withdrawal, *Pending* and fro
   names none). A lot photographing fronts only has no backs half and no separator.
 - **Templates**: a *caption* template per listing type and a *post text* template for the captioned
   post's shared body, all followed settings. A caption takes its type's placeholders bar `{terms}`;
-  the post text takes `{offer}` — the lots' offer numbers — and `{terms}`. An offer's own template
+  the post text takes `{offer}` — the lots' offer numbers — and `{terms}`. Both take `{post}`, the
+  post's number (#1854), which no single post's template offers. An offer's own template
   (§6, #1780) writes its caption.
 - **The kit** shows the post text with its copy button, then the photos in post order, each with its
   caption and its own copy button; the download gives one photo per lot, named in that order (#1754).

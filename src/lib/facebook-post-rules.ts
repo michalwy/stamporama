@@ -188,8 +188,9 @@ function knownTokens(listingType: OfferListingType, role: FacebookTemplateRole =
 }
 
 /** What each placeholder becomes for this lot. `{terms}` is `terms`, empty unless this lot is where
- *  the post states the note (#1689). */
-function placeholderValues(lot: FacebookPostLotText, terms: string): Record<string, string> {
+ *  the post states the note (#1689); `{post}` is the post's number (#1854), which only a caption
+ *  knows of — empty where there is none. */
+function placeholderValues(lot: FacebookPostLotText, terms: string, postNo: number | null = null): Record<string, string> {
   return {
     "{title}": lot.title,
     "{description}": lot.description,
@@ -201,6 +202,7 @@ function placeholderValues(lot: FacebookPostLotText, terms: string): Record<stri
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
     "{offer}": String(lot.offerNo),
     "{terms}": terms.trim(),
+    "{post}": postNo == null ? "" : String(postNo),
   };
 }
 
@@ -227,15 +229,17 @@ function partsText(parts: readonly FacebookPostPart[]): string {
  * while it is typed (`unknownPostPlaceholders`) — so an auction's `{closesAt}` left in a quick buy's
  * template is seen, not quietly emptied. A retired placeholder is still filled in (#1671), so no post
  * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
- * (#1689) — `terms`, empty unless this lot is where the post states it.
+ * (#1689) — `terms`, empty unless this lot is where the post states it. `postNo` is what a caption's
+ * `{post}` becomes (#1854); a post template does not know the token, so it stays as typed there.
  */
 export function renderFacebookLotParts(
   template: string,
   lot: FacebookPostLotText,
   terms = "",
-  role: "post" | "caption" = "post"
+  role: "post" | "caption" = "post",
+  postNo: number | null = null
 ): FacebookPostPart[] {
-  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms));
+  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms, postNo));
 }
 
 /** A template with the known tokens replaced by their values, everything else kept as typed. */
@@ -416,28 +420,38 @@ export interface FacebookCaptionedPost {
  * A post of several lots laid out with **each lot's text in its photo's caption** (#1841). Each lot's
  * caption is its type's caption template — or its offer's own (#1780) — filled in as a lot's text is,
  * without `{terms}`: the note goes in the post's shared text, which carries `{offer}` (the lots' offer
- * numbers, bare, in lot order) and `{terms}`. Nothing is added or fallen back to (#1692): an empty
- * template is an empty caption or an empty post.
+ * numbers, bare, in lot order) and `{terms}`. Both carry `{post}`, the post's number `postNo` (#1854).
+ * Nothing is added or fallen back to (#1692): an empty template is an empty caption or an empty post.
  */
 export function renderFacebookCaptionedPost(
   captions: FacebookCaptionTemplates,
   standingNote: string,
-  lots: readonly FacebookPostLotText[]
+  lots: readonly FacebookPostLotText[],
+  postNo: number | null
 ): FacebookCaptionedPost {
   const sorted = inLotOrder(lots);
   return {
-    post: fillTemplate(captions.post, knownTokens("auction", "captionPost"), captionPostValues(sorted, standingNote)),
+    post: fillTemplate(
+      captions.post,
+      knownTokens("auction", "captionPost"),
+      captionPostValues(sorted, standingNote, postNo)
+    ),
     captions: sorted.map((lot) => ({
       lotNo: lot.lotNo,
       offerNo: lot.offerNo,
-      parts: renderFacebookLotParts(facebookCaptionLotTemplate(captions, lot), lot, "", "caption"),
+      parts: renderFacebookLotParts(facebookCaptionLotTemplate(captions, lot), lot, "", "caption", postNo),
     })),
   };
 }
 
-function captionPostValues(sorted: readonly FacebookPostLotText[], standingNote: string): Record<string, string> {
+function captionPostValues(
+  sorted: readonly FacebookPostLotText[],
+  standingNote: string,
+  postNo: number | null
+): Record<string, string> {
   return {
     "{offer}": sorted.map((lot) => String(lot.offerNo)).join(", "),
+    "{post}": postNo == null ? "" : String(postNo),
     [FACEBOOK_TERMS_PLACEHOLDER.token]: standingNote.trim(),
   };
 }
@@ -453,7 +467,8 @@ export interface FacebookCaptionedPostGaps extends FacebookPostGaps {
 export function facebookCaptionedPostGaps(
   captions: FacebookCaptionTemplates,
   standingNote: string,
-  lots: readonly FacebookPostLotText[]
+  lots: readonly FacebookPostLotText[],
+  postNo: number | null
 ): FacebookCaptionedPostGaps {
   const sorted = inLotOrder(lots);
   const followsGroup = (lot: FacebookPostLotText) => lot.ownTemplate == null;
@@ -466,14 +481,14 @@ export function facebookCaptionedPostGaps(
     .filter((lot) => !followsGroup(lot) && !lot.ownTemplate!.trim())
     .map((lot) => lot.lotNo);
   const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
-  const postValues = captionPostValues(sorted, standingNote);
+  const postValues = captionPostValues(sorted, standingNote, postNo);
   const postKnown = knownTokens("auction", "captionPost");
   for (const token of new Set(captions.post.match(TOKEN) ?? [])) {
     if (postKnown.has(token) && postValues[token].trim() === "") emptyPlaceholders.push({ lotNo: null, token });
   }
   for (const lot of sorted) {
     const known = knownTokens(lot.listingType, "caption");
-    const values = placeholderValues(lot, "");
+    const values = placeholderValues(lot, "", postNo);
     for (const token of new Set(facebookCaptionLotTemplate(captions, lot).match(TOKEN) ?? [])) {
       if (!known.has(token)) continue;
       if (token === "{lot}" && lot.lotNo == null) continue;

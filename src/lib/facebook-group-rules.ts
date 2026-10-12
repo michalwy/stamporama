@@ -101,21 +101,37 @@ export function toFacebookMultiLotLayout(value: string | null | undefined): Face
 }
 
 /**
+ * The post's own number (#1854) — `1` for *Post #1* (#1842), bare as `{offer}` is, so the template
+ * writes any prefix. Offered only where a post always has one: a captioned post's text and its
+ * captions. An offer posted alone has no post number (ADR-0061 §2), so the post templates do not
+ * offer it, and nothing would stand in for it there (#1692).
+ */
+export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
+  token: "{post}",
+  label: "Post number",
+  example: "1",
+};
+
+/**
  * The placeholders a lot's **caption** may carry in a captioned post (#1841): its type's post
  * placeholders without `{terms}` — the note belongs to the post's shared text, stated once, not to
- * any one photo.
+ * any one photo — and with the post's number (#1854).
  */
 export function facebookCaptionPlaceholders(listingType: OfferListingType): readonly FacebookPostPlaceholder[] {
-  return facebookPostPlaceholders(listingType).filter((p) => p.token !== FACEBOOK_TERMS_PLACEHOLDER.token);
+  return [
+    ...facebookPostPlaceholders(listingType).filter((p) => p.token !== FACEBOOK_TERMS_PLACEHOLDER.token),
+    FACEBOOK_POST_NUMBER_PLACEHOLDER,
+  ];
 }
 
 /**
  * The placeholders the shared **post text** of a captioned post may carry (#1841): the lots' offer
- * numbers, bare and in lot order — the template writes any `#` — and the note on shipping, payment and
- * terms. Each lot's own figures are its caption's.
+ * numbers, bare and in lot order — the template writes any `#` — the post's own number (#1854), and
+ * the note on shipping, payment and terms. Each lot's own figures are its caption's.
  */
 export const FACEBOOK_CAPTION_POST_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
   { token: "{offer}", label: "Offer numbers", example: "412, 413, 414" },
+  FACEBOOK_POST_NUMBER_PLACEHOLDER,
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 

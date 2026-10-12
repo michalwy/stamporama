@@ -240,7 +240,12 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   caption template — with the type's placeholders bar `{terms}` (`facebookTemplatePlaceholders(role,
   type)`, the role `post | caption | captionPost` also driving `unknownPostPlaceholders` and the shared
   field's list; `{catalog}` is unknown outside a post template). `facebookCaptionedPostGaps` adds
-  `missingPostText` and names the shared text's empty placeholders with `lotNo: null`. **Freezing**:
+  `missingPostText` and names the shared text's empty placeholders with `lotNo: null`. **`{post}`**
+  (#1854, `FACEBOOK_POST_NUMBER_PLACEHOLDER`) is the post's `postNo`, bare, in the shared text and
+  every caption — an offer's own template included, since it writes the caption — and in **no** post
+  template: an offer posted alone has no number and nothing stands in for it (#1692), so there it is
+  *unknown* and kept as typed. Both functions take `postNo` explicitly (the kit's `post.postNo`); it
+  is the post's identity rather than its content, so it is read live and not frozen. **Freezing**:
   `FacebookFrozenLot` gained `layout` and `postText` (a snapshot without them reads as `text`), and
   `freezeFacebookPostText` stores the caption template as `template` in a captioned post through
   `facebookLayoutLotTemplate`; `facebookPostSource` takes the layout and shared text off the last lot's

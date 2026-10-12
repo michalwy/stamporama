@@ -573,7 +573,7 @@ describe("a captioned post (#1841)", () => {
   });
 
   it("writes the shared text once and each lot's caption from its type's template, in lot order", () => {
-    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots, 1)), {
       post: "Lots 412, 413\nShipping 7 PLN",
       captions: [
         [1, "1. First from 10.00 PLN"],
@@ -583,12 +583,12 @@ describe("a captioned post (#1841)", () => {
   });
 
   it("keeps {terms} out of a caption — the note is the post's, stated once", () => {
-    const out = renderFacebookCaptionedPost({ ...captions, auction: "{title} {terms}" }, "Note", [lots[1]]);
+    const out = renderFacebookCaptionedPost({ ...captions, auction: "{title} {terms}" }, "Note", [lots[1]], 1);
     assert.equal(facebookPartsText(out.captions[0].parts), "First {terms}");
   });
 
   it("writes a lot's caption from its offer's own template where it has one", () => {
-    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "Own {title}" })]);
+    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "Own {title}" })], 1);
     assert.equal(facebookPartsText(out.captions[0].parts), "Own Austria 1850 Mercury");
   });
 
@@ -596,11 +596,11 @@ describe("a captioned post (#1841)", () => {
     const gaps = facebookCaptionedPostGaps({ auction: "{title} {description}", quickBuy: "", post: "" }, "", [
       lot({ lotNo: 1, description: "" }),
       lot({ lotNo: 2, listingType: "fixed", price: "5 PLN" }),
-    ]);
+    ], 1);
     assert.equal(gaps.missingPostText, true);
     assert.deepEqual(gaps.missingTemplates, ["fixed"]);
     assert.deepEqual(gaps.emptyPlaceholders, [{ lotNo: 1, token: "{description}" }]);
-    const note = facebookCaptionedPostGaps(captions, "  ", [lot({ lotNo: 1 })]);
+    const note = facebookCaptionedPostGaps(captions, "  ", [lot({ lotNo: 1 })], 1);
     assert.equal(note.missingPostText, false);
     assert.deepEqual(note.emptyPlaceholders, [{ lotNo: null, token: "{terms}" }]);
   });
@@ -649,16 +649,51 @@ describe("a captioned post (#1841)", () => {
     };
     const s = facebookPostSource(group, [one], () => "");
     assert.equal(s.layout, "captions");
-    assert.deepEqual(texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots, 1)), {
       post: "Old lots 412\nOld note",
       captions: [[1, "Then First"]],
     });
     // Not yet published, it follows the group's layout and templates now.
     const live = facebookPostSource({ ...group, layout: "captions" }, [{ ...one, frozen: null }], () => "");
-    assert.deepEqual(texts(renderFacebookCaptionedPost(live.captions, live.standingNote, live.lots)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(live.captions, live.standingNote, live.lots, 1)), {
       post: "New lots 412",
       captions: [[1, "Now First, retitled"]],
     });
+  });
+
+  it("puts the post's number where the shared text or a caption has {post} (#1854)", () => {
+    const out = renderFacebookCaptionedPost(
+      { ...captions, auction: "Post #{post}, lot {lot}: {title}", post: "Post #{post} — lots {offer}" },
+      "",
+      [lots[1]],
+      7
+    );
+    assert.deepEqual(texts(out), { post: "Post #7 — lots 412", captions: [[1, "Post #7, lot 1: First"]] });
+    // An offer's own template writes its caption, so it takes {post} there too.
+    const own = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "{post}/{lot}" })], 7);
+    assert.equal(facebookPartsText(own.captions[0].parts), "7/1");
+  });
+
+  it("keeps {post} as typed in a post template — an offer posted alone has no post number (#1854)", () => {
+    const templates = { auction: "Post {post}: {title}", quickBuy: "" };
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })]), "Post {post}: Austria 1850 Mercury");
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: 1 })]), "Post {post}: Austria 1850 Mercury");
+    assert.deepEqual(facebookPostGaps(templates, "", [lot({ lotNo: null })]).emptyPlaceholders, []);
+  });
+
+  it("names {post} as empty where a captioned post has no number (#1854)", () => {
+    const gaps = facebookCaptionedPostGaps(
+      { ...captions, auction: "{title} {post}", post: "Post {post}" },
+      "",
+      [lot({ lotNo: 1 })],
+      null
+    );
+    assert.deepEqual(gaps.emptyPlaceholders, [
+      { lotNo: null, token: "{post}" },
+      { lotNo: 1, token: "{post}" },
+    ]);
+    const numbered = facebookCaptionedPostGaps({ ...captions, auction: "{title} {post}", post: "Post {post}" }, "", [lot({ lotNo: 1 })], 3);
+    assert.deepEqual(numbered.emptyPlaceholders, []);
   });
 
   it("reads a snapshot older than the layout as the post's text", () => {

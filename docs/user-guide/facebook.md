@@ -411,11 +411,24 @@ on its own — only the layout changes.
 A captioned post is written from its own templates, set beside the layout:
 
 - **Captioned post text** — the post's own text, shared by its lots: a heading, the terms, the lots'
-  numbers. It takes `{offer}`, the lots' offer numbers in lot order (`412, 413, 414` — write any `#`
-  yourself), and `{terms}`, the note on shipping, payment and terms.
+  numbers. Its placeholders:
+
+  | Placeholder | Becomes |
+  | --- | --- |
+  | `{offer}` | the lots' offer numbers in lot order — `412, 413, 414`; write any `#` yourself |
+  | `{post}` | the post's number — `1` for Post #1; write any `#` or *Post* yourself |
+  | `{terms}` | the note on shipping, payment and terms |
+
 - **Captions → Auction caption** and **Quick-buy caption** — the text under each lot's photo, from the
   template of the lot's type. They take the same placeholders as that type's post template, except
-  `{terms}`: the note goes in the post's text, once.
+  `{terms}` — the note goes in the post's text, once — and one more:
+
+  | Placeholder | Becomes |
+  | --- | --- |
+  | `{post}` | the post's number — `1` for Post #1 |
+
+`{post}` is offered only in these templates. An offer posted alone has no post number, so the auction
+and quick-buy post templates do not take it: there it stays as typed, and the field says so.
 
 An offer's own template (above), if it has one, writes its caption in a captioned post.
 

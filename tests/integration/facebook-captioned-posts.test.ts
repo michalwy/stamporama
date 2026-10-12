@@ -139,7 +139,7 @@ describe("a captioned Facebook post (#1841)", () => {
   async function captioned(offerId: string) {
     const kit = (await getFacebookOfferKit(offerId))!;
     const source = facebookPostSource({ ...kit.group, layout: kit.layout }, kit.lots, (iso) => iso ?? "");
-    const post = renderFacebookCaptionedPost(source.captions, source.standingNote, source.lots);
+    const post = renderFacebookCaptionedPost(source.captions, source.standingNote, source.lots, kit.post?.postNo ?? null);
     return {
       layout: source.layout,
       post: facebookPartsText(post.post),

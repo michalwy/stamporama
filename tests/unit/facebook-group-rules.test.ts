@@ -451,7 +451,7 @@ describe("toFacebookListingType (#1671)", () => {
 });
 
 describe("captioned posts' settings (#1841)", () => {
-  it("offer a caption its type's placeholders without {terms}, and the post text {offer} and {terms}", () => {
+  it("offer a caption its type's placeholders without {terms} and with {post}, and the post text {offer}, {post} and {terms}", () => {
     const tokens = (role: FacebookTemplateRole, type: "auction" | "fixed") =>
       facebookTemplatePlaceholders(role, type).map((p) => p.token);
     assert.deepEqual(tokens("caption", "auction"), [
@@ -462,9 +462,10 @@ describe("captioned posts' settings (#1841)", () => {
       "{closesAt}",
       "{lot}",
       "{offer}",
+      "{post}",
     ]);
-    assert.deepEqual(tokens("caption", "fixed"), ["{title}", "{description}", "{price}", "{lot}", "{offer}"]);
-    assert.deepEqual(tokens("captionPost", "fixed"), ["{offer}", "{terms}"]);
+    assert.deepEqual(tokens("caption", "fixed"), ["{title}", "{description}", "{price}", "{lot}", "{offer}", "{post}"]);
+    assert.deepEqual(tokens("captionPost", "fixed"), ["{offer}", "{post}", "{terms}"]);
     assert.deepEqual(tokens("post", "fixed"), facebookPostPlaceholders("fixed").map((p) => p.token));
   });
 
@@ -472,6 +473,13 @@ describe("captioned posts' settings (#1841)", () => {
     assert.deepEqual(unknownPostPlaceholders("{title} {terms} {catalog}", "auction", "caption"), ["{terms}", "{catalog}"]);
     assert.deepEqual(unknownPostPlaceholders("{offer} {terms} {price}", "fixed", "captionPost"), ["{price}"]);
     assert.deepEqual(unknownPostPlaceholders("{title} {catalog}", "auction"), []);
+  });
+
+  it("offer {post} only where a post always has a number — not in a post template (#1854)", () => {
+    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "auction"), ["{post}"]);
+    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "fixed"), ["{post}"]);
+    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "auction", "caption"), []);
+    assert.deepEqual(unknownPostPlaceholders("{post} {offer}", "auction", "captionPost"), []);
   });
 
   it("read any stored layout but `captions` as the post's text", () => {
