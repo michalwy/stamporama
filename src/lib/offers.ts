@@ -23,6 +23,8 @@ import {
   type OfferMemberCopy,
 } from "./offer-collision-rules";
 import { loadVariantChains } from "./checklist-variant-rollup";
+import { loadChecklistSlots } from "./offer-photo-checklists";
+import type { PlanChecklistSlot } from "./offer-photo-plan";
 import {
   aggregateOfferAsking,
   type OfferPlatformTotal,
@@ -738,6 +740,28 @@ export async function previewCopyEstimates(
     if (estimate) out[id] = estimate.averageBase.toFixed(2);
   }
   return out;
+}
+
+/** The checklist slots each copy fills (#1869), for the *New offer* dialog's series order — the
+ * photo planner's read (#1673), so a copy fills the slot its variant chain reaches. A copy on no
+ * checklist is absent. Writes nothing. */
+export async function previewCopyChecklistSlots(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[],
+  includeSpecialised: boolean
+): Promise<Record<string, PlanChecklistSlot[]>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const items = await prisma.item.findMany({
+    where: { collectionId, id: { in: itemIds } },
+    select: { id: true, stampId: true },
+  });
+  const slots = await loadChecklistSlots(
+    collectionId,
+    items.map((item) => ({ itemId: item.id, stampId: item.stampId })),
+    includeSpecialised
+  );
+  return Object.fromEntries(slots);
 }
 
 /** The title an offer created on `platformId` with `itemIds` would be generated, without writing

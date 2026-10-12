@@ -1179,7 +1179,16 @@ without closing the dialog.
   estimate yet.
 - **Each row** shows the copy's cost just before its catalogue value.
 - **Order** the rows *As picked*, by **Catalogue value** or by **Cost** — highest first, so an
-  expensive copy that slipped in stands out.
+  expensive copy that slipped in stands out — or in the series' own order, for checking it for gaps
+  and doubles:
+  - **Series order** puts each checklist's copies together in the checklist's order. A copy on
+    several checklists sits under the one that holds most of the offer, checklists follow one
+    another by catalogue number, and the copies on no checklist come last, by catalogue number.
+    Specialised checklists count only while they are switched on.
+  - **Catalogue number** reads the numbers as the Copies list sorts them — *45, 46, 46a, 47, 100* —
+    with a copy that has no number last.
+
+  With the rows grouped, each group follows the order chosen.
 - **Filter** the rows to read a long set in parts: **Duplicates only** (every copy of a stamp or
   variant that goes in more than once, whatever the packaging), **conditions**, and **Worth at
   least …** — a catalogue-value floor in your collection currency, for finding what is too valuable

@@ -26,6 +26,8 @@ function copy(overrides: Partial<NewOfferCopy> = {}): NewOfferCopy {
     conditionId: "mint",
     issueId: null,
     issueName: null,
+    areaId: null,
+    catalogNumbers: [],
     multiStamp: false,
     carriedStamps: [],
     value: { baseAmountDisplay: null, uncertain: false },
@@ -39,6 +41,11 @@ function copy(overrides: Partial<NewOfferCopy> = {}): NewOfferCopy {
   };
 }
 
+const carried = (stampId: string, numbers: string[] = []) => ({
+  stampId,
+  areaId: "gg",
+  catalogNumbers: numbers.map((number) => ({ catalogVendorId: "fi", number })),
+});
 const priced = (amount: string, o: Partial<NewOfferCopy> = {}) =>
   copy({ value: { baseAmountDisplay: amount, uncertain: false }, ...o });
 const costing = (amount: string, o: Partial<NewOfferCopy> = {}) =>
@@ -79,7 +86,7 @@ describe("the same stamp in a new offer (#1793)", () => {
 
   it("matches a multi-stamp piece only to one carrying exactly the same stamps", () => {
     const piece = (ids: string[]) =>
-      copy({ stampId: ids[0], multiStamp: true, carriedStamps: ids.map((stampId) => ({ stampId })) });
+      copy({ stampId: ids[0], multiStamp: true, carriedStamps: ids.map((stampId) => carried(stampId)) });
     assert.equal(sameStampKey(piece(["a", "b"])), sameStampKey(piece(["b", "a"])));
     assert.notEqual(sameStampKey(piece(["a", "b"])), sameStampKey(piece(["a", "c"])));
     // A cover led by stamp a is not a single copy of a.
@@ -149,6 +156,138 @@ describe("ordering the new offer's copies (#1793)", () => {
     const b = priced("2.00");
     assert.deepEqual(orderNewOfferCopies([a, b], "value"), [a, b]);
     assert.deepEqual(orderNewOfferCopies([b, a], "value"), [b, a]);
+  });
+});
+
+// A series read for gaps and doubles in its own order (#1869).
+
+/** A copy numbered in the primary catalogue (`fi`) and, where given, another one (`mi`). */
+const numbered = (fi: string | null, o: Partial<NewOfferCopy> & { mi?: string } = {}) => {
+  const { mi, ...rest } = o;
+  return copy({
+    areaId: "gg",
+    catalogNumbers: [
+      ...(mi ? [{ catalogVendorId: "mi", number: mi }] : []),
+      ...(fi ? [{ catalogVendorId: "fi", number: fi }] : []),
+    ],
+    ...rest,
+  });
+};
+const primary = new Map([["gg", "fi"]]);
+
+describe("ordering the new offer's copies by catalogue number (#1869)", () => {
+  it("reads numbers as numbers, a suffix after its base, no number last", () => {
+    const n47 = numbered("47");
+    const none = numbered(null);
+    const n45 = numbered("45");
+    const n46a = numbered("46a");
+    const n100 = numbered("100");
+    const n46 = numbered("46");
+    assert.deepEqual(
+      orderNewOfferCopies([n47, none, n45, n46a, n100, n46], "catalog", { primaryVendorByArea: primary }),
+      [n45, n46, n46a, n47, n100, none]
+    );
+  });
+
+  it("goes by the area's primary catalogue, not whichever number comes first", () => {
+    // By the lowest number of any catalogue, `a` (Mi 1) would lead.
+    const a = numbered("2", { mi: "1" });
+    const b = numbered("1", { mi: "3" });
+    assert.deepEqual(orderNewOfferCopies([a, b], "catalog", { primaryVendorByArea: primary }), [b, a]);
+  });
+
+  it("keeps the picked order between copies of one number", () => {
+    const a = numbered("5");
+    const b = numbered("5");
+    assert.deepEqual(orderNewOfferCopies([b, a], "catalog", { primaryVendorByArea: primary }), [b, a]);
+  });
+
+  it("orders a multi-stamp piece by its first carried stamp", () => {
+    const piece = copy({ multiStamp: true, carriedStamps: [carried("x", ["3"]), carried("y", ["9"])] });
+    const n4 = numbered("4");
+    const n2 = numbered("2");
+    assert.deepEqual(orderNewOfferCopies([n4, piece, n2], "catalog", { primaryVendorByArea: primary }), [
+      n2,
+      piece,
+      n4,
+    ]);
+  });
+});
+
+describe("ordering the new offer's copies in series order (#1869)", () => {
+  const slot = (checklistId: string, position: number) => ({ checklistId, position });
+
+  it("reads a series picked out of order in its checklist's order, the rest after by number", () => {
+    // Checklist order is not catalogue order here: the block comes first on its checklist.
+    const first = numbered("12");
+    const second = numbered("10");
+    const third = numbered("11");
+    const loose2 = numbered("90");
+    const loose1 = numbered("80");
+    const slots = {
+      [third.id]: [slot("set", 2)],
+      [first.id]: [slot("set", 0)],
+      [second.id]: [slot("set", 1)],
+    };
+    assert.deepEqual(
+      orderNewOfferCopies([loose2, third, loose1, second, first], "series", {
+        primaryVendorByArea: primary,
+        checklistSlots: slots,
+      }),
+      [first, second, third, loose1, loose2]
+    );
+  });
+
+  it("keeps two copies of one slot together, in the picked order", () => {
+    const a = numbered("1");
+    const b = numbered("2");
+    const b2 = numbered("2");
+    const slots = { [a.id]: [slot("set", 0)], [b.id]: [slot("set", 1)], [b2.id]: [slot("set", 1)] };
+    assert.deepEqual(orderNewOfferCopies([b2, a, b], "series", { checklistSlots: slots }), [a, b2, b]);
+  });
+
+  it("puts each copy under the checklist holding most of the set, and orders checklists by number", () => {
+    // `both` is on the small checklist and on the big one; the big one takes it.
+    const big1 = numbered("20");
+    const big2 = numbered("21");
+    const both = numbered("22");
+    const small = numbered("5");
+    const slots = {
+      [big1.id]: [slot("big", 0)],
+      [big2.id]: [slot("big", 1)],
+      [both.id]: [slot("small", 1), slot("big", 2)],
+      [small.id]: [slot("small", 0)],
+    };
+    // The small checklist's lowest number (5) reads before the big one's (20).
+    assert.deepEqual(
+      orderNewOfferCopies([both, big2, small, big1], "series", {
+        primaryVendorByArea: primary,
+        checklistSlots: slots,
+      }),
+      [small, big1, big2, both]
+    );
+  });
+
+  it("is catalogue-number order while no copy is on a checklist", () => {
+    const n3 = numbered("3");
+    const n1 = numbered("1");
+    const n2 = numbered("2");
+    assert.deepEqual(orderNewOfferCopies([n3, n1, n2], "series", { primaryVendorByArea: primary }), [n1, n2, n3]);
+  });
+
+  it("orders within each group when the list is grouped", () => {
+    const a1 = numbered("2", { issueId: "A", issueName: "A" });
+    const b1 = numbered("9", { issueId: "B", issueName: "B" });
+    const a0 = numbered("1", { issueId: "A", issueName: "A" });
+    const slots = { [a1.id]: [slot("A", 1)], [a0.id]: [slot("A", 0)] };
+    const groups = groupNewOfferCopies(
+      orderNewOfferCopies([a1, b1, a0], "series", { primaryVendorByArea: primary, checklistSlots: slots }),
+      "issue"
+    );
+    assert.deepEqual(
+      groups.map((g) => g.copies),
+      [[a0, a1], [b1]]
+    );
   });
 });
 
@@ -243,8 +382,8 @@ describe("groupNewOfferCopies", () => {
   });
 
   it("puts a multi-stamp piece with another carrying the same stamps", () => {
-    const p1 = copy({ multiStamp: true, carriedStamps: [{ stampId: "A" }, { stampId: "B" }] });
-    const p2 = copy({ multiStamp: true, carriedStamps: [{ stampId: "B" }, { stampId: "A" }] });
+    const p1 = copy({ multiStamp: true, carriedStamps: [carried("A"), carried("B")] });
+    const p2 = copy({ multiStamp: true, carriedStamps: [carried("B"), carried("A")] });
     assert.equal(groupNewOfferCopies([p1, p2], "stamp").length, 1);
   });
 });

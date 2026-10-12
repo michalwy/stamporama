@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
 import type { LocationData } from "@/lib/locations";
@@ -18,6 +19,7 @@ import {
   type NewOfferCopyOrder,
 } from "@/lib/new-offer-copies";
 import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { previewCopyChecklistSlotsAction } from "@/app/actions/offers";
 import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -74,6 +76,12 @@ const GROUPING_OPTIONS: { id: NewOfferCopyGrouping; label: string }[] = [
 
 const ORDER_OPTIONS: { value: NewOfferCopyOrder; label: string; title: string }[] = [
   { value: "picked", label: "As picked", title: "The order the copies were picked in." },
+  {
+    value: "series",
+    label: "Series order",
+    title: "Each checklist's copies in its order; copies on no checklist after, by catalogue number.",
+  },
+  { value: "catalog", label: "Catalogue number", title: "By catalogue number, as the copies list sorts." },
   { value: "value", label: "Catalogue value", title: "Highest catalogue value first." },
   { value: "cost", label: "Cost", title: "Highest cost first." },
 ];
@@ -115,7 +123,23 @@ export function NewOfferCopiesPanel({
   // *Duplicates only* reads the whole offer whatever its packaging (#1795): it is a way of reading the
   // list, while the tint and the warning above stay a question about one set (#1793).
   const allDupes = useMemo(() => duplicateStamps(copies), [copies]);
-  const ordered = useMemo(() => orderNewOfferCopies(copies, order), [copies, order]);
+  // The checklist slots are read only once series order is asked for (#1869); until they arrive the
+  // list reads as if no copy were on a checklist, by catalogue number.
+  const copyIds = useMemo(() => copies.map((c) => c.id), [copies]);
+  const { data: checklistSlots } = useQuery({
+    queryKey: ["offers", collectionId, "new-offer-checklist-slots", copyIds] as const,
+    queryFn: () => previewCopyChecklistSlotsAction(collectionId, copyIds),
+    enabled: order === "series" && copyIds.length > 0,
+    staleTime: 60_000,
+  });
+  const ordered = useMemo(
+    () =>
+      orderNewOfferCopies(copies, order, {
+        primaryVendorByArea: vendorMaps.primaryVendorByArea,
+        checklistSlots,
+      }),
+    [copies, order, vendorMaps.primaryVendorByArea, checklistSlots]
+  );
   const shown = useMemo(() => filterNewOfferCopies(ordered, filters), [ordered, filters]);
   const groups = useMemo(
     () => (grouping === "none" ? null : groupNewOfferCopies(shown, grouping)),
