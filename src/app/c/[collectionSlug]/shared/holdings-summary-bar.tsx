@@ -12,10 +12,12 @@ import {
   NOT_APPLICABLE,
   NOT_WORKED_OUT,
   differenceFigure,
+  figureDirection,
   markEstimated,
   negatedAmount,
   signedAmount,
   stateFigure,
+  type FigureDirection,
   type StatedFigure,
 } from "@/lib/summary-figure";
 import { usePersistedFlag } from "./use-persisted-flag";
@@ -268,6 +270,19 @@ function AbsentAmount({ text, style }: { text: string; style: React.CSSPropertie
 const ESTIMATED_FIGURE_HINT =
   "An estimate: copies on purchase lots that are still open are counted at their share of the lot's cost by catalog value, the figure each copy's own page shows. It settles when the lots are closed.";
 
+/** A gain in the success colour, a loss in the error one — the tokens a sale's profit and the profit
+ * and loss screen use, so a gain looks the same here as there (#559, #1883). Neither takes no colour
+ * of its own: it did not go any way. */
+const DIRECTION_COLOR: Record<FigureDirection, string | undefined> = {
+  gain: "var(--color-success)",
+  loss: "var(--color-error)",
+  none: undefined,
+};
+
+/** The estimate mark, set a little apart from what follows it: in italic `~` and a minus touch and
+ * read as `~~` (#1883). A margin rather than a space, so the text still copies as `~−516.23 PLN`. */
+const ESTIMATE_MARK_STYLE: React.CSSProperties = { marginRight: "0.15em" };
+
 /** The amount slot, in the one place that decides whether there is an amount to put in it (#1184).
  * A figure with nothing behind it says so in the collector's terms instead of printing a sum of
  * nothing; the grey sentence beside it, which counts what is missing, is unchanged either way. A
@@ -275,18 +290,27 @@ const ESTIMATED_FIGURE_HINT =
  *
  * A figure counting copies at an estimated cost (#1881) is marked as one in #238's vocabulary — `~`,
  * muted italic — exactly as an estimated cost reads on a copy (#1696), an offer (#1736) and a sale
- * (#1814). The muted colour takes over from a signed figure's green or red, as it does on a sale. */
+ * (#1814).
+ *
+ * A **signed** figure (#559) prints its sign and is coloured by it (#1883): a bare figure in the same
+ * colour as everything above it is one a collector has to read digit by digit to tell which way it
+ * went. An estimated one keeps that colour and takes only the italic and the mark, so an *estimated
+ * loss* still reads as a loss.
+ */
 function FigureAmount({
   figure,
   currency,
   style,
   format,
+  signed = false,
 }: {
   figure: StatedFigure;
   currency: string;
   style: React.CSSProperties;
-  /** How the amount reads once there is one — signed, negated, or plain. */
+  /** How the amount reads once there is one — negated, or plain. */
   format?: (amount: string) => string;
+  /** A figure whose direction is the point: drawn with its sign and in its direction's colour. */
+  signed?: boolean;
 }) {
   if (figure.amount === null) {
     return (
@@ -296,33 +320,36 @@ function FigureAmount({
       />
     );
   }
-  const text = `${format ? format(figure.amount) : figure.amount} ${currency}`;
+  const shown = signed ? signedAmount(figure.amount) : format ? format(figure.amount) : figure.amount;
+  const text = `${shown} ${currency}`;
+  const color = signed ? DIRECTION_COLOR[figureDirection(figure.amount)] : undefined;
   if (figure.estimated) {
     return (
       <Tooltip content={ESTIMATED_FIGURE_HINT}>
-        <span style={{ ...style, ...COST_ESTIMATE_STYLE }}>~{text}</span>
+        <span style={{ ...style, ...COST_ESTIMATE_STYLE, ...(color ? { color } : {}) }}>
+          <span style={ESTIMATE_MARK_STYLE}>~</span>
+          {text}
+        </span>
       </Tooltip>
     );
   }
-  return <span style={style}>{text}</span>;
+  return <span style={color ? { ...style, color } : style}>{text}</span>;
 }
 
-/** A gain is stated in the accent-positive hue and a loss in the error one (#559). A bare figure in
- * the same colour as everything above it is one a collector has to read twice to tell which way it
- * went. An absence takes neither: it did not go any way. */
-function signedStyle(figure: StatedFigure): React.CSSProperties {
-  if (figure.amount === null) return AMOUNT_STYLE;
-  return {
-    ...AMOUNT_STYLE,
-    color:
-      Number(figure.amount) < 0
-        ? "var(--color-error)"
-        : "var(--color-success, var(--color-text-primary))",
-  };
-}
-
-function percentNote(percent: number | null): string {
-  return percent == null ? "" : ` · ${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
+/** The percentage beside a signed figure, in the same colour as the figure (#1883), with the sign
+ * printed and the minus the typographic one, as the figure's own. */
+function PercentNote({ percent }: { percent: number | null }) {
+  if (percent == null) return null;
+  const sign = percent > 0 ? "+" : percent < 0 ? "−" : "";
+  return (
+    <>
+      {" · "}
+      <span style={{ color: DIRECTION_COLOR[figureDirection(percent)] }}>
+        {sign}
+        {Math.abs(percent).toFixed(1)}%
+      </span>
+    </>
+  );
 }
 
 function copiesWord(n: number): string {
@@ -628,8 +655,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         <FigureAmount
           figure={netReturn}
           currency={ret.baseCurrency}
-          style={signedStyle(netReturn)}
-          format={signedAmount}
+          style={AMOUNT_STYLE}
+          signed
         />
         {/* The spend is named rather than left to be read off the rows above: those split what was
             paid into what is still held and what was written off (#396), and this figure is both. */}
@@ -638,7 +665,7 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
             ? `${noCost(spent)} for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
             : `against ${spent.estimated ? "~" : ""}${spent.amount} ${ret.spent.baseCurrency} ${costWord} all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
           {spent.estimated ? `, ${estimatedNote(ret.spent)}` : ""}
-          {percentNote(ret.netReturnPercent)}
+          <PercentNote percent={ret.netReturnPercent} />
         </span>
       </div>
       {/* The figure above reads deeply negative until most of a purchase has sold, which says
@@ -649,15 +676,15 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         <FigureAmount
           figure={soldMargin}
           currency={ret.baseCurrency}
-          style={signedStyle(soldMargin)}
-          format={signedAmount}
+          style={AMOUNT_STYLE}
+          signed
         />
         <span style={NOTE_STYLE}>
           {soldCost.amount === null
             ? `${noCost(soldCost)} for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
             : `against ${soldCost.estimated ? "~" : ""}${soldCost.amount} ${ret.soldCost.baseCurrency} ${costWord} the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
           {soldCost.estimated ? `, ${estimatedNote(ret.soldCost)}` : ""}
-          {percentNote(ret.soldMarginPercent)}
+          <PercentNote percent={ret.soldMarginPercent} />
         </span>
       </div>
     </>

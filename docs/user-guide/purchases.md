@@ -386,7 +386,7 @@ it, while the valuations are in your base currency outright.
 no frozen cost yet, but it does have an estimate — its share of the lot's cost by catalog value, the
 figure its own page shows — and on this screen **Purchase cost**, **Net return** and **On sold**
 count it at that estimate, so you can judge a purchase before its lots close. A figure that includes
-an estimate is marked as one, as an estimated cost is everywhere else — `~`, muted and in italics —
+an estimate is marked as one, as an estimated cost is everywhere else — `~` and in italics, muted unless it is a gain or a loss —
 and says how many copies are estimated: *851 estimated · 0 costed*, or *against ~1,240.00 PLN spent
 on all 851 copies, 851 estimated*. Hover it for the explanation. When the lots close, the figures
 switch to the actual costs on their own. The same holds on each lot's bar. The [Copies](inventory.md)
@@ -433,6 +433,10 @@ bar for the whole parcel, each lot's bar for that lot alone.
 - **On sold** — realized minus what those *sold* copies cost, with a percentage. The other question:
   how the sales themselves went, regardless of how much is still unsold. Both are shown because
   neither answers the other.
+
+**Net return** and **On sold** are coloured by which way they went: **green** for a gain, **red** for
+a loss, and neither at zero — their percentages too. An estimated one keeps its colour as well as its
+`~` and italics, so an estimated loss still reads as a loss.
 
 On an [opening balance](#opening-balances) the same rows are measured against the **opening value**
 instead, and the rows say *opening value* where a purchase's say *spent* — nothing was bought.

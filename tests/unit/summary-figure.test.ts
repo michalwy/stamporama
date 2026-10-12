@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   differenceFigure,
+  figureDirection,
   markEstimated,
   negatedAmount,
   signedAmount,
@@ -163,5 +164,31 @@ describe("markEstimated", () => {
       state: "unknown",
       amount: null,
     });
+  });
+});
+
+describe("figureDirection", () => {
+  it("calls a positive figure a gain and a negative one a loss (#1883)", () => {
+    assert.equal(figureDirection("46.44"), "gain");
+    assert.equal(figureDirection("-516.23"), "loss");
+    assert.equal(figureDirection(124.4), "gain");
+    assert.equal(figureDirection(-86), "loss");
+  });
+
+  it("gives zero no direction, negative zero included", () => {
+    assert.equal(figureDirection("0.00"), "none");
+    assert.equal(figureDirection("-0.00"), "none");
+    assert.equal(figureDirection(-0), "none");
+  });
+
+  it("gives an absence no direction", () => {
+    assert.equal(figureDirection(null), "none");
+  });
+
+  it("reads an estimated difference by its amount, as a settled one", () => {
+    const spent = markEstimated(stateFigure("600.00", 10, 0), 10);
+    const net = differenceFigure("-516.23", [stateFigure("83.77", 2, 0), spent]);
+    assert.equal(net.estimated, true);
+    assert.equal(figureDirection(net.amount), "loss");
   });
 });
