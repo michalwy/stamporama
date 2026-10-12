@@ -11,6 +11,7 @@ import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attri
 import { ALLEGRO_SETTINGS_PARTS } from "./allegro-summary";
 import { DELCAMPE_SETTINGS_PARTS } from "./delcampe-summary";
 import { COLNECT_SETTINGS_PARTS, COLNECT_VIEW_PARAMS } from "./colnect-summary";
+import { FACEBOOK_CASE_PARAM } from "./facebook-settings-cases";
 
 /**
  * The groups mirror the sidebar's sections, **in their tints** (#1465): a collector looking for the
@@ -345,9 +346,14 @@ export const SETTINGS_ROW_PARAM = "row";
 
 /**
  * What names a view of one page and tab rather than the page — the selected row, the Colnect
- * attribute list and its narrowing (#1480). Choosing a page or a tab drops them all.
+ * attribute list and its narrowing (#1480), the tab of Facebook's pane (#1849). Choosing a page or a
+ * tab drops them all.
  */
-const SETTINGS_VIEW_PARAMS: readonly string[] = [SETTINGS_ROW_PARAM, ...COLNECT_VIEW_PARAMS];
+const SETTINGS_VIEW_PARAMS: readonly string[] = [
+  SETTINGS_ROW_PARAM,
+  ...COLNECT_VIEW_PARAMS,
+  FACEBOOK_CASE_PARAM,
+];
 
 /**
  * The query an entry and its tab are written as. The defaults are left out — the default entry and

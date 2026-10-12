@@ -442,15 +442,28 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
 
 - **Where it is seen.** Settings → Facebook (`facebook-settings-page.tsx`): the platform choice in the
   header (`MarketplacePlatformSelect`, *Facebook platform*), then list beside detail (#1471) with no
-  tabs and no summary strip. The list's first row is **Facebook defaults** (`DEFAULTS_ROW`, the
+  page tabs and no summary strip — the tabs are the detail pane's (#1849, below). The list's first row is **Facebook defaults** (`DEFAULTS_ROW`, the
   page's default selection), then the groups; a group's pane shows each setting as *Same as Facebook*
   with its value, or with its field once *Custom for this group* — a checkbox named `custom` carrying
   the key, so the pane's unsaved measure sees it. Archive/Restore is the detail
   pane's header action; Delete is disabled with its reason while offers name the group. The user guide
   is `docs/user-guide/facebook.md`.
-  The panes group the settings as the collector asked (#1671): *Every offer* (type, currency, mixing),
-  the note, *New auctions* (auction template and figures), *Quick buys* (its template), then
-  *Posts of several lots* (layout, captioned post text) beside *Captions* (#1841).
+  **The pane is in tabs by case** (#1849, decided with the collector on 2026-10-12, amending #1801's
+  one grid of sections): **General** (type, currency, mixing, the note), **Auctions** (post template,
+  caption, the figures), **Quick buys** (post template, caption, refresh days), **Several-lot posts**
+  (layout, captioned post text), **Buyer messages** — each holding everything for its case and
+  nothing else. Which setting is on which tab is `facebook-settings-cases.ts` (pure, a `Record` over
+  `FacebookGroupSetting`, so a new setting without a tab does not compile; the split is pinned in
+  `facebook-settings-cases.test.ts`). Facebook's pane and a group's are one layout,
+  `FacebookSettingsTabs`, drawn through a `Slot` — a label and field there, `FollowableSetting` here.
+  **Every panel stays mounted**, the others `hidden`: the tabs are grouping in one form, and a panel
+  unmounted would drop its fields from `FormData`, so a save would blank them. The tab shown is
+  `&case=` (`FACEBOOK_CASE_PARAM`, a Settings view parameter, written with `history.replaceState`
+  like `&row=`), so it stays while moving between the defaults and the groups; the kit's links to a
+  missing setting carry it, landing on the setting's tab. A group's tab holding a custom setting
+  carries a dot (`facebookCustomCases`), live as *Custom* is ticked. **Every template says when it
+  is used** in one line under its label (`USED_WHEN`), followed or own. A group's name and link are
+  the group, not settings, so they sit above the tabs.
   An offer is the offer form (group, the listing type seeded from it until touched, and an auction's
   increment, shown only on the Facebook platform, the group locked on a lot of a post), the
   **Facebook** card on the offer's screen, directly under the description like every platform's card

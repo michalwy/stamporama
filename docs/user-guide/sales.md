@@ -431,7 +431,7 @@ screen.
 
 The template is set per platform: on the platform's [contact](contacts.md#message-to-buyer), or for
 Facebook under **Settings → Facebook**, where a group can have its own
-([Facebook](facebook.md#message-to-buyer)). A platform without a template offers no message — the
+([Facebook](facebook.md#buyer-messages)). A platform without a template offers no message — the
 button is simply not there. The account number and the next steps are ordinary text in the
 template; the rest are placeholders:
 

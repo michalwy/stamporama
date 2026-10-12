@@ -30,14 +30,27 @@ asked of its offers.
 
 ## Facebook defaults
 
-The first row of the list, **Facebook defaults**, holds the settings every group follows, in seven
-sections. They take the width beside the list, two to a row on a wide window: **Every offer** beside
-**Shipping, payment and terms**, then **New auctions** beside **Quick buys**, so the two post
-templates sit level and can be compared at a glance, then **Posts of several lots** beside
-**Captions** ([below](#a-post-with-several-lots-in-captions)), then **Message to buyer**. A group's settings are laid out the same way,
-under its name and link.
+The first row of the list, **Facebook defaults**, holds the settings every group follows, in five
+tabs — one per case, each holding everything for that case and nothing else:
 
-**Every offer** — what applies to auctions and quick buys alike:
+| Tab | Holds |
+| --- | --- |
+| **General** | what a new offer starts as, the currency, whether a post may mix auctions and quick buys, and the note on shipping, payment and terms |
+| **Auctions** | the auction post template, the auction caption, and what a new auction starts from — starting price, bid increment, days, closing time |
+| **Quick buys** | the quick-buy post template, the quick-buy caption, and when a quick buy wants refreshing |
+| **Several-lot posts** | the layout of a post of several lots, and a captioned post's own text |
+| **Buyer messages** | the message to a buyer after a sale |
+
+**Every template says under its name when it is used** — *A post of one auction, and each auction in
+a post with every lot in its text* for the auction post template, *An auction lot's photo caption, in
+a post with captions* for the auction caption, and so on — so the seven texts can be told apart at a
+glance. Within a tab the fields take the width beside the list, two to a row on a wide window. A
+group's settings are the same tabs, under its name and link, and the tab you are on stays open as you
+move between Facebook defaults and the groups, so one case can be compared across them.
+
+### General
+
+What applies to auctions and quick buys alike:
 
 - **A new offer starts as** — **Auction** or **Quick buy**. Each offer can still be changed on its
   own form. Until you change it, this is **Auction**, which is what every Facebook offer was before
@@ -45,13 +58,14 @@ under its name and link.
 - **Currency** — shown, not set here: it is the platform's own currency, set on its contact.
 - **A post may mix auctions and quick buys** — off, the lots of one [post](#a-post-with-several-lots)
   are all auctions or all quick buys; on, one post may hold both.
+- **Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
+  terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
+  template without `{terms}` posts no note, and the field warns you when the note is set but no post
+  template uses it — the auction and quick-buy templates, and a captioned post's text.
 
-**Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
-terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
-template without `{terms}` posts no note, and the field warns you when the note is set but no post
-template uses it — the auction and quick-buy templates, and a captioned post's text.
+### Auctions
 
-**New auctions** — how an auction's post reads, and what a new auction starts from, each optional:
+How an auction's post reads, and what a new auction starts from, each optional:
 
 - **Post template** — the text an auction's post is prepared from. It can carry placeholders, filled
   in from the offer when the post is prepared:
@@ -67,6 +81,8 @@ template uses it — the auction and quick-buy templates, and a captioned post's
   | `{offer}` | the offer's number — `412` for offer #412; in a post holding several lots, each lot's own |
   | `{terms}` | the note on shipping, payment and terms |
 
+- **Caption** — an auction lot's text under its photo, in a post with captions
+  ([below](#a-post-with-several-lots-in-captions)).
 - **Starting price** — none, an amount, or a percentage of the copies' catalogue value.
 - **Bid increment** — how much a bid must beat the last one by.
 - **Days an auction runs** — between 1 and 90.
@@ -75,7 +91,9 @@ template uses it — the auction and quick-buy templates, and a captioned post's
 These are starting points: each can be changed on the auction itself. Changing one here changes it
 at once for every group that follows it, and never changes an auction already made.
 
-**Quick buys** — how a quick buy's post reads:
+### Quick buys
+
+How a quick buy's post reads:
 
 - **Post template** — the text a quick buy's post is prepared from, with its own placeholders:
 
@@ -90,6 +108,8 @@ at once for every group that follows it, and never changes an auction already ma
 
   A quick buy has no price default here: its price is set on each offer.
 
+- **Caption** — a quick-buy lot's text under its photo, in a post with captions
+  ([below](#a-post-with-several-lots-in-captions)).
 - **Refresh quick buys after (days)** — how long a quick buy may be up before it is seen by nobody
   and wants posting again. Past it, the offer carries **Up N days · refresh** and is listed under
   **Needs refresh** (see [Refreshing a quick buy](#refreshing-a-quick-buy)). Empty means never.
@@ -145,7 +165,13 @@ in its place; a group with no template for an offer's type gives an empty post; 
 are exactly the template's, around a placeholder that comes out empty too. The offer's Facebook card
 names whatever is missing (below), so you fix it where it is set.
 
-### Message to buyer
+### Several-lot posts
+
+The **Layout** of a post holding several lots — every lot in the post's text, or each lot in its
+photo's caption — and the **Captioned post text**, a captioned post's own text. Both are described
+with [captioned posts](#a-post-with-several-lots-in-captions).
+
+### Buyer messages
 
 **Message to buyer** is the template of what you send a buyer after a sale on Facebook — what to
 pay, the account, what happens next — copied from the sale with **Message to buyer** (see
@@ -164,13 +190,15 @@ Each group has a **Name** — what you call it here, usually the group's own nam
 platform cannot share one — and a **Link**, the group's address on Facebook, starting with
 `https://`. Any address that opens the group will do; the ↗ beside the label opens it.
 
-Every other setting — whether a new offer is an auction or a quick buy, the currency, whether a post
-may mix the two, the note on shipping, payment and terms, both post templates, the starting price,
-the bid increment, the days and the closing time — shows as **Same as Facebook**, with the value it
+Under them are the same five tabs as Facebook defaults. Every setting on them shows as
+**Same as Facebook**, with the value it
 follows, until you tick **Custom for this group** beside it (**Custom** on the smaller ones). The field then appears, starting from Facebook's value, and what you save there
 is this group's alone: a later change to Facebook defaults does not reach it. Untick it to follow
 Facebook again — the group's own value is dropped. A custom setting may also be empty, for a group
 that wants, say, no bid increment where Facebook has one. A custom **currency** must name one.
+
+A tab holding any of the group's own settings is marked with a dot beside its name, so a group's
+customs can be found without opening every tab.
 
 A new group follows Facebook throughout.
 
@@ -415,7 +443,7 @@ each item's price and description in **its photo's caption** rather than in the 
 of several lots can be laid out that way. Each lot is still its own offer — sold, withdrawn and frozen
 on its own — only the layout changes.
 
-**Posts of several lots → Layout**, in Facebook defaults or a group's own settings, chooses between
+**Several-lot posts → Layout**, in Facebook defaults or a group's own settings, chooses between
 **Every lot in the post's text** (the layout described above, and what every post starts as) and
 **Each lot in its photo's caption**. A post follows its group's choice until you change it: the
 **Layout** field in the post's kit, on the post's screen, sets it for that post alone, or back to
@@ -423,8 +451,8 @@ on its own — only the layout changes.
 
 A captioned post is written from its own templates, set beside the layout:
 
-- **Captioned post text** — the post's own text, shared by its lots: a heading, the terms, the lots'
-  numbers. Its placeholders:
+- **Several-lot posts → Captioned post text** — the post's own text, shared by its lots: a heading,
+  the terms, the lots' numbers. Its placeholders:
 
   | Placeholder | Becomes |
   | --- | --- |
@@ -432,7 +460,7 @@ A captioned post is written from its own templates, set beside the layout:
   | `{post}` | the post's number — `1` for Post #1; write any `#` or *Post* yourself |
   | `{terms}` | the note on shipping, payment and terms |
 
-- **Captions → Auction caption** and **Quick-buy caption** — the text under each lot's photo, from the
+- **Auctions → Caption** and **Quick buys → Caption** — the text under each lot's photo, from the
   template of the lot's type. They take the same placeholders as that type's post template, except
   `{terms}` — the note goes in the post's text, once — and one more:
 
@@ -512,7 +540,7 @@ A quick buy never closes by itself, so it never asks for a result: to take one d
 it as any offer.
 
 The sale's **Message to buyer** writes what the buyer owes from the group's
-[message template](#message-to-buyer).
+[message template](#buyer-messages).
 
 ## Refreshing a quick buy
 
