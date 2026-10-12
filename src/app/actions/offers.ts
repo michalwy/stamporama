@@ -29,6 +29,7 @@ import {
   previewOfferTitle,
   previewNewOfferTitle,
   previewCopyEstimates,
+  previewCopyChecklistSlots,
   offerTranslationGaps,
   type OfferTitlePreview,
   OfferActionBlockedError,
@@ -36,6 +37,7 @@ import {
   repostOffer,
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
+import type { PlanChecklistSlot } from "@/lib/offer-photo-plan";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
 import {
@@ -542,6 +544,26 @@ export async function previewCopyEstimatesAction(
   const session = await getSession();
   try {
     return await previewCopyEstimates(session.user.id, collectionId, itemIds);
+  } catch {
+    return {};
+  }
+}
+
+/** The checklist slots each copy fills (#1869), for the *New offer* dialog's series order —
+ * read-only, following this browser's specialised-checklists switch (#1617). Empty on any failure:
+ * the list then reads as if no copy were on a checklist, by catalogue number. */
+export async function previewCopyChecklistSlotsAction(
+  collectionId: string,
+  itemIds: string[]
+): Promise<Record<string, PlanChecklistSlot[]>> {
+  const session = await getSession();
+  try {
+    return await previewCopyChecklistSlots(
+      session.user.id,
+      collectionId,
+      itemIds,
+      await readIncludeSpecialised(collectionId)
+    );
   } catch {
     return {};
   }

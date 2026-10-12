@@ -9,9 +9,10 @@ import type { PlanChecklistSlot } from "./offer-photo-plan";
  * The checklist slots an offer's copies fill (#1673), for the photo planner's grouping — the I/O half;
  * the grouping itself is `checklistGroupsOf` in the pure plan module.
  *
- * - **Standard checklists only** (#1617). Specialised ones are hidden by a switch remembered per
- *   browser, which a server-side render cannot read, and a finer goal — every colour of one stamp —
- *   is not the series a buyer is looking for.
+ * - **Standard checklists only** (#1617), unless `includeSpecialised` says otherwise. Specialised ones
+ *   are hidden by a switch remembered per browser, which a server-side render cannot read, and a
+ *   finer goal — every colour of one stamp — is not the series a buyer is looking for. The *New
+ *   offer* dialog's series order (#1869) is the collector's own reading, so it follows the switch.
  * - A copy fills the slot its **variant chain** reaches (#661), as the lot builder reads it: a `226yw`
  *   copy is a `226` to a checklist naming `226`, so a series identified down to its varieties still
  *   groups.
@@ -21,7 +22,8 @@ import type { PlanChecklistSlot } from "./offer-photo-plan";
  */
 export async function loadChecklistSlots(
   collectionId: string,
-  copies: readonly { itemId: string; stampId: string }[]
+  copies: readonly { itemId: string; stampId: string }[],
+  includeSpecialised = false
 ): Promise<Map<string, PlanChecklistSlot[]>> {
   const slots = new Map<string, PlanChecklistSlot[]>();
   if (copies.length === 0) return slots;
@@ -36,7 +38,7 @@ export async function loadChecklistSlots(
   const rows = await prisma.checklistStamp.findMany({
     where: {
       stampId: { in: [...chainIds] },
-      checklist: { collectionId, ...shownChecklistWhere(false) },
+      checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
     },
     select: { checklistId: true, stampId: true, sortOrder: true },
   });

@@ -12,7 +12,10 @@
 //    cost basis, an open lot's copy at its estimate and the figure then marked. It is `copiesCost`
 //    itself, so the three cannot drift apart.
 //  - **The order** is the picked order by default, or highest first by catalogue value or by cost,
-//    so an expensive copy stands out; a copy with no figure goes last either way.
+//    so an expensive copy stands out; a copy with no figure goes last either way. A series is read
+//    for gaps and doubles in its own order (#1869): **by catalogue number** — the copies list's own
+//    sort key — or **in series order**, each checklist's copies in its order and the copies on no
+//    checklist after them by catalogue number.
 //  - **The filters** (#1795) narrow what is *shown*, never what goes in: the duplicates only, some
 //    conditions, a catalogue-value floor. *Duplicates* is asked of the whole offer, so hiding one of
 //    two copies of a stamp does not make the other stop being a duplicate.
@@ -20,6 +23,8 @@
 
 import { copiesCost, copyCostFigure, type CopyCostInput, type OfferSetCost } from "./offer-cost";
 import { formatItemNo } from "./item-number";
+import { compareCatalogSortKeys, computeCatalogSortKey } from "./catalog-sort-key";
+import type { PlanChecklistSlot } from "./offer-photo-plan";
 
 /** A copy as this module reads it — the fields of a Copies list row it needs. */
 export interface NewOfferCopy extends Omit<CopyCostInput, "label"> {
@@ -30,8 +35,14 @@ export interface NewOfferCopy extends Omit<CopyCostInput, "label"> {
   conditionId: string;
   issueId: string | null;
   issueName: string | null;
+  areaId: string | null;
+  catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   multiStamp: boolean;
-  carriedStamps: readonly { stampId: string }[];
+  carriedStamps: readonly {
+    stampId: string;
+    areaId: string | null;
+    catalogNumbers: readonly { catalogVendorId: string; number: string }[];
+  }[];
   value: { baseAmountDisplay: string | null; uncertain: boolean };
 }
 
@@ -114,10 +125,33 @@ export function newOfferCopiesSummary(copies: readonly NewOfferCopy[]): NewOffer
   };
 }
 
-export type NewOfferCopyOrder = "picked" | "value" | "cost";
+export type NewOfferCopyOrder = "picked" | "series" | "catalog" | "value" | "cost";
+
+/** What the series and catalogue-number orders read beyond the copies themselves. */
+export interface NewOfferCopyOrderContext {
+  /** Each area's effective primary catalogue vendor — whose number leads a copy's sort key. */
+  primaryVendorByArea?: ReadonlyMap<string, string | null>;
+  /** The checklist slots each copy fills, by copy id; a copy absent is on no checklist. */
+  checklistSlots?: Readonly<Record<string, readonly PlanChecklistSlot[]>>;
+}
+
+/** A copy's catalogue sort key — the key the copies list sorts by (`primaryCatalogSortKey`, #181):
+ *  its area's primary vendor's number, else its lowest. A multi-stamp piece with no number of its
+ *  own reads its first carried stamp's. Null for a copy with no number, which goes last. */
+export function newOfferCopyCatalogKey(
+  copy: Pick<NewOfferCopy, "areaId" | "catalogNumbers" | "carriedStamps">,
+  primaryVendorByArea: ReadonlyMap<string, string | null> = new Map()
+): string | null {
+  const source =
+    copy.catalogNumbers.length === 0 && copy.carriedStamps.length > 0 ? copy.carriedStamps[0] : copy;
+  return computeCatalogSortKey(
+    source.catalogNumbers.map((c) => ({ catalogVendorId: c.catalogVendorId, value: c.number })),
+    source.areaId ? (primaryVendorByArea.get(source.areaId) ?? null) : null
+  );
+}
 
 /** The figure a copy is ordered by, or null when it has none — such a copy goes last. */
-function orderFigure(copy: NewOfferCopy, order: Exclude<NewOfferCopyOrder, "picked">): number | null {
+function orderFigure(copy: NewOfferCopy, order: "value" | "cost"): number | null {
   if (order === "value") {
     return copy.value.baseAmountDisplay == null ? null : cents(copy.value.baseAmountDisplay);
   }
@@ -125,10 +159,81 @@ function orderFigure(copy: NewOfferCopy, order: Exclude<NewOfferCopyOrder, "pick
   return figure.kind === "missing" ? null : cents(figure.amount);
 }
 
-/** The copies in the order asked for — highest first, a tie and a copy with no figure keeping the
- *  picked order. A new array; the input is left as it was. */
-export function orderNewOfferCopies<T extends NewOfferCopy>(copies: readonly T[], order: NewOfferCopyOrder): T[] {
+interface Indexed<T> {
+  copy: T;
+  index: number;
+  key: string | null;
+}
+
+/** Catalogue-number order: ascending, a copy with no number last, a tie keeping the picked order. */
+const byCatalogKey = <T>(a: Indexed<T>, b: Indexed<T>) =>
+  compareCatalogSortKeys(a.key, b.key) || a.index - b.index;
+
+/**
+ * Series order (#1869): the checklists the copies fill, each copy under one of them — the one that
+ * takes the most of the copies still unplaced, as the photo planner groups an offer (#1673) — and
+ * within it in the checklist's own order. The checklists follow one another by the catalogue number
+ * of their lowest copy; the copies on no checklist close the list by catalogue number.
+ */
+function seriesOrder<T extends NewOfferCopy>(
+  entries: Indexed<T>[],
+  slotsOf: (copy: T) => readonly PlanChecklistSlot[]
+): T[] {
+  let open = entries;
+  const groups: Indexed<T>[][] = [];
+  for (;;) {
+    const tally = new Map<string, { count: number; first: number }>();
+    for (const entry of open) {
+      for (const checklistId of new Set(slotsOf(entry.copy).map((s) => s.checklistId))) {
+        const seen = tally.get(checklistId);
+        if (seen) seen.count++;
+        else tally.set(checklistId, { count: 1, first: entry.index });
+      }
+    }
+    let best: { checklistId: string; count: number; first: number } | null = null;
+    for (const [checklistId, seen] of tally) {
+      if (
+        !best ||
+        seen.count > best.count ||
+        (seen.count === best.count &&
+          (seen.first < best.first || (seen.first === best.first && checklistId < best.checklistId)))
+      ) {
+        best = { checklistId, ...seen };
+      }
+    }
+    if (!best) break;
+    const chosen = best.checklistId;
+    const position = (entry: Indexed<T>) =>
+      Math.min(...slotsOf(entry.copy).filter((s) => s.checklistId === chosen).map((s) => s.position));
+    const members = open.filter((entry) => slotsOf(entry.copy).some((s) => s.checklistId === chosen));
+    open = open.filter((entry) => !members.includes(entry));
+    members.sort((a, b) => position(a) - position(b) || a.index - b.index);
+    groups.push(members);
+  }
+  const lowest = (group: Indexed<T>[]) => [...group].sort(byCatalogKey)[0];
+  groups.sort((a, b) => byCatalogKey(lowest(a), lowest(b)));
+  return [...groups.flat(), ...open.sort(byCatalogKey)].map((e) => e.copy);
+}
+
+/** The copies in the order asked for. By value or cost, highest first — a tie and a copy with no
+ *  figure keeping the picked order; by catalogue number and in series order, as the context lets
+ *  them read. A new array; the input is left as it was. */
+export function orderNewOfferCopies<T extends NewOfferCopy>(
+  copies: readonly T[],
+  order: NewOfferCopyOrder,
+  context: NewOfferCopyOrderContext = {}
+): T[] {
   if (order === "picked") return [...copies];
+  if (order === "catalog" || order === "series") {
+    const entries = copies.map((copy, index) => ({
+      copy,
+      index,
+      key: newOfferCopyCatalogKey(copy, context.primaryVendorByArea),
+    }));
+    if (order === "catalog") return entries.sort(byCatalogKey).map((e) => e.copy);
+    const slots = context.checklistSlots ?? {};
+    return seriesOrder(entries, (copy) => slots[copy.id] ?? []);
+  }
   return copies
     .map((copy, index) => ({ copy, index, figure: orderFigure(copy, order) }))
     .sort((a, b) => {
