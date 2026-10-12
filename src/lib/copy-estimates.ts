@@ -86,6 +86,7 @@ export async function estimateCopiesByGroup(
       level: ratio.level,
       bucketLabel: ratio.bucketLabel,
       n: ratio.n,
+      catalogueName: valuation.catalogNameId ? ratios.catalogueName(valuation.catalogNameId) : null,
     });
   }
   return new Map(

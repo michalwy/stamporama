@@ -208,6 +208,10 @@ export interface RealizationRatioResolver {
   /** What one catalogue's own results say, with no minimum sample (#1828) — the learned figure the
    * catalogue settings show beside the manual factor. */
   learnedForCatalogue(catalogNameId: string): { ratio: number | null; n: number };
+  /** A catalogue's name as the areas screen gives a valuing volume — `Michel / Online` — or null for
+   * one this collection does not have. Loaded with the ladder, so a caller naming the book a figure
+   * was read in (#1839) asks nothing more of the database. */
+  catalogueName(catalogNameId: string): string | null;
   /** Observations behind every answer, for a caller that wants to say how much was recorded at
    * all. Deduplication is per bucket, so this is the raw count. */
   observationCount: number;
@@ -461,6 +465,7 @@ export async function loadRealizationRatios(
     learnedForCatalogue(catalogNameId) {
       return learnedCatalogueRatio(catalogNameId, observations);
     },
+    catalogueName: (catalogNameId) => catalogues.catalogues.get(catalogNameId)?.name ?? null,
     resolve(subject) {
       return resolveSubject(subject, observations, fallbackPercent, catalogues, {
         areaName: subject.areaId ? (areaNames.get(subject.areaId) ?? null) : null,
@@ -481,6 +486,7 @@ function emptyResolver(
     describeLots: () => [],
     describeObservations: () => [],
     learnedForCatalogue: () => ({ ratio: null, n: 0 }),
+    catalogueName: (catalogNameId) => catalogues.catalogues.get(catalogNameId)?.name ?? null,
     resolve(subject) {
       return resolveSubject(subject, [], fallbackPercent, catalogues, { areaName: null, conditionName: null });
     },

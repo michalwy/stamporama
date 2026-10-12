@@ -195,6 +195,12 @@ describe("per-set catalogue value + cost (#378)", () => {
     assert.equal(detail.suggestedEstimate?.valuedSets, 2);
     assert.equal(detail.suggestedEstimate?.copies, 2);
     assert.equal(detail.suggestedEstimate?.source.level, "fallback");
+    assert.equal(detail.suggestedEstimate?.ratio, 1);
+  });
+
+  it("names the book the catalogue value was read in (#1839)", async () => {
+    const detail = await offerWithSets([[priced], [pricedNoCost]]);
+    assert.deepEqual(detail.catalogNames, ["Michel / Michel Katalog"]);
   });
 
   it("corrects the catalogue by the catalogue's manual factor, and names it as the source", async () => {
@@ -221,6 +227,9 @@ describe("per-set catalogue value + cost (#378)", () => {
     assert.equal(detail.suggestedPrice, null);
     assert.equal(detail.suggestedEstimate, null);
     assert.equal(detail.marketPrice, null);
+    // Nothing recorded at all, which is not the same as results no rate converts (#1839).
+    assert.equal(detail.marketUnconvertible, false);
+    assert.deepEqual(detail.catalogNames, []);
     // …while the cost is known, per set and in the offer's currency.
     assert.equal(detail.costPrice, "5.00");
   });

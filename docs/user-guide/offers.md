@@ -205,44 +205,56 @@ any of them is.
 
 ### The price table
 
-Above the asking price sits a small table of the figures you weigh it against, each **per set** (an
-offer's price is for the one set a buyer takes) and in the **offer's currency**:
+An offer's price sits in a small table with the figures you weigh it against. It has three columns —
+the row's name, **Price** and **Profit over cost** — and every figure is **per set** (an offer's price
+is for the one set a buyer takes) and in the **offer's currency**. A short note in brackets after a
+row's name says what the figure is; hover the name for the rest.
 
 - **Minimum** — the platform's [minimum price](contacts.md): the lowest figure that platform is worth
   listing on once its fees are paid.
-- **Catalogue** — the copies' **catalogue value**, averaged over the sets that have one. Sets with no
-  catalogue value are named beside it (*1 set unpriced*).
-- **Estimated · suggested** — **Estimated value**: the catalogue value corrected by how far that
-  catalogue runs above what stamps actually fetch — the realisation ratio learned from your recorded
-  auction results, or the catalogue's own [manual factor](collections.md#how-far-a-catalogue-overstates) where nothing has been learned
-  for it yet. This is the **suggested price**, marked with *≈* because it is an estimate. Beside it
-  is where its ratio came from — the bucket it was learned in and how many results (*Polska Ludowa ·
-  34% · n = 6*), *your estimate, not evidence* for a manual factor, *policy, not evidence* for the
+- **Catalogue (Michel / Online, 100%)** — the copies' **catalogue value**, averaged over the sets that
+  have one, and the catalogue it was read in (*2 catalogues* when the copies come from several). Its
+  hover names any sets with no catalogue value.
+- **Estimated** `suggested` **(58% of catalogue)** — **Estimated value**: the catalogue value
+  corrected by how far that catalogue runs above what stamps actually fetch — the realisation ratio
+  learned from your recorded auction results, or the catalogue's own
+  [manual factor](collections.md#how-far-a-catalogue-overstates) where nothing has been learned for
+  it yet. This is the **suggested price**. The note gives only the share of the catalogue; its hover
+  says where that came from — the bucket it was learned in and how many results (*Second Republic,
+  26 results*), *your estimate, not evidence* for a manual factor, *policy, not evidence* for the
   collection's fallback percentage, or how many buckets when your copies were estimated from several.
-- **Market** — what recorded results paid for copies like these, with how many copies they cover.
-  Shown only where there are results.
-- **Cost** — what the copies cost you, marked *estimate* while their purchase lot is still open.
+  The note turns to the warning colour when the share is one you stated rather than one learned.
+- **Market** — what recorded results paid for copies like these; its hover says how many copies they
+  cover. The row is **always there**: with nothing recorded it reads *—* **(no recorded results)**.
+- **Cost** — what the copies cost you, **(estimate — purchase lot still open)** while their purchase
+  lot is open.
+- **Your price** — the offer's own price, last, with the base-currency equivalent in brackets
+  (*≈ 0.22 PLN*) when the offer's currency differs from your collection's. It reads as plain text;
+  **click it** to type a new one. On an auction this row is the **Current price** — where the
+  bidding stands.
 
-Beside every price is the **margin** it would give over the cost — *+4.00 · +50%* — in the warning
-colour when it is a loss. A figure that does not exist is left out rather than shown as 0.00, and
-so is every margin when the cost is unknown.
+**Profit over cost** is one figure with its percentage — *−0.02 (−29%)* — green when it is a profit
+and in the warning colour when it is a loss. A figure that does not exist is left out rather than
+shown as 0.00 (Market excepted), and so is every profit when the cost is unknown.
 
-**Click any price** to set the price to it — the asking price on a quick buy, and the **starting**
-price on an auction, since that is the figure you state while the price beside it is wherever the
-bidding has got to (see [below](#auction-or-quick-buy)). Hovering one says what it is and what
-clicking does. A figure that already is your price is shown plain. The cost is not clickable, and on
-a sold or withdrawn offer none of the figures are.
+**Click a price to use it.** Minimum, Catalogue, Estimated and Market are drawn as links, and hovering
+one says *Use as the offer's price*: clicking sets the asking price on a quick buy, and the
+**starting** price on an auction (*Use as the offer's starting price*), since that is the figure you
+state while the current price is wherever the bidding has got to (see
+[below](#auction-or-quick-buy)). A figure that already is your price is shown plain. The cost is not
+a link, and on a sold or withdrawn offer none of the figures are.
 
 On an auction that has no starting price yet, and on a platform with a
-[default starting price](contacts.md), the platform's own opening figure sits under the price line as
+[default starting price](contacts.md), the platform's own opening figure sits under the price table as
 **platform default**, and its **Use** fills the starting price with it. It is offered only while the
 starting price is empty: the default already filled that field when the offer was created, so once
 it holds a figure — the default's or your own — there is nothing left for it to answer.
 Nothing is ever refused for being under it.
 
 When the offer's currency differs from your collection's base currency, the asking price also shows
-a base-currency equivalent (**≈ 200 PLN**) — on both the offer list and its detail — converted at
-the **current** exchange rate, so you can compare offers across platforms at a glance.
+a base-currency equivalent (**≈ 200 PLN**) — on the offer list, and in brackets on the price table's
+**Your price** row — converted at the **current** exchange rate, so you can compare offers across
+platforms at a glance.
 
 Only copies that are **For sale**, **delivered**, **unsold**, and **not already in this offer**
 can be added. To list the same package on another marketplace, just create a second offer and

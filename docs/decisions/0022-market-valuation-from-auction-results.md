@@ -155,8 +155,8 @@ most of the collection while still wearing the measured figure's name.
 What changed is only the conclusion that the app should therefore show **nothing at all**. The
 estimate is a **section of its own** in the Valuation dialog — *Estimated value*, under Market value
 and above What I paid — where a collector is asking about one stamp and can read a label. Since
-#1829 it is also a **row of its own** in an offer's price table, labelled and with its ratio's source
-beside it, and is the price the offer suggests; there it is computed over every copy with a catalogue
+#1829 it is also a **row of its own** in an offer's price table, labelled with its share of the
+catalogue (its ratio's source in the row's hover since #1839), and is the price the offer suggests; there it is computed over every copy with a catalogue
 value, since the market figure is a separate row rather than the cell beside it. Three rules keep it
 from being mistaken for a measurement in the dialog:
 
