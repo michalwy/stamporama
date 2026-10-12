@@ -28,6 +28,7 @@ import {
   type OfferFilters,
 } from "./use-offers-query";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 import { offerListContextQuery } from "./list-context";
 import { OffersSummaryBar } from "./offers-summary-bar";
 import { OfferFormDialog } from "./offer-form-dialog";
@@ -229,6 +230,11 @@ export function OffersListPanel({
   // it is the batch to go and post again, and it empties as that is done.
   const needsRefresh = searchParams.get("needsRefresh") === "1";
 
+  // One multi-lot Facebook post's lots (#1842), narrowed to from a lot's *Post #N* chip or the post's
+  // own screen. URL-only like the narrowings above: it is where a click took the collector, not the
+  // shape the list should still have next time.
+  const post = parseFacebookPostNo(searchParams.get("post"));
+
   const filters: OfferFilters = useMemo(
     () => ({
       platformId,
@@ -241,6 +247,7 @@ export function OffersListPanel({
       needsRefresh,
       includeClosed,
       search: search || undefined,
+      post,
     }),
     [
       platformId,
@@ -253,6 +260,7 @@ export function OffersListPanel({
       needsRefresh,
       includeClosed,
       search,
+      post,
     ]
   );
 
@@ -473,9 +481,9 @@ export function OffersListPanel({
       invalidateAll(collectionId);
       setSelection((prev) => keptAfterBulkRun(prev, batch.map((o) => o.id), []));
       toast({
-        message: `${batch.length} offers are now one post, as lots 1–${batch.length}`,
-        href: `/c/${collectionSlug}/offers/${batch[0].id}`,
-        linkLabel: "Open lot 1",
+        message: `${batch.length} offers are now post #${result.postNo}, as lots 1–${batch.length}`,
+        href: `/c/${collectionSlug}/offers/posts/${result.postNo}`,
+        linkLabel: "Open post",
       });
     });
   }
@@ -551,6 +559,7 @@ export function OffersListPanel({
     platformSale ||
     listingOutOfDate ||
     needsRefresh ||
+    !!post ||
     !!search;
 
   return (
@@ -715,6 +724,8 @@ export function OffersListPanel({
               onClick={() => updateParams({ listingOutOfDate: "" })}
             />
           )}
+          {/* Likewise while the list is narrowed to one Facebook post's lots (#1842). */}
+          {post && <FilterChip label={`Post #${post}`} active onClick={() => updateParams({ post: "" })} />}
           <span style={{ width: "1px", height: "1.25rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
           {/* Remembered toggle (#245): closed (sold / withdrawn) offers are hidden by default. */}
           <FilterChip
@@ -1015,6 +1026,7 @@ export function OffersListPanel({
                 onSell={(row) => setDialog({ kind: "sell", offer: row })}
                 onSetInActiveBidding={setOfferBidding}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
+                onNarrowToPost={post ? undefined : (postNo) => updateParams({ post: String(postNo) })}
                 selection={{
                   selected: selection.has(offer.id),
                   onToggle: toggleSelected,

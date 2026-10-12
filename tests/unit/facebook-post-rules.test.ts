@@ -9,7 +9,10 @@ import {
   facebookPostGaps,
   facebookPostRefusal,
   facebookPostLink,
+  facebookPostMoves,
   facebookPostSource,
+  facebookPostStage,
+  parseFacebookPostNo,
   isFacebookLotPosted,
   isFacebookPendingPostUrl,
   parseBidIncrement,
@@ -664,5 +667,63 @@ describe("a captioned post (#1841)", () => {
     });
     assert.equal(old?.layout, "text");
     assert.equal(old?.postText, "");
+  });
+});
+
+describe("a multi-lot post's screen (#1842)", () => {
+  const lots = (...states: string[]) => states.map((state, i) => ({ state, lotNo: i + 1 }));
+
+  it("offers activating or submitting only when every lot is Ready", () => {
+    const ready = facebookPostMoves(lots("ready", "ready"));
+    assert.equal(ready.activate, true);
+    assert.equal(ready.submit, true);
+    assert.equal(ready.approve, false);
+    assert.equal(ready.takeOut, true);
+    assert.deepEqual(ready.waiting, []);
+
+    const short = facebookPostMoves(lots("ready", "preparing", "preparing"));
+    assert.equal(short.activate, false);
+    assert.equal(short.submit, false);
+    assert.deepEqual(short.waiting, [2, 3]);
+  });
+
+  it("finishes an activation refused halfway, but not a submission into a live post", () => {
+    const half = facebookPostMoves(lots("active", "ready"));
+    assert.equal(half.activate, true);
+    assert.equal(half.submit, false);
+    assert.equal(half.takeOut, false);
+  });
+
+  it("offers approve, reject and withdraw while the post waits for approval, and nothing else", () => {
+    const pending = facebookPostMoves(lots("pending", "pending"));
+    assert.deepEqual(
+      [pending.activate, pending.submit, pending.approve, pending.reject, pending.withdraw, pending.takeOut],
+      [false, false, true, true, true, false]
+    );
+  });
+
+  it("offers no move of the post's own once it is up, and no take-out", () => {
+    const up = facebookPostMoves(lots("active", "sold", "withdrawn"));
+    assert.deepEqual(
+      [up.activate, up.submit, up.approve, up.reject, up.withdraw, up.takeOut],
+      [false, false, false, false, false, false]
+    );
+    assert.deepEqual(up.waiting, []);
+  });
+
+  it("says where the post stands as a whole", () => {
+    assert.equal(facebookPostStage(lots("preparing", "ready")), "preparing");
+    assert.equal(facebookPostStage(lots("ready", "ready")), "ready");
+    assert.equal(facebookPostStage(lots("pending", "ready")), "pending");
+    assert.equal(facebookPostStage(lots("active", "sold")), "up");
+    assert.equal(facebookPostStage(lots("paused", "withdrawn")), "up");
+    assert.equal(facebookPostStage(lots("sold", "withdrawn")), "over");
+  });
+
+  it("reads a post number from a filter only as a positive whole number", () => {
+    assert.equal(parseFacebookPostNo("12"), 12);
+    for (const bad of [null, undefined, "", "0", "-3", "1.5", "12a", " 12", "99999999999999999999"]) {
+      assert.equal(parseFacebookPostNo(bad), undefined, String(bad));
+    }
   });
 });

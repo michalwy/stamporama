@@ -3,6 +3,8 @@ import { prisma } from "./db";
 import {
   detachFacebookLot,
   facebookGroupMixesTypes,
+  getFacebookOfferKit,
+  type FacebookOfferKit,
   readFacebookGroupSettings,
   setFrozenFacebookClosing,
 } from "./facebook-auctions";
@@ -13,6 +15,7 @@ import {
   isFacebookLotPosted,
   type FacebookApprovalClosing,
 } from "./facebook-post-rules";
+import { allocateEntityNumber } from "./items";
 import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
 import { isAuctionListing, normalizeListingType } from "./offer-rules";
 
@@ -59,7 +62,7 @@ export async function createFacebookPost(
   ownerId: string,
   collectionId: string,
   offerIds: readonly string[]
-): Promise<{ postId: string }> {
+): Promise<{ postId: string; postNo: number }> {
   await assertCollectionOwner(ownerId, collectionId);
   const ids = [...new Set(offerIds)];
   const rows = await prisma.offer.findMany({
@@ -90,8 +93,9 @@ export async function createFacebookPost(
   const auction = (l: (typeof lots)[number]) => isAuctionListing(l.listingType);
   const endsAt = lots.find((l) => auction(l) && l.endsAt !== null)?.endsAt ?? null;
   return prisma.$transaction(async (tx) => {
+    const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
     const post = await tx.facebookPost.create({
-      data: { collectionId, groupId: lots[0].facebookGroupId! },
+      data: { collectionId, postNo, groupId: lots[0].facebookGroupId! },
       select: { id: true },
     });
     for (const [index, lot] of lots.entries()) {
@@ -100,8 +104,80 @@ export async function createFacebookPost(
         data: { facebookPostId: post.id, facebookLotNo: index + 1, ...(auction(lot) ? { endsAt } : {}) },
       });
     }
-    return { postId: post.id };
+    return { postId: post.id, postNo };
   });
+}
+
+/** What a multi-lot post's own screen draws (#1842): the post's kit — the group, the lots in lot
+ *  order, the text and photos — and, per lot, the sales it left on. */
+export interface FacebookPostScreen {
+  postId: string;
+  postNo: number;
+  collectionId: string;
+  kit: FacebookOfferKit;
+  /** The Facebook platform the lots are offered on — what *Sell* on a lot's row records the sale on. */
+  platform: { id: string; name: string };
+  /** Keyed by the lot's offer id; a lot sold on no sale is absent. Several only when its sets were
+   *  sold apart. */
+  sales: Record<string, { id: string; saleNo: number }[]>;
+}
+
+/** The post a collection numbers `postNo` (#1842), or null — what its screen's address is resolved by. */
+export async function findFacebookPostId(
+  ownerId: string,
+  collectionId: string,
+  postNo: number
+): Promise<string | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const post = await prisma.facebookPost.findUnique({
+    where: { collectionId_postNo: { collectionId, postNo } },
+    select: { id: true },
+  });
+  return post?.id ?? null;
+}
+
+/**
+ * A multi-lot post as its own screen shows it (#1842): the kit every lot's card used to repeat, read
+ * once off its first lot, and each lot's sale. Null for a post that is gone — dissolved when it was
+ * left with one lot.
+ */
+export async function getFacebookPostScreen(ownerId: string, postId: string): Promise<FacebookPostScreen | null> {
+  const post = await prisma.facebookPost.findUnique({
+    where: { id: postId },
+    select: {
+      id: true,
+      postNo: true,
+      collectionId: true,
+      lots: {
+        select: { id: true, platform: { select: { id: true, name: true } } },
+        orderBy: { facebookLotNo: "asc" },
+        take: 1,
+      },
+    },
+  });
+  if (!post || post.lots.length === 0) return null;
+  await assertCollectionOwner(ownerId, post.collectionId);
+  const kit = await getFacebookOfferKit(post.lots[0].id);
+  if (!kit) return null;
+  const lines = await prisma.saleLine.findMany({
+    where: { offerId: { in: kit.lots.map((l) => l.offerId) } },
+    select: { offerId: true, sale: { select: { id: true, saleNo: true } } },
+    orderBy: { sale: { saleNo: "asc" } },
+  });
+  const sales: FacebookPostScreen["sales"] = {};
+  for (const line of lines) {
+    if (!line.offerId) continue;
+    const list = (sales[line.offerId] ??= []);
+    if (!list.some((s) => s.id === line.sale.id)) list.push(line.sale);
+  }
+  return {
+    postId: post.id,
+    postNo: post.postNo,
+    collectionId: post.collectionId,
+    kit,
+    platform: post.lots[0].platform,
+    sales,
+  };
 }
 
 /**

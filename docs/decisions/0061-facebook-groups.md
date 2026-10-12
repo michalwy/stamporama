@@ -13,7 +13,8 @@ is amended by #1692: a post is only what its template places. §4 and §8 are am
 Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*. §6 is
 amended by #1780: an offer can carry its own post template, overriding its group's. §3 is amended
 by #1800: a published offer's post text is frozen as it was posted. §2 is amended by #1841: a post of
-several lots can carry each lot's text in its photo's caption.
+several lots can carry each lot's text in its photo's caption. §2 is amended by #1842: a post of
+several lots has a number and a screen of its own.
 
 ## Context
 
@@ -75,6 +76,23 @@ own and an offer per lot already carries its sale, withdrawal, *Pending* and fro
 
 The joined photo is drawn on demand from the offer's stored images, never stored itself: it follows
 the offer's photo run without a second fingerprint to keep in step.
+
+**Amended by #1842 (decided with the collector on 2026-10-12): a post of several lots has a screen of
+its own, and a number.** It was seen only from the Facebook card of any of its lots, each card
+repeating the whole post.
+
+- **A post has a short number**, per collection, allocated as an offer's is (#416) and never reused —
+  a dissolved post retires it.
+- **The post's screen** lists its lots in lot order with each one's state, price, link and sale, and
+  holds the post kit and the moves the post makes as one: submit for approval, approve, reject,
+  activate, withdraw a pending post — plus taking a lot out while the post is not up. Each lot's own
+  actions — selling it, withdrawing one lot of a post that is up — stay the offer's, reached from the
+  lot's row.
+- **The offers list names the post on every lot's row** — *Post #12 · lot 3* — opening the post's
+  screen, and can be narrowed to one post's lots from it.
+- **A lot's Facebook card names its post** — number, lot number, where the post stands, *Open post* —
+  instead of repeating it. What is the lot's own stays on it: its own template and its bidding.
+- A list of all posts was not part of the decision.
 
 ### 3. Posting starts as a kit to paste
 

@@ -34,6 +34,7 @@ import {
   ListingOutOfDateChip,
   RefreshDueChip,
   ListingTypeChip,
+  FacebookPostChip,
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
@@ -104,6 +105,8 @@ interface OfferRowProps {
   onSell: (offer: OfferListItem) => void;
   onSetInActiveBidding: (offer: OfferListItem, value: boolean) => void;
   onDelete: (offer: OfferListItem) => void;
+  /** Narrows the list to the lots of this row's Facebook post (#1842); absent while it already is. */
+  onNarrowToPost?: (postNo: number) => void;
   /** Bulk selection: when present the row gains a checkbox in the gutter the list's select-all
    * shares. **Every** row gets one, terminal offers included — unlike the copies list (#373), where
    * one eligibility rule covers every bulk action, the two actions here disagree (a withdrawn offer
@@ -131,6 +134,7 @@ export function OfferRow({
   onSell,
   onSetInActiveBidding,
   onDelete,
+  onNarrowToPost,
   selection,
 }: OfferRowProps) {
     const [hovered, setHovered] = useState(false);
@@ -312,6 +316,15 @@ export function OfferRow({
           <Tooltip content="Platform">
             <span style={CHIP}>{offer.platformName}</span>
           </Tooltip>
+          {/* A lot of a multi-lot Facebook post names its post (#1842). */}
+          {offer.facebookPost && (
+            <FacebookPostChip
+              collectionSlug={collectionSlug}
+              postNo={offer.facebookPost.postNo}
+              lotNo={offer.facebookPost.lotNo}
+              onNarrow={onNarrowToPost ? () => onNarrowToPost(offer.facebookPost!.postNo) : undefined}
+            />
+          )}
           <OfferStateChip state={offer.state} />
           {canAdvance && advanceTo && (() => {
             const { label, icon } = advanceLabel(offer.state, advanceTo);

@@ -188,8 +188,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `refreshQuickBuysAfterDays` in `customSettings` — a custom null is a group's own *never* where
   Facebook has one. The Facebook contact's `refreshQuickBuysAfterDays` column is not read (the
   contact dialog hides it there), the `defaultStartingPrice` reasoning of #1661. The card's
-  **Repost…** (an active quick buy only) opens the offer screen's dialog; for a lot it reposts every
-  active quick-buy lot of the post, since they are one post. The rest is in `offers.md`.
+  **Repost…** (an active quick buy posted alone, since #1842) opens the offer screen's dialog; a lot
+  reposts from the offer's ⋮, and takes every active quick-buy lot of the post, since they are one post. The rest is in `offers.md`.
 
 - **A group's currency wins over the platform's** (settled with the collector on 2026-10-03, the
   question ADR-0061 left to #1544). An auction in a group with `currency` set is created in it and
@@ -255,10 +255,34 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   image's side, pair and size), on demand and never stored, within the platform's edge and size
   limits; `GET …/facebook-posts/[postId]/lots/[offerId]/photo` serves it (refused for an offer not
   in the post), and `buildFacebookPostPhotos` is the post's ZIP — one `lot-NN-<offer slug>.jpg` per
-  lot when captioned (the frozen layout first), `buildFacebookPostPhotoArchive` otherwise. The card
-  shows a **Layout** select under the lots (a plain line once posted) and, captioned, each lot's photo
+  lot when captioned (the frozen layout first), `buildFacebookPostPhotoArchive` otherwise. The kit
+  (on the post's screen since #1842) shows a **Layout** select (a plain line once posted) and, captioned, each lot's photo
   and caption with its own copy button; the repost dialog lists the captions too. The integration
   test is `tests/integration/facebook-captioned-posts.test.ts`.
+
+- **A multi-lot post has a number and a screen of its own** (#1842, decided with the collector on
+  2026-10-12; ADR-0061 §2). `FacebookPost.postNo` comes from `Collection.nextFacebookPostNo` through
+  `allocateEntityNumber(…, "facebookPost")` in `createFacebookPost` — the one writer, so not ADR-0062's
+  trigger — unique per collection and never reused (the integration test dissolves the **newest** post
+  so a `max + 1` would fail it; checked when written). The migration numbered existing posts oldest
+  first. The screen is `/c/[slug]/offers/posts/[postNo]` (`findFacebookPostId` resolves the number;
+  the static `posts` segment shadows no offer id), drawn by `facebook-post-panel.tsx` off
+  `getFacebookPostScreen` (`facebook-posts.ts`: the kit read once off the first lot, the platform for
+  *Sell*, and each lot's sales from `SaleLine.offerId`) through `GET …/facebook-posts/[postId]`, under
+  `offerKeys.all` so `invalidateAll` refreshes it. **Which whole-post moves it offers is
+  `facebookPostMoves`** (pure, `facebook-post-rules.ts`), written to match the gates of
+  `publishFacebookPost`, `rejectOfferOrPost` and `withdrawOfferOrPost`; the moves themselves are the
+  existing actions asked of a lot — any lot to publish, a pending one to approve, reject or withdraw —
+  so nothing new runs server-side. `facebookPostStage` is where the post stands, said on the screen and
+  on each lot's card. The kit section moved out of `offer-facebook-card.tsx` into `facebook-post-kit.tsx`
+  (`FacebookPostKit`, `selfOfferId` null on the post's screen so every lot's gap links to its offer):
+  the card draws it only for an offer posted alone, and a lot's card is the post's number, the lot's,
+  the stage and *Open post*, keeping the lot's own template and bidding; its *Listing link* and
+  *Repost…* are for an offer posted alone (a lot reposts from the offer's ⋮). **The offers list**:
+  `OfferListItem.facebookPost` (`{ postNo, lotNo }`) draws `FacebookPostChip` in `offer-badges.tsx`, and
+  `facebookPostNo` in `OfferListFilters` (URL `post`, parsed by `parseFacebookPostNo`) narrows the list,
+  the summary and the detail walk (`list-context.ts`) but not the toolbar's counts, as `bidding`. The
+  integration test is `tests/integration/facebook-post-screen.test.ts`.
 
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
@@ -389,4 +413,4 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   auction is up — and nothing of its own for a quick buy, which is sold and withdrawn from the offer's
   actions (#1777)), and **Post together** in the offers list's
   selection bar, offered while every ticked offer in view is a Facebook offer and numbering the lots
-  in tick order.
+  in tick order; its toast links to the new post's screen (#1842).

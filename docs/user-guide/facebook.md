@@ -254,7 +254,9 @@ Listing the same copy on another platform at the same time is not affected.
 ## Posting
 
 Facebook has no way for an app to post in a group, so you post by hand from the **Facebook** card on
-the offer's screen, directly under the description, which holds everything the post needs:
+the offer's screen, directly under the description, which holds everything the post needs (for a post
+of several lots, the same kit is on the post's own screen — see
+[A post with several lots](#a-post-with-several-lots)):
 
 - the **group**, with a link to open it;
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
@@ -342,28 +344,49 @@ and quick buys**, above). They become lots 1, 2, 3… in the order you ticked th
 them share one closing time — the first auction's — from then on: changing it on one lot changes it
 on all of them. A quick buy has no closing time.
 
-Each lot's Facebook card then shows the whole post — laid out in its text as below, or in captions
-([below](#a-post-with-several-lots-in-captions)):
+The post gets a **number** of its own — **Post #12** — counted per collection like an offer's, and
+never given to another post, even after this one is gone. On the **Offers** screen, every lot's row
+carries a chip **Post #12 · lot 3**: click the words to open the post's screen, or the list icon beside
+them to show only that post's lots in the list (a **Post #12** filter chip appears in the toolbar;
+click it to show every offer again).
 
-- the lots, in order, each linking to its offer;
-- the **post text** for the whole post — each lot's text in lot order, each from its own type's
-  template, or from its offer's own where it has one — which shapes that lot's part of the post and
-  no other — the note on shipping, payment and terms once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
-  with its lot (`lot-01-…`), so the album uploads in the right order;
-- the **listing link** of this lot, once the post is up.
+**The post's screen** is where the post is seen and managed as one. It is reached from that chip, from
+**Open post** on each lot's Facebook card, and from the message **Post together** shows. It has:
 
-The post goes up as one: **Activate** on any lot asks for the post's link once and activates **every**
-lot, so every lot has to be Ready first. The link becomes the listing URL of every lot that has none
-of its own. A lot can carry its own photo's link instead: enter it as that offer's listing URL before
-activating, and it is kept. A post waiting for the group's approval waits as one too: submitting,
-approving, rejecting or withdrawing any lot does it for the whole post, and approving writes the
-final link in place of the pending one and the closing time you settle on into every auction of the
-post. Once the post is up, each lot is its own result again — withdrawing one lot leaves the
-others.
+- **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
+  or over), the group, the post's link once it has one, and the moves the post makes as one, each
+  offered only while it can be made: **Activate…** and **Submit for approval…** once every lot is
+  Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
+  the group's approval. While some lot is not Ready yet, it says which.
+- **Lots** — in lot order: the lot number, the offer's number and title (linking to the offer), its
+  type, its price — an auction's highest bid once one is recorded, else its starting price; a quick
+  buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the offer,
+  **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up — takes
+  the lot out of the post.
+- **Post kit** — the layout (laid out in its text as below, or in captions
+  ([below](#a-post-with-several-lots-in-captions))), the **post text** for the whole post — each lot's
+  text in lot order, each from its own type's template, or from its offer's own where it has one —
+  which shapes that lot's part of the post and no other — the note on shipping, payment and terms
+  once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in
+  one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
+
+Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · lot 3 of 5** and
+where the post stands — with **Open post**, and keeps what is the lot's own: its own post template and,
+while an auction is up, its bidding.
+
+The post goes up as one: **Activate** — on the post's screen, or on any lot — asks for the post's link
+once and activates **every** lot, so every lot has to be Ready first. The link becomes the listing URL
+of every lot that has none of its own. A lot can carry its own photo's link instead: enter it as that
+offer's listing URL before activating, and it is kept. A post waiting for the group's approval waits
+as one too: submitting, approving, rejecting or withdrawing it — or any lot of it — does it for the
+whole post, and approving writes the final link in place of the pending one and the closing time you
+settle on into every auction of the post. Once the post is up, each lot is its own result again —
+withdrawing one lot leaves the others.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
-move up, and a post left with one lot becomes an ordinary single post. Once the post is up, its lots
-stay as they were posted. Deleting a lot's offer works the same way as taking it out.
+move up, and a post left with one lot becomes an ordinary single post — its number is not used again.
+Once the post is up, its lots stay as they were posted. Deleting a lot's offer works the same way as
+taking it out.
 
 A lot cannot be moved to another group while it is in a post; take it out first. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.
@@ -378,8 +401,8 @@ on its own — only the layout changes.
 **Posts of several lots → Layout**, in Facebook defaults or a group's own settings, chooses between
 **Every lot in the post's text** (the layout described above, and what every post starts as) and
 **Each lot in its photo's caption**. A post follows its group's choice until you change it: the
-**Layout** field under the lots on any lot's card sets it for that post alone, or back to **Same as
-group**. Once the post is up, it stays laid out as it was posted.
+**Layout** field in the post's kit, on the post's screen, sets it for that post alone, or back to
+**Same as group**. Once the post is up, it stays laid out as it was posted.
 
 A captioned post is written from its own templates, set beside the layout:
 
@@ -400,7 +423,7 @@ other, whichever brings the image closer to the shape the offer's collage aims a
 portrait or square; square for a fixed grid). A lot photographed on the front only has no backs half
 and no line.
 
-The lot's card then shows the post's text with its **Copy** button, and under it each lot in order:
+The post's screen then shows the post's text with its **Copy** button, and under it each lot in order:
 its photo — click it to download that one — and its caption, each with its own **Copy**. **↓ Photos,
 one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
 album uploads in the right order. What is missing — the post's text, a type's caption template, an
@@ -466,9 +489,10 @@ A quick-buy post a few days old reaches nobody. Once one is up longer than **Ref
 after** — Facebook's, or the group's own — the offer carries **Up N days · refresh** and appears
 under the offers list's **Needs refresh**.
 
-Delete the old post in the group and post it again: choose **Repost…** on the card, which shows the
-post text as it goes up now — the current template and figures, with **Copy** — and take **↓ Photos**
-from the card as the first time. Then paste the new post's link in the dialog; recording it freezes
+Delete the old post in the group and post it again: choose **Repost…** on the card (for a lot of a
+post with several lots, from the offer's **⋮** menu), which shows the post text as it goes up now — the
+current template and figures, with **Copy** — and take **↓ Photos** from the card, or from the post's
+screen, as the first time. Then paste the new post's link in the dialog; recording it freezes
 the new text. The offer keeps its number — so `{offer}` and what buyers quote still match — and the
 count of days starts again from today; the old link stays on the offer as an earlier post. For a
 lot of a post with several lots, every quick buy of the post takes the new link at once. See

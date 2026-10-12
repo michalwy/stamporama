@@ -656,6 +656,69 @@ export function isFacebookLotPosted(state: string): boolean {
   return state !== "preparing" && state !== "ready";
 }
 
+/** The moves a multi-lot post's own screen offers as one (#1842), read off its lots' states with the
+ *  gates `publishFacebookPost`, `rejectOfferOrPost` and `withdrawOfferOrPost` ask — so a button is
+ *  offered only where the server would take it:
+ *
+ *  - `activate` / `submit` — nothing waiting for approval, every lot Ready or already where the move
+ *    takes it, and at least one Ready (a refusal halfway through is finished by asking again);
+ *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
+ *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
+ *  - `takeOut` — a lot may leave the post only until the post is up;
+ *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
+export interface FacebookPostMoves {
+  activate: boolean;
+  submit: boolean;
+  approve: boolean;
+  reject: boolean;
+  withdraw: boolean;
+  takeOut: boolean;
+  waiting: number[];
+}
+
+export function facebookPostMoves(lots: readonly { state: string; lotNo: number | null }[]): FacebookPostMoves {
+  const posted = lots.some((l) => isFacebookLotPosted(l.state));
+  const pending = lots.some((l) => l.state === "pending");
+  const ready = lots.some((l) => l.state === "ready");
+  const onlyIn = (states: readonly string[]) => lots.every((l) => states.includes(l.state));
+  return {
+    activate: !pending && ready && onlyIn(["ready", "active"]),
+    submit: !pending && ready && onlyIn(["ready"]),
+    approve: pending && onlyIn(["ready", "pending", "active"]),
+    reject: pending,
+    withdraw: pending,
+    takeOut: !posted,
+    waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
+  };
+}
+
+/** Where a multi-lot post stands as a whole (#1842), read off its lots — what the post's screen and
+ *  each lot's card say it is: still being prepared, ready to post, waiting for the group's approval,
+ *  up in the group, or over (every lot sold or withdrawn). */
+export type FacebookPostStage = "preparing" | "ready" | "pending" | "up" | "over";
+
+export const FACEBOOK_POST_STAGE_LABEL: Record<FacebookPostStage, string> = {
+  preparing: "Being prepared",
+  ready: "Ready to post",
+  pending: "Waiting for approval",
+  up: "Up in the group",
+  over: "Over",
+};
+
+export function facebookPostStage(lots: readonly { state: string }[]): FacebookPostStage {
+  if (lots.some((l) => l.state === "pending")) return "pending";
+  if (lots.some((l) => l.state === "active" || l.state === "paused")) return "up";
+  if (lots.some((l) => isFacebookLotPosted(l.state))) return "over";
+  return lots.every((l) => l.state === "ready") ? "ready" : "preparing";
+}
+
+/** A post's number as a list filter carries it (#1842): a positive whole number, else no filter. */
+export function parseFacebookPostNo(value: string | null | undefined): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const n = Number(value);
+  return n > 0 && Number.isSafeInteger(n) ? n : undefined;
+}
+
 /** The link of a post holding several lots, read off its lots (#1778): the one most of them carry,
  *  since publishing writes it into every lot with no link of its own and a lot keeping its photo's
  *  link is the exception. The first lot's wins a tie; null when none carries a link. */

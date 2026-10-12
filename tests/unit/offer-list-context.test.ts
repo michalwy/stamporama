@@ -29,6 +29,12 @@ describe("offer list context", () => {
     });
   });
 
+  it("carries the narrowing to one Facebook post's lots (#1842)", () => {
+    assert.equal(roundTrip({ post: 12 })?.post, 12);
+    assert.equal(roundTrip({})?.post, undefined);
+    assert.equal(parseOfferListContext(new URLSearchParams("from=list&post=x"))?.post, undefined);
+  });
+
   it("round-trips several states at once (#475)", () => {
     assert.deepEqual(roundTrip({ states: ["ready", "active"] }), {
       platformId: undefined,

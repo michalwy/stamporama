@@ -1,4 +1,5 @@
 import { isOfferState, type OfferState } from "@/lib/offer-rules";
+import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 /**
  * The filter context an offer was opened from (#429), carried in the detail URL so the screen can
@@ -42,6 +43,8 @@ export interface OfferListContext {
   /** What was in the search box (#465): the list an offer was found through is the list the walk
    * steps along, and a search narrows it exactly as a filter does. */
   search?: string;
+  /** The one multi-lot Facebook post the list was narrowed to (#1842), by its number. */
+  post?: number;
 }
 
 const MARKER = "from";
@@ -60,6 +63,7 @@ export function offerListContextQuery(context: OfferListContext): string {
   else if (context.states?.length) params.set("state", context.states.join(","));
   if (context.includeClosed) params.set("closed", "1");
   if (context.search) params.set("search", context.search);
+  if (context.post) params.set("post", String(context.post));
   return `?${params.toString()}`;
 }
 
@@ -74,6 +78,7 @@ export function parseOfferListContext(
   };
   if (get(MARKER) !== MARKER_VALUE) return null;
   const needsAction = get("needsAction") === "1";
+  const post = parseFacebookPostNo(get("post"));
   return {
     platformId: get("platform") || undefined,
     states: needsAction ? [] : (get("state") || "").split(",").filter(isOfferState),
@@ -85,5 +90,6 @@ export function parseOfferListContext(
     platformSale: get("platformSale") === "1",
     includeClosed: get("closed") === "1",
     search: get("search") || undefined,
+    ...(post ? { post } : {}),
   };
 }

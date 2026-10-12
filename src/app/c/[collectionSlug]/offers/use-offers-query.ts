@@ -19,6 +19,7 @@ import type {
   OfferListNeighbours,
 } from "@/lib/offers";
 import type { OfferListContext } from "./list-context";
+import type { FacebookPostScreen } from "@/lib/facebook-posts";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
@@ -60,6 +61,9 @@ export interface OfferFilters {
    * and filing refs (#465). Matched server-side — the list is cursor-paginated, so it cannot be a
    * client facet. */
   search?: string;
+  /** Only the lots of one multi-lot Facebook post, by its number (#1842) — what a lot's *Post #N*
+   * chip narrows the list to. */
+  post?: number;
 }
 
 export const offerKeys = {
@@ -72,6 +76,10 @@ export const offerKeys = {
     ["offers", collectionId, "photo-plan", offerId] as const,
   coverWalk: (collectionId: string, offerId: string) =>
     ["offers", collectionId, "cover-walk", offerId] as const,
+  /** A multi-lot Facebook post's screen (#1842) — under the offers key, so a write to any lot
+   *  refreshes it. */
+  facebookPost: (collectionId: string, postId: string) =>
+    ["offers", collectionId, "facebook-post", postId] as const,
 };
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
@@ -90,6 +98,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(`/api/collections/${collectionId}/offers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch offers");
       return res.json();
@@ -114,6 +123,19 @@ export function useOfferDetail(collectionId: string, offerId: string) {
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/offers/${offerId}`);
       if (!res.ok) throw new Error("Failed to fetch offer");
+      return res.json();
+    },
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** A multi-lot Facebook post as its own screen reads it (#1842). */
+export function useFacebookPostScreen(collectionId: string, postId: string) {
+  return useQuery<FacebookPostScreen>({
+    queryKey: offerKeys.facebookPost(collectionId, postId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}`);
+      if (!res.ok) throw new Error("Failed to fetch the post");
       return res.json();
     },
     refetchOnWindowFocus: true,
@@ -165,6 +187,7 @@ export function useOfferNeighbours(
       else if (context?.states?.length) params.set("state", context.states.join(","));
       else if (context?.includeClosed) params.set("includeClosed", "1");
       if (context?.search) params.set("search", context.search);
+      if (context?.post) params.set("post", String(context.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/neighbours?${params.toString()}`
       );
@@ -194,6 +217,7 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/counts?${params.toString()}`
       );
@@ -221,6 +245,7 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/summary?${params.toString()}`
       );
