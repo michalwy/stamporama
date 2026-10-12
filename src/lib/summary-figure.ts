@@ -137,3 +137,17 @@ export function signedAmount(amount: string): string {
   const value = Number(amount);
   return value < 0 ? `−${Math.abs(value).toFixed(2)}` : `+${value.toFixed(2)}`;
 }
+
+/** Which way a figure whose direction is the point went (#1883): a gain, a loss, or neither. */
+export type FigureDirection = "gain" | "loss" | "none";
+
+/**
+ * The direction of a signed figure — a return, a margin, or the percentage beside one — which is
+ * what colours it (#1883). **Zero went neither way**, and neither did an absence: a figure with no
+ * amount is not a loss of nothing, and `−0` is not below zero.
+ */
+export function figureDirection(amount: string | number | null): FigureDirection {
+  if (amount === null) return "none";
+  const value = Number(amount);
+  return value > 0 ? "gain" : value < 0 ? "loss" : "none";
+}
