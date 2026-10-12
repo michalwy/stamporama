@@ -6,8 +6,8 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
-import type { SaleDetailLine } from "@/lib/sales";
-import { describeEstimated, describeLeftOut, type UnitProfit } from "@/lib/sale-profit";
+import type { SaleCopyRef, SaleDetailLine } from "@/lib/sales";
+import { describeEstimated, describeLeftOut, explainWithoutCost, type UnitProfit } from "@/lib/sale-profit";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -30,6 +30,7 @@ import {
 import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
 import { Icon } from "@/app/icons";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { CopiesWithoutCost } from "./copies-without-cost";
 
 
 // The sales packing view adds "Location ref" to the shared copy sort keys — the in-location
@@ -870,16 +871,28 @@ function EditableLinePrice({
 
 /** A sold unit's profit (#168) under its net: the figure when every copy on it counts, otherwise a
  * dash that says which copies are missing what. A figure counting a copy at its open lot's estimate
- * (#1814) reads as an estimate — `~`, muted italic, as an estimated cost does (#1696). */
-function UnitProfitLine({ profit, baseCurrency }: { profit: UnitProfit; baseCurrency: string }) {
+ * (#1814) reads as an estimate — `~`, muted italic, as an estimated cost does (#1696). One counting a
+ * copy with no cost recorded (#1875) is a ceiling rather than an estimate — `≤`, since the cost it
+ * leaves out can only lower it — and names those copies beside it, leading to each. */
+function UnitProfitLine({
+  profit,
+  copiesWithoutCost,
+  baseCurrency,
+}: {
+  profit: UnitProfit;
+  copiesWithoutCost: readonly SaleCopyRef[];
+  baseCurrency: string;
+}) {
   if (profit.profit != null) {
     const n = Number(profit.profit);
     const estimated = profit.estimatedCount > 0;
-    const mark = estimated ? "~" : "";
-    return (
+    const mark = (copiesWithoutCost.length > 0 ? "≤ " : "") + (estimated ? "~" : "");
+    const figure = (
       <Tooltip
         content={[
-          `Net against the ${mark}${profit.cost} ${baseCurrency} its copies cost`,
+          copiesWithoutCost.length > 0
+            ? `Net against the ${estimated ? "~" : ""}${profit.cost} ${baseCurrency} recorded for its copies — ${explainWithoutCost(copiesWithoutCost.length).toLowerCase()}`
+            : `Net against the ${mark}${profit.cost} ${baseCurrency} its copies cost`,
           describeEstimated(profit.estimatedCount),
         ]
           .filter(Boolean)
@@ -898,6 +911,14 @@ function UnitProfitLine({ profit, baseCurrency }: { profit: UnitProfit; baseCurr
           {n < 0 ? `−${Math.abs(n).toFixed(2)}` : `+${n.toFixed(2)}`} {baseCurrency}
         </span>
       </Tooltip>
+    );
+    if (copiesWithoutCost.length === 0) return figure;
+    return (
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.3rem" }}>
+        {figure}
+        <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>·</span>
+        <CopiesWithoutCost copies={copiesWithoutCost} />
+      </span>
     );
   }
   return (
@@ -1035,7 +1056,11 @@ function SoldUnitCard({
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             net {line.netBase} {ctx.baseCurrency}
           </div>
-          <UnitProfitLine profit={line.profit} baseCurrency={ctx.baseCurrency} />
+          <UnitProfitLine
+            profit={line.profit}
+            copiesWithoutCost={line.copiesWithoutCost}
+            baseCurrency={ctx.baseCurrency}
+          />
         </div>
         <span onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
           <RowActionsMenu actions={actions} ariaLabel="Sold unit actions" />

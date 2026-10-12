@@ -9,7 +9,8 @@ import { getOverviewValue } from "../../src/lib/overview";
 // that counts whole, one partly countable through a catalogue split, one with no exchange rate and
 // one whose uncountable unit cannot be split — and, over all four, the sale screens adding up to
 // exactly the Overview's realized figure. Last, a copy on a still-open lot counted at its estimated
-// cost on the sale screen (#1814), and at its frozen cost once the lot closes.
+// cost on the sale screen (#1814), and at its frozen cost once the lot closes; and a copy with no
+// cost at all counted at none on the sale screen, named, until its cost is set (#1875).
 //
 // Cost bases are written directly, as `purchase-return.test.ts` does: freezing them is #121's.
 
@@ -191,7 +192,9 @@ describe("sale profit and loss (#168)", () => {
       cost: "20.00",
       profit: "25.00",
       estimatedCount: 0,
+      withoutCostIds: [],
     });
+    assert.deepEqual(detail.copiesWithoutCost, []);
     assert.equal(detail.lines[0].profit.profit, "25.00");
     assert.equal(detail.lines[0].profit.cost, "20.00");
 
@@ -244,14 +247,22 @@ describe("sale profit and loss (#168)", () => {
     assert.equal(record.profit.share, null);
   });
 
-  it("leaves a known copy out when its unit's net cannot be split away from an uncosted one", async () => {
+  it("counts a copy with no cost at none on the sale screen, where the realized figure leaves it out (#1875)", async () => {
+    // Without the option the unit's net cannot be split away from the uncosted, unpriced copy, so
+    // the realized figure leaves both out; the sale screen states the unit over the known cost.
     const f = await copy(cheap, costing("10.00"));
     const g = await copy(unpriced, noCost);
     const saleId = await sell([f, g], "50.00");
 
     const detail = (await getSaleDetail(userId, saleId))!;
-    assert.equal(detail.profit.profit, null);
-    assert.deepEqual(detail.profit.leftOut, { costPending: 0, noCost: 1, noOpeningValue: 0, noRate: 0, unsplittable: 1 });
+    assert.equal(detail.profit.profit, "40.00");
+    assert.equal(detail.profit.cost, "10.00");
+    assert.equal(detail.profit.countedCount, 2);
+    assert.deepEqual(detail.profit.withoutCostIds, [g]);
+    assert.equal(detail.lines[0].profit.profit, "40.00");
+    assert.deepEqual(detail.lines[0].copiesWithoutCost.map((c) => c.itemId), [g]);
+    assert.ok(detail.lines[0].copiesWithoutCost[0].label.length > 0);
+    assert.deepEqual(detail.copiesWithoutCost, detail.lines[0].copiesWithoutCost);
   });
 
   it("adds the sale screens up to exactly the Overview's realized figure", async () => {
@@ -262,7 +273,15 @@ describe("sale profit and loss (#168)", () => {
     let profit = 0;
     const leftOut = { costPending: 0, noCost: 0, noOpeningValue: 0, noRate: 0, unsplittable: 0 };
     for (const saleId of saleIds) {
-      const { profit: p } = (await getSaleDetail(userId, saleId))!;
+      const { profit: p, copiesWithoutCost } = (await getSaleDetail(userId, saleId))!;
+      if (copiesWithoutCost.length > 0) {
+        // The sale screen counts a copy with no cost at none (#1875); the realized figure leaves
+        // it out — here, the fourth case's unit: its uncosted copy, and its known one unsplittable.
+        copies += p.copyCount;
+        leftOut.noCost += 1;
+        leftOut.unsplittable += 1;
+        continue;
+      }
       copies += p.copyCount;
       counted += p.countedCount;
       if (p.proceeds != null) proceeds += Math.round(Number(p.proceeds) * 100);
@@ -324,5 +343,28 @@ describe("sale profit and loss (#168)", () => {
     assert.equal(settled.profit.profit, "60.00");
     assert.equal(settled.lines[0].profit.estimatedCount, 0);
     assert.equal(settled.lines[0].profit.profit, "60.00");
+  });
+
+  it("names a copy lacking any cost on its line until the cost is set, then states a plain profit (#1875)", async () => {
+    // 45.00 net over three copies, one with no cost: 45.00 − 16.60 known = 28.40, marked incomplete.
+    const a = await copy(cheap, costing("10.00"));
+    const b = await copy(cheap, noCost);
+    const c = await copy(cheap, costing("6.60"));
+    const saleId = await sell([a, b, c], "45.00");
+
+    const detail = (await getSaleDetail(userId, saleId))!;
+    assert.equal(detail.lines[0].profit.profit, "28.40");
+    assert.equal(detail.lines[0].profit.cost, "16.60");
+    assert.deepEqual(detail.lines[0].copiesWithoutCost.map((r) => r.itemId), [b]);
+    assert.deepEqual(detail.copiesWithoutCost.map((r) => r.itemId), [b]);
+    assert.equal(detail.profit.profit, "28.40");
+    assert.equal(detail.profit.countedCount, 3);
+
+    await prisma.item.update({ where: { id: b }, data: { costBasis: "3.40" } });
+    const settled = (await getSaleDetail(userId, saleId))!;
+    assert.deepEqual(settled.lines[0].copiesWithoutCost, []);
+    assert.deepEqual(settled.copiesWithoutCost, []);
+    assert.equal(settled.lines[0].profit.profit, "25.00");
+    assert.equal(settled.profit.profit, "25.00");
   });
 });

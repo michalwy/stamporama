@@ -10,9 +10,15 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
-import type { SaleDetail } from "@/lib/sales";
+import type { SaleCopyRef, SaleDetail } from "@/lib/sales";
 import type { SaleBuyerMessage } from "@/lib/sale-buyer-message";
-import { describeEstimated, describeLeftOut, type EstimatedProfitFigures } from "@/lib/sale-profit";
+import {
+  describeEstimated,
+  describeLeftOut,
+  explainWithoutCost,
+  type EstimatedProfitFigures,
+} from "@/lib/sale-profit";
+import { CopiesWithoutCost } from "./copies-without-cost";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
@@ -679,7 +685,12 @@ export function SaleDetailPanel({
 
           {/* Profit and loss (#168): the net against what the sold copies cost. */}
           {sale.lines.length > 0 && (
-            <ProfitRows profit={sale.profit} baseCurrency={sale.baseCurrency} showBase={showBase} />
+            <ProfitRows
+              profit={sale.profit}
+              copiesWithoutCost={sale.copiesWithoutCost}
+              baseCurrency={sale.baseCurrency}
+              showBase={showBase}
+            />
           )}
         </div>
       </div>
@@ -1049,13 +1060,17 @@ const PROFIT_NOTE: React.CSSProperties = {
 /** The cost and profit rows under the net (#168), in the net's own column. A profit that cannot be
  * computed says why instead of showing a figure; one over only some of the copies says how many it
  * left out, and why. One counting a copy at its open lot's estimate (#1814) reads as an estimate —
- * `~`, muted italic, on both the cost and the profit — and says how many copies are estimated. */
+ * `~`, muted italic, on both the cost and the profit — and says how many copies are estimated. One
+ * counting a copy with no cost recorded (#1875) is incomplete and a ceiling — `≤` on the profit — and
+ * names those copies, each leading to its own page. */
 function ProfitRows({
   profit,
+  copiesWithoutCost,
   baseCurrency,
   showBase,
 }: {
   profit: EstimatedProfitFigures;
+  copiesWithoutCost: readonly SaleCopyRef[];
   baseCurrency: string;
   showBase: boolean;
 }) {
@@ -1095,26 +1110,41 @@ function ProfitRows({
   }
 
   const n = Number(profit.profit);
-  const incomplete = profit.countedCount < profit.copyCount;
+  const leftOut = profit.countedCount < profit.copyCount;
+  const withoutCost = copiesWithoutCost.length > 0;
+  const incomplete = leftOut || withoutCost;
   const estimateNote = describeEstimated(profit.estimatedCount);
   const mark = estimateNote ? "~" : "";
+  const ceiling = withoutCost ? "≤ " : "";
   const estimateStyle = estimateNote ? COST_ESTIMATE_STYLE : {};
   const qualifiers = [incomplete && "incomplete", estimateNote && "estimated"].filter(Boolean);
   return (
     <>
-      <div style={ROW_LABEL}>{incomplete ? "− Cost of the counted copies" : "− Cost of copies sold"}</div>
+      <div style={ROW_LABEL}>
+        {leftOut
+          ? "− Cost of the counted copies"
+          : withoutCost
+            ? "− Recorded cost of copies sold"
+            : "− Cost of copies sold"}
+      </div>
       {amount(`${mark}${profit.cost} ${baseCurrency}`, estimateStyle)}
       <div style={{ ...ROW_LABEL, fontWeight: 600, color: "var(--color-text-primary)" }}>
         {qualifiers.length > 0 ? `Profit / loss (${qualifiers.join(", ")})` : "Profit / loss"}
       </div>
-      {amount(`${mark}${signedAmount(profit.profit)} ${baseCurrency}`, {
+      {amount(`${ceiling}${mark}${signedAmount(profit.profit)} ${baseCurrency}`, {
         fontSize: "0.875rem",
         fontWeight: 600,
         color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-primary)",
         ...estimateStyle,
       })}
       {estimateNote && <p style={PROFIT_NOTE}>{estimateNote}.</p>}
-      {incomplete && (
+      {withoutCost && (
+        <p style={PROFIT_NOTE}>
+          <CopiesWithoutCost copies={copiesWithoutCost} align="start" /> —{" "}
+          {explainWithoutCost(copiesWithoutCost.length).toLowerCase()}.
+        </p>
+      )}
+      {leftOut && (
         <p style={PROFIT_NOTE}>
           Counted over {profit.countedCount} of {profit.copyCount} copies, whose proceeds are{" "}
           {profit.proceeds} {baseCurrency}. Left out: {reasons}.

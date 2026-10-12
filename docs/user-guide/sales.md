@@ -187,7 +187,8 @@ counted as costing nothing — when:
 
 - **its cost is pending and cannot be estimated** — it belongs to a purchase lot that is still open,
   and no estimated cost can be worked out for it (see below);
-- **it has no cost recorded** — you added it by hand, or it came through no purchase lot;
+- **it has no cost recorded** — you added it by hand, or it came through no purchase lot (on the
+  sale's own screen such a copy is counted instead, see [Incomplete profit](#incomplete-profit-a-copy-with-no-cost));
 - **it has no opening value** — it came in on an [opening balance](purchases.md#opening-balances)
   whose lot was given no value, so there is nothing to measure a profit against (a copy from a lot
   *with* an opening value counts against its share of it, as against a purchase price);
@@ -216,6 +217,25 @@ cost cannot be estimated (no catalog value, no exchange rate on the purchase, no
 still left out as pending. Only the sale's own screen counts estimates: the profit and loss screen
 and the Overview keep such a copy pending until its lot is closed.
 
+#### Incomplete profit: a copy with no cost
+
+A copy with **no cost recorded** at all — not pending, simply none — would otherwise hide the profit
+of the whole unit it sold in: one such copy in a set of twenty would leave the set reading
+**profit —**. So the sale's own screen counts the unit over the costs it **does** know, and marks the
+figure as **incomplete**, e.g. *profit ≤ +18.40 EUR · 1 copy without cost*.
+
+- **`≤`** says the figure is a ceiling, not an estimate: it leaves out a cost, so the true profit
+  can only be lower. Hovering *1 copy without cost* says so.
+- Clicking **1 copy without cost** opens a short list of those copies; each one links to the copy's
+  own page, where you set its cost.
+- The sale's **Profit / loss** is marked **incomplete** too, with `≤` on its figure and a note
+  naming the copies the same way.
+- Once every such copy has a cost, the mark goes and the unit shows a plain profit.
+
+A copy from an opening balance with no value is still left out (see above): its cost is not missing,
+it was deliberately not stated. And as with estimates, only the sale's own screen counts these
+copies: the profit and loss screen and the Overview still leave them out.
+
 ### The profit and loss screen
 
 Click the **Realized profit and loss** tile on the [Overview](overview.md) to open the **Profit and
@@ -232,7 +252,8 @@ loss** screen. It shows where that figure comes from. Everything on it is in you
   their own line, and the result under them is the same result as in the totals.
 - **By sale** — every sale in the range, newest first: its date, number, platform and buyer, and its
   net proceeds, cost and profit. These are the figures the sale's own screen shows, except that a
-  copy whose purchase lot is still open stays pending here rather than counted at its estimated cost.
+  copy whose purchase lot is still open stays pending here rather than counted at its estimated cost,
+  and a copy with no cost recorded is left out here rather than counted at none.
   Click a row to open the sale.
 
 **Write-offs** are the copies you marked as no longer held — lost, damaged or otherwise gone. They

@@ -6,6 +6,8 @@ import {
   copiesNeedingWeights,
   describeEstimated,
   describeLeftOut,
+  describeWithoutCost,
+  explainWithoutCost,
   leftOutTotal,
   saleRateMissing,
   sumProfitFigures,
@@ -195,6 +197,84 @@ describe("computeSaleProfit with open-lot estimates", () => {
     assert.equal(describeEstimated(0), null);
     assert.match(describeEstimated(1)!, /^~ 1 copy counted at its estimated cost/);
     assert.match(describeEstimated(3)!, /^~ 3 copies counted at their estimated cost/);
+  });
+});
+
+// #1875: the sale's own screen counts a copy with no cost recorded at none, and names it.
+describe("computeSaleProfit counting copies without cost", () => {
+  const SCREEN = { countWithoutCost: true };
+
+  it("gives a unit with a copy lacking any cost its net against the known costs, and names it", () => {
+    const profit = computeSaleProfit(
+      [line("l1", 45, [known("a", "10.00"), noCost("b"), known("c", "6.60")]), line("l2", 20, [known("d", "5.00")])],
+      false,
+      SCREEN
+    );
+    assert.deepEqual(profit.units.map((u) => [u.profit, u.cost, u.withoutCostIds]), [
+      ["28.40", "16.60", ["b"]],
+      ["15.00", "5.00", []],
+    ]);
+    assert.equal(profit.countedCount, 4);
+    assert.equal(leftOutTotal(profit.leftOut), 0);
+    assert.deepEqual(profit.withoutCostIds, ["b"]);
+    assert.equal(profit.profit, "43.40");
+  });
+
+  it("leaves the copy out as before when the screen does not ask", () => {
+    const profit = computeSaleProfit([line("l1", 45, [known("a", "10.00"), noCost("b", null)])], false);
+    assert.equal(profit.units[0].profit, null);
+    assert.deepEqual(profit.units[0].withoutCostIds, []);
+    assert.deepEqual(profit.withoutCostIds, []);
+    assert.equal(profit.leftOut.noCost, 1);
+  });
+
+  it("keeps an opening balance's copy with no value out, and a pending one with no estimate", () => {
+    const profit = computeSaleProfit(
+      [line("l1", 50, [noOpeningValue("a")]), line("l2", 100, [noCost("b", 1), pending("c", 3)])],
+      false,
+      SCREEN
+    );
+    assert.equal(profit.units[0].profit, null);
+    assert.equal(profit.units[1].profit, null);
+    assert.equal(profit.leftOut.noOpeningValue, 1);
+    assert.equal(profit.leftOut.costPending, 1);
+    assert.equal(profit.leftOut.noCost, 0);
+    // The no-cost copy's catalogue quarter of the split unit is counted, at no cost, and named.
+    assert.equal(profit.countedCount, 1);
+    assert.equal(profit.proceeds, "25.00");
+    assert.equal(profit.profit, "25.00");
+    assert.deepEqual(profit.withoutCostIds, ["b"]);
+    assert.deepEqual(profit.units[1].withoutCostIds, []);
+  });
+
+  it("names nothing once the cost is set, and the figure is plain", () => {
+    const profit = computeSaleProfit([line("l1", 45, [known("a", "10.00"), known("b", "3.00")])], false, SCREEN);
+    assert.deepEqual(profit.withoutCostIds, []);
+    assert.deepEqual(profit.units[0].withoutCostIds, []);
+    assert.equal(profit.units[0].profit, "32.00");
+  });
+
+  it("names no copy on a sale with no exchange rate", () => {
+    const profit = computeSaleProfit([line("l1", 30, [noCost("a")])], true, SCREEN);
+    assert.equal(profit.profit, null);
+    assert.deepEqual(profit.withoutCostIds, []);
+  });
+
+  it("asks for weights on a unit a copy without cost still leaves partly countable", () => {
+    assert.deepEqual(
+      copiesNeedingWeights(
+        [line("whole", 1, [known("a", "1.00"), noCost("b")]), line("part", 1, [noCost("c"), pending("d")])],
+        SCREEN
+      ),
+      ["c", "d"]
+    );
+  });
+
+  it("describes the copies and says the figure is overstated", () => {
+    assert.equal(describeWithoutCost(1), "1 copy without cost");
+    assert.equal(describeWithoutCost(2), "2 copies without cost");
+    assert.match(explainWithoutCost(1), /^This copy has no cost recorded.*overstated/);
+    assert.match(explainWithoutCost(3), /^These copies have no cost recorded/);
   });
 });
 

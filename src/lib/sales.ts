@@ -1424,11 +1424,16 @@ function toProfitLines(
  *
  * `withEstimates` is the sale's own screen (#1814): a copy whose lot is still open is counted at its
  * estimated cost, read through `loadCostEstimates` — the purchase order's own figure. The profit and
- * loss screen and the Overview leave it off and keep such a copy pending. */
+ * loss screen and the Overview leave it off and keep such a copy pending. `countWithoutCost` is the
+ * same screen's other exception (#1875): a copy with no cost recorded is counted at none and listed,
+ * where the other two leave it out. */
 async function profitOfSales(
   collectionId: string,
   sales: SaleProfitSaleInput[],
-  { withEstimates = false }: { withEstimates?: boolean } = {}
+  {
+    withEstimates = false,
+    countWithoutCost = false,
+  }: { withEstimates?: boolean; countWithoutCost?: boolean } = {}
 ): Promise<SaleProfit[]> {
   const estimates = withEstimates
     ? await loadCostEstimates(
@@ -1448,14 +1453,17 @@ async function profitOfSales(
   const estimateOf = (id: string) => estimates.get(id)?.amount ?? null;
   const needed = new Set(
     sales.flatMap((sale) =>
-      sale.rateMissing ? [] : copiesNeedingWeights(toProfitLines(sale, () => null, estimateOf))
+      sale.rateMissing
+        ? []
+        : copiesNeedingWeights(toProfitLines(sale, () => null, estimateOf), { countWithoutCost })
     )
   );
   const weights = await valuateItemsByIds(collectionId, [...needed]);
   return sales.map((sale) =>
     computeSaleProfit(
       toProfitLines(sale, (id) => weights.get(id)?.baseAmount ?? null, estimateOf),
-      sale.rateMissing
+      sale.rateMissing,
+      { countWithoutCost }
     )
   );
 }
@@ -1712,6 +1720,15 @@ export interface SaleDetailLine {
   netBase: string;
   /** The unit's profit (#168): its net against the cost of every copy in it, or no figure and why. */
   profit: UnitProfit;
+  /** The copies {@link profit} counts at no cost because none is recorded (#1875), named so the
+   * screen can lead to each one, where its cost is set. */
+  copiesWithoutCost: SaleCopyRef[];
+}
+
+/** A sold copy as a short link: its id and the label the sale screen names it by. */
+export interface SaleCopyRef {
+  itemId: string;
+  label: string;
 }
 
 /** What the sale screen knows about its buyer link (#699) without asking `sale-share.ts` for it.
@@ -1786,8 +1803,12 @@ export interface SaleDetail {
   /** Profit and loss over the sold copies (#168): the counted copies' proceeds and cost, and the
    * copies left out, by why. A copy whose lot is still open is counted at its estimated cost
    * (#1814), and `estimatedCount` says how many were, marking the figure as an estimate. The
-   * Overview's realized figure is these added up **without** the estimates. */
+   * Overview's realized figure is these added up **without** the estimates. A copy with no cost
+   * recorded is counted at none (#1875) and named in {@link copiesWithoutCost}, marking the figure
+   * as incomplete; there it is left out. */
   profit: EstimatedProfitFigures;
+  /** Every copy of the sale that {@link profit} counts at no cost (#1875), in line order. */
+  copiesWithoutCost: SaleCopyRef[];
   /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
   status: string;
   /** True when the sale has at least one copy and every copy is packed (#192) — drives the
@@ -1895,12 +1916,17 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
         lines: sale.lines.map((l) => ({ id: l.id, netBase: resolved.netBaseOf(l), items: l.items })),
       },
     ],
-    { withEstimates: true }
+    { withEstimates: true, countWithoutCost: true }
   );
   const { units, ...profitFigures } = profit;
   const unitById = new Map(units.map((u) => [u.lineId, u]));
 
   const labeller = await makeOfferLabeller(sale.collectionId);
+  const copyLabelById = new Map(
+    sale.lines.flatMap((l) => l.items.map((li) => [li.itemId, labeller.copy(li.item.stamp)] as const))
+  );
+  const refsOf = (ids: readonly string[]): SaleCopyRef[] =>
+    ids.map((itemId) => ({ itemId, label: copyLabelById.get(itemId) ?? "" }));
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
     const setLbl = labeller.set(l.offerSet);
     const net = resolved.netOf(l.id);
@@ -1921,6 +1947,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
       netBase: (net?.netBase ?? Number(l.price)).toFixed(2),
       profit: unitById.get(l.id)!,
+      copiesWithoutCost: refsOf(unitById.get(l.id)!.withoutCostIds),
     };
   });
 
@@ -1971,6 +1998,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     grossProceeds: gross.toFixed(2),
     netProceeds: net.toFixed(2),
     profit: profitFigures,
+    copiesWithoutCost: refsOf(profitFigures.withoutCostIds),
     status: sale.status,
     allItemsPacked: allItemsPacked,
     unpackedItemCount,
@@ -2236,7 +2264,7 @@ export async function realizedProceedsByGroup(
  * sale's own figure (the one its screen shows, `profitOfSales`) added up by `sumProfitFigures`, so
  * the tile and the sale screens agree by construction rather than by two calculations kept in step —
  * except that a sale screen counts a copy on a still-open lot at its estimate (#1814) and this keeps
- * it pending.
+ * it pending, and counts a copy with no cost recorded at none (#1875) where this leaves it out.
  *
  * Ownership is the caller's to assert.
  */
@@ -2257,7 +2285,8 @@ export interface SaleProfitRow {
   platformName: string;
   buyerName: string | null;
   /** The figure the sale's own screen shows (`SaleDetail.profit`), by the same `profitOfSales` — less
-   * the open-lot estimates that screen counts (#1814): here such a copy stays pending. */
+   * the open-lot estimates that screen counts (#1814), here pending, and the copies it counts with no
+   * cost recorded (#1875), here left out. */
   profit: ProfitFigures;
 }
 
