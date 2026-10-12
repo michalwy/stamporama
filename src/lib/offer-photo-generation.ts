@@ -1397,6 +1397,12 @@ export interface OfferUploadImage {
   fileName: string;
   mime: string;
   bytes: Buffer;
+  /** What the image is of, read by a captioned Facebook post that joins an offer's images into one
+   *  (#1841): `front` / `back` / `paired`, or null for an attachment, and the pair it belongs to. */
+  side: PlanImageSide | null;
+  pairKey: string | null;
+  width: number;
+  height: number;
 }
 
 /**
@@ -1450,6 +1456,10 @@ export async function readOfferUploadSet(
         // `delivery` (#591): this is the ZIP the collector downloads, not something the server is
         // about to work on.
         bytes: await readFullBytes(photo, "delivery"),
+        side: image.side,
+        pairKey: image.pairKey,
+        width: image.width,
+        height: image.height,
       };
     })
   );

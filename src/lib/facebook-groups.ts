@@ -8,6 +8,7 @@ import {
   FACEBOOK_BLANK_SETTINGS,
   isFacebookGroupSetting,
   toFacebookListingType,
+  toFacebookMultiLotLayout,
   type FacebookGroupValues,
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
@@ -18,8 +19,8 @@ import {
 // Facebook is **one platform and its groups sit under it**: a group is a row owned by the platform
 // contact this collection calls Facebook, and is not a platform of its own. What a group holds is its
 // customs — how a new offer is sold (#1671), the auction and quick-buy post templates, the standing
-// note, and the defaults a new auction starts from — each read when an offer is created (#1544) and
-// then owned by the offer.
+// note, how a post of several lots is laid out and its caption templates (#1841), and the defaults a
+// new auction starts from — each read when an offer is created (#1544) and then owned by the offer.
 //
 // Each setting of a group **follows the platform's** unless the group marks it custom (#1661): the
 // platform's own settings are a `FacebookDefaults` row, and `readFacebookDefaults` is the one reader
@@ -97,6 +98,10 @@ interface SettingsRow {
   closingTime: string | null;
   refreshQuickBuysAfterDays: number | null;
   buyerMessageTemplate: string;
+  multiLotLayout: string;
+  auctionCaptionTemplate: string;
+  quickBuyCaptionTemplate: string;
+  captionPostTemplate: string;
 }
 
 /** A settings row's columns as the plain values the rules and the client hold. */
@@ -115,6 +120,10 @@ export function toPostingSettings(row: SettingsRow): FacebookPostingSettings {
     closingTime: row.closingTime,
     refreshQuickBuysAfterDays: row.refreshQuickBuysAfterDays,
     buyerMessageTemplate: row.buyerMessageTemplate,
+    multiLotLayout: toFacebookMultiLotLayout(row.multiLotLayout),
+    auctionCaptionTemplate: row.auctionCaptionTemplate,
+    quickBuyCaptionTemplate: row.quickBuyCaptionTemplate,
+    captionPostTemplate: row.captionPostTemplate,
   };
 }
 
@@ -154,6 +163,10 @@ const GROUP_SELECT = {
   closingTime: true,
   refreshQuickBuysAfterDays: true,
   buyerMessageTemplate: true,
+  multiLotLayout: true,
+  auctionCaptionTemplate: true,
+  quickBuyCaptionTemplate: true,
+  captionPostTemplate: true,
   currency: true,
   _count: { select: { offers: true } },
 } as const;
@@ -255,6 +268,10 @@ function settingsColumns(values: FacebookPostingSettings) {
     closingTime: values.closingTime,
     refreshQuickBuysAfterDays: values.refreshQuickBuysAfterDays,
     buyerMessageTemplate: values.buyerMessageTemplate,
+    multiLotLayout: values.multiLotLayout,
+    auctionCaptionTemplate: values.auctionCaptionTemplate,
+    quickBuyCaptionTemplate: values.quickBuyCaptionTemplate,
+    captionPostTemplate: values.captionPostTemplate,
   };
 }
 

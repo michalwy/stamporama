@@ -77,7 +77,8 @@ groups sit under it; whether a new offer is an auction or a quick buy, the post 
 the note on shipping and payment, and auction defaults are set once for Facebook and followed by
 every group, which can set any of them custom for itself. Facebook has no API for group posts, so an
 offer there is prepared as a kit — the post's text and photos — that you paste by hand, alone or as
-lots of one post. On an auction you type the highest bid while it runs, and when it ends the winner
+lots of one post, each lot's text in the post or, where a group asks for it, in its one photo's
+caption. On an auction you type the highest bid while it runs, and when it ends the winner
 and the price; on a quick buy the buyer and the price — either records the sale — see
 [Facebook](docs/user-guide/facebook.md).
 

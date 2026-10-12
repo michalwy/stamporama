@@ -4,14 +4,16 @@ import { prisma, type DbTransaction } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import {
   effectiveFacebookGroupSettings,
+  toFacebookMultiLotLayout,
   type FacebookEffectiveSettings,
   type FacebookGroupSetting,
+  type FacebookMultiLotLayout,
   type FacebookStartingPriceMode,
 } from "./facebook-group-rules";
 import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
 import {
   describeFacebookAuctionCopies,
-  facebookLotTemplate,
+  facebookLayoutLotTemplate,
   facebookMixedTypesRefusal,
   isFacebookLotPosted,
   readFacebookFrozenLot,
@@ -397,15 +399,38 @@ export interface FacebookOfferKit {
     /** The settings the group holds as its own (#1661) — the rest it follows from Facebook's — so the
      *  card links a missing template or note to where it is set (#1692). */
     custom: FacebookGroupSetting[];
+    /** How the group lays out a post of several lots, and a captioned post's templates (#1841). */
+    multiLotLayout: FacebookMultiLotLayout;
+    auctionCaptionTemplate: string;
+    quickBuyCaptionTemplate: string;
+    captionPostTemplate: string;
   };
   /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
-   *  lot's own `url` (#1668), so the post carries none. */
-  post: { id: string } | null;
+   *  lot's own `url` (#1668), so the post carries none. `layout` is the post's own choice (#1841), or
+   *  null while it follows its group's. */
+  post: { id: string; layout: FacebookMultiLotLayout | null } | null;
+  /** How the post is laid out now (#1841): the post's own choice, else its group's; always `text` for
+   *  an offer posted alone. A published post is drawn in the layout it went up in, which its frozen
+   *  lots carry. */
+  layout: FacebookMultiLotLayout;
   /** The post's lots in lot order — or this offer alone. */
   lots: FacebookKitLot[];
   /** Where one click downloads the photos, in lot order: the offer's own archive when it is posted
-   *  alone, the post's when it is a lot. */
+   *  alone, the post's when it is a lot — one photo per lot in a captioned post (#1841). */
   photoZipPath: string;
+  /** Where a captioned post's lot photo is drawn from (#1841): append the lot's offer id and
+   *  `/photo`. Null for an offer posted alone. */
+  lotPhotoBase: string | null;
+}
+
+/** How a post is laid out (#1841): its own choice, else its group's; an offer posted alone is no
+ *  post of several lots and always `text`. */
+export function facebookPostLayout(
+  post: { layout: string | null } | null,
+  settings: Pick<FacebookEffectiveSettings, "multiLotLayout">
+): FacebookMultiLotLayout {
+  if (!post) return "text";
+  return post.layout === null ? settings.multiLotLayout : toFacebookMultiLotLayout(post.layout);
 }
 
 /** What a lot's text is built from, read for a kit or a freeze (#1800). */
@@ -479,7 +504,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     select: {
       collectionId: true,
       facebookPostId: true,
-      facebookPost: { select: { id: true } },
+      facebookPost: { select: { id: true, layout: true } },
       facebookGroup: true,
     },
   });
@@ -506,12 +531,23 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       quickBuyTemplate: settings.quickBuyTemplate,
       standingNote: settings.standingNote,
       custom: toCustomSettings(offer.facebookGroup.customSettings),
+      multiLotLayout: settings.multiLotLayout,
+      auctionCaptionTemplate: settings.auctionCaptionTemplate,
+      quickBuyCaptionTemplate: settings.quickBuyCaptionTemplate,
+      captionPostTemplate: settings.captionPostTemplate,
     },
-    post: offer.facebookPost,
+    post: offer.facebookPost
+      ? {
+          id: offer.facebookPost.id,
+          layout: offer.facebookPost.layout === null ? null : toFacebookMultiLotLayout(offer.facebookPost.layout),
+        }
+      : null,
+    layout: facebookPostLayout(offer.facebookPost, settings),
     lots,
     photoZipPath: offer.facebookPost
       ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
+    lotPhotoBase: offer.facebookPost ? `${base}/facebook-posts/${offer.facebookPost.id}/lots/` : null,
   };
 }
 
@@ -519,7 +555,8 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
 
 /**
  * Freeze the post text of these offers as it reads **now** (#1800): each lot's template — its own, or
- * its group's for its type — the group's note and the lot's figures, written into
+ * its group's for its type; in a captioned post (#1841) its caption's, with the post's shared text and
+ * the layout itself — the group's note and the lot's figures, written into
  * `Offer.facebookPostSnapshot` and drawn instead of the live ones from then on. Called when an offer
  * first goes up (Pending or Active, whichever comes first) and by a repost, which puts the current
  * text up again.
@@ -539,7 +576,7 @@ export async function freezeFacebookPostText(
       facebookGroupId: { not: null },
       ...(onlyUnfrozen ? { facebookPostSnapshot: { equals: Prisma.DbNull } } : {}),
     },
-    select: { id: true, collectionId: true, facebookGroupId: true },
+    select: { id: true, collectionId: true, facebookGroupId: true, facebookPost: { select: { layout: true } } },
   });
   const now = new Date().toISOString();
   const settingsByGroup = new Map<string, FacebookEffectiveSettings>();
@@ -548,14 +585,22 @@ export async function freezeFacebookPostText(
     const ids = targets.filter((t) => t.collectionId === collectionId).map((t) => t.id);
     const lots = await readKitLots(collectionId, { id: { in: ids } });
     for (const lot of lots) {
-      const groupId = targets.find((t) => t.id === lot.offerId)!.facebookGroupId!;
+      const target = targets.find((t) => t.id === lot.offerId)!;
+      const groupId = target.facebookGroupId!;
       if (!settingsByGroup.has(groupId)) settingsByGroup.set(groupId, await readFacebookGroupSettings(groupId));
       const settings = settingsByGroup.get(groupId)!;
+      const layout = facebookPostLayout(target.facebookPost, settings);
       const snapshot: FacebookFrozenLot = {
         frozenAt: now,
         listingType: lot.listingType,
-        template: facebookLotTemplate(
+        template: facebookLayoutLotTemplate(
+          layout,
           { auction: settings.postTemplate, quickBuy: settings.quickBuyTemplate },
+          {
+            auction: settings.auctionCaptionTemplate,
+            quickBuy: settings.quickBuyCaptionTemplate,
+            post: settings.captionPostTemplate,
+          },
           { listingType: lot.listingType, ownTemplate: lot.ownTemplate }
         ),
         standingNote: settings.standingNote,
@@ -567,6 +612,8 @@ export async function freezeFacebookPostText(
         price: isAuctionListing(lot.listingType) ? null : lot.price,
         currency: lot.currency,
         endsAt: lot.endsAt,
+        layout,
+        postText: layout === "captions" ? settings.captionPostTemplate : "",
       };
       await prisma.offer.update({
         where: { id: lot.offerId },

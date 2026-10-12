@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { setFacebookPlatform } from "@/lib/facebook";
-import type { FacebookGroupValues, FacebookPostingSettings } from "@/lib/facebook-group-rules";
+import type {
+  FacebookGroupValues,
+  FacebookMultiLotLayout,
+  FacebookPostingSettings,
+} from "@/lib/facebook-group-rules";
 import {
   createFacebookGroup,
   deleteFacebookGroup,
@@ -14,7 +18,7 @@ import {
   updateFacebookGroup,
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
-import { createFacebookPost, removeFacebookLot } from "@/lib/facebook-posts";
+import { createFacebookPost, removeFacebookLot, setFacebookPostLayout } from "@/lib/facebook-posts";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
 import { patchOffer } from "@/lib/offers";
 import { assertCollectionOwner } from "@/lib/platform-category";
@@ -155,6 +159,20 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** Lay a post of several lots out its own way (#1841), or follow its group's again with null. */
+export async function setFacebookPostLayoutAction(
+  postId: string,
+  layout: FacebookMultiLotLayout | null
+): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await setFacebookPostLayout(session.user.id, postId, layout);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to change how the post is laid out.");
   }
 }
 

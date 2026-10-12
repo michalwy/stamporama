@@ -6,6 +6,7 @@ import {
   readFacebookGroupSettings,
   setFrozenFacebookClosing,
 } from "./facebook-auctions";
+import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./facebook-group-rules";
 import {
   facebookPostLink,
   facebookPostRefusal,
@@ -127,6 +128,30 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
     );
   }
   await prisma.$transaction((tx) => detachFacebookLot(tx, offerId));
+}
+
+/**
+ * Lay a post of several lots out its own way (#1841) — every lot in the post's text, or each lot in
+ * its photo's caption — or, with null, follow its group's setting again. Only until a lot has gone
+ * up: from then on the post is what was posted, and its frozen text says how (#1800).
+ */
+export async function setFacebookPostLayout(
+  ownerId: string,
+  postId: string,
+  layout: FacebookMultiLotLayout | null
+): Promise<void> {
+  if (layout !== null && !(FACEBOOK_MULTI_LOT_LAYOUTS as readonly string[]).includes(layout)) {
+    throw new Error("Unknown layout for a post of several lots.");
+  }
+  await assertPostOwner(ownerId, postId);
+  const lots = await prisma.offer.findMany({ where: { facebookPostId: postId }, select: { state: true } });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      "The post is up, so it stays laid out as it was posted."
+    );
+  }
+  await prisma.facebookPost.update({ where: { id: postId }, data: { layout } });
 }
 
 /**

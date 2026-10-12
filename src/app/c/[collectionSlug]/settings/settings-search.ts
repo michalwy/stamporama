@@ -101,7 +101,17 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Facebook platform", words: ["groups"] },
     {
       label: "Facebook defaults",
-      words: ["post template", "shipping", "payment", "terms", "starting price", "bid increment", "closing time"],
+      words: [
+        "post template",
+        "shipping",
+        "payment",
+        "terms",
+        "starting price",
+        "bid increment",
+        "closing time",
+        "caption",
+        "several lots",
+      ],
     },
   ],
   philasearch: [{ label: "Philasearch platform" }],

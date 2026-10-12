@@ -72,8 +72,8 @@ export function RepostOfferDialog({
   /** How many quick-buy lots of a Facebook post take the link — 1 for an offer posted alone. */
   lots: number;
   /** A Facebook offer's post as it goes up again (#1800), formatted, with its plain text; absent
-   *  everywhere else. */
-  post?: { html: string; plain: string };
+   *  everywhere else. A captioned post (#1841) carries each lot's caption too. */
+  post?: { html: string; plain: string; captions?: { lotNo: number | null; html: string; plain: string }[] };
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -123,6 +123,21 @@ export function RepostOfferDialog({
             ) : (
               <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>The post is empty.</p>
             )}
+            {post.captions?.map((caption) => (
+              <div key={caption.lotNo ?? 0} style={{ marginTop: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-muted)" }}>
+                    Lot {caption.lotNo} caption
+                  </span>
+                  <CopyButton value={caption.plain} html={caption.html} label="caption" />
+                </div>
+                {caption.html ? (
+                  <RenderedHtml html={caption.html} style={POST_TEXT} />
+                ) : (
+                  <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>The caption is empty.</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
         <label style={CHECK_ROW}>

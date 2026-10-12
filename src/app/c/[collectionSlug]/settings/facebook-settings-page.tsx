@@ -16,13 +16,17 @@ import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups
 import {
   effectiveFacebookGroupSettings,
   FACEBOOK_AUCTION_DAYS_MAX,
+  FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
+  FACEBOOK_MULTI_LOT_LAYOUTS,
   isFacebookGroupSetting,
   standingNoteUnused,
   usesRetiredPostPlaceholder,
   type FacebookGroupSetting,
   type FacebookGroupValues,
+  type FacebookMultiLotLayout,
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
+  type FacebookTemplateRole,
 } from "@/lib/facebook-group-rules";
 import { OFFER_LISTING_TYPE_LABEL, OFFER_LISTING_TYPES, type OfferListingType } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
@@ -69,7 +73,9 @@ import {
  *
  * The pane is long, so it takes the width beside the list and lays its sections out in pairs (#1801):
  * *Every offer* beside *Shipping, payment and terms*, then *New auctions* beside *Quick buys*, so the
- * two post templates sit level and are compared at a glance.
+ * two post templates sit level and are compared at a glance — then *Posts of several lots* beside
+ * *Captions* (#1841): how such a post is laid out, a captioned post's shared text, and the caption
+ * template per type.
  */
 
 export function FacebookSettingsBody({
@@ -322,6 +328,11 @@ function settingsInput(fd: FormData): FacebookPostingSettings {
     closingTime: text("closingTime") || null,
     refreshQuickBuysAfterDays: optionalNumber(text("refreshQuickBuysAfterDays")),
     buyerMessageTemplate: text("buyerMessageTemplate"),
+    // A group following Facebook's layout sends none; the save stores the blank one.
+    multiLotLayout: text("multiLotLayout") === "captions" ? "captions" : "text",
+    auctionCaptionTemplate: text("auctionCaptionTemplate"),
+    quickBuyCaptionTemplate: text("quickBuyCaptionTemplate"),
+    captionPostTemplate: text("captionPostTemplate"),
   };
 }
 
@@ -401,6 +412,21 @@ const HINTS = {
     "A quick buy has a price and no bidding: the first buyer to claim it takes it. Its price is set on each offer.",
   buyerMessage:
     "What to pay, where, and what happens next — copied from a sale with Message to buyer. A sale whose offers are all from one group uses that group's message; any other sale uses Facebook's.",
+  multiLot: (
+    <>
+      How a post holding several lots is laid out: every lot&rsquo;s text in the post&rsquo;s own text,
+      or one photo per lot with the lot&rsquo;s text as that photo&rsquo;s caption — what some groups
+      ask of single series or stamps offered together. Each post can choose otherwise until it is up.
+      A captioned post&rsquo;s own text is shared by its lots — a heading, <code>{"{terms}"}</code>, the
+      lots&rsquo; offer numbers.
+    </>
+  ),
+  captions: (
+    <>
+      The text under each lot&rsquo;s photo in a captioned post, written from the template for the
+      lot&rsquo;s type. A lot of several photos is joined into one, so one photo is one price.
+    </>
+  ),
 } as const;
 
 function money(value: number | null, currency: string | null): string {
@@ -418,10 +444,15 @@ function describeSetting(
       return OFFER_LISTING_TYPE_LABEL[s.listingType];
     case "mixedListingTypes":
       return s.mixedListingTypes ? "A post may mix auctions and quick buys" : "A post's lots share one type";
+    case "multiLotLayout":
+      return FACEBOOK_MULTI_LOT_LAYOUT_LABEL[s.multiLotLayout];
     case "postTemplate":
     case "quickBuyTemplate":
     case "standingNote":
-    case "buyerMessageTemplate": {
+    case "buyerMessageTemplate":
+    case "auctionCaptionTemplate":
+    case "quickBuyCaptionTemplate":
+    case "captionPostTemplate": {
       const text = s[key].trim();
       return text ? <span style={{ whiteSpace: "pre-wrap" }}>{text}</span> : "None";
     }
@@ -540,6 +571,42 @@ function DefaultsFields({
         </div>
       </div>
       <div>
+        <GroupLabel hint={HINTS.multiLot}>Posts of several lots</GroupLabel>
+        <span style={SMALL_LABEL}>Layout</span>
+        <MultiLotLayoutField initial={defaults.multiLotLayout} />
+        <div style={{ marginTop: "0.75rem" }}>
+          <span style={SMALL_LABEL}>Captioned post text</span>
+          <CaptionTemplateField
+            id="facebook-caption-post-template"
+            role="captionPost"
+            listingType="auction"
+            value={texts.captionPostTemplate}
+            onChange={setText("captionPostTemplate")}
+          />
+        </div>
+      </div>
+      <div>
+        <GroupLabel hint={HINTS.captions}>Captions</GroupLabel>
+        <span style={SMALL_LABEL}>Auction caption</span>
+        <CaptionTemplateField
+          id="facebook-auction-caption-template"
+          role="caption"
+          listingType="auction"
+          value={texts.auctionCaptionTemplate}
+          onChange={setText("auctionCaptionTemplate")}
+        />
+        <div style={{ marginTop: "0.75rem" }}>
+          <span style={SMALL_LABEL}>Quick-buy caption</span>
+          <CaptionTemplateField
+            id="facebook-quick-buy-caption-template"
+            role="caption"
+            listingType="fixed"
+            value={texts.quickBuyCaptionTemplate}
+            onChange={setText("quickBuyCaptionTemplate")}
+          />
+        </div>
+      </div>
+      <div>
         <GroupLabel htmlFor="facebook-buyer-message" hint={HINTS.buyerMessage}>
           Message to buyer
         </GroupLabel>
@@ -598,6 +665,7 @@ function GroupFields({
   const posting = {
     postTemplate: own("postTemplate") ? texts.postTemplate : defaults.postTemplate,
     quickBuyTemplate: own("quickBuyTemplate") ? texts.quickBuyTemplate : defaults.quickBuyTemplate,
+    captionPostTemplate: own("captionPostTemplate") ? texts.captionPostTemplate : defaults.captionPostTemplate,
     standingNote: own("standingNote") ? texts.standingNote : defaults.standingNote,
   };
   const setting = (key: FacebookGroupSetting) => ({
@@ -761,6 +829,48 @@ function GroupFields({
         </div>
       </div>
 
+      <div>
+        <GroupLabel hint={HINTS.multiLot}>Posts of several lots</GroupLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <FollowableSetting label="Layout" small {...setting("multiLotLayout")}>
+            <MultiLotLayoutField initial={start.multiLotLayout} />
+          </FollowableSetting>
+          <FollowableSetting label="Captioned post text" small {...setting("captionPostTemplate")}>
+            <CaptionTemplateField
+              id="facebook-group-caption-post-template"
+              role="captionPost"
+              listingType="auction"
+              value={texts.captionPostTemplate}
+              onChange={setText("captionPostTemplate")}
+            />
+          </FollowableSetting>
+        </div>
+      </div>
+
+      <div>
+        <GroupLabel hint={HINTS.captions}>Captions</GroupLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <FollowableSetting label="Auction caption" small {...setting("auctionCaptionTemplate")}>
+            <CaptionTemplateField
+              id="facebook-group-auction-caption-template"
+              role="caption"
+              listingType="auction"
+              value={texts.auctionCaptionTemplate}
+              onChange={setText("auctionCaptionTemplate")}
+            />
+          </FollowableSetting>
+          <FollowableSetting label="Quick-buy caption" small {...setting("quickBuyCaptionTemplate")}>
+            <CaptionTemplateField
+              id="facebook-group-quick-buy-caption-template"
+              role="caption"
+              listingType="fixed"
+              value={texts.quickBuyCaptionTemplate}
+              onChange={setText("quickBuyCaptionTemplate")}
+            />
+          </FollowableSetting>
+        </div>
+      </div>
+
       <FollowableSetting
         label="Message to buyer"
         htmlFor="facebook-group-buyer-message"
@@ -895,6 +1005,58 @@ function PostTemplateField({
   );
 }
 
+/** A captioned post's template in a settings pane (#1841): a lot's caption for its type, or the
+ *  post's shared text — the shared field, submitted under its own name. */
+function CaptionTemplateField({
+  id,
+  role,
+  listingType,
+  value,
+  onChange,
+}: {
+  id: string;
+  role: Exclude<FacebookTemplateRole, "post">;
+  listingType: OfferListingType;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <FacebookPostTemplateField
+      id={id}
+      name={
+        role === "captionPost"
+          ? "captionPostTemplate"
+          : listingType === "auction"
+            ? "auctionCaptionTemplate"
+            : "quickBuyCaptionTemplate"
+      }
+      listingType={listingType}
+      role={role}
+      value={value}
+      onChange={onChange}
+      style={TEXTAREA_STYLE}
+    />
+  );
+}
+
+/** How a post of several lots is laid out (#1841). */
+function MultiLotLayoutField({ initial }: { initial: FacebookMultiLotLayout }) {
+  return (
+    <select
+      name="multiLotLayout"
+      aria-label="Layout of a post of several lots"
+      defaultValue={initial}
+      style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
+    >
+      {FACEBOOK_MULTI_LOT_LAYOUTS.map((l) => (
+        <option key={l} value={l}>
+          {FACEBOOK_MULTI_LOT_LAYOUT_LABEL[l]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** How a new offer starts (#1671): an auction, or a quick buy. */
 function ListingTypeField({ initial }: { initial: OfferListingType }) {
   return (
@@ -925,15 +1087,31 @@ function MixedListingTypesField({ initial }: { initial: boolean }) {
   );
 }
 
-/** The texts a post is written from — both templates and the note — as a pane holds them. */
-type PostTexts = Pick<FacebookPostingSettings, "postTemplate" | "quickBuyTemplate" | "standingNote">;
+/** The texts a post is written from — the templates, a captioned post's too (#1841), and the note —
+ *  as a pane holds them. */
+const POST_TEXT_KEYS = [
+  "postTemplate",
+  "quickBuyTemplate",
+  "standingNote",
+  "auctionCaptionTemplate",
+  "quickBuyCaptionTemplate",
+  "captionPostTemplate",
+] as const;
+type PostTexts = Pick<FacebookPostingSettings, (typeof POST_TEXT_KEYS)[number]>;
 
 function postTexts(s: PostTexts): PostTexts {
-  return { postTemplate: s.postTemplate, quickBuyTemplate: s.quickBuyTemplate, standingNote: s.standingNote };
+  return {
+    postTemplate: s.postTemplate,
+    quickBuyTemplate: s.quickBuyTemplate,
+    standingNote: s.standingNote,
+    auctionCaptionTemplate: s.auctionCaptionTemplate,
+    quickBuyCaptionTemplate: s.quickBuyCaptionTemplate,
+    captionPostTemplate: s.captionPostTemplate,
+  };
 }
 
 function isPostText(key: FacebookGroupSetting): key is keyof PostTexts {
-  return key === "postTemplate" || key === "quickBuyTemplate" || key === "standingNote";
+  return (POST_TEXT_KEYS as readonly string[]).includes(key);
 }
 
 /** The note on shipping, payment and terms, and — since nothing appends it any more (#1689) — the
@@ -968,7 +1146,7 @@ function UnusedNote() {
   return (
     <FieldNote>
       <span style={{ color: "var(--color-warning)" }}>
-        No post carries this note: neither post template has <code>{"{terms}"}</code>.
+        No post carries this note: no post template has <code>{"{terms}"}</code>.
       </span>
     </FieldNote>
   );

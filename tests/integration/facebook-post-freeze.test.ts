@@ -107,7 +107,7 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
   /** The post text the offer's card draws, its closing time written as the instant. */
   async function postText(offerId: string): Promise<string> {
     const kit = (await getFacebookOfferKit(offerId))!;
-    const source = facebookPostSource(kit.group, kit.lots, (iso) => iso ?? "");
+    const source = facebookPostSource({ ...kit.group, layout: kit.layout }, kit.lots, (iso) => iso ?? "");
     return renderFacebookPostText(source.templates, source.standingNote, source.lots);
   }
 

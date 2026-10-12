@@ -14,9 +14,13 @@ import {
   isFacebookPendingPostUrl,
   parseBidIncrement,
   readFacebookCreateChoice,
+  facebookCaptionedPostGaps,
+  facebookPartsText,
   readFacebookFrozenLot,
+  renderFacebookCaptionedPost,
   renderFacebookLotText,
   renderFacebookPostText,
+  type FacebookCaptionTemplates,
   type FacebookFrozenLot,
   type FacebookPostCandidate,
   type FacebookPostLotText,
@@ -460,7 +464,15 @@ describe("isFacebookPendingPostUrl (#1779)", () => {
 });
 
 describe("the post as published (#1800)", () => {
-  const group = { postTemplate: "Now: {title} from {startingPrice}, ends {closesAt}\n{terms}", quickBuyTemplate: "Buy {title} for {price}", standingNote: "New note" };
+  const group = {
+    postTemplate: "Now: {title} from {startingPrice}, ends {closesAt}\n{terms}",
+    quickBuyTemplate: "Buy {title} for {price}",
+    standingNote: "New note",
+    auctionCaptionTemplate: "",
+    quickBuyCaptionTemplate: "",
+    captionPostTemplate: "",
+    layout: "text" as const,
+  };
   const closesAt = (iso: string | null) => (iso ? `at ${iso}` : "");
   const frozen: FacebookFrozenLot = {
     frozenAt: "2026-10-11T10:00:00.000Z",
@@ -475,6 +487,8 @@ describe("the post as published (#1800)", () => {
     price: null,
     currency: "PLN",
     endsAt: "2026-10-18T18:00:00.000Z",
+    layout: "text",
+    postText: "",
   };
   function source(overrides: Partial<FacebookPostSourceLot> = {}): FacebookPostSourceLot {
     return {
@@ -535,5 +549,120 @@ describe("the post as published (#1800)", () => {
     assert.equal(readFacebookFrozenLot({ ...frozen, template: 3 }), null);
     assert.equal(readFacebookFrozenLot({ ...frozen, listingType: "barter" }), null);
     assert.equal(readFacebookFrozenLot([frozen]), null);
+  });
+});
+
+describe("a captioned post (#1841)", () => {
+  const captions: FacebookCaptionTemplates = {
+    auction: "{lot}. {title} from {startingPrice}",
+    quickBuy: "{title} — {price}",
+    post: "Lots {offer}\n{terms}",
+  };
+  const lots = [
+    lot({ lotNo: 2, offerNo: 413, listingType: "fixed", price: "25 PLN", title: "Second" }),
+    lot({ lotNo: 1, offerNo: 412, title: "First" }),
+  ];
+  const texts = (post: ReturnType<typeof renderFacebookCaptionedPost>) => ({
+    post: facebookPartsText(post.post),
+    captions: post.captions.map((c) => [c.lotNo, facebookPartsText(c.parts)]),
+  });
+
+  it("writes the shared text once and each lot's caption from its type's template, in lot order", () => {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots)), {
+      post: "Lots 412, 413\nShipping 7 PLN",
+      captions: [
+        [1, "1. First from 10.00 PLN"],
+        [2, "Second — 25 PLN"],
+      ],
+    });
+  });
+
+  it("keeps {terms} out of a caption — the note is the post's, stated once", () => {
+    const out = renderFacebookCaptionedPost({ ...captions, auction: "{title} {terms}" }, "Note", [lots[1]]);
+    assert.equal(facebookPartsText(out.captions[0].parts), "First {terms}");
+  });
+
+  it("writes a lot's caption from its offer's own template where it has one", () => {
+    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "Own {title}" })]);
+    assert.equal(facebookPartsText(out.captions[0].parts), "Own Austria 1850 Mercury");
+  });
+
+  it("names what is missing: the shared text, a type's caption template, empty placeholders", () => {
+    const gaps = facebookCaptionedPostGaps({ auction: "{title} {description}", quickBuy: "", post: "" }, "", [
+      lot({ lotNo: 1, description: "" }),
+      lot({ lotNo: 2, listingType: "fixed", price: "5 PLN" }),
+    ]);
+    assert.equal(gaps.missingPostText, true);
+    assert.deepEqual(gaps.missingTemplates, ["fixed"]);
+    assert.deepEqual(gaps.emptyPlaceholders, [{ lotNo: 1, token: "{description}" }]);
+    const note = facebookCaptionedPostGaps(captions, "  ", [lot({ lotNo: 1 })]);
+    assert.equal(note.missingPostText, false);
+    assert.deepEqual(note.emptyPlaceholders, [{ lotNo: null, token: "{terms}" }]);
+  });
+
+  it("is drawn as it was published: the layout, the shared text and each caption, frozen", () => {
+    const frozen: FacebookFrozenLot = {
+      frozenAt: "2026-10-12T10:00:00.000Z",
+      listingType: "auction",
+      template: "Then {title}",
+      standingNote: "Old note",
+      title: "First",
+      description: "",
+      catalog: "",
+      startingPrice: "10.00",
+      bidIncrement: null,
+      price: null,
+      currency: "PLN",
+      endsAt: null,
+      layout: "captions",
+      postText: "Old lots {offer}\n{terms}",
+    };
+    const group = {
+      postTemplate: "",
+      quickBuyTemplate: "",
+      standingNote: "New note",
+      auctionCaptionTemplate: "Now {title}",
+      quickBuyCaptionTemplate: "",
+      captionPostTemplate: "New lots {offer}",
+      layout: "text" as const,
+    };
+    const one = {
+      offerId: "o1",
+      lotNo: 1,
+      offerNo: 412,
+      listingType: "auction" as const,
+      title: "First, retitled",
+      description: "",
+      catalog: "",
+      startingPrice: "12.00",
+      bidIncrement: null,
+      currency: "PLN",
+      endsAt: null,
+      price: "0.00",
+      ownTemplate: null,
+      frozen,
+    };
+    const s = facebookPostSource(group, [one], () => "");
+    assert.equal(s.layout, "captions");
+    assert.deepEqual(texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots)), {
+      post: "Old lots 412\nOld note",
+      captions: [[1, "Then First"]],
+    });
+    // Not yet published, it follows the group's layout and templates now.
+    const live = facebookPostSource({ ...group, layout: "captions" }, [{ ...one, frozen: null }], () => "");
+    assert.deepEqual(texts(renderFacebookCaptionedPost(live.captions, live.standingNote, live.lots)), {
+      post: "New lots 412",
+      captions: [[1, "Now First, retitled"]],
+    });
+  });
+
+  it("reads a snapshot older than the layout as the post's text", () => {
+    const old = readFacebookFrozenLot({
+      frozenAt: "2026-10-11T10:00:00.000Z",
+      listingType: "auction",
+      template: "{title}",
+    });
+    assert.equal(old?.layout, "text");
+    assert.equal(old?.postText, "");
   });
 });

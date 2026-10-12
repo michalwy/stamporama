@@ -79,6 +79,59 @@ export function facebookPostPlaceholders(listingType: OfferListingType): readonl
   return listingType === "auction" ? FACEBOOK_AUCTION_PLACEHOLDERS : FACEBOOK_QUICK_BUY_PLACEHOLDERS;
 }
 
+/**
+ * How a post of several lots is laid out (#1841). `text` is every lot's text in the post's own text,
+ * one after another — what every multi-lot post was until then. `captions` is one photo per lot with
+ * the lot's text as **that photo's caption**, which some groups require of single series or stamps
+ * offered together, the post's own text then being shared (terms, a heading). A group setting, and a
+ * post may override it.
+ */
+export const FACEBOOK_MULTI_LOT_LAYOUTS = ["text", "captions"] as const;
+export type FacebookMultiLotLayout = (typeof FACEBOOK_MULTI_LOT_LAYOUTS)[number];
+
+export const FACEBOOK_MULTI_LOT_LAYOUT_LABEL: Record<FacebookMultiLotLayout, string> = {
+  text: "Every lot in the post's text",
+  captions: "Each lot in its photo's caption",
+};
+
+/** A stored layout as the rules read it: anything but `captions` is the post's text, which is what
+ *  every row older than the column was. */
+export function toFacebookMultiLotLayout(value: string | null | undefined): FacebookMultiLotLayout {
+  return value === "captions" ? "captions" : "text";
+}
+
+/**
+ * The placeholders a lot's **caption** may carry in a captioned post (#1841): its type's post
+ * placeholders without `{terms}` — the note belongs to the post's shared text, stated once, not to
+ * any one photo.
+ */
+export function facebookCaptionPlaceholders(listingType: OfferListingType): readonly FacebookPostPlaceholder[] {
+  return facebookPostPlaceholders(listingType).filter((p) => p.token !== FACEBOOK_TERMS_PLACEHOLDER.token);
+}
+
+/**
+ * The placeholders the shared **post text** of a captioned post may carry (#1841): the lots' offer
+ * numbers, bare and in lot order — the template writes any `#` — and the note on shipping, payment and
+ * terms. Each lot's own figures are its caption's.
+ */
+export const FACEBOOK_CAPTION_POST_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
+  { token: "{offer}", label: "Offer numbers", example: "412, 413, 414" },
+  FACEBOOK_TERMS_PLACEHOLDER,
+];
+
+/** Which template a field or a render is for: a post's own lot text (`post`), a lot's caption in a
+ *  captioned post, or a captioned post's shared text (#1841). */
+export type FacebookTemplateRole = "post" | "caption" | "captionPost";
+
+/** The placeholders a template of this role — and, for a lot's, of this type — offers. */
+export function facebookTemplatePlaceholders(
+  role: FacebookTemplateRole,
+  listingType: OfferListingType
+): readonly FacebookPostPlaceholder[] {
+  if (role === "captionPost") return FACEBOOK_CAPTION_POST_PLACEHOLDERS;
+  return role === "caption" ? facebookCaptionPlaceholders(listingType) : facebookPostPlaceholders(listingType);
+}
+
 /** How a group states its default starting price: a figure, or a share of catalogue value. */
 export const FACEBOOK_STARTING_PRICE_MODES = ["amount", "catalogPercent"] as const;
 export type FacebookStartingPriceMode = (typeof FACEBOOK_STARTING_PRICE_MODES)[number];
@@ -108,6 +161,10 @@ export const FACEBOOK_GROUP_SETTINGS = [
   "currency",
   "refreshQuickBuysAfterDays",
   "buyerMessageTemplate",
+  "multiLotLayout",
+  "auctionCaptionTemplate",
+  "quickBuyCaptionTemplate",
+  "captionPostTemplate",
 ] as const;
 export type FacebookGroupSetting = (typeof FACEBOOK_GROUP_SETTINGS)[number];
 
@@ -138,6 +195,13 @@ export interface FacebookPostingSettings {
   refreshQuickBuysAfterDays: number | null;
   /** The message a buyer is sent after a sale (#1815); empty is none. */
   buyerMessageTemplate: string;
+  /** How a post of several lots is laid out (#1841). */
+  multiLotLayout: FacebookMultiLotLayout;
+  /** A lot's caption in a captioned post, per type (#1841). */
+  auctionCaptionTemplate: string;
+  quickBuyCaptionTemplate: string;
+  /** A captioned post's shared text (#1841). */
+  captionPostTemplate: string;
 }
 
 /** The platform's settings before anybody has stated any — what a platform with no row reads as.
@@ -155,6 +219,10 @@ export const FACEBOOK_BLANK_SETTINGS: FacebookPostingSettings = {
   closingTime: null,
   refreshQuickBuysAfterDays: null,
   buyerMessageTemplate: "",
+  multiLotLayout: "text",
+  auctionCaptionTemplate: "",
+  quickBuyCaptionTemplate: "",
+  captionPostTemplate: "",
 };
 
 /** A group's values, as the editor holds them and the domain layer stores them. A setting not named
@@ -257,6 +325,9 @@ export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookP
   if (input.listingType !== "auction" && input.listingType !== "fixed") {
     throw new Error("Unknown listing type.");
   }
+  if (!(FACEBOOK_MULTI_LOT_LAYOUTS as readonly string[]).includes(input.multiLotLayout)) {
+    throw new Error("Unknown layout for a post of several lots.");
+  }
   return {
     listingType: input.listingType,
     mixedListingTypes: input.mixedListingTypes === true,
@@ -270,6 +341,10 @@ export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookP
     closingTime: cleanClosingTime(input.closingTime),
     refreshQuickBuysAfterDays: cleanRefreshQuickBuysAfterDays(input.refreshQuickBuysAfterDays),
     buyerMessageTemplate: input.buyerMessageTemplate.trim(),
+    multiLotLayout: input.multiLotLayout,
+    auctionCaptionTemplate: input.auctionCaptionTemplate.trim(),
+    quickBuyCaptionTemplate: input.quickBuyCaptionTemplate.trim(),
+    captionPostTemplate: input.captionPostTemplate.trim(),
   };
 }
 
@@ -312,6 +387,10 @@ export function cleanFacebookGroupValues(input: FacebookGroupValues): FacebookGr
     closingTime: own("closingTime") ? input.closingTime : null,
     refreshQuickBuysAfterDays: own("refreshQuickBuysAfterDays") ? input.refreshQuickBuysAfterDays : null,
     buyerMessageTemplate: own("buyerMessageTemplate") ? input.buyerMessageTemplate : "",
+    multiLotLayout: own("multiLotLayout") ? input.multiLotLayout : blank.multiLotLayout,
+    auctionCaptionTemplate: own("auctionCaptionTemplate") ? input.auctionCaptionTemplate : "",
+    quickBuyCaptionTemplate: own("quickBuyCaptionTemplate") ? input.quickBuyCaptionTemplate : "",
+    captionPostTemplate: own("captionPostTemplate") ? input.captionPostTemplate : "",
   });
 
   let currency: string | null = null;
@@ -356,6 +435,10 @@ export function effectiveFacebookGroupSettings(
     closingTime: from("closingTime").closingTime,
     refreshQuickBuysAfterDays: from("refreshQuickBuysAfterDays").refreshQuickBuysAfterDays,
     buyerMessageTemplate: from("buyerMessageTemplate").buyerMessageTemplate,
+    multiLotLayout: from("multiLotLayout").multiLotLayout,
+    auctionCaptionTemplate: from("auctionCaptionTemplate").auctionCaptionTemplate,
+    quickBuyCaptionTemplate: from("quickBuyCaptionTemplate").quickBuyCaptionTemplate,
+    captionPostTemplate: from("captionPostTemplate").captionPostTemplate,
     currency: own("currency") ? group.currency : null,
   };
 }
@@ -380,12 +463,17 @@ function templateTokens(template: string): string[] {
 
 /** The template tokens a text carries that are not placeholders of its type's post — said beside the
  *  field so a misspelt `{startprice}`, or an auction's `{increment}` in a quick buy's template, is
- *  seen while it is typed, not on the first post. A retired placeholder is not unknown: it is
- *  {@link retiredPostPlaceholders}' to name. */
-export function unknownPostPlaceholders(template: string, listingType: OfferListingType): string[] {
+ *  seen while it is typed, not on the first post. A retired placeholder is not unknown in a post
+ *  template: it is {@link retiredPostPlaceholders}' to name. The caption and captioned-post templates
+ *  (#1841) were written after `{catalog}` was retired, so there it is simply unknown. */
+export function unknownPostPlaceholders(
+  template: string,
+  listingType: OfferListingType,
+  role: FacebookTemplateRole = "post"
+): string[] {
   const known = new Set<string>([
-    ...facebookPostPlaceholders(listingType).map((p) => p.token),
-    ...FACEBOOK_RETIRED_PLACEHOLDERS,
+    ...facebookTemplatePlaceholders(role, listingType).map((p) => p.token),
+    ...(role === "post" ? FACEBOOK_RETIRED_PLACEHOLDERS : []),
   ]);
   return templateTokens(template).filter((token) => !known.has(token));
 }
@@ -406,18 +494,23 @@ export function usesRetiredPostPlaceholder(settings: Pick<FacebookPostingSetting
 }
 
 /**
- * Whether a note is set that no post will carry (#1689): neither template has `{terms}`. Said under
- * the note, since nothing appends it any more — a template written before the placeholder was left
- * as it was (decided with the collector, 2026-10-09), so its posts carry no note until it is placed.
+ * Whether a note is set that no post will carry (#1689): no template that can state it has `{terms}`
+ * — the two post templates, and a captioned post's shared text (#1841). Said under the note, since
+ * nothing appends it any more — a template written before the placeholder was left as it was
+ * (decided with the collector, 2026-10-09), so its posts carry no note until it is placed.
  */
 export function standingNoteUnused(
-  settings: Pick<FacebookPostingSettings, "postTemplate" | "quickBuyTemplate" | "standingNote">
+  settings: Pick<
+    FacebookPostingSettings,
+    "postTemplate" | "quickBuyTemplate" | "captionPostTemplate" | "standingNote"
+  >
 ): boolean {
   const places = (template: string) => template.includes(FACEBOOK_TERMS_PLACEHOLDER.token);
   return (
     settings.standingNote.trim() !== "" &&
     !places(settings.postTemplate) &&
-    !places(settings.quickBuyTemplate)
+    !places(settings.quickBuyTemplate) &&
+    !places(settings.captionPostTemplate)
   );
 }
 
