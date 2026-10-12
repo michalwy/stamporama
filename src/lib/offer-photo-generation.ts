@@ -15,6 +15,7 @@ import { CLOSED_OFFER_STATES, isOfferState, isTerminalState } from "./offer-rule
 import { closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
 import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
+import { facebookLotPhotoFileName } from "./facebook-post-rules";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import {
@@ -1371,10 +1372,10 @@ export async function buildFacebookPostPhotoArchive(
   const entries: ZipEntry[] = [];
   sets.forEach((set, index) => {
     if ("reason" in set) return;
-    const prefix = `lot-${String(lots[index].facebookLotNo ?? index + 1).padStart(2, "0")}`;
+    const lotNo = lots[index].facebookLotNo ?? index + 1;
     for (const image of set.images) {
       const file = zipEntryOf(image);
-      entries.push({ ...file, name: `${prefix}-${file.name}` });
+      entries.push({ ...file, name: facebookLotPhotoFileName(lotNo, file.name) });
     }
   });
   if (entries.length === 0) {

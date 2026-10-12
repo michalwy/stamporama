@@ -284,6 +284,19 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the summary and the detail walk (`list-context.ts`) but not the toolbar's counts, as `bidding`. The
   integration test is `tests/integration/facebook-post-screen.test.ts`.
 
+- **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
+  2026-10-12), so posting needs no lot opened. In `FacebookPostKit`, a grid across the card's width
+  (`PHOTO_GRID`, 18rem photos drawn from the `full` variant — the 320px thumb is too small to tell
+  stamps apart): captioned, each lot's one photo with its caption and *Copy* under it; as text
+  (`TextLayoutPhotos`), every lot's upload set in lot order without captions. The text layout reads
+  each lot's photo plan client-side through `useOfferPhotoPlans` (`useQueries` under each offer's own
+  `offerKeys.photoPlan`, shared with the lot's Photos card) and keeps what `facebookLotUploadPhotos`
+  (pure, `facebook-post-rules.ts`: publish and not over the limit — `readOfferUploadSet`'s filter)
+  keeps; a click downloads a photo as `facebookLotPhotoFileName` names it, which
+  `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot with nothing
+  to put up is named with a link to its offer. `FacebookOfferKit.collectionId` is what the photos are
+  read through. An offer posted alone keeps its kit as it was: text and ZIP only.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

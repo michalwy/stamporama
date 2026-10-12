@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -149,16 +149,28 @@ export type OfferPhotoPlanView = Omit<OfferPhotoPlanState, "startedAt" | "finish
 /** Generation state + stored images for an offer's photos (#311). Polls while a run is queued or in
  * flight — rendering happens in a background worker, so the card has no completion event to await. */
 export function useOfferPhotoPlan(collectionId: string, offerId: string) {
-  return useQuery<OfferPhotoPlanView>({
+  return useQuery<OfferPhotoPlanView>(photoPlanQuery(collectionId, offerId));
+}
+
+/** Several offers' photo plans at once — a multi-lot post's lots (#1848) — each under its offer's own
+ *  key, so the post's screen and a lot's Photos card share one copy. Asked only while `enabled`. */
+export function useOfferPhotoPlans(collectionId: string, offerIds: readonly string[], enabled: boolean) {
+  return useQueries({
+    queries: offerIds.map((offerId) => ({ ...photoPlanQuery(collectionId, offerId), enabled })),
+  });
+}
+
+function photoPlanQuery(collectionId: string, offerId: string) {
+  return {
     queryKey: offerKeys.photoPlan(collectionId, offerId),
-    queryFn: async () => {
+    queryFn: async (): Promise<OfferPhotoPlanView> => {
       const res = await fetch(`/api/collections/${collectionId}/offers/${offerId}/photos`);
       if (!res.ok) throw new Error("Failed to load the photo plan");
       return res.json();
     },
-    refetchInterval: (query) =>
+    refetchInterval: (query: { state: { data?: OfferPhotoPlanView } }) =>
       query.state.data?.status === "queued" || query.state.data?.status === "running" ? 2000 : false,
-  });
+  };
 }
 
 /**

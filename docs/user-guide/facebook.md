@@ -369,6 +369,10 @@ click it to show every offer again).
   which shapes that lot's part of the post and no other — the note on shipping, payment and terms
   once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in
   one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
+  Under the text, **every photo the post puts up**, in lot order and large enough to recognise the
+  stamps, each marked with its lot and offer: click a photo to download that one, under the same name
+  it has in the download. A lot with no photos to put up is named, with a link to it. Everything a post
+  needs is here — its text, its photos and, captioned, its captions — so posting needs no lot opened.
 
 Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · lot 3 of 5** and
 where the post stands — with **Open post**, and keeps what is the lot's own: its own post template and,
@@ -423,8 +427,9 @@ other, whichever brings the image closer to the shape the offer's collage aims a
 portrait or square; square for a fixed grid). A lot photographed on the front only has no backs half
 and no line.
 
-The post's screen then shows the post's text with its **Copy** button, and under it each lot in order:
-its photo — click it to download that one — and its caption, each with its own **Copy**. **↓ Photos,
+The post's screen then shows the post's text with its **Copy** button, and under it each lot in order,
+side by side across the screen: its photo, shown large — click it to download that one — and its
+caption under it, each with its own **Copy**. **↓ Photos,
 one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
 album uploads in the right order. What is missing — the post's text, a type's caption template, an
 empty placeholder in a caption — is named under it, as for any post. When the post goes up, its text

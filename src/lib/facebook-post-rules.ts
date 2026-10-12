@@ -719,6 +719,20 @@ export function parseFacebookPostNo(value: string | null | undefined): number | 
   return n > 0 && Number.isSafeInteger(n) ? n : undefined;
 }
 
+/** What a lot puts up in a post laid out as text (#1848): its upload set — the images marked to publish
+ *  and inside the platform's limit — in upload order, the very files the post's ZIP carries. */
+export function facebookLotUploadPhotos<T extends { publish: boolean; overLimit: boolean }>(
+  images: readonly T[]
+): T[] {
+  return images.filter((image) => image.publish && !image.overLimit);
+}
+
+/** The name a lot's photo takes in a post laid out as text (#1544, #1848): its lot, two digits, before
+ *  the image's own upload name — what keeps an album's files in lot order, in the ZIP and one by one. */
+export function facebookLotPhotoFileName(lotNo: number, fileName: string): string {
+  return `lot-${String(lotNo).padStart(2, "0")}-${fileName}`;
+}
+
 /** The link of a post holding several lots, read off its lots (#1778): the one most of them carry,
  *  since publishing writes it into every lot with no link of its own and a lot keeping its photo's
  *  link is the exception. The first lot's wins a tie; null when none carries a link. */
