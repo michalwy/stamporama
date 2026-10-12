@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { countItems } from "@/lib/items";
 import { readItemFilters } from "../item-filters";
 
@@ -24,7 +25,7 @@ export async function GET(
     const count = await countItems(
       session.user.id,
       collectionId,
-      readItemFilters(request.nextUrl.searchParams)
+      await withCompletenessSwitch(collectionId, readItemFilters(request.nextUrl.searchParams))
     );
     return NextResponse.json({ count });
   } catch {

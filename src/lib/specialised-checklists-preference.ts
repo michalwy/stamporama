@@ -13,3 +13,16 @@ export async function readIncludeSpecialised(collectionId: string): Promise<bool
   const store = await cookies();
   return readSpecialisedChecklistsCookie(store.get(specialisedChecklistsCookieName(collectionId))?.value);
 }
+
+/**
+ * A Copies filter set with the switch its *Complete* filter judges by (#1884) — the header's chips
+ * count specialised checklists only while it is on, so the filter has to as well, or it would keep
+ * an issue whose chips on screen say otherwise. Read only when the filter is set.
+ */
+export async function withCompletenessSwitch<
+  T extends { complete?: unknown; completeIncludesSpecialised?: boolean },
+>(collectionId: string, filters: T): Promise<T> {
+  return filters.complete
+    ? { ...filters, completeIncludesSpecialised: await readIncludeSpecialised(collectionId) }
+    : filters;
+}

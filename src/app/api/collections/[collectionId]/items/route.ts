@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { listItemsPaginated, type ItemSortBy } from "@/lib/items";
 import { readItemFilters } from "./item-filters";
 
@@ -31,7 +32,7 @@ export async function GET(
 
   try {
     const result = await listItemsPaginated(session.user.id, collectionId, {
-      ...readItemFilters(sp),
+      ...(await withCompletenessSwitch(collectionId, readItemFilters(sp))),
       offset,
       sortBy,
       sortDir,

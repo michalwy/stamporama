@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { listItemYearFacets } from "@/lib/items";
 import { readYearFacetFilters } from "../item-filters";
 
@@ -21,7 +22,7 @@ export async function GET(
     const years = await listItemYearFacets(
       session.user.id,
       collectionId,
-      readYearFacetFilters(request.nextUrl.searchParams)
+      await withCompletenessSwitch(collectionId, readYearFacetFilters(request.nextUrl.searchParams))
     );
     return NextResponse.json({ years });
   } catch {

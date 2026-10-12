@@ -3,6 +3,7 @@ import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { faultFilterFromParams } from "@/lib/fault-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
+import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
 
@@ -96,6 +97,9 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // For or against the multi-stamp copies (#748). An unrecognised value is no filter, so a stale
     // link shows the list rather than an empty screen.
     multiStamp: asMultiStampFilter(sp.get("multiStamp")),
+    // The issue's completeness (#1884). It needs the specialised-checklist switch beside it, which is
+    // a cookie and so is the route's to read — `withCompletenessSwitch` — not this parser's.
+    complete: asCompletenessFilter(sp.get("complete")),
   };
 }
 

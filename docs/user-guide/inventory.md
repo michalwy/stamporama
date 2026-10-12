@@ -66,7 +66,7 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 
 Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
 the way you left it — condition, format, certificate, delivery state, location, the disposition
-filter, the several-stamps filter and all four **More filters** switches, alongside the grouping mode and sort that were
+filter, the several-stamps filter, the **Complete** filter and all four **More filters** switches, alongside the grouping mode and sort that were
 already remembered. Switching a filter off is remembered too, so
 clearing one clears it for next time. A link that names a filter still wins over what is remembered,
 so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
@@ -207,6 +207,19 @@ right, from *which copies* to *how they are shown*.
   several-stamp pieces*: narrow the list to the [covers and other pieces carrying several
   stamps](#covers-fragments-and-other-pieces-carrying-several-stamps), or set them aside. It is
   always on the bar, whether or not you have entered such a piece yet.
+- **Complete** — *All, complete or not* (the default), *Complete — any condition*, *Complete — one
+  condition* or *Incomplete*: show only the copies of issues whose set you hold whole, or of those
+  you do not, so the series you can offer complete are not found by scrolling past every unfinished
+  one. *Any condition* means the [Any chip](#how-complete-each-set-is) reads in full — MNH and MH
+  together count; *one condition* means one condition's own chip does. *Incomplete* is every other
+  issue that has chips. An issue with no chips — no checklist, nothing held of it, or the copies with
+  no issue at all — is left out by every choice but the default, and so are the pieces carrying
+  several stamps. Where an issue has more than one checklist, any one of them being complete makes
+  the issue complete. The judgement is made over **the copies the other filters let through** —
+  exactly what the chips count — so narrowed to one klaser it keeps the series complete *in that
+  klaser*, and what it keeps always agrees with the chips on screen. It works whether or not the
+  list is [grouped by issue](#grouping-by-issue); ungrouped, you get the copies those groups would
+  hold. Specialised checklists count only while they are switched on, as they do for the chips.
 - **Tags** — show only copies carrying the [tags](tags.md) you tick. Inside its panel is a **Must
   carry every ticked tag** switch: off (the default) the list shows copies carrying *any* of the
   ticked tags, on it shows only the copies carrying *all* of them, and the closed control says which
@@ -1629,6 +1642,11 @@ the same rule the issue's own [completeness grid](detail-pages.md#completeness) 
 An issue whose checklists you hold nothing of shows no chips, and so does the **no issue** row: a
 bucket of copies is not a set that can be complete. A piece carrying several stamps ticks none of
 them off here either.
+
+To see only the finished sets — or only the unfinished ones — use the **Complete** filter on the
+toolbar ([Filters and sorting](#filters-and-sorting)): it keeps exactly the groups whose chips say
+so. A copy that *might* be of an issue (the *+n possibly* figure) is not settled into it, so the
+filter leaves it out.
 
 ## Seeing what a stamp is worth
 

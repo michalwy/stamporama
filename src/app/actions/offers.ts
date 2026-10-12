@@ -82,7 +82,7 @@ import {
 import { commitOfferGeneration, type OfferGeneratorResult } from "@/lib/offer-generator";
 import { parseGeneratorRequest, parsePlanFingerprint } from "@/lib/offer-generator-rules";
 import { readItemFilters } from "@/app/api/collections/[collectionId]/items/item-filters";
-import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
+import { readIncludeSpecialised, withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import {
   parseLotBuilderRequest,
   toLotRecipe,
@@ -352,7 +352,13 @@ export async function generateOffersAction(
     const result = await commitOfferGeneration(
       session.user.id,
       collectionId,
-      { ...request, filters: readItemFilters(new URLSearchParams(request.filters)) },
+      {
+        ...request,
+        filters: await withCompletenessSwitch(
+          collectionId,
+          readItemFilters(new URLSearchParams(request.filters))
+        ),
+      },
       expected,
       await readIncludeSpecialised(collectionId)
     );

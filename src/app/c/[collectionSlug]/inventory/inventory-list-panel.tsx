@@ -43,6 +43,7 @@ import {
   type SortOption,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { asMultiStampFilter, MULTI_STAMP_GROUP_KEY } from "@/lib/multi-stamp";
+import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import {
@@ -417,6 +418,9 @@ export function InventoryListPanel({
   // rather than a screen of their own, so the list is where they are found — or set aside. Absent
   // is both; an unrecognised value reads as absent rather than as a list that can never match.
   const multiStamp = asMultiStampFilter(readFilterParam("multiStamp"));
+  // The issue's completeness (#1884) — the issue group header's chips as a filter. Absent is *All*;
+  // an unrecognised value reads as absent, as above.
+  const complete = asCompletenessFilter(readFilterParam("complete"));
   // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
   // changes *what the rows are*, not what is being looked at, and it is a way of working the
   // collector keeps. The modes answer different questions: what stock do I have in duplicate (#372),
@@ -551,10 +555,11 @@ export function InventoryListPanel({
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
       multiStamp,
+      complete,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -585,8 +590,9 @@ export function InventoryListPanel({
       includeGone: includeGone || undefined,
       includeDisposed: includeDisposed || undefined,
       multiStamp,
+      complete,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1183,6 +1189,7 @@ export function InventoryListPanel({
     includeGone ||
     includeDisposed ||
     !!multiStamp ||
+    !!complete ||
     activeDispositions.size > 0;
 
   // The empty state asks a wider question — "is anything narrowing this list" — and the year is
@@ -1623,6 +1630,7 @@ export function InventoryListPanel({
                 formatIds={formatIds}
                 subtypeIds={subtypeIds}
                 multiStamp={multiStamp}
+                complete={complete}
                 tagIds={tagIds}
                 tagMode={tagMode}
                 faultIds={faultIds}
