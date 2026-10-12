@@ -372,3 +372,25 @@ export const CREATABLE_OFFER_STATES: readonly OfferState[] = ["preparing", "read
 export function isCreatableOfferState(value: unknown): value is OfferState {
   return value === "preparing" || value === "ready" || value === "active";
 }
+
+/**
+ * A safe, recognisable file-name stem for one offer — used for the archive and, since #326, for
+ * every image inside it and every image downloaded on its own.
+ *
+ * It leads with the offer's **number** (#416, #1754): two offers with the same or similar titles
+ * otherwise produce archives that cannot be told apart, and the number is what traces a file back
+ * to its offer. The title's slug follows when the offer has one (it usually does: the title is
+ * generated at creation from the platform's template, #209/#210); an untitled offer is its number
+ * alone.
+ */
+export function offerFileSlug(name: string | null | undefined, offerNo: number): string {
+  const slug = (name ?? "")
+    // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .toLowerCase();
+  return slug ? `${offerNo}-${slug}` : String(offerNo);
+}

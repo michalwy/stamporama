@@ -11,11 +11,11 @@ import {
   type StorageAccess,
 } from "./storage";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
-import { CLOSED_OFFER_STATES, isOfferState, isTerminalState } from "./offer-rules";
+import { CLOSED_OFFER_STATES, isOfferState, isTerminalState, offerFileSlug } from "./offer-rules";
 import { closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
 import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
-import { facebookLotPhotoFileName } from "./facebook-post-rules";
+import { facebookLotPhotoFileName, facebookPostPhotoArchiveName } from "./facebook-post-rules";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import {
@@ -1360,7 +1360,7 @@ export async function buildFacebookPostPhotoArchive(
   // first lot's owner check.
   const post = await prisma.facebookPost.findFirst({
     where: { id: postId, collection: { ownerId } },
-    select: { id: true },
+    select: { id: true, postNo: true, title: true },
   });
   if (!post) throw new OfferPhotoGenerationError("Post not found.");
   const lots = await prisma.offer.findMany({
@@ -1381,7 +1381,7 @@ export async function buildFacebookPostPhotoArchive(
   if (entries.length === 0) {
     throw new OfferPhotoGenerationError("None of this post's lots has images to upload — generate them first.");
   }
-  return { fileName: `facebook-post-${lots.length}-lots-photos.zip`, bytes: zip(entries) };
+  return { fileName: facebookPostPhotoArchiveName(post.postNo, post.title), bytes: zip(entries) };
 }
 
 /** An upload-set image as the archive stores it. The name is the plan's own, so a file in a ZIP and
@@ -1505,28 +1505,6 @@ export async function readOfferUploadImages(
   const one = await readOfferUploadSet(ownerId, offerId);
   if ("reason" in one) throw new OfferPhotoGenerationError(one.reason);
   return one.images;
-}
-
-/**
- * A safe, recognisable file-name stem for one offer — used for the archive and, since #326, for
- * every image inside it and every image downloaded on its own.
- *
- * It leads with the offer's **number** (#416, #1754): two offers with the same or similar titles
- * otherwise produce archives that cannot be told apart, and the number is what traces a file back
- * to its offer. The title's slug follows when the offer has one (it usually does: the title is
- * generated at creation from the platform's template, #209/#210); an untitled offer is its number
- * alone.
- */
-export function offerFileSlug(name: string | null | undefined, offerNo: number): string {
-  const slug = (name ?? "")
-    // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60)
-    .toLowerCase();
-  return slug ? `${offerNo}-${slug}` : String(offerNo);
 }
 
 // ── Enqueue ──────────────────────────────────────────────────────────────────

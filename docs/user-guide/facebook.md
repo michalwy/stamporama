@@ -403,6 +403,8 @@ keeps the title it went up with, as it keeps everything else.
   which shapes that lot's part of the post and no other — the note on shipping, payment and terms
   once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in
   one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
+  The download is named by the post's number and title — `12-generalgouvernement-1940-44-photos.zip`,
+  or `12-photos.zip` for a post with no title.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,

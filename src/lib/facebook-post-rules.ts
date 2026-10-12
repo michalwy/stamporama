@@ -26,7 +26,7 @@ import {
   type FacebookStartingPriceMode,
   type FacebookTemplateRole,
 } from "./facebook-group-rules";
-import { isAuctionListing, type OfferListingType } from "./offer-rules";
+import { isAuctionListing, offerFileSlug, type OfferListingType } from "./offer-rules";
 
 /**
  * When a new auction in a group closes, from the group's defaults: `days` after `now`, at the group's
@@ -814,6 +814,13 @@ export function facebookLotUploadPhotos<T extends { publish: boolean; overLimit:
  *  the image's own upload name — what keeps an album's files in lot order, in the ZIP and one by one. */
 export function facebookLotPhotoFileName(lotNo: number, fileName: string): string {
   return `lot-${String(lotNo).padStart(2, "0")}-${fileName}`;
+}
+
+/** The name of a post's photo archive, in either layout (#1871): its number, then its title's slug —
+ *  `12-generalgouvernement-1940-44-photos.zip` — made as an offer's is (#1754), so two posts never
+ *  download under one name. A post with no title (one made before #1862) is its number alone. */
+export function facebookPostPhotoArchiveName(postNo: number, title: string | null | undefined): string {
+  return `${offerFileSlug(title, postNo)}-photos.zip`;
 }
 
 /** The link of a post holding several lots, read off its lots (#1778): the one most of them carry,
