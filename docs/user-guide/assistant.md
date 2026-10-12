@@ -441,6 +441,10 @@ live — except that it clears the offer's **Changed since listed** flag, since 
 been reloaded from the offer. That flag is how you find the listings worth coming back to in the first
 place; see [Listings that no longer match](offers.md#listings-that-no-longer-match).
 
+If some of the offer's sets have sold elsewhere, the update takes them off the offer first, after a
+confirmation listing them, and regenerates the photos before the form opens; see
+[When sets have sold elsewhere](offers.md#when-sets-have-sold-elsewhere).
+
 Colnect serves the same form at an edit address, so its listings can be updated this way; Allegro's
 cannot, and is corrected on Allegro's own screen. The details are in the
 [offers guide](offers.md#update-via-assistant).

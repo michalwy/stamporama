@@ -92,3 +92,26 @@ export function soldElsewhereRemoval<S extends { sold: boolean; soldElsewhere: b
 export function soldElsewhereRemovalLabel(count: number): string {
   return `Remove ${count} ${count === 1 ? "set" : "sets"} sold elsewhere`;
 }
+
+/**
+ * Where the removal of the sets sold elsewhere is offered (#1835): inside **Update via Assistant**
+ * wherever the offer has that update, since taking them off is always the first half of bringing the
+ * listing back into step — one action and one confirmation instead of remove, confirm, update. Its
+ * own **Remove N sets sold elsewhere** (#1805) stays only where there is no update to fold it into: a
+ * platform the Assistant cannot edit a live listing on, or an offer that is not Active. Null while
+ * there is nothing to remove.
+ */
+export function soldElsewhereRemovalVia(offer: {
+  state: OfferState;
+  /** The offer's screen offers Update via Assistant at all (`offersAssistantUpdate`). */
+  assistantUpdate: boolean;
+  sets: readonly { soldElsewhere: boolean }[];
+}): "update" | "own" | null {
+  if (!offer.sets.some((s) => s.soldElsewhere)) return null;
+  return offer.state === "active" && offer.assistantUpdate ? "update" : "own";
+}
+
+/** The update's action once it removes sets first (#1835): *Remove 2 sets and update*. */
+export function soldElsewhereUpdateLabel(count: number): string {
+  return `Remove ${count} ${count === 1 ? "set" : "sets"} and update`;
+}
