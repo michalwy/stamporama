@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { multiLineFormControl } from "@/app/control-style";
 import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -38,6 +38,13 @@ import {
   updateFacebookDefaultsAction,
   updateFacebookGroupAction,
 } from "@/app/actions/facebook";
+import {
+  FACEBOOK_CASE_PARAM,
+  FACEBOOK_SETTINGS_CASES,
+  facebookCustomCases,
+  parseFacebookSettingsCase,
+  type FacebookSettingsCase,
+} from "./facebook-settings-cases";
 import { MarketplacePlatformSelect } from "./marketplace-platform-select";
 import { SETTINGS_FIELD_SELECT_STYLE } from "./settings-field-grid";
 import {
@@ -63,19 +70,19 @@ import {
  * Settings → Facebook (#1543; ADR-0061): which platform is Facebook, in the page header as on every
  * marketplace page, and the **groups** under it — list beside detail, the dictionaries' shape (#1471).
  *
- * Facebook is one platform and its groups sit under it, so the page has no tabs: the groups are what
- * is configured here, and what a group holds is its customs — how a new offer there is sold, the post
+ * Facebook is one platform and its groups sit under it, so the page has no tabs of its own: the groups
+ * are what is configured here, and what a group holds is its customs — how a new offer there is sold, the post
  * templates for an auction and a quick buy (#1671), the standing note, and the defaults a new auction
  * there starts from. **Facebook's own row comes first** (#1661): the
  * settings every group follows, each of which a group may instead set custom for itself. Groups in
  * use are listed next and the archived ones under their own heading, still editable and brought
  * back from the pane.
  *
- * The pane is long, so it takes the width beside the list and lays its sections out in pairs (#1801):
- * *Every offer* beside *Shipping, payment and terms*, then *New auctions* beside *Quick buys*, so the
- * two post templates sit level and are compared at a glance — then *Posts of several lots* beside
- * *Captions* (#1841): how such a post is laid out, a captioned post's shared text, and the caption
- * template per type.
+ * The pane takes the width beside the list (#1801) and is split into **tabs by case** (#1849): General,
+ * Auctions, Quick buys, Several-lot posts, Buyer messages — each holding everything for that case and
+ * nothing else, every template saying in a line when it is used. Facebook's pane and a group's are
+ * the same tabs; a group's tab holding a setting of its own is marked, and the tab shown is kept in
+ * the address while moving between rows.
  */
 
 export function FacebookSettingsBody({
@@ -395,7 +402,8 @@ const HINTS = {
   ),
   quickBuyTemplate: (
     <>
-      The text a quick buy&rsquo;s post is prepared from, the same way. A quick buy is never written
+      The text a quick buy&rsquo;s post is prepared from, as an auction&rsquo;s is from its own. A
+      quick buy has a price and no bidding: the first buyer to claim it takes it. It is never written
       from the auction template, nor an auction from this one.
     </>
   ),
@@ -408,8 +416,6 @@ const HINTS = {
   shared: "These apply to auctions and quick buys alike.",
   newAuctions:
     "What a new auction starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.",
-  quickBuys:
-    "A quick buy has a price and no bidding: the first buyer to claim it takes it. Its price is set on each offer.",
   buyerMessage:
     "What to pay, where, and what happens next — copied from a sale with Message to buyer. A sale whose offers are all from one group uses that group's message; any other sale uses Facebook's.",
   multiLot: (
@@ -476,6 +482,357 @@ function describeSetting(
   }
 }
 
+/** What each template is used for, said in one line under its label (#1849), so the collector can
+ *  tell the seven texts apart without opening the guide. */
+const USED_WHEN = {
+  postTemplate: "A post of one auction, and each auction in a post with every lot in its text",
+  quickBuyTemplate: "A post of one quick buy, and each quick buy in a post with every lot in its text",
+  auctionCaptionTemplate: "An auction lot's photo caption, in a post with captions",
+  quickBuyCaptionTemplate: "A quick-buy lot's photo caption, in a post with captions",
+  captionPostTemplate: "The text above a post with captions",
+  buyerMessageTemplate: "The message to the buyer, copied from a sale with Message to buyer",
+} as const;
+
+/** How one setting is drawn in a pane: its label and the field. */
+interface SlotProps {
+  label: string;
+  htmlFor?: string;
+  hint?: React.ReactNode;
+  /** What a template is used for (#1849), one line under its label. */
+  usedWhen?: string;
+  /** What the label leaves out, said under the field (#1670). */
+  note?: React.ReactNode;
+  /** A figure in a grid: its label is the small one. */
+  small?: boolean;
+}
+
+/** Facebook's pane draws a setting as its label and field; a group's as *Same as Facebook* or its
+ *  own (#1661). The tabs are laid out once, for both, through this. */
+type Slot = (key: FacebookGroupSetting, props: SlotProps, field: React.ReactNode) => React.ReactNode;
+
+/**
+ * The pane's settings in **tabs by case** (#1849, amending #1801's grid): each tab holds everything
+ * for one case and nothing else — what is shared, auctions, quick buys, posts of several lots, the
+ * buyer's message — so a template is found by what it is for. Which setting is on which tab is
+ * `facebook-settings-cases.ts`. Within a tab the sections keep #1801's rule: the width beside the
+ * list, two to a row, no field across the window.
+ */
+function FacebookSettingsTabs({
+  idPrefix,
+  slot,
+  start,
+  texts,
+  setText,
+  currency,
+  currencyField,
+  noteUnused,
+  noteWarning,
+  marked,
+}: {
+  idPrefix: string;
+  slot: Slot;
+  /** What each field opens with. */
+  start: FacebookPostingSettings;
+  texts: PostTexts;
+  setText: (key: keyof PostTexts) => (value: string) => void;
+  /** The currency the figures are in. */
+  currency: string | null;
+  currencyField: React.ReactNode;
+  /** No template the pane's posts use places the note (#1689). */
+  noteUnused: boolean;
+  /** Said under the note when it is followed rather than the pane's own. */
+  noteWarning?: React.ReactNode;
+  /** The tabs holding settings of a group's own. */
+  marked: ReadonlySet<FacebookSettingsCase>;
+}) {
+  const id = (name: string) => `${idPrefix}-${name}`;
+  const panels: Record<FacebookSettingsCase, React.ReactNode> = {
+    general: (
+      <>
+        <div>
+          <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
+          <div style={FIGURE_GRID}>
+            {slot("listingType", { label: "A new offer starts as", small: true }, (
+              <ListingTypeField initial={start.listingType} />
+            ))}
+            {slot("currency", { label: "Currency", small: true }, currencyField)}
+            <div style={{ gridColumn: "1 / -1" }}>
+              {slot("mixedListingTypes", { label: "Lots of one post", small: true }, (
+                <MixedListingTypesField initial={start.mixedListingTypes} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          {slot(
+            "standingNote",
+            { label: "Shipping, payment and terms", htmlFor: id("note"), hint: HINTS.standingNote },
+            <StandingNoteField
+              id={id("note")}
+              value={texts.standingNote}
+              onChange={setText("standingNote")}
+              unused={noteUnused}
+            />
+          )}
+          {noteWarning}
+        </div>
+      </>
+    ),
+    auctions: (
+      <>
+        {slot(
+          "postTemplate",
+          {
+            label: "Post template",
+            htmlFor: id("post-template"),
+            hint: HINTS.postTemplate,
+            usedWhen: USED_WHEN.postTemplate,
+          },
+          <PostTemplateField
+            id={id("post-template")}
+            listingType="auction"
+            value={texts.postTemplate}
+            onChange={setText("postTemplate")}
+          />
+        )}
+        {slot(
+          "auctionCaptionTemplate",
+          {
+            label: "Caption",
+            htmlFor: id("auction-caption-template"),
+            hint: HINTS.captions,
+            usedWhen: USED_WHEN.auctionCaptionTemplate,
+          },
+          <CaptionTemplateField
+            id={id("auction-caption-template")}
+            role="caption"
+            listingType="auction"
+            value={texts.auctionCaptionTemplate}
+            onChange={setText("auctionCaptionTemplate")}
+          />
+        )}
+        <div>
+          <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
+          <div style={FIGURE_GRID}>
+            {slot("startingPrice", { label: "Starting price", small: true }, (
+              <StartingPriceField initial={start} currency={currency} />
+            ))}
+            {slot(
+              "bidIncrement",
+              { label: "Bid increment", small: true, note: currency ? `In ${currency}` : undefined },
+              <BidIncrementField initial={start.bidIncrement} />
+            )}
+            {slot("auctionDays", { label: "Days an auction runs", small: true }, (
+              <AuctionDaysField initial={start.auctionDays} />
+            ))}
+            {slot("closingTime", { label: "Closing time", small: true, note: "On its last day" }, (
+              <ClosingTimeField initial={start.closingTime} />
+            ))}
+          </div>
+        </div>
+      </>
+    ),
+    "quick-buys": (
+      <>
+        {slot(
+          "quickBuyTemplate",
+          {
+            label: "Post template",
+            htmlFor: id("quick-buy-template"),
+            hint: HINTS.quickBuyTemplate,
+            usedWhen: USED_WHEN.quickBuyTemplate,
+          },
+          <PostTemplateField
+            id={id("quick-buy-template")}
+            listingType="fixed"
+            value={texts.quickBuyTemplate}
+            onChange={setText("quickBuyTemplate")}
+          />
+        )}
+        {slot(
+          "quickBuyCaptionTemplate",
+          {
+            label: "Caption",
+            htmlFor: id("quick-buy-caption-template"),
+            hint: HINTS.captions,
+            usedWhen: USED_WHEN.quickBuyCaptionTemplate,
+          },
+          <CaptionTemplateField
+            id={id("quick-buy-caption-template")}
+            role="caption"
+            listingType="fixed"
+            value={texts.quickBuyCaptionTemplate}
+            onChange={setText("quickBuyCaptionTemplate")}
+          />
+        )}
+        {slot("refreshQuickBuysAfterDays", { label: REFRESH_LABEL, note: REFRESH_NOTE }, (
+          <RefreshDaysField initial={start.refreshQuickBuysAfterDays} />
+        ))}
+      </>
+    ),
+    "several-lots": (
+      <>
+        {slot("multiLotLayout", { label: "Layout", hint: HINTS.multiLot }, (
+          <MultiLotLayoutField initial={start.multiLotLayout} />
+        ))}
+        {slot(
+          "captionPostTemplate",
+          {
+            label: "Captioned post text",
+            htmlFor: id("caption-post-template"),
+            usedWhen: USED_WHEN.captionPostTemplate,
+          },
+          <CaptionTemplateField
+            id={id("caption-post-template")}
+            role="captionPost"
+            listingType="auction"
+            value={texts.captionPostTemplate}
+            onChange={setText("captionPostTemplate")}
+          />
+        )}
+      </>
+    ),
+    "buyer-messages": slot(
+      "buyerMessageTemplate",
+      {
+        label: "Message to buyer",
+        htmlFor: id("buyer-message"),
+        hint: HINTS.buyerMessage,
+        usedWhen: USED_WHEN.buyerMessageTemplate,
+      },
+      <BuyerMessageTemplateField
+        id={id("buyer-message")}
+        defaultValue={start.buyerMessageTemplate}
+        style={TEXTAREA_STYLE}
+      />
+    ),
+  };
+  return <CaseTabs panels={panels} marked={marked} />;
+}
+
+/** The tab shown — `&case=` — read from the address and written back without the router, as
+ *  `&row=` is, so it stays while the collector moves between the defaults and the groups. Choosing a
+ *  tab is not leaving the pane: the form is one, so nothing asks. */
+function useFacebookCase() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const shown = parseFacebookSettingsCase(searchParams.get(FACEBOOK_CASE_PARAM));
+  const choose = useCallback(
+    (key: FacebookSettingsCase) => {
+      const params = new URLSearchParams(window.location.search);
+      // The first tab is the default, left out of the address like the others.
+      if (key === FACEBOOK_SETTINGS_CASES[0].key) params.delete(FACEBOOK_CASE_PARAM);
+      else params.set(FACEBOOK_CASE_PARAM, key);
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+    },
+    [pathname]
+  );
+  return { shown, choose };
+}
+
+/**
+ * The tab bar and its panels. **Every panel stays mounted** and the others are only hidden: a tab is
+ * grouping inside one form, and a hidden panel's fields must still reach `FormData` — a save would
+ * otherwise blank what it does not show, and *unsaved* would read a tab switch as a change.
+ */
+function CaseTabs({
+  panels,
+  marked,
+}: {
+  panels: Record<FacebookSettingsCase, React.ReactNode>;
+  marked: ReadonlySet<FacebookSettingsCase>;
+}) {
+  const { shown, choose } = useFacebookCase();
+  return (
+    <div>
+      <div
+        role="tablist"
+        aria-label="Facebook settings"
+        style={{ display: "flex", borderBottom: "1px solid var(--color-border)", marginBottom: "1.25rem" }}
+      >
+        {FACEBOOK_SETTINGS_CASES.map(({ key, label }) => {
+          const active = key === shown;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              id={`facebook-case-${key}`}
+              aria-selected={active}
+              aria-controls={`facebook-case-panel-${key}`}
+              onClick={() => choose(key)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                padding: "0.625rem 1rem",
+                fontSize: "0.875rem",
+                fontWeight: active ? 600 : 400,
+                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                background: "transparent",
+                border: "none",
+                borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+                cursor: "pointer",
+                marginBottom: "-1px",
+              }}
+            >
+              {label}
+              {marked.has(key) && <CustomMark />}
+            </button>
+          );
+        })}
+      </div>
+      {FACEBOOK_SETTINGS_CASES.map(({ key }) => (
+        <div
+          key={key}
+          role="tabpanel"
+          id={`facebook-case-panel-${key}`}
+          aria-labelledby={`facebook-case-${key}`}
+          hidden={key !== shown}
+        >
+          <DetailSections>{panels[key]}</DetailSections>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A group's tab holding a setting of its own (#1849), so its customs can be found. */
+function CustomMark() {
+  return (
+    <Tooltip content="Holds settings of this group's own">
+      <span
+        role="img"
+        aria-label="Has custom settings"
+        style={{
+          display: "inline-block",
+          width: "0.4375rem",
+          height: "0.4375rem",
+          borderRadius: "50%",
+          background: "var(--color-accent)",
+        }}
+      />
+    </Tooltip>
+  );
+}
+
+/** A template's *used when* line (#1849), between its label and its field. */
+function UsedWhen({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        display: "block",
+        margin: "0.125rem 0 0.375rem",
+        fontSize: "0.75rem",
+        color: "var(--color-text-muted)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 /**
  * Facebook's own settings (#1661) — what every group follows unless it sets its own. The currency is
  * not one of them: it is the platform's own (#196), stated on its contact, so it is said here rather
@@ -491,134 +848,44 @@ function DefaultsFields({
   // The texts the note's warning reads (#1689), held here so it answers while either is typed.
   const [texts, setTexts] = useState<PostTexts>(() => postTexts(defaults));
   const setText = (key: keyof PostTexts) => (value: string) => setTexts((t) => ({ ...t, [key]: value }));
+  const slot: Slot = (key, { label, htmlFor, hint, usedWhen, note, small }, field) => (
+    <div key={key}>
+      {small ? (
+        <span style={SMALL_LABEL}>{label}</span>
+      ) : (
+        <GroupLabel htmlFor={htmlFor} hint={hint}>
+          {label}
+        </GroupLabel>
+      )}
+      {usedWhen && <UsedWhen>{usedWhen}</UsedWhen>}
+      {field}
+      {note && <FieldNote>{note}</FieldNote>}
+    </div>
+  );
   return (
-    <DetailSections>
-      <div>
-        <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
-        <div style={FIGURE_GRID}>
-          <div>
-            <span style={SMALL_LABEL}>A new offer starts as</span>
-            <ListingTypeField initial={defaults.listingType} />
+    <FacebookSettingsTabs
+      idPrefix="facebook"
+      slot={slot}
+      start={defaults}
+      texts={texts}
+      setText={setText}
+      currency={platformCurrency}
+      currencyField={
+        <>
+          <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
+            {platformCurrency ?? "Not set yet"}
           </div>
-          <div>
-            <span style={SMALL_LABEL}>Currency</span>
-            <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
-              {platformCurrency ?? "Not set yet"}
-            </div>
-            <FieldNote>The platform&rsquo;s own, set on its contact</FieldNote>
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <MixedListingTypesField initial={defaults.mixedListingTypes} />
-          </div>
-        </div>
-      </div>
-      <div>
-        <GroupLabel htmlFor="facebook-standing-note" hint={HINTS.standingNote}>
-          Shipping, payment and terms
-        </GroupLabel>
-        <StandingNoteField
-          id="facebook-standing-note"
-          value={texts.standingNote}
-          onChange={setText("standingNote")}
-          unused={standingNoteUnused(texts)}
-        />
-      </div>
-      <div>
-        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
-        <div style={FIGURE_GRID}>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <span style={SMALL_LABEL}>Post template</span>
-            <PostTemplateField
-              id="facebook-post-template"
-              listingType="auction"
-              value={texts.postTemplate}
-              onChange={setText("postTemplate")}
-            />
-          </div>
-          <div>
-            <span style={SMALL_LABEL}>Starting price</span>
-            <StartingPriceField initial={defaults} currency={platformCurrency} />
-          </div>
-          <div>
-            <span style={SMALL_LABEL}>Bid increment</span>
-            <BidIncrementField initial={defaults.bidIncrement} />
-            {platformCurrency && <FieldNote>In {platformCurrency}</FieldNote>}
-          </div>
-          <div>
-            <span style={SMALL_LABEL}>Days an auction runs</span>
-            <AuctionDaysField initial={defaults.auctionDays} />
-          </div>
-          <div>
-            <span style={SMALL_LABEL}>Closing time</span>
-            <ClosingTimeField initial={defaults.closingTime} />
-            <FieldNote>On its last day</FieldNote>
-          </div>
-        </div>
-      </div>
-      <div>
-        <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
-        <span style={SMALL_LABEL}>Post template</span>
-        <PostTemplateField
-          id="facebook-quick-buy-template"
-          listingType="fixed"
-          value={texts.quickBuyTemplate}
-          onChange={setText("quickBuyTemplate")}
-        />
-        <div style={{ marginTop: "0.75rem" }}>
-          <span style={SMALL_LABEL}>{REFRESH_LABEL}</span>
-          <RefreshDaysField initial={defaults.refreshQuickBuysAfterDays} />
-          <FieldNote>{REFRESH_NOTE}</FieldNote>
-        </div>
-      </div>
-      <div>
-        <GroupLabel hint={HINTS.multiLot}>Posts of several lots</GroupLabel>
-        <span style={SMALL_LABEL}>Layout</span>
-        <MultiLotLayoutField initial={defaults.multiLotLayout} />
-        <div style={{ marginTop: "0.75rem" }}>
-          <span style={SMALL_LABEL}>Captioned post text</span>
-          <CaptionTemplateField
-            id="facebook-caption-post-template"
-            role="captionPost"
-            listingType="auction"
-            value={texts.captionPostTemplate}
-            onChange={setText("captionPostTemplate")}
-          />
-        </div>
-      </div>
-      <div>
-        <GroupLabel hint={HINTS.captions}>Captions</GroupLabel>
-        <span style={SMALL_LABEL}>Auction caption</span>
-        <CaptionTemplateField
-          id="facebook-auction-caption-template"
-          role="caption"
-          listingType="auction"
-          value={texts.auctionCaptionTemplate}
-          onChange={setText("auctionCaptionTemplate")}
-        />
-        <div style={{ marginTop: "0.75rem" }}>
-          <span style={SMALL_LABEL}>Quick-buy caption</span>
-          <CaptionTemplateField
-            id="facebook-quick-buy-caption-template"
-            role="caption"
-            listingType="fixed"
-            value={texts.quickBuyCaptionTemplate}
-            onChange={setText("quickBuyCaptionTemplate")}
-          />
-        </div>
-      </div>
-      <div>
-        <GroupLabel htmlFor="facebook-buyer-message" hint={HINTS.buyerMessage}>
-          Message to buyer
-        </GroupLabel>
-        <BuyerMessageTemplateField
-          id="facebook-buyer-message"
-          defaultValue={defaults.buyerMessageTemplate}
-          style={TEXTAREA_STYLE}
-        />
-      </div>
-    </DetailSections>
+          <FieldNote>The platform&rsquo;s own, set on its contact</FieldNote>
+        </>
+      }
+      noteUnused={standingNoteUnused(texts)}
+      marked={NO_CASES}
+    />
   );
 }
+
+/** Facebook's own pane marks no tab: every setting there is its own. */
+const NO_CASES: ReadonlySet<FacebookSettingsCase> = new Set();
 
 /** The label a field inside a section carries — the small one the figures' grid uses. */
 const SMALL_LABEL: React.CSSProperties = {
@@ -638,7 +905,8 @@ const FIGURE_GRID: React.CSSProperties = {
  * One group's fields. **Every one is a named form control** (#1471) — the pane measures what is
  * unsaved off the form. Each setting either follows Facebook, shown with the value it follows, or is
  * custom for this group, with its field (#1661); the switch is the `custom` control, so turning it
- * is a change the pane sees.
+ * is a change the pane sees. The name and link are the group itself, not settings, so they sit above
+ * the tabs.
  */
 function GroupFields({
   group,
@@ -668,222 +936,101 @@ function GroupFields({
     captionPostTemplate: own("captionPostTemplate") ? texts.captionPostTemplate : defaults.captionPostTemplate,
     standingNote: own("standingNote") ? texts.standingNote : defaults.standingNote,
   };
-  const setting = (key: FacebookGroupSetting) => ({
-    custom: own(key),
-    onCustom: (on: boolean) => {
-      setCustom((c) => (on ? [...c, key] : c.filter((k) => k !== key)));
-      // A text switched to custom starts again from what it followed, as a field shown afresh would.
-      if (on && isPostText(key)) setText(key)(start[key]);
-    },
-    following: describeSetting(key, defaults, platformCurrency),
-    settingKey: key,
-  });
+  const slot: Slot = (key, props, field) => (
+    <FollowableSetting
+      key={key}
+      {...props}
+      settingKey={key}
+      custom={own(key)}
+      onCustom={(on: boolean) => {
+        setCustom((c) => (on ? [...c, key] : c.filter((k) => k !== key)));
+        // A text switched to custom starts again from what it followed, as a field shown afresh would.
+        if (on && isPostText(key)) setText(key)(start[key]);
+      }}
+      following={describeSetting(key, defaults, platformCurrency)}
+    >
+      {field}
+    </FollowableSetting>
+  );
 
   return (
-    <DetailSections>
-      <div>
-        <LabelWithError htmlFor="facebook-group-name">Name</LabelWithError>
-        <TextInput
-          id="facebook-group-name"
-          name="name"
-          defaultValue={group?.name ?? ""}
-          placeholder="e.g. Znaczki — aukcje"
-          autoFocus={!group}
-          style={INPUT_STYLE}
-          {...NO_AUTOFILL}
-        />
-        <FieldNote>What you call it here — usually the group&rsquo;s own name.</FieldNote>
-      </div>
-
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-          <LabelWithError htmlFor="facebook-group-url">Link</LabelWithError>
-          {group && (
-            <a
-              href={group.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open ${group.name} on Facebook`}
-              style={{ display: "inline-flex", color: "var(--color-text-muted)" }}
-            >
-              <Icon name="externalLink" size="sm" />
-            </a>
-          )}
-        </div>
-        <TextInput
-          id="facebook-group-url"
-          name="url"
-          type="url"
-          defaultValue={group?.url ?? ""}
-          placeholder="https://www.facebook.com/groups/…"
-          style={INPUT_STYLE}
-          {...NO_AUTOFILL}
-        />
-      </div>
-
-      <div>
-        <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
-        <div style={FIGURE_GRID}>
-          <FollowableSetting label="A new offer starts as" small {...setting("listingType")}>
-            <ListingTypeField initial={start.listingType} />
-          </FollowableSetting>
-          <FollowableSetting label="Currency" small {...setting("currency")}>
-            <select
-              name="currency"
-              aria-label="Currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
-            >
-              <option value="">Choose a currency</option>
-              {COMMON_CURRENCIES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-              {/* A stored code outside the common list still reads as itself. */}
-              {group?.currency && !(COMMON_CURRENCIES as readonly string[]).includes(group.currency) && (
-                <option value={group.currency}>{group.currency}</option>
-              )}
-            </select>
-          </FollowableSetting>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FollowableSetting label="Lots of one post" small {...setting("mixedListingTypes")}>
-              <MixedListingTypesField initial={start.mixedListingTypes} />
-            </FollowableSetting>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <FollowableSetting
-          label="Shipping, payment and terms"
-          htmlFor="facebook-group-note"
-          hint={HINTS.standingNote}
-          {...setting("standingNote")}
-        >
-          <StandingNoteField
-            id="facebook-group-note"
-            value={texts.standingNote}
-            onChange={setText("standingNote")}
-            unused={standingNoteUnused(posting)}
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <DetailSections>
+        <div>
+          <LabelWithError htmlFor="facebook-group-name">Name</LabelWithError>
+          <TextInput
+            id="facebook-group-name"
+            name="name"
+            defaultValue={group?.name ?? ""}
+            placeholder="e.g. Znaczki — aukcje"
+            autoFocus={!group}
+            style={INPUT_STYLE}
+            {...NO_AUTOFILL}
           />
-        </FollowableSetting>
-        {/* A followed note no template here uses is said too: the note is Facebook's, the gap is this
-            group's. */}
-        {!own("standingNote") && standingNoteUnused(posting) && <UnusedNote />}
-      </div>
+          <FieldNote>What you call it here — usually the group&rsquo;s own name.</FieldNote>
+        </div>
 
-      <div>
-        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
-        <div style={FIGURE_GRID}>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FollowableSetting label="Post template" small {...setting("postTemplate")}>
-              <PostTemplateField
-                id="facebook-group-template"
-                listingType="auction"
-                value={texts.postTemplate}
-                onChange={setText("postTemplate")}
-              />
-            </FollowableSetting>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <LabelWithError htmlFor="facebook-group-url">Link</LabelWithError>
+            {group && (
+              <a
+                href={group.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${group.name} on Facebook`}
+                style={{ display: "inline-flex", color: "var(--color-text-muted)" }}
+              >
+                <Icon name="externalLink" size="sm" />
+              </a>
+            )}
           </div>
-          <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
-            <StartingPriceField initial={start} currency={shownCurrency} />
-          </FollowableSetting>
-          <FollowableSetting
-            label="Bid increment"
-            note={shownCurrency ? `In ${shownCurrency}` : undefined}
-            small
-            {...setting("bidIncrement")}
+          <TextInput
+            id="facebook-group-url"
+            name="url"
+            type="url"
+            defaultValue={group?.url ?? ""}
+            placeholder="https://www.facebook.com/groups/…"
+            style={INPUT_STYLE}
+            {...NO_AUTOFILL}
+          />
+        </div>
+      </DetailSections>
+
+      <FacebookSettingsTabs
+        idPrefix="facebook-group"
+        slot={slot}
+        start={start}
+        texts={texts}
+        setText={setText}
+        currency={shownCurrency}
+        currencyField={
+          <select
+            name="currency"
+            aria-label="Currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
           >
-            <BidIncrementField initial={start.bidIncrement} />
-          </FollowableSetting>
-          <FollowableSetting label="Days an auction runs" small {...setting("auctionDays")}>
-            <AuctionDaysField initial={start.auctionDays} />
-          </FollowableSetting>
-          <FollowableSetting label="Closing time" note="On its last day" small {...setting("closingTime")}>
-            <ClosingTimeField initial={start.closingTime} />
-          </FollowableSetting>
-        </div>
-      </div>
-
-      <div>
-        <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <FollowableSetting label="Post template" small {...setting("quickBuyTemplate")}>
-            <PostTemplateField
-              id="facebook-group-quick-buy-template"
-              listingType="fixed"
-              value={texts.quickBuyTemplate}
-              onChange={setText("quickBuyTemplate")}
-            />
-          </FollowableSetting>
-          <FollowableSetting
-            label={REFRESH_LABEL}
-            note={REFRESH_NOTE}
-            small
-            {...setting("refreshQuickBuysAfterDays")}
-          >
-            <RefreshDaysField initial={start.refreshQuickBuysAfterDays} />
-          </FollowableSetting>
-        </div>
-      </div>
-
-      <div>
-        <GroupLabel hint={HINTS.multiLot}>Posts of several lots</GroupLabel>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <FollowableSetting label="Layout" small {...setting("multiLotLayout")}>
-            <MultiLotLayoutField initial={start.multiLotLayout} />
-          </FollowableSetting>
-          <FollowableSetting label="Captioned post text" small {...setting("captionPostTemplate")}>
-            <CaptionTemplateField
-              id="facebook-group-caption-post-template"
-              role="captionPost"
-              listingType="auction"
-              value={texts.captionPostTemplate}
-              onChange={setText("captionPostTemplate")}
-            />
-          </FollowableSetting>
-        </div>
-      </div>
-
-      <div>
-        <GroupLabel hint={HINTS.captions}>Captions</GroupLabel>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <FollowableSetting label="Auction caption" small {...setting("auctionCaptionTemplate")}>
-            <CaptionTemplateField
-              id="facebook-group-auction-caption-template"
-              role="caption"
-              listingType="auction"
-              value={texts.auctionCaptionTemplate}
-              onChange={setText("auctionCaptionTemplate")}
-            />
-          </FollowableSetting>
-          <FollowableSetting label="Quick-buy caption" small {...setting("quickBuyCaptionTemplate")}>
-            <CaptionTemplateField
-              id="facebook-group-quick-buy-caption-template"
-              role="caption"
-              listingType="fixed"
-              value={texts.quickBuyCaptionTemplate}
-              onChange={setText("quickBuyCaptionTemplate")}
-            />
-          </FollowableSetting>
-        </div>
-      </div>
-
-      <FollowableSetting
-        label="Message to buyer"
-        htmlFor="facebook-group-buyer-message"
-        hint={HINTS.buyerMessage}
-        {...setting("buyerMessageTemplate")}
-      >
-        <BuyerMessageTemplateField
-          id="facebook-group-buyer-message"
-          defaultValue={start.buyerMessageTemplate}
-          style={TEXTAREA_STYLE}
-        />
-      </FollowableSetting>
-    </DetailSections>
+            <option value="">Choose a currency</option>
+            {COMMON_CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+            {/* A stored code outside the common list still reads as itself. */}
+            {group?.currency && !(COMMON_CURRENCIES as readonly string[]).includes(group.currency) && (
+              <option value={group.currency}>{group.currency}</option>
+            )}
+          </select>
+        }
+        noteUnused={standingNoteUnused(posting)}
+        // A followed note no template here uses is said too: the note is Facebook's, the gap is this
+        // group's.
+        noteWarning={!own("standingNote") && standingNoteUnused(posting) ? <UnusedNote /> : undefined}
+        marked={facebookCustomCases(custom)}
+      />
+    </div>
   );
 }
 
@@ -896,6 +1043,7 @@ function FollowableSetting({
   label,
   htmlFor,
   hint,
+  usedWhen,
   note,
   small,
   settingKey,
@@ -903,14 +1051,7 @@ function FollowableSetting({
   onCustom,
   following,
   children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: React.ReactNode;
-  /** What the label leaves out, said under the field while it is the group's own (#1670). */
-  note?: React.ReactNode;
-  /** A figure under *New auctions*: its label is the small one the grid's fields carry. */
-  small?: boolean;
+}: SlotProps & {
   settingKey: FacebookGroupSetting;
   custom: boolean;
   onCustom: (on: boolean) => void;
@@ -951,6 +1092,8 @@ function FollowableSetting({
           {small ? "Custom" : "Custom for this group"}
         </label>
       </div>
+      {/* Said whether the template is followed or the group's own: it is what the template is for. */}
+      {usedWhen && <UsedWhen>{usedWhen}</UsedWhen>}
       {custom ? (
         <>
           {children}

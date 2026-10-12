@@ -124,6 +124,10 @@ dictionary composes them — a flat list, a grouped one (Multipliers) and a tree
   at 82rem), its sections laid out **two to a row** (`DetailSections`), never three. Each section is
   at most as wide as the 40rem pane was, so the rule still holds inside it. A pane of a few fields
   keeps the narrow column: widening it would only stretch those fields.
+- *Amended by #1849:* Facebook's pane is further split into **tabs by case** inside its one form —
+  General, Auctions, Quick buys, Several-lot posts, Buyer messages — every panel mounted and the
+  others hidden, so each field still reaches the form, and the tab shown is a view parameter
+  (`&case=`) that stays while moving between rows. Within a tab, #1801's two-to-a-row rule holds.
 
 *Rejected in writing #1471:* selecting the row through the router, which would re-run the whole
 Settings loader on every click down a list — the address is written with `history.replaceState`.

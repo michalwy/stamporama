@@ -23,6 +23,7 @@ import { formControl } from "@/app/control-style";
 import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
 import { useOfferPhotoPlans } from "../use-offers-query";
 import { renderFacebookKitPost } from "./facebook-kit-post";
+import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlug]/settings/facebook-settings-cases";
 
 // A Facebook post's kit (#1544; ADR-0061 §3): its text and its photos, each taken in one click — and,
 // for a post of several lots, how it is laid out (#1841). Drawn by an offer posted alone on its own
@@ -150,11 +151,12 @@ export function FacebookPostKit({
   const captioned = layout === "captions";
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
-  // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661).
+  // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661),
+  // open on the tab the setting is on (#1849).
   const settingHref = (setting: FacebookGroupSetting) =>
     `/c/${collectionSlug}/settings?tab=facebook&row=${encodeURIComponent(
       kit.group.custom.includes(setting) ? kit.group.id : "facebook:defaults"
-    )}`;
+    )}&${FACEBOOK_CASE_PARAM}=${facebookSettingCase(setting)}`;
 
   function setLayout(value: FacebookMultiLotLayout | null) {
     if (!kit.post) return;

@@ -571,7 +571,7 @@ sale's own figures; the [sales guide](sales.md#message-to-the-buyer) lists them 
 Leave it empty and sales on this platform offer no message.
 
 The Facebook platform has no such field here: its message is set under **Settings → Facebook**,
-where each group can follow it or have its own ([Facebook](facebook.md#message-to-buyer)).
+where each group can follow it or have its own ([Facebook](facebook.md#buyer-messages)).
 
 ### Listing text limits
 

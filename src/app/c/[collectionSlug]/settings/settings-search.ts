@@ -111,6 +111,8 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
         "closing time",
         "caption",
         "several lots",
+        "quick buy",
+        "message to buyer",
       ],
     },
   ],
