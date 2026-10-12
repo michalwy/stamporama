@@ -6,7 +6,7 @@ import { isFacebookPostStage } from "@/lib/facebook-post-rules";
 
 // The list of a collection's multi-lot Facebook posts (#1850), newest first. `group` is a
 // comma-separated set of group ids and `stage` one stage; an unrecognised stage is dropped rather than
-// refused, as the other lists drop an unknown status.
+// refused, as the other lists drop an unknown status. `untitled=1` keeps the posts with no title (#1862).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -24,12 +24,14 @@ export async function GET(
   const groupIds = (sp.get("group") || "").split(",").filter(Boolean);
   const stageParam = sp.get("stage") ?? "";
   const stage = isFacebookPostStage(stageParam) ? stageParam : undefined;
+  const untitled = sp.get("untitled") === "1";
 
   try {
     const result = await listFacebookPostsPaginated(session.user.id, collectionId, {
       offset,
       groupIds,
       stage,
+      untitled,
       pageSize: 50,
     });
     return NextResponse.json(result);

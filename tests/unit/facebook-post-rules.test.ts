@@ -8,10 +8,12 @@ import {
   facebookMoney,
   facebookPostGaps,
   facebookPostRefusal,
+  facebookPostLabel,
   facebookPostLink,
   facebookPostMoves,
   facebookPostSource,
   facebookPostStage,
+  facebookPostTitleRefusal,
   FACEBOOK_POST_STAGES,
   FACEBOOK_POST_STAGE_LABEL,
   isFacebookPostStage,
@@ -34,6 +36,7 @@ import {
   type FacebookPostLotText,
   type FacebookPostSourceLot,
 } from "../../src/lib/facebook-post-rules";
+import { facebookTemplatePlaceholders } from "../../src/lib/facebook-group-rules";
 
 // A Facebook offer and its post (#1544; ADR-0061 §2, §3, §6): what a group's defaults become on a
 // new auction, and the kit's text — an auction's or, since #1671, a quick buy's. The database half — the group required, its currency, a copy in
@@ -497,6 +500,7 @@ describe("the post as published (#1800)", () => {
     endsAt: "2026-10-18T18:00:00.000Z",
     layout: "text",
     postText: "",
+    postTitle: "",
   };
   function source(overrides: Partial<FacebookPostSourceLot> = {}): FacebookPostSourceLot {
     return {
@@ -576,7 +580,7 @@ describe("a captioned post (#1841)", () => {
   });
 
   it("writes the shared text once and each lot's caption from its type's template, in lot order", () => {
-    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots, 1)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots, { postNo: 1, title: null })), {
       post: "Lots 412, 413\nShipping 7 PLN",
       captions: [
         [1, "1. First from 10.00 PLN"],
@@ -586,12 +590,12 @@ describe("a captioned post (#1841)", () => {
   });
 
   it("keeps {terms} out of a caption — the note is the post's, stated once", () => {
-    const out = renderFacebookCaptionedPost({ ...captions, auction: "{title} {terms}" }, "Note", [lots[1]], 1);
+    const out = renderFacebookCaptionedPost({ ...captions, auction: "{title} {terms}" }, "Note", [lots[1]], { postNo: 1, title: null });
     assert.equal(facebookPartsText(out.captions[0].parts), "First {terms}");
   });
 
   it("writes a lot's caption from its offer's own template where it has one", () => {
-    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "Own {title}" })], 1);
+    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "Own {title}" })], { postNo: 1, title: null });
     assert.equal(facebookPartsText(out.captions[0].parts), "Own Austria 1850 Mercury");
   });
 
@@ -599,11 +603,11 @@ describe("a captioned post (#1841)", () => {
     const gaps = facebookCaptionedPostGaps({ auction: "{title} {description}", quickBuy: "", post: "" }, "", [
       lot({ lotNo: 1, description: "" }),
       lot({ lotNo: 2, listingType: "fixed", price: "5 PLN" }),
-    ], 1);
+    ], { postNo: 1, title: null });
     assert.equal(gaps.missingPostText, true);
     assert.deepEqual(gaps.missingTemplates, ["fixed"]);
     assert.deepEqual(gaps.emptyPlaceholders, [{ lotNo: 1, token: "{description}" }]);
-    const note = facebookCaptionedPostGaps(captions, "  ", [lot({ lotNo: 1 })], 1);
+    const note = facebookCaptionedPostGaps(captions, "  ", [lot({ lotNo: 1 })], { postNo: 1, title: null });
     assert.equal(note.missingPostText, false);
     assert.deepEqual(note.emptyPlaceholders, [{ lotNo: null, token: "{terms}" }]);
   });
@@ -624,6 +628,7 @@ describe("a captioned post (#1841)", () => {
       endsAt: null,
       layout: "captions",
       postText: "Old lots {offer}\n{terms}",
+      postTitle: "",
     };
     const group = {
       postTemplate: "",
@@ -652,13 +657,13 @@ describe("a captioned post (#1841)", () => {
     };
     const s = facebookPostSource(group, [one], () => "");
     assert.equal(s.layout, "captions");
-    assert.deepEqual(texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots, 1)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots, { postNo: 1, title: null })), {
       post: "Old lots 412\nOld note",
       captions: [[1, "Then First"]],
     });
     // Not yet published, it follows the group's layout and templates now.
     const live = facebookPostSource({ ...group, layout: "captions" }, [{ ...one, frozen: null }], () => "");
-    assert.deepEqual(texts(renderFacebookCaptionedPost(live.captions, live.standingNote, live.lots, 1)), {
+    assert.deepEqual(texts(renderFacebookCaptionedPost(live.captions, live.standingNote, live.lots, { postNo: 1, title: null })), {
       post: "New lots 412",
       captions: [[1, "Now First, retitled"]],
     });
@@ -669,11 +674,11 @@ describe("a captioned post (#1841)", () => {
       { ...captions, auction: "Post #{post}, lot {lot}: {title}", post: "Post #{post} — lots {offer}" },
       "",
       [lots[1]],
-      7
+      { postNo: 7, title: null }
     );
     assert.deepEqual(texts(out), { post: "Post #7 — lots 412", captions: [[1, "Post #7, lot 1: First"]] });
     // An offer's own template writes its caption, so it takes {post} there too.
-    const own = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "{post}/{lot}" })], 7);
+    const own = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "{post}/{lot}" })], { postNo: 7, title: null });
     assert.equal(facebookPartsText(own.captions[0].parts), "7/1");
   });
 
@@ -695,7 +700,7 @@ describe("a captioned post (#1841)", () => {
       { lotNo: null, token: "{post}" },
       { lotNo: 1, token: "{post}" },
     ]);
-    const numbered = facebookCaptionedPostGaps({ ...captions, auction: "{title} {post}", post: "Post {post}" }, "", [lot({ lotNo: 1 })], 3);
+    const numbered = facebookCaptionedPostGaps({ ...captions, auction: "{title} {post}", post: "Post {post}" }, "", [lot({ lotNo: 1 })], { postNo: 3, title: null });
     assert.deepEqual(numbered.emptyPlaceholders, []);
   });
 
@@ -792,5 +797,146 @@ describe("the list of posts' stage filter (#1850)", () => {
   it("reads a stage from the address only when it is one", () => {
     for (const stage of FACEBOOK_POST_STAGES) assert.equal(isFacebookPostStage(stage), true);
     for (const bad of ["", "active", "Up", "sold"]) assert.equal(isFacebookPostStage(bad), false, bad);
+  });
+});
+
+describe("a post's title (#1862)", () => {
+  const captions: FacebookCaptionTemplates = {
+    auction: "{postTitle}, lot {lot}: {title}",
+    quickBuy: "",
+    post: "Post #{post} · {postTitle}",
+  };
+  const titled = { postNo: 4, title: "Generalgouvernement 1940–44" };
+  const untitled = { postNo: 4, title: null };
+  const texts = (post: ReturnType<typeof renderFacebookCaptionedPost>) => ({
+    post: facebookPartsText(post.post),
+    captions: post.captions.map((c) => facebookPartsText(c.parts)),
+  });
+
+  it("names a post by number and title, or by number alone while it has none", () => {
+    assert.equal(facebookPostLabel(titled), "Post #4 · Generalgouvernement 1940–44");
+    assert.equal(facebookPostLabel(untitled), "Post #4");
+    assert.equal(facebookPostLabel({ postNo: 4, title: "  " }), "Post #4");
+  });
+
+  it("refuses a blank title — every post has one", () => {
+    assert.equal(facebookPostTitleRefusal("Generalgouvernement"), null);
+    assert.equal(facebookPostTitleRefusal(""), "A post needs a title.");
+    assert.equal(facebookPostTitleRefusal("   "), "A post needs a title.");
+  });
+
+  it("is offered beside {post} in the captioned post's text and its captions, and in no post template", () => {
+    const tokens = (role: "post" | "caption" | "captionPost", type: "auction" | "fixed") =>
+      facebookTemplatePlaceholders(role, type).map((p) => p.token);
+    for (const type of ["auction", "fixed"] as const) {
+      assert.ok(tokens("caption", type).includes("{postTitle}"), type);
+      assert.ok(!tokens("post", type).includes("{postTitle}"), type);
+    }
+    assert.ok(tokens("captionPost", "auction").includes("{postTitle}"));
+  });
+
+  it("puts the title where the shared text, a caption or an offer's own template has {postTitle}", () => {
+    const out = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, title: "First" })], titled);
+    assert.deepEqual(texts(out), {
+      post: "Post #4 · Generalgouvernement 1940–44",
+      captions: ["Generalgouvernement 1940–44, lot 1: First"],
+    });
+    const own = renderFacebookCaptionedPost(captions, "", [lot({ lotNo: 1, ownTemplate: "[{postTitle}]" })], titled);
+    assert.equal(facebookPartsText(own.captions[0].parts), "[Generalgouvernement 1940–44]");
+  });
+
+  it("keeps {postTitle} as typed in a post template — an offer posted alone has no post", () => {
+    const templates = { auction: "{postTitle}: {title}", quickBuy: "" };
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })]), "{postTitle}: Austria 1850 Mercury");
+  });
+
+  it("leaves {postTitle} empty on a post with no title and names the want once, never per lot", () => {
+    const lots = [lot({ lotNo: 1 }), lot({ lotNo: 2 })];
+    assert.deepEqual(texts(renderFacebookCaptionedPost(captions, "", lots, untitled)), {
+      post: "Post #4 · ",
+      captions: [", lot 1: Austria 1850 Mercury", ", lot 2: Austria 1850 Mercury"],
+    });
+    const gaps = facebookCaptionedPostGaps(captions, "", lots, untitled);
+    assert.equal(gaps.missingPostTitle, true);
+    assert.deepEqual(gaps.emptyPlaceholders, []);
+    assert.equal(facebookCaptionedPostGaps(captions, "", lots, titled).missingPostTitle, false);
+    // A title nobody places is no gap, whether the post has one or not.
+    const plain = { ...captions, auction: "{title}", post: "Post #{post}" };
+    assert.equal(facebookCaptionedPostGaps(plain, "", lots, untitled).missingPostTitle, false);
+    // Placed only in a caption, it is still the post's one want.
+    const inCaption = { ...captions, post: "Post #{post}" };
+    assert.equal(facebookCaptionedPostGaps(inCaption, "", lots, untitled).missingPostTitle, true);
+  });
+
+  describe("as published (#1800)", () => {
+    const group = {
+      postTemplate: "",
+      quickBuyTemplate: "",
+      standingNote: "",
+      auctionCaptionTemplate: "{postTitle}: {title}",
+      quickBuyCaptionTemplate: "",
+      captionPostTemplate: "{postTitle}",
+      layout: "captions" as const,
+    };
+    const frozen = (postTitle: string | null): FacebookFrozenLot => ({
+      frozenAt: "2026-10-12T10:00:00.000Z",
+      listingType: "auction",
+      template: "{postTitle}: {title}",
+      standingNote: "",
+      title: "First",
+      description: "",
+      catalog: "",
+      startingPrice: "10.00",
+      bidIncrement: null,
+      price: null,
+      currency: "PLN",
+      endsAt: null,
+      layout: "captions",
+      postText: "{postTitle}",
+      postTitle,
+    });
+    const one = (snapshot: FacebookFrozenLot | null): FacebookPostSourceLot => ({
+      offerId: "o1",
+      lotNo: 1,
+      offerNo: 412,
+      listingType: "auction",
+      title: "First",
+      description: "",
+      catalog: "",
+      startingPrice: "10.00",
+      bidIncrement: null,
+      currency: "PLN",
+      endsAt: null,
+      price: "0.00",
+      ownTemplate: null,
+      frozen: snapshot,
+    });
+    const renamed = { ...group, post: { postNo: 4, title: "Renamed since" } };
+    const drawn = (snapshot: FacebookFrozenLot | null) => {
+      const s = facebookPostSource(renamed, [one(snapshot)], () => "");
+      return texts(renderFacebookCaptionedPost(s.captions, s.standingNote, s.lots, s.post));
+    };
+
+    it("keeps the title the post went up with, however it is renamed after", () => {
+      assert.deepEqual(drawn(frozen("As posted")), { post: "As posted", captions: ["As posted: First"] });
+      // Posted with none, it stays with none — the title given since was not posted.
+      assert.deepEqual(drawn(frozen("")), { post: "", captions: [": First"] });
+    });
+
+    it("reads the title now on a snapshot older than titles, and on a post not yet published", () => {
+      assert.deepEqual(drawn(frozen(null)), { post: "Renamed since", captions: ["Renamed since: First"] });
+      assert.deepEqual(drawn(null), { post: "Renamed since", captions: ["Renamed since: First"] });
+    });
+
+    it("reads a snapshot without a title as older than titles", () => {
+      const { postTitle: _drop, ...older } = frozen("x");
+      void _drop;
+      assert.equal(readFacebookFrozenLot(older)!.postTitle, null);
+      assert.equal(readFacebookFrozenLot(frozen(""))!.postTitle, "");
+    });
+
+    it("has no post for an offer posted alone", () => {
+      assert.equal(facebookPostSource(group, [one(null)], () => "").post, null);
+    });
   });
 });

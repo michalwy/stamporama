@@ -337,6 +337,7 @@ export function OfferRow({
             <FacebookPostChip
               collectionSlug={collectionSlug}
               postNo={offer.facebookPost.postNo}
+              title={offer.facebookPost.title}
               lotNo={offer.facebookPost.lotNo}
               onNarrow={onNarrowToPost ? () => onNarrowToPost(offer.facebookPost!.postNo) : undefined}
             />

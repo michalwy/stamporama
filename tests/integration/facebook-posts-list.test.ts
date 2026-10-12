@@ -123,19 +123,19 @@ describe("the list of Facebook posts (#1850)", () => {
     // Oldest first: one still being prepared, one ready and captioned, one up with a lot withdrawn,
     // and one over.
     const prep = [await offer(groupA), await offer(groupA)];
-    posts.preparing = await createFacebookPost(userId, collectionId, prep);
+    posts.preparing = await createFacebookPost(userId, collectionId, prep, "Test post");
     await setOfferState(userId, prep[1], "preparing");
 
-    posts.ready = await createFacebookPost(userId, collectionId, [await offer(groupA), await offer(groupA)]);
+    posts.ready = await createFacebookPost(userId, collectionId, [await offer(groupA), await offer(groupA)], "Test post");
     await setFacebookPostLayout(userId, posts.ready.postId, "captions");
 
     const up = [await offer(groupB), await offer(groupB)];
-    posts.up = await createFacebookPost(userId, collectionId, up);
+    posts.up = await createFacebookPost(userId, collectionId, up, "Test post");
     await publishOfferOrPost(userId, up[0], LINK);
     await setOfferState(userId, up[1], "withdrawn");
 
     const over = [await offer(groupA), await offer(groupA)];
-    posts.over = await createFacebookPost(userId, collectionId, over);
+    posts.over = await createFacebookPost(userId, collectionId, over, "Test post");
     await publishOfferOrPost(userId, over[0], "https://www.facebook.com/groups/190000/posts/8");
     for (const id of over) await setOfferState(userId, id, "withdrawn");
   });

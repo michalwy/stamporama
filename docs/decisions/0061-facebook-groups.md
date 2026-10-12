@@ -69,7 +69,8 @@ own and an offer per lot already carries its sale, withdrawal, *Pending* and fro
 - **Templates**: a *caption* template per listing type and a *post text* template for the captioned
   post's shared body, all followed settings. A caption takes its type's placeholders bar `{terms}`;
   the post text takes `{offer}` — the lots' offer numbers — and `{terms}`. Both take `{post}`, the
-  post's number (#1854), which no single post's template offers. An offer's own template
+  post's number (#1854), and `{postTitle}`, its title (#1862), which no single post's template
+  offers. An offer's own template
   (§6, #1780) writes its caption.
 - **The kit** shows the post text with its copy button, then the photos in post order, each with its
   caption and its own copy button; the download gives one photo per lot, named in that order (#1754).
@@ -110,6 +111,20 @@ repeating the whole post.
 - **A lot's Facebook card names its post** — number, lot number, where the post stands, *Open post* —
   instead of repeating it. What is the lot's own stays on it: its own template and its bidding.
 - A list of all posts was not part of the decision.
+
+**Amended by #1862 (decided with the collector on 2026-10-12): every post of several lots has a
+title.** With a list of posts (#1850) and several running at once, a number alone did not say which
+post was which.
+
+- **Given when the post is made** — *Post together* asks for it and refuses a blank one — and renamed
+  in place on the post's screen, never to blank. Posts made before have none until given one, are named
+  by number meanwhile, and the list of posts can be narrowed to them.
+- **Shown wherever the post is named**: its screen's heading (*Post #1 · Generalgouvernement
+  1940–44*), the list of posts, each lot's Facebook card, and the offers list's *Post #N · lot M* chip
+  on hover.
+- **`{postTitle}`** fills it into the captioned post's text and captions, beside `{post}`. A post with
+  none leaves it empty and its kit names the gap (#1692). Unlike the number it is content: frozen with
+  the post's text when it goes up (§3, #1800), so a rename afterwards leaves the posted text as it was.
 
 ### 3. Posting starts as a kit to paste
 

@@ -173,7 +173,7 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
     await editTemplates({});
     const a = await offer();
     const b = await offer();
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/180000/posts/5");
     const asPosted = await postText(b);
     assert.match(asPosted, /^1 .*\n\n2 .*\nShipping 5 PLN\.$/s);

@@ -3,7 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
-import { FACEBOOK_POST_STAGE_LABEL, facebookPostStage, isFacebookLotPosted } from "@/lib/facebook-post-rules";
+import {
+  FACEBOOK_POST_STAGE_LABEL,
+  facebookPostLabel,
+  facebookPostStage,
+  isFacebookLotPosted,
+} from "@/lib/facebook-post-rules";
 import { isAuctionListing } from "@/lib/offer-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -232,7 +237,8 @@ export function OfferFacebookCard({
         {kit.post ? (
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
             <p style={{ ...MUTED, margin: 0 }}>
-              <strong style={{ color: "var(--color-text-primary)" }}>Post #{kit.post.postNo}</strong> · lot {self.lotNo}{" "}
+              <strong style={{ color: "var(--color-text-primary)" }}>{facebookPostLabel(kit.post)}</strong> · lot{" "}
+              {self.lotNo}{" "}
               of {kit.lots.length} · {FACEBOOK_POST_STAGE_LABEL[facebookPostStage(kit.lots)]}
             </p>
             <Link

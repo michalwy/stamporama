@@ -367,18 +367,27 @@ quick buy's **refresh** count starts on the day it is approved, not the day it w
 ## A post with several lots
 
 A post can hold several offers as **lots** — an album, each photo a lot of its own. On the
-**Offers** screen, tick the offers to post together and choose **Post together** in the selection
-bar. They must all be Facebook offers in the same group, not yet posted and not in another post —
+**Offers** screen, tick the offers to post together and choose **Post together…** in the selection
+bar, then give the post a **title** — *Generalgouvernement 1940–44*, say — and choose **Post together**.
+Every post has one: with several posts running at once, it tells them apart. They must all be Facebook offers in the same group, not yet posted and not in another post —
 and all auctions or all quick buys, unless the group's posts may mix them (**A post may mix auctions
 and quick buys**, above). They become lots 1, 2, 3… in the order you ticked them. The auctions among
 them share one closing time — the first auction's — from then on: changing it on one lot changes it
 on all of them. A quick buy has no closing time.
 
 The post gets a **number** of its own — **Post #12** — counted per collection like an offer's, and
-never given to another post, even after this one is gone. On the **Offers** screen, every lot's row
-carries a chip **Post #12 · lot 3**: click the words to open the post's screen, or the list icon beside
+never given to another post, even after this one is gone. It is named by both wherever it is named —
+**Post #12 · Generalgouvernement 1940–44** — on its screen, in the list of posts and on each lot's
+Facebook card. On the **Offers** screen, every lot's row carries a chip **Post #12 · lot 3**, with the
+title when you point at it: click the words to open the post's screen, or the list icon beside
 them to show only that post's lots in the list (a **Post #12** filter chip appears in the toolbar;
 click it to show every offer again).
+
+**Renaming a post**: the pencil beside its heading on the post's screen. A title cannot be emptied —
+every post has one. Posts made before titles have none until you give them one: they are named by
+number meanwhile, their heading says *no title*, and the **No title** chip in the list of posts finds
+them. Renaming a post that is already up changes how it is named here, not what was posted: its text
+keeps the title it went up with, as it keeps everything else.
 
 **The post's screen** is where the post is seen and managed as one. It is reached from that chip, from
 **Open post** on each lot's Facebook card, from the message **Post together** shows, and from the
@@ -411,13 +420,14 @@ click it to show every offer again).
 
 **Marketplaces → Facebook** in the sidebar lists every post of several lots, newest first, headed
 *Facebook posts*. An offer posted on its own is not a post of several lots and stays only on the
-**Offers** screen. Each row shows the post's number and group, where it stands (being prepared, ready
+**Offers** screen. Each row shows the post's number, title and group, where it stands (being prepared, ready
 to post, waiting for approval, up in the group, or over), how many lots it holds and how many of them
 are still for sale — neither sold nor withdrawn — its layout (**Text** or **Captions**), the day it went
-up and its link. Click a row to open the post's screen. Narrow the list with the **group** filter and
-the **stage** chips; click a lit chip again to show every post.
+up and its link. Click a row to open the post's screen. Narrow the list with the **group** filter,
+the **stage** chips and **No title**; click a lit chip again to show every post.
 
-Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · lot 3 of 5** and
+Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · Generalgouvernement
+1940–44 · lot 3 of 5** and
 where the post stands — with **Open post**, and keeps what is the lot's own: its own post template and,
 while an auction is up, its bidding.
 
@@ -461,18 +471,23 @@ A captioned post is written from its own templates, set beside the layout:
   | --- | --- |
   | `{offer}` | the lots' offer numbers in lot order — `412, 413, 414`; write any `#` yourself |
   | `{post}` | the post's number — `1` for Post #1; write any `#` or *Post* yourself |
+  | `{postTitle}` | the post's title — *Generalgouvernement 1940–44* |
   | `{terms}` | the note on shipping, payment and terms |
 
 - **Auctions → Caption** and **Quick buys → Caption** — the text under each lot's photo, from the
   template of the lot's type. They take the same placeholders as that type's post template, except
-  `{terms}` — the note goes in the post's text, once — and one more:
+  `{terms}` — the note goes in the post's text, once — and two more:
 
   | Placeholder | Becomes |
   | --- | --- |
   | `{post}` | the post's number — `1` for Post #1 |
+  | `{postTitle}` | the post's title |
 
-`{post}` is offered only in these templates. An offer posted alone has no post number, so the auction
-and quick-buy post templates do not take it: there it stays as typed, and the field says so.
+`{post}` and `{postTitle}` are offered only in these templates. An offer posted alone has no post
+number and no title, so the auction and quick-buy post templates do not take them: there they stay as
+typed, and the field says so. A post made before titles has none until you give it one; while it has
+none, `{postTitle}` is left empty and the kit says so under the post text — nothing is put in its
+place.
 
 An offer's own template (above), if it has one, writes its caption in a captioned post.
 

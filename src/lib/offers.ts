@@ -2290,9 +2290,10 @@ export interface OfferListItem {
   facebookGroupId: string | null;
   bidIncrement: string | null;
   facebookPostId: string | null;
-  /** The multi-lot post this offer is a lot of, by the post's number and the lot's (#1842) — the row's
-   *  *Post #N · lot M* chip. Null for an offer posted alone and off Facebook. */
-  facebookPost: { postNo: number; lotNo: number } | null;
+  /** The multi-lot post this offer is a lot of, by the post's number and the lot's (#1842) and the
+   *  post's title (#1862) — the row's *Post #N · lot M* chip, the title on its hover. Null for an offer
+   *  posted alone and off Facebook. */
+  facebookPost: { postNo: number; title: string | null; lotNo: number } | null;
   /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
    *  changing the listing type drops it. */
   facebookOwnTemplate: boolean;
@@ -2321,7 +2322,7 @@ const OFFER_SELECT = {
   bidIncrement: true,
   facebookPostId: true,
   facebookLotNo: true,
-  facebookPost: { select: { postNo: true } },
+  facebookPost: { select: { postNo: true, title: true } },
   facebookPostTemplate: true,
   createdAt: true,
   platform: { select: { name: true } },
@@ -2350,7 +2351,7 @@ type OfferRow = {
   bidIncrement: Decimal | null;
   facebookPostId: string | null;
   facebookLotNo: number | null;
-  facebookPost: { postNo: number } | null;
+  facebookPost: { postNo: number; title: string | null } | null;
   facebookPostTemplate: string | null;
   createdAt: Date;
   platform: { name: string };
@@ -2438,7 +2439,7 @@ function toListItem(
     facebookPostId: row.facebookPostId,
     facebookPost:
       row.facebookPost && row.facebookLotNo !== null
-        ? { postNo: row.facebookPost.postNo, lotNo: row.facebookLotNo }
+        ? { postNo: row.facebookPost.postNo, title: row.facebookPost.title, lotNo: row.facebookLotNo }
         : null,
     facebookOwnTemplate: row.facebookPostTemplate !== null,
     createdAt: row.createdAt,

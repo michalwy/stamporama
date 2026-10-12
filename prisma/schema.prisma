@@ -2982,6 +2982,10 @@ model FacebookPost {
   // The post's short number within its collection (#1842), allocated by `allocateEntityNumber` from
   // `Collection.nextFacebookPostNo` and never reused — what *Post #12 · lot 3* names on the offers list.
   postNo       Int
+  // The post's title (#1862) — what tells it apart beside its number, and what `{postTitle}` puts into
+  // a captioned post. Every post made since has one (*Post together* asks for it); null only on a post
+  // made before, which is named by number until it is given one.
+  title        String?
   // How this post is laid out (#1841): `text` or `captions`, or null to follow its group's setting,
   // read live. Changeable only until a lot has gone up — after that the post is what was posted.
   layout       String?

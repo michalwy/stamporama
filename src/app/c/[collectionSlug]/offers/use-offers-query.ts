@@ -95,6 +95,8 @@ export interface FacebookPostFilters {
   /** Any of these groups; empty is every group. */
   groupIds: readonly string[];
   stage?: FacebookPostStage;
+  /** Only the posts with no title (#1862). */
+  untitled?: boolean;
 }
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
@@ -182,6 +184,7 @@ export function useFacebookPostsInfinite(collectionId: string, filters: Facebook
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.groupIds.length) params.set("group", filters.groupIds.join(","));
       if (filters.stage) params.set("stage", filters.stage);
+      if (filters.untitled) params.set("untitled", "1");
       const res = await fetch(`/api/collections/${collectionId}/facebook-posts?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch the posts");
       return res.json();

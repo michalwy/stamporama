@@ -18,7 +18,12 @@ import {
   updateFacebookGroup,
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
-import { createFacebookPost, removeFacebookLot, setFacebookPostLayout } from "@/lib/facebook-posts";
+import {
+  createFacebookPost,
+  removeFacebookLot,
+  setFacebookPostLayout,
+  setFacebookPostTitle,
+} from "@/lib/facebook-posts";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
@@ -145,14 +150,15 @@ export type FacebookPostActionState =
   | { status: "success"; postId: string; postNo: number }
   | { status: "error"; message: string };
 
-/** Put the ticked Facebook offers into one post, as lots in the order given. */
+/** Put the ticked Facebook offers into one post, as lots in the order given, under its title (#1862). */
 export async function createFacebookPostAction(
   collectionId: string,
-  offerIds: string[]
+  offerIds: string[],
+  title: string
 ): Promise<FacebookPostActionState> {
   const session = await getSession();
   try {
-    const { postId, postNo } = await createFacebookPost(session.user.id, collectionId, offerIds);
+    const { postId, postNo } = await createFacebookPost(session.user.id, collectionId, offerIds, title);
     kickOfferPhotoWorker(); // a captioned post's lot photos were queued (#1861)
     return { status: "success", postId, postNo };
   } catch (err) {
@@ -168,6 +174,17 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** Give a post of several lots its title, or another one (#1862). */
+export async function setFacebookPostTitleAction(postId: string, title: string): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await setFacebookPostTitle(session.user.id, postId, title);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to save the post's title.");
   }
 }
 

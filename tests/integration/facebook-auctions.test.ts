@@ -391,7 +391,7 @@ describe("Facebook auction offers (#1544)", () => {
     const q = await createOffer(userId, collectionId, input({ listingType: "fixed", price: "20.00" }), {
       seedItemIds: [await newItem()],
     });
-    await assert.rejects(() => createFacebookPost(userId, collectionId, [a, q]), /share one listing type/);
+    await assert.rejects(() => createFacebookPost(userId, collectionId, [a, q], "Test post"), /share one listing type/);
 
     // The group lets its posts mix: the quick buy goes in, and takes no closing time from the auction.
     await updateFacebookGroup(
@@ -408,7 +408,7 @@ describe("Facebook auction offers (#1544)", () => {
         custom: ["postTemplate", "standingNote", "startingPrice", "bidIncrement", "currency", "mixedListingTypes"],
       })
     );
-    await createFacebookPost(userId, collectionId, [a, q]);
+    await createFacebookPost(userId, collectionId, [a, q], "Test post");
     assert.equal((await read(q)).endsAt, null);
     assert.equal((await read(a)).endsAt?.toISOString(), closes.toISOString());
 
@@ -428,7 +428,7 @@ describe("Facebook auction offers (#1544)", () => {
     );
     const b = await auction([await newItem()]);
     const c = await auction([await newItem()]);
-    await createFacebookPost(userId, collectionId, [b, c]);
+    await createFacebookPost(userId, collectionId, [b, c], "Test post");
     await assert.rejects(
       () => updateOffer(userId, b, input({ listingType: "fixed", price: "20.00" })),
       /take it out of the post before changing its type/
@@ -444,11 +444,11 @@ describe("Facebook auction offers (#1544)", () => {
     const other = await auction([await newItem()], "preparing", otherGroupId);
 
     await assert.rejects(
-      () => createFacebookPost(userId, collectionId, [a, other]),
+      () => createFacebookPost(userId, collectionId, [a, other], "Test post"),
       /different groups/
     );
 
-    const { postId } = await createFacebookPost(userId, collectionId, [b, a]);
+    const { postId } = await createFacebookPost(userId, collectionId, [b, a], "Test post");
     const [lotB, lotA] = [await read(b), await read(a)];
     assert.deepEqual([lotB.facebookPostId, lotB.facebookLotNo], [postId, 1]);
     assert.deepEqual([lotA.facebookPostId, lotA.facebookLotNo], [postId, 2]);
@@ -478,7 +478,7 @@ describe("Facebook auction offers (#1544)", () => {
     const b = await auction([await newItem()]);
     const c = await auction([await newItem()], "ready");
     await prisma.offer.update({ where: { id: c }, data: { url: photo } });
-    await createFacebookPost(userId, collectionId, [a, b, c]);
+    await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
 
     await assert.rejects(() => publishOfferOrPost(userId, a, link), /Every lot must be Ready.*lot 2/);
     assert.equal((await read(a)).state, "ready", "nothing moved");
@@ -502,7 +502,7 @@ describe("Facebook auction offers (#1544)", () => {
     const a = await auction([await newItem()], "ready");
     const b = await auction([await newItem()], "ready");
     await prisma.offer.update({ where: { id: b }, data: { url: photo } });
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
 
     await publishOfferOrPost(userId, a, pending, "pending");
     for (const id of [a, b]) assert.equal((await read(id)).state, "pending", "the post's lots wait together");
@@ -520,7 +520,7 @@ describe("Facebook auction offers (#1544)", () => {
   it("takes every lot of a rejected post back to Ready, links cleared (#1778)", async () => {
     const a = await auction([await newItem()], "ready");
     const b = await auction([await newItem()], "ready");
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/1/pending_posts/7", "pending");
 
     await rejectOfferOrPost(userId, b);
@@ -547,7 +547,7 @@ describe("Facebook auction offers (#1544)", () => {
     const written = new Date("2026-10-12T18:00:00.000Z");
     const a = await auction([await newItem()], "ready", timed);
     const b = await auction([await newItem()], "ready", timed);
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await prisma.offer.updateMany({ where: { id: { in: [a, b] } }, data: { endsAt: written } });
 
     assert.equal(await readFacebookApprovalClosing(userId, a), null, "nothing is pending, nothing is asked");
@@ -591,7 +591,7 @@ describe("Facebook auction offers (#1544)", () => {
   it("withdraws a post waiting for approval as one, and a lot of a post that is up alone (#1779)", async () => {
     const a = await auction([await newItem()], "ready");
     const b = await auction([await newItem()], "ready");
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/1/pending_posts/14", "pending");
     await withdrawOfferOrPost(userId, b);
     for (const id of [a, b]) assert.equal((await read(id)).state, "withdrawn", "the post is taken back whole");
@@ -600,7 +600,7 @@ describe("Facebook auction offers (#1544)", () => {
 
     const c = await auction([await newItem()], "ready");
     const d = await auction([await newItem()], "ready");
-    await createFacebookPost(userId, collectionId, [c, d]);
+    await createFacebookPost(userId, collectionId, [c, d], "Test post");
     await publishOfferOrPost(userId, c, "https://www.facebook.com/groups/1/posts/15");
     await withdrawOfferOrPost(userId, c);
     assert.equal((await read(c)).state, "withdrawn");
@@ -620,7 +620,7 @@ describe("Facebook auction offers (#1544)", () => {
     const own = "Mine: **{title}** from {startingPrice}";
     const a = await auction([await newItem()]);
     const b = await auction([await newItem()]);
-    await createFacebookPost(userId, collectionId, [a, b]);
+    await createFacebookPost(userId, collectionId, [a, b], "Test post");
 
     await patchOffer(userId, a, { facebookPostTemplate: own });
     assert.equal((await read(a)).facebookPostTemplate, own);
@@ -662,7 +662,7 @@ describe("Facebook auction offers (#1544)", () => {
       await auction([await newItem()]),
       await auction([await newItem()]),
     ];
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b, c]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
 
     await removeFacebookLot(userId, a);
     assert.deepEqual([(await read(a)).facebookPostId, (await read(a)).facebookLotNo], [null, null]);

@@ -42,6 +42,7 @@ import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "./sell-offer-flow-dialog";
 import { OfferRow } from "./offer-row";
 import { ActivateOfferDialog, type PublishTarget } from "./activate-offer-dialog";
+import { PostTogetherDialog } from "./post-together-dialog";
 import { QuickOfferFlow } from "./quick-offer-flow";
 import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
@@ -66,6 +67,8 @@ type DialogState =
   | { kind: "delete"; offer: OfferListItem }
   | { kind: "bulkWithdraw" }
   | { kind: "bulkDelete" }
+  /** Several ticked Facebook offers becoming one post, which asks for its title (#1862). */
+  | { kind: "postTogether" }
   | { kind: "quickOffer" };
 
 /** What a bulk run refused, named against the row it belongs to. Kept as a list rather than a
@@ -469,21 +472,25 @@ export function OffersListPanel({
   }
 
   /** Put the ticked Facebook offers **in view** into one post (#1544; ADR-0061 §2), numbered as
-   * lots in the order they were ticked. The server says why when they cannot be — different groups,
-   * one already up, auctions and quick buys in a group that keeps one type per post (#1671) — and
-   * nothing is written then, so the ticks stay to be corrected. */
-  function postTogether() {
+   * lots in the order they were ticked, under the title the dialog asked for (#1862). The server says
+   * why when they cannot be — different groups, one already up, auctions and quick buys in a group
+   * that keeps one type per post (#1671) — and nothing is written then, so the ticks stay to be
+   * corrected; the dialog stays open with the reason. */
+  function postTogether(title: string) {
     const batch = selectedInView;
+    setActionError(undefined);
     startTransition(async () => {
       const { createFacebookPostAction } = await import("@/app/actions/facebook");
       const result = await createFacebookPostAction(
         collectionId,
-        batch.map((o) => o.id)
+        batch.map((o) => o.id),
+        title
       );
       if (result.status === "error") {
-        toast({ message: result.message, tone: "error" });
+        setActionError(result.message);
         return;
       }
+      setDialog({ kind: "none" });
       invalidateAll(collectionId);
       setSelection((prev) => keptAfterBulkRun(prev, batch.map((o) => o.id), []));
       toast({
@@ -947,14 +954,17 @@ export function OffersListPanel({
                           only while every ticked offer in view is a Facebook offer. */}
                       {selectedInView.length >= 2 &&
                         selectedInView.every((o) => o.facebookGroupId !== null) && (
-                          <Tooltip content="One Facebook post holding these offers as lots, numbered in the order you ticked them.">
+                          <Tooltip content="One Facebook post holding these offers as lots, numbered in the order you ticked them — you give it a title.">
                             <button
                               type="button"
-                              onClick={postTogether}
+                              onClick={() => {
+                                setActionError(undefined);
+                                setDialog({ kind: "postTogether" });
+                              }}
                               disabled={isPending}
                               style={BULK_BTN}
                             >
-                              Post together
+                              Post together…
                             </button>
                           </Tooltip>
                         )}
@@ -1214,6 +1224,16 @@ export function OffersListPanel({
           to happen is not a matter of remembering what was ticked. It is the **in view** count,
           which is what the run takes (#1031): a title naming the ticks the filter is hiding would
           promise something the run then does not do. */}
+      {dialog.kind === "postTogether" && (
+        <PostTogetherDialog
+          count={selectedInView.length}
+          isPending={isPending}
+          error={actionError}
+          onCancel={closeDialog}
+          onSubmit={postTogether}
+        />
+      )}
+
       {(dialog.kind === "bulkWithdraw" || dialog.kind === "bulkDelete") && (
         <ConfirmDialog
           title={

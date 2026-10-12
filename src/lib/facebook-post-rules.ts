@@ -17,6 +17,7 @@
 
 import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
+  FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_RETIRED_PLACEHOLDERS,
   FACEBOOK_TERMS_PLACEHOLDER,
   facebookTemplatePlaceholders,
@@ -187,10 +188,42 @@ function knownTokens(listingType: OfferListingType, role: FacebookTemplateRole =
   ]);
 }
 
+/** The multi-lot post a captioned text names (#1854, #1862): its number, and its title — null on a post
+ *  made before titles until it is given one. */
+export interface FacebookPostName {
+  postNo: number;
+  title: string | null;
+}
+
+/** A multi-lot post as the app names it wherever it is named (#1862): *Post #1 · Generalgouvernement
+ *  1940–44*, or *Post #1* while a post made before titles has none. */
+export function facebookPostLabel(post: FacebookPostName): string {
+  const title = post.title?.trim();
+  return title ? `Post #${post.postNo} · ${title}` : `Post #${post.postNo}`;
+}
+
+/** Why a post cannot be given this title, or null when it can (#1862): every multi-lot post has one,
+ *  so a blank title is refused — on *Post together* and on renaming alike. */
+export function facebookPostTitleRefusal(title: string): string | null {
+  return title.trim() ? null : "A post needs a title.";
+}
+
+/** What `{post}` and `{postTitle}` become: the post's number and title, empty where there is none. */
+function postNameValues(post: FacebookPostName | null): Record<string, string> {
+  return {
+    "{post}": post ? String(post.postNo) : "",
+    [FACEBOOK_POST_TITLE_PLACEHOLDER.token]: post?.title?.trim() ?? "",
+  };
+}
+
 /** What each placeholder becomes for this lot. `{terms}` is `terms`, empty unless this lot is where
- *  the post states the note (#1689); `{post}` is the post's number (#1854), which only a caption
- *  knows of — empty where there is none. */
-function placeholderValues(lot: FacebookPostLotText, terms: string, postNo: number | null = null): Record<string, string> {
+ *  the post states the note (#1689); `{post}` and `{postTitle}` are the post's number (#1854) and
+ *  title (#1862), which only a caption knows of — empty where there is none. */
+function placeholderValues(
+  lot: FacebookPostLotText,
+  terms: string,
+  post: FacebookPostName | null = null
+): Record<string, string> {
   return {
     "{title}": lot.title,
     "{description}": lot.description,
@@ -202,7 +235,7 @@ function placeholderValues(lot: FacebookPostLotText, terms: string, postNo: numb
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
     "{offer}": String(lot.offerNo),
     "{terms}": terms.trim(),
-    "{post}": postNo == null ? "" : String(postNo),
+    ...postNameValues(post),
   };
 }
 
@@ -229,17 +262,18 @@ function partsText(parts: readonly FacebookPostPart[]): string {
  * while it is typed (`unknownPostPlaceholders`) — so an auction's `{closesAt}` left in a quick buy's
  * template is seen, not quietly emptied. A retired placeholder is still filled in (#1671), so no post
  * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
- * (#1689) — `terms`, empty unless this lot is where the post states it. `postNo` is what a caption's
- * `{post}` becomes (#1854); a post template does not know the token, so it stays as typed there.
+ * (#1689) — `terms`, empty unless this lot is where the post states it. `post` is what a caption's
+ * `{post}` and `{postTitle}` become (#1854, #1862); a post template knows neither token, so they stay
+ * as typed there.
  */
 export function renderFacebookLotParts(
   template: string,
   lot: FacebookPostLotText,
   terms = "",
   role: "post" | "caption" = "post",
-  postNo: number | null = null
+  post: FacebookPostName | null = null
 ): FacebookPostPart[] {
-  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms, postNo));
+  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms, post));
 }
 
 /** A template with the known tokens replaced by their values, everything else kept as typed. */
@@ -420,26 +454,27 @@ export interface FacebookCaptionedPost {
  * A post of several lots laid out with **each lot's text in its photo's caption** (#1841). Each lot's
  * caption is its type's caption template — or its offer's own (#1780) — filled in as a lot's text is,
  * without `{terms}`: the note goes in the post's shared text, which carries `{offer}` (the lots' offer
- * numbers, bare, in lot order) and `{terms}`. Both carry `{post}`, the post's number `postNo` (#1854).
- * Nothing is added or fallen back to (#1692): an empty template is an empty caption or an empty post.
+ * numbers, bare, in lot order) and `{terms}`. Both carry `{post}` and `{postTitle}`, the post's number
+ * and title (#1854, #1862). Nothing is added or fallen back to (#1692): an empty template is an empty
+ * caption or an empty post, and a post with no title leaves `{postTitle}` empty.
  */
 export function renderFacebookCaptionedPost(
   captions: FacebookCaptionTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[],
-  postNo: number | null
+  post: FacebookPostName | null
 ): FacebookCaptionedPost {
   const sorted = inLotOrder(lots);
   return {
     post: fillTemplate(
       captions.post,
       knownTokens("auction", "captionPost"),
-      captionPostValues(sorted, standingNote, postNo)
+      captionPostValues(sorted, standingNote, post)
     ),
     captions: sorted.map((lot) => ({
       lotNo: lot.lotNo,
       offerNo: lot.offerNo,
-      parts: renderFacebookLotParts(facebookCaptionLotTemplate(captions, lot), lot, "", "caption", postNo),
+      parts: renderFacebookLotParts(facebookCaptionLotTemplate(captions, lot), lot, "", "caption", post),
     })),
   };
 }
@@ -447,11 +482,11 @@ export function renderFacebookCaptionedPost(
 function captionPostValues(
   sorted: readonly FacebookPostLotText[],
   standingNote: string,
-  postNo: number | null
+  post: FacebookPostName | null
 ): Record<string, string> {
   return {
     "{offer}": sorted.map((lot) => String(lot.offerNo)).join(", "),
-    "{post}": postNo == null ? "" : String(postNo),
+    ...postNameValues(post),
     [FACEBOOK_TERMS_PLACEHOLDER.token]: standingNote.trim(),
   };
 }
@@ -459,16 +494,19 @@ function captionPostValues(
 /** What a captioned post is missing (#1841): {@link FacebookPostGaps} for its captions — the caption
  *  templates its lots' types have none of, the lots whose own template is empty, the placeholders a
  *  caption leaves empty — and for its shared text, whether there is none and the placeholders it
- *  leaves empty (named with `lotNo: null`). */
+ *  leaves empty (named with `lotNo: null`). `missingPostTitle` is the post's want of a title (#1862)
+ *  where its text or a caption places `{postTitle}` — named once for the post, never per lot, since
+ *  one title fills every place. */
 export interface FacebookCaptionedPostGaps extends FacebookPostGaps {
   missingPostText: boolean;
+  missingPostTitle: boolean;
 }
 
 export function facebookCaptionedPostGaps(
   captions: FacebookCaptionTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[],
-  postNo: number | null
+  post: FacebookPostName | null
 ): FacebookCaptionedPostGaps {
   const sorted = inLotOrder(lots);
   const followsGroup = (lot: FacebookPostLotText) => lot.ownTemplate == null;
@@ -481,18 +519,24 @@ export function facebookCaptionedPostGaps(
     .filter((lot) => !followsGroup(lot) && !lot.ownTemplate!.trim())
     .map((lot) => lot.lotNo);
   const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
-  const postValues = captionPostValues(sorted, standingNote, postNo);
+  const title = FACEBOOK_POST_TITLE_PLACEHOLDER.token;
+  let missingPostTitle = false;
+  const postValues = captionPostValues(sorted, standingNote, post);
   const postKnown = knownTokens("auction", "captionPost");
   for (const token of new Set(captions.post.match(TOKEN) ?? [])) {
-    if (postKnown.has(token) && postValues[token].trim() === "") emptyPlaceholders.push({ lotNo: null, token });
+    if (!postKnown.has(token) || postValues[token].trim() !== "") continue;
+    if (token === title) missingPostTitle = true;
+    else emptyPlaceholders.push({ lotNo: null, token });
   }
   for (const lot of sorted) {
     const known = knownTokens(lot.listingType, "caption");
-    const values = placeholderValues(lot, "", postNo);
+    const values = placeholderValues(lot, "", post);
     for (const token of new Set(facebookCaptionLotTemplate(captions, lot).match(TOKEN) ?? [])) {
       if (!known.has(token)) continue;
       if (token === "{lot}" && lot.lotNo == null) continue;
-      if (values[token].trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
+      if (values[token].trim() !== "") continue;
+      if (token === title) missingPostTitle = true;
+      else emptyPlaceholders.push({ lotNo: lot.lotNo, token });
     }
   }
   return {
@@ -500,6 +544,7 @@ export function facebookCaptionedPostGaps(
     emptyOwnTemplates,
     emptyPlaceholders,
     missingPostText: !captions.post.trim(),
+    missingPostTitle,
   };
 }
 
@@ -534,6 +579,10 @@ export interface FacebookFrozenLot {
   layout: FacebookMultiLotLayout;
   /** A captioned post's shared text as it was published (#1841); empty in the `text` layout. */
   postText: string;
+  /** The post's title as it was published (#1862) — what `{postTitle}` put up, so renaming the post
+   *  afterwards leaves the posted text as it was; empty for a post with none, or an offer posted alone.
+   *  Null on a snapshot older than titles, which could not have placed one: the post's title now. */
+  postTitle: string | null;
 }
 
 /** A stored snapshot read back, or null when there is none or it is not one — a lot with no readable
@@ -562,6 +611,7 @@ export function readFacebookFrozenLot(value: unknown): FacebookFrozenLot | null 
     endsAt: optional("endsAt"),
     layout: toFacebookMultiLotLayout(text("layout")),
     postText: text("postText") ?? "",
+    postTitle: text("postTitle"),
   };
 }
 
@@ -587,7 +637,9 @@ export interface FacebookPostSourceLot {
 
 /** What a post is rendered from: the templates and note, and each lot written out. `frozenAt` is when
  *  the post was published — set only when every lot is drawn as it was posted. `layout` is how the
- *  post is laid out (#1841), and `captions` the templates a captioned one is written from. */
+ *  post is laid out (#1841), and `captions` the templates a captioned one is written from. `post` is
+ *  the multi-lot post's number and title (#1854, #1862) — the title as it was posted once it is up —
+ *  and null for an offer posted alone. */
 export interface FacebookPostSource {
   templates: FacebookPostTemplates;
   captions: FacebookCaptionTemplates;
@@ -595,10 +647,12 @@ export interface FacebookPostSource {
   standingNote: string;
   lots: FacebookPostLotText[];
   frozenAt: string | null;
+  post: FacebookPostName | null;
 }
 
 /** The group's templates and note as the source reads them, and the layout the post has **now** — its
- *  own, or its group's (#1841); `text` for an offer posted alone. */
+ *  own, or its group's (#1841); `text` for an offer posted alone. `post` is the multi-lot post the lots
+ *  are in, its title as it reads now (#1862); absent or null for an offer posted alone. */
 export interface FacebookPostSourceGroup {
   postTemplate: string;
   quickBuyTemplate: string;
@@ -607,6 +661,7 @@ export interface FacebookPostSourceGroup {
   quickBuyCaptionTemplate: string;
   captionPostTemplate: string;
   layout: FacebookMultiLotLayout;
+  post?: FacebookPostName | null;
 }
 
 /**
@@ -614,7 +669,8 @@ export interface FacebookPostSourceGroup {
  * and figures, whatever has changed since — and a lot not yet published from its group's templates and
  * its figures now. `live` names the lots drawn as they would be posted **now** even though frozen: a
  * repost puts the current template and figures up again (#1718). The note is the last lot's: frozen
- * with it, or the group's.
+ * with it, or the group's — and so is the post's title (#1862), while its number is read live: it is
+ * the post's identity and never changes.
  */
 export function facebookPostSource<L extends FacebookPostSourceLot>(
   group: FacebookPostSourceGroup,
@@ -657,6 +713,9 @@ export function facebookPostSource<L extends FacebookPostSourceLot>(
     standingNote: lastFrozen ? lastFrozen.standingNote : group.standingNote,
     lots: texts,
     frozenAt: allFrozen ? (frozenAts as string[]).reduce((a, b) => (b > a ? b : a)) : null,
+    post: group.post
+      ? { postNo: group.post.postNo, title: lastFrozen?.postTitle ?? group.post.title }
+      : null,
   };
 }
 

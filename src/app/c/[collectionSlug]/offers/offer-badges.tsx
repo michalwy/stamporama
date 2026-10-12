@@ -6,6 +6,7 @@ import {
   OFFER_STATE_LABEL,
   isAuctionListing,
 } from "@/lib/offer-rules";
+import { facebookPostLabel } from "@/lib/facebook-post-rules";
 import Link from "next/link";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
@@ -223,22 +224,35 @@ export function InActiveBiddingChip() {
 
 /** A lot of a multi-lot Facebook post (#1842), on its row: *Post #N · lot M*, opening the post's own
  *  screen, with a narrowing control beside the words that filters the list to the post's lots. Two
- *  targets in one chip because both answer "this post": where it is managed, and which rows are in it. */
+ *  targets in one chip because both answer "this post": where it is managed, and which rows are in it.
+ *  The post's title (#1862) is on the chip's hover — a row has no room for it. */
 export function FacebookPostChip({
   collectionSlug,
   postNo,
+  title,
   lotNo,
   onNarrow,
 }: {
   collectionSlug: string;
   postNo: number;
+  /** The post's title; null on a post made before titles until it is given one. */
+  title: string | null;
   lotNo: number;
   /** Filters the list to this post's lots; absent where the list already is. */
   onNarrow?: () => void;
 }) {
   return (
     <span style={{ ...CHIP, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-      <Tooltip content="Open the post — every lot, the post kit and the post's moves">
+      <Tooltip
+        content={
+          <span>
+            {title?.trim() && (
+              <span style={{ display: "block", fontWeight: 600 }}>{facebookPostLabel({ postNo, title })}</span>
+            )}
+            Open the post — every lot, the post kit and the post&apos;s moves
+          </span>
+        }
+      >
         <Link
           href={`/c/${collectionSlug}/offers/posts/${postNo}`}
           onClick={(e) => e.stopPropagation()}
