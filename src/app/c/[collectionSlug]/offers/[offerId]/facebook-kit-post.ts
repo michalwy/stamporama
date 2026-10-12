@@ -86,7 +86,8 @@ export function renderFacebookKitPost(
     live
   );
   if (layout === "captions") {
-    const post = renderFacebookCaptionedPost(captions, standingNote, lots);
+    const postNo = kit.post?.postNo ?? null;
+    const post = renderFacebookCaptionedPost(captions, standingNote, lots, postNo);
     return {
       ...kitText(post.post),
       layout,
@@ -96,7 +97,7 @@ export function renderFacebookKitPost(
         offerNo: caption.offerNo,
         lotNo: caption.lotNo,
       })),
-      gaps: frozenAt ? NO_GAPS : facebookCaptionedPostGaps(captions, standingNote, lots),
+      gaps: frozenAt ? NO_GAPS : facebookCaptionedPostGaps(captions, standingNote, lots, postNo),
       frozenAt,
     };
   }
