@@ -354,3 +354,29 @@ export function estimateCopyCost(
   if (w == null || w <= 0 || weightBase <= 0) return { amount: null, gap: "no_catalog_value" };
   return { amount: Math.round(((poolBase * w) / weightBase) * 100) / 100, gap: null };
 }
+
+/** An open lot as its copies' estimates need it: its own value and its purchase's money. */
+export interface EstimateLot {
+  id: string;
+  /** The lot's price; null on an opening balance's lot with no value (#1323). */
+  price: unknown;
+  purchase: StoredPurchaseCosts & { currency: string };
+}
+
+/**
+ * Every copy's estimate on one open lot (#1696), id → estimate. `copies` must be the **whole** lot
+ * — the weight base is theirs ({@link estimateWeightBase}), never a filtered part of it. Pure.
+ */
+export function estimateLotCopies(
+  lot: EstimateLot,
+  copies: readonly (EstimateCopy & { id: string })[],
+  baseCurrency: string
+): Map<string, CostEstimate> {
+  const costs = purchaseCostsOf(lot.purchase);
+  const poolBase = lotPoolBase(costs, lot.id, {
+    valued: lot.price != null,
+    canExpressBase: canExpressInBase(costs.fxRateToBase, lot.purchase.currency, baseCurrency),
+  });
+  const weightBase = estimateWeightBase(copies);
+  return new Map(copies.map((c) => [c.id, estimateCopyCost(c, poolBase, weightBase)]));
+}

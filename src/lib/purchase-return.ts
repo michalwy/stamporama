@@ -24,12 +24,23 @@
 // its proceeds are left out of `realized`, which is then reported as covering fewer copies than have
 // sold — a figure that is short by a stated amount, rather than one quietly claiming a loss.
 //
+// **A copy on a still-open lot may be counted at its estimate** (#1881), on the purchase order's own
+// screen: `spent` and `soldCost` then carry the estimates beside the frozen sum
+// (`CostBasisTotal.estimated`), and both returns are worked out against the two together, so the
+// collector can judge an order before its lots close. Once a lot closes its frozen cost basis wins
+// and the estimate drops out with no action.
+//
 // **On an opening balance the same arithmetic runs against an opening value** (#1324): its frozen
 // cost basis is what the collector said the material was worth, and it counts towards profit and
 // loss exactly as a purchase cost does — but nothing was spent. `basis` says which of the two the
 // figures are against, so the screen never calls an opening value *spent*.
 
-import { aggregateCostBasis, type CostBasisInput, type CostBasisTotal } from "./cost-basis";
+import {
+  aggregateCostBasis,
+  costWithEstimates,
+  type CostBasisInput,
+  type CostBasisTotal,
+} from "./cost-basis";
 import {
   allocateSaleLine,
   SaleLineBlockedError,
@@ -134,7 +145,8 @@ export interface PurchaseReturn {
   unattributedCount: number;
   /** Σ net proceeds attributed to the order's sold copies. */
   realized: string;
-  /** Cost-basis over every copy of the order — the spend {@link netReturn} is against. */
+  /** Cost-basis over every copy of the order — the spend {@link netReturn} is against, with its
+   *  estimated copies counted in where it carries any (#1881). */
   spent: CostBasisTotal;
   /** Cost-basis over the sold copies alone — the denominator of {@link soldMargin}. */
   soldCost: CostBasisTotal;
@@ -167,15 +179,18 @@ export function summarizePurchaseReturn(
   copies: PurchaseReturnCopy[],
   realized: number,
   baseCurrency: string,
-  basis: ReturnBasis = "spent"
+  basis: ReturnBasis = "spent",
+  /** Count a pending copy's `estimate` into the cost side (#1881); see the module header. */
+  opts: { withEstimates?: boolean } = {}
 ): PurchaseReturn {
   const sold = copies.filter((c) => c.sold);
   const realizedCents = toCents(realized);
-  const spent = aggregateCostBasis(copies, baseCurrency);
-  const soldCost = aggregateCostBasis(sold, baseCurrency);
+  const spent = aggregateCostBasis(copies, baseCurrency, opts);
+  const soldCost = aggregateCostBasis(sold, baseCurrency, opts);
 
-  const spentCents = toCents(Number(spent.totalCostBasis));
-  const soldCostCents = toCents(Number(soldCost.totalCostBasis));
+  // The frozen sum plus any estimates — just the frozen sum where none were asked for.
+  const spentCents = toCents(Number(costWithEstimates(spent).amount));
+  const soldCostCents = toCents(Number(costWithEstimates(soldCost).amount));
 
   return {
     baseCurrency,

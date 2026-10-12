@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   differenceFigure,
+  markEstimated,
   negatedAmount,
   signedAmount,
   stateFigure,
@@ -118,5 +119,49 @@ describe("signedAmount", () => {
   it("gives zero a plus rather than a minus", () => {
     assert.equal(signedAmount("0.00"), "+0.00");
     assert.equal(signedAmount("-0.00"), "+0.00");
+  });
+});
+
+// A figure leaning on estimated costs is marked as one (#1881), and so is a difference against it.
+describe("markEstimated", () => {
+  it("marks a stated figure with estimated copies behind it", () => {
+    assert.deepEqual(markEstimated(stateFigure("12.00", 3, 0), 2), {
+      state: "complete",
+      amount: "12.00",
+      estimated: true,
+    });
+  });
+
+  it("leaves a figure with no estimated copies unmarked", () => {
+    assert.deepEqual(markEstimated(stateFigure("12.00", 3, 0), 0), {
+      state: "complete",
+      amount: "12.00",
+    });
+  });
+
+  it("never marks an absence", () => {
+    assert.deepEqual(markEstimated(stateFigure("0.00", 0, 4), 2), { state: "unknown", amount: null });
+  });
+
+  it("carries the mark through a difference", () => {
+    const realized = stateFigure("50.00", 2, 0);
+    const spent = markEstimated(stateFigure("30.00", 5, 0), 5);
+    assert.deepEqual(differenceFigure("20.00", [realized, spent]), {
+      state: "complete",
+      amount: "20.00",
+      estimated: true,
+    });
+    assert.deepEqual(differenceFigure("20.00", [realized, stateFigure("30.00", 5, 0)]), {
+      state: "complete",
+      amount: "20.00",
+    });
+  });
+
+  it("gives an unknown difference no mark even beside an estimated side", () => {
+    const spent = markEstimated(stateFigure("30.00", 5, 0), 5);
+    assert.deepEqual(differenceFigure("0.00", [stateFigure("0.00", 0, 1), spent]), {
+      state: "unknown",
+      amount: null,
+    });
   });
 });

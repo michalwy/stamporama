@@ -2,8 +2,14 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { closeLot, createLot, getPurchaseDetail, intakeStamps } from "../../src/lib/lots";
-import { createPurchase } from "../../src/lib/purchases";
-import { getItemListItem, getLotIntakeSummary, listItemsPaginated } from "../../src/lib/items";
+import { createPurchase, getLotReturn, getPurchaseReturn } from "../../src/lib/purchases";
+import {
+  getHoldingsValuation,
+  getItemListItem,
+  getLotIntakeSummary,
+  getPurchaseIntakeSummary,
+  listItemsPaginated,
+} from "../../src/lib/items";
 import { getStampPurchaseCosts } from "../../src/lib/purchase-costs";
 import { estimateCopyCost } from "../../src/lib/purchase-allocation";
 import { addOfferSet, createOffer, getOfferDetail } from "../../src/lib/offers";
@@ -181,6 +187,39 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
     assert.equal(cell.pendingCount, 1);
     assert.equal(cell.pendingEstimate, "4.00");
     assert.equal(cell.pendingEstimatedCount, 1);
+  });
+
+  it("is counted into the purchase order's own summary, beside the frozen sum (#1881)", async () => {
+    // The order: the closed lot's 1.33 + 2.67 frozen, the open lot's 4.00 + 8.00 estimated, and the
+    // unpriced copy pending with no estimate. The copy that never arrived is a write-off.
+    const order = (await getPurchaseIntakeSummary(userId, collectionId, purchaseId)).holdings;
+    assert.equal(order.cost.totalCostBasis, "4.00");
+    assert.equal(order.cost.knownCount, 2);
+    assert.equal(order.cost.pendingCount, 3);
+    assert.deepEqual(order.cost.estimated, { count: 2, amount: "12.00" });
+    assert.deepEqual(order.writeOff.cost.estimated, { count: 0, amount: "0.00" });
+    assert.equal(order.writeOff.cost.pendingCount, 1);
+
+    const lot = (await getLotIntakeSummary(userId, collectionId, openLotId)).holdings;
+    assert.equal(lot.cost.knownCount, 0);
+    assert.deepEqual(lot.cost.estimated, { count: 2, amount: "12.00" });
+
+    // The Copies list reads no estimates: its purchase cost keeps these copies pending.
+    const copies = await getHoldingsValuation(userId, collectionId);
+    assert.equal(copies.cost.estimated, undefined);
+  });
+
+  it("is counted into what the order and the lot have returned (#1881)", async () => {
+    const order = await getPurchaseReturn(userId, purchaseId);
+    assert.equal(order.spent.totalCostBasis, "4.00");
+    assert.deepEqual(order.spent.estimated, { count: 2, amount: "12.00" });
+    // Nothing has sold: the whole of the frozen and estimated cost is the net return so far.
+    assert.equal(order.netReturn, "-16.00");
+    assert.equal(order.netReturnPercent, -100);
+
+    const lot = await getLotReturn(userId, openLotId);
+    assert.deepEqual(lot.spent.estimated, { count: 2, amount: "12.00" });
+    assert.equal(lot.netReturn, "-12.00");
   });
 
   it("is counted into an offer's COST, marked, while its holdings keep it pending (#1736)", async () => {

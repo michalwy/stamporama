@@ -3,7 +3,7 @@
 import { markedCopiesNote } from "@/lib/catalog-price-mark";
 import { useState } from "react";
 import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
-import type { CostBasisTotal } from "@/lib/cost-basis";
+import { costWithEstimates, type CostBasisTotal } from "@/lib/cost-basis";
 import type { OpeningValue } from "@/lib/opening-value";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { PurchaseSpend } from "@/lib/purchase-spend";
@@ -12,12 +12,14 @@ import {
   NOT_APPLICABLE,
   NOT_WORKED_OUT,
   differenceFigure,
+  markEstimated,
   negatedAmount,
   signedAmount,
   stateFigure,
   type StatedFigure,
 } from "@/lib/summary-figure";
 import { usePersistedFlag } from "./use-persisted-flag";
+import { COST_ESTIMATE_STYLE } from "./cost-estimate-text";
 import { FaultReducedNote } from "./fault-reduction-mark";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -262,10 +264,18 @@ function AbsentAmount({ text, style }: { text: string; style: React.CSSPropertie
   );
 }
 
+/** The hover on a figure that counts copies at their estimated cost (#1881). */
+const ESTIMATED_FIGURE_HINT =
+  "An estimate: copies on purchase lots that are still open are counted at their share of the lot's cost by catalog value, the figure each copy's own page shows. It settles when the lots are closed.";
+
 /** The amount slot, in the one place that decides whether there is an amount to put in it (#1184).
  * A figure with nothing behind it says so in the collector's terms instead of printing a sum of
  * nothing; the grey sentence beside it, which counts what is missing, is unchanged either way. A
- * figure that cannot apply to anything in scope (#1325) says that instead of promising it. */
+ * figure that cannot apply to anything in scope (#1325) says that instead of promising it.
+ *
+ * A figure counting copies at an estimated cost (#1881) is marked as one in #238's vocabulary — `~`,
+ * muted italic — exactly as an estimated cost reads on a copy (#1696), an offer (#1736) and a sale
+ * (#1814). The muted colour takes over from a signed figure's green or red, as it does on a sale. */
 function FigureAmount({
   figure,
   currency,
@@ -286,11 +296,15 @@ function FigureAmount({
       />
     );
   }
-  return (
-    <span style={style}>
-      {format ? format(figure.amount) : figure.amount} {currency}
-    </span>
-  );
+  const text = `${format ? format(figure.amount) : figure.amount} ${currency}`;
+  if (figure.estimated) {
+    return (
+      <Tooltip content={ESTIMATED_FIGURE_HINT}>
+        <span style={{ ...style, ...COST_ESTIMATE_STYLE }}>~{text}</span>
+      </Tooltip>
+    );
+  }
+  return <span style={style}>{text}</span>;
 }
 
 /** A gain is stated in the accent-positive hue and a loss in the error one (#559). A bare figure in
@@ -317,22 +331,39 @@ function copiesWord(n: number): string {
 
 /** A cost over a set of copies, stated (#1184). A copy from an opening-balance lot with no opening
  * value is neither behind the figure nor missing from it — its cost is not applicable (#1325) — so a
- * scope made only of such copies reads *not applicable* rather than *not worked out yet*. */
+ * scope made only of such copies reads *not applicable* rather than *not worked out yet*.
+ *
+ * A pending copy counted at its estimate (#1881) **is** behind the figure, which is then marked as
+ * an estimate; only a pending copy with no estimate possible is still missing from it. */
 function costFigure(total: CostBasisTotal): StatedFigure {
-  return stateFigure(
-    total.totalCostBasis,
-    total.knownCount,
-    total.pendingCount + total.noneCount - total.noOpeningValueCount,
-    total.noOpeningValueCount
+  const { amount, behind, estimatedCount } = costWithEstimates(total);
+  return markEstimated(
+    stateFigure(
+      amount,
+      behind,
+      total.pendingCount - estimatedCount + total.noneCount - total.noOpeningValueCount,
+      total.noOpeningValueCount
+    ),
+    estimatedCount
   );
 }
 
+/** How many copies a cost counts at an estimate (#1881) — `851 estimated` — or nothing. */
+function estimatedNote(total: CostBasisTotal): string | null {
+  const n = total.estimated?.count ?? 0;
+  return n > 0 ? `${n} estimated` : null;
+}
+
 /** The copies a cost has nothing for, by why: still to be frozen, never recorded, or — from an opening
- * balance's unvalued lot — not applicable (#1325). */
+ * balance's unvalued lot — not applicable (#1325). Where estimates were read (#1881), a pending copy
+ * still counted here is one with no estimate possible, and says so. */
 function costGapNotes(total: CostBasisTotal, pendingWord = "pending"): string[] {
   const notes: string[] = [];
   const unrecorded = total.noneCount - total.noOpeningValueCount;
-  if (total.pendingCount > 0) notes.push(`${total.pendingCount} ${pendingWord}`);
+  const unestimated = total.pendingCount - (total.estimated?.count ?? 0);
+  if (unestimated > 0) {
+    notes.push(`${unestimated} ${pendingWord}${total.estimated ? ", no estimate" : ""}`);
+  }
   if (unrecorded > 0) notes.push(`${unrecorded} no cost recorded`);
   if (total.noOpeningValueCount > 0) notes.push(`${total.noOpeningValueCount} without a value`);
   return notes;
@@ -605,7 +636,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         <span style={NOTE_STYLE}>
           {spent.amount === null
             ? `${noCost(spent)} for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
-            : `against ${spent.amount} ${ret.spent.baseCurrency} ${costWord} all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
+            : `against ${spent.estimated ? "~" : ""}${spent.amount} ${ret.spent.baseCurrency} ${costWord} all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
+          {spent.estimated ? `, ${estimatedNote(ret.spent)}` : ""}
           {percentNote(ret.netReturnPercent)}
         </span>
       </div>
@@ -623,7 +655,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         <span style={NOTE_STYLE}>
           {soldCost.amount === null
             ? `${noCost(soldCost)} for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
-            : `against ${soldCost.amount} ${ret.soldCost.baseCurrency} ${costWord} the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
+            : `against ${soldCost.estimated ? "~" : ""}${soldCost.amount} ${ret.soldCost.baseCurrency} ${costWord} the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
+          {soldCost.estimated ? `, ${estimatedNote(ret.soldCost)}` : ""}
           {percentNote(ret.soldMarginPercent)}
         </span>
       </div>
@@ -751,8 +784,9 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
           <span style={LABEL_STYLE}>Purchase cost</span>
           <FigureAmount figure={purchaseFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
           <span style={NOTE_STYLE}>
-            {cost.knownCount} costed
-            {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
+            {[estimatedNote(cost), `${cost.knownCount} costed`, ...costNotes]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </div>
       )}
@@ -761,8 +795,9 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
           <span style={LABEL_STYLE}>Opening value</span>
           <FigureAmount figure={openingFigure} currency={opening.baseCurrency} style={AMOUNT_STYLE} />
           <span style={NOTE_STYLE}>
-            {opening.knownCount} valued
-            {openingNotes.length > 0 ? ` · ${openingNotes.join(" · ")}` : ""}
+            {[estimatedNote(opening), `${opening.knownCount} valued`, ...openingNotes]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </div>
       )}
@@ -783,8 +818,9 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
             format={negatedAmount}
           />
           <span style={NOTE_STYLE}>
-            {writeOff.count} no longer held
-            {writeOffNotes.length > 0 ? ` · ${writeOffNotes.join(" · ")}` : ""}
+            {[`${writeOff.count} no longer held`, estimatedNote(writeOff.cost), ...writeOffNotes]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </div>
       )}
@@ -799,6 +835,10 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
  * calling out copies whose cost is still pending (open lot) or has no cost recorded — and the
  * **write-off** of copies that are gone (#396). Renders a fixed-height skeleton until the figures
  * have loaded so no layout shift occurs (#151).
+ *
+ * On a purchase order and its lots the cost totals also carry the **estimated** cost of copies on
+ * still-open lots (#1881, `CostBasisTotal.estimated`), and the cost and return figures count them,
+ * marked as estimates. Nothing here decides that: a total with no `estimated` part reads as before.
  *
  * `ret` (#559) adds the return rows beneath, on the surfaces that know what the same copies have
  * since fetched — a purchase order and each of its lots. Omitted everywhere else, and drawn only

@@ -43,6 +43,9 @@ export interface StatedFigure {
   /** The amount to print, 2 dp; `null` exactly when {@link state} is `"unknown"` or
    *  `"not_applicable"`. */
   amount: string | null;
+  /** Set when the amount counts some copies at an estimated cost (#1881) — copies on a purchase lot
+   *  that is still open. Never set on a figure with no amount: there is nothing to mark. */
+  estimated?: true;
 }
 
 /** What the screen says in place of an amount it has not got. The collector's terms, not the
@@ -99,7 +102,18 @@ export function differenceFigure(amount: string, sides: StatedFigure[]): StatedF
   return {
     state: sides.some((side) => side.state === "partial") ? "partial" : "complete",
     amount: plainAmount(amount),
+    // A difference against an estimate is an estimate too (#1881).
+    ...(sides.some((side) => side.estimated) ? { estimated: true as const } : {}),
   };
+}
+
+/**
+ * A figure marked as leaning on estimated costs (#1881) when `estimatedCount` copies behind it were
+ * counted at an estimate — and only when it states an amount, since an absence is not an estimate
+ * of anything.
+ */
+export function markEstimated(figure: StatedFigure, estimatedCount: number): StatedFigure {
+  return figure.amount !== null && estimatedCount > 0 ? { ...figure, estimated: true } : figure;
 }
 
 /**

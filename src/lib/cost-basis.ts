@@ -47,6 +47,10 @@ export interface CostBasisInput {
    *  there is no lot. `false` only on an opening balance's lot without an opening value (#1323),
    *  whose copies are never *pending*: there is no pool for a close to freeze. */
   lotValued: boolean | null;
+  /** A **pending** copy's estimated cost (#1696), base currency, or null when it has none. Read
+   *  only for a pending copy, and only where the reader asked for estimates (#1881): it never
+   *  becomes the cost basis, and a total keeps it apart from the frozen sum. */
+  estimate?: number | null;
 }
 
 /** The lot half of a {@link CostBasisInput}, read off the owning lot as selected (`status` and
@@ -91,19 +95,23 @@ export function lotIsOpeningBalance(
 
 /** A holdings scope's cost, split by what the amount means (#1324): `cost` over copies from
  *  purchases (or from no lot at all) — money spent — and `openingValue` over copies from opening
- *  balances. Every copy lands in exactly one of the two. Pure. */
+ *  balances. Every copy lands in exactly one of the two. `opts` is {@link aggregateCostBasis}'s.
+ *  Pure. */
 export function splitCostBasis(
   inputs: HoldingsCostInput[],
-  baseCurrency: string
+  baseCurrency: string,
+  opts: { withEstimates?: boolean } = {}
 ): { cost: CostBasisTotal; openingValue: CostBasisTotal } {
   return {
     cost: aggregateCostBasis(
       inputs.filter((i) => !i.openingBalance),
-      baseCurrency
+      baseCurrency,
+      opts
     ),
     openingValue: aggregateCostBasis(
       inputs.filter((i) => i.openingBalance),
-      baseCurrency
+      baseCurrency,
+      opts
     ),
   };
 }
@@ -128,19 +136,30 @@ export interface CostBasisTotal {
    *  applicable rather than one nobody recorded, so a summary can say so instead of *not worked out
    *  yet*. */
   noOpeningValueCount: number;
+  /** The part of {@link pendingCount} counted at its open lot's estimate (#1881), and what those
+   *  estimates add up to (2 dp). **Present only where the reader asked for estimates** — a purchase
+   *  order's own summary — so a screen can tell *pending, no estimate possible* from *pending, none
+   *  read*. Never part of {@link totalCostBasis}, which stays the frozen sum: see
+   *  {@link costWithEstimates}. */
+  estimated?: { count: number; amount: string };
 }
 
 /** Aggregate per-copy cost-basis into a {@link CostBasisTotal}. See the module header for
- * the per-copy state rules; see the interface for how each state contributes. Pure. */
+ * the per-copy state rules; see the interface for how each state contributes. With
+ * `withEstimates` (#1881), a pending copy carrying an `estimate` is counted into
+ * {@link CostBasisTotal.estimated}. Pure. */
 export function aggregateCostBasis(
   inputs: CostBasisInput[],
-  baseCurrency: string
+  baseCurrency: string,
+  opts: { withEstimates?: boolean } = {}
 ): CostBasisTotal {
   let total = 0;
   let knownCount = 0;
   let pendingCount = 0;
   let noneCount = 0;
   let noOpeningValueCount = 0;
+  let estimatedCount = 0;
+  let estimatedCents = 0;
   for (const input of inputs) {
     const resolved = resolveCostBasis(input);
     if (resolved.state === "known") {
@@ -148,6 +167,10 @@ export function aggregateCostBasis(
       total += Number(resolved.amount);
     } else if (resolved.state === "pending") {
       pendingCount++;
+      if (opts.withEstimates && input.estimate != null) {
+        estimatedCount++;
+        estimatedCents += Math.round(input.estimate * 100);
+      }
     } else {
       noneCount++;
       if (resolved.reason === "no_opening_value") noOpeningValueCount++;
@@ -160,6 +183,30 @@ export function aggregateCostBasis(
     pendingCount,
     noneCount,
     noOpeningValueCount,
+    ...(opts.withEstimates
+      ? { estimated: { count: estimatedCount, amount: (estimatedCents / 100).toFixed(2) } }
+      : {}),
+  };
+}
+
+/**
+ * A cost total with its estimated copies counted in (#1881): the frozen sum plus the estimates, to
+ * the cent, and how many copies are behind it. Without estimates it is the frozen sum and the
+ * known count, unchanged. Pure.
+ */
+export function costWithEstimates(total: CostBasisTotal): {
+  amount: string;
+  behind: number;
+  estimatedCount: number;
+} {
+  const estimatedCount = total.estimated?.count ?? 0;
+  const cents =
+    Math.round(Number(total.totalCostBasis) * 100) +
+    Math.round(Number(total.estimated?.amount ?? 0) * 100);
+  return {
+    amount: (cents / 100).toFixed(2),
+    behind: total.knownCount + estimatedCount,
+    estimatedCount,
   };
 }
 

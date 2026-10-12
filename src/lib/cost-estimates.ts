@@ -4,12 +4,9 @@ import { valuateItemsByIds } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
 import { resolveCostBasis, type CostBasisInput } from "./cost-basis";
 import {
-  canExpressInBase,
-  estimateCopyCost,
-  estimateWeightBase,
-  lotPoolBase,
-  purchaseCostsOf,
+  estimateLotCopies,
   type CostEstimate,
+  type EstimateCopy,
 } from "./purchase-allocation";
 
 // **What a copy on a still-open lot is estimated to cost** (#1696), read for the screens other than
@@ -74,25 +71,70 @@ export async function loadCostEstimates(
 
   const estimates = new Map<string, CostEstimate>();
   for (const lot of lots) {
-    const costs = purchaseCostsOf(lot.purchase);
-    const poolBase = lotPoolBase(costs, lot.id, {
-      valued: lot.price != null,
-      canExpressBase: canExpressInBase(costs.fxRateToBase, lot.purchase.currency, baseCurrency),
-    });
     const weighed = lot.items.map((i) => ({
       id: i.id,
       deliveryState: i.deliveryState,
       weight: valuations.get(i.id)?.baseAmount ?? null,
     }));
-    const weightBase = estimateWeightBase(weighed);
-    for (const copy of weighed) estimates.set(copy.id, estimateCopyCost(copy, poolBase, weightBase));
+    for (const [id, estimate] of estimateLotCopies(lot, weighed, baseCurrency)) {
+      estimates.set(id, estimate);
+    }
   }
+  return onlyPending(pending, estimates);
+}
 
-  // Only the copies asked about, and only the pending ones among them.
+/** Only the copies asked about, and only the pending ones among them. */
+function onlyPending(
+  pending: readonly CostEstimateCopy[],
+  estimates: Map<string, CostEstimate>
+): Map<string, CostEstimate> {
   const result = new Map<string, CostEstimate>();
   for (const c of pending) {
     const estimate = estimates.get(c.id);
     if (estimate) result.set(c.id, estimate);
   }
   return result;
+}
+
+/**
+ * The same estimates for copies **already valued**, where `copies` holds every copy of each open lot
+ * behind them — a purchase order's own summaries (#1881), which have just valued the whole order or
+ * the whole lot and must not pay for it twice (the reason the intake reads skip
+ * {@link loadCostEstimates}). Only the lots' money is read. Caller must have asserted collection
+ * ownership.
+ */
+export async function estimateWholeLots(
+  collectionId: string,
+  copies: readonly (CostEstimateCopy & EstimateCopy)[],
+  baseCurrency: string
+): Promise<Map<string, CostEstimate>> {
+  const pending = copies.filter((c) => resolveCostBasis(c).state === "pending");
+  const lotIds = [...new Set(pending.map((c) => c.lotId!))];
+  if (lotIds.length === 0) return new Map();
+
+  const lots = await prisma.purchaseLot.findMany({
+    where: { id: { in: lotIds }, purchase: { collectionId } },
+    select: {
+      id: true,
+      price: true,
+      purchase: {
+        select: {
+          currency: true,
+          shippingCost: true,
+          fxRateToBase: true,
+          lots: { select: { id: true, price: true } },
+          expenses: { select: { id: true, price: true } },
+        },
+      },
+    },
+  });
+
+  const estimates = new Map<string, CostEstimate>();
+  for (const lot of lots) {
+    const onLot = copies.filter((c) => c.lotId === lot.id);
+    for (const [id, estimate] of estimateLotCopies(lot, onLot, baseCurrency)) {
+      estimates.set(id, estimate);
+    }
+  }
+  return onlyPending(pending, estimates);
 }
