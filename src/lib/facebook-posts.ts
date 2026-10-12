@@ -11,6 +11,7 @@ import {
   setFrozenFacebookClosing,
 } from "./facebook-auctions";
 import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./facebook-group-rules";
+import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
   facebookPostLink,
   facebookPostRefusal,
@@ -102,7 +103,7 @@ export async function createFacebookPost(
 
   const auction = (l: (typeof lots)[number]) => isAuctionListing(l.listingType);
   const endsAt = lots.find((l) => auction(l) && l.endsAt !== null)?.endsAt ?? null;
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
     const post = await tx.facebookPost.create({
       data: { collectionId, postNo, groupId: lots[0].facebookGroupId! },
@@ -116,6 +117,9 @@ export async function createFacebookPost(
     }
     return { postId: post.id, postNo };
   });
+  // A post captioned from the start has its lots' photos queued now (#1861), not when it is opened.
+  await syncFacebookPostLotPhotos(created.postId);
+  return created;
 }
 
 /** What a multi-lot post's own screen draws (#1842): the post's kit — the group, the lots in lot
@@ -337,6 +341,8 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
     );
   }
   await prisma.$transaction((tx) => detachFacebookLot(tx, offerId));
+  // Its lot photo goes with it, and so does the last lot's of a post it dissolved (#1861).
+  await pruneFacebookLotPhotos(offer.collectionId);
 }
 
 /**
@@ -361,6 +367,8 @@ export async function setFacebookPostLayout(
     );
   }
   await prisma.facebookPost.update({ where: { id: postId }, data: { layout } });
+  // Captioned now: its lots' photos are queued; laid out as text: they go (#1861).
+  await syncFacebookPostLotPhotos(postId);
 }
 
 /**

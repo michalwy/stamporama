@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { OfferPhotoGenerationError } from "@/lib/offer-photo-generation";
-import { buildFacebookPostPhotos } from "@/lib/facebook-lot-photos";
+import { buildFacebookPostPhotos, FacebookLotPhotosNotReadyError } from "@/lib/facebook-lot-photos";
 
 // A Facebook post's photos as one ZIP, in lot order (#1544; ADR-0061 §3) — the photos half of the
 // kit, downloaded in one click and uploaded to the album in the order the post numbers its lots. A
-// captioned post (#1841) gives one photo per lot.
+// captioned post (#1841) gives one photo per lot, its stored one (#1861) — refused with 409 while any
+// lot's is still being generated, so an incomplete set is never what gets posted.
 // Owner-checked lot by lot through the photo read model, as the per-offer archive is.
 export async function GET(
   _request: NextRequest,
@@ -22,6 +23,9 @@ export async function GET(
   try {
     archive = await buildFacebookPostPhotos(session.user.id, postId);
   } catch (err) {
+    if (err instanceof FacebookLotPhotosNotReadyError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof OfferPhotoGenerationError) {
       return NextResponse.json({ error: err.message }, { status: 404 });
     }

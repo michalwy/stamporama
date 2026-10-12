@@ -179,6 +179,7 @@ import {
   type FacebookOfferResolution,
 } from "./facebook-auctions";
 import { facebookDefaultStartingPrice } from "./facebook-post-rules";
+import { pruneFacebookLotPhotos } from "./facebook-lot-photos";
 import type { PlanDrift } from "./offer-generator-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
@@ -6354,6 +6355,9 @@ export async function updateOffer(
     },
     });
   });
+  // Off Facebook, it is no lot any more: its captioned photo goes, and the last lot's of a post it
+  // dissolved (#1861).
+  if (postId && !facebook.facebookGroupId) await pruneFacebookLotPhotos(ref.collectionId);
 
   // The header form writes no texts, so the only question is the price — and on an auction, only the
   // *starting* one (#542): the current figure is where the bidding stands, and noting a bid is not a
@@ -7015,7 +7019,7 @@ export async function acknowledgeOfferBiddingNotice(
 /** Delete an offer and all its sets (the underlying copies are untouched). Blocked when any set
  * has sold — the sale record must survive (`sale_line.offerSetId` is `Restrict`). */
 export async function deleteOffer(ownerId: string, offerId: string): Promise<void> {
-  await assertOfferOwner(ownerId, offerId);
+  const { collectionId } = await assertOfferOwner(ownerId, offerId);
   const soldSets = await prisma.saleLine.count({ where: { offerSet: { offerId } } });
   if (soldSets > 0) {
     throw new OfferActionBlockedError(
@@ -7032,6 +7036,8 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
     await detachFacebookLot(tx, offerId);
     await tx.offer.delete({ where: { id: offerId } });
   });
+  // The last lot of a post it dissolved is no lot any more, and loses its captioned photo (#1861).
+  await pruneFacebookLotPhotos(collectionId);
 }
 
 /** Verify copies are addable to a set: they belong to the collection, have not already sold, and —

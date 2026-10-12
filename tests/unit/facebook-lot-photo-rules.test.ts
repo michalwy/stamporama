@@ -2,7 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   arrangeFacebookLotPhoto,
+  decideLotPhoto,
+  lotPhotoFingerprintPayload,
+  lotPhotosNotReady,
   lotPhotoSeparatorColor,
+  type LotPhotoSource,
+  type StoredLotPhoto,
   type LotPhotoCollage,
   type LotPhotoImage,
 } from "../../src/lib/facebook-lot-photo-rules";
@@ -103,5 +108,96 @@ describe("lotPhotoSeparatorColor (#1841)", () => {
   it("leans away from the background", () => {
     assert.equal(lotPhotoSeparatorColor("#000000"), "#a6a6a6");
     assert.equal(lotPhotoSeparatorColor("#ffffff"), "#595959");
+  });
+});
+
+describe("a stored lot photo (#1861)", () => {
+  const source = (overrides: Partial<LotPhotoSource> = {}): LotPhotoSource => ({
+    images: [{ photoId: "p1", side: "front", pairKey: "g1", width: 300, height: 400 }],
+    collage: auto("portrait"),
+    background: "#ffffff",
+    maxEdge: 2000,
+    maxBytes: null,
+    ...overrides,
+  });
+  const ready = (fingerprint = "F"): StoredLotPhoto => ({ status: "ready", fingerprint, photoId: "lot1", error: null });
+  const decide = (input: Partial<Parameters<typeof decideLotPhoto>[0]>) =>
+    decideLotPhoto({ wanted: true, posted: false, stored: null, current: { fingerprint: "F" }, ...input });
+
+  it("fingerprints every input the drawing reads, and nothing else", () => {
+    const base = lotPhotoFingerprintPayload(source());
+    assert.equal(lotPhotoFingerprintPayload(source()), base);
+    const changes: Partial<LotPhotoSource>[] = [
+      { images: [{ photoId: "p2", side: "front", pairKey: "g1", width: 300, height: 400 }] },
+      { images: [{ photoId: "p1", side: "back", pairKey: "g1", width: 300, height: 400 }] },
+      { collage: auto("landscape") },
+      { collage: { ...auto("portrait"), gapPercent: 5 } },
+      { background: "#000000" },
+      { maxEdge: 1600 },
+      { maxBytes: 1024 },
+    ];
+    for (const change of changes) {
+      assert.notEqual(lotPhotoFingerprintPayload(source(change)), base, JSON.stringify(change));
+    }
+  });
+
+  it("serves a current photo, and queues a missing or stale one rather than serve it", () => {
+    assert.deepEqual(decide({ stored: ready() }), { state: { status: "ready", photoId: "lot1" }, action: null });
+    assert.deepEqual(decide({}), { state: { status: "generating" }, action: "enqueue" });
+    assert.deepEqual(decide({ stored: ready("OLD") }), { state: { status: "generating" }, action: "enqueue" });
+    // Taken by the closed-offer sweep: no photo, so it is drawn again.
+    assert.equal(decide({ stored: { ...ready(), photoId: null } }).action, "enqueue");
+  });
+
+  it("shows a run under way as such, and queues nothing more", () => {
+    for (const status of ["queued", "running"]) {
+      assert.deepEqual(decide({ stored: { ...ready("OLD"), status } }), { state: { status: "generating" }, action: null });
+    }
+  });
+
+  it("keeps a published lot's photo whatever has changed since", () => {
+    assert.deepEqual(decide({ posted: true, stored: ready("OLD") }), {
+      state: { status: "ready", photoId: "lot1" },
+      action: null,
+    });
+    assert.deepEqual(decide({ posted: true, stored: ready("OLD"), current: { reason: "gone" } }).state, {
+      status: "ready",
+      photoId: "lot1",
+    });
+    // Published before its photo was ever drawn: drawn once, then kept.
+    assert.equal(decide({ posted: true }).action, "enqueue");
+  });
+
+  it("drops a photo nobody wants, and one of an offer with nothing to draw it from", () => {
+    assert.equal(decide({ wanted: false, stored: ready() }).action, "drop");
+    assert.equal(decide({ wanted: false }).action, null);
+    assert.deepEqual(decide({ stored: ready(), current: { reason: "No images." } }), {
+      state: { status: "none", reason: "No images." },
+      action: "drop",
+    });
+  });
+
+  it("does not retry a failure until what it is drawn from changes", () => {
+    const failed: StoredLotPhoto = { status: "failed", fingerprint: "F", photoId: null, error: "Broken scan." };
+    assert.deepEqual(decide({ stored: failed }), { state: { status: "failed", error: "Broken scan." }, action: null });
+    assert.equal(decide({ stored: failed, current: { fingerprint: "G" } }).action, "enqueue");
+  });
+
+  it("refuses the ZIP while a lot's photo is generated or failed, naming the lots", () => {
+    const lot = (lotNo: number, status: "ready" | "generating" | "failed" | "none") => ({
+      lotNo,
+      state:
+        status === "ready"
+          ? { status, photoId: "x" }
+          : status === "failed"
+            ? { status, error: "e" }
+            : status === "none"
+              ? { status, reason: "r" }
+              : { status },
+    });
+    assert.equal(lotPhotosNotReady([lot(1, "ready"), lot(2, "none")]), null);
+    assert.match(lotPhotosNotReady([lot(1, "ready"), lot(2, "generating")])!, /^The photo of lot 2 is still/);
+    assert.match(lotPhotosNotReady([lot(1, "generating"), lot(3, "generating")])!, /^The photos of lots 1, 3 are/);
+    assert.match(lotPhotosNotReady([lot(1, "failed")])!, /lot 1 is not generated/);
   });
 });

@@ -486,7 +486,17 @@ The post's screen then shows the post's text with its **Copy** button, and under
 order: its photo, shown large — click it to download that one — and, beside the lot's offer, price and
 state, its caption with its own **Copy**. **↓ Photos,
 one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
-album uploads in the right order. What is missing — the post's text, a type's caption template, an
+album uploads in the right order.
+
+Each lot's photo is made **once, in the background**, and kept — so the post's screen opens quickly
+however many lots it has. A lot whose photo is still being made says **Generating the photo…** in its
+place, and the photo appears as soon as it is ready; until every lot's is, **↓ Photos, one per lot**
+waits (hover it to see which lots). A lot's photo is made again by itself when what it is made from
+changes — the offer's photos are regenerated, or its collage settings change — and an out-of-date photo
+is never shown meanwhile. Once the post is up, each lot keeps the photo it was posted with. A lot with
+no photos to put up says so in its row.
+
+What is missing — the post's text, a type's caption template, an
 empty placeholder in a caption — is named under it, as for any post. When the post goes up, its text
 and every caption are frozen with it.
 

@@ -223,3 +223,117 @@ export function lotPhotoSeparatorColor(background: string): string {
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance < 0.5 ? "#a6a6a6" : "#595959";
 }
+
+// ── Stored, not drawn on every view (#1861) ───────────────────────────────────────────────────────
+//
+// The photo is drawn once, in the background, and stored. What decides whether the stored one is
+// still the lot's is a fingerprint of everything it is drawn from — the images, in order, with the
+// facts the arrangement reads off them, and the offer's collage settings and its platform's limits —
+// so a change to any of them, and to nothing else, rebuilds it.
+
+/** Raised when a drawing change should rebuild every stored lot photo. */
+export const FACEBOOK_LOT_PHOTO_DRAWING = 1;
+
+/** Everything a lot's photo is drawn from, as it is fingerprinted. */
+export interface LotPhotoSource {
+  /** The upload set in plan order. The photo id stands for the bytes: a regenerated image is a new
+   *  photo, a reorder or a held-back image a different list. */
+  images: readonly (LotPhotoImage & { photoId: string })[];
+  collage: LotPhotoCollage;
+  background: string;
+  maxEdge: number | null;
+  maxBytes: number | null;
+}
+
+/** The canonical text a lot photo's fingerprint is the hash of — every input, in a fixed order. */
+export function lotPhotoFingerprintPayload(source: LotPhotoSource): string {
+  return JSON.stringify([
+    FACEBOOK_LOT_PHOTO_DRAWING,
+    source.images.map((i) => [i.photoId, i.side, i.pairKey, i.width, i.height]),
+    [source.collage.gridMode, source.collage.gridShape, source.collage.columns, source.collage.gapPercent],
+    source.background,
+    source.maxEdge,
+    source.maxBytes,
+  ]);
+}
+
+/** A lot's photo as the post's screen shows it. */
+export type FacebookLotPhotoState =
+  | { status: "ready"; photoId: string }
+  | { status: "generating" }
+  | { status: "failed"; error: string }
+  /** Nothing to draw it from — the offer has no images going up. */
+  | { status: "none"; reason: string };
+
+/** The stored row, as the decision reads it. */
+export interface StoredLotPhoto {
+  status: string;
+  fingerprint: string | null;
+  photoId: string | null;
+  error: string | null;
+}
+
+/** What to do about a lot's stored photo, and what the screen shows meanwhile. */
+export interface LotPhotoDecision {
+  state: FacebookLotPhotoState;
+  /** `enqueue` draws it (again); `drop` deletes the stored row and image. */
+  action: "enqueue" | "drop" | null;
+}
+
+/**
+ * Whether a lot's stored photo is the one to show, or has to be drawn (again) or dropped (#1861).
+ *
+ * - Not wanted — the lot is in no captioned post — is dropped.
+ * - A run queued or under way is shown as such, whatever is stored.
+ * - **A published lot keeps the photo it went up with** (as its text is frozen, #1800), however its
+ *   images have changed since. A repost keeps it too: the repost dialog shows no photos, so what goes
+ *   up again is the photo the post's screen showed.
+ * - Nothing to draw it from — the offer has no images going up — is said so, and a stored photo of an
+ *   unpublished lot goes: it would be an image of nothing the offer now uploads.
+ * - A stored photo of the current fingerprint is served; a failure on the current fingerprint stays
+ *   failed until something it is drawn from changes, so a broken image is not retried in a loop.
+ * - Anything else is queued, and is never served stale meanwhile.
+ */
+export function decideLotPhoto(input: {
+  wanted: boolean;
+  posted: boolean;
+  stored: StoredLotPhoto | null;
+  current: { fingerprint: string } | { reason: string };
+}): LotPhotoDecision {
+  const { stored, current } = input;
+  if (!input.wanted) return { state: { status: "none", reason: "" }, action: stored ? "drop" : null };
+  if (stored && (stored.status === "queued" || stored.status === "running")) {
+    return { state: { status: "generating" }, action: null };
+  }
+  const fresh = "fingerprint" in current && stored?.fingerprint === current.fingerprint;
+  if (stored?.photoId && stored.status === "ready" && input.posted) {
+    return { state: { status: "ready", photoId: stored.photoId }, action: null };
+  }
+  if ("reason" in current) {
+    return { state: { status: "none", reason: current.reason }, action: stored ? "drop" : null };
+  }
+  if (fresh && stored?.status === "ready" && stored.photoId) {
+    return { state: { status: "ready", photoId: stored.photoId }, action: null };
+  }
+  if (fresh && stored?.status === "failed") {
+    return { state: { status: "failed", error: stored.error ?? "The photo could not be drawn." }, action: null };
+  }
+  return { state: { status: "generating" }, action: "enqueue" };
+}
+
+/** Why a captioned post's photos cannot be downloaded yet, or null when every lot's photo is ready or
+ *  has nothing to be drawn from (#1861) — the archive is refused until it is whole. */
+export function lotPhotosNotReady(
+  lots: readonly { lotNo: number; state: FacebookLotPhotoState }[]
+): string | null {
+  const named = (status: FacebookLotPhotoState["status"]) => {
+    const numbers = lots.filter((l) => l.state.status === status).map((l) => l.lotNo);
+    if (numbers.length === 0) return null;
+    return numbers.length === 1 ? `The photo of lot ${numbers[0]} is` : `The photos of lots ${numbers.join(", ")} are`;
+  };
+  const generating = named("generating");
+  if (generating) return `${generating} still being generated — download the photos once they are ready.`;
+  const failed = named("failed");
+  if (failed) return `${failed} not generated: drawing failed — see the post's screen.`;
+  return null;
+}

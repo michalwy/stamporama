@@ -21,7 +21,9 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { formControl } from "@/app/control-style";
 import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
-import { useOfferPhotoPlans } from "../use-offers-query";
+import { useFacebookPostLotPhotos, useOfferPhotoPlans } from "../use-offers-query";
+import { lotPhotosNotReady } from "@/lib/facebook-lot-photo-rules";
+import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
 import { renderFacebookKitPost } from "./facebook-kit-post";
 import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlug]/settings/facebook-settings-cases";
 
@@ -35,6 +37,8 @@ import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlu
 // as text, every lot's upload set. One click on a photo downloads it, so posting needs no lot opened.
 // Those are drawn in the post's one list of lots (#1863), each lot's row carrying its photos and
 // caption beside its state and actions; the post-wide part — layout, text, ZIP — stays above it.
+// A captioned lot's photo is stored once drawn (#1861): one still being drawn says so, and the ZIP
+// waits until every lot's is ready.
 //
 // The text is rendered **here**, in the browser, because the closing time it states is a local time
 // and this is the one place the collector's zone is known (#490). It is Markdown limited to Facebook's
@@ -157,6 +161,13 @@ export function FacebookPostKit({
     captions,
   } = useMemo(() => renderFacebookKitPost(kit), [kit]);
   const captioned = layout === "captions";
+  const lotPhotos = useFacebookPostLotPhotos(kit.collectionId, kit.post?.id ?? null, captioned);
+  // The ZIP of a captioned post is refused until every lot's photo is ready (#1861).
+  const zipWaits = captioned
+    ? lotPhotos.data
+      ? lotPhotosNotReady(lotPhotos.data)
+      : "Loading the lots' photos…"
+    : null;
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661),
@@ -223,9 +234,15 @@ export function FacebookPostKit({
             </Tooltip>
           )}
           <CopyButton value={plain} html={html} label="post text" />
-          <a href={kit.photoZipPath} download style={{ ...MUTED, color: "var(--color-accent)" }}>
-            ↓ Photos{captioned ? ", one per lot" : multiLot ? ", in lot order" : ""}
-          </a>
+          {zipWaits ? (
+            <Tooltip content={zipWaits}>
+              <span style={MUTED}>↓ Photos, one per lot</span>
+            </Tooltip>
+          ) : (
+            <a href={kit.photoZipPath} download style={{ ...MUTED, color: "var(--color-accent)" }}>
+              ↓ Photos{captioned ? ", one per lot" : multiLot ? ", in lot order" : ""}
+            </a>
+          )}
         </div>
       </div>
       {postText.trim() ? (
@@ -327,7 +344,14 @@ export function FacebookPostKit({
         </p>
       )}
       {multiLot && renderLots && (
-        <PostLots kit={kit} captioned={captioned} captions={captions} showSource={showSource} renderLots={renderLots} />
+        <PostLots
+          kit={kit}
+          captioned={captioned}
+          captions={captions}
+          lotPhotos={lotPhotos.data}
+          showSource={showSource}
+          renderLots={renderLots}
+        />
       )}
     </div>
   );
@@ -350,12 +374,15 @@ function PostLots({
   kit,
   captioned,
   captions,
+  lotPhotos,
   showSource,
   renderLots,
 }: {
   kit: FacebookOfferKit;
   captioned: boolean;
   captions: ReturnType<typeof renderFacebookKitPost>["captions"];
+  /** A captioned post's stored lot photos (#1861); undefined while they load. */
+  lotPhotos: FacebookPostLotPhoto[] | undefined;
   showSource: boolean;
   renderLots: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
 }) {
@@ -373,13 +400,9 @@ function PostLots({
     if (captioned) {
       const caption = captions.find((c) => c.offerId === lot.offerId);
       return {
-        photos: kit.lotPhotoBase ? (
-          <PhotoLink
-            href={`${kit.lotPhotoBase}${lot.offerId}/photo?download`}
-            src={`${kit.lotPhotoBase}${lot.offerId}/photo`}
-            name={`lot ${lotNo}'s photo`}
-          />
-        ) : null,
+        photos: (
+          <LotPhoto collectionId={collectionId} lot={lotPhotos?.find((l) => l.offerId === lot.offerId)} />
+        ),
         caption: caption ? (
           <div style={{ minWidth: 0 }}>
             <div
@@ -422,6 +445,50 @@ function PhotoLink({ href, src, name, fileName }: { href: string; src: string; n
         <img src={src} alt={name} loading="lazy" style={POST_PHOTO} />
       </a>
     </Tooltip>
+  );
+}
+
+/**
+ * A captioned lot's one photo (#1861): the stored one once it is ready, downloaded by a click under the
+ * name the post's ZIP gives it; until then, a placeholder saying where it stands.
+ */
+function LotPhoto({ collectionId, lot }: { collectionId: string; lot: FacebookPostLotPhoto | undefined }) {
+  const state = lot?.state;
+  if (lot && state?.status === "ready") {
+    const base = `/api/collections/${collectionId}/photos/${state.photoId}/full`;
+    return (
+      <PhotoLink
+        href={`${base}?download=${encodeURIComponent(lot.fileName)}`}
+        src={base}
+        name={`lot ${lot.lotNo}'s photo`}
+        fileName={lot.fileName}
+      />
+    );
+  }
+  const message = !state
+    ? "Loading the photo…"
+    : state.status === "generating"
+      ? "Generating the photo…"
+      : state.status === "failed"
+        ? `The photo could not be generated: ${state.error}`
+        : state.status === "none"
+          ? state.reason
+          : "";
+  const warn = state?.status === "failed" || state?.status === "none";
+  return (
+    <div
+      style={{
+        ...POST_PHOTO,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+        textAlign: "center",
+        boxSizing: "border-box",
+      }}
+    >
+      <p style={{ ...MUTED, margin: 0, color: warn ? "var(--color-warning)" : MUTED.color }}>{message}</p>
+    </div>
   );
 }
 
