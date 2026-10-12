@@ -39,18 +39,21 @@ import { Icon, type IconName } from "@/app/icons";
  *
  * Shape
  * -----
- * - **Top right** (#702), above everything (`Z_INDEX`), portalled to `<body>` so no scrolling
- *   ancestor's `overflow` can clip it — the same call `MultiSelectFilter` makes. The corner the eye
- *   is already in: a confirmation arrives while the collector is looking at the screen that caused
- *   it, not at the far edge of the window.
- * - **Newest nearest the corner.** The stack grows *downwards* from the top, so a toast never moves
- *   once it is on screen — an older one being dropped or dismissed below it cannot shift the one
- *   being read, or the link inside it, out from under the pointer.
+ * - **Bottom right** (#1836), above everything (`Z_INDEX`), portalled to `<body>` so no scrolling
+ *   ancestor's `overflow` can clip it — the same call `MultiSelectFilter` makes. #702 had moved it to
+ *   the top right, where it sat on the controls that live there — an offer's *Previous · Next* was
+ *   hidden under the very toast that told the collector to move on to the next offer.
+ * - **Newest furthest from the corner.** The stack grows *upwards* from the bottom, so a toast on
+ *   screen keeps its place when another arrives — the new one is added above it, not slid in under
+ *   it.
+ * - **The whole stack pauses together.** An older toast sits nearer the corner, below the newer ones,
+ *   and expires first — which would drop every toast above it by a row, the one being reached for
+ *   included. So while the pointer or the keyboard is on *any* toast, none of them counts down.
  * - **`aria-live="polite"`**, on a region that exists before any toast does. A live region created at
  *   the same moment as its first message is a region screen readers do not announce.
  * - **Auto-dismissed**, and a toast carrying a link is given longer, because it is the only kind
- *   there is anything to *do* about. The timer **pauses on hover and on focus within**, so a link is
- *   never pulled out from under the pointer reaching for it.
+ *   there is anything to *do* about. The timers **pause on hover and on focus within** (the whole
+ *   stack, above), so a link is never pulled out from under the pointer reaching for it.
  * - **Not an escape-stack layer** (#361). Nothing is trapped here and nothing is waiting on an
  *   answer, so a toast must not be what Escape closes while a dialog is open behind it — the same
  *   call the notification centre and the multi-select popover make for their own reasons.
@@ -137,9 +140,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((input: ToastInput) => {
     const id = nextId.current++;
     // Newest first, and capped: an action taken in a loop (a bulk add, a run of row actions) must
-    // not stack a column of toasts down the screen. What is dropped is the oldest, which is the one
-    // whose link the collector has already had the chance to follow — and it is furthest from the
-    // corner, so dropping it never shifts the newer ones.
+    // not stack a column of toasts up the screen. What is dropped is the oldest, which is the one
+    // whose link the collector has already had the chance to follow. It sits in the corner, so the
+    // others step down a row when it goes — the one arrival that moves a toast already on screen,
+    // and only on a full stack.
     setToasts((current) => [{ ...input, id }, ...current].slice(0, MAX_VISIBLE));
   }, []);
 
@@ -174,6 +178,13 @@ function ToastViewport({
   // says "this value differs between server and client" instead of causing a second render to say
   // it. Nothing is subscribed to — the answer never changes again once the client is running.
   const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
+  // One hold for the stack rather than one per card: the oldest toast expiring under a newer one
+  // would drop the newer one by a row, so a pointer on any of them holds all of them (#1836).
+  // Kept as *which* toast holds it, not as a flag: a toast dismissed under the pointer never fires
+  // its `mouseleave`, and a flag would then hold the rest of the stack for good.
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const paused = toasts.some((t) => t.id === hoveredId || t.id === focusedId);
   if (!mounted) return null;
 
   return createPortal(
@@ -186,7 +197,7 @@ function ToastViewport({
       style={{
         position: "fixed",
         right: "1.25rem",
-        top: "1.25rem",
+        bottom: "1.25rem",
         zIndex: Z_INDEX,
         display: "flex",
         flexDirection: "column",
@@ -199,20 +210,38 @@ function ToastViewport({
       }}
     >
       {toasts.map((t) => (
-        <ToastCard key={t.id} toast={t} onDismiss={() => onDismiss(t.id)} />
+        <ToastCard
+          key={t.id}
+          toast={t}
+          paused={paused}
+          onHover={(on) => setHoveredId(on ? t.id : null)}
+          onFocusWithin={(on) => setFocusedId(on ? t.id : null)}
+          onDismiss={() => onDismiss(t.id)}
+        />
       ))}
     </div>,
     document.body
   );
 }
 
-function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+function ToastCard({
+  toast,
+  paused,
+  onHover,
+  onFocusWithin,
+  onDismiss,
+}: {
+  toast: Toast;
+  /** Paused while the pointer is over any toast or the keyboard is inside one — a link that
+   * vanishes, or slides away, as it is being reached for is worse than no link. */
+  paused: boolean;
+  onHover: (on: boolean) => void;
+  onFocusWithin: (on: boolean) => void;
+  onDismiss: () => void;
+}) {
   const tone = TONE[toast.tone ?? "success"];
   const duration =
     toast.durationMs ?? (toast.href || toast.action ? LINGER_WITH_LINK_MS : LINGER_MS);
-  // Paused while the pointer is over the toast or the keyboard is inside it — a link that vanishes
-  // as it is being reached for is worse than no link.
-  const [paused, setPaused] = useState(false);
 
   const dismiss = useRef(onDismiss);
   useEffect(() => {
@@ -229,10 +258,10 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
       // `status`, not `alert`: nothing here interrupts, and an alert role would talk over whatever
       // the collector is doing for what is by definition news they already expected.
       role="status"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      onFocus={() => onFocusWithin(true)}
+      onBlur={() => onFocusWithin(false)}
       className="toast-card"
       style={{
         pointerEvents: "auto",

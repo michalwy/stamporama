@@ -37,13 +37,14 @@ the app will not quietly drop it.
 ## Confirmations
 
 When an action finishes and you cannot see the result from where you are standing, Stamporama says so
-in a small note at the top right of the screen. It carries a **link to what changed** wherever
+in a small note at the bottom right of the screen. It carries a **link to what changed** wherever
 there is somewhere to go — the copy you just saved, the purchase you edited, the issue that has moved
 to another area — so getting back to it is one click rather than a search.
 
 The note goes away by itself. One with a link stays longer, because there is something to do about
-it, and it **stops counting down while your pointer is on it** so a link is never pulled away as you
-reach for it. Close it early with the ✕, and dismiss nothing if you would rather ignore it — it costs
+it. A newer note appears above the ones already showing, so nothing you are reading moves, and
+**none of them counts down while your pointer is on any of them** so a link is never pulled away as
+you reach for it. Close it early with the ✕, and dismiss nothing if you would rather ignore it — it costs
 nothing to let it pass.
 
 Not every action gets one. Where the result is right there — a new row appearing in the list you are
