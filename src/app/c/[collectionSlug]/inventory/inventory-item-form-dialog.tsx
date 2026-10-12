@@ -28,7 +28,7 @@ import type { ItemStampSummary } from "@/lib/items";
 import type { IssuePickerContext } from "./issue-stamp-picker-dialog";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
-import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
+import { PhotoEditor, type PhotoEditorValue, type PhotoRole } from "./photo-editor";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
@@ -367,6 +367,32 @@ export function InventoryItemFormDialog({
   const [pickingSet, setPickingSet] = useState(false);
   /** A carrier of several stamps takes no set (decided with the collector, 2026-10-05). */
   const offersSet = !(stampRows && stampRows.length > 1);
+  // Where a photo promoted from this dialog goes (#1878): the stamp chosen **here**, never the one the
+  // copy had when the dialog opened. While a change of the copy's stamp is unsaved, the server still
+  // has the old one, so a promotion is held and sent with the Save — which re-points the copy first
+  // — and Cancel drops it, leaving untouched a stamp the copy never ends up on. With no change
+  // pending it is carried out at once, as it always was.
+  const leadingStamp = stampRows?.[0]?.picked;
+  const stampChangePending =
+    mode === "edit" &&
+    !!item &&
+    (setTouched || (!!leadingStamp && leadingStamp.stampId !== item.stampId));
+  const leadingLabel = leadingStamp
+    ? (leadingStamp.catalogLabels[0] ?? leadingStamp.name ?? "(unnamed stamp)")
+    : "this copy's stamp";
+  const promoteTarget = {
+    // A set is filed under one stamp the server works out (ADR-0065), so it is named by the set.
+    label:
+      candidateSet && setTouched
+        ? `the stamp of ${pickedSetLabel(candidateSet)}`
+        : leadingLabel,
+    onSave: stampChangePending,
+  };
+  const [heldPromotions, setHeldPromotions] = useState<
+    ReadonlyMap<string, { role: PhotoRole; title: string | null }>
+  >(new Map());
+  const heldPromotionIds = useMemo(() => new Set(heldPromotions.keys()), [heldPromotions]);
+
   const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
@@ -376,6 +402,12 @@ export function InventoryItemFormDialog({
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
+    if (heldPromotions.size > 0) {
+      formData.set(
+        "photoPromotions",
+        JSON.stringify([...heldPromotions].map(([photoId, t]) => ({ photoId, ...t })))
+      );
+    }
     // Remember the choices for the next add-copy, shared across every entry point (#234).
     if (mode === "add" && persistDefaults) {
       writeAddCopyDefaults(collectionId, {
@@ -771,7 +803,8 @@ export function InventoryItemFormDialog({
             {/* Row 6: photos (#112) — front/back slots + reorderable titled extras. Eager
                 staged uploads; the pending change-set applies on Save with the copy fields.
                 In edit mode each committed photo can be promoted to this copy's stamp (#137):
-                an independent duplicated stamp photo; the copy's own photo is untouched.
+                an independent duplicated stamp photo; the copy's own photo is untouched. Held
+                for the Save while the copy's stamp change is unsaved (#1878).
                 Offered on every copy regardless of physical format — only the *automatic*
                 seeding is restricted to singles (#346). */}
             <PhotoEditor
@@ -782,6 +815,10 @@ export function InventoryItemFormDialog({
               onPromotePhoto={
                 mode === "edit"
                   ? async (photoId, target) => {
+                      if (stampChangePending) {
+                        setHeldPromotions((held) => new Map(held).set(photoId, target));
+                        return { ok: true };
+                      }
                       const { promoteCopyPhotoAction } = await import(
                         "@/app/actions/stamps"
                       );
@@ -801,6 +838,15 @@ export function InventoryItemFormDialog({
                           };
                     }
                   : undefined
+              }
+              promoteTarget={mode === "edit" ? promoteTarget : undefined}
+              heldPromotions={heldPromotionIds}
+              onDropPromotion={(photoId) =>
+                setHeldPromotions((held) => {
+                  const next = new Map(held);
+                  next.delete(photoId);
+                  return next;
+                })
               }
             />
           </div>

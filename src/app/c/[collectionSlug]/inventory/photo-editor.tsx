@@ -33,7 +33,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
  * editor that records it (#1001). */
 export type CommittedPhoto = PhotoSummary & { sourceUrl?: string | null };
 
-type PhotoRole = SlotRole | null;
+export type PhotoRole = SlotRole | null;
 type EntryStatus = "uploading" | "done" | "error";
 
 /** Which role-mode a photo editor runs in: copies get front/back reserved slots; stamps (#137)
@@ -110,12 +110,20 @@ interface PhotoEditorProps {
    * copies already held. Addresses only: what gets saved is still `onChange`'s change-set. */
   onPreviewsChange?: (previews: PhotoEditorPreview[]) => void;
   /** When provided (copy editor, #137), each already-committed photo can be *promoted* to its
-   * copy's stamp — creating an independent duplicated stamp photo. Applies immediately (not part
-   * of the Save change-set), so the copy's own photo is untouched regardless of Save/Cancel. */
+   * copy's stamp — creating an independent duplicated stamp photo. The copy's own photo is never
+   * touched. Whether it applies at once or with the Save is the caller's (#1878), and
+   * `promoteTarget` says which. */
   onPromotePhoto?: (
     photoId: string,
     target: { role: PhotoRole; title: string | null }
   ) => Promise<PromoteResult>;
+  /** The stamp a promotion goes to, named in its popover so a wrong one is visible (#1878), and
+   * whether it is carried out on Save rather than at once. */
+  promoteTarget?: { label: string; onSave: boolean };
+  /** Photos whose promotion is held for the Save (#1878): their button shows it, and their popover
+   * offers to drop it through `onDropPromotion`. */
+  heldPromotions?: ReadonlySet<string>;
+  onDropPromotion?: (photoId: string) => void;
 }
 
 let localSeq = 0;
@@ -183,6 +191,9 @@ export function PhotoEditor({
   onChange,
   onPreviewsChange,
   onPromotePhoto,
+  promoteTarget,
+  heldPromotions,
+  onDropPromotion,
 }: PhotoEditorProps) {
   const slots = SLOT_ROLES[roleMode];
   const [entries, setEntries] = useState<Entry[]>(() =>
@@ -473,6 +484,13 @@ export function PhotoEditor({
                     ? (target) => onPromotePhoto(entry.photoId!, target)
                     : undefined
                 }
+                promoteTarget={promoteTarget}
+                promotionHeld={!!entry.photoId && !!heldPromotions?.has(entry.photoId)}
+                onDropPromotion={
+                  onDropPromotion && entry.photoId
+                    ? () => onDropPromotion(entry.photoId!)
+                    : undefined
+                }
                 onDragStart={() => {
                   dragIndex.current = index;
                 }}
@@ -505,6 +523,9 @@ function PhotoCard({
   onRemove,
   onTurn,
   onPromote,
+  promoteTarget,
+  promotionHeld,
+  onDropPromotion,
   onDragStart,
   onDropOn,
 }: {
@@ -521,6 +542,9 @@ function PhotoCard({
     role: PhotoRole;
     title: string | null;
   }) => Promise<{ ok: boolean; error?: string }>;
+  promoteTarget?: { label: string; onSave: boolean };
+  promotionHeld: boolean;
+  onDropPromotion?: () => void;
   onDragStart: () => void;
   onDropOn: () => void;
 }) {
@@ -626,7 +650,13 @@ function PhotoCard({
             }}
           >
             {onPromote && (
-              <Tooltip content="Promote to stamp">
+              <Tooltip
+                content={
+                  promotionHeld && promoteTarget
+                    ? `Goes to ${promoteTarget.label} when you save`
+                    : "Promote to stamp"
+                }
+              >
                 <button
                   ref={promoteBtnRef}
                   type="button"
@@ -638,8 +668,9 @@ function PhotoCard({
                     height: "1.375rem",
                     borderRadius: "999px",
                     border: "none",
-                    background: "var(--color-bg-elevated)",
-                    color: "var(--color-text-secondary)",
+                    // A promotion held for the Save (#1878) is marked on its own button.
+                    background: promotionHeld ? "var(--color-accent)" : "var(--color-bg-elevated)",
+                    color: promotionHeld ? "#fff" : "var(--color-text-secondary)",
                     fontSize: "0.75rem",
                     lineHeight: 1,
                     cursor: "pointer",
@@ -709,6 +740,9 @@ function PhotoCard({
             anchorRef={promoteBtnRef}
             onClose={() => setPromoteOpen(false)}
             onPromote={onPromote}
+            target={promoteTarget}
+            held={promotionHeld}
+            onDrop={onDropPromotion}
           />
         )}
       </div>
@@ -880,7 +914,8 @@ const PROMOTE_POPOVER_WIDTH = 192; // 12rem
 
 /** Small popover to promote a copy photo to its stamp (#137): pick where it lands on the stamp
  * — the single `main` slot (replaces any incumbent) or an extra with an optional title — then
- * apply immediately. The copy's own photo is never touched.
+ * apply, at once or with the Save as `target` says (#1878). It names the stamp it goes to. The
+ * copy's own photo is never touched.
  *
  * Rendered in a portal with `position: fixed`, anchored to the trigger button, so the
  * horizontally-scrolling photo strip (`overflow-x: auto`, which also clips vertically) can't
@@ -889,6 +924,9 @@ function PromotePopover({
   anchorRef,
   onClose,
   onPromote,
+  target,
+  held,
+  onDrop,
 }: {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
@@ -896,6 +934,9 @@ function PromotePopover({
     role: PhotoRole;
     title: string | null;
   }) => Promise<{ ok: boolean; error?: string }>;
+  target?: { label: string; onSave: boolean };
+  held: boolean;
+  onDrop?: () => void;
 }) {
   const [role, setRole] = useState<PhotoRole>("main");
   const [title, setTitle] = useState("");
@@ -980,6 +1021,18 @@ function PromotePopover({
       >
         Promote to stamp
       </div>
+      {target && (
+        <div
+          style={{
+            fontSize: "0.75rem",
+            color: "var(--color-text-secondary)",
+            overflowWrap: "anywhere",
+          }}
+        >
+          To <strong>{target.label}</strong>
+          {target.onSave && " when you save"}
+        </div>
+      )}
       <div style={{ display: "flex", gap: "0.25rem" }}>
         {roleOptions.map((opt) => {
           const active = role === opt.value;
@@ -1028,6 +1081,27 @@ function PromotePopover({
         <div style={{ fontSize: "0.6875rem", color: "var(--color-error)" }}>{error}</div>
       )}
       <div style={{ display: "flex", gap: "0.375rem", justifyContent: "flex-end" }}>
+        {held && onDrop && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              onDrop();
+              onClose();
+            }}
+            style={{
+              marginRight: "auto",
+              padding: "0.3rem 0",
+              border: "none",
+              background: "none",
+              color: "var(--color-text-secondary)",
+              fontSize: "0.75rem",
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            Don&apos;t promote
+          </button>
+        )}
         <button
           type="button"
           disabled={busy}
