@@ -33,6 +33,14 @@
 // (`estimatedCount`), so the screen marks it. The profit and loss screen and the Overview pass no
 // estimates and keep such a copy pending; once the lot closes its frozen cost basis wins and the
 // estimate is never read again.
+//
+// **The sale's own screen also counts a copy with no cost at all** (#1875) — `unrecorded`, not
+// pending and not an opening balance's deliberate absence — rather than letting one such copy hide
+// the profit of a whole set. With {@link SaleProfitOptions.countWithoutCost} such a copy is counted at
+// **no cost**, and every figure that does so lists it (`withoutCostIds`), so the screen marks the
+// figure as incomplete: it leaves that copy's cost out and so overstates the profit. Setting the
+// cost settles it. Without the option — the profit and loss screen and the Overview — it is still
+// left out as no-cost. An opening balance's copy with no value stays left out either way (#1324).
 
 import {
   allocateSaleLine,
@@ -128,6 +136,13 @@ export interface ProfitFigures {
   profit: string | null;
 }
 
+/** How {@link computeSaleProfit} counts what the profit and loss screen leaves out — the sale's own
+ * screen asks for it. */
+export interface SaleProfitOptions {
+  /** Count a copy with no cost recorded at no cost, listing it in `withoutCostIds` (#1875). */
+  countWithoutCost?: boolean;
+}
+
 /** A sold unit's profit: its net against the cost of every copy in it, or no figure at all. */
 export interface UnitProfit {
   lineId: string;
@@ -136,6 +151,9 @@ export interface UnitProfit {
   /** How many of the unit's copies {@link cost} counts at an estimate (#1814) — the figure is then an
    * estimate itself. Zero when it has no figure. */
   estimatedCount: number;
+  /** The unit's copies {@link cost} counts at no cost because none is recorded (#1875) — the figure
+   * then leaves their cost out and overstates the profit. Empty when it has no figure. */
+  withoutCostIds: string[];
   /** `net − cost`, when every copy is counted; otherwise null and {@link leftOut} says why. */
   profit: string | null;
   /** Why the unit has no figure: its copies' cost states, or the sale's missing rate. Never
@@ -147,6 +165,9 @@ export interface UnitProfit {
  * copies are counted at an estimate (#1814), which marks the figure as one. */
 export interface EstimatedProfitFigures extends ProfitFigures {
   estimatedCount: number;
+  /** The counted copies counted at no cost because none is recorded (#1875), which marks the figure
+   * as incomplete — they are inside {@link ProfitFigures.countedCount}, not left out. */
+  withoutCostIds: string[];
 }
 
 export interface SaleProfit extends EstimatedProfitFigures {
@@ -158,28 +179,43 @@ function estimateOf(copy: SaleProfitCopy, state: CostBasisState): number | null 
   return state.state === "pending" && copy.estimate != null ? copy.estimate : null;
 }
 
+/** Whether a copy is counted at no cost (#1875): it has none recorded, and the caller asked. */
+function countedWithoutCost(state: CostBasisState, options: SaleProfitOptions): boolean {
+  return options.countWithoutCost === true && state.state === "none" && state.reason === "unrecorded";
+}
+
+/** Whether a copy is inside a figure: its cost known, or estimated, or — when asked — none at all. */
+function isCounted(copy: SaleProfitCopy, state: CostBasisState, options: SaleProfitOptions): boolean {
+  return state.state === "known" || estimateOf(copy, state) != null || countedWithoutCost(state, options);
+}
+
 /** The copies whose catalogue weight {@link computeSaleProfit} will need: those on a unit that is
  * only partly countable, the one case that splits a net. The caller loads weights for these alone. */
-export function copiesNeedingWeights(lines: readonly Pick<SaleProfitLine, "copies">[]): string[] {
+export function copiesNeedingWeights(
+  lines: readonly Pick<SaleProfitLine, "copies">[],
+  options: SaleProfitOptions = {}
+): string[] {
   const ids: string[] = [];
   for (const line of lines) {
-    const counted = line.copies.filter((c) => {
-      const state = resolveCostBasis(c);
-      return state.state === "known" || estimateOf(c, state) != null;
-    }).length;
+    const counted = line.copies.filter((c) => isCounted(c, resolveCostBasis(c), options)).length;
     if (counted > 0 && counted < line.copies.length) ids.push(...line.copies.map((c) => c.id));
   }
   return ids;
 }
 
 /** Profit and loss on one sale, and on each of its units. See the module header for the rules. */
-export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean): SaleProfit {
+export function computeSaleProfit(
+  lines: SaleProfitLine[],
+  rateMissing: boolean,
+  options: SaleProfitOptions = {}
+): SaleProfit {
   const leftOut = { ...NOTHING_LEFT_OUT };
   let copyCount = 0;
   let countedCount = 0;
   let proceedsCents = 0;
   let costCents = 0;
   let estimatedCount = 0;
+  const withoutCostIds: string[] = [];
   const units: UnitProfit[] = [];
 
   for (const line of lines) {
@@ -192,6 +228,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
         lineId: line.id,
         cost: null,
         estimatedCount: 0,
+        withoutCostIds: [],
         profit: null,
         leftOut: { ...NOTHING_LEFT_OUT, noRate: n },
       });
@@ -199,20 +236,21 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
     }
 
     const states = line.copies.map((c) => resolveCostBasis(c));
-    // A copy is counted when its cost is known or, on the sale's own screen, estimated (#1814).
-    const counted = line.copies.map(
-      (c, i) => states[i].state === "known" || estimateOf(c, states[i]) != null
-    );
+    // A copy is counted when its cost is known or, on the sale's own screen, estimated (#1814) or
+    // missing altogether (#1875).
+    const counted = line.copies.map((c, i) => isCounted(c, states[i], options));
     const unitLeftOut = { ...NOTHING_LEFT_OUT };
     let knownCostCents = 0;
     let unitEstimated = 0;
+    const unitWithoutCost: string[] = [];
     states.forEach((state, i) => {
       const estimate = estimateOf(line.copies[i], state);
       if (state.state === "known") knownCostCents += toCents(Number(state.amount));
       else if (estimate != null) {
         knownCostCents += toCents(estimate);
         unitEstimated++;
-      } else if (state.state === "pending") unitLeftOut.costPending++;
+      } else if (countedWithoutCost(state, options)) unitWithoutCost.push(line.copies[i].id);
+      else if (state.state === "pending") unitLeftOut.costPending++;
       else if (state.reason === "no_opening_value") unitLeftOut.noOpeningValue++;
       else unitLeftOut.noCost++;
     });
@@ -222,12 +260,14 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
       // Wholly countable: the net is the unit's however its copies weigh, so nothing is split.
       countedCount += n;
       estimatedCount += unitEstimated;
+      withoutCostIds.push(...unitWithoutCost);
       proceedsCents += netCents;
       costCents += knownCostCents;
       units.push({
         lineId: line.id,
         cost: fromCents(knownCostCents),
         estimatedCount: unitEstimated,
+        withoutCostIds: unitWithoutCost,
         profit: fromCents(netCents - knownCostCents),
         leftOut: unitLeftOut,
       });
@@ -238,6 +278,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
       lineId: line.id,
       cost: null,
       estimatedCount: 0,
+      withoutCostIds: [],
       profit: null,
       leftOut: unitLeftOut,
     });
@@ -255,6 +296,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
       });
       countedCount += knownCount;
       estimatedCount += unitEstimated;
+      withoutCostIds.push(...unitWithoutCost);
       costCents += knownCostCents;
     } catch (err) {
       if (!(err instanceof SaleLineBlockedError)) throw err;
@@ -263,7 +305,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
   }
 
   const figures = figuresOf(copyCount, countedCount, leftOut, proceedsCents, costCents);
-  return { ...figures, estimatedCount, units };
+  return { ...figures, estimatedCount, withoutCostIds, units };
 }
 
 function figuresOf(
@@ -373,4 +415,15 @@ export function describeEstimated(estimatedCount: number): string | null {
   if (estimatedCount === 0) return null;
   const one = estimatedCount === 1;
   return `~ ${estimatedCount} cop${one ? "y" : "ies"} counted at ${one ? "its" : "their"} estimated cost — ${one ? "its" : "their"} purchase lot${one ? " is" : "s are"} still open, and the figure settles when ${one ? "it is" : "they are"} closed`;
+}
+
+/** The mark on a profit counting copies at no cost (#1875): how many, as the screen links it. */
+export function describeWithoutCost(count: number): string {
+  return `${count} cop${count === 1 ? "y" : "ies"} without cost`;
+}
+
+/** The hint on that mark: what the figure leaves out, which way it errs, and how it settles. */
+export function explainWithoutCost(count: number): string {
+  const one = count === 1;
+  return `${one ? "This copy has" : "These copies have"} no cost recorded, so the profit leaves ${one ? "its" : "their"} cost out and is overstated by it — set ${one ? "its" : "their"} cost and the figure settles`;
 }

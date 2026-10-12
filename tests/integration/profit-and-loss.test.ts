@@ -162,10 +162,12 @@ describe("profit and loss screen (#1305)", () => {
     );
     for (const row of page.items) {
       const detail = (await getSaleDetail(userId, row.id))!;
-      // The sale screen would count an open lot's copy at its estimate (#1814); this stamp has no
-      // catalogue value, so there is none to count and the two figures agree exactly.
-      const { estimatedCount, ...figures } = detail.profit;
+      // The sale screen would count an open lot's copy at its estimate (#1814), and a copy with no
+      // cost recorded at none (#1875); this stamp has no catalogue value and every copy here has a
+      // lot, so there is neither to count and the two figures agree exactly.
+      const { estimatedCount, withoutCostIds, ...figures } = detail.profit;
       assert.equal(estimatedCount, 0);
+      assert.deepEqual(withoutCostIds, []);
       assert.deepEqual(row.profit, figures);
     }
     assert.equal(page.items[2].platformName, "Allegro");
