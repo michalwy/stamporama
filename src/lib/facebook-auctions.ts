@@ -386,6 +386,8 @@ export interface FacebookKitLot {
 /** What the offer's Facebook card draws (ADR-0061 §3): the group, the post and its lots, and where
  *  the photos come from. Null on an offer that is not on Facebook. */
 export interface FacebookOfferKit {
+  /** The collection the post is in — what a lot's photos are read and drawn through (#1848). */
+  collectionId: string;
   group: {
     id: string;
     name: string;
@@ -523,6 +525,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     await readFacebookDefaults(offer.facebookGroup.platformId)
   );
   return {
+    collectionId: offer.collectionId,
     group: {
       id: offer.facebookGroup.id,
       name: offer.facebookGroup.name,
