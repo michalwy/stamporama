@@ -24,10 +24,12 @@ import { failedScanPreparations } from "./scan-notices";
  *   lot list's own `closing` windows (#351) against the server's clock;
  * - lots about to be bought twice are the lot list's `duplicate` chip (#369), which is the same
  *   collision rule the composition dialog warns with (`auction-duplicates.ts`);
- * - the three needs-action groups are the single derivation (ADR-0013 §4) split by *reason*
+ * - the needs-action groups are the single derivation (ADR-0013 §4) split by *reason*
  *   (#167 / #215 / #499), because each asks for something different: a sold copy has to come out of
  *   the listing, a copy under the hammer has to wait for the auction to end, and one sold on a
- *   marketplace has to be recorded before the listing beside it takes an order too;
+ *   marketplace has to be recorded before the listing beside it takes an order too. The sold copy
+ *   is split once more by the offer's state (#1876): an offer still being prepared that holds one is
+ *   its own, amber group, as nothing of it is up to be sold twice;
  * - the two bidding groups are what the Allegro sync did on its own (#481) — the notice that it
  *   flagged an auction, which lasts until it is read, and the flag left standing over a bid that has
  *   since been withdrawn, which lasts until the collector settles it;
@@ -71,6 +73,7 @@ export type ActionItemGroupId =
   | "auction-outcome"
   | "auction-duplicate"
   | "offer-sold-elsewhere"
+  | "offer-prepared-sold-elsewhere"
   | "offer-bidding-conflict"
   | "offer-bidding-started"
   | "offer-bid-withdrawn"
@@ -290,32 +293,51 @@ const auctionProvider: ActionItemProvider = {
 
 const offerProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    // One read for both groups: they are one derivation counted two ways, and the derived labels
+    // One read for every group: they are one derivation counted several ways, and the derived labels
     // they need would otherwise each pay for the collection's area tree (#379).
     const flagged = await offersNeedingAction(ownerId, collectionId, limit);
 
-    // Both land on the needs-action filter: it is one flag on the offers list (the split is this
-    // panel's, so it can say which of the two things happened), and a link to a filter the screen
+    // All land on the needs-action filter: it is one flag on the offers list (the split is this
+    // panel's, so it can say which of the things happened), and a link to a filter the screen
     // does not have would be a link to the wrong rows.
     const href = "offers?needsAction=1";
 
-    // All three are `critical`: each one is a piece of stock committed in two places at once, which
-    // is a double sale waiting to happen. One has already lost the copy, one is about to, and the
-    // third has lost it to a marketplace order the books do not know about yet (#499).
+    // Three are `critical`: each one is a piece of stock committed in two places at once, which is a
+    // double sale waiting to happen. One has already lost the copy, one is about to, and the third
+    // has lost it to a marketplace order the books do not know about yet (#499). The fourth is an
+    // offer still being prepared that holds a copy sold elsewhere (#1876): nothing of it is on a
+    // platform, so no double sale is possible — `warning`, a step that will go wrong if it is left.
     const groups = [
-      { id: "offer-sold-elsewhere", title: "Listing a copy sold elsewhere", reason: "sold-elsewhere" },
-      { id: "offer-bidding-conflict", title: "Conflicting with a live auction", reason: "bidding-conflict" },
+      {
+        id: "offer-sold-elsewhere",
+        title: "Listing a copy sold elsewhere",
+        reason: "sold-elsewhere",
+        severity: "critical",
+      },
+      {
+        id: "offer-prepared-sold-elsewhere",
+        title: "Preparing an offer with a copy sold elsewhere",
+        reason: "prepared-sold-elsewhere",
+        severity: "warning",
+      },
+      {
+        id: "offer-bidding-conflict",
+        title: "Conflicting with a live auction",
+        reason: "bidding-conflict",
+        severity: "critical",
+      },
       {
         id: "offer-platform-sale-conflict",
         title: "Conflicting with a sale on Allegro",
         reason: "platform-sale-conflict",
+        severity: "critical",
       },
     ] as const;
 
-    return groups.map(({ id, title, reason }) => ({
+    return groups.map(({ id, title, reason, severity }) => ({
       id,
       title,
-      severity: "critical" as const,
+      severity,
       count: flagged[reason].total,
       items: flagged[reason].offers.map((o) => ({
         key: o.offerId,

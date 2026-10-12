@@ -26,11 +26,17 @@ import {
   type FacebookPostStage,
 } from "./facebook-post-rules";
 import { allocateEntityNumber } from "./items";
-import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
+import {
+  OfferActionBlockedError,
+  publishOffer,
+  readSoldElsewhereRefusal,
+  setOfferState,
+} from "./offers";
 import {
   CLOSED_OFFER_STATES,
   OFFER_STATES,
   isAuctionListing,
+  isOfferState,
   normalizeListingType,
   type OfferState,
 } from "./offer-rules";
@@ -657,6 +663,15 @@ export async function publishFacebookPost(
   if (waiting.length > 0) {
     const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
     throw new OfferActionBlockedError("bad-transition", `Every lot must be Ready before the post goes up: ${named}.`);
+  }
+  // A lot holding a set sold elsewhere keeps the whole post down (#1876): asked of every lot before
+  // any of them moves, since the loop below would otherwise put the lots ahead of it up alone.
+  for (const lot of lots) {
+    if (!isOfferState(lot.state)) continue;
+    const refusal = await readSoldElsewhereRefusal(lot.id, lot.state, to);
+    if (refusal) {
+      throw new OfferActionBlockedError("sold-elsewhere", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${refusal}`);
+    }
   }
   const approving = lots.some((l) => l.state === "pending") && to === "active";
   const pending = approving ? facebookPostLink(lots.filter((l) => l.state === "pending")) : null;

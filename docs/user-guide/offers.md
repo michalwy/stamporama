@@ -2542,7 +2542,8 @@ above) — leaves the other listings stale. Stamporama surfaces this automatical
 offer holding a **set whose copy has sold, is in active bidding, or has been sold on a connected
 platform without the sale being recorded yet** ([above](#sold-on-a-platform-not-recorded-here)) is
 flagged **Needs action** — a red badge on the offer row and on the affected set, plus a **Needs
-action** filter in the toolbar.
+action** filter in the toolbar. An offer you are still preparing is flagged too when one of its copies
+sells elsewhere — see [Before it is posted](#before-it-is-posted).
 
 To resolve one, open the offer and:
 
@@ -2571,14 +2572,35 @@ the dialog says so and offers **Withdraw…**, because a listing with nothing le
 (on Colnect, **Close via Assistant** does that in one step). The entry is absent when no set has sold
 elsewhere.
 
+### Before it is posted
+
+An offer still in **Preparing** or **Ready** that holds a copy which has **sold through another
+offer** is flagged **Needs action** as well, with the same badge on the offer and on the set, and the
+same **Remove N sets sold elsewhere** in its header and **⋮** menu. Nothing of it is on a platform yet,
+so nothing can be sold twice — but you would be preparing, and could publish, a listing offering a
+copy that is gone. A copy that is merely in bidding elsewhere does not flag it: nothing of this offer
+is up for that bid to collide with.
+
+Until those sets are removed the offer **cannot move on**: **Mark ready** is disabled with the reason
+in its hover hint, and marking it ready, publishing it, or submitting it for approval — from its own
+screen, the Offers list, the bulk listing workspace or a Facebook post — is refused with the same
+sentence. A multi-lot Facebook post holding such a lot does not go up at all, rather than with the
+lots ahead of it. Stepping a Ready offer back to **Preparing**, or withdrawing it, stays open.
+
+Removing them works as above, except that there is no listing to update afterwards; if nothing would
+be left to sell, the dialog offers **Withdraw…** instead. The flag goes as soon as the sets are
+removed, or the offer is withdrawn or deleted. A **Pending** offer is not "before it is posted": the
+administrator may approve it at any moment, so it is flagged like an active one.
+
 The offer the sale actually went through is handled for you — it becomes **Sold** once *every* set
 has sold through it (a partial sale keeps it **Active** for its remaining sets). Nothing is done to
 other platforms automatically — you stay in control of each marketplace. The flag is derived live
 from what has sold, so it clears the moment the offer no longer holds a sold copy.
 
 You do not have to come to this screen to find out that something is flagged: the same offers are
-listed in [Action items](action-items.md), the bell at the top of the sidebar, split into the two
-reasons a listing gets flagged — a copy sold elsewhere, and a copy under a live auction.
+listed in [Action items](action-items.md), the bell at the top of the sidebar, split by the reason it
+was flagged — a copy sold elsewhere, a copy under a live auction, a sale on Allegro not recorded yet,
+and, in amber, an offer still being prepared with a copy sold elsewhere.
 
 ## Offer lifecycle
 

@@ -50,9 +50,15 @@ nothing. Bidding on the same stamp deliberately is fine, so this is a warning an
 it goes away when one of the two is no longer yours to win, or when you correct what a lot is
 described as holding. Clicking through lands on the lot list's **Duplicate** chip.
 
-**Listing a copy sold elsewhere** — red. An active [offer](offers.md) holding a copy that has already
+**Listing a copy sold elsewhere** — red. An active (or pending) [offer](offers.md) holding a copy that has already
 sold through a different listing. The copy is gone, so the listing is stale on its platform: remove
 the dead set or withdraw the listing.
+
+**Preparing an offer with a copy sold elsewhere** — amber. An offer still in *Preparing* or *Ready*
+holding a copy that has already sold through a different offer. Nothing of it is posted, so nothing
+can be sold twice — it is amber, not red — but it cannot be marked ready or published until the dead
+set is removed ([before it is posted](offers.md#before-it-is-posted)). A *Pending* offer is not here:
+it may go up at any moment, so it is in the red group above.
 
 **Conflicting with a live auction** — red. An active offer holding a copy that another of your active
 listings currently has *in active bidding*. Two of your own listings are competing for one piece of
@@ -125,12 +131,13 @@ A card scan that has been prepared and is **ready to cut** does not appear here.
 a time, and the order's **Card scans** section already shows each one waiting with **Review the
 front cut** (or the back).
 
-The three red groups, and *Changed since listed*, are the same **needs action** flag the offers list
-shows, split by *why* it fired, because each asks for something different: a sold copy has to come
-out of the listing, a copy under the hammer is waiting on someone else's clock, one sold on a
-marketplace is waiting on you to record it before the listing beside it takes an order too, and a
-changed listing is waiting to be re-posted. The offers list's **Needs action** filter holds all four
-— it is one question, "which of my live listings is wrong?", so it is one chip. Each group's own
+The three red groups, *Preparing an offer with a copy sold elsewhere* and *Changed since listed* are
+the same **needs action** flag the offers list shows, split by *why* it fired, because each asks for
+something different: a sold copy has to come out of the listing, a copy under the hammer is waiting
+on someone else's clock, one sold on a marketplace is waiting on you to record it before the listing
+beside it takes an order too, an offer being prepared has to lose the copy before it goes up, and a
+changed listing is waiting to be re-posted. The offers list's **Needs action** filter holds all five
+— it is one question, "which of my offers is wrong?", so it is one chip. Each group's own
 link narrows to just its own rows.
 
 ## Reading the panel

@@ -57,6 +57,20 @@ export function isLiveState(state: OfferState): boolean {
   return state === "active" || state === "pending";
 }
 
+/** The two states an offer is **prepared** in (#1876): still being composed, or assembled and waiting
+ * to be posted. Nothing of it is on a platform yet, so a copy it holds that has sold elsewhere is no
+ * double sale — but it is a listing about to be posted with a copy that has gone, so it is flagged
+ * and may not move on until the set is removed. */
+export function isPreparedState(state: OfferState): boolean {
+  return state === "preparing" || state === "ready";
+}
+
+/** Whether a set sold elsewhere is flagged on an offer in this state (#167, #1876): a live offer, whose
+ * listing is selling it, and a prepared one, about to. A paused, sold or withdrawn offer is not asked. */
+export function flagsSoldElsewhere(state: OfferState): boolean {
+  return isLiveState(state) || isPreparedState(state);
+}
+
 /**
  * The offer state machine (ADR-0012, extended in #246 and #1778): two pre-live states before an
  * offer goes live, and an optional wait for approval between posting it and its going up —

@@ -46,6 +46,8 @@ import {
   OPEN_OFFER_STATES,
   LIVE_OFFER_STATES,
   isLiveState,
+  flagsSoldElsewhere,
+  isPreparedState,
   type OfferListingType,
   isAuctionListing,
   normalizeListingType,
@@ -58,7 +60,11 @@ import {
   type OfferLabeller,
 } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
-import { isSetSoldElsewhere, soldElsewhereRemoval } from "./offer-needs-action-remedy";
+import {
+  evaluateSoldElsewhereReadiness,
+  isSetSoldElsewhere,
+  soldElsewhereRemoval,
+} from "./offer-needs-action-remedy";
 import {
   headerChangeIsDrift,
   isListedState,
@@ -1035,6 +1041,9 @@ export async function offerTranslationGaps(
 interface NeedsActionRow {
   offerId: string;
   platformId: string;
+  /** Live (`active`, `pending`) or still being prepared (`preparing`, `ready`, #1876) — the bell grades
+   * the two apart, a prepared offer having nothing on a platform to sell twice. */
+  state: OfferState;
   deadCount: number;
   /** Copies already sold through another set (#167). */
   soldCount: number;
@@ -1054,6 +1063,11 @@ interface NeedsActionRow {
  * its own line is not counted (it is the sale, not a collision), and fully-sold offers are already
  * `sold` (#166), so only live offers are considered — `active`, and `pending` beside it (#1778), whose
  * post the administrator may approve with the dead copy still in it.
+ *
+ * An offer still being **prepared** (`preparing`, `ready`) is asked the sale half alone (#1876): it is
+ * about to be posted with a copy that has gone, which is worth flagging, but nothing of it is up yet
+ * — so a bid or an unrecorded platform sale elsewhere is not a collision with it, exactly as the trade
+ * reservation does not reach it (#639).
  *
  * **One SQL query, evaluated in the database** — the previous in-memory derivation had to load
  * every active offer with its sets and copy ids on each call, which is tens of thousands of rows
@@ -1121,15 +1135,18 @@ async function needsActionRows(
         AND o2."inActiveBidding" = TRUE
       GROUP BY li2."itemId"
     )
-    SELECT o."id" AS "offerId", o."platformId" AS "platformId", COUNT(*)::int AS "deadCount",
+    SELECT o."id" AS "offerId", o."platformId" AS "platformId", o."state" AS "state",
+           COUNT(*)::int AS "deadCount",
            COUNT(*) FILTER (
              WHERE sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id"
            )::int AS "soldCount",
            COUNT(*) FILTER (
-             WHERE b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id")
+             WHERE o."state" IN ('active', 'pending')
+               AND b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id")
            )::int AS "biddingCount",
            COUNT(*) FILTER (
-             WHERE p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id")
+             WHERE o."state" IN ('active', 'pending')
+               AND p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id")
            )::int AS "platformSaleCount"
     FROM "offer" o
     JOIN "offer_set" s ON s."offerId" = o."id"
@@ -1139,14 +1156,19 @@ async function needsActionRows(
     LEFT JOIN bidding_items b ON b."itemId" = li."itemId"
     LEFT JOIN platform_sold_items p ON p."itemId" = li."itemId"
     WHERE o."collectionId" = ${collectionId}
-      AND o."state" IN ('active', 'pending')
+      AND o."state" IN ('active', 'pending', 'preparing', 'ready')
       ${scope}
       AND (
         (sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id")
-        OR (b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id"))
-        OR (p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id"))
+        OR (
+          o."state" IN ('active', 'pending')
+          AND (
+            (b."itemId" IS NOT NULL AND (b."offerCount" > 1 OR b."offerId" <> o."id"))
+            OR (p."itemId" IS NOT NULL AND (p."offerCount" > 1 OR p."offerId" <> o."id"))
+          )
+        )
       )
-    GROUP BY o."id", o."platformId"
+    GROUP BY o."id", o."platformId", o."state"
   `;
 }
 
@@ -1160,8 +1182,14 @@ async function needsActionCounts(
   return new Map(rows.map((r) => [r.offerId, r.deadCount]));
 }
 
-/** Which of the two collisions flagged an offer (#367) — see {@link NeedsActionRow}. */
-export type OfferActionReason = "sold-elsewhere" | "bidding-conflict" | "platform-sale-conflict";
+/** Which of the collisions flagged an offer (#367) — see {@link NeedsActionRow}. A copy sold elsewhere
+ * is two reasons, told apart by the offer's state (#1876): a live listing selling it, and an offer
+ * still being prepared that holds it. */
+export type OfferActionReason =
+  | "sold-elsewhere"
+  | "prepared-sold-elsewhere"
+  | "bidding-conflict"
+  | "platform-sale-conflict";
 
 /** One flagged offer as the notification centre lists it: what to call it, where it is listed, and
  * how many of its copies this reason accounts for. */
@@ -1214,12 +1242,18 @@ export async function offersNeedingAction(
     return { total: flagged.length, head: flagged.slice(0, limit), countOf };
   }
 
-  const sold = bucket((r) => r.soldCount);
+  // Split by state (#1876): a live listing is selling the copy, a prepared offer is only about to.
+  const sold = bucket((r) => (isLiveState(r.state) ? r.soldCount : 0));
+  const preparedSold = bucket((r) => (isPreparedState(r.state) ? r.soldCount : 0));
   const bidding = bucket((r) => r.biddingCount);
   const platformSale = bucket((r) => r.platformSaleCount);
 
   const ids = [
-    ...new Set([...sold.head, ...bidding.head, ...platformSale.head].map((r) => r.offerId)),
+    ...new Set(
+      [...sold.head, ...preparedSold.head, ...bidding.head, ...platformSale.head].map(
+        (r) => r.offerId
+      )
+    ),
   ];
   const offers = ids.length
     ? await prisma.offer.findMany({
@@ -1256,6 +1290,7 @@ export async function offersNeedingAction(
 
   return {
     "sold-elsewhere": resolve(sold),
+    "prepared-sold-elsewhere": resolve(preparedSold),
     "bidding-conflict": resolve(bidding),
     "platform-sale-conflict": resolve(platformSale),
   };
@@ -1768,7 +1803,7 @@ async function labelWaitingOffers<T extends { id: string; since: Date | null }>(
   });
 }
 
-/** Why an offer needs action (#1811): one of the bell's three collisions (#367), or its listing
+/** Why an offer needs action (#1811): one of the bell's collisions (#367, #1876), or its listing
  *  having changed since it went up (#542). */
 export type OfferNeedsActionReason = OfferActionReason | "listing-changed";
 
@@ -1778,16 +1813,17 @@ export interface NeedsActionOffer extends WaitingOffer {
 }
 
 /**
- * The offers list's *Needs action* set as one group, for the Dashboard (#1811) — the bell's four
- * groups (`offer-sold-elsewhere`, `offer-bidding-conflict`, `offer-platform-sale-conflict`,
- * `offer-listing-changed`) read from the same two derivations and put back together.
+ * The offers list's *Needs action* set as one group, for the Dashboard (#1811) — the bell's five
+ * groups (`offer-sold-elsewhere`, `offer-prepared-sold-elsewhere`, `offer-bidding-conflict`,
+ * `offer-platform-sale-conflict`, `offer-listing-changed`) read from the same two derivations and put back together.
  *
  * - **The set** is the union `resolveOfferOverlays` makes for `needsAction=1`: {@link needsActionRows}
  *   and the drift `where`, so the count is the rows the group's link opens and each row is one the
  *   bell reports.
  * - **One row per offer**, under its worst reason: a collision is a double sale waiting to happen
  *   and the bell's red, so **collisions come first**, worst first as the bell reads them (most
- *   affected copies); then the listings changed since they went up, longest wrong first — again the
+ *   affected copies); then the offers still being prepared with a copy sold elsewhere (#1876), the
+ *   bell's amber; then the listings changed since they went up, longest wrong first — again the
  *   bell's order.
  * - **The instant** is when a changed listing started diverging. A collision carries none: nothing
  *   records when the copy went elsewhere, and the bell does not age it either.
@@ -1814,17 +1850,33 @@ export async function offersNeedingActionForDashboard(
       : row.biddingCount > 0
         ? "bidding-conflict"
         : "platform-sale-conflict";
-  const flagged = collisions
-    .filter((row) => row.soldCount + row.biddingCount + row.platformSaleCount > 0)
-    .sort((a, b) => b.deadCount - a.deadCount || a.offerId.localeCompare(b.offerId))
+  const byWorst = (a: NeedsActionRow, b: NeedsActionRow) =>
+    b.deadCount - a.deadCount || a.offerId.localeCompare(b.offerId);
+  const counted = collisions.filter(
+    (row) => row.soldCount + row.biddingCount + row.platformSaleCount > 0
+  );
+  const flagged = counted
+    .filter((row) => isLiveState(row.state))
+    .sort(byWorst)
     .map((row) => ({
       id: row.offerId,
       reason: reasonOf(row) as OfferNeedsActionReason,
       since: null as Date | null,
     }));
-  const collided = new Set(flagged.map((row) => row.id));
+  // An offer still being prepared is the bell's amber (#1876), so it follows the red collisions and
+  // leads the changed listings, as the bell's own groups read.
+  const prepared = counted
+    .filter((row) => isPreparedState(row.state))
+    .sort(byWorst)
+    .map((row) => ({
+      id: row.offerId,
+      reason: "prepared-sold-elsewhere" as OfferNeedsActionReason,
+      since: null as Date | null,
+    }));
+  const collided = new Set([...flagged, ...prepared].map((row) => row.id));
   const ordered = [
     ...flagged,
+    ...prepared,
     ...drifted
       .filter((row) => !collided.has(row.id))
       .map((row) => ({
@@ -2523,7 +2575,7 @@ async function withNeedsAction(
     resolved.counts ??
       needsActionCounts(
         collectionId,
-        rows.filter((r) => isOfferState(r.state) && isLiveState(r.state)).map((r) => r.id),
+        rows.filter((r) => isOfferState(r.state) && flagsSoldElsewhere(r.state)).map((r) => r.id),
         platformSoldIds
       ),
     makeOfferLabeller(collectionId),
@@ -4845,8 +4897,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     );
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
+    // Asked of a prepared offer too (#1876): it is about to be posted with the copy that has gone.
     const soldElsewhere =
-      isLiveState(state) &&
+      flagsSoldElsewhere(state) &&
       isSetSoldElsewhere({ id: s.id, sold, itemIds: s.items.map((li) => li.itemId) }, soldViaSet);
     const elsewhereItem = soldElsewhere
       ? s.items.find((li) => {
@@ -5189,6 +5242,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
             ),
             ...textBlockers,
             ...readyPhotoBlockers,
+            // Off this screen's own sets, the very flag the Needs action chip reads (#1876).
+            ...evaluateSoldElsewhereReadiness(
+              sets.filter((s) => s.soldElsewhere).length,
+              transitionVerb("ready")
+            ),
           ]
         : [],
     platformItems: platformItemsFor(offer.sets, labeller, conditionMap, catalogIds),
@@ -6836,6 +6894,13 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
     }
   }
+  // An offer still being prepared may not move on while it holds a set sold elsewhere (#1876): it
+  // would be marked ready, submitted or published offering a copy that has gone. Asked on all three
+  // steps out of `preparing` / `ready`, before the ready gate, so the refusal names the one fix.
+  // Not on the approval or the rejection of a pending post — that offer is live, flagged red beside
+  // the active ones, and refusing either would leave the record claiming what the platform did not.
+  const soldElsewhere = await readSoldElsewhereRefusal(offerId, ref.state, to);
+  if (soldElsewhere) throw new OfferActionBlockedError("sold-elsewhere", soldElsewhere);
   // Marking it ready is also where the listing preconditions (#418) and the listing photos (#311)
   // are asked — see {@link readReadyBlockers} for why here and nowhere else in the lifecycle. Not on
   // a rejection (`pending → ready`, #1778): the offer was ready when it was submitted, and refusing to
@@ -7682,8 +7747,68 @@ export async function updateOfferSet(ownerId: string, setId: string, title: stri
 }
 
 /**
- * Remove from a live offer every set sold elsewhere (#1805) — the hand-run errand of #700 in one
- * action. `setIds` is what the collector confirmed: only those of them **still** sold elsewhere go,
+ * Each of an offer's sets with whether it sold here and whether it **sold elsewhere** — the question
+ * {@link isSetSoldElsewhere} answers, over the sale lines that took its copies. Asked only of an offer
+ * in a state that flags it ({@link flagsSoldElsewhere}); for any other, no set is sold elsewhere.
+ * Shared by the removal (#1805) and the gate that holds a prepared offer back (#1876), so the sets the
+ * one refuses over are the sets the other takes off.
+ */
+async function readSoldElsewhereSets(
+  state: OfferState,
+  sets: readonly {
+    id: string;
+    saleLines: readonly unknown[];
+    items: readonly { itemId: string }[];
+  }[]
+): Promise<{ id: string; sold: boolean; soldElsewhere: boolean }[]> {
+  const allIds = sets.flatMap((s) => s.items.map((li) => li.itemId));
+  const soldRows =
+    flagsSoldElsewhere(state) && allIds.length > 0
+      ? await prisma.saleLineItem.findMany({
+          where: { itemId: { in: allIds } },
+          select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+        })
+      : [];
+  const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+  return sets.map((s) => {
+    const sold = s.saleLines.length > 0;
+    const itemIds = s.items.map((li) => li.itemId);
+    return { id: s.id, sold, soldElsewhere: isSetSoldElsewhere({ id: s.id, sold, itemIds }, soldVia) };
+  });
+}
+
+/**
+ * Why moving a prepared offer `from → to` is refused over its sets sold elsewhere (#1876), or null
+ * when it is not: the step goes to Ready, Pending or Active out of `preparing` / `ready`, and a set
+ * has sold elsewhere. {@link setOfferState} asks it of every such step; a Facebook post asks it of
+ * each of its lots **before** moving any, so a post never goes up with half its lots.
+ */
+export async function readSoldElsewhereRefusal(
+  offerId: string,
+  from: OfferState,
+  to: OfferState
+): Promise<string | null> {
+  if (!requiresSets(to) || !isPreparedState(from)) return null;
+  const count = await countSetsSoldElsewhere(offerId, from);
+  return evaluateSoldElsewhereReadiness(count, transitionVerb(to))[0]?.message ?? null;
+}
+
+/** The sets of an offer that a {@link readSoldElsewhereSets} would report sold elsewhere, counted. */
+async function countSetsSoldElsewhere(offerId: string, state: OfferState): Promise<number> {
+  const sets = await prisma.offerSet.findMany({
+    where: { offerId },
+    select: {
+      id: true,
+      saleLines: { select: { id: true }, take: 1 },
+      items: { select: { itemId: true } },
+    },
+  });
+  return (await readSoldElsewhereSets(state, sets)).filter((s) => s.soldElsewhere).length;
+}
+
+/**
+ * Remove from an offer every set sold elsewhere (#1805) — the hand-run errand of #700 in one
+ * action. A live offer, or one still being prepared (#1876), which may not move on until they go. `setIds` is what the collector confirmed: only those of them **still** sold elsewhere go,
  * so the action removes exactly what the confirmation listed and nothing it did not. A set sold
  * through this offer is never one of them — it is this offer's own sale record. Refused when the
  * removal would leave nothing to sell: that listing can only come down (#1277), and emptying it
@@ -7715,20 +7840,7 @@ export async function removeOfferSetsSoldElsewhere(
     throw new Error("Offer not found or access denied.");
   }
   const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
-  const allIds = offer.sets.flatMap((s) => s.items.map((li) => li.itemId));
-  const soldRows =
-    isLiveState(state) && allIds.length > 0
-      ? await prisma.saleLineItem.findMany({
-          where: { itemId: { in: allIds } },
-          select: { itemId: true, saleLine: { select: { offerSetId: true } } },
-        })
-      : [];
-  const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
-  const sets = offer.sets.map((s) => {
-    const sold = s.saleLines.length > 0;
-    const itemIds = s.items.map((li) => li.itemId);
-    return { id: s.id, sold, soldElsewhere: isSetSoldElsewhere({ id: s.id, sold, itemIds }, soldVia) };
-  });
+  const sets = await readSoldElsewhereSets(state, offer.sets);
   const { remove, leftToSell } = soldElsewhereRemoval(sets);
   const confirmed = new Set(setIds);
   const ids = remove.filter((s) => confirmed.has(s.id)).map((s) => s.id);
@@ -7741,7 +7853,9 @@ export async function removeOfferSetsSoldElsewhere(
   if (leftToSell === 0) {
     throw new OfferActionBlockedError(
       "sold-elsewhere",
-      "Nothing would be left to sell — close the listing instead."
+      isPreparedState(state)
+        ? "Nothing would be left to sell — withdraw the offer instead."
+        : "Nothing would be left to sell — close the listing instead."
     );
   }
   // `saleLines: none` restates the guard `removeOfferSet` makes: a set with a sale line is a record.
