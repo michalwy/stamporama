@@ -661,7 +661,9 @@ export function isFacebookLotPosted(state: string): boolean {
  *  offered only where the server would take it:
  *
  *  - `activate` / `submit` — nothing waiting for approval, every lot Ready or already where the move
- *    takes it, and at least one Ready (a refusal halfway through is finished by asking again);
+ *    takes it, and at least one Ready (a refusal halfway through is finished by asking again). The
+ *    screen draws one *Publish…* for `activate` (#1847); `submit` says whether its dialog may offer
+ *    *Waiting for approval*;
  *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
  *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
  *  - `takeOut` — a lot may leave the post only until the post is up;

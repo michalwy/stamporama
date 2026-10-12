@@ -124,6 +124,20 @@ export function manualTransitions(from: OfferState): readonly OfferState[] {
   return MANUAL_TRANSITIONS[from];
 }
 
+/** The moves an offer's ⋮ lists, given its current state. On Facebook a Ready offer is published
+ *  through one door (#1847): `ready → active` is *Publish…*, and its dialog alone chooses between live
+ *  and waiting for approval, so `ready → pending` has no entry of its own. Elsewhere the two stay. */
+export function menuTransitions(from: OfferState, onFacebook: boolean): readonly OfferState[] {
+  const all = MANUAL_TRANSITIONS[from];
+  return onFacebook && from === "ready" ? all.filter((s) => s !== "pending") : all;
+}
+
+/** Whether moving `from → to` is Facebook's single *Publish…* (#1847) — always through the publish
+ *  dialog, which records the post as live or as waiting for the group's approval. */
+export function isFacebookPublish(from: OfferState, to: OfferState, onFacebook: boolean): boolean {
+  return onFacebook && from === "ready" && to === "active";
+}
+
 /**
  * The single unambiguous "advance one step" target for a one-click control (#255): the linear,
  * forward part of the lifecycle only — `preparing → ready`, `ready → active` and, for a listing

@@ -229,7 +229,7 @@ export function FacebookPostPanel({
     ];
   }
 
-  const anyMove = moves.activate || moves.submit || moves.approve || moves.reject || moves.withdraw;
+  const anyMove = moves.activate || moves.approve || moves.reject || moves.withdraw;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -264,22 +264,14 @@ export function FacebookPostPanel({
         <h3 style={CARD_TITLE}>The post</h3>
         {anyMove ? (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            {/* One door (#1847): live or waiting for the group's approval is chosen in the dialog. */}
             {moves.activate && (
               <DialogSecondaryButton
                 type="button"
                 disabled={isPending}
                 onClick={() => setDialog({ kind: "publish", target: "active", approving: false })}
               >
-                Activate…
-              </DialogSecondaryButton>
-            )}
-            {moves.submit && (
-              <DialogSecondaryButton
-                type="button"
-                disabled={isPending}
-                onClick={() => setDialog({ kind: "publish", target: "pending", approving: false })}
-              >
-                Submit for approval…
+                Publish…
               </DialogSecondaryButton>
             )}
             {moves.approve && (
@@ -421,6 +413,7 @@ export function FacebookPostPanel({
           facebookLots={lots.length}
           initialTarget={dialog.target}
           approving={dialog.approving}
+          canWait={moves.submit}
           offerId={dialog.approving ? pendingLot?.offerId : undefined}
           isPending={isPending}
           error={error}

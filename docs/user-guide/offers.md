@@ -2612,7 +2612,8 @@ a trade](#copies-promised-in-a-trade).
 When you post a listing and the platform or group holds it for approval, publish it as **Pending**
 rather than Active: tick **Waiting for approval** in the publish dialog (the one **Activate** opens,
 on the offer and in the bulk listing workspace), or pick **Submit for approval…** from the **⋮**
-menu. Paste the link you have — the link to the pending post. It is shown as **Pending post** rather
+menu. On Facebook there is one button, **Publish…**, and the choice is made only in its dialog (see
+[Facebook](facebook.md)). Paste the link you have — the link to the pending post. It is shown as **Pending post** rather
 than **Listing** everywhere the offer's link appears, so it is never mistaken for the address buyers
 will see.
 

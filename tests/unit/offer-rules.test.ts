@@ -5,6 +5,8 @@ import {
   isLiveState,
   canTransition,
   manualTransitions,
+  menuTransitions,
+  isFacebookPublish,
   isTerminalState,
   requiresSets,
   requiresPrice,
@@ -148,6 +150,26 @@ describe("manualTransitions", () => {
     assert.deepEqual([...manualTransitions("paused")], ["active", "withdrawn"]);
     assert.deepEqual([...manualTransitions("sold")], []);
     assert.deepEqual([...manualTransitions("withdrawn")], []);
+  });
+});
+
+describe("menuTransitions", () => {
+  it("a Ready Facebook offer has one way to publish — Submit for approval is the dialog's (#1847)", () => {
+    assert.deepEqual([...menuTransitions("ready", true)], ["active", "preparing", "withdrawn"]);
+    assert.deepEqual([...menuTransitions("pending", true)], ["active", "ready", "withdrawn"]);
+  });
+
+  it("every other platform keeps both moves", () => {
+    assert.deepEqual([...menuTransitions("ready", false)], ["active", "pending", "preparing", "withdrawn"]);
+  });
+});
+
+describe("isFacebookPublish", () => {
+  it("is Ready → Active on Facebook only (#1847)", () => {
+    assert.equal(isFacebookPublish("ready", "active", true), true);
+    assert.equal(isFacebookPublish("ready", "active", false), false);
+    assert.equal(isFacebookPublish("pending", "active", true), false);
+    assert.equal(isFacebookPublish("paused", "active", true), false);
   });
 });
 
