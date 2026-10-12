@@ -2126,6 +2126,20 @@ paste the address into the offer's header first.
 The composition is **not** something an update can change. Selling some of the sets is a smaller
 quantity, which the form does edit; an offer whose stamps are different is a different listing.
 
+#### When sets have sold elsewhere
+
+If the offer holds sets whose copies sold through **another** offer, the update **removes them first**
+— one action instead of removing them, confirming and then updating. The button asks before it does
+anything: its confirmation lists each set it will remove with the sale that took its copy (each sale is
+a link), exactly as [removing them on their own](#removing-every-set-sold-elsewhere-at-once) does, and
+that one confirmation covers both halves. Confirming takes those sets off the offer (the copies stay in
+your inventory), regenerates the listing photos without them — the update waits for that — and then
+hands the listing to the Assistant, re-filled with what is left.
+
+If removing them would leave **nothing to sell**, there is nothing to update the listing to: the
+confirmation removes nothing, says so and offers **Close via Assistant…** instead — the button the
+header already highlights for such an offer.
+
 ### Close via Assistant
 
 And the way down: an **Active** Colnect offer's header also carries **Close via Assistant**. After
@@ -2520,7 +2534,9 @@ To resolve one, open the offer and:
 
 While an offer holds sets whose copies sold through **another** offer — on this platform or another —
 its header carries **Remove N sets sold elsewhere** beside the Needs action badge, and the offer's
-**⋮** menu carries the same entry. It asks first, listing each set it will remove with the sale that
+**⋮** menu carries the same entry. On an Active offer that has **Update via Assistant** (a Colnect
+listing) neither is shown: the update removes these sets itself before updating the listing — see
+[When sets have sold elsewhere](#when-sets-have-sold-elsewhere). It asks first, listing each set it will remove with the sale that
 took its copy (each sale is a link). Confirming removes **exactly those sets**: a set sold through this
 offer stays, as the record of that sale, and so does every set still for sale — including one whose
 copy is only in bidding elsewhere, since that bid may still come to nothing. The copies stay in your

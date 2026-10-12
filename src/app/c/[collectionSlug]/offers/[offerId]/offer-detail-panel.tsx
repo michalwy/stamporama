@@ -76,6 +76,7 @@ import {
   needsActionRemedy,
   soldElsewhereRemoval,
   soldElsewhereRemovalLabel,
+  soldElsewhereRemovalVia,
 } from "@/lib/offer-needs-action-remedy";
 import { facebookPostLink } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
@@ -423,6 +424,14 @@ export function OfferDetailPanel({
   // The sets sold elsewhere (#1805), and what would be left to sell without them. The action exists
   // only while there is one to remove; with nothing left, its confirmation points at closing instead.
   const soldElsewhere = soldElsewhereRemoval(offer.sets);
+  // Where that removal is offered (#1835): folded into Update via Assistant wherever the offer has
+  // one — the update's confirmation lists them and the update removes them first — and an action of
+  // its own only where it does not.
+  const soldElsewhereVia = soldElsewhereRemovalVia({
+    state: offer.state,
+    assistantUpdate: offersAssistantUpdate(offer.platformModule, offer.url),
+    sets: offer.sets,
+  });
   const canWithdraw = manualTransitions(offer.state).includes("withdrawn");
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button. On an auction what is missing is the
@@ -596,6 +605,15 @@ export function OfferDetailPanel({
     });
   }
 
+  /** Open Close via Assistant's confirmation (#729) — from its button, and from an update that would
+   *  leave nothing to sell (#1835). */
+  function openCloseListing() {
+    setActionError(undefined);
+    setCloseError(undefined);
+    dismissClose();
+    setClosingListing(true);
+  }
+
   /**
    * Hand this offer to the Assistant to post (#414), from **Preparing** as well as from Ready
    * (#554).
@@ -737,8 +755,9 @@ export function OfferDetailPanel({
           } as RowAction,
         ]
       : []),
-    // Beside the header's own button (#1805), for the collector who goes to the menu for it.
-    ...(soldElsewhere.remove.length > 0
+    // Beside the header's own button (#1805), for the collector who goes to the menu for it — and,
+    // like it, only where Update via Assistant does not already do it (#1835).
+    ...(soldElsewhereVia === "own"
       ? [
           {
             key: "remove-sold-elsewhere",
@@ -1029,10 +1048,14 @@ export function OfferDetailPanel({
                 busy={false}
                 running={handoffRunning}
                 disabled={isPending}
+                removesSets={soldElsewhereVia === "update" ? soldElsewhere.remove.length : 0}
                 style={remedy?.action === "update" ? QUICK_ADVANCE_BTN : ASSISTANT_BTN}
                 onStart={() => {
                   setActionError(undefined);
-                  void startHandoff(offerId, "update");
+                  // Sets sold elsewhere come off first (#1835), after the confirmation that lists
+                  // them; the handoff starts once they are gone.
+                  if (soldElsewhereVia === "update") setRemovingSoldElsewhere(true);
+                  else void startHandoff(offerId, "update");
                 }}
               />
             )}
@@ -1047,12 +1070,7 @@ export function OfferDetailPanel({
                 running={closeHandoff?.state === "running"}
                 disabled={isPending}
                 style={remedy?.action === "close" ? QUICK_ADVANCE_BTN : ASSISTANT_BTN}
-                onStart={() => {
-                  setActionError(undefined);
-                  setCloseError(undefined);
-                  dismissClose();
-                  setClosingListing(true);
-                }}
+                onStart={openCloseListing}
               />
             )}
             {remedy && (
@@ -1080,8 +1098,9 @@ export function OfferDetailPanel({
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
             {/* The errand the chip asks for, in one press (#1805): every set sold elsewhere off the
-                offer, after a confirmation naming them. Only while there is one to remove. */}
-            {soldElsewhere.remove.length > 0 && (
+                offer, after a confirmation naming them. Only while there is one to remove, and only
+                where Update via Assistant does not remove them itself (#1835). */}
+            {soldElsewhereVia === "own" && (
               <button
                 type="button"
                 disabled={isPending}
@@ -1733,22 +1752,39 @@ export function OfferDetailPanel({
       {removingSoldElsewhere && (
         <RemoveSoldElsewhereDialog
           collectionSlug={collectionSlug}
+          andUpdate={soldElsewhereVia === "update"}
           sets={soldElsewhere.remove}
           leftToSell={soldElsewhere.leftToSell}
           isPending={isPending}
           error={actionError}
           onClose={() => !isPending && setRemovingSoldElsewhere(false)}
-          onWithdraw={
-            canWithdraw
-              ? () => {
-                  setRemovingSoldElsewhere(false);
-                  setActionError(undefined);
-                  setConfirm("withdraw");
+          alternative={
+            // An update with nothing left to update to is a listing to close (#1835), and on Colnect
+            // that is Close via Assistant (#729) — the action the Needs action highlight already
+            // points at (#1804). Otherwise, and for the removal on its own, withdrawing.
+            soldElsewhereVia === "update" &&
+            offersAssistantClose(offer.platformModule, offer.colnectSaleId)
+              ? {
+                  label: "Close via Assistant…",
+                  onSelect: () => {
+                    setRemovingSoldElsewhere(false);
+                    openCloseListing();
+                  },
                 }
-              : null
+              : canWithdraw
+                ? {
+                    label: "Withdraw…",
+                    onSelect: () => {
+                      setRemovingSoldElsewhere(false);
+                      setActionError(undefined);
+                      setConfirm("withdraw");
+                    },
+                  }
+                : null
           }
           onConfirm={() => {
             const setIds = soldElsewhere.remove.map((s) => s.id);
+            const andUpdate = soldElsewhereVia === "update";
             setActionError(undefined);
             startTransition(async () => {
               const { removeOfferSetsSoldElsewhereAction } = await import("@/app/actions/offers");
@@ -1756,9 +1792,14 @@ export function OfferDetailPanel({
               if (result.status === "success") {
                 setRemovingSoldElsewhere(false);
                 invalidateAll(collectionId);
-                toast({
-                  message: `Removed ${setIds.length} ${setIds.length === 1 ? "set" : "sets"} sold elsewhere — now update the listing`,
-                });
+                // The update's second half (#1835): the handoff regenerates the photos — the plan
+                // left these sets out when they sold (#315), so stored pictures from before are out
+                // of date — and then hands the listing to the Assistant. Its strip is the report.
+                if (andUpdate) void startHandoff(offerId, "update");
+                else
+                  toast({
+                    message: `Removed ${setIds.length} ${setIds.length === 1 ? "set" : "sets"} sold elsewhere — now update the listing`,
+                  });
               } else setActionError(result.message);
             });
           }}

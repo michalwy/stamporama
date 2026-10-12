@@ -5,6 +5,8 @@ import {
   needsActionRemedy,
   soldElsewhereRemoval,
   soldElsewhereRemovalLabel,
+  soldElsewhereRemovalVia,
+  soldElsewhereUpdateLabel,
 } from "../../src/lib/offer-needs-action-remedy";
 import { OFFER_STATES } from "../../src/lib/offer-rules";
 
@@ -131,5 +133,43 @@ describe("soldElsewhereRemovalLabel (#1805)", () => {
   it("names the count", () => {
     assert.equal(soldElsewhereRemovalLabel(1), "Remove 1 set sold elsewhere");
     assert.equal(soldElsewhereRemovalLabel(3), "Remove 3 sets sold elsewhere");
+  });
+});
+
+describe("soldElsewhereRemovalVia (#1835)", () => {
+  it("folds the removal into Update via Assistant on an active offer that has the update", () => {
+    assert.equal(
+      soldElsewhereRemovalVia({ state: "active", assistantUpdate: true, sets: [forSale, soldElsewhere] }),
+      "update"
+    );
+  });
+
+  it("keeps its own action where there is no Assistant update to fold it into", () => {
+    assert.equal(
+      soldElsewhereRemovalVia({ state: "active", assistantUpdate: false, sets: [forSale, soldElsewhere] }),
+      "own"
+    );
+    for (const state of OFFER_STATES.filter((s) => s !== "active")) {
+      assert.equal(
+        soldElsewhereRemovalVia({ state, assistantUpdate: true, sets: [forSale, soldElsewhere] }),
+        "own",
+        state
+      );
+    }
+  });
+
+  it("offers nothing while no set has sold elsewhere", () => {
+    assert.equal(
+      soldElsewhereRemovalVia({ state: "active", assistantUpdate: true, sets: [forSale, soldHere] }),
+      null
+    );
+    assert.equal(soldElsewhereRemovalVia({ state: "active", assistantUpdate: true, sets: [] }), null);
+  });
+});
+
+describe("soldElsewhereUpdateLabel (#1835)", () => {
+  it("counts the sets in the update's action", () => {
+    assert.equal(soldElsewhereUpdateLabel(1), "Remove 1 set and update");
+    assert.equal(soldElsewhereUpdateLabel(3), "Remove 3 sets and update");
   });
 });

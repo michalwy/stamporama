@@ -152,6 +152,7 @@ export function UpdateViaAssistantButton({
   busy,
   running,
   disabled,
+  removesSets = 0,
   style,
   onStart,
 }: {
@@ -163,6 +164,10 @@ export function UpdateViaAssistantButton({
   busy: boolean;
   running: boolean;
   disabled?: boolean;
+  /** Sets sold elsewhere this click takes off the offer first, after a confirmation (#1835). Said in
+   *  the hint for `generatesPhotos`' reason: a button doing more than it says is how a removal goes
+   *  unnoticed. */
+  removesSets?: number;
   style: React.CSSProperties;
   onStart: () => void;
 }) {
@@ -174,7 +179,11 @@ export function UpdateViaAssistantButton({
     <Tooltip
       content={
         hint ??
-        "Open this listing's edit form on the platform, re-filled from this offer as it now stands. Its pictures are replaced with the current set. Nothing is saved — you check it and submit it yourself."
+        `${
+          removesSets > 0
+            ? `Remove the ${removesSets === 1 ? "set" : `${removesSets} sets`} sold elsewhere (you confirm first), then open`
+            : "Open"
+        } this listing's edit form on the platform, re-filled from this offer as it now stands. Its pictures are replaced with the current set. Nothing is saved — you check it and submit it yourself.`
       }
     >
       <button
