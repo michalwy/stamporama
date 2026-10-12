@@ -2882,6 +2882,15 @@ model FacebookGroup {
   // none (#1692).
   buyerMessageTemplate String @default("")
 
+  // ── How a post of several lots is laid out (#1841) ─────────────────────────────────────────────
+  // `text`: every lot's text in the post's own text, from the post templates above. `captions`: each
+  // lot is one photo and its text is that photo's caption, from the caption templates, while the
+  // post's text is `captionPostTemplate`. A post may override it (`FacebookPost.layout`).
+  multiLotLayout          String @default("text")
+  auctionCaptionTemplate  String @default("")
+  quickBuyCaptionTemplate String @default("")
+  captionPostTemplate     String @default("")
+
   // ── What a new auction starts from ─────────────────────────────────────────────────────────────
   // The starting price, stated one of two ways: `amount` (a figure in the group's currency) or
   // `catalogPercent` (a percentage of the copies' catalogue value). Null mode is "no default", and
@@ -2935,6 +2944,11 @@ model FacebookDefaults {
   standingNote      String  @default("")
   // The message to a buyer (#1815); empty is none.
   buyerMessageTemplate String @default("")
+  // How a post of several lots is laid out, and the templates a captioned one is written from (#1841).
+  multiLotLayout          String @default("text")
+  auctionCaptionTemplate  String @default("")
+  quickBuyCaptionTemplate String @default("")
+  captionPostTemplate     String @default("")
 
   startingPriceMode  String?
   startingPriceValue Decimal? @db.Decimal(10, 2)
@@ -2962,6 +2976,9 @@ model FacebookPost {
   id           String   @id @default(cuid())
   collectionId String
   groupId      String
+  // How this post is laid out (#1841): `text` or `captions`, or null to follow its group's setting,
+  // read live. Changeable only until a lot has gone up — after that the post is what was posted.
+  layout       String?
   createdAt    DateTime @default(now())
 
   collection Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)

@@ -10,13 +10,20 @@
 // what comes out empty is named on the card (`facebookPostGaps`) rather than filled in. An offer may
 // carry its **own** template (#1780), which writes that lot instead of the group's. Once the offer is
 // published its lot is **frozen** (#1800): what it was written from is kept, and drawn from then on.
+//
+// A post of several lots is laid out one of two ways (#1841): every lot's text in the post's own text,
+// or — the *captioned* layout — one photo per lot, the lot's text that photo's caption, and the post's
+// text a shared one of its own (`renderFacebookCaptionedPost`).
 
 import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
   FACEBOOK_RETIRED_PLACEHOLDERS,
   FACEBOOK_TERMS_PLACEHOLDER,
-  facebookPostPlaceholders,
+  facebookTemplatePlaceholders,
+  toFacebookMultiLotLayout,
+  type FacebookMultiLotLayout,
   type FacebookStartingPriceMode,
+  type FacebookTemplateRole,
 } from "./facebook-group-rules";
 import { isAuctionListing, type OfferListingType } from "./offer-rules";
 
@@ -160,13 +167,23 @@ export interface FacebookPostTemplates {
   quickBuy: string;
 }
 
+/** The templates a **captioned** post of several lots is written from (#1841): a caption per listing
+ *  type, and the post's shared text. */
+export interface FacebookCaptionTemplates {
+  auction: string;
+  quickBuy: string;
+  /** The captioned post's own text — the note, a heading, the lots' offer numbers. */
+  post: string;
+}
+
 const TOKEN = /\{[A-Za-z]+\}/g;
 
-/** The placeholders a lot of this type fills in: its type's own, and the retired ones (#1671). */
-function knownTokens(listingType: OfferListingType): Set<string> {
+/** The placeholders a lot of this type fills in: its type's own — its post's, or its caption's
+ *  (#1841) — and, in a post template, the retired ones (#1671). */
+function knownTokens(listingType: OfferListingType, role: FacebookTemplateRole = "post"): Set<string> {
   return new Set<string>([
-    ...facebookPostPlaceholders(listingType).map((p) => p.token),
-    ...FACEBOOK_RETIRED_PLACEHOLDERS,
+    ...facebookTemplatePlaceholders(role, listingType).map((p) => p.token),
+    ...(role === "post" ? FACEBOOK_RETIRED_PLACEHOLDERS : []),
   ]);
 }
 
@@ -212,9 +229,17 @@ function partsText(parts: readonly FacebookPostPart[]): string {
  * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
  * (#1689) — `terms`, empty unless this lot is where the post states it.
  */
-export function renderFacebookLotParts(template: string, lot: FacebookPostLotText, terms = ""): FacebookPostPart[] {
-  const known = knownTokens(lot.listingType);
-  const values = placeholderValues(lot, terms);
+export function renderFacebookLotParts(
+  template: string,
+  lot: FacebookPostLotText,
+  terms = "",
+  role: "post" | "caption" = "post"
+): FacebookPostPart[] {
+  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms));
+}
+
+/** A template with the known tokens replaced by their values, everything else kept as typed. */
+function fillTemplate(template: string, known: Set<string>, values: Record<string, string>): FacebookPostPart[] {
   const parts: FacebookPostPart[] = [];
   let from = 0;
   for (const match of template.matchAll(TOKEN)) {
@@ -233,6 +258,11 @@ export function renderFacebookLotText(template: string, lot: FacebookPostLotText
   return partsText(renderFacebookLotParts(template, lot, terms));
 }
 
+/** Parts as one string — the source a part list was rendered from. */
+export function facebookPartsText(parts: readonly FacebookPostPart[]): string {
+  return partsText(parts);
+}
+
 /** The group's template a lot of `listingType` is written from (#1671). */
 export function facebookTemplateFor(templates: FacebookPostTemplates, listingType: OfferListingType): string {
   return listingType === "auction" ? templates.auction : templates.quickBuy;
@@ -245,6 +275,31 @@ export function facebookLotTemplate(
   lot: Pick<FacebookPostLotText, "listingType" | "ownTemplate">
 ): string {
   return lot.ownTemplate ?? facebookTemplateFor(templates, lot.listingType);
+}
+
+/** The caption template a lot of `listingType` is written from in a captioned post (#1841). */
+export function facebookCaptionTemplateFor(captions: FacebookCaptionTemplates, listingType: OfferListingType): string {
+  return listingType === "auction" ? captions.auction : captions.quickBuy;
+}
+
+/** The template a lot's **caption** is written from (#1841): its offer's own where it has one (#1780)
+ *  — the lot's text is its caption here, so that is what the offer's own words write — else its
+ *  group's caption template for its type. */
+export function facebookCaptionLotTemplate(
+  captions: FacebookCaptionTemplates,
+  lot: Pick<FacebookPostLotText, "listingType" | "ownTemplate">
+): string {
+  return lot.ownTemplate ?? facebookCaptionTemplateFor(captions, lot.listingType);
+}
+
+/** The template a lot is written from in a post of `layout` — its post text's, or its caption's. */
+export function facebookLayoutLotTemplate(
+  layout: FacebookMultiLotLayout,
+  templates: FacebookPostTemplates,
+  captions: FacebookCaptionTemplates,
+  lot: Pick<FacebookPostLotText, "listingType" | "ownTemplate">
+): string {
+  return layout === "captions" ? facebookCaptionLotTemplate(captions, lot) : facebookLotTemplate(templates, lot);
 }
 
 function inLotOrder<T extends { lotNo: number | null }>(lots: readonly T[]): T[] {
@@ -344,6 +399,95 @@ export function facebookPostGaps(
   return { missingTemplates, emptyOwnTemplates, emptyPlaceholders };
 }
 
+/** One lot's caption in a captioned post (#1841): the photo it goes under, by lot. */
+export interface FacebookCaption {
+  lotNo: number | null;
+  offerNo: number;
+  parts: FacebookPostPart[];
+}
+
+/** A captioned post (#1841): its shared text, and each lot's caption in lot order. */
+export interface FacebookCaptionedPost {
+  post: FacebookPostPart[];
+  captions: FacebookCaption[];
+}
+
+/**
+ * A post of several lots laid out with **each lot's text in its photo's caption** (#1841). Each lot's
+ * caption is its type's caption template — or its offer's own (#1780) — filled in as a lot's text is,
+ * without `{terms}`: the note goes in the post's shared text, which carries `{offer}` (the lots' offer
+ * numbers, bare, in lot order) and `{terms}`. Nothing is added or fallen back to (#1692): an empty
+ * template is an empty caption or an empty post.
+ */
+export function renderFacebookCaptionedPost(
+  captions: FacebookCaptionTemplates,
+  standingNote: string,
+  lots: readonly FacebookPostLotText[]
+): FacebookCaptionedPost {
+  const sorted = inLotOrder(lots);
+  return {
+    post: fillTemplate(captions.post, knownTokens("auction", "captionPost"), captionPostValues(sorted, standingNote)),
+    captions: sorted.map((lot) => ({
+      lotNo: lot.lotNo,
+      offerNo: lot.offerNo,
+      parts: renderFacebookLotParts(facebookCaptionLotTemplate(captions, lot), lot, "", "caption"),
+    })),
+  };
+}
+
+function captionPostValues(sorted: readonly FacebookPostLotText[], standingNote: string): Record<string, string> {
+  return {
+    "{offer}": sorted.map((lot) => String(lot.offerNo)).join(", "),
+    [FACEBOOK_TERMS_PLACEHOLDER.token]: standingNote.trim(),
+  };
+}
+
+/** What a captioned post is missing (#1841): {@link FacebookPostGaps} for its captions — the caption
+ *  templates its lots' types have none of, the lots whose own template is empty, the placeholders a
+ *  caption leaves empty — and for its shared text, whether there is none and the placeholders it
+ *  leaves empty (named with `lotNo: null`). */
+export interface FacebookCaptionedPostGaps extends FacebookPostGaps {
+  missingPostText: boolean;
+}
+
+export function facebookCaptionedPostGaps(
+  captions: FacebookCaptionTemplates,
+  standingNote: string,
+  lots: readonly FacebookPostLotText[]
+): FacebookCaptionedPostGaps {
+  const sorted = inLotOrder(lots);
+  const followsGroup = (lot: FacebookPostLotText) => lot.ownTemplate == null;
+  const missingTemplates = (["auction", "fixed"] as const).filter(
+    (type) =>
+      sorted.some((lot) => followsGroup(lot) && lot.listingType === type) &&
+      !facebookCaptionTemplateFor(captions, type).trim()
+  );
+  const emptyOwnTemplates = sorted
+    .filter((lot) => !followsGroup(lot) && !lot.ownTemplate!.trim())
+    .map((lot) => lot.lotNo);
+  const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
+  const postValues = captionPostValues(sorted, standingNote);
+  const postKnown = knownTokens("auction", "captionPost");
+  for (const token of new Set(captions.post.match(TOKEN) ?? [])) {
+    if (postKnown.has(token) && postValues[token].trim() === "") emptyPlaceholders.push({ lotNo: null, token });
+  }
+  for (const lot of sorted) {
+    const known = knownTokens(lot.listingType, "caption");
+    const values = placeholderValues(lot, "");
+    for (const token of new Set(facebookCaptionLotTemplate(captions, lot).match(TOKEN) ?? [])) {
+      if (!known.has(token)) continue;
+      if (token === "{lot}" && lot.lotNo == null) continue;
+      if (values[token].trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
+    }
+  }
+  return {
+    missingTemplates,
+    emptyOwnTemplates,
+    emptyPlaceholders,
+    missingPostText: !captions.post.trim(),
+  };
+}
+
 /**
  * A lot's post as it was published (#1800): the template it was written from and everything that
  * filled it in, kept from the moment the offer first went up — Pending or Active — so that editing a
@@ -370,6 +514,11 @@ export interface FacebookFrozenLot {
   /** ISO-8601, or null. The one figure that moves after freezing: an approval that states a new
    *  closing time writes it here too (#1800, decided with the collector on 2026-10-11). */
   endsAt: string | null;
+  /** How the lot's post was laid out (#1841) — `captions` when `template` is the lot's caption and
+   *  `postText` the post's shared text. A snapshot older than the layout is `text`. */
+  layout: FacebookMultiLotLayout;
+  /** A captioned post's shared text as it was published (#1841); empty in the `text` layout. */
+  postText: string;
 }
 
 /** A stored snapshot read back, or null when there is none or it is not one — a lot with no readable
@@ -396,6 +545,8 @@ export function readFacebookFrozenLot(value: unknown): FacebookFrozenLot | null 
     price: optional("price"),
     currency: text("currency") ?? "",
     endsAt: optional("endsAt"),
+    layout: toFacebookMultiLotLayout(text("layout")),
+    postText: text("postText") ?? "",
   };
 }
 
@@ -420,12 +571,27 @@ export interface FacebookPostSourceLot {
 }
 
 /** What a post is rendered from: the templates and note, and each lot written out. `frozenAt` is when
- *  the post was published — set only when every lot is drawn as it was posted. */
+ *  the post was published — set only when every lot is drawn as it was posted. `layout` is how the
+ *  post is laid out (#1841), and `captions` the templates a captioned one is written from. */
 export interface FacebookPostSource {
   templates: FacebookPostTemplates;
+  captions: FacebookCaptionTemplates;
+  layout: FacebookMultiLotLayout;
   standingNote: string;
   lots: FacebookPostLotText[];
   frozenAt: string | null;
+}
+
+/** The group's templates and note as the source reads them, and the layout the post has **now** — its
+ *  own, or its group's (#1841); `text` for an offer posted alone. */
+export interface FacebookPostSourceGroup {
+  postTemplate: string;
+  quickBuyTemplate: string;
+  standingNote: string;
+  auctionCaptionTemplate: string;
+  quickBuyCaptionTemplate: string;
+  captionPostTemplate: string;
+  layout: FacebookMultiLotLayout;
 }
 
 /**
@@ -436,7 +602,7 @@ export interface FacebookPostSource {
  * with it, or the group's.
  */
 export function facebookPostSource<L extends FacebookPostSourceLot>(
-  group: { postTemplate: string; quickBuyTemplate: string; standingNote: string },
+  group: FacebookPostSourceGroup,
   lots: readonly L[],
   closesAt: (iso: string | null) => string,
   live: (lot: L) => boolean = () => false
@@ -463,8 +629,16 @@ export function facebookPostSource<L extends FacebookPostSourceLot>(
   const lastFrozen = last ? frozenOf(last) : null;
   const frozenAts = lots.map((lot) => frozenOf(lot)?.frozenAt);
   const allFrozen = lots.length > 0 && frozenAts.every((at): at is string => at !== undefined);
+  // A published post keeps the layout it went up in and its shared text (#1841), read off its last
+  // lot as the note is.
   return {
     templates: { auction: group.postTemplate, quickBuy: group.quickBuyTemplate },
+    captions: {
+      auction: group.auctionCaptionTemplate,
+      quickBuy: group.quickBuyCaptionTemplate,
+      post: lastFrozen ? lastFrozen.postText : group.captionPostTemplate,
+    },
+    layout: lastFrozen ? lastFrozen.layout : group.layout,
     standingNote: lastFrozen ? lastFrozen.standingNote : group.standingNote,
     lots: texts,
     frozenAt: allFrozen ? (frozenAts as string[]).reduce((a, b) => (b > a ? b : a)) : null,

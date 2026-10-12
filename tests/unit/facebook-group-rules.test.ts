@@ -11,14 +11,18 @@ import {
   cleanFacebookGroupValues,
   effectiveFacebookGroupSettings,
   effectiveRefreshQuickBuysAfterDays,
+  facebookPostPlaceholders,
+  facebookTemplatePlaceholders,
   isFacebookGroupUrl,
   normalizeClosingTime,
   retiredPostPlaceholders,
   standingNoteUnused,
   toFacebookListingType,
+  toFacebookMultiLotLayout,
   unknownPostPlaceholders,
   usesRetiredPostPlaceholder,
   type FacebookGroupValues,
+  type FacebookTemplateRole,
 } from "../../src/lib/facebook-group-rules";
 
 // A Facebook group's settings (#1543; ADR-0061): every default optional, and what is stated held to
@@ -232,6 +236,10 @@ describe("cleanFacebookDefaults (#1661)", () => {
         closingTime: "9:00",
         refreshQuickBuysAfterDays: 4,
         buyerMessageTemplate: " Pay {total} ",
+        multiLotLayout: "captions",
+        auctionCaptionTemplate: " {title} from {startingPrice} ",
+        quickBuyCaptionTemplate: " {title} {price} ",
+        captionPostTemplate: " Lots {offer}\n{terms} ",
       }),
       {
         listingType: "fixed",
@@ -246,7 +254,19 @@ describe("cleanFacebookDefaults (#1661)", () => {
         closingTime: "09:00",
         refreshQuickBuysAfterDays: 4,
         buyerMessageTemplate: "Pay {total}",
+        multiLotLayout: "captions",
+        auctionCaptionTemplate: "{title} from {startingPrice}",
+        quickBuyCaptionTemplate: "{title} {price}",
+        captionPostTemplate: "Lots {offer}\n{terms}",
       }
+    );
+    assert.throws(
+      () =>
+        cleanFacebookDefaults({
+          ...FACEBOOK_BLANK_SETTINGS,
+          multiLotLayout: "album" as unknown as "text",
+        }),
+      /Unknown layout/
     );
     assert.throws(
       () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, startingPriceMode: "amount" }),
@@ -277,6 +297,10 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
     closingTime: "20:00",
     refreshQuickBuysAfterDays: 3,
     buyerMessageTemplate: "Platform {total}",
+    multiLotLayout: "captions" as const,
+    auctionCaptionTemplate: "Platform caption {startingPrice}",
+    quickBuyCaptionTemplate: "Platform caption {price}",
+    captionPostTemplate: "Platform lots {offer}",
   };
 
   it("reads every setting from the platform for a group that follows it throughout", () => {
@@ -293,6 +317,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       currency: "EUR",
       refreshQuickBuysAfterDays: 10,
       buyerMessageTemplate: "Group {total}",
+      quickBuyCaptionTemplate: "Group caption {price}",
       custom: [
         "standingNote",
         "startingPrice",
@@ -302,6 +327,8 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
         "mixedListingTypes",
         "refreshQuickBuysAfterDays",
         "buyerMessageTemplate",
+        "multiLotLayout",
+        "quickBuyCaptionTemplate",
       ],
     };
     assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
@@ -317,6 +344,11 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       closingTime: null,
       refreshQuickBuysAfterDays: 10,
       buyerMessageTemplate: "Group {total}",
+      // The group's own layout is the blank one, `text`; its own quick-buy caption, the rest followed.
+      multiLotLayout: "text",
+      auctionCaptionTemplate: "Platform caption {startingPrice}",
+      quickBuyCaptionTemplate: "Group caption {price}",
+      captionPostTemplate: "Platform lots {offer}",
       currency: "EUR",
     });
   });
@@ -394,14 +426,14 @@ describe("post template placeholders", () => {
 describe("the note on shipping, payment and terms (#1689)", () => {
   it("is flagged when it is set and neither template has {terms}", () => {
     const note = "Shipping 7 PLN";
-    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", standingNote: note }), true);
-    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price} {terms}", standingNote: note }), false);
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", captionPostTemplate: "", standingNote: note }), true);
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price} {terms}", captionPostTemplate: "", standingNote: note }), false);
     // A blank template places nothing either: the note is only where `{terms}` puts it.
-    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "", standingNote: note }), true);
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "", captionPostTemplate: "", standingNote: note }), true);
   });
 
   it("is not flagged when there is no note to place", () => {
-    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", standingNote: "  " }), false);
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", captionPostTemplate: "", standingNote: "  " }), false);
   });
 
   it("is not an unknown token in either template", () => {
@@ -415,5 +447,68 @@ describe("toFacebookListingType (#1671)", () => {
     assert.equal(toFacebookListingType("fixed"), "fixed");
     assert.equal(toFacebookListingType("auction"), "auction");
     assert.equal(toFacebookListingType(null), "auction");
+  });
+});
+
+describe("captioned posts' settings (#1841)", () => {
+  it("offer a caption its type's placeholders without {terms}, and the post text {offer} and {terms}", () => {
+    const tokens = (role: FacebookTemplateRole, type: "auction" | "fixed") =>
+      facebookTemplatePlaceholders(role, type).map((p) => p.token);
+    assert.deepEqual(tokens("caption", "auction"), [
+      "{title}",
+      "{description}",
+      "{startingPrice}",
+      "{increment}",
+      "{closesAt}",
+      "{lot}",
+      "{offer}",
+    ]);
+    assert.deepEqual(tokens("caption", "fixed"), ["{title}", "{description}", "{price}", "{lot}", "{offer}"]);
+    assert.deepEqual(tokens("captionPost", "fixed"), ["{offer}", "{terms}"]);
+    assert.deepEqual(tokens("post", "fixed"), facebookPostPlaceholders("fixed").map((p) => p.token));
+  });
+
+  it("name {terms} in a caption, and {catalog} anywhere but a post template, as unknown", () => {
+    assert.deepEqual(unknownPostPlaceholders("{title} {terms} {catalog}", "auction", "caption"), ["{terms}", "{catalog}"]);
+    assert.deepEqual(unknownPostPlaceholders("{offer} {terms} {price}", "fixed", "captionPost"), ["{price}"]);
+    assert.deepEqual(unknownPostPlaceholders("{title} {catalog}", "auction"), []);
+  });
+
+  it("read any stored layout but `captions` as the post's text", () => {
+    assert.equal(toFacebookMultiLotLayout("captions"), "captions");
+    assert.equal(toFacebookMultiLotLayout("text"), "text");
+    assert.equal(toFacebookMultiLotLayout(null), "text");
+    assert.equal(toFacebookMultiLotLayout("album"), "text");
+  });
+
+  it("store a followed layout and caption templates blank, a custom one as set", () => {
+    const base = {
+      ...FACEBOOK_GROUP_DEFAULTS,
+      name: "G",
+      url: "https://facebook.com/groups/g",
+      multiLotLayout: "captions" as const,
+      auctionCaptionTemplate: " {title} ",
+      captionPostTemplate: "Lots {offer}",
+    };
+    const followed = cleanFacebookGroupValues({ ...base, custom: [] });
+    assert.equal(followed.multiLotLayout, "text");
+    assert.equal(followed.auctionCaptionTemplate, "");
+    assert.equal(followed.captionPostTemplate, "");
+    const own = cleanFacebookGroupValues({ ...base, custom: ["multiLotLayout", "auctionCaptionTemplate"] });
+    assert.equal(own.multiLotLayout, "captions");
+    assert.equal(own.auctionCaptionTemplate, "{title}");
+    assert.equal(own.captionPostTemplate, "");
+  });
+
+  it("count a captioned post's text as a place the note is put", () => {
+    const note = "Shipping 7 PLN";
+    assert.equal(
+      standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "", captionPostTemplate: "Lots\n{terms}", standingNote: note }),
+      false
+    );
+    assert.equal(
+      standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "", captionPostTemplate: "Lots", standingNote: note }),
+      true
+    );
   });
 });

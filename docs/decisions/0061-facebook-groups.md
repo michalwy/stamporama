@@ -12,7 +12,8 @@ is amended by #1689: the standing note is placed by a `{terms}` placeholder, no 
 is amended by #1692: a post is only what its template places. §4 and §8 are amended by #1777: a
 Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*. §6 is
 amended by #1780: an offer can carry its own post template, overriding its group's. §3 is amended
-by #1800: a published offer's post text is frozen as it was posted.
+by #1800: a published offer's post text is frozen as it was posted. §2 is amended by #1841: a post of
+several lots can carry each lot's text in its photo's caption.
 
 ## Context
 
@@ -47,6 +48,33 @@ and the platform's listing templates and photo limits would be typed once per gr
 One post per auction, and one post holding several lots — an album, each photo a lot bid on in its
 own comments. Which one depends on the group and the occasion, so neither is the model and the other
 an exception.
+
+**Amended by #1841 (decided with the collector on 2026-10-12): a post of several lots can be laid
+out with each lot's text in its photo's caption.** Some groups require single series or single
+stamps offered together to go in one post of many photos, each item's price and description in its
+photo's caption rather than in the post's text. The model stays — **many offers, one lot each, posted
+together**; one offer holding many lots was considered and not chosen, since each lot sells on its
+own and an offer per lot already carries its sale, withdrawal, *Pending* and frozen text.
+
+- **The layout is a group setting** — in the Facebook defaults and per group, §6's rule — **and a
+  post can override it** until it is up.
+- **In the captioned layout each lot is exactly one photo**, its caption the lot's text, so one photo
+  is one price. A lot that already is one photo uses it; a lot of several is joined into one with the
+  offer's collage settings. A lot whose photos show fronts and backs puts both in that one photo: the
+  fronts and the backs as two halves in the same grid, so a stamp's front and back sit in matching
+  places, with a visible separator between them, **joined side by side or one above the other,
+  whichever brings the result closer to the shape the offer's collage aims at** (#1699; square when it
+  names none). A lot photographing fronts only has no backs half and no separator.
+- **Templates**: a *caption* template per listing type and a *post text* template for the captioned
+  post's shared body, all followed settings. A caption takes its type's placeholders bar `{terms}`;
+  the post text takes `{offer}` — the lots' offer numbers — and `{terms}`. An offer's own template
+  (§6, #1780) writes its caption.
+- **The kit** shows the post text with its copy button, then the photos in post order, each with its
+  caption and its own copy button; the download gives one photo per lot, named in that order (#1754).
+- **Freezing at publication** (§3, #1800) covers the post text, every caption and the layout itself.
+
+The joined photo is drawn on demand from the offer's stored images, never stored itself: it follows
+the offer's photo run without a second fingerprint to keep in step.
 
 ### 3. Posting starts as a kit to paste
 

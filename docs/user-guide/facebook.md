@@ -30,10 +30,11 @@ asked of its offers.
 
 ## Facebook defaults
 
-The first row of the list, **Facebook defaults**, holds the settings every group follows, in five
+The first row of the list, **Facebook defaults**, holds the settings every group follows, in seven
 sections. They take the width beside the list, two to a row on a wide window: **Every offer** beside
 **Shipping, payment and terms**, then **New auctions** beside **Quick buys**, so the two post
-templates sit level and can be compared at a glance, then **Message to buyer**. A group's settings are laid out the same way,
+templates sit level and can be compared at a glance, then **Posts of several lots** beside
+**Captions** ([below](#a-post-with-several-lots-in-captions)), then **Message to buyer**. A group's settings are laid out the same way,
 under its name and link.
 
 **Every offer** — what applies to auctions and quick buys alike:
@@ -47,8 +48,8 @@ under its name and link.
 
 **Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
 terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
-template without `{terms}` posts no note, and the field warns you when the note is set but neither
-template uses it.
+template without `{terms}` posts no note, and the field warns you when the note is set but no post
+template uses it — the auction and quick-buy templates, and a captioned post's text.
 
 **New auctions** — how an auction's post reads, and what a new auction starts from, each optional:
 
@@ -341,7 +342,8 @@ and quick buys**, above). They become lots 1, 2, 3… in the order you ticked th
 them share one closing time — the first auction's — from then on: changing it on one lot changes it
 on all of them. A quick buy has no closing time.
 
-Each lot's Facebook card then shows the whole post:
+Each lot's Facebook card then shows the whole post — laid out in its text as below, or in captions
+([below](#a-post-with-several-lots-in-captions)):
 
 - the lots, in order, each linking to its offer;
 - the **post text** for the whole post — each lot's text in lot order, each from its own type's
@@ -365,6 +367,45 @@ stay as they were posted. Deleting a lot's offer works the same way as taking it
 
 A lot cannot be moved to another group while it is in a post; take it out first. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.
+
+### A post with several lots in captions
+
+Some groups want single series or single stamps offered together as **one post with many photos**,
+each item's price and description in **its photo's caption** rather than in the post's text. A post
+of several lots can be laid out that way. Each lot is still its own offer — sold, withdrawn and frozen
+on its own — only the layout changes.
+
+**Posts of several lots → Layout**, in Facebook defaults or a group's own settings, chooses between
+**Every lot in the post's text** (the layout described above, and what every post starts as) and
+**Each lot in its photo's caption**. A post follows its group's choice until you change it: the
+**Layout** field under the lots on any lot's card sets it for that post alone, or back to **Same as
+group**. Once the post is up, it stays laid out as it was posted.
+
+A captioned post is written from its own templates, set beside the layout:
+
+- **Captioned post text** — the post's own text, shared by its lots: a heading, the terms, the lots'
+  numbers. It takes `{offer}`, the lots' offer numbers in lot order (`412, 413, 414` — write any `#`
+  yourself), and `{terms}`, the note on shipping, payment and terms.
+- **Captions → Auction caption** and **Quick-buy caption** — the text under each lot's photo, from the
+  template of the lot's type. They take the same placeholders as that type's post template, except
+  `{terms}`: the note goes in the post's text, once.
+
+An offer's own template (above), if it has one, writes its caption in a captioned post.
+
+**Each lot is exactly one photo**, so one photo is one price. A lot whose photos are already one image
+uses it. A lot of several is joined into one image, laid out with the offer's collage settings:
+its fronts on one half and its backs on the other, **in the same grid** — so a stamp's back sits where
+its front does — with a line between the halves. The two halves go **side by side or one above the
+other, whichever brings the image closer to the shape the offer's collage aims at** (landscape,
+portrait or square; square for a fixed grid). A lot photographed on the front only has no backs half
+and no line.
+
+The lot's card then shows the post's text with its **Copy** button, and under it each lot in order:
+its photo — click it to download that one — and its caption, each with its own **Copy**. **↓ Photos,
+one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
+album uploads in the right order. What is missing — the post's text, a type's caption template, an
+empty placeholder in a caption — is named under it, as for any post. When the post goes up, its text
+and every caption are frozen with it.
 
 ## While an auction runs
 

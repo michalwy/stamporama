@@ -3,9 +3,10 @@
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 import {
-  facebookPostPlaceholders,
+  facebookTemplatePlaceholders,
   retiredPostPlaceholders,
   unknownPostPlaceholders,
+  type FacebookTemplateRole,
 } from "@/lib/facebook-group-rules";
 import { FACEBOOK_POST_FORMATTING } from "@/lib/facebook-post-format";
 import { OFFER_LISTING_TYPE_LABEL, type OfferListingType } from "@/lib/offer-rules";
@@ -14,7 +15,14 @@ import { OFFER_LISTING_TYPE_LABEL, type OfferListingType } from "@/lib/offer-rul
 // placeholders and the formatting Facebook's editor takes (#1772) named under it, an unknown one
 // called out as typed, and a retired one flagged so it is removed. One field for every place a post
 // template is written: Settings → Facebook's defaults and groups, and an offer's own (#1780), so the
-// three never drift apart in what they say a template can hold.
+// three never drift apart in what they say a template can hold. A captioned post's templates (#1841) —
+// a lot's caption, and the post's shared text — are this field too, with their own placeholders.
+
+const ROLE_LABEL: Record<FacebookTemplateRole, string> = {
+  post: "post",
+  caption: "caption",
+  captionPost: "captioned post text",
+};
 
 function TemplateNote({ children }: { children: React.ReactNode }) {
   return (
@@ -28,6 +36,7 @@ export function FacebookPostTemplateField({
   id,
   name,
   listingType,
+  role = "post",
   value: template,
   onChange,
   style,
@@ -37,19 +46,26 @@ export function FacebookPostTemplateField({
   /** The form field it submits as, where it is part of a form. */
   name?: string;
   listingType: OfferListingType;
+  /** Which template this is (#1841): a post's lot text — the default — a lot's caption, or a
+   *  captioned post's shared text, which belongs to no type. */
+  role?: FacebookTemplateRole;
   value: string;
   onChange: (value: string) => void;
   style: React.CSSProperties;
   disabled?: boolean;
 }) {
-  const unknown = unknownPostPlaceholders(template, listingType);
-  const retired = retiredPostPlaceholders(template);
+  const unknown = unknownPostPlaceholders(template, listingType, role);
+  const retired = role === "post" ? retiredPostPlaceholders(template) : [];
   return (
     <>
       <TextArea
         id={id}
         name={name}
-        aria-label={`${OFFER_LISTING_TYPE_LABEL[listingType]} post template`}
+        aria-label={
+          role === "captionPost"
+            ? "Captioned post text template"
+            : `${OFFER_LISTING_TYPE_LABEL[listingType]} ${ROLE_LABEL[role]} template`
+        }
         value={template}
         onChange={(e) => onChange(e.target.value)}
         style={style}
@@ -58,13 +74,19 @@ export function FacebookPostTemplateField({
       />
       <TemplateNote>
         Placeholders:{" "}
-        {facebookPostPlaceholders(listingType).map((p, i) => (
+        {facebookTemplatePlaceholders(role, listingType).map((p, i) => (
           <span key={p.token}>
             {i > 0 && ", "}
             <code>{p.token}</code> {p.label.toLowerCase()}
           </span>
         ))}
-        . An amount reads <code>15 PLN</code>, or <code>15.50 PLN</code> when it is not whole.
+        .
+        {role !== "captionPost" && (
+          <>
+            {" "}
+            An amount reads <code>15 PLN</code>, or <code>15.50 PLN</code> when it is not whole.
+          </>
+        )}
       </TemplateNote>
       <TemplateNote>
         Formatting:{" "}

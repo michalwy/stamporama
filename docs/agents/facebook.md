@@ -226,6 +226,40 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), dissolves a
   post left with one lot, and runs on take-out and on `deleteOffer`.
 
+- **A post of several lots can be captioned** (#1841, decided with the collector on 2026-10-12;
+  ADR-0061 §2). `multiLotLayout` (`text` | `captions`, `FACEBOOK_MULTI_LOT_LAYOUTS`) and three
+  templates — `auctionCaptionTemplate`, `quickBuyCaptionTemplate`, `captionPostTemplate` — are
+  followed settings under #1661's rule (in `FACEBOOK_GROUP_SETTINGS`, on `FacebookDefaults` and each
+  group; the migration made every row `text`, so nothing changed). `FacebookPost.layout` is the post's
+  own choice, null following the group live; `facebookPostLayout` (`facebook-auctions.ts`) is the one
+  reading of it — always `text` for an offer posted alone — and `setFacebookPostLayout`
+  (`facebook-posts.ts`) refuses once any lot is past Ready. **Rendering** is
+  `renderFacebookCaptionedPost` (pure): the shared text from `captionPostTemplate` with `{offer}` (the
+  lots' offer numbers, `, `-joined in lot order) and `{terms}`; each caption from
+  `facebookCaptionLotTemplate` — the offer's own template (#1780) where it has one, else its type's
+  caption template — with the type's placeholders bar `{terms}` (`facebookTemplatePlaceholders(role,
+  type)`, the role `post | caption | captionPost` also driving `unknownPostPlaceholders` and the shared
+  field's list; `{catalog}` is unknown outside a post template). `facebookCaptionedPostGaps` adds
+  `missingPostText` and names the shared text's empty placeholders with `lotNo: null`. **Freezing**:
+  `FacebookFrozenLot` gained `layout` and `postText` (a snapshot without them reads as `text`), and
+  `freezeFacebookPostText` stores the caption template as `template` in a captioned post through
+  `facebookLayoutLotTemplate`; `facebookPostSource` takes the layout and shared text off the last lot's
+  snapshot, as the note. `standingNoteUnused` counts `captionPostTemplate` as a place for `{terms}`.
+  **Photos**: `arrangeFacebookLotPhoto` (`facebook-lot-photo-rules.ts`, pure) turns a lot's upload set
+  into one photo — the only image as it is; otherwise fronts and backs as two halves of one grid
+  (a back matched to its front by `pairKey`; a paired image, an attachment, and a back whose front is
+  held back stand alone), a separator line between, side by side or stacked and the half's columns
+  chosen together by the auto grid's cost (empty cells + 3 × log distance outside the band) against
+  the offer's `collageGridShape`, or square on a fixed grid, which keeps its own column count.
+  `facebook-lot-photos.ts` draws it with sharp from `readOfferUploadSet` (which now carries each
+  image's side, pair and size), on demand and never stored, within the platform's edge and size
+  limits; `GET …/facebook-posts/[postId]/lots/[offerId]/photo` serves it (refused for an offer not
+  in the post), and `buildFacebookPostPhotos` is the post's ZIP — one `lot-NN-<offer slug>.jpg` per
+  lot when captioned (the frozen layout first), `buildFacebookPostPhotoArchive` otherwise. The card
+  shows a **Layout** select under the lots (a plain line once posted) and, captioned, each lot's photo
+  and caption with its own copy button; the repost dialog lists the captions too. The integration
+  test is `tests/integration/facebook-captioned-posts.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports
@@ -346,7 +380,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   pane's header action; Delete is disabled with its reason while offers name the group. The user guide
   is `docs/user-guide/facebook.md`.
   The panes group the settings as the collector asked (#1671): *Every offer* (type, currency, mixing),
-  the note, *New auctions* (auction template and figures), *Quick buys* (its template).
+  the note, *New auctions* (auction template and figures), *Quick buys* (its template), then
+  *Posts of several lots* (layout, captioned post text) beside *Captions* (#1841).
   An offer is the offer form (group, the listing type seeded from it until touched, and an auction's
   increment, shown only on the Facebook platform, the group locked on a lot of a post), the
   **Facebook** card on the offer's screen, directly under the description like every platform's card

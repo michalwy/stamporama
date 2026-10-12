@@ -205,6 +205,10 @@ describe("Facebook groups (#1543)", () => {
       closingTime: "9:00",
       refreshQuickBuysAfterDays: 4,
       buyerMessageTemplate: " Pay {total}\nAccount 123 ",
+      multiLotLayout: "captions",
+      auctionCaptionTemplate: " {title} from {startingPrice} ",
+      quickBuyCaptionTemplate: " {title} {price} ",
+      captionPostTemplate: " Lots {offer}\n{terms} ",
     });
     const expected: FacebookPostingSettings = {
       listingType: "fixed",
@@ -219,6 +223,10 @@ describe("Facebook groups (#1543)", () => {
       closingTime: "09:00",
       refreshQuickBuysAfterDays: 4,
       buyerMessageTemplate: "Pay {total}\nAccount 123",
+      multiLotLayout: "captions",
+      auctionCaptionTemplate: "{title} from {startingPrice}",
+      quickBuyCaptionTemplate: "{title} {price}",
+      captionPostTemplate: "Lots {offer}\n{terms}",
     };
     assert.deepEqual((await listFacebookGroups(userId, collectionId)).defaults, expected);
     // A second save edits the one row.
