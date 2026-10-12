@@ -314,6 +314,17 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   photo's); an offer posted alone is asked only while it has no `url`, the ordinary rule. A posted
   post's lots cannot be taken out.
 
+- **On Facebook, publishing has one door: *Publish…*** (#1847, decided with the collector on
+  2026-10-12). *Activate…* and *Submit for approval…* opened the same `ActivateOfferDialog`, so a
+  Ready Facebook offer — its header's quick advance, its ⋮, its row in the Offers list — and a post's
+  screen show one *Publish…*, and live or waiting for approval is chosen only in the dialog, which
+  still ticks *Waiting for approval* for a `pending_posts` link (#1779). `menuTransitions` and
+  `isFacebookPublish` (`offer-rules.ts`) are the rule; a Facebook offer is one with a group. *Publish…*
+  always opens the dialog, even for an offer posted alone that already carries a link — the dialog is
+  where the choice is. On a post's screen `facebookPostMoves.submit` stays and becomes the dialog's
+  `canWait`: a post half up after a refusal can only finish going live. Other platforms keep
+  *Activate* and *Submit for approval…*.
+
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). **A post is only what
   its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,

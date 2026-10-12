@@ -5,7 +5,8 @@ import type { OfferListItem } from "@/lib/offers";
 import {
   isAuctionListing,
   isTerminalState,
-  manualTransitions,
+  isFacebookPublish,
+  menuTransitions,
   priceLabel,
   pricingReadyFor,
   quickAdvanceTarget,
@@ -75,17 +76,32 @@ const QUICK_ADVANCE_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate", and
- * approving a `pending` one "Approve" (#1778); marking a `preparing` one ready keeps the plain
- * transition label. */
-function advanceLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+/** Facebook's one door to publishing a Ready offer (#1847): the dialog it opens chooses between live
+ *  and waiting for the group's approval, so there is no separate *Submit for approval…*. */
+const FACEBOOK_PUBLISH: { label: string; icon: IconName } = { label: "Publish…", icon: "publish" };
+
+/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate" (on
+ * Facebook "Publish…", #1847), and approving a `pending` one "Approve" (#1778); marking a `preparing`
+ * one ready keeps the plain transition label. */
+function advanceLabel(
+  from: OfferState,
+  to: ManualOfferTarget,
+  onFacebook: boolean
+): { label: string; icon: IconName } {
+  if (isFacebookPublish(from, to, onFacebook)) return FACEBOOK_PUBLISH;
   if (to === "active") return from === "pending" ? { label: "Approve", icon: "activate" } : { label: "Activate", icon: "activate" };
   return TRANSITION_LABEL[to];
 }
 
-/** The ⋮ entry for moving `from` → `to`. Publishing a ready offer reads "Activate", resuming a paused
- *  one keeps "Resume", and the two ways out of Pending say what happened to the post (#1778). */
-function transitionEntryLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+/** The ⋮ entry for moving `from` → `to`. Publishing a ready offer reads "Activate" (on Facebook
+ *  "Publish…"), resuming a paused one keeps "Resume", and the two ways out of Pending say what
+ *  happened to the post (#1778). */
+function transitionEntryLabel(
+  from: OfferState,
+  to: ManualOfferTarget,
+  onFacebook: boolean
+): { label: string; icon: IconName } {
+  if (isFacebookPublish(from, to, onFacebook)) return FACEBOOK_PUBLISH;
   if (from === "ready" && to === "active") return { label: "Activate", icon: "activate" };
   if (from === "pending" && to === "active") return { label: "Approved…", icon: "activate" };
   if (from === "pending" && to === "ready") return { label: "Rejected — back to Ready", icon: "reject" };
@@ -162,10 +178,10 @@ export function OfferRow({
     // than as a button here that would only fail.
     pricingReadyFor(offer.listingType, advanceTo, offer.price, offer.startingPrice);
 
-  const stateActions: RowAction[] = manualTransitions(offer.state)
+  const stateActions: RowAction[] = menuTransitions(offer.state, offer.facebookGroupId !== null)
     .filter((s): s is ManualOfferTarget => s !== "sold")
     .map((s) => {
-      const { label, icon } = transitionEntryLabel(offer.state, s);
+      const { label, icon } = transitionEntryLabel(offer.state, s, offer.facebookGroupId !== null);
       return {
         key: s,
         label,
@@ -327,7 +343,7 @@ export function OfferRow({
           )}
           <OfferStateChip state={offer.state} />
           {canAdvance && advanceTo && (() => {
-            const { label, icon } = advanceLabel(offer.state, advanceTo);
+            const { label, icon } = advanceLabel(offer.state, advanceTo, offer.facebookGroupId !== null);
             return (
               <Tooltip content={label}>
                 <button

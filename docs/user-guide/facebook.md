@@ -312,10 +312,12 @@ The template is for the offer's type. Changing the offer from auction to quick b
 **Edit offer** form drops its own template — the form says so before you save — and the post follows
 the group's template for the new type. Moving the offer off Facebook drops it too.
 
-Once the post is up, choose **Activate** on the offer and paste the post's link as its **listing
+Once the post is up, choose **Publish…** on the offer and paste the post's link as its **listing
 URL** — on Facebook the listing link *is* the post's address. That activates the offer, the same as
 publishing on any other platform, so the offer has to be **Ready** first; the card says so until it
-is, and shows the link once the offer is up.
+is, and shows the link once the offer is up. **Publish…** is the one way to publish on Facebook —
+the button on the offer, in its **⋮** menu and on its row in **Offers** — and its dialog is where you
+say whether the post is up or waiting for approval.
 
 If the group's administrator has to approve the post first, tick **Waiting for approval** in that
 dialog and paste the link to the pending post: the offer becomes **Pending**, and the card marks its
@@ -355,8 +357,7 @@ click it to show every offer again).
 
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
-  offered only while it can be made: **Activate…** and **Submit for approval…** once every lot is
-  Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
+  offered only while it can be made: **Publish…** once every lot is Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
   the group's approval. While some lot is not Ready yet, it says which.
 - **Lots** — in lot order: the lot number, the offer's number and title (linking to the offer), its
   type, its price — an auction's highest bid once one is recorded, else its starting price; a quick
@@ -378,9 +379,10 @@ Each lot's own Facebook card no longer repeats the post: it names it — **Post 
 where the post stands — with **Open post**, and keeps what is the lot's own: its own post template and,
 while an auction is up, its bidding.
 
-The post goes up as one: **Activate** — on the post's screen, or on any lot — asks for the post's link
-once and activates **every** lot, so every lot has to be Ready first. The link becomes the listing URL
-of every lot that has none of its own. A lot can carry its own photo's link instead: enter it as that
+The post goes up as one: **Publish…** — on the post's screen, or on any lot — asks for the post's
+link once and activates **every** lot — or, with **Waiting for approval** ticked, makes every lot
+Pending — so every lot has to be Ready first. The link becomes the listing URL of every lot that has
+none of its own. A lot can carry its own photo's link instead: enter it as that
 offer's listing URL before activating, and it is kept. A post waiting for the group's approval waits
 as one too: submitting, approving, rejecting or withdrawing it — or any lot of it — does it for the
 whole post, and approving writes the final link in place of the pending one and the closing time you

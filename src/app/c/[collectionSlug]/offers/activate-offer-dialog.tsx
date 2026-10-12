@@ -81,6 +81,7 @@ export function ActivateOfferDialog({
   initialUrl,
   facebookLots,
   initialTarget = "active",
+  canWait = true,
   approving = false,
   offerId,
   isPending,
@@ -94,8 +95,11 @@ export function ActivateOfferDialog({
   initialUrl: string | null;
   /** On a Facebook auction, how many lots its post holds — 1 when it is posted alone. Null elsewhere. */
   facebookLots?: number | null;
-  /** Whether *Waiting for approval* starts ticked — the ⋮ *Submit for approval…* entry opens it so. */
+  /** Whether *Waiting for approval* starts ticked — the ⋮ *Submit for approval…* entry opens it so
+   *  (off Facebook; on Facebook the one *Publish…* starts it unticked, #1847). */
   initialTarget?: PublishTarget;
+  /** Whether going to approval is open at all — a post half up already (#1842) can only go live. */
+  canWait?: boolean;
   /** The offer is pending and this records its approval (#1778): the URL asked for is the final one. */
   approving?: boolean;
   /** Approving, the offer whose Facebook auctions may be asked for a closing time (#1779). */
@@ -108,7 +112,11 @@ export function ActivateOfferDialog({
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
   const [target, setTarget] = useState<PublishTarget>(
-    approving ? "active" : initialUrl && isFacebookPendingPostUrl(initialUrl) ? "pending" : initialTarget
+    approving || !canWait
+      ? "active"
+      : initialUrl && isFacebookPendingPostUrl(initialUrl)
+        ? "pending"
+        : initialTarget
   );
   const closing = useApprovalClosing(approving ? offerId : undefined);
   const [endsAt, setEndsAt] = useState<string | null>(null);
@@ -186,7 +194,7 @@ export function ActivateOfferDialog({
         >
           {lead}
         </p>
-        {!approving && (
+        {!approving && canWait && (
           <label style={CHECK_ROW}>
             <input
               type="checkbox"
@@ -209,7 +217,7 @@ export function ActivateOfferDialog({
           onChange={(e) => {
             const next = e.target.value;
             // A pending post's link proposes *Waiting for approval* the moment it arrives (#1779).
-            if (!approving && isFacebookPendingPostUrl(next) && !isFacebookPendingPostUrl(url)) {
+            if (!approving && canWait && isFacebookPendingPostUrl(next) && !isFacebookPendingPostUrl(url)) {
               setTarget("pending");
             }
             setUrl(next);

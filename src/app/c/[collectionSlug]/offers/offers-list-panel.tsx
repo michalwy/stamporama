@@ -16,7 +16,13 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
 import type { OfferListItem } from "@/lib/offers";
-import { type ManualOfferTarget, OFFER_STATES, OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
+import {
+  type ManualOfferTarget,
+  OFFER_STATES,
+  OFFER_STATE_LABEL,
+  isFacebookPublish,
+  isOfferState,
+} from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
@@ -525,8 +531,13 @@ export function OffersListPanel({
       return;
     }
     // Waiting for approval records a link at both ends (#1778): the pending post's on the way in, the
-    // final one on approval — so both go through the publish dialog rather than straight through.
-    if (next === "pending" || (next === "active" && offer.state === "pending")) {
+    // final one on approval — so both go through the publish dialog rather than straight through. On
+    // Facebook *Publish…* always does (#1847): the dialog is where live or waiting is chosen.
+    if (
+      next === "pending" ||
+      (next === "active" && offer.state === "pending") ||
+      isFacebookPublish(offer.state, next, offer.facebookGroupId !== null)
+    ) {
       setDialog({
         kind: "publish",
         offer,
