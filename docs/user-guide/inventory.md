@@ -1594,6 +1594,13 @@ condition you own the whole set in is **filled green and ticked** (`✓ U 5/5`),
 jump out of a long list without your reading each fraction. Conditions you hold none of get no chip
 at all: the ones on the line are the ones there is something to say about.
 
+The line opens with **Any** — how many of the set's stamps you hold **in any condition**, set apart
+from the condition chips by its bold label and a thin rule after it. It is the figure for a set you
+would sell complete in mixed conditions: one stamp in MNH and the other eleven in MH reads
+`Any 12/12 · MNH 1/12 · MH 11/12`, and a set complete in any condition is ticked green the same way.
+It counts the same copies the condition chips do, so with the list filtered to one condition it
+agrees with that condition's chip. Its hover gives the same two figures as the others.
+
 Hover a chip for the figures behind it: the checklist and condition it is talking about, then
 **Held** (the same fraction the chip shows) and **how many complete sets** you could assemble from
 those copies — the figure that says whether a duplicate is a spare or the only one you have. The two
