@@ -177,3 +177,41 @@ describe("summarizePurchaseReturn", () => {
     assert.equal(result.soldMarginPercent, null);
   });
 });
+
+// On a purchase order's own screen a copy on a still-open lot counts at its estimate (#1881).
+describe("summarizePurchaseReturn with estimates", () => {
+  const open = (id: string, estimate: number | null, sold = false) =>
+    copy({ id, lotStatus: "open", estimate, sold, proceedsResolved: sold });
+
+  it("works both returns out against the frozen and estimated costs together", () => {
+    const result = summarizePurchaseReturn(
+      [copy({ id: "a", costBasis: "10.00" }), open("b", 6, true), open("c", 4)],
+      15,
+      "PLN",
+      "spent",
+      { withEstimates: true }
+    );
+    assert.equal(result.spent.totalCostBasis, "10.00");
+    assert.deepEqual(result.spent.estimated, { count: 2, amount: "10.00" });
+    assert.equal(result.netReturn, "-5.00");
+    assert.equal(result.netReturnPercent, -25);
+    assert.deepEqual(result.soldCost.estimated, { count: 1, amount: "6.00" });
+    assert.equal(result.soldMargin, "9.00");
+    assert.equal(result.soldMarginPercent, 150);
+  });
+
+  it("leaves a pending copy with no estimate out of the cost", () => {
+    const result = summarizePurchaseReturn([open("a", null, true)], 25, "PLN", "spent", {
+      withEstimates: true,
+    });
+    assert.deepEqual(result.spent.estimated, { count: 0, amount: "0.00" });
+    assert.equal(result.netReturn, "25.00");
+    assert.equal(result.netReturnPercent, null);
+  });
+
+  it("ignores estimates unless asked, as every other reader does", () => {
+    const result = summarizePurchaseReturn([open("a", 6, true)], 25, "PLN");
+    assert.equal(result.spent.estimated, undefined);
+    assert.equal(result.netReturn, "25.00");
+  });
+});

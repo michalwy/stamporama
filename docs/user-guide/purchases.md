@@ -369,8 +369,8 @@ changed since the lot was closed.
 **catalog value / purchase cost** figures the [inventory holdings summary](inventory.md) does — the summed catalog value (in
 your base currency, using each copy's default display condition) next to what was actually paid, so
 you can compare paid-against-catalog at a glance. Both call out copies that don't fully count:
-*unpriced* copies (no catalog price for their condition) and *pending* cost (a copy whose lot is
-still open, so its cost-basis is not frozen yet). Note that **Purchase cost** is not the order
+*unpriced* copies (no catalog price for their condition) and *estimated* or *pending* cost (a copy
+whose lot is still open, so its cost-basis is not frozen yet — see below). Note that **Purchase cost** is not the order
 total: it is the part of the order's money that has been frozen onto individual copies so far. The
 order-level bar totals every copy across all lots; each lot's bar totals just that lot.
 
@@ -382,12 +382,25 @@ still carries its own currency code, so grouping never leaves you guessing which
 is stated in — the order is in its transaction currency with a base-currency approximation beside
 it, while the valuations are in your base currency outright.
 
+**While lots are still open, the cost figures use the estimated costs.** A copy on an open lot has
+no frozen cost yet, but it does have an estimate — its share of the lot's cost by catalog value, the
+figure its own page shows — and on this screen **Purchase cost**, **Net return** and **On sold**
+count it at that estimate, so you can judge a purchase before its lots close. A figure that includes
+an estimate is marked as one, as an estimated cost is everywhere else — `~`, muted and in italics —
+and says how many copies are estimated: *851 estimated · 0 costed*, or *against ~1,240.00 PLN spent
+on all 851 copies, 851 estimated*. Hover it for the explanation. When the lots close, the figures
+switch to the actual costs on their own. The same holds on each lot's bar. The [Copies](inventory.md)
+list's own bar does not do this: its purchase cost still counts such copies as pending.
+
 **A figure with nothing behind it says so instead of showing `0.00`** — see
 [the holdings summary](inventory.md#copy-value-and-holdings-total) for the rule, which is the same
-one here. On a parcel that has just arrived it is most of the bar: no lot is closed, so nothing is
-costed; no auction results are recorded, so there is no market value. Those lines read *not worked
-out yet*, which is what they mean, rather than stating that the parcel cost nothing and is worth
-nothing.
+one here. On a parcel that has just arrived, no auction results are recorded, so there is no market
+value, and that line reads *not worked out yet*, which is what it means, rather than stating that
+the parcel is worth nothing. A cost figure reads *not worked out yet* only when **no** copy behind it
+has either a cost or an estimate — a copy on an open lot with no catalog value, say, or one whose
+purchase has no exchange rate — and the note beside it says how many: *0 costed · 12 pending, no
+estimate*. Where only some copies lack one, the figure is stated over the rest and the note counts
+the ones left out.
 
 Both bars are **collapsed to their total line by default**, with a **More** button for the rest —
 the same shape the [Offers](offers.md) summary has. The order's bar and the lot bars **remember

@@ -6,6 +6,7 @@ import { getOrFetchRate } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
+import { loadCostEstimates } from "./cost-estimates";
 import { summarizePurchaseReturn, type PurchaseReturn, type ReturnBasis } from "./purchase-return";
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { roundAmount } from "./decimal-input";
@@ -762,22 +763,31 @@ async function returnOverCopies(
       lot: { select: { status: true, price: true } },
     },
   });
-  const realized = await realizedProceedsForItems(
-    collectionId,
-    rows.map((r) => r.id)
-  );
+  const copies = rows.map((r) => ({
+    id: r.id,
+    costBasis: r.costBasis == null ? null : r.costBasis.toFixed(2),
+    lotId: r.lotId,
+    ...lotCostInputs(r.lot),
+  }));
+  // A copy on a still-open lot counts at its estimate (#1881), the figure its own page shows.
+  const [realized, estimates] = await Promise.all([
+    realizedProceedsForItems(
+      collectionId,
+      rows.map((r) => r.id)
+    ),
+    loadCostEstimates(collectionId, copies),
+  ]);
   return summarizePurchaseReturn(
-    rows.map((r) => ({
-      id: r.id,
-      costBasis: r.costBasis == null ? null : r.costBasis.toFixed(2),
-      lotId: r.lotId,
-      ...lotCostInputs(r.lot),
-      sold: realized.resolved.has(r.id) || realized.unresolved.has(r.id),
-      proceedsResolved: realized.resolved.has(r.id),
+    copies.map((c) => ({
+      ...c,
+      estimate: estimates.get(c.id)?.amount ?? null,
+      sold: realized.resolved.has(c.id) || realized.unresolved.has(c.id),
+      proceedsResolved: realized.resolved.has(c.id),
     })),
     realized.total,
     baseCurrency,
-    basis
+    basis,
+    { withEstimates: true }
   );
 }
 

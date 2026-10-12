@@ -36,9 +36,10 @@ import {
   type HoldingsCostInput,
 } from "./cost-basis";
 import { intakeDocumentName } from "./purchase-kind";
-import { loadCostEstimates } from "./cost-estimates";
+import { estimateWholeLots, loadCostEstimates } from "./cost-estimates";
 import {
   estimateWeightBase,
+  type CostEstimate,
   type CostEstimateGap,
   type EstimateCopy,
 } from "./purchase-allocation";
@@ -2205,6 +2206,28 @@ function estimateCopyOf(item: ItemListItem): EstimateCopy {
   return { deliveryState: item.deliveryState, weight: item.value.baseAmount };
 }
 
+/** The pending copies' estimates over copies **already valued** — every copy of each lot behind
+ * them (#1881). The intake summaries' own read: they have just valued the whole order or lot, so
+ * only the lots' money is read on top. */
+function estimatesOfWholeLots(
+  collectionId: string,
+  items: ItemListItem[],
+  baseCurrency: string
+): Promise<Map<string, CostEstimate>> {
+  return estimateWholeLots(
+    collectionId,
+    items.map((i) => ({
+      id: i.id,
+      costBasis: i.costBasis,
+      lotId: i.lotId,
+      lotStatus: i.lotStatus,
+      lotValued: i.lotValued,
+      ...estimateCopyOf(i),
+    })),
+    baseCurrency
+  );
+}
+
 /** The pending copies' estimated cost (#1696), on the readers that show a copy's cost basis outside
  * its purchase order — the copy's page, the copies list, and every picker drawn from it. The intake
  * reads leave it out: the purchase order works the same figure out on the screen from its own lot
@@ -3579,7 +3602,11 @@ function itemCandidateIds(item: { candidates: readonly { stampId: string }[] }):
 function summarizeHoldings(
   items: ItemListItem[],
   baseCurrency: string,
-  marketMedians: Map<string, number>
+  marketMedians: Map<string, number>,
+  /** Every pending copy's estimate (#1881): the purchase order's summaries count a copy on an open
+   *  lot at its estimated cost, so its cost figures are not left *not worked out* until the lots
+   *  close. The Copies list's own bar is `makeHoldingsSummarizer`, which passes none. */
+  estimates: Map<string, CostEstimate>
 ): HoldingsSummary {
   // Same held/gone partition as `makeHoldingsSummarizer` (#396) — a purchase's own screens value
   // what arrived, and report what did not as a write-off rather than as a hole in the total.
@@ -3591,7 +3618,9 @@ function summarizeHoldings(
     lotStatus: i.lotStatus,
     lotValued: i.lotValued,
     openingBalance: i.openingBalance,
+    estimate: estimates.get(i.id)?.amount ?? null,
   });
+  const withEstimates = { withEstimates: true };
   return {
     ...aggregateHoldings(
       held.map((i) => i.value),
@@ -3599,9 +3628,9 @@ function summarizeHoldings(
     ),
     // Purchase cost and opening value apart (#1324); the write-off below is the whole loss, since an
     // opening value counts towards profit and loss.
-    ...splitCostBasis(held.map(costOf), baseCurrency),
+    ...splitCostBasis(held.map(costOf), baseCurrency, withEstimates),
     writeOff: {
-      cost: aggregateCostBasis(gone.map(costOf), baseCurrency),
+      cost: aggregateCostBasis(gone.map(costOf), baseCurrency, withEstimates),
       count: gone.length,
     },
     market: aggregateMarketHoldings(
@@ -3692,7 +3721,8 @@ export async function getLotIntakeSummary(
       await marketMediansFor(
         collectionId,
         all.map((i) => ({ ...i, candidateStampIds: itemCandidateIds(i) }))
-      )
+      ),
+      await estimatesOfWholeLots(collectionId, all, baseCurrency)
     ),
     catalogBasis: lotCatalogBasis(all.map(catalogBasisCopyOf)),
   };
@@ -3796,7 +3826,8 @@ export async function getPurchaseIntakeSummary(
       await marketMediansFor(
         collectionId,
         all.map((i) => ({ ...i, candidateStampIds: itemCandidateIds(i) }))
-      )
+      ),
+      await estimatesOfWholeLots(collectionId, all, baseCurrency)
     ),
     lotCatalogBasis: lotCatalogBases,
   };

@@ -7,6 +7,7 @@ import {
   aggregatePurchaseCostsByKey,
   lotIsOpeningBalance,
   splitCostBasis,
+  costWithEstimates,
   type PurchaseCostInput,
 } from "../../src/lib/cost-basis";
 
@@ -322,5 +323,56 @@ describe("aggregatePurchaseCostsByKey", () => {
       result.map((c) => c.average).sort(),
       ["10.00", "25.00", "4.00", "50.00"]
     );
+  });
+});
+
+// A purchase order's own summary counts a pending copy at its open lot's estimate (#1881): beside
+// the frozen sum, never inside it, and only where the reader asked.
+describe("aggregateCostBasis with estimates", () => {
+  const pending = (estimate: number | null) => ({
+    costBasis: null,
+    lotId: "open",
+    lotStatus: "open",
+    lotValued: true,
+    estimate,
+  });
+  const frozen = { costBasis: "10.00", lotId: "closed", lotStatus: "closed", lotValued: true };
+
+  it("counts pending copies with an estimate apart from the frozen sum", () => {
+    const total = aggregateCostBasis([frozen, pending(2.5), pending(0.75), pending(null)], "PLN", {
+      withEstimates: true,
+    });
+    assert.equal(total.totalCostBasis, "10.00");
+    assert.equal(total.knownCount, 1);
+    assert.equal(total.pendingCount, 3);
+    assert.deepEqual(total.estimated, { count: 2, amount: "3.25" });
+    assert.deepEqual(costWithEstimates(total), { amount: "13.25", behind: 3, estimatedCount: 2 });
+  });
+
+  it("states a zero estimated count when estimates were read and none was possible", () => {
+    const total = aggregateCostBasis([pending(null)], "PLN", { withEstimates: true });
+    assert.deepEqual(total.estimated, { count: 0, amount: "0.00" });
+    assert.deepEqual(costWithEstimates(total), { amount: "0.00", behind: 0, estimatedCount: 0 });
+  });
+
+  it("ignores estimates, and carries no estimated part, unless asked", () => {
+    const total = aggregateCostBasis([frozen, pending(2.5)], "PLN");
+    assert.equal(total.estimated, undefined);
+    assert.deepEqual(costWithEstimates(total), { amount: "10.00", behind: 1, estimatedCount: 0 });
+  });
+
+  it("never counts an estimate on a copy that is not pending", () => {
+    const total = aggregateCostBasis([{ ...frozen, estimate: 99 }], "PLN", { withEstimates: true });
+    assert.deepEqual(total.estimated, { count: 0, amount: "0.00" });
+    assert.equal(costWithEstimates(total).amount, "10.00");
+  });
+
+  it("sums to the cent without float drift", () => {
+    const total = aggregateCostBasis(
+      [{ ...frozen, costBasis: "0.10" }, pending(0.2)],
+      "PLN",
+      { withEstimates: true }
+    );
+    assert.equal(costWithEstimates(total).amount, "0.30");
   });
 });

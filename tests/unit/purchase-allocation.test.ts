@@ -8,6 +8,7 @@ import {
   closeLot,
   canExpressInBase,
   estimateCopyCost,
+  estimateLotCopies,
   estimateWeightBase,
   lotPoolBase,
   purchaseCostsOf,
@@ -441,5 +442,43 @@ describe("lotPoolBase — the pool an open lot is estimated from", () => {
     assert.equal(canExpressInBase(4, "EUR", "PLN"), true);
     assert.equal(canExpressInBase(null, "PLN", "PLN"), true);
     assert.equal(canExpressInBase(null, "EUR", "PLN"), false);
+  });
+});
+
+// One open lot's estimates in one call (#1881), shared by the copy-page reader and the purchase
+// order's summaries so the two cannot state different figures.
+describe("estimateLotCopies", () => {
+  const purchase = {
+    currency: "PLN",
+    shippingCost: 0,
+    fxRateToBase: null,
+    lots: [{ id: "L", price: 100 }],
+    expenses: [],
+  };
+
+  it("splits the lot's pool by catalogue weight over the whole lot", () => {
+    const estimates = estimateLotCopies(
+      { id: "L", price: 100, purchase },
+      [
+        { id: "a", deliveryState: "delivered", weight: 30 },
+        { id: "b", deliveryState: "delivered", weight: 10 },
+        { id: "c", deliveryState: "not_delivered", weight: 60 },
+        { id: "d", deliveryState: "delivered", weight: null },
+      ],
+      "PLN"
+    );
+    assert.deepEqual(estimates.get("a"), { amount: 75, gap: null });
+    assert.deepEqual(estimates.get("b"), { amount: 25, gap: null });
+    assert.deepEqual(estimates.get("c"), { amount: null, gap: "not_delivered" });
+    assert.deepEqual(estimates.get("d"), { amount: null, gap: "no_catalog_value" });
+  });
+
+  it("has no estimate without a rate into the base currency", () => {
+    const estimates = estimateLotCopies(
+      { id: "L", price: 100, purchase: { ...purchase, currency: "EUR" } },
+      [{ id: "a", deliveryState: "delivered", weight: 30 }],
+      "PLN"
+    );
+    assert.deepEqual(estimates.get("a"), { amount: null, gap: "no_rate" });
   });
 });
