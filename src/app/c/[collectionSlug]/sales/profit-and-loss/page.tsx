@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { ProfitAndLossPanel } from "./profit-and-loss-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Profit and loss" };
 
@@ -23,14 +24,7 @@ export default async function ProfitAndLossPage({ params }: ProfitAndLossPagePro
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -42,6 +36,6 @@ export default async function ProfitAndLossPage({ params }: ProfitAndLossPagePro
         Profit and loss
       </h2>
       <ProfitAndLossPanel collectionId={collection.id} collectionSlug={collectionSlug} />
-    </div>
+    </Screen>
   );
 }

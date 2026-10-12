@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getLocations } from "@/lib/locations";
 import { LocationsPanel } from "./locations-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Locations" };
 
@@ -24,7 +25,7 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
   const locations = await getLocations(session.user.id, collection.id);
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen>
       <h2
         style={{
           margin: "0 0 0.5rem",
@@ -53,6 +54,6 @@ export default async function LocationsPage({ params }: LocationsPageProps) {
         collectionSlug={collectionSlug}
         initialLocations={locations}
       />
-    </div>
+    </Screen>
   );
 }

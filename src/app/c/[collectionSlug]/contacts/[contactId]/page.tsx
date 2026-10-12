@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getContactListItem } from "@/lib/contacts";
 import { ContactDetailPanel } from "./contact-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface ContactPageProps {
   params: Promise<{ collectionSlug: string; contactId: string }>;
@@ -34,12 +35,12 @@ export default async function ContactPage({ params }: ContactPageProps) {
   if (!contact || contact.collectionId !== collection.id) notFound();
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <ContactDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         contactId={contact.id}
       />
-    </div>
+    </Screen>
   );
 }

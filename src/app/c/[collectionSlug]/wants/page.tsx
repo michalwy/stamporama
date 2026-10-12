@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { WantsListPanel } from "./wants-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Want list" };
 
@@ -24,14 +25,7 @@ export default async function WantsPage({ params }: WantsPageProps) {
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -43,6 +37,6 @@ export default async function WantsPage({ params }: WantsPageProps) {
         Want list
       </h2>
       <WantsListPanel collectionId={collection.id} areas={areas} />
-    </div>
+    </Screen>
   );
 }

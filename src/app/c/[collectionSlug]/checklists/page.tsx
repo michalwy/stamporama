@@ -9,6 +9,7 @@ import { getAlbums } from "@/lib/albums";
 import { getSpanningChecklistOverview } from "@/lib/spanning-checklists";
 import { ChecklistsPanel } from "./checklists-panel";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Checklists" };
 
@@ -45,7 +46,7 @@ export default async function ChecklistsPage({ params }: ChecklistsPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "64rem" }}>
+    <Screen>
       <h2
         style={{
           margin: "0 0 0.5rem",
@@ -81,6 +82,6 @@ export default async function ChecklistsPage({ params }: ChecklistsPageProps) {
         areas={areas}
         albums={albums}
       />
-    </div>
+    </Screen>
   );
 }

@@ -50,6 +50,7 @@ import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
 import { SettingsScreen } from "./settings-screen";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Settings" };
 
@@ -160,7 +161,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
   return (
     // No width cap here (#1469; ADR-0059): the screen takes the window, and how wide a page's
     // fields may run is its body shape's answer, not the screen's.
-    <div style={{ padding: "2rem" }}>
+    <Screen>
       <Suspense fallback={null}>
         <SettingsScreen
           collectionId={collection.id}
@@ -231,6 +232,6 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           appReleaseDate={getAppReleaseDate()}
         />
       </Suspense>
-    </div>
+    </Screen>
   );
 }

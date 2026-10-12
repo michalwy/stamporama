@@ -9,6 +9,7 @@ import { getStampConditions } from "@/lib/conditions";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { listContacts } from "@/lib/contacts";
 import { LotBuilderPanel } from "./lot-builder-panel";
+import { Screen } from "@/app/screen";
 
 // The bulk-lot builder (#760) — a nav entry of its own under Offers, beside the bulk listing
 // workspace, on #502's reasoning: views of one subject, the list leading. The static `lot-builder`
@@ -65,14 +66,7 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
   // the card grow and carried its columns away (#815); that screen needs a definite `height`. Swap
   // this one to `height` and the card is clipped at the window, the proposal with it.
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <div
         style={{
           display: "flex",
@@ -102,6 +96,6 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
         platforms={platforms}
         baseCurrency={collection.baseCurrency}
       />
-    </div>
+    </Screen>
   );
 }

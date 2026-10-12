@@ -18,6 +18,7 @@ import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { Icon } from "@/app/icons";
 import { TradePackingSheet } from "./trade-packing-sheet";
 import { SheetFooter, SheetMeta, SHEET_META_ROW, formatSheetDate } from "../sheet-parts";
+import { Screen } from "@/app/screen";
 
 interface PageProps {
   params: Promise<{ collectionSlug: string; tradeId: string }>;
@@ -76,7 +77,7 @@ export default async function TradePackingListPage({ params }: PageProps) {
   );
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen cap="sheet" className="print-sheet">
       {/* Screen-only controls */}
       <div
         className="no-print"
@@ -176,6 +177,6 @@ export default async function TradePackingListPage({ params }: PageProps) {
           list.totalCopies === 1 ? "copy" : "copies"
         } to pack`}
       />
-    </div>
+    </Screen>
   );
 }

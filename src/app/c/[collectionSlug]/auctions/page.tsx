@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { AuctionLotsPanel } from "./auction-lots-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Auction lots" };
 
@@ -28,14 +29,7 @@ export default async function AuctionsPage({ params }: AuctionsPageProps) {
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -51,6 +45,6 @@ export default async function AuctionsPage({ params }: AuctionsPageProps) {
         collectionSlug={collectionSlug}
         areas={areas}
       />
-    </div>
+    </Screen>
   );
 }

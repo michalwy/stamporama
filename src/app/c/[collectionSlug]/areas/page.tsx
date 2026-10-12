@@ -7,6 +7,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { AreasPanel } from "./areas-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Areas" };
 
@@ -44,7 +45,7 @@ export default async function AreasPage({ params }: AreasPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "80rem" }}>
+    <Screen cap="areas">
       <h2
         style={{
           margin: "0 0 0.5rem",
@@ -82,6 +83,6 @@ export default async function AreasPage({ params }: AreasPageProps) {
         titleLanguages={titleLanguages}
         defaultLanguage={collection.defaultLanguage}
       />
-    </div>
+    </Screen>
   );
 }

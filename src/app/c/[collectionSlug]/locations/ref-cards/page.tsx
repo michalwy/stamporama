@@ -14,6 +14,7 @@ import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
 import { RefCard, REF_CARD_CUT_RULE } from "@/app/c/[collectionSlug]/shared/ref-card";
 import { RefCardsControls } from "./ref-cards-controls";
+import { Screen } from "@/app/screen";
 
 export const metadata: Metadata = { title: "Blank ref cards" };
 
@@ -81,7 +82,7 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
   const card: RefCardGeometry = chosen ?? DEFAULT_REF_CARD_GEOMETRY;
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen cap="sheet" className="print-sheet">
       <div
         className="no-print"
         style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}
@@ -199,6 +200,6 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
           <GeneratedAt iso={new Date().toISOString()} />
         </span>
       </div>
-    </div>
+    </Screen>
   );
 }

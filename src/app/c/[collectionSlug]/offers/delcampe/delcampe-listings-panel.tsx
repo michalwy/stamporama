@@ -173,7 +173,7 @@ export function DelcampeListingsPanel({
   const now = new Date();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "62rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <section style={{ ...CARD, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: "18rem" }}>

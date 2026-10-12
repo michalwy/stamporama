@@ -8,6 +8,7 @@ import { getAuctionSaleIssueIds } from "@/lib/auction-lines";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { AuctionSaleDetailPanel } from "./auction-sale-detail-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Auction sale" };
 
@@ -43,7 +44,7 @@ export default async function AuctionSaleDetailPage({ params }: AuctionSaleDetai
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <AuctionSaleDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
@@ -51,6 +52,6 @@ export default async function AuctionSaleDetailPage({ params }: AuctionSaleDetai
         areas={areas}
         issueHeaderById={issueHeaderById}
       />
-    </div>
+    </Screen>
   );
 }

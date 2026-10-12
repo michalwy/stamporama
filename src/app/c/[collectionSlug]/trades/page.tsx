@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCatalogTree } from "@/lib/catalog";
 import { TradesListPanel } from "./trades-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Trades" };
 
@@ -32,14 +33,7 @@ export default async function TradesPage({ params }: TradesPageProps) {
   }));
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -56,6 +50,6 @@ export default async function TradesPage({ params }: TradesPageProps) {
         baseCurrency={collection.baseCurrency}
         catalogVendors={catalogVendors}
       />
-    </div>
+    </Screen>
   );
 }

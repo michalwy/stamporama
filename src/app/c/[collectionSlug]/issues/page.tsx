@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { IssuesListPanel } from "./issues-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Issues" };
 
@@ -24,14 +25,7 @@ export default async function IssuesPage({ params }: IssuesPageProps) {
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -48,6 +42,6 @@ export default async function IssuesPage({ params }: IssuesPageProps) {
         areas={areas}
         baseCurrency={collection.baseCurrency}
       />
-    </div>
+    </Screen>
   );
 }

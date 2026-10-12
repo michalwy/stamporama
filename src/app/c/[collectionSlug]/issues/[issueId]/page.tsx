@@ -11,6 +11,7 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { IssueDetailPanel } from "./issue-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface IssueDetailPageProps {
   params: Promise<{ collectionSlug: string; issueId: string }>;
@@ -57,7 +58,7 @@ export default async function IssueDetailPage({ params }: IssueDetailPageProps) 
   ]);
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <RecordRecentVisit
         collectionId={collection.id}
         kind="issue"
@@ -75,6 +76,6 @@ export default async function IssueDetailPage({ params }: IssueDetailPageProps) 
         completeness={completeness}
         areas={areas}
       />
-    </div>
+    </Screen>
   );
 }

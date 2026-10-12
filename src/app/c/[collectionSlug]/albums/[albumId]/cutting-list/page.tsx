@@ -16,6 +16,7 @@ import type {
 } from "@/lib/album-cutting-list";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
+import { Screen } from "@/app/screen";
 
 // The hawid cutting list (#770) — the sheet that is read at the desk, with scissors.
 //
@@ -111,7 +112,7 @@ export default async function AlbumCuttingListPage({ params }: CuttingListPagePr
   const { toCut, onPaper } = list;
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen cap="sheet" className="print-sheet">
       {/* Screen-only controls */}
       <div
         className="no-print"
@@ -308,7 +309,7 @@ export default async function AlbumCuttingListPage({ params }: CuttingListPagePr
           <GeneratedAt iso={new Date().toISOString()} />
         </span>
       </div>
-    </div>
+    </Screen>
   );
 }
 

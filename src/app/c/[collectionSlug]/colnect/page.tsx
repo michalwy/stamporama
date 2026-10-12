@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { ColnectReportPanel } from "./colnect-report-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Colnect" };
 
@@ -24,14 +25,7 @@ export default async function ColnectPage({ params }: ColnectPageProps) {
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="window">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -47,6 +41,6 @@ export default async function ColnectPage({ params }: ColnectPageProps) {
         collectionSlug={collectionSlug}
         areas={areas}
       />
-    </div>
+    </Screen>
   );
 }

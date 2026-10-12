@@ -9,6 +9,7 @@ import { getLocations } from "@/lib/locations";
 import { getCatalogTree } from "@/lib/catalog";
 import { getTrade } from "@/lib/trades";
 import { TradeDetailPanel } from "./trade-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface TradeDetailPageProps {
   params: Promise<{ collectionSlug: string; tradeId: string }>;
@@ -46,7 +47,7 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
   ]);
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <TradeDetailPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
@@ -60,6 +61,6 @@ export default async function TradeDetailPage({ params }: TradeDetailPageProps) 
           abbreviation: v.abbreviation,
         }))}
       />
-    </div>
+    </Screen>
   );
 }

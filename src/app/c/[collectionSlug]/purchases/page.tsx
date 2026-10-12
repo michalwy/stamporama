@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { PurchasesListPanel } from "./purchases-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Intake documents" };
 
@@ -25,14 +26,7 @@ export default async function PurchasesPage({ params }: PurchasesPageProps) {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -49,6 +43,6 @@ export default async function PurchasesPage({ params }: PurchasesPageProps) {
         baseCurrency={collection.baseCurrency}
         today={today}
       />
-    </div>
+    </Screen>
   );
 }

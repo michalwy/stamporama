@@ -181,6 +181,10 @@ Until a page's own issue lays it out, it keeps today's content at today's width 
 (`UNSHAPED_PAGE_WIDTH`, 56rem), so no field is stretched in the meantime. The constant goes when the
 last of those issues lands.
 
+*Amended by #1851 (2026-10-12):* the entries still held to that width are listed as **exceptions**
+(`UNSHAPED_ENTRIES`), not the reshaped ones as an allowlist, so an entry added later is wide by
+default — a screen uses the window's width unless it states a reason not to.
+
 ### 7. Addresses
 
 The `?tab=` form stays, and the chosen tab inside an entry is `&part=`. Every key of the old strip

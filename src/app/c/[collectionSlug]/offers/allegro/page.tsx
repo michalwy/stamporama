@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { AllegroWorklistPanel } from "./allegro-worklist-panel";
+import { Screen } from "@/app/screen";
 
 // The Allegro sold-listing worklist (#467) — a sub-route of Offers, exactly as the bulk listing
 // workspace is (#322): recording what has sold is a step in the offer lifecycle rather than a
@@ -30,14 +31,7 @@ export default async function AllegroWorklistPage({ params }: AllegroWorklistPag
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <div
         style={{
           display: "flex",
@@ -63,6 +57,6 @@ export default async function AllegroWorklistPage({ params }: AllegroWorklistPag
         baseCurrency={collection.baseCurrency}
         today={today}
       />
-    </div>
+    </Screen>
   );
 }

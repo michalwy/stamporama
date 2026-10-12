@@ -14,6 +14,22 @@ Use the theme toggle to switch between Light, Dark, and Auto. On collection page
 
 Your choice is saved in the browser and persists across sessions. It does not require an account setting — each browser remembers its own preference independently.
 
+## Screen width
+
+Every screen uses the **whole width of the window**: on a wide monitor, lists get more columns and
+side-by-side panes get more room, rather than everything sitting in a narrow strip down the middle.
+No single field or paragraph is stretched across the window, though — the extra width goes to
+columns, grids and panes.
+
+A few screens are narrower on purpose:
+
+- **Areas** stays bounded, so each area's catalog chips stay close to the name they describe.
+- **Printable sheets** — packing lists, a trade's enclosure, an album's cutting list, reference
+  cards and an offer's specification — are drawn about a page wide, so you see on screen where their
+  lines will wrap on paper. Printing uses the full page.
+- In **Settings**, *Collage templates*, *Auction reminder* and *Email* are still a single column of
+  fields, so they keep a narrower width until they are laid out as cards.
+
 ## Typing into a field
 
 **The spaces around what you type are dropped.** Leave a field — Tab, Enter, or a click somewhere
