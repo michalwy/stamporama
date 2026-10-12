@@ -256,14 +256,51 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   held back stand alone), a separator line between, side by side or stacked and the half's columns
   chosen together by the auto grid's cost (empty cells + 3 × log distance outside the band) against
   the offer's `collageGridShape`, or square on a fixed grid, which keeps its own column count.
-  `facebook-lot-photos.ts` draws it with sharp from `readOfferUploadSet` (which now carries each
-  image's side, pair and size), on demand and never stored, within the platform's edge and size
-  limits; `GET …/facebook-posts/[postId]/lots/[offerId]/photo` serves it (refused for an offer not
-  in the post), and `buildFacebookPostPhotos` is the post's ZIP — one `lot-NN-<offer slug>.jpg` per
-  lot when captioned (the frozen layout first), `buildFacebookPostPhotoArchive` otherwise. The kit
+  `facebook-lot-photos.ts` draws it with sharp from the offer's upload set (which now carries each
+  image's side, pair and size), within the platform's edge and size limits — **once, in the
+  background, and stored since #1861** (below); `buildFacebookPostPhotos` is the post's ZIP — one
+  `lot-NN-<offer slug>.jpg` per lot when captioned (the frozen layout first),
+  `buildFacebookPostPhotoArchive` otherwise. The kit
   (on the post's screen since #1842) shows a **Layout** select (a plain line once posted) and, captioned, each lot's photo
   and caption with its own copy button (in the lot's row since #1863); the repost dialog lists the captions too. The integration
   test is `tests/integration/facebook-captioned-posts.test.ts`.
+
+- **A captioned lot's photo is drawn once and stored** (#1861, decided with the collector on
+  2026-10-12; ADR-0061 §2 as amended), no longer drawn on every view and download. `FacebookLotPhoto`
+  (one per offer) is the queue row and the record of the stored image, as `OfferPhotoGeneration` is for
+  the offer's own: `status` `queued | running | ready | failed`, `photoId` → a `Photo` of the offer
+  with `kind = generated` and **no plan entry** (`SetNull`, so the closed-offer sweep taking it leaves
+  the row), and `fingerprint` — sha256 of `lotPhotoFingerprintPayload` (pure, `facebook-lot-photo-rules.ts`):
+  the upload set's photo ids in order with each one's side, pair and size, the offer's collage mode,
+  shape, columns, gap and background, the platform's edge and size limits, and
+  `FACEBOOK_LOT_PHOTO_DRAWING` (raise it when the drawing changes). The upload set is read **without
+  bytes** through `readOfferUploadPlan` (split out of `readOfferUploadSet`), so whether a photo is
+  current is answered without reading an image. **`syncFacebookPostLotPhotos(postId)` is the one
+  place that decides**, through `decideLotPhoto` (pure): a lot in no captioned post is dropped (row,
+  photo row, then bytes); a run queued or under way is *generating*; **a lot with a frozen snapshot
+  (#1800) keeps a ready photo whatever has changed** — a repost keeps it too, the repost dialog showing
+  no photos; an offer with nothing going up is *none* with the reason, its photo dropped; a ready photo
+  of the current fingerprint is served; a failure on the current fingerprint stays *failed*, so a broken
+  image is not retried in a loop; anything else is queued and shown as *generating*, never served
+  stale. Every read goes through it (`readFacebookPostLotPhotos` behind `GET …/facebook-posts/[postId]/lot-photos`,
+  which kicks the worker; `buildFacebookPostPhotos`), and so do the writes that change what a photo is
+  made of: `createFacebookPost`, `setFacebookPostLayout`, the worker after an offer run succeeds
+  (`refreshFacebookLotPhotosForOffer`), and Settings → Facebook's saves (`refreshFacebookLotPhotos` /
+  `refreshFacebookGroupLotPhotos`, in the actions — `facebook-groups.ts` cannot import it,
+  `facebook-auctions.ts` importing that). `pruneFacebookLotPhotos(collectionId)` drops the photos of
+  offers in no post, after `removeFacebookLot`, `deleteOffer` and an `updateOffer` moving a lot off
+  Facebook — a dissolved post's last lot included. **The worker** (`offer-photo-worker.ts`) drains this
+  queue behind the offer queue, one job at a time, offers first; `runFacebookLotPhoto` reads the plan,
+  fingerprints it, reads the bytes as `work`, draws, writes the new photo before the old one goes and
+  records the fingerprint it drew — or, failing, the one it tried. **The offer's own run never swaps
+  the lot photo out** (`facebookLotPhoto: { is: null }` on its swap), since a published post keeps it.
+  **The ZIP waits** (the collector, 2026-10-12): `lotPhotosNotReady` names the lots still generating or
+  failed and `FacebookLotPhotosNotReadyError` is a 409; the kit greys **↓ Photos** with that sentence
+  as its tooltip. The kit reads the states through `useFacebookPostLotPhotos` (`offerKeys.facebookLotPhotos`,
+  polled every 2 s while any lot is generating) and `PostLots` hands each lot's row a `LotPhoto` — a
+  ready photo from the ordinary photo route,
+  downloading it as `fileName`; the per-lot drawing route is gone. The integration test is
+  `tests/integration/facebook-captioned-posts.test.ts`.
 
 - **A multi-lot post has a number and a screen of its own** (#1842, decided with the collector on
   2026-10-12; ADR-0061 §2). `FacebookPost.postNo` comes from `Collection.nextFacebookPostNo` through

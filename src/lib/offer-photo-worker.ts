@@ -5,6 +5,13 @@ import {
   requeueStalledOfferPhotoGenerations,
   runOfferPhotoGeneration,
 } from "./offer-photo-generation";
+import {
+  claimNextFacebookLotPhoto,
+  failFacebookLotPhoto,
+  refreshFacebookLotPhotosForOffer,
+  requeueStalledFacebookLotPhotos,
+  runFacebookLotPhoto,
+} from "./facebook-lot-photos";
 
 /**
  * In-process worker draining the offer photo generation queue (#311).
@@ -22,6 +29,11 @@ import {
  *
  * `kick` exists so pressing Generate feels immediate rather than waiting out the poll interval. It is
  * best-effort and unawaited — the poll is what guarantees the job runs.
+ *
+ * It drains a second queue behind the first (#1861): the captioned Facebook lot photos, each drawn
+ * from its offer's images. The offer queue always goes first, since a lot photo drawn from images
+ * about to be replaced would only be drawn again — and an offer run that succeeds brings its post's
+ * lot photos in line, which queues them.
  */
 
 const POLL_INTERVAL_MS = 5_000;
@@ -44,8 +56,8 @@ function state(): WorkerState {
   return globalForWorker.offerPhotoWorker;
 }
 
-/** Claim and run queued jobs until the queue is empty. Never throws: a failing job is recorded on
- * its row and the next one is picked up. */
+/** Claim and run queued jobs until both queues are empty, the offers' first. Never throws: a failing
+ * job is recorded on its row and the next one is picked up. */
 async function drain(): Promise<void> {
   const s = state();
   if (s.draining) return;
@@ -53,12 +65,28 @@ async function drain(): Promise<void> {
   try {
     for (;;) {
       const offerId = await claimNextOfferPhotoGeneration();
-      if (!offerId) return;
+      if (offerId) {
+        try {
+          await runOfferPhotoGeneration(offerId);
+        } catch (err) {
+          console.error(`[offer-photos] generation failed for offer ${offerId}`, err);
+          await failOfferPhotoGeneration(offerId, err);
+          continue;
+        }
+        try {
+          await refreshFacebookLotPhotosForOffer(offerId);
+        } catch (err) {
+          console.error(`[offer-photos] queueing the lot photo of offer ${offerId} failed`, err);
+        }
+        continue;
+      }
+      const lotOfferId = await claimNextFacebookLotPhoto();
+      if (!lotOfferId) return;
       try {
-        await runOfferPhotoGeneration(offerId);
+        await runFacebookLotPhoto(lotOfferId);
       } catch (err) {
-        console.error(`[offer-photos] generation failed for offer ${offerId}`, err);
-        await failOfferPhotoGeneration(offerId, err);
+        console.error(`[offer-photos] the Facebook lot photo of offer ${lotOfferId} failed`, err);
+        await failFacebookLotPhoto(lotOfferId, err);
       }
     }
   } catch (err) {
@@ -84,6 +112,10 @@ export async function startOfferPhotoWorker(): Promise<void> {
     const requeued = await requeueStalledOfferPhotoGenerations();
     if (requeued > 0) {
       console.log(`[offer-photos] requeued ${requeued} generation(s) left running by a restart`);
+    }
+    const lots = await requeueStalledFacebookLotPhotos();
+    if (lots > 0) {
+      console.log(`[offer-photos] requeued ${lots} Facebook lot photo(s) left running by a restart`);
     }
   } catch (err) {
     console.error("[offer-photos] requeue of stalled generations failed", err);

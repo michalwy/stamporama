@@ -421,9 +421,6 @@ export interface FacebookOfferKit {
   /** Where one click downloads the photos, in lot order: the offer's own archive when it is posted
    *  alone, the post's when it is a lot — one photo per lot in a captioned post (#1841). */
   photoZipPath: string;
-  /** Where a captioned post's lot photo is drawn from (#1841): append the lot's offer id and
-   *  `/photo`. Null for an offer posted alone. */
-  lotPhotoBase: string | null;
 }
 
 /** How a post is laid out (#1841): its own choice, else its group's; an offer posted alone is no
@@ -552,7 +549,6 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     photoZipPath: offer.facebookPost
       ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
-    lotPhotoBase: offer.facebookPost ? `${base}/facebook-posts/${offer.facebookPost.id}/lots/` : null,
   };
 }
 

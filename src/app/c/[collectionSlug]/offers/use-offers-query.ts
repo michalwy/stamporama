@@ -20,6 +20,7 @@ import type {
 } from "@/lib/offers";
 import type { OfferListContext } from "./list-context";
 import type { FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
@@ -81,6 +82,10 @@ export const offerKeys = {
    *  refreshes it. */
   facebookPost: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-post", postId] as const,
+  /** A captioned post's stored lot photos (#1861) — under the offers key, so regenerating a lot's
+   *  images refreshes them. */
+  facebookLotPhotos: (collectionId: string, postId: string) =>
+    ["offers", collectionId, "facebook-lot-photos", postId] as const,
   /** The list of multi-lot Facebook posts (#1850) — under the offers key for the same reason. */
   facebookPosts: (collectionId: string, filters: FacebookPostFilters) =>
     ["offers", collectionId, "facebook-posts", filters] as const,
@@ -149,6 +154,22 @@ export function useFacebookPostScreen(collectionId: string, postId: string) {
       return res.json();
     },
     refetchOnWindowFocus: true,
+  });
+}
+
+/** A captioned post's lot photos (#1861): each lot's stored photo, or where it stands — polled while
+ *  any is still being generated, so each appears as soon as it is ready. Asked only while `enabled`. */
+export function useFacebookPostLotPhotos(collectionId: string, postId: string | null, enabled: boolean) {
+  return useQuery<FacebookPostLotPhoto[]>({
+    queryKey: offerKeys.facebookLotPhotos(collectionId, postId ?? ""),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/lot-photos`);
+      if (!res.ok) throw new Error("Failed to load the lots' photos");
+      return (await res.json()).lots;
+    },
+    enabled: enabled && postId !== null,
+    refetchInterval: (query) =>
+      query.state.data?.some((lot) => lot.state.status === "generating") ? 2000 : false,
   });
 }
 

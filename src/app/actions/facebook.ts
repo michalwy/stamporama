@@ -19,6 +19,8 @@ import {
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import { createFacebookPost, removeFacebookLot, setFacebookPostLayout } from "@/lib/facebook-posts";
+import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
+import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
 import { patchOffer } from "@/lib/offers";
 import { assertCollectionOwner } from "@/lib/platform-category";
@@ -63,6 +65,9 @@ export async function updateFacebookDefaultsAction(
   const session = await getSession();
   try {
     await updateFacebookDefaults(session.user.id, collectionId, input);
+    // A post following them may have turned captioned, or away from it (#1861).
+    await refreshFacebookLotPhotos(collectionId);
+    kickOfferPhotoWorker();
     return { status: "success" };
   } catch (err) {
     return failure(err, "Facebook's settings could not be saved.");
@@ -89,6 +94,9 @@ export async function updateFacebookGroupAction(
   const session = await getSession();
   try {
     await updateFacebookGroup(session.user.id, groupId, input);
+    // A post following the group may have turned captioned, or away from it (#1861).
+    await refreshFacebookGroupLotPhotos(groupId);
+    kickOfferPhotoWorker();
     return { status: "success" };
   } catch (err) {
     return failure(err, "The group could not be saved.");
@@ -145,6 +153,7 @@ export async function createFacebookPostAction(
   const session = await getSession();
   try {
     const { postId, postNo } = await createFacebookPost(session.user.id, collectionId, offerIds);
+    kickOfferPhotoWorker(); // a captioned post's lot photos were queued (#1861)
     return { status: "success", postId, postNo };
   } catch (err) {
     return failure(err, "Failed to put the offers into one post.");
@@ -170,6 +179,7 @@ export async function setFacebookPostLayoutAction(
   const session = await getSession();
   try {
     await setFacebookPostLayout(session.user.id, postId, layout);
+    kickOfferPhotoWorker(); // captioned now, its lot photos were queued (#1861)
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to change how the post is laid out.");

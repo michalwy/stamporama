@@ -1423,6 +1423,40 @@ export async function readOfferUploadSet(
   ownerId: string,
   offerId: string
 ): Promise<{ slug: string; images: OfferUploadImage[] } | { reason: string }> {
+  const plan = await readOfferUploadPlan(ownerId, offerId);
+  if ("reason" in plan) return plan;
+
+  const photos = await prisma.photo.findMany({
+    where: { id: { in: plan.images.map((image) => image.photoId) } },
+    select: { id: true, storageBackend: true, storageKey: true, mime: true },
+  });
+  const byId = new Map(photos.map((photo) => [photo.id, photo]));
+
+  const images = await Promise.all(
+    plan.images.map(async (image): Promise<OfferUploadImage> => ({
+      ...image,
+      // `delivery` (#591): this is the ZIP the collector downloads, not something the server is
+      // about to work on.
+      bytes: await readFullBytes(byId.get(image.photoId)!, "delivery"),
+    }))
+  );
+
+  return { slug: plan.slug, images };
+}
+
+/** One image of the upload run without its bytes: what an image is, and where it sits. */
+export type OfferUploadPlanImage = Omit<OfferUploadImage, "bytes">;
+
+/**
+ * The offer's upload set as {@link readOfferUploadSet} reads it, **without the bytes** — which images
+ * go up, in plan order, under which names. Owner-checked. A captioned Facebook post's lot photo
+ * (#1861) is fingerprinted from it, so whether the stored photo is still current is answered without
+ * reading an image.
+ */
+export async function readOfferUploadPlan(
+  ownerId: string,
+  offerId: string
+): Promise<{ slug: string; images: OfferUploadPlanImage[] } | { reason: string }> {
   const state = await getOfferPhotoPlanState(ownerId, offerId);
   const offer = await prisma.offer.findUniqueOrThrow({
     where: { id: offerId },
@@ -1441,31 +1475,18 @@ export async function readOfferUploadSet(
     };
   }
 
-  const photos = await prisma.photo.findMany({
-    where: { id: { in: uploaded.map((image) => image.photoId) } },
-    select: { id: true, storageBackend: true, storageKey: true, mime: true },
-  });
-  const byId = new Map(photos.map((photo) => [photo.id, photo]));
-
-  const images = await Promise.all(
-    uploaded.map(async (image): Promise<OfferUploadImage> => {
-      const photo = byId.get(image.photoId)!;
-      return {
-        photoId: image.photoId,
-        fileName: image.fileName,
-        mime: photo.mime,
-        // `delivery` (#591): this is the ZIP the collector downloads, not something the server is
-        // about to work on.
-        bytes: await readFullBytes(photo, "delivery"),
-        side: image.side,
-        pairKey: image.pairKey,
-        width: image.width,
-        height: image.height,
-      };
-    })
-  );
-
-  return { slug: offerFileSlug(offer.name, offer.offerNo), images };
+  return {
+    slug: offerFileSlug(offer.name, offer.offerNo),
+    images: uploaded.map((image) => ({
+      photoId: image.photoId,
+      fileName: image.fileName,
+      mime: image.mime,
+      side: image.side,
+      pairKey: image.pairKey,
+      width: image.width,
+      height: image.height,
+    })),
+  };
 }
 
 /**
@@ -1496,7 +1517,7 @@ export async function readOfferUploadImages(
  * generated at creation from the platform's template, #209/#210); an untitled offer is its number
  * alone.
  */
-function offerFileSlug(name: string | null | undefined, offerNo: number): string {
+export function offerFileSlug(name: string | null | undefined, offerNo: number): string {
   const slug = (name ?? "")
     // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
     .normalize("NFKD")
@@ -1611,7 +1632,7 @@ export async function requeueStalledOfferPhotoGenerations(only?: { offerId: stri
  * server is about to repeat on the next regeneration, and to fill the ZIP a browser downloads,
  * which is delivery. One cached copy is worth having; the other would be a photo nobody will ask
  * the server about again taking a slot from the sources of the offer being tuned. */
-async function readFullBytes(
+export async function readFullBytes(
   photo: {
     storageBackend: string;
     storageKey: string;
@@ -1632,7 +1653,7 @@ async function readFullBytes(
 }
 
 /** Best-effort deletion of both variants under a prefix; byte cleanup never fails a caller. */
-async function deleteVariants(backend: string, storageKey: string, mime: string): Promise<void> {
+export async function deleteVariants(backend: string, storageKey: string, mime: string): Promise<void> {
   const storage = getStorage(backend);
   await Promise.all(
     (["full", "thumb"] as PhotoVariant[]).map((v) =>
@@ -2059,9 +2080,11 @@ export async function runOfferPhotoGeneration(offerId: string): Promise<void> {
   // Swap: the previous generated photos go, the new ones arrive, in one transaction. Deleting a
   // `Photo` cascades to its plan entry, so the entries need no separate delete. Only `generated`
   // rows are swapped: an attachment's uploaded original (#313) is a source, not an output, and is
-  // rendered from again on every run.
+  // rendered from again on every run. Nor is the offer's captioned Facebook lot photo (#1861): it is
+  // drawn from these images by a run of its own, which their new fingerprint queues, and a published
+  // post keeps the one it went up with.
   const previous = await prisma.photo.findMany({
-    where: { offerId, kind: "generated" },
+    where: { offerId, kind: "generated", facebookLotPhoto: { is: null } },
     select: { id: true, storageBackend: true, storageKey: true, mime: true },
   });
   await prisma.$transaction(async (tx) => {
