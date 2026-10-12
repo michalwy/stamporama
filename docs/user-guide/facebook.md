@@ -443,6 +443,17 @@ whole post, and approving writes the final link in place of the pending one and 
 settle on into every auction of the post. Once the post is up, each lot is its own result again —
 withdrawing one lot leaves the others.
 
+**Adding lots to a post.** Until a post is up — while it is being prepared or Ready — more offers can
+join it, as its next lots in the order you ticked or picked them; the auctions among them take the
+post's closing time. On the **Offers** screen, tick them and choose **Add to post…** in the selection
+bar: it lists the posts of their group not yet up, newest first, by number and title. On the post's
+screen, **Add lots…** beside the *Lots* heading lists the offers that could join and adds the ones you
+pick; each row says which lot it will become. An offer joins on the same conditions as for **Post
+together** — a Facebook offer in the post's group, not yet posted, in no other post, and of the
+post's listing type unless the group's posts may mix them. One that does not qualify is named with
+the reason and the others are added; on the **Offers** screen it stays ticked. A post waiting for
+approval or up in the group takes no new lots.
+
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
 move up, and a post left with one lot becomes an ordinary single post — its number is not used again.
 Once the post is up, its lots stay as they were posted. Deleting a lot's offer works the same way as

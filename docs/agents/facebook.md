@@ -392,6 +392,25 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   last lot's snapshot — so a rename after posting leaves the posted text as it was. The integration
   test is the *its title* suite in `tests/integration/facebook-post-screen.test.ts`.
 
+- **Offers can join a post that exists** (#1870, decided with the collector on 2026-10-12; ADR-0061 §2
+  as amended), only while it is not up — `facebookPostMoves().addLots`, the same `!posted` as
+  `takeOut`. `addFacebookLots` (`facebook-posts.ts`) refuses a post with a lot past Ready whole, then
+  asks each offer `facebookLotAddRefusal` (pure, `facebook-post-rules.ts`: *Post together*'s conditions
+  against the post — its group, in no post, not yet up, one of the post's `lotTypes` unless
+  `mixedListingTypes`), phrased to follow the offer's number. **Partial by design**: the qualifying
+  offers become lots `max + 1…` in the order given, the rest come back in `refused` and as one
+  `describeRefusedLots` sentence; when none qualifies nothing is written and that sentence is the
+  error. The auctions then share the first closing time in lot order, `createFacebookPost`'s rule, so
+  a post with none takes an added auction's. `syncFacebookPostLotPhotos` queues a captioned post's new
+  lots. **Two doors**: the offers list's *Add to post…* (`AddToPostDialog`) lists posts through
+  `listFacebookPostsPaginated`'s `notUp` filter (URL `notUp=1`) for the ticked offers' groups — composed
+  with the stage filter as separate `AND` clauses, since both are queries over the lots — and puts the
+  refused into the bulk-skip strip, leaving them ticked; the post's screen's *Add lots…*
+  (`AddLotsDialog`) picks from `listFacebookLotCandidates` (`GET …/facebook-posts/[postId]/candidates`,
+  `offerKeys.facebookLotCandidates`, read as kit lots through the now-exported `readKitLots`) and names
+  the refused under the *Lots* heading. The integration test is
+  `tests/integration/facebook-post-add-lots.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

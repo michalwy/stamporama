@@ -21,6 +21,7 @@ import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
 import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
 import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
+import { AddLotsDialog } from "./add-lots-dialog";
 
 // A multi-lot Facebook post's own screen (#1842): the one place every offer in the post is seen with
 // its state, and the post is managed as one. Until it existed the post was seen from any lot's
@@ -39,6 +40,8 @@ import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 //   listing link, its sale once sold, and, captioned (#1841), its caption with its *Copy*. Each lot's
 //   own actions stay the offer's (*Sell*, withdrawing one lot of a post that is up) and are reached
 //   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up.
+// - **Add lots…** (#1870), beside the lots' heading while the post is not up: offers picked from those
+//   that could join become its next lots, and any the server turns away is named under the heading.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -99,6 +102,7 @@ type Dialog =
   | { kind: "withdrawPost" }
   | { kind: "withdrawLot"; lot: FacebookKitLot }
   | { kind: "takeOut"; lot: FacebookKitLot }
+  | { kind: "addLots" }
   | { kind: "sell"; lot: FacebookKitLot };
 
 export function FacebookPostPanel({
@@ -121,6 +125,8 @@ export function FacebookPostPanel({
   const { toast } = useToast();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
+  // The offers the last *Add lots…* turned away, by number (#1870) — kept until the next add.
+  const [notAdded, setNotAdded] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
@@ -217,6 +223,31 @@ export function FacebookPostPanel({
         : `Offer #${lot.offerNo} taken out of post #${postNo}`,
       remaining ? () => router.push(`/c/${collectionSlug}/offers/${remaining.offerId}`) : undefined
     );
+  }
+
+  // The picked offers join as the post's next lots (#1870); the ones that cannot are named under the
+  // lots' heading, the rest added — or, when none can, the dialog keeps the reason.
+  function addLots(offerIds: string[]) {
+    setError(undefined);
+    setNotAdded(null);
+    startTransition(async () => {
+      const { addFacebookLotsAction } = await import("@/app/actions/facebook");
+      const result = await addFacebookLotsAction(postId, offerIds);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      setNotAdded(result.notAdded);
+      const added = result.added;
+      toast({
+        message:
+          added.length === 1
+            ? `Offer #${added[0].offerNo} is now lot ${added[0].lotNo}`
+            : `${added.length} offers are now lots ${added[0].lotNo}–${added[added.length - 1].lotNo}`,
+      });
+    });
   }
 
   function lotActions(lot: FacebookKitLot): RowAction[] {
@@ -366,7 +397,34 @@ export function FacebookPostPanel({
           onChanged={() => invalidateAll(collectionId)}
           renderLots={(lotKit) => (
             <>
-              <h3 style={{ ...CARD_TITLE, margin: "1.25rem 0 0" }}>Lots</h3>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                  margin: "1.25rem 0 0",
+                }}
+              >
+                <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
+                {moves.addLots && (
+                  <DialogSecondaryButton
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(undefined);
+                      setDialog({ kind: "addLots" });
+                    }}
+                  >
+                    Add lots…
+                  </DialogSecondaryButton>
+                )}
+              </div>
+              {notAdded && (
+                <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>
+                  {notAdded}
+                </p>
+              )}
               <ol style={LOT_LIST}>
                 {lots.map((lot) => {
                   const { photos, caption } = lotKit(lot);
@@ -460,6 +518,19 @@ export function FacebookPostPanel({
           error={error}
           onClose={close}
           onConfirm={() => takeOut(dialog.lot)}
+        />
+      )}
+
+      {dialog.kind === "addLots" && (
+        <AddLotsDialog
+          collectionId={collectionId}
+          postId={postId}
+          postNo={postNo}
+          nextLotNo={Math.max(0, ...lots.map((l) => l.lotNo ?? 0)) + 1}
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSubmit={addLots}
         />
       )}
 

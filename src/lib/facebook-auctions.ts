@@ -461,8 +461,9 @@ const KIT_LOT_SELECT = {
   },
 } satisfies Prisma.OfferSelect;
 
-/** The lots of one collection as their post is written from them, in lot order. */
-async function readKitLots(collectionId: string, where: Prisma.OfferWhereInput): Promise<FacebookKitLot[]> {
+/** The lots of one collection as their post is written from them, in lot order — and, by the post's
+ *  screen, the offers that could join it as further lots (#1870), read the same way. */
+export async function readKitLots(collectionId: string, where: Prisma.OfferWhereInput): Promise<FacebookKitLot[]> {
   const rows = await prisma.offer.findMany({
     where: { ...where, collectionId },
     orderBy: [{ facebookLotNo: "asc" }, { offerNo: "asc" }],

@@ -126,6 +126,21 @@ post was which.
   none leaves it empty and its kit names the gap (#1692). Unlike the number it is content: frozen with
   the post's text when it goes up (§3, #1800), so a rename afterwards leaves the posted text as it was.
 
+**Amended by #1870 (decided with the collector on 2026-10-12): offers can be added to a post that
+exists.** Offers joined a post only when it was made, so adding one meant taking every lot out —
+dissolving the post and retiring its number — and making it again.
+
+- **Only while the post is not yet up** — being prepared or Ready. A post pending or live keeps the
+  lots it went up with, as it keeps them against taking one out.
+- **From the offers list** (*Add to post…*, listing the posts of the ticked offers' groups not yet up,
+  newest first, by number and title) **and from the post's screen** (*Add lots…*, picking from the
+  offers that could join).
+- **Each offer is asked what *Post together* asks** — a Facebook offer in the post's group, in no post,
+  not yet up, of the post's listing type unless its group mixes them. One that fails is turned away by
+  number with its reason, and the rest are added.
+- **They become the next lots**, in the order ticked or picked; the auctions among them take the post's
+  shared closing time.
+
 ### 3. Posting starts as a kit to paste
 
 The app prepares the post's text from the group's template and the photos to download; the collector

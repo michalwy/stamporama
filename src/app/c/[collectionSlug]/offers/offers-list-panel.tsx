@@ -43,6 +43,7 @@ import { SellOfferFlowDialog } from "./sell-offer-flow-dialog";
 import { OfferRow } from "./offer-row";
 import { ActivateOfferDialog, type PublishTarget } from "./activate-offer-dialog";
 import { PostTogetherDialog } from "./post-together-dialog";
+import { AddToPostDialog } from "./add-to-post-dialog";
 import { QuickOfferFlow } from "./quick-offer-flow";
 import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
@@ -69,6 +70,8 @@ type DialogState =
   | { kind: "bulkDelete" }
   /** Several ticked Facebook offers becoming one post, which asks for its title (#1862). */
   | { kind: "postTogether" }
+  /** Ticked Facebook offers joining a post not yet up as its next lots (#1870). */
+  | { kind: "addToPost" }
   | { kind: "quickOffer" };
 
 /** What a bulk run refused, named against the row it belongs to. Kept as a list rather than a
@@ -495,6 +498,45 @@ export function OffersListPanel({
       setSelection((prev) => keptAfterBulkRun(prev, batch.map((o) => o.id), []));
       toast({
         message: `${batch.length} offers are now post #${result.postNo}, as lots 1–${batch.length}`,
+        href: `/c/${collectionSlug}/offers/posts/${result.postNo}`,
+        linkLabel: "Open post",
+      });
+    });
+  }
+
+  /** Add the ticked Facebook offers **in view** to a post not yet up, as its next lots in the order they
+   * were ticked (#1870). An offer the post cannot take is turned away by number in the skipped strip and
+   * stays ticked; the rest are added. When none can join, nothing is written and the dialog stays open
+   * with the reason. */
+  function addToPost(postId: string) {
+    const batch = selectedInView;
+    setActionError(undefined);
+    startTransition(async () => {
+      const { addFacebookLotsAction } = await import("@/app/actions/facebook");
+      const result = await addFacebookLotsAction(
+        postId,
+        batch.map((o) => o.id)
+      );
+      if (result.status === "error") {
+        setActionError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      setBulkSkips(result.refused.map((r) => ({ offerNo: r.offerNo, message: r.reason })));
+      setSelection((prev) =>
+        keptAfterBulkRun(
+          prev,
+          batch.map((o) => o.id),
+          result.refused.map((r) => r.offerId)
+        )
+      );
+      const lots = result.added.map((a) => a.lotNo);
+      const n = lots.length;
+      toast({
+        message: `${n === 1 ? "1 offer is" : `${n} offers are`} now post #${result.postNo}'s ${
+          n === 1 ? `lot ${lots[0]}` : `lots ${lots[0]}–${lots[n - 1]}`
+        }`,
         href: `/c/${collectionSlug}/offers/posts/${result.postNo}`,
         linkLabel: "Open post",
       });
@@ -968,6 +1010,24 @@ export function OffersListPanel({
                             </button>
                           </Tooltip>
                         )}
+                      {/* …or join a post already made, while it is not yet up (#1870): offered on the
+                          same condition, from one offer up. */}
+                      {selectedInView.every((o) => o.facebookGroupId !== null) && (
+                        <Tooltip content="Add these offers to a Facebook post not yet up, as its next lots in the order you ticked them.">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionError(undefined);
+                              setBulkSkips([]);
+                              setDialog({ kind: "addToPost" });
+                            }}
+                            disabled={isPending}
+                            style={BULK_BTN}
+                          >
+                            Add to post…
+                          </button>
+                        </Tooltip>
+                      )}
                       <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
                         <button
                           type="button"
@@ -1231,6 +1291,18 @@ export function OffersListPanel({
           error={actionError}
           onCancel={closeDialog}
           onSubmit={postTogether}
+        />
+      )}
+
+      {dialog.kind === "addToPost" && (
+        <AddToPostDialog
+          collectionId={collectionId}
+          groupIds={[...new Set(selectedInView.map((o) => o.facebookGroupId!))]}
+          count={selectedInView.length}
+          isPending={isPending}
+          error={actionError}
+          onCancel={closeDialog}
+          onSubmit={addToPost}
         />
       )}
 
