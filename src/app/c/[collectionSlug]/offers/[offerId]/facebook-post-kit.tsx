@@ -20,7 +20,8 @@ import { RenderedHtml } from "@/app/c/[collectionSlug]/shared/rendered-descripti
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { formControl } from "@/app/control-style";
-import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
+import { Icon } from "@/app/icons";
+import { PhotoLightbox, THUMB_OBJECT_FIT, type ViewablePhoto } from "@/app/photo-viewer";
 import { useFacebookPostLotPhotos, useOfferPhotoPlans } from "../use-offers-query";
 import { lotPhotosNotReady } from "@/lib/facebook-lot-photo-rules";
 import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
@@ -34,7 +35,9 @@ import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlu
 //
 // On the post's screen the kit shows every photo the post puts up, in post order, large enough to
 // recognise the stamps (#1848): captioned, each lot's one photo with its caption and its own *Copy*;
-// as text, every lot's upload set. One click on a photo downloads it, so posting needs no lot opened.
+// as text, every lot's upload set. A click on a photo opens it enlarged, stepping through the post's
+// photos in lot order, as a photo does everywhere else; one photo downloads by a discreet button on it
+// (#1865), and ↓ Photos stays the way to take them all. Posting needs no lot opened.
 // Those are drawn in the post's one list of lots (#1863), each lot's row carrying its photos and
 // caption beside its state and actions; the post-wide part — layout, text, ZIP — stays above it.
 // A captioned lot's photo is stored once drawn (#1861): one still being drawn says so, and the ZIP
@@ -94,6 +97,20 @@ const POST_PHOTO: React.CSSProperties = {
   border: "1px solid var(--color-border)",
   borderRadius: "0.375rem",
   background: "var(--color-bg-subtle)",
+};
+
+// The one-photo download (#1865): small, in the photo's corner, shown while the photo is hovered or
+// the button has focus (`.post-photo` in globals.css) — ↓ Photos is the main download.
+const PHOTO_DOWNLOAD: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "1.75rem",
+  height: "1.75rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-bg-elevated)",
+  color: "var(--color-text-secondary)",
 };
 
 const SELECT: React.CSSProperties = {
@@ -393,16 +410,59 @@ function PostLots({
     lots.map((l) => l.offerId),
     !captioned
   );
+  const [viewing, setViewing] = useState<number | null>(null);
+
+  // Every photo the post puts up, in lot order (#1865): what the lightbox steps through, each named by
+  // its lot. A lot whose photos are still loading — or, captioned, still being drawn (#1861) — joins the
+  // run once they are in.
+  const postPhotos = useMemo(() => {
+    const photos: PostPhotoEntry[] = [];
+    const photoBase = `/api/collections/${collectionId}/photos/`;
+    lots.forEach((lot, index) => {
+      const lotNo = lot.lotNo ?? index + 1;
+      if (captioned) {
+        const stored = lotPhotos?.find((l) => l.offerId === lot.offerId);
+        if (stored?.state.status !== "ready") return;
+        const src = `${photoBase}${stored.state.photoId}/full`;
+        photos.push({
+          key: lot.offerId,
+          src,
+          label: `Lot ${stored.lotNo}`,
+          name: `lot ${stored.lotNo}'s photo`,
+          href: `${src}?download=${encodeURIComponent(stored.fileName)}`,
+          fileName: stored.fileName,
+        });
+        return;
+      }
+      const images = plans[index]?.data ? facebookLotUploadPhotos(plans[index].data.images) : [];
+      images.forEach((image, i) => {
+        const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
+        const of = images.length > 1 ? ` ${i + 1}` : "";
+        photos.push({
+          key: `${lot.offerId}:${image.photoId}`,
+          src: `${photoBase}${image.photoId}/full`,
+          label: images.length > 1 ? `Lot ${lotNo} · photo ${i + 1} of ${images.length}` : `Lot ${lotNo}`,
+          name: `lot ${lotNo}'s photo${of}`,
+          href: `${photoBase}${image.photoId}/full?download=${encodeURIComponent(fileName)}`,
+          fileName,
+        });
+      });
+    });
+    return photos;
+  }, [lots, captioned, lotPhotos, plans, collectionId]);
+
+  function photo(key: string) {
+    const index = postPhotos.findIndex((p) => p.key === key);
+    if (index < 0) return null;
+    return <PostPhoto photo={postPhotos[index]} onOpen={() => setViewing(index)} />;
+  }
 
   function lotKit(lot: FacebookKitLot): FacebookLotKit {
     const index = lots.findIndex((l) => l.offerId === lot.offerId);
-    const lotNo = lot.lotNo ?? index + 1;
     if (captioned) {
       const caption = captions.find((c) => c.offerId === lot.offerId);
       return {
-        photos: (
-          <LotPhoto collectionId={collectionId} lot={lotPhotos?.find((l) => l.offerId === lot.offerId)} />
-        ),
+        photos: <LotPhoto lot={lotPhotos?.find((l) => l.offerId === lot.offerId)} photo={photo} />,
         caption: caption ? (
           <div style={{ minWidth: 0 }}>
             <div
@@ -430,41 +490,73 @@ function PostLots({
       };
     }
     const plan = plans[index];
-    return { photos: <TextLayoutPhotos collectionId={collectionId} plan={plan} lotNo={lotNo} />, caption: null };
+    return {
+      photos: <TextLayoutPhotos offerId={lot.offerId} plan={plan} photo={photo} />,
+      caption: null,
+    };
   }
 
-  return renderLots(lotKit);
+  return (
+    <>
+      {renderLots(lotKit)}
+      {viewing !== null && (
+        <PhotoLightbox photos={postPhotos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
+      )}
+    </>
+  );
 }
 
-/** One of the post's photos: drawn large, and downloaded by a click (#1848). */
-function PhotoLink({ href, src, name, fileName }: { href: string; src: string; name: string; fileName?: string }) {
+/** One photo the post puts up: what the lightbox shows, and how the photo alone is downloaded. */
+type PostPhotoEntry = ViewablePhoto & {
+  /** What a screen reader calls it on the row: *lot 3's photo 2*. */
+  name: string;
+  href: string;
+  /** The name it downloads under — the one the post's ZIP gives it — where the route does not name it. */
+  fileName?: string;
+};
+
+/**
+ * One of the post's photos, drawn large (#1848). A click opens it enlarged (#1865); the button in its
+ * corner downloads this one photo, under the name the post's ZIP gives it.
+ */
+function PostPhoto({ photo, onOpen }: { photo: PostPhotoEntry; onOpen: () => void }) {
   return (
-    <Tooltip content={fileName ? `Download as ${fileName}` : `Download ${name}`} align="start">
-      <a href={href} download={fileName ?? true} aria-label={`Download ${name}`} style={{ display: "block" }}>
+    <div className="post-photo" style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Enlarge ${photo.name}`}
+        style={{ display: "block", width: "100%", padding: 0, border: 0, background: "none", cursor: "zoom-in" }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element -- served by our own photo routes */}
-        <img src={src} alt={name} loading="lazy" style={POST_PHOTO} />
-      </a>
-    </Tooltip>
+        <img src={photo.src} alt={photo.name} loading="lazy" style={POST_PHOTO} />
+      </button>
+      <span className="post-photo-download" style={{ position: "absolute", top: "0.375rem", right: "0.375rem" }}>
+        <Tooltip content="Download this photo">
+          <a href={photo.href} download={photo.fileName ?? true} aria-label={`Download ${photo.name}`} style={PHOTO_DOWNLOAD}>
+            <Icon name="download" size="sm" />
+          </a>
+        </Tooltip>
+      </span>
+    </div>
   );
 }
 
 /**
- * A captioned lot's one photo (#1861): the stored one once it is ready, downloaded by a click under the
- * name the post's ZIP gives it; until then, a placeholder saying where it stands.
+ * A captioned lot's one photo (#1861): the stored one once it is ready — opening enlarged, and
+ * downloaded from its corner under the name the post's ZIP gives it (#1865); until then, a placeholder
+ * saying where it stands.
  */
-function LotPhoto({ collectionId, lot }: { collectionId: string; lot: FacebookPostLotPhoto | undefined }) {
+function LotPhoto({
+  lot,
+  photo,
+}: {
+  lot: FacebookPostLotPhoto | undefined;
+  /** Draws one of the post's photos by its key, opening the lightbox on it. */
+  photo: (key: string) => React.ReactNode;
+}) {
   const state = lot?.state;
-  if (lot && state?.status === "ready") {
-    const base = `/api/collections/${collectionId}/photos/${state.photoId}/full`;
-    return (
-      <PhotoLink
-        href={`${base}?download=${encodeURIComponent(lot.fileName)}`}
-        src={base}
-        name={`lot ${lot.lotNo}'s photo`}
-        fileName={lot.fileName}
-      />
-    );
-  }
+  if (lot && state?.status === "ready") return photo(lot.offerId);
   const message = !state
     ? "Loading the photo…"
     : state.status === "generating"
@@ -498,13 +590,14 @@ function LotPhoto({ collectionId, lot }: { collectionId: string; lot: FacebookPo
  * nothing to put up says so in its row rather than showing nothing.
  */
 function TextLayoutPhotos({
-  collectionId,
+  offerId,
   plan,
-  lotNo,
+  photo,
 }: {
-  collectionId: string;
+  offerId: string;
   plan: ReturnType<typeof useOfferPhotoPlans>[number];
-  lotNo: number;
+  /** Draws one of the post's photos by its key, opening the lightbox on it. */
+  photo: (key: string) => React.ReactNode;
 }) {
   if (!plan.data) {
     return plan.isError ? (
@@ -517,27 +610,18 @@ function TextLayoutPhotos({
   if (photos.length === 0) {
     return <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>No photos to put up.</p>;
   }
-  const photoBase = `/api/collections/${collectionId}/photos/`;
   return (
     <ol style={LOT_PHOTOS}>
-      {photos.map((image, i) => {
-        const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
-        return (
-          <li key={image.photoId} style={{ width: PHOTO_SIZE }}>
-            <PhotoLink
-              href={`${photoBase}${image.photoId}/full?download=${encodeURIComponent(fileName)}`}
-              src={`${photoBase}${image.photoId}/full`}
-              name={`lot ${lotNo}'s photo${photos.length > 1 ? ` ${i + 1}` : ""}`}
-              fileName={fileName}
-            />
-            {photos.length > 1 && (
-              <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-                {i + 1} of {photos.length}
-              </p>
-            )}
-          </li>
-        );
-      })}
+      {photos.map((image, i) => (
+        <li key={image.photoId} style={{ width: PHOTO_SIZE }}>
+          {photo(`${offerId}:${image.photoId}`)}
+          {photos.length > 1 && (
+            <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
+              {i + 1} of {photos.length}
+            </p>
+          )}
+        </li>
+      ))}
     </ol>
   );
 }

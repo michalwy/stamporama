@@ -349,10 +349,20 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   layout reads each lot's photo plan client-side through `useOfferPhotoPlans` (`useQueries` under each
   offer's own `offerKeys.photoPlan`, shared with the lot's Photos card) and keeps what
   `facebookLotUploadPhotos` (pure, `facebook-post-rules.ts`: publish and not over the limit —
-  `readOfferUploadSet`'s filter) keeps; a click downloads a photo as `facebookLotPhotoFileName` names
+  `readOfferUploadSet`'s filter) keeps; one photo downloads as `facebookLotPhotoFileName` names
   it, which `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot
   with nothing to put up says so in its row. `FacebookOfferKit.collectionId` is what the photos are
   read through. An offer posted alone keeps its kit as it was: text and ZIP only.
+
+- **A click on a post's photo opens it enlarged; one photo downloads from a discreet button** (#1865,
+  decided with the collector on 2026-10-12). #1848 made the click a download, but the collector takes
+  the whole post through *↓ Photos* and clicks a photo to look at it, as everywhere else in the app.
+  `PostLots` builds the post's photos in lot order (`PostPhotoEntry`: captioned, each lot's stored photo once
+  #1861's worker has drawn it — `LotPhoto` keeps the placeholder until then; as text, each lot's upload
+  set once its plan has loaded), each labelled with its lot, and opens the shared
+  `PhotoLightbox` on the one clicked, stepping through them all. `PostPhoto` draws the photo as a
+  button and, in its corner, the one-photo download (`Icon` `download`, hint *Download this photo*),
+  hidden until the photo is hovered or the button has focus — the `.post-photo` rule in `globals.css`.
 
 - **A post's screen lists its lots once** (#1863, decided with the collector on 2026-10-12): #1842's
   *Lots* table and #1848's per-lot photos and captions were the same lots twice. The kit keeps the

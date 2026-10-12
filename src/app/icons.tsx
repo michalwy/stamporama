@@ -63,6 +63,7 @@ import {
   Crosshair,
   Dices,
   Diamond,
+  Download,
   Ellipsis,
   EllipsisVertical,
   ExternalLink,
@@ -243,6 +244,8 @@ const GLYPHS = {
    * sits beside *Add stamp*, and two identical plus signs name neither (#125). */
   addCopies: CopyPlus,
   print: Printer,
+  /** Saves one file to the collector's disk — a single photo beside the ZIP that takes them all (#1865). */
+  download: Download,
   move: ArrowLeftRight,
   merge: Merge,
   /** Re-derives a declared range from what is inside it. */
