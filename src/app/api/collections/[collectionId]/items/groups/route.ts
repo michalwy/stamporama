@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { listItemDuplicateGroups } from "@/lib/items";
 import { readItemFilters } from "../item-filters";
 
@@ -24,7 +25,7 @@ export async function GET(
 
   try {
     const result = await listItemDuplicateGroups(session.user.id, collectionId, {
-      ...readItemFilters(sp),
+      ...(await withCompletenessSwitch(collectionId, readItemFilters(sp))),
       axes: {
         condition: sp.get("groupByCondition") === "true",
         format: sp.get("groupByFormat") === "true",

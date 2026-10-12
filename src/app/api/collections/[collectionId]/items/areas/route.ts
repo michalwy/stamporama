@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { listItemAreaFacets } from "@/lib/items";
 import { readAreaFacetFilters } from "../item-filters";
 
@@ -22,7 +23,7 @@ export async function GET(
     const areas = await listItemAreaFacets(
       session.user.id,
       collectionId,
-      readAreaFacetFilters(request.nextUrl.searchParams)
+      await withCompletenessSwitch(collectionId, readAreaFacetFilters(request.nextUrl.searchParams))
     );
     return NextResponse.json({ areas });
   } catch {

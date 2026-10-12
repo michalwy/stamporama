@@ -137,6 +137,7 @@ import {
   type ConditionCompletenessCount,
 } from "./checklist-completeness-rules";
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
+import { issueMatchesCompleteness, type CompletenessFilter } from "./completeness-filter";
 import { buildLocationPath } from "./location-path";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
@@ -1245,6 +1246,16 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  Absent is both — the list's default, since a carrier stays an ordinary copy for everything the
    *  list does. Narrows through the very fragments the counts spread (`multi-stamp.ts`). */
   multiStamp?: MultiStampFilter;
+  /** The issues a copy's issue must be complete — or incomplete — in (#1884): `any` keeps the copies
+   *  whose issue has a checklist held whole in any conditions, `one` one held whole in a single
+   *  condition, `incomplete` the rest of the issues that have chips. Absent is *All*. Judged over
+   *  the copies **every other filter** lets through — the same figures the issue group header's
+   *  chips draw (`listIssueGroupCompleteness`) — and a copy belongs to its stamp's **first** issue,
+   *  the one it is grouped under. See `completeness-filter.ts` and {@link withDerivedFilters}. */
+  complete?: CompletenessFilter;
+  /** Whether specialised checklists count toward {@link complete} (#1617) — the screens' switch,
+   *  which the route reads and the domain never does. Read by nothing else. */
+  completeIncludesSpecialised?: boolean;
   /** The copies whose **variant is to settle** (#1651): `true` those with a candidate set or on an
    *  unknown-variant umbrella, `false` the rest. Absent is both. See `candidate-set-predicates.ts`. */
   variantToSettle?: boolean;
@@ -1597,16 +1608,36 @@ function valuationInBand(
   return true;
 }
 
+/** Wrap a base `where` with every filter that is **derived** rather than a column — the catalog
+ * valuation (#229, #711), then the issue's completeness (#1884). Returns the base `where` untouched
+ * when none is set. Kept as one helper, and called by every read, so the list, its counts, the
+ * holdings total, the facets and the groups narrow identically.
+ *
+ * Completeness comes **last** because it is judged over the copies every other filter lets
+ * through, the valuation band included — exactly the set the issue group header counts. */
+async function withDerivedFilters(
+  collectionId: string,
+  filters: ItemListFiltersPaginated,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  baseWhere: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  return withCompletenessFilter(
+    collectionId,
+    filters,
+    await withValuationFilter(collectionId, filters, baseWhere)
+  );
+}
+
 /** Wrap a base `where` so it also matches only copies whose **derived** catalog valuation answers
  * what the caller asked — missing a value (#229), or inside a band (#711). Returns the base `where`
- * untouched when neither filter is set. Kept as one helper, and called by every read, so the list,
- * its counts, the holdings total and the year facets narrow identically.
+ * untouched when neither filter is set.
  *
  * The two compose: asking for both is asking for the copies that are unpriced *and* in the band,
  * which is empty by {@link valuationInBand}'s own rule. That is the truthful answer to a
  * contradictory question rather than a refusal — the same thing `notOfferedPlatformId` beside a
  * `forSale: false` would give. */
-async function withMissingCatalogFilter(
+async function withValuationFilter(
   collectionId: string,
   filters: ItemListFiltersPaginated,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2280,7 +2311,7 @@ export async function buildItemFilterWhere(
   filters: ItemListFiltersPaginated = {}
 ): Promise<Prisma.ItemWhereInput> {
   const locationIds = await resolveLocationScope(collectionId, filters);
-  return (await withMissingCatalogFilter(
+  return (await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2294,7 +2325,7 @@ export async function filterItemIds(
 ): Promise<string[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2326,7 +2357,7 @@ export async function listItemsPaginated(
 
   const locationIds = await resolveLocationScope(collectionId, filters);
 
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2366,7 +2397,7 @@ export async function countItems(
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2398,7 +2429,7 @@ export async function countItemsByCondition(
 ): Promise<Map<string, number>> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2551,7 +2582,7 @@ export async function listItemDuplicateGroups(
   const offset = filters.offset ?? 0;
 
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const filtered = await withMissingCatalogFilter(
+  const filtered = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2796,7 +2827,7 @@ export async function listItemLocationGroups(
   const offset = filters.offset ?? 0;
 
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -2917,7 +2948,7 @@ export async function listItemIssueGroups(
   const offset = filters.offset ?? 0;
 
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -3108,6 +3139,33 @@ export async function listIssueGroupCompleteness(
   const ids = [...new Set(issueIds)];
   if (ids.length === 0) return {};
 
+  // The *Complete* filter (#1884) is left out of the copies these figures count: it is decided
+  // **from** them, so counting under it would let it narrow its own evidence — a checklist stamp
+  // whose copies sit under another issue's group would drop out, and the chip would contradict the
+  // filter that kept it.
+  const counted = { ...filters };
+  delete counted.complete;
+  delete counted.completeIncludesSpecialised;
+  const locationIds = await resolveLocationScope(collectionId, counted);
+  const where = await withDerivedFilters(
+    collectionId,
+    counted,
+    buildItemWhere(collectionId, counted, locationIds)
+  );
+  return readIssueGroupCompleteness(collectionId, ids, where, includeSpecialised);
+}
+
+/** {@link listIssueGroupCompleteness}' figures over an already-built copy `where` — the header's
+ *  read and the *Complete* filter's (#1884), so the two cannot compute a chip two ways. */
+async function readIssueGroupCompleteness(
+  collectionId: string,
+  ids: string[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  where: any,
+  includeSpecialised: boolean
+): Promise<IssueGroupCompleteness> {
+  if (ids.length === 0) return {};
+
   const checklists = await prisma.checklist.findMany({
     where: { collectionId, issueId: { in: ids }, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -3129,12 +3187,6 @@ export async function listIssueGroupCompleteness(
   // A copy filed under a variant of a listed stamp is a copy of it (#661), so the read reaches
   // below the membership and each row is attributed back to the member it answers for.
   const rollup = await loadChecklistVariantRollup(collectionId, stampIds);
-  const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
-    collectionId,
-    filters,
-    buildItemWhere(collectionId, filters, locationIds)
-  );
 
   const [rows, conditions] = await Promise.all([
     rollup.countingStampIds.length === 0
@@ -3201,6 +3253,54 @@ export async function listIssueGroupCompleteness(
     });
   }
   return byIssue;
+}
+
+/**
+ * The *Complete* filter's narrowing (#1884): of the copies `where` already lets through, those whose
+ * issue answers `filters.complete`. Returns `where` untouched when the filter is off.
+ *
+ * **Judged over `where` itself** — every other filter in force — through the very read the issue
+ * group header draws its chips from ({@link readIssueGroupCompleteness}), so a value kept here is a
+ * header that says so on screen, under any combination of the other filters.
+ *
+ * A copy belongs to its stamp's **first** issue (`FIRST_ISSUE_MEMBERSHIP`), the group it sits in,
+ * so grouped or not the filter keeps exactly the copies of the groups it keeps. The copies in no
+ * issue group are in no kept one either: a carrier of several stamps (#748), which is filed under
+ * none, and a copy whose candidates span variant trees (#1651), which is only *possibly* in one —
+ * and a copy whose stamp is in no issue has no completeness to judge.
+ */
+async function withCompletenessFilter(
+  collectionId: string,
+  filters: ItemListFiltersPaginated,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  where: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  const filter = filters.complete;
+  if (!filter) return where;
+  const rows = await prisma.item.findMany({
+    where: { AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES] },
+    select: {
+      id: true,
+      stamp: { select: { issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issueId: true } } } },
+    },
+  });
+  const issueOf = (row: (typeof rows)[number]) => row.stamp.issueMemberships[0]?.issueId ?? null;
+  const issueIds = [...new Set(rows.flatMap((row) => issueOf(row) ?? []))];
+  const byIssue = await readIssueGroupCompleteness(
+    collectionId,
+    issueIds,
+    where,
+    filters.completeIncludesSpecialised ?? false
+  );
+  const kept = new Set(
+    issueIds.filter((id) => issueMatchesCompleteness(byIssue[id] ?? [], filter))
+  );
+  const ids = rows.flatMap((row) => {
+    const issueId = issueOf(row);
+    return issueId !== null && kept.has(issueId) ? [row.id] : [];
+  });
+  return { AND: [where, { id: { in: ids } }] };
 }
 
 /** The conditions one group's members are in, each with its count — most copies first, then the
@@ -4144,7 +4244,7 @@ export async function getHoldingsValuation(
   // case it exists for. The bar still sums one scope — it just partitions it into held and gone,
   // which is what the write-off line makes legible. Everything else, `excludeGone` included, is
   // taken as the list left it: a realised sale is not a write-off (#168 is where it belongs).
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     { ...filters, includeDisposed: true },
     buildItemWhere(collectionId, { ...filters, includeDisposed: true }, locationIds)
@@ -4404,7 +4504,7 @@ export async function listItemAreaFacets(
 ): Promise<AreaFacet[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -4448,7 +4548,7 @@ export async function listItemStructureFacts(
 ): Promise<{ copies: StructureCopy[]; summarize: (itemIds: string[]) => HoldingsSummary }> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)
@@ -4503,7 +4603,7 @@ export async function listItemYearFacets(
 ): Promise<ItemYearFacet[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
-  const where = await withMissingCatalogFilter(
+  const where = await withDerivedFilters(
     collectionId,
     filters,
     buildItemWhere(collectionId, filters, locationIds)

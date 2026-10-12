@@ -7,6 +7,7 @@ import {
   isStructureDimension,
 } from "@/lib/collection-structure-rules";
 import { readItemFilters } from "../item-filters";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 /**
  * The collection structure screen (#1401): the screen's own address — the Copies list's filter names
@@ -28,6 +29,8 @@ export async function GET(
   const rows = sp.get("rows");
   const columns = sp.get("cols");
 
+  const includeSpecialised = await readIncludeSpecialised(collectionId);
+
   try {
     const structure = await getCollectionStructure(
       session.user.id,
@@ -40,7 +43,8 @@ export async function GET(
         includeSubAreas: sp.get("includeSubAreas") !== "false",
         includeSubLocations: sp.get("includeSubLocations") !== "false",
       },
-      readItemFilters
+      // The *Complete* filter judges by the specialised-checklist switch (#1884), a cookie read here.
+      (query) => ({ ...readItemFilters(query), completeIncludesSpecialised: includeSpecialised })
     );
     return NextResponse.json(structure);
   } catch {

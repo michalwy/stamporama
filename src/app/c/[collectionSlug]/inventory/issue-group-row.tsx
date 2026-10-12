@@ -7,6 +7,7 @@ import type {
   IssueGroupRow as IssueGroupRowData,
 } from "@/lib/items";
 import { NO_ISSUE } from "@/lib/issue-groups";
+import { hasCompletenessChips } from "@/lib/completeness-filter";
 import { Icon } from "@/app/icons";
 import {
   GROUP_COUNT_CHIP,
@@ -274,9 +275,8 @@ export function IssueGroupRow({
   const named = group.issueId !== null;
   // A checklist with nothing held of it says nothing on a header: the chips *are* the statement, so
   // an empty checklist and an untouched one both fall away rather than printing `0/0`.
-  const sets = (completeness ?? []).filter(
-    (c) => c.requiredCount > 0 && c.conditions.length > 0
-  );
+  // The same sentence the *Complete* filter judges by (#1884), so a set it skips has no chips here.
+  const sets = (completeness ?? []).filter(hasCompletenessChips);
 
   return (
     <CopyGroupShell
@@ -387,5 +387,9 @@ export function issueGroupMemberFilters(
 ): InventoryItemFilters {
   // `exclude` for the reason the duplicate groups carry it (#748): the carriers were counted into a
   // bucket of their own, and a cover whose leading stamp is in this series is not one of its rows.
-  return { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" };
+  // …and without the *Complete* filter (#1884): the group is on screen because its issue answered
+  // it, and judging it again over this one issue's copies would judge it over a different set.
+  const members: InventoryItemFilters = { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" };
+  delete members.complete;
+  return members;
 }

@@ -27,6 +27,7 @@ import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 import { appendFaultFilterParams, type FaultFilterOpts } from "@/lib/fault-filter";
 import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
+import type { CompletenessFilter } from "@/lib/completeness-filter";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -122,6 +123,8 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
    *  A grouped list's multi-stamp bucket addresses its own members with `only`, and every other
    *  group of a grouping that sets carriers apart with `exclude`. */
   multiStamp?: MultiStampFilter;
+  /** The issue's completeness (#1884): `any`, `one` or `incomplete`; absent is *All*. */
+  complete?: CompletenessFilter;
   /** The copies that might be this stamp — candidates across variant trees (#1651). */
   possibleStampId?: string;
   /** The copies with a candidate in this issue, across variant trees (#1651). */
@@ -164,6 +167,8 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   includeDisposed?: boolean;
   /** The multi-stamp filter (#748). */
   multiStamp?: MultiStampFilter;
+  /** The *Complete* filter (#1884). */
+  complete?: CompletenessFilter;
 }
 
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
@@ -243,6 +248,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.includeGone) params.set("includeGone", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
   if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
+  if (filters.complete) params.set("complete", filters.complete);
   appendTagFilterParams(params, filters);
   appendFaultFilterParams(params, filters);
   return params;
@@ -446,6 +452,7 @@ export function useHoldingsValuation(
       tagMode: filters.tagMode,
       faultIds: filters.faultIds,
       multiStamp: filters.multiStamp,
+      complete: filters.complete,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -480,6 +487,7 @@ export function useHoldingsValuation(
         params.set("deliveryStates", filters.deliveryStates.join(","));
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
+      if (filters.complete) params.set("complete", filters.complete);
       appendTagFilterParams(params, filters);
       appendFaultFilterParams(params, filters);
       const res = await fetch(
@@ -534,6 +542,7 @@ export function useItemYears(
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.includeDisposed) params.set("includeDisposed", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
+      if (filters.complete) params.set("complete", filters.complete);
       appendTagFilterParams(params, filters);
       appendFaultFilterParams(params, filters);
       const res = await fetch(

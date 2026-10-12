@@ -39,6 +39,7 @@ export const REMEMBERED_FILTER_KEYS = [
   "includeGone",
   "includeDisposed",
   "multiStamp",
+  "complete",
   ...DISPOSITION_FILTERS.map((f) => f.key),
 ] as const;
 

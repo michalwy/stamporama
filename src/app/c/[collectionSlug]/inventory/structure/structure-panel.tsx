@@ -34,6 +34,7 @@ import {
 } from "@/lib/copies-list-url";
 import { NO_AREA } from "@/lib/list-area-year-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
+import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { DEFAULT_TAG_FILTER_MODE, isTagFilterMode } from "@/lib/tag-filter";
 import { buildLocationTree } from "@/app/location-tree-select";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
@@ -276,6 +277,7 @@ export function StructurePanel({
       faultIds: csv(read("faultIds")),
       locationId: read("locationId") ?? "",
       multiStamp: asMultiStampFilter(read("multiStamp")),
+      complete: asCompletenessFilter(read("complete")),
       activeDispositions: new Set(
         DISPOSITION_FILTERS.map((f) => f.key).filter((key) => read(key) === "true")
       ),
@@ -471,6 +473,7 @@ export function StructurePanel({
               formatIds={values.formatIds}
               subtypeIds={values.subtypeIds}
               multiStamp={values.multiStamp}
+              complete={values.complete}
               tagIds={values.tagIds}
               tagMode={values.tagMode}
               faultIds={values.faultIds}

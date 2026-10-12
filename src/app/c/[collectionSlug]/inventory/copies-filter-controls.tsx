@@ -8,6 +8,7 @@ import type { StampSubtypeData } from "@/lib/subtypes";
 import type { LocationData } from "@/lib/locations";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import type { MultiStampFilter } from "@/lib/multi-stamp";
+import type { CompletenessFilter } from "@/lib/completeness-filter";
 import type { TagFilterMode } from "@/lib/tag-filter";
 import { NO_LOCATION } from "@/lib/location-groups";
 import { LocationTreeSelect, type LocationTreeItem } from "@/app/location-tree-select";
@@ -104,6 +105,8 @@ export const FILTER_WIDTH = {
   /** Sized for `Only several-stamp pieces`, the longest of its three options — a native `<select>`
    *  takes its widest option's width anyway (#868), so this pins what it would have been. */
   multiStamp: "12.5rem",
+  /** Sized for `Complete — one condition`, the longest of its four options, for the same reason. */
+  complete: "12.5rem",
 } as const;
 
 /** What a `Tooltip` around a bar control needs to stop being the loose link: it renders an
@@ -126,6 +129,8 @@ export interface CopiesFilterControlsProps {
   formatIds: string[];
   subtypeIds: string[];
   multiStamp: MultiStampFilter | undefined;
+  /** The issue's completeness (#1884); absent is *All*. */
+  complete: CompletenessFilter | undefined;
   tagIds: string[];
   tagMode: TagFilterMode;
   /** The ticked faults (#1557), `none` among them for the copies with no fault. */
@@ -154,6 +159,7 @@ export function CopiesFilterControls({
   formatIds,
   subtypeIds,
   multiStamp,
+  complete,
   tagIds,
   tagMode,
   faultIds,
@@ -329,6 +335,39 @@ export function CopiesFilterControls({
           <option value="">Any number of stamps</option>
           <option value="only">Only several-stamp pieces</option>
           <option value="exclude">No several-stamp pieces</option>
+        </select>
+      </Tooltip>
+
+      {/* The issue's completeness (#1884) — the chips an issue group header draws (#594/#1859),
+          turned into a narrowing, so the series that can be offered whole are not found by
+          scrolling past every incomplete one. A one-of choice, so a native `<select>` like the
+          one beside it. Judged over the copies the other filters let through, which is exactly
+          what the chips count, and it keeps the copies of the issues it keeps whether or not the
+          list is grouped. Always drawn: every collection can have a checklist. */}
+      <Tooltip
+        style={NO_SHRINK}
+        content="Only the copies of issues whose checklist is complete — in any conditions together, or in one condition alone — or of those still incomplete. Judged over the copies the other filters show, as the issue chips are."
+      >
+        <select
+          value={complete ?? ""}
+          onChange={(e) => updateParams({ complete: e.target.value })}
+          style={{
+            ...FILTER_CONTROL_STYLE,
+            width: FILTER_WIDTH.complete,
+            ...(complete
+              ? {
+                  color: "var(--color-accent)",
+                  border: "1px solid var(--color-accent)",
+                  background: "var(--color-accent-soft)",
+                }
+              : null),
+          }}
+          aria-label="Filter by how complete the issue is"
+        >
+          <option value="">All, complete or not</option>
+          <option value="any">Complete — any condition</option>
+          <option value="one">Complete — one condition</option>
+          <option value="incomplete">Incomplete</option>
         </select>
       </Tooltip>
 

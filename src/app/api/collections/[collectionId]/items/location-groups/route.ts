@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { listItemLocationGroups } from "@/lib/items";
 import { readItemFilters } from "../item-filters";
 
@@ -24,7 +25,7 @@ export async function GET(
 
   try {
     const result = await listItemLocationGroups(session.user.id, collectionId, {
-      ...readItemFilters(sp),
+      ...(await withCompletenessSwitch(collectionId, readItemFilters(sp))),
       // Anything but the explicit ref mode groups by location alone, so a stale link falls back to
       // the coarser reading rather than to an empty screen.
       by: sp.get("by") === "ref" ? "ref" : "location",

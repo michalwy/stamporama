@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
 import { getHoldingsValuation } from "@/lib/items";
 import { readItemFilters } from "../item-filters";
 
@@ -24,7 +25,7 @@ export async function GET(
     const total = await getHoldingsValuation(
       session.user.id,
       collectionId,
-      readItemFilters(request.nextUrl.searchParams)
+      await withCompletenessSwitch(collectionId, readItemFilters(request.nextUrl.searchParams))
     );
     return NextResponse.json(total);
   } catch {
