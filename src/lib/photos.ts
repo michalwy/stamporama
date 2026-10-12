@@ -176,6 +176,62 @@ export function parsePhotoChangeSet(formData: FormData): PhotoChangeSet | null {
   }
 }
 
+/** A promotion the copy dialog held back for its Save (#1878): one copy photo, and where it lands
+ * on the stamp. */
+export interface PhotoPromotion {
+  photoId: string;
+  role: PhotoRole;
+  title: string | null;
+}
+
+/** Parse the copy dialog's held-back promotions from a form's `photoPromotions` JSON blob (#1878).
+ * Absent, blank or malformed degrades to none, as {@link parsePhotoChangeSet} does; an entry with
+ * no photo id is dropped. */
+export function parsePhotoPromotions(formData: FormData): PhotoPromotion[] {
+  const raw = ((formData.get("photoPromotions") as string | null) ?? "").trim();
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((p: Partial<PhotoPromotion> | null) =>
+      p && typeof p.photoId === "string" && p.photoId
+        ? [
+            {
+              photoId: p.photoId,
+              role: normalizeRole(p.role),
+              title: typeof p.title === "string" && p.title.trim() ? p.title.trim() : null,
+            },
+          ]
+        : []
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Carry out the promotions a copy's edit held back for its Save (#1878), **after** the copy was
+ * re-pointed: each goes to the stamp the copy is on *now*, which is the stamp chosen in the dialog,
+ * never the one it had when the dialog opened. Only this copy's own photos are promoted. */
+export async function applyPhotoPromotions(
+  ownerId: string,
+  itemId: string,
+  promotions: readonly PhotoPromotion[]
+): Promise<void> {
+  if (promotions.length === 0) return;
+  const own = new Set(
+    (
+      await prisma.photo.findMany({
+        where: { itemId, id: { in: promotions.map((p) => p.photoId) } },
+        select: { id: true },
+      })
+    ).map((p) => p.id)
+  );
+  for (const p of promotions) {
+    if (!own.has(p.photoId)) throw new PhotoValidationError("Photo is not this copy's photo.");
+    await promoteCopyPhotoToStamp(ownerId, p.photoId, { role: p.role, title: p.title });
+  }
+}
+
 async function assertCollectionOwner(
   ownerId: string,
   collectionId: string

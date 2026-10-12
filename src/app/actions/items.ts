@@ -29,7 +29,12 @@ import { parseExplicitValueInput } from "@/lib/carrier-value";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
-import { applyPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
+import {
+  applyPhotoChangeSet,
+  applyPhotoPromotions,
+  parsePhotoChangeSet,
+  parsePhotoPromotions,
+} from "@/lib/photos";
 import { setItemTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
 import { setItemFaultEntries } from "@/lib/faults";
@@ -324,6 +329,10 @@ export async function updateItemAction(
       // …and the stamps it might be (#1651), when the dialog says.
       candidateStampIds: parseCandidateStampIds(formData),
     });
+    // Promotions held back while the copy's stamp change was unsaved (#1878): after the re-point, so
+    // they reach the stamp chosen in the dialog, and before the change-set, so a photo promoted and
+    // then removed from the copy still has its bytes to duplicate.
+    await applyPhotoPromotions(session.user.id, itemId, parsePhotoPromotions(formData));
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, itemId, changeSet);
     }

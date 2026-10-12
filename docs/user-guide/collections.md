@@ -1586,7 +1586,9 @@ They also show up on the **Issues** list: expand an issue to see each stamp's ph
 
 ### Promoting a copy photo to its stamp
 
-If you have already photographed one of your copies and want to reuse that image as the stamp's reference photo, you don't have to upload it again. Open the copy's **Edit** dialog, and on each saved photo use the **⬆** (promote to stamp) button. Choose where it should land on the stamp — as the **Main** photo or an **Extra** with an optional title — and confirm.
+If you have already photographed one of your copies and want to reuse that image as the stamp's reference photo, you don't have to upload it again. Open the copy's **Edit** dialog, and on each saved photo use the **⬆** (promote to stamp) button. Choose where it should land on the stamp — as the **Main** photo or an **Extra** with an optional title — and confirm. The popover names the stamp the photo goes to.
+
+The photo always goes to the stamp chosen **in the dialog**. If you have changed the copy's stamp in the same edit and not saved yet, the promotion waits for **Save changes**: the popover says *when you save*, the photo's ⬆ button stays highlighted, and the promotion is carried out together with the save — after the copy has moved to its new stamp. **Cancel** drops it, so a stamp the copy does not end up on is never changed. Open the ⬆ popover again and choose **Don't promote** to take a waiting promotion back. With no stamp change pending, the promotion happens at once.
 
 Promotion makes an **independent copy** of the photo on the stamp: the image bytes are duplicated, so the new stamp photo and the original copy photo have completely separate lives. Deleting or replacing one never affects the other. (A copy must be identified to a stamp for its photos to be promotable.)
 
