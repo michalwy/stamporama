@@ -11,6 +11,7 @@ import {
 import {
   FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
   FACEBOOK_MULTI_LOT_LAYOUTS,
+  FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_TERMS_PLACEHOLDER,
   type FacebookGroupSetting,
   type FacebookMultiLotLayout,
@@ -277,6 +278,7 @@ export function FacebookPostKit({
         </p>
       )}
       {(gaps.missingPostText ||
+        gaps.missingPostTitle ||
         gaps.missingTemplates.length > 0 ||
         gaps.emptyOwnTemplates.length > 0 ||
         gaps.emptyPlaceholders.length > 0) && (
@@ -287,6 +289,12 @@ export function FacebookPostKit({
               <Link href={settingHref("captionPostTemplate")} style={{ color: "var(--color-accent)" }}>
                 set it in Settings → Facebook
               </Link>
+            </li>
+          )}
+          {gaps.missingPostTitle && (
+            <li>
+              The post has no title, so <code>{FACEBOOK_POST_TITLE_PLACEHOLDER.token}</code> is empty — give it one at
+              the top of this screen
             </li>
           )}
           {gaps.missingTemplates.map((type) => (

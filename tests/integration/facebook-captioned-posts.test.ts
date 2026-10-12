@@ -171,8 +171,8 @@ describe("a captioned Facebook post (#1841)", () => {
   /** The post as the offer's card draws it: its shared text, and each caption in lot order. */
   async function captioned(offerId: string) {
     const kit = (await getFacebookOfferKit(offerId))!;
-    const source = facebookPostSource({ ...kit.group, layout: kit.layout }, kit.lots, (iso) => iso ?? "");
-    const post = renderFacebookCaptionedPost(source.captions, source.standingNote, source.lots, kit.post?.postNo ?? null);
+    const source = facebookPostSource({ ...kit.group, layout: kit.layout, post: kit.post }, kit.lots, (iso) => iso ?? "");
+    const post = renderFacebookCaptionedPost(source.captions, source.standingNote, source.lots, source.post);
     return {
       layout: source.layout,
       post: facebookPartsText(post.post),
@@ -205,7 +205,7 @@ describe("a captioned Facebook post (#1841)", () => {
     await updateFacebookGroup(userId, groupId, groupValues());
     const a = await offer();
     const b = await offer();
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b], "Test post");
     const kit = (await getFacebookOfferKit(a))!;
     assert.equal(kit.layout, "captions");
     assert.equal(kit.post?.layout, null);
@@ -228,7 +228,7 @@ describe("a captioned Facebook post (#1841)", () => {
     await updateFacebookGroup(userId, groupId, groupValues());
     const a = await offer();
     const b = await offer();
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/190000/posts/1");
     const asPosted = await captioned(b);
     const frozen = readFacebookFrozenLot(
@@ -286,7 +286,7 @@ describe("a captioned Facebook post (#1841)", () => {
     await updateFacebookGroup(userId, groupId, groupValues());
     const a = await offer();
     const b = await offer();
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await generate(a, "both");
     await generate(b, "front");
 
@@ -350,7 +350,7 @@ describe("a captioned Facebook post (#1841)", () => {
     await updateFacebookGroup(userId, groupId, groupValues());
     const a = await offer();
     const b = await offer();
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b], "Test post");
     await generate(a, "both");
     await generate(b, "front");
     await readFacebookPostLotPhotos(userId, postId);
@@ -386,7 +386,7 @@ describe("a captioned Facebook post (#1841)", () => {
     const a = await offer();
     const b = await offer();
     const c = await offer();
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b, c]);
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
     await generate(a, "both");
     await generate(b, "front");
     await generate(c, "front");

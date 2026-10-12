@@ -13,12 +13,15 @@ import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { getFacebookOfferKit } from "../../src/lib/facebook-auctions";
+import { facebookPostSource } from "../../src/lib/facebook-post-rules";
 import {
   createFacebookPost,
   findFacebookPostId,
   getFacebookPostScreen,
+  listFacebookPostsPaginated,
   publishOfferOrPost,
   removeFacebookLot,
+  setFacebookPostTitle,
 } from "../../src/lib/facebook-posts";
 import { addSaleLines, createSale } from "../../src/lib/sales";
 
@@ -128,8 +131,8 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     const b = (await offer()).offerId;
     const c = (await offer()).offerId;
     const d = (await offer()).offerId;
-    const first = await createFacebookPost(userId, collectionId, [a, b]);
-    const second = await createFacebookPost(userId, collectionId, [c, d]);
+    const first = await createFacebookPost(userId, collectionId, [a, b], "Test post");
+    const second = await createFacebookPost(userId, collectionId, [c, d], "Test post");
     assert.equal(second.postNo, first.postNo + 1);
     assert.equal(await findFacebookPostId(userId, collectionId, first.postNo), first.postId);
     assert.equal((await getFacebookOfferKit(a))!.post!.postNo, first.postNo);
@@ -138,7 +141,7 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     // the one dissolved, so a `max + 1` allocation would hand its number straight out again.
     await removeFacebookLot(userId, d);
     assert.equal(await findFacebookPostId(userId, collectionId, second.postNo), null);
-    const third = await createFacebookPost(userId, collectionId, [c, d]);
+    const third = await createFacebookPost(userId, collectionId, [c, d], "Test post");
     assert.equal(third.postNo, second.postNo + 1);
   });
 
@@ -146,7 +149,7 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     const one = await offer();
     const two = await offer();
     const three = await offer();
-    const { postId, postNo } = await createFacebookPost(userId, collectionId, [two.offerId, one.offerId, three.offerId]);
+    const { postId, postNo } = await createFacebookPost(userId, collectionId, [two.offerId, one.offerId, three.offerId], "Test post");
     await publishOfferOrPost(userId, one.offerId, "https://www.facebook.com/groups/180000/posts/1");
 
     const saleId = await createSale(userId, collectionId, {
@@ -190,18 +193,110 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     const x = (await offer()).offerId;
     const y = (await offer()).offerId;
     const alone = (await offer()).offerId;
-    const { postNo } = await createFacebookPost(userId, collectionId, [y, x]);
+    const { postNo } = await createFacebookPost(userId, collectionId, [y, x], "Test post");
 
     const { items } = await listOffersPaginated(userId, collectionId, { facebookPostNo: postNo });
     assert.deepEqual(
       items.map((i) => [i.id, i.facebookPost]).sort(),
       [
-        [x, { postNo, lotNo: 2 }],
-        [y, { postNo, lotNo: 1 }],
+        [x, { postNo, title: "Test post", lotNo: 2 }],
+        [y, { postNo, title: "Test post", lotNo: 1 }],
       ].sort()
     );
 
     const all = await listOffersPaginated(userId, collectionId, {});
     assert.equal(all.items.find((i) => i.id === alone)!.facebookPost, null);
+  });
+
+  describe("its title (#1862)", () => {
+    it("is asked for when the post is made — never blank — and kept trimmed", async () => {
+      const a = (await offer()).offerId;
+      const b = (await offer()).offerId;
+      for (const blank of ["", "   "]) {
+        await assert.rejects(createFacebookPost(userId, collectionId, [a, b], blank), /A post needs a title/);
+      }
+      // Refused before anything is written: the offers are in no post.
+      const loose = await prisma.offer.findMany({ where: { id: { in: [a, b] } }, select: { facebookPostId: true } });
+      assert.deepEqual(loose.map((o) => o.facebookPostId), [null, null]);
+
+      const { postId } = await createFacebookPost(userId, collectionId, [a, b], "  Generalgouvernement 1940–44 ");
+      const row = await prisma.facebookPost.findUniqueOrThrow({ where: { id: postId }, select: { title: true } });
+      assert.equal(row.title, "Generalgouvernement 1940–44");
+    });
+
+    it("shows wherever the post is named: its screen, its lots' kit, the offers list and the list of posts", async () => {
+      const a = (await offer()).offerId;
+      const b = (await offer()).offerId;
+      const { postId, postNo } = await createFacebookPost(userId, collectionId, [a, b], "Fiscals");
+
+      assert.equal((await getFacebookPostScreen(userId, postId))!.title, "Fiscals");
+      assert.equal((await getFacebookOfferKit(b))!.post!.title, "Fiscals");
+      const { items } = await listOffersPaginated(userId, collectionId, { facebookPostNo: postNo });
+      assert.deepEqual(
+        items.map((i) => i.facebookPost!.title),
+        ["Fiscals", "Fiscals"]
+      );
+      const posts = await listFacebookPostsPaginated(userId, collectionId, { pageSize: 200 });
+      assert.equal(posts.items.find((p) => p.postId === postId)!.title, "Fiscals");
+    });
+
+    it("is renamed in place, never to blank, and only by the collection's owner", async () => {
+      const { postId } = await createFacebookPost(
+        userId,
+        collectionId,
+        [(await offer()).offerId, (await offer()).offerId],
+        "Before"
+      );
+      await setFacebookPostTitle(userId, postId, "  After ");
+      assert.equal((await getFacebookPostScreen(userId, postId))!.title, "After");
+      await assert.rejects(setFacebookPostTitle(userId, postId, "  "), /A post needs a title/);
+      await assert.rejects(setFacebookPostTitle(otherUserId, postId, "Theirs"));
+      assert.equal((await getFacebookPostScreen(userId, postId))!.title, "After");
+    });
+
+    it("filters the list of posts to those made before titles, which have none until given one", async () => {
+      const { postId: titled } = await createFacebookPost(
+        userId,
+        collectionId,
+        [(await offer()).offerId, (await offer()).offerId],
+        "Named"
+      );
+      const { postId: older } = await createFacebookPost(
+        userId,
+        collectionId,
+        [(await offer()).offerId, (await offer()).offerId],
+        "Soon none"
+      );
+      // As a post made before #1862 is: no title at all.
+      await prisma.facebookPost.update({ where: { id: older }, data: { title: null } });
+
+      const untitled = await listFacebookPostsPaginated(userId, collectionId, { untitled: true, pageSize: 200 });
+      assert.deepEqual(
+        untitled.items.map((p) => [p.postId, p.title]),
+        [[older, null]]
+      );
+      const all = await listFacebookPostsPaginated(userId, collectionId, { pageSize: 200 });
+      assert.ok(all.items.some((p) => p.postId === titled));
+
+      await setFacebookPostTitle(userId, older, "Named at last");
+      assert.deepEqual((await listFacebookPostsPaginated(userId, collectionId, { untitled: true })).items, []);
+    });
+
+    it("is frozen with the post once it is up, so renaming it after leaves the posted text as it was (#1800)", async () => {
+      const a = (await offer()).offerId;
+      const b = (await offer()).offerId;
+      const { postId } = await createFacebookPost(userId, collectionId, [a, b], "As posted");
+      await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/180000/posts/77");
+      await setFacebookPostTitle(userId, postId, "Renamed since");
+
+      const kit = (await getFacebookOfferKit(a))!;
+      assert.equal(kit.post!.title, "Renamed since");
+      assert.deepEqual(
+        kit.lots.map((l) => l.frozen!.postTitle),
+        ["As posted", "As posted"]
+      );
+      const source = facebookPostSource({ ...kit.group, layout: kit.layout, post: kit.post }, kit.lots, () => "");
+      assert.equal(source.post!.title, "As posted");
+    });
   });
 });

@@ -14,6 +14,7 @@ import { isAuctionListing, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
@@ -25,6 +26,9 @@ import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 // its state, and the post is managed as one. Until it existed the post was seen from any lot's
 // Facebook card, which repeated the whole post on every lot.
 //
+// - **The post's title** (#1862), in its heading beside its number, edited in place — what tells the
+//   post apart from the others running at once. A post made before titles is named by number until it
+//   is given one, and its heading offers to name it.
 // - **The post's moves**, made as one — submit for approval, approve, reject, activate, withdraw (#1778,
 //   #1779) — through the same actions the offer screen uses, asked of a lot: the server takes the whole
 //   post with it, so the buttons are offered only where `facebookPostMoves` says the server would.
@@ -132,7 +136,7 @@ export function FacebookPostPanel({
     );
   }
 
-  const { kit, postNo } = screen;
+  const { kit, postNo, title } = screen;
   const lots = kit.lots;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
@@ -176,6 +180,20 @@ export function FacebookPostPanel({
           ? `Post #${postNo} submitted — waiting for the group's approval`
           : `Post #${postNo} is up — all ${lots.length} lots active`
     );
+  }
+
+  // Said where it was typed rather than in the moves' card: a refused title is the heading's (#1862).
+  function rename(next: string) {
+    startTransition(async () => {
+      const { setFacebookPostTitleAction } = await import("@/app/actions/facebook");
+      const result = await setFacebookPostTitleAction(postId, next);
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      invalidateAll(collectionId);
+      toast({ message: `Post #${postNo} is now called ${next.trim()}` });
+    });
   }
 
   function setLotState(offerId: string, next: "ready" | "withdrawn", done: string) {
@@ -239,9 +257,27 @@ export function FacebookPostPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <header>
-        <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Post #{postNo}
-        </h2>
+        <InlineText
+          value={title ?? ""}
+          placeholder="Post title"
+          display={
+            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+              Post #{postNo}
+              {title ? (
+                <> · {title}</>
+              ) : (
+                <span style={{ ...MUTED, fontSize: "0.875rem", fontWeight: 400, marginLeft: "0.5rem" }}>no title</span>
+              )}
+            </h2>
+          }
+          editable
+          isPending={isPending}
+          inputType="text"
+          editControl
+          editAriaLabel={title ? "Rename this post" : "Give this post a title"}
+          selectOnEdit
+          onSave={rename}
+        />
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
           A Facebook post of {lots.length} lots in{" "}
           <a href={kit.group.url} target="_blank" rel="noreferrer" style={LINK}>

@@ -53,7 +53,7 @@ export interface FacebookKitPost extends FacebookKitText {
   /** Each lot's caption, in lot order — empty unless the post is captioned. */
   captions: FacebookKitCaption[];
   /** What it is missing (#1692) — none on a post already published, which nothing here changes.
-   *  `missingPostText` is a captioned post's alone. */
+   *  `missingPostText` and `missingPostTitle` (#1862) are a captioned post's alone. */
   gaps: FacebookCaptionedPostGaps;
   /** When the post was published and its text frozen (#1800), or null while it follows the template. */
   frozenAt: string | null;
@@ -64,6 +64,7 @@ const NO_GAPS: FacebookCaptionedPostGaps = {
   emptyOwnTemplates: [],
   emptyPlaceholders: [],
   missingPostText: false,
+  missingPostTitle: false,
 };
 
 function kitText(parts: readonly FacebookPostPart[]): FacebookKitText {
@@ -79,15 +80,14 @@ export function renderFacebookKitPost(
   kit: FacebookOfferKit,
   live: (lot: FacebookKitLot) => boolean = () => false
 ): FacebookKitPost {
-  const { templates, captions, layout, standingNote, lots, frozenAt } = facebookPostSource(
-    { ...kit.group, layout: kit.layout },
+  const { templates, captions, layout, standingNote, lots, frozenAt, post: name } = facebookPostSource(
+    { ...kit.group, layout: kit.layout, post: kit.post },
     kit.lots,
     formatClosesAt,
     live
   );
   if (layout === "captions") {
-    const postNo = kit.post?.postNo ?? null;
-    const post = renderFacebookCaptionedPost(captions, standingNote, lots, postNo);
+    const post = renderFacebookCaptionedPost(captions, standingNote, lots, name);
     return {
       ...kitText(post.post),
       layout,
@@ -97,7 +97,7 @@ export function renderFacebookKitPost(
         offerNo: caption.offerNo,
         lotNo: caption.lotNo,
       })),
-      gaps: frozenAt ? NO_GAPS : facebookCaptionedPostGaps(captions, standingNote, lots, postNo),
+      gaps: frozenAt ? NO_GAPS : facebookCaptionedPostGaps(captions, standingNote, lots, name),
       frozenAt,
     };
   }
@@ -105,7 +105,9 @@ export function renderFacebookKitPost(
     ...kitText(renderFacebookPostParts(templates, standingNote, lots)),
     layout,
     captions: [],
-    gaps: frozenAt ? NO_GAPS : { ...facebookPostGaps(templates, standingNote, lots), missingPostText: false },
+    gaps: frozenAt
+      ? NO_GAPS
+      : { ...facebookPostGaps(templates, standingNote, lots), missingPostText: false, missingPostTitle: false },
     frozenAt,
   };
 }

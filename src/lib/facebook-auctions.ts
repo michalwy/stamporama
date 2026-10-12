@@ -409,9 +409,9 @@ export interface FacebookOfferKit {
   };
   /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
    *  lot's own `url` (#1668), so the post carries none. `postNo` is its short number (#1842), what its
-   *  screen is reached by; `layout` is the post's own choice (#1841), or null while it follows its
-   *  group's. */
-  post: { id: string; postNo: number; layout: FacebookMultiLotLayout | null } | null;
+   *  screen is reached by; `title` its title (#1862), null on a post made before titles until it is
+   *  given one; `layout` is the post's own choice (#1841), or null while it follows its group's. */
+  post: { id: string; postNo: number; title: string | null; layout: FacebookMultiLotLayout | null } | null;
   /** How the post is laid out now (#1841): the post's own choice, else its group's; always `text` for
    *  an offer posted alone. A published post is drawn in the layout it went up in, which its frozen
    *  lots carry. */
@@ -504,7 +504,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     select: {
       collectionId: true,
       facebookPostId: true,
-      facebookPost: { select: { id: true, postNo: true, layout: true } },
+      facebookPost: { select: { id: true, postNo: true, title: true, layout: true } },
       facebookGroup: true,
     },
   });
@@ -541,6 +541,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       ? {
           id: offer.facebookPost.id,
           postNo: offer.facebookPost.postNo,
+          title: offer.facebookPost.title,
           layout: offer.facebookPost.layout === null ? null : toFacebookMultiLotLayout(offer.facebookPost.layout),
         }
       : null,
@@ -557,7 +558,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
 /**
  * Freeze the post text of these offers as it reads **now** (#1800): each lot's template — its own, or
  * its group's for its type; in a captioned post (#1841) its caption's, with the post's shared text and
- * the layout itself — the group's note and the lot's figures, written into
+ * the layout itself — the group's note, the post's title (#1862) and the lot's figures, written into
  * `Offer.facebookPostSnapshot` and drawn instead of the live ones from then on. Called when an offer
  * first goes up (Pending or Active, whichever comes first) and by a repost, which puts the current
  * text up again.
@@ -577,7 +578,12 @@ export async function freezeFacebookPostText(
       facebookGroupId: { not: null },
       ...(onlyUnfrozen ? { facebookPostSnapshot: { equals: Prisma.DbNull } } : {}),
     },
-    select: { id: true, collectionId: true, facebookGroupId: true, facebookPost: { select: { layout: true } } },
+    select: {
+      id: true,
+      collectionId: true,
+      facebookGroupId: true,
+      facebookPost: { select: { layout: true, title: true } },
+    },
   });
   const now = new Date().toISOString();
   const settingsByGroup = new Map<string, FacebookEffectiveSettings>();
@@ -615,6 +621,7 @@ export async function freezeFacebookPostText(
         endsAt: lot.endsAt,
         layout,
         postText: layout === "captions" ? settings.captionPostTemplate : "",
+        postTitle: target.facebookPost?.title ?? "",
       };
       await prisma.offer.update({
         where: { id: lot.offerId },

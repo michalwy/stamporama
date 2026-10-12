@@ -16,6 +16,7 @@ import {
   facebookPostLink,
   facebookPostRefusal,
   facebookPostStage,
+  facebookPostTitleRefusal,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
   type FacebookPostStage,
@@ -67,13 +68,17 @@ async function assertPostOwner(ownerId: string, postId: string): Promise<{ colle
  * They must be offers in one group, in no other post, and not yet up (ADR-0061 §2): a lot of a post
  * goes up with the post. They share one listing type unless the group's posts may mix them (#1671).
  * The auctions' closing time becomes one — the first auction's that has one — since the lots of a
- * post close together; a quick buy closes at no time and keeps none.
+ * post close together; a quick buy closes at no time and keeps none. Every post is given a title
+ * (#1862), what tells it apart from the other posts running at once; a blank one is refused.
  */
 export async function createFacebookPost(
   ownerId: string,
   collectionId: string,
-  offerIds: readonly string[]
+  offerIds: readonly string[],
+  title: string
 ): Promise<{ postId: string; postNo: number }> {
+  const titleRefusal = facebookPostTitleRefusal(title);
+  if (titleRefusal) throw new OfferActionBlockedError("facebook-group", titleRefusal);
   await assertCollectionOwner(ownerId, collectionId);
   const ids = [...new Set(offerIds)];
   const rows = await prisma.offer.findMany({
@@ -106,7 +111,7 @@ export async function createFacebookPost(
   const created = await prisma.$transaction(async (tx) => {
     const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
     const post = await tx.facebookPost.create({
-      data: { collectionId, postNo, groupId: lots[0].facebookGroupId! },
+      data: { collectionId, postNo, title: title.trim(), groupId: lots[0].facebookGroupId! },
       select: { id: true },
     });
     for (const [index, lot] of lots.entries()) {
@@ -127,6 +132,8 @@ export async function createFacebookPost(
 export interface FacebookPostScreen {
   postId: string;
   postNo: number;
+  /** The post's title (#1862); null on a post made before titles until it is given one. */
+  title: string | null;
   collectionId: string;
   kit: FacebookOfferKit;
   /** The Facebook platform the lots are offered on — what *Sell* on a lot's row records the sale on. */
@@ -161,6 +168,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     select: {
       id: true,
       postNo: true,
+      title: true,
       collectionId: true,
       lots: {
         select: { id: true, platform: { select: { id: true, name: true } } },
@@ -187,6 +195,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   return {
     postId: post.id,
     postNo: post.postNo,
+    title: post.title,
     collectionId: post.collectionId,
     kit,
     platform: post.lots[0].platform,
@@ -198,6 +207,8 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
 export interface FacebookPostListItem {
   postId: string;
   postNo: number;
+  /** The post's title (#1862); null on a post made before titles until it is given one. */
+  title: string | null;
   group: { id: string; name: string; archived: boolean };
   lotCount: number;
   /** Lots neither sold nor withdrawn. */
@@ -213,6 +224,8 @@ export interface FacebookPostListFilters {
   /** Any of these groups; empty is every group. */
   groupIds?: readonly string[];
   stage?: FacebookPostStage;
+  /** Only the posts with no title (#1862) — those made before titles, to be named. */
+  untitled?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -258,6 +271,7 @@ export async function listFacebookPostsPaginated(
     collectionId,
     ...(filters.groupIds?.length ? { groupId: { in: [...filters.groupIds] } } : {}),
     ...(filters.stage ? facebookPostStageWhere(filters.stage) : {}),
+    ...(filters.untitled ? { OR: [{ title: null }, { title: "" }] } : {}),
   };
   const rows = await prisma.facebookPost.findMany({
     where,
@@ -267,6 +281,7 @@ export async function listFacebookPostsPaginated(
     select: {
       id: true,
       postNo: true,
+      title: true,
       layout: true,
       group: { select: { id: true, name: true, archivedAt: true } },
       lots: { orderBy: { facebookLotNo: "asc" }, select: { state: true, url: true, listingDate: true } },
@@ -291,6 +306,7 @@ export async function listFacebookPostsPaginated(
     return {
       postId: row.id,
       postNo: row.postNo,
+      title: row.title,
       group: { id: row.group.id, name: row.group.name, archived: row.group.archivedAt !== null },
       lotCount: row.lots.length,
       forSaleCount: row.lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state)).length,
@@ -369,6 +385,18 @@ export async function setFacebookPostLayout(
   await prisma.facebookPost.update({ where: { id: postId }, data: { layout } });
   // Captioned now: its lots' photos are queued; laid out as text: they go (#1861).
   await syncFacebookPostLotPhotos(postId);
+}
+
+/**
+ * Give a post its title, or another one (#1862) — at any time, the post being up included: the title
+ * names the post here, and a post already up keeps the title it went up with in its frozen text
+ * (#1800). Never blank, since every post has one.
+ */
+export async function setFacebookPostTitle(ownerId: string, postId: string, title: string): Promise<void> {
+  const refusal = facebookPostTitleRefusal(title);
+  if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
+  await assertPostOwner(ownerId, postId);
+  await prisma.facebookPost.update({ where: { id: postId }, data: { title: title.trim() } });
 }
 
 /**

@@ -13,6 +13,7 @@ import type { FacebookPostListItem } from "@/lib/facebook-posts";
 import {
   FACEBOOK_POST_STAGES,
   FACEBOOK_POST_STAGE_LABEL,
+  facebookPostLabel,
   isFacebookPostStage,
 } from "@/lib/facebook-post-rules";
 import { FACEBOOK_MULTI_LOT_LAYOUT_SHORT_LABEL } from "@/lib/facebook-group-rules";
@@ -43,10 +44,10 @@ interface FacebookPostsListPanelProps {
 }
 
 /**
- * The list of multi-lot Facebook posts (#1850): each post's number, group, lots and how many are still
- * for sale, where it stands, its layout, the day it went up and its link — the row opening the post's
- * own screen. Newest first, paged on the server like trades; the group and stage filters live in the
- * URL (`group`, a comma-separated set, and `stage`).
+ * The list of multi-lot Facebook posts (#1850): each post's number and title (#1862), group, lots and
+ * how many are still for sale, where it stands, its layout, the day it went up and its link — the row
+ * opening the post's own screen. Newest first, paged on the server like trades; the group, stage and
+ * no-title filters live in the URL (`group`, a comma-separated set, `stage`, and `untitled`).
  */
 export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }: FacebookPostsListPanelProps) {
   const router = useRouter();
@@ -56,6 +57,7 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
   const groupIds = useMemo(() => groupParam.split(",").filter(Boolean), [groupParam]);
   const stageParam = searchParams.get("stage") ?? "";
   const stage = isFacebookPostStage(stageParam) ? stageParam : undefined;
+  const untitled = searchParams.get("untitled") === "1";
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -70,13 +72,13 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
     [router, collectionSlug, searchParams]
   );
 
-  const filters: FacebookPostFilters = useMemo(() => ({ groupIds, stage }), [groupIds, stage]);
+  const filters: FacebookPostFilters = useMemo(() => ({ groupIds, stage, untitled }), [groupIds, stage, untitled]);
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useFacebookPostsInfinite(
     collectionId,
     filters
   );
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
-  const hasActiveFilters = groupIds.length > 0 || !!stage;
+  const hasActiveFilters = groupIds.length > 0 || !!stage || untitled;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -109,6 +111,12 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
             />
           ))}
         </div>
+        {/* Posts made before titles have none until they are given one (#1862). */}
+        <FilterChip
+          label="No title"
+          active={untitled}
+          onClick={() => updateParams({ untitled: untitled ? "" : "1" })}
+        />
       </div>
 
       <div
@@ -182,12 +190,28 @@ function FacebookPostRow({
           cursor: "pointer",
         }}
       >
-        <RowLink href={href} label={`Post #${post.postNo}`} />
+        <RowLink href={href} label={facebookPostLabel(post)} />
 
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", minWidth: 0 }}>
+          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
             Post #{post.postNo}
           </span>
+          {post.title ? (
+            <span
+              style={{
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "var(--color-text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              · {post.title}
+            </span>
+          ) : (
+            <span style={{ ...META_INLINE, fontStyle: "italic" }}>no title</span>
+          )}
           <span
             style={{
               fontSize: "0.875rem",

@@ -372,6 +372,24 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   with its `⋮`, type, price, state, link, sale, caption — that wraps rather than shrinking the photo.
   The kit still owns what a lot puts up; the panel owns where it stands and what it can do.
 
+- **Every multi-lot post has a title** (#1862, decided with the collector on 2026-10-12; ADR-0061 §2).
+  `FacebookPost.title`, nullable only for posts made before it (the migration backfills nothing — a
+  title is the collector's words, #1692). `createFacebookPost` takes it and `setFacebookPostTitle`
+  renames, both refusing a blank one through `facebookPostTitleRefusal` (pure) before anything is
+  written; *Post together…* is now `PostTogetherDialog` (`offers/post-together-dialog.tsx`), which asks
+  for it, and the post's screen edits it in its heading through `InlineText`, at any stage. It is named
+  through `facebookPostLabel` (*Post #N · title*, or *Post #N*) on the screen, the lot's card and the
+  chip's hover (`OfferListItem.facebookPost.title`); the list of posts shows it and filters to the
+  untitled (`untitled`, URL `untitled=1`). **`{postTitle}`** (`FACEBOOK_POST_TITLE_PLACEHOLDER`) sits
+  beside `{post}` in the caption and captioned-post lists only. The render and gap functions take a
+  `FacebookPostName` (`{ postNo, title }`) where they took `postNo`. A missing title is
+  `FacebookCaptionedPostGaps.missingPostTitle` — **one** gap for the post, kept out of
+  `emptyPlaceholders` so it is not named per lot. **Unlike the number, the title is content**: frozen as
+  `FacebookFrozenLot.postTitle` (`""` when the post had none; null on a snapshot older than titles,
+  which reads the live one), and `facebookPostSource` returns the `post` to render, its title off the
+  last lot's snapshot — so a rename after posting leaves the posted text as it was. The integration
+  test is the *its title* suite in `tests/integration/facebook-post-screen.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports
