@@ -184,6 +184,7 @@ function offerRow(offer: WaitingOffer, detail: string = offer.platformName): Das
 /** What a *Needs action* row says beside its platform: which of the bell's groups it is in. */
 const NEEDS_ACTION_REASON: Record<OfferNeedsActionReason, string> = {
   "sold-elsewhere": "copy sold elsewhere",
+  "prepared-sold-elsewhere": "not posted yet, copy sold elsewhere",
   "bidding-conflict": "conflicts with a live auction",
   "platform-sale-conflict": "conflicts with a sale on Allegro",
   "listing-changed": "changed since listed",

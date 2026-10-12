@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  evaluateSoldElsewhereReadiness,
   isSetSoldElsewhere,
   needsActionRemedy,
   soldElsewhereRemoval,
@@ -8,7 +9,11 @@ import {
   soldElsewhereRemovalVia,
   soldElsewhereUpdateLabel,
 } from "../../src/lib/offer-needs-action-remedy";
-import { OFFER_STATES } from "../../src/lib/offer-rules";
+import {
+  OFFER_STATES,
+  flagsSoldElsewhere,
+  isPreparedState,
+} from "../../src/lib/offer-rules";
 
 const forSale = { sold: false, soldElsewhere: false, needsAction: false };
 const soldHere = { sold: true, soldElsewhere: false, needsAction: false };
@@ -171,5 +176,40 @@ describe("soldElsewhereUpdateLabel (#1835)", () => {
   it("counts the sets in the update's action", () => {
     assert.equal(soldElsewhereUpdateLabel(1), "Remove 1 set and update");
     assert.equal(soldElsewhereUpdateLabel(3), "Remove 3 sets and update");
+  });
+});
+
+describe("evaluateSoldElsewhereReadiness (#1876)", () => {
+  it("says nothing while no set has sold elsewhere", () => {
+    assert.deepEqual(evaluateSoldElsewhereReadiness(0, "marking this offer ready"), []);
+  });
+
+  it("names the count, the refused step and the action that fixes it", () => {
+    const [one] = evaluateSoldElsewhereReadiness(1, "marking this offer ready");
+    assert.equal(one.code, "sets-sold-elsewhere");
+    assert.equal(one.title, "1 set sold elsewhere");
+    assert.equal(
+      one.message,
+      "1 set holds a copy already sold through another offer. Remove 1 set sold elsewhere before marking this offer ready."
+    );
+    const [two] = evaluateSoldElsewhereReadiness(2, "activating");
+    assert.equal(two.title, "2 sets sold elsewhere");
+    assert.equal(
+      two.message,
+      "2 sets hold a copy already sold through another offer. Remove 2 sets sold elsewhere before activating."
+    );
+  });
+});
+
+describe("the states a set sold elsewhere is flagged in (#1876)", () => {
+  it("is the live states and the two an offer is prepared in, nothing else", () => {
+    assert.deepEqual(
+      OFFER_STATES.filter(isPreparedState),
+      ["preparing", "ready"]
+    );
+    assert.deepEqual(
+      [...OFFER_STATES.filter(flagsSoldElsewhere)].sort(),
+      ["active", "pending", "preparing", "ready"]
+    );
   });
 });

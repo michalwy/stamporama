@@ -1,5 +1,6 @@
 import type { ListingBlocker } from "./listing-preconditions";
 import type { ListingTextLimitBlocker } from "./listing-text-limits";
+import type { SoldElsewhereReadyBlocker } from "./offer-needs-action-remedy";
 import type { OfferPhotoGenerationStatus } from "./offer-photo-generation";
 
 // Whether an offer's listing photos are in a state that lets it be marked **Ready** — pure, no
@@ -55,9 +56,13 @@ export interface CoverReadinessBlocker {
 export type ListingCardBlocker = ListingBlocker | ListingTextLimitBlocker;
 
 /** Everything the ready gate reports, whatever it is about: the Assistant's listing preconditions
- *  (#406/#418), the platform's text caps (#636) and the photo plan's own state. Same shape, so a
- *  surface renders one list. */
-export type ReadyBlocker = ListingCardBlocker | PhotoReadinessBlocker | CoverReadinessBlocker;
+ *  (#406/#418), the platform's text caps (#636), the photo plan's own state and the sets that have
+ *  sold elsewhere (#1876). Same shape, so a surface renders one list. */
+export type ReadyBlocker =
+  | ListingCardBlocker
+  | PhotoReadinessBlocker
+  | CoverReadinessBlocker
+  | SoldElsewhereReadyBlocker;
 
 /** The four codes above as a set, so a mixed list of ready-gate reasons can be told apart. */
 const PHOTO_READINESS_CODES = new Set<string>([

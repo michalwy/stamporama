@@ -59,8 +59,9 @@ export function needsActionRemedy(offer: {
 /**
  * Whether a set has **sold elsewhere** (#1804): it has not left through this offer's own sale, and
  * one of its copies has left through another set's — another offer's, on this platform or another.
- * `soldVia` maps each sold copy to the set whose sale line took it. Only a live offer is asked: a
- * set of an offer that is not up is not out of step with anything.
+ * `soldVia` maps each sold copy to the set whose sale line took it. Only an offer that is live or
+ * still being prepared is asked (`flagsSoldElsewhere`, #1876): a paused or closed one is not about to
+ * sell anything.
  */
 export function isSetSoldElsewhere(
   set: { id: string; sold: boolean; itemIds: readonly string[] },
@@ -114,4 +115,37 @@ export function soldElsewhereRemovalVia(offer: {
 /** The update's action once it removes sets first (#1835): *Remove 2 sets and update*. */
 export function soldElsewhereUpdateLabel(count: number): string {
   return `Remove ${count} ${count === 1 ? "set" : "sets"} and update`;
+}
+
+/**
+ * The refusal an offer still being prepared meets while it holds sets sold elsewhere (#1876): it may
+ * not be marked Ready, submitted or published until they are removed. The same shape as the other
+ * ready-gate reasons (#418), so **Mark ready** is disabled with it in the one list they render, and
+ * the server states the same sentence when it refuses the step from any surface.
+ */
+export interface SoldElsewhereReadyBlocker {
+  code: "sets-sold-elsewhere";
+  title: string;
+  message: string;
+  subjects: string[];
+  stampIds: string[];
+}
+
+/** One blocker naming how many sets hold a copy sold elsewhere, or none. `verb` is the step refused —
+ * *marking this offer ready*, *activating* — as `transitionVerb` says it. */
+export function evaluateSoldElsewhereReadiness(
+  count: number,
+  verb: string
+): SoldElsewhereReadyBlocker[] {
+  if (count <= 0) return [];
+  const sets = count === 1 ? "1 set holds a copy" : `${count} sets hold a copy`;
+  return [
+    {
+      code: "sets-sold-elsewhere",
+      title: count === 1 ? "1 set sold elsewhere" : `${count} sets sold elsewhere`,
+      message: `${sets} already sold through another offer. ${soldElsewhereRemovalLabel(count)} before ${verb}.`,
+      subjects: [],
+      stampIds: [],
+    },
+  ];
 }

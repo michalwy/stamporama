@@ -25,10 +25,14 @@ import { formatEntityNo } from "@/lib/quick-jump";
  * removes them first: the same list, so the removal is still seen before it happens, and one
  * confirmation covering both halves. With nothing left the update refuses for the same reason, and
  * the alternative is closing the listing.
+ *
+ * An offer still being **prepared** (#1876) has no listing yet: the same removal, worded without one —
+ * nothing to update afterwards, and withdrawing the offer as the way down when nothing would be left.
  */
 export function RemoveSoldElsewhereDialog({
   collectionSlug,
   andUpdate = false,
+  prepared = false,
   sets,
   leftToSell,
   isPending,
@@ -40,6 +44,8 @@ export function RemoveSoldElsewhereDialog({
   collectionSlug: string;
   /** This is Update via Assistant's confirmation (#1835): the removal is its first half. */
   andUpdate?: boolean;
+  /** The offer is Preparing or Ready — nothing of it is posted yet (#1876). */
+  prepared?: boolean;
   /** The sets sold elsewhere — exactly what the action removes. */
   sets: OfferDetailSet[];
   /** Sets still for sale once these are gone. */
@@ -63,10 +69,14 @@ export function RemoveSoldElsewhereDialog({
           {nothingLeft
             ? andUpdate
               ? "Nothing would be left to update the listing to — every other set has sold too. Close the listing instead; the sets stay as the record of where the copies went."
-              : "Nothing would be left to sell — every other set has sold too. Close the listing instead; the sets stay as the record of where the copies went."
+              : prepared
+                ? "Nothing would be left to sell — every other set has sold too. Withdraw the offer instead; the sets stay as the record of where the copies went."
+                : "Nothing would be left to sell — every other set has sold too. Close the listing instead; the sets stay as the record of where the copies went."
             : andUpdate
               ? "These sets sold elsewhere come off the offer first; their copies stay in your inventory. Then the listing photos are regenerated without them, and the Assistant opens the listing's edit form re-filled with what is left."
-              : "These sets come off the offer; their copies stay in your inventory. Then update the listing on the platform to what is left."}
+              : prepared
+                ? "These sets come off the offer; their copies stay in your inventory. Nothing has been posted yet, so the offer can then move on as it is."
+                : "These sets come off the offer; their copies stay in your inventory. Then update the listing on the platform to what is left."}
         </p>
         <ul style={{ margin: "0.75rem 0 0", paddingLeft: "1.25rem", fontSize: "0.875rem", lineHeight: 1.6 }}>
           {sets.map((set) => (

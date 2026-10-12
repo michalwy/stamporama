@@ -77,8 +77,9 @@ platform, and how long it has been waiting, and opens the offer.
 - **Pending approval** — offers submitted and waiting for a group administrator (or the platform)
   to approve them, the longest-waiting first.
 - **Needs action** — live listings that are wrong: one holding a copy that has sold elsewhere, is in
-  another live auction, or has sold on Allegro (these come first), and one whose contents have
-  changed since it went up. Each row says which.
+  another live auction, or has sold on Allegro (these come first); then an offer not posted yet that
+  holds a copy sold elsewhere; then one whose contents have changed since it went up. Each row says
+  which.
 - **Quick buys to refresh** — quick buys up longer than their platform's refresh threshold, aged from
   when they were last posted.
 - **Auctions ended, no result** — your auctions that have ended with a bid and have no sale or other

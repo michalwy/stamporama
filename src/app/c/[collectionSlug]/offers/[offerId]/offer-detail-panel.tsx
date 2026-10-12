@@ -61,6 +61,7 @@ import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format"
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import {
   isAuctionListing,
+  isPreparedState,
   isTerminalState,
   isFacebookPublish,
   manualTransitions,
@@ -1763,6 +1764,7 @@ export function OfferDetailPanel({
         <RemoveSoldElsewhereDialog
           collectionSlug={collectionSlug}
           andUpdate={soldElsewhereVia === "update"}
+          prepared={isPreparedState(offer.state)}
           sets={soldElsewhere.remove}
           leftToSell={soldElsewhere.leftToSell}
           isPending={isPending}
@@ -1808,7 +1810,8 @@ export function OfferDetailPanel({
                 if (andUpdate) void startHandoff(offerId, "update");
                 else
                   toast({
-                    message: `Removed ${setIds.length} ${setIds.length === 1 ? "set" : "sets"} sold elsewhere — now update the listing`,
+                    // Nothing of a prepared offer is posted yet (#1876), so there is no listing to update.
+                    message: `Removed ${setIds.length} ${setIds.length === 1 ? "set" : "sets"} sold elsewhere${isPreparedState(offer.state) ? "" : " — now update the listing"}`,
                   });
               } else setActionError(result.message);
             });
