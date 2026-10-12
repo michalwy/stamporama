@@ -18,6 +18,12 @@
 // it is printed beside the measurement. Here the market figure is a row of its own, and an estimate
 // that skipped the measured copies would price the set as though they were worth nothing. A copy
 // valued at a **recorded** figure (#747) has no catalogue value to correct, and is left out.
+//
+// **The table reads without its tooltips** (#1839): three headed columns — the row's name, *Price*,
+// *Profit over cost* — a short note in brackets after a name saying what the figure is and nothing
+// more, a Market row that is always there (empty, with its reason, when nothing was recorded), and
+// the offer's own price as the last row. What a figure rests on beyond that note — the ratio's
+// bucket and sample, the sets a figure leaves out — is the tooltip's.
 
 import { isStatedRatio, type RatioBucketLevel } from "./realization-ratio";
 
@@ -32,6 +38,9 @@ export interface CopyEstimateInput {
   bucketLabel: string;
   /** Observations behind the bucket's median; zero at the two stated rungs. */
   n: number;
+  /** The book the catalogue value was read in — `Michel / Online` — named on the Catalogue row
+   *  (#1839). Null where the collection has no such book on record. */
+  catalogueName: string | null;
 }
 
 /**
@@ -69,6 +78,20 @@ export function describeEstimateSource(source: EstimateSource): string {
   return parts.join(" · ");
 }
 
+/**
+ * What the estimate rests on, for the Estimated row's tooltip (#1839) — the bucket and how many
+ * results, `Second Republic, 26 results`; the manual factor, which its own label names; or how many
+ * buckets, when the copies resolved several. The row itself says only the ratio.
+ */
+export function describeEstimateBasis(source: EstimateSource): string {
+  if (source.level === null || source.bucketLabel === null) {
+    return `${source.bucketCount} ratio buckets`;
+  }
+  if (source.level === "catalogue-factor") return `${source.bucketLabel} — your estimate, not evidence`;
+  if (source.level === "fallback") return `${source.bucketLabel} — policy, not evidence`;
+  return `${source.bucketLabel}, ${source.n} result${source.n === 1 ? "" : "s"}`;
+}
+
 /** True when the source is one of the two stated rungs — drawn in the warning tone. */
 export function isStatedSource(source: EstimateSource): boolean {
   return source.level !== null && isStatedRatio(source.level);
@@ -81,6 +104,11 @@ export interface SetsEstimate {
   valuedSets: number;
   /** Copies behind the figure. */
   copies: number;
+  /** The estimate as a share of the catalogue value it was taken from — unitless, the one ratio
+   *  when there is one and the weighted one across several buckets. */
+  ratio: number;
+  /** The books the copies' catalogue values were read in, by name, sorted (#1839). */
+  catalogues: string[];
   source: EstimateSource;
 }
 
@@ -92,14 +120,18 @@ const bucketKey = (copy: CopyEstimateInput) => `${copy.level}\u0000${copy.bucket
  */
 export function estimateSets(sets: readonly (readonly CopyEstimateInput[])[]): SetsEstimate | null {
   let sum = 0;
+  let catalogueSum = 0;
   let valuedSets = 0;
   let copies = 0;
   const buckets = new Map<string, CopyEstimateInput>();
+  const catalogues = new Set<string>();
   for (const set of sets) {
     if (set.length === 0) continue;
     for (const copy of set) {
       sum += copy.catalogueBase * copy.ratio;
+      catalogueSum += copy.catalogueBase;
       buckets.set(bucketKey(copy), copy);
+      if (copy.catalogueName !== null) catalogues.add(copy.catalogueName);
     }
     copies += set.length;
     valuedSets++;
@@ -110,6 +142,8 @@ export function estimateSets(sets: readonly (readonly CopyEstimateInput[])[]): S
     averageBase: sum / valuedSets,
     valuedSets,
     copies,
+    ratio: only?.ratio ?? (catalogueSum > 0 ? sum / catalogueSum : 0),
+    catalogues: [...catalogues].sort((a, b) => a.localeCompare(b)),
     source: {
       level: only?.level ?? null,
       bucketLabel: only?.bucketLabel ?? null,
@@ -137,19 +171,42 @@ export function priceMargin(price: number, cost: number): PriceMargin {
   };
 }
 
-/** A margin as the table prints it: `+12.00 · +40%`, `−3.50 · −10%`. */
+/** A margin as the table prints it — one figure with its percentage (#1839): `+12.00 (+40%)`,
+ *  `−3.50 (−10%)`. */
 export function formatPriceMargin(margin: PriceMargin): string {
   const signed = (value: string) => (value.startsWith("-") ? `−${value.slice(1)}` : `+${value}`);
   const amount = signed(margin.amount);
-  return margin.percent === null ? amount : `${amount} · ${signed(String(margin.percent))}%`;
+  return margin.percent === null ? amount : `${amount} (${signed(String(margin.percent))}%)`;
 }
 
-export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" | "cost";
+/** Which way a margin goes, for its colour: a loss, a profit, or neither. */
+export function marginSign(margin: PriceMargin): -1 | 0 | 1 {
+  const value = Number(margin.amount);
+  return value < 0 ? -1 : value > 0 ? 1 : 0;
+}
+
+/** The Catalogue row's note (#1839): the book the value was read in, and that it is the catalogue at
+ *  full value — the figure the Estimated row's share is a share of. Several books are counted rather
+ *  than one named, the rule the estimate's buckets follow; null when none can be named. */
+export function describeCatalogueNote(catalogues: readonly string[]): string | null {
+  if (catalogues.length === 0) return null;
+  const book = catalogues.length === 1 ? catalogues[0] : `${catalogues.length} catalogues`;
+  return `${book}, 100%`;
+}
+
+/** The Estimated row's note (#1839): the ratio and nothing more — `58% of catalogue`. */
+export function describeEstimateNote(ratio: number): string {
+  return `${Math.round(ratio * 100)}% of catalogue`;
+}
+
+/** `own` is the offer's own price — the table's last row since #1839. */
+export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" | "cost" | "own";
 
 export interface OfferPriceRow {
   key: OfferPriceRowKey;
-  /** 2-dp string in the offer's currency. */
-  amount: string;
+  /** 2-dp string in the offer's currency; null only on the two rows that are always drawn — Market
+   *  with nothing recorded, and the offer's own price while it has none. */
+  amount: string | null;
   /** Over the cost row; null on the cost row itself and wherever the cost is unknown. */
   margin: PriceMargin | null;
 }
@@ -162,31 +219,38 @@ export interface OfferPriceFigures {
   estimated: string | null;
   market: string | null;
   cost: string | null;
+  /** The offer's own price; null while it has none. */
+  own: string | null;
 }
 
-const ROW_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost"];
+const ROW_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
+
+/** The rows drawn whether or not they have a figure (#1839): Market, whose absence is itself worth
+ *  saying, and the offer's own price, which is where it is set. */
+const ALWAYS_DRAWN: ReadonlySet<OfferPriceRowKey> = new Set(["market", "own"]);
 
 /**
- * The table's rows, in the order the collector named them. A figure that does not exist is left
- * out, never drawn as `0.00` (#1184) — and a price of zero is no price, so the four prices drop out
- * at zero too. **A cost of zero is kept**: copies that cost nothing are a known cost, and every
- * margin then reads as the whole price.
+ * The table's rows, in the order the collector named them, the offer's own price last. A figure that
+ * does not exist is left out, never drawn as `0.00` (#1184) — and a price of zero is no price, so the
+ * prices drop out at zero too — except Market and the offer's own price, which are drawn empty.
+ * **A cost of zero is kept**: copies that cost nothing are a known cost, and every margin then reads
+ * as the whole price.
  */
 export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
   const cost = figures.cost === null ? null : Number(figures.cost);
-  const known = cost !== null && Number.isFinite(cost);
+  const known = cost !== null && Number.isFinite(cost) && cost >= 0;
   const rows: OfferPriceRow[] = [];
   for (const key of ROW_ORDER) {
     const amount = figures[key];
-    if (amount === null) continue;
-    const value = Number(amount);
-    if (!Number.isFinite(value)) continue;
+    const value = amount === null ? NaN : Number(amount);
     if (key === "cost") {
-      if (value < 0) continue;
-      rows.push({ key, amount, margin: null });
+      if (known) rows.push({ key, amount, margin: null });
       continue;
     }
-    if (value <= 0) continue;
+    if (!(Number.isFinite(value) && value > 0)) {
+      if (ALWAYS_DRAWN.has(key)) rows.push({ key, amount: null, margin: null });
+      continue;
+    }
     rows.push({ key, amount, margin: known ? priceMargin(value, cost) : null });
   }
   return rows;

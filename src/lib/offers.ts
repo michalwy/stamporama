@@ -4315,9 +4315,13 @@ export interface OfferDetail {
    * one set). Null when no copy can be estimated or no rate is available. It was the catalogue value
    * until #1829, which is {@link catalogPrice} now. */
   suggestedPrice: string | null;
-  /** What {@link suggestedPrice} rests on: the sets and copies behind it, and the ratio's source —
-   * the bucket and its `n`, or the catalogue's manual factor (#1828). Null with it. */
-  suggestedEstimate: { valuedSets: number; copies: number; source: EstimateSource } | null;
+  /** What {@link suggestedPrice} rests on: the sets and copies behind it, its share of the catalogue
+   * value (`ratio`, the price table's note since #1839), and the ratio's source — the bucket and its
+   * `n`, or the catalogue's manual factor (#1828). Null with it. */
+  suggestedEstimate: { valuedSets: number; copies: number; ratio: number; source: EstimateSource } | null;
+  /** The books the copies' catalogue values were read in, by name — `Michel / Online` — which the
+   * price table's Catalogue row names (#1839). Empty when none can be named. */
+  catalogNames: string[];
   /** The catalogue value per set **in the offer's currency**, averaged over the sets carrying one,
    * converted from base at the current FX rate. Null when nothing is valued or no rate is available.
    * The agent API's `suggested` (#711), whose meaning is fixed. */
@@ -4333,6 +4337,10 @@ export interface OfferDetail {
    * copy that has recorded results; `copies` is how many copies those results cover, and
    * `noEvidenceCopies` how many held copies they say nothing about. Null when no copy has any. */
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
+  /** True when copies do have recorded results but no rate converts them into the offer's currency —
+   * the one reason {@link marketPrice} is null other than there being none, which the price table's
+   * always-drawn Market row says (#1839). */
+  marketUnconvertible: boolean;
   /** What the copies cost per set (#378, estimates included #1736), in the offer's currency. Null
    * when no set's cost is known or no rate is available. */
   costPrice: string | null;
@@ -5004,8 +5012,14 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     suggestedPrice,
     suggestedEstimate:
       estimate && suggestedPrice !== null
-        ? { valuedSets: estimate.valuedSets, copies: estimate.copies, source: estimate.source }
+        ? {
+            valuedSets: estimate.valuedSets,
+            copies: estimate.copies,
+            ratio: estimate.ratio,
+            source: estimate.source,
+          }
         : null,
+    catalogNames: estimate?.catalogues ?? [],
     catalogPrice,
     catalogUnpricedSets: offer.sets.length - valuedSets,
     catalogFaultReducedCount: faultReducedCount,
@@ -5014,6 +5028,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       marketAmount === null
         ? null
         : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
+    marketUnconvertible: marketSets > 0 && marketAmount === null,
     costPrice: inOfferCurrencyOrNull(costTotals.average),
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     platformMinimumPrice: offer.platform.minimumPrice?.toFixed(2) ?? null,

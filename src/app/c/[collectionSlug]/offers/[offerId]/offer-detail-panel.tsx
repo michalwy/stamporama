@@ -1225,47 +1225,46 @@ export function OfferDetailPanel({
               either way, and editing it in place is how a bid is refreshed (#351's pattern:
               committing stamps the check date shown below it). */}
           <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
-            {/* The figures the price is weighed against, as a small table (#1829): the platform's
-                floor (#731), the catalogue value (#230), Estimated value — the suggestion — the
-                market and the cost, each per set with its margin over the cost. Clicking a price
+            {/* The price and the figures it is weighed against, as a small table (#1829) made to
+                read without its tooltips (#1839): the platform's floor (#731), the catalogue value
+                (#230), Estimated value — the suggestion — the market and the cost, each per set with
+                its profit over the cost, and the offer's own price as the last row. Clicking a price
                 writes the figure the seller **states** (`askingPriceField`), never an auction's
-                current price, which would be recording a bid nobody placed. */}
+                current price, which would be recording a bid nobody placed. The offer's own price
+                reads as text and becomes its field on click, as it always has. */}
             <OfferPriceTable
               offer={offer}
               askingPrice={askingPrice}
               target={askingPriceNoun}
+              ownLabel={isAuctionListing(offer.listingType) ? priceLabel(offer.listingType) : "Your price"}
               editable={editable}
               disabled={isPending}
               onApply={(amount) => patch(askingPriceField, amount)}
+              priceEditor={
+                <InlineText
+                  value={offer.price === "0.00" ? "" : offer.price}
+                  placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
+                  display={
+                    offer.price === "0.00" ? (
+                      <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", cursor: "text" }}>
+                        {/* An unbid auction is not *unpriced* — it is up at its opening figure with
+                            nobody having bid, which is a different and perfectly normal thing (#449). */}
+                        {isAuctionListing(offer.listingType) ? "no bids yet" : "no price yet"}
+                      </span>
+                    ) : (
+                      <span style={{ cursor: "text" }}>{offer.price}</span>
+                    )
+                  }
+                  editable={editable}
+                  isPending={isPending}
+                  inputType="amount"
+                  suffix={offer.currency}
+                  // A price is retyped whole, never amended in the middle (#329).
+                  selectOnEdit
+                  onSave={(v) => patch("price", v)}
+                />
+              }
             />
-            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", fontVariantNumeric: "tabular-nums" }}>
-              <span style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
-                <Tooltip content={priceLabel(offer.listingType)} align="end">
-                  <InlineText
-                    value={offer.price === "0.00" ? "" : offer.price}
-                    placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
-                    display={
-                      offer.price === "0.00" ? (
-                        <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
-                          {/* An unbid auction is not *unpriced* — it is up at its opening figure with
-                              nobody having bid, which is a different and perfectly normal thing (#449). */}
-                          {isAuctionListing(offer.listingType) ? "no bids yet" : "no price yet"}
-                        </span>
-                      ) : (
-                        <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>
-                      )
-                    }
-                    editable={editable}
-                    isPending={isPending}
-                    inputType="amount"
-                    suffix={offer.currency}
-                    // A price is retyped whole, never amended in the middle (#329).
-                    selectOnEdit
-                    onSave={(v) => patch("price", v)}
-                  />
-                </Tooltip>
-              </span>
-            </span>
             {/* An auction's two extra facts (#449), both muted under the live figure: what it opened
                 at — a record, nothing is computed from it — and when the figure was last confirmed
                 against the listing. Refreshing a bid is manual by decision (ADR-0021 §8), so an
@@ -1332,15 +1331,6 @@ export function OfferDetailPanel({
                     : "activate this offer"
                   : "mark this offer ready"}
               </span>
-            )}
-            {offer.priceBase && (
-              <Tooltip content={`Converted to ${offer.baseCurrency} at the current rate`} align="end">
-                <span
-                  style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}
-                >
-                  ≈ {offer.priceBase} {offer.baseCurrency}
-                </span>
-              </Tooltip>
             )}
             {/* The platform's own opening figure (#362/#553), offered back only on an auction that
                 still has no starting price. It is a *creation-time* seed, so on an offer that
