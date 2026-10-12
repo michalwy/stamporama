@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { offerListNeighbours } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 // Where one offer sits in the filtered offer list, for the detail screen's next/previous links
 // (#429). Takes the same filter params as the list route, plus the offer being looked at.
@@ -38,6 +39,7 @@ export async function GET(
       needsRefresh: sp.get("needsRefresh") === "1",
       platformSale: sp.get("platformSale") === "1",
       includeClosed: sp.get("includeClosed") === "1",
+      facebookPostNo: parseFacebookPostNo(sp.get("post")),
     });
     return NextResponse.json(result);
   } catch {

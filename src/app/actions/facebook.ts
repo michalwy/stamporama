@@ -134,7 +134,7 @@ export async function facebookGroupChoicesAction(
 }
 
 export type FacebookPostActionState =
-  | { status: "success"; postId: string }
+  | { status: "success"; postId: string; postNo: number }
   | { status: "error"; message: string };
 
 /** Put the ticked Facebook offers into one post, as lots in the order given. */
@@ -144,8 +144,8 @@ export async function createFacebookPostAction(
 ): Promise<FacebookPostActionState> {
   const session = await getSession();
   try {
-    const { postId } = await createFacebookPost(session.user.id, collectionId, offerIds);
-    return { status: "success", postId };
+    const { postId, postNo } = await createFacebookPost(session.user.id, collectionId, offerIds);
+    return { status: "success", postId, postNo };
   } catch (err) {
     return failure(err, "Failed to put the offers into one post.");
   }

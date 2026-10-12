@@ -201,7 +201,9 @@ any of them is.
    On the platform named as **Facebook**, an offer — an auction or a quick buy — is in a group and
    carries a **Facebook** card: the post's text and photos to paste by hand. Its listing URL is the
    post's link, asked for by **Activate** as on any platform. Several offers in one group can be
-   **posted together** as lots of one post. See [Facebook](facebook.md#selling-in-a-group).
+   **posted together** as lots of one post, which then has a screen and a number of its own — each
+   lot's row in the list says **Post #12 · lot 3**. See [Facebook](facebook.md#selling-in-a-group) and
+   [A post with several lots](facebook.md#a-post-with-several-lots).
 
 ### The price table
 
@@ -2274,7 +2276,7 @@ listing date.
 ### Reposting
 
 Once you have posted it again, choose **Repost…** from the offer's **⋮** menu (on Facebook, also on
-the offer's Facebook card) and paste the **new link**. The offer stays the same offer — the same
+the Facebook card of an offer posted alone) and paste the **new link**. The offer stays the same offer — the same
 number, so buyers' messages and an `{offer}` in a Facebook post still match, and the same copies, so
 nothing moves. What changes:
 

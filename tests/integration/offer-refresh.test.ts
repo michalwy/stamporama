@@ -228,7 +228,7 @@ describe("quick-buy refresh (#1718)", () => {
           },
         })
       ).id;
-      postId = (await prisma.facebookPost.create({ data: { collectionId, groupId: following } })).id;
+      postId = (await prisma.facebookPost.create({ data: { collectionId, postNo: 1, groupId: following } })).id;
     });
 
     it("holds an offer to its group's threshold — Facebook's where the group follows it", async () => {
@@ -266,7 +266,7 @@ describe("quick-buy refresh (#1718)", () => {
     });
 
     it("reposts a post for the group's approval, and counts the days up from the approval (#1779)", async () => {
-      const post = (await prisma.facebookPost.create({ data: { collectionId, groupId: following } })).id;
+      const post = (await prisma.facebookPost.create({ data: { collectionId, postNo: 2, groupId: following } })).id;
       const lot1 = await facebookOffer(following, 5, "fixed", { postId: post, lotNo: 1 });
       const lot2 = await facebookOffer(following, 5, "fixed", { postId: post, lotNo: 2 });
       const lot3 = await facebookOffer(following, 5, "auction", { postId: post, lotNo: 3 });

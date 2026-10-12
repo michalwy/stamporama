@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listOffersPaginated } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 // Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or the
 // derived "needs action" overlay (active offers holding a set sold elsewhere).
@@ -50,6 +51,7 @@ export async function GET(
       platformSale,
       search,
       includeClosed,
+      facebookPostNo: parseFacebookPostNo(sp.get("post")),
       pageSize: 50,
     });
     return NextResponse.json(result);

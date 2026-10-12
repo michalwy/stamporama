@@ -6,7 +6,9 @@ import {
   OFFER_STATE_LABEL,
   isAuctionListing,
 } from "@/lib/offer-rules";
+import Link from "next/link";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { Icon } from "@/app/icons";
 
 // Shared chip presentation for an offer's lifecycle state (ADR-0012, #165), reused by the list
 // rows, the lot detail panel's Offers section, and the dialog header so an offer reads
@@ -216,5 +218,57 @@ export function InActiveBiddingChip() {
     "warning",
     "In bidding",
     "A bid has been placed — withdraw this copy from other platforms before the auction closes"
+  );
+}
+
+/** A lot of a multi-lot Facebook post (#1842), on its row: *Post #N · lot M*, opening the post's own
+ *  screen, with a narrowing control beside the words that filters the list to the post's lots. Two
+ *  targets in one chip because both answer "this post": where it is managed, and which rows are in it. */
+export function FacebookPostChip({
+  collectionSlug,
+  postNo,
+  lotNo,
+  onNarrow,
+}: {
+  collectionSlug: string;
+  postNo: number;
+  lotNo: number;
+  /** Filters the list to this post's lots; absent where the list already is. */
+  onNarrow?: () => void;
+}) {
+  return (
+    <span style={{ ...CHIP, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+      <Tooltip content="Open the post — every lot, the post kit and the post's moves">
+        <Link
+          href={`/c/${collectionSlug}/offers/posts/${postNo}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: "var(--color-accent)", textDecoration: "none" }}
+        >
+          Post #{postNo} · lot {lotNo}
+        </Link>
+      </Tooltip>
+      {onNarrow && (
+        <Tooltip content="Show only this post's lots">
+          <button
+            type="button"
+            aria-label={`Show only post #${postNo}'s lots`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onNarrow();
+            }}
+            style={{
+              display: "inline-flex",
+              padding: 0,
+              border: "none",
+              background: "none",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="list" size="sm" />
+          </button>
+        </Tooltip>
+      )}
+    </span>
   );
 }

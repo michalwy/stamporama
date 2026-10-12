@@ -2289,6 +2289,9 @@ export interface OfferListItem {
   facebookGroupId: string | null;
   bidIncrement: string | null;
   facebookPostId: string | null;
+  /** The multi-lot post this offer is a lot of, by the post's number and the lot's (#1842) — the row's
+   *  *Post #N · lot M* chip. Null for an offer posted alone and off Facebook. */
+  facebookPost: { postNo: number; lotNo: number } | null;
   /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
    *  changing the listing type drops it. */
   facebookOwnTemplate: boolean;
@@ -2316,6 +2319,8 @@ const OFFER_SELECT = {
   facebookGroupId: true,
   bidIncrement: true,
   facebookPostId: true,
+  facebookLotNo: true,
+  facebookPost: { select: { postNo: true } },
   facebookPostTemplate: true,
   createdAt: true,
   platform: { select: { name: true } },
@@ -2343,6 +2348,8 @@ type OfferRow = {
   facebookGroupId: string | null;
   bidIncrement: Decimal | null;
   facebookPostId: string | null;
+  facebookLotNo: number | null;
+  facebookPost: { postNo: number } | null;
   facebookPostTemplate: string | null;
   createdAt: Date;
   platform: { name: string };
@@ -2428,6 +2435,10 @@ function toListItem(
     facebookGroupId: row.facebookGroupId,
     bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
     facebookPostId: row.facebookPostId,
+    facebookPost:
+      row.facebookPost && row.facebookLotNo !== null
+        ? { postNo: row.facebookPost.postNo, lotNo: row.facebookLotNo }
+        : null,
     facebookOwnTemplate: row.facebookPostTemplate !== null,
     createdAt: row.createdAt,
   };
@@ -2543,6 +2554,10 @@ export interface OfferListFilters {
    * offer's own number, its listing URL, or the catalog number / filing ref of a copy it holds.
    * Composes with every other filter rather than replacing them. */
   search?: string;
+  /** Only the lots of one multi-lot Facebook post, by its short number (#1842) — what the *Post #N ·
+   *  lot M* chip on a lot's row narrows the list to. A plain column narrowing like `bidding`, composing
+   *  with every other filter. */
+  facebookPostNo?: number;
   offset?: number;
   pageSize?: number;
 }
@@ -2674,6 +2689,7 @@ function offerListWhere(
     | "bidding"
     | "endedAuction"
     | "listingOutOfDate"
+    | "facebookPostNo"
   >,
   needsActionIds?: string[],
   platformSoldIds?: string[],
@@ -2702,6 +2718,7 @@ function offerListWhere(
     collectionId,
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.bidding ? { inActiveBidding: true } : {}),
+    ...(filters.facebookPostNo ? { facebookPost: { postNo: filters.facebookPostNo } } : {}),
     ...(and.length > 0 ? { AND: and } : {}),
   };
 }
@@ -2927,6 +2944,7 @@ export async function offerListNeighbours(
     | "platformSale"
     | "listingOutOfDate"
     | "needsRefresh"
+    | "facebookPostNo"
   > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -3443,6 +3461,7 @@ export async function offersSummary(
     | "platformSale"
     | "listingOutOfDate"
     | "needsRefresh"
+    | "facebookPostNo"
   > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);

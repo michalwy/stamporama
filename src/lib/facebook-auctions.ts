@@ -406,9 +406,10 @@ export interface FacebookOfferKit {
     captionPostTemplate: string;
   };
   /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
-   *  lot's own `url` (#1668), so the post carries none. `layout` is the post's own choice (#1841), or
-   *  null while it follows its group's. */
-  post: { id: string; layout: FacebookMultiLotLayout | null } | null;
+   *  lot's own `url` (#1668), so the post carries none. `postNo` is its short number (#1842), what its
+   *  screen is reached by; `layout` is the post's own choice (#1841), or null while it follows its
+   *  group's. */
+  post: { id: string; postNo: number; layout: FacebookMultiLotLayout | null } | null;
   /** How the post is laid out now (#1841): the post's own choice, else its group's; always `text` for
    *  an offer posted alone. A published post is drawn in the layout it went up in, which its frozen
    *  lots carry. */
@@ -504,7 +505,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     select: {
       collectionId: true,
       facebookPostId: true,
-      facebookPost: { select: { id: true, layout: true } },
+      facebookPost: { select: { id: true, postNo: true, layout: true } },
       facebookGroup: true,
     },
   });
@@ -539,6 +540,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     post: offer.facebookPost
       ? {
           id: offer.facebookPost.id,
+          postNo: offer.facebookPost.postNo,
           layout: offer.facebookPost.layout === null ? null : toFacebookMultiLotLayout(offer.facebookPost.layout),
         }
       : null,

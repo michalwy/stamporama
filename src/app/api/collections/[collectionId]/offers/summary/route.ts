@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { offersSummary } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 // Aggregate figures for the offer list's summary bar (#317). Takes the same params as the list
 // route so the totals cover exactly the offers being shown, not the whole collection.
@@ -34,6 +35,7 @@ export async function GET(
       needsRefresh: sp.get("needsRefresh") === "1",
       platformSale: sp.get("platformSale") === "1",
       includeClosed: sp.get("includeClosed") === "1",
+      facebookPostNo: parseFacebookPostNo(sp.get("post")),
     });
     return NextResponse.json(summary);
   } catch {

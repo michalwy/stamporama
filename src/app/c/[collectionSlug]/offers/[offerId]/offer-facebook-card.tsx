@@ -3,17 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
-import { isFacebookLotPosted } from "@/lib/facebook-post-rules";
-import {
-  FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
-  FACEBOOK_MULTI_LOT_LAYOUTS,
-  FACEBOOK_TERMS_PLACEHOLDER,
-  type FacebookGroupSetting,
-  type FacebookMultiLotLayout,
-} from "@/lib/facebook-group-rules";
-import { isAuctionListing, OFFER_LISTING_TYPE_LABEL, OFFER_STATE_LABEL } from "@/lib/offer-rules";
-import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
-import { RenderedHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
+import { FACEBOOK_POST_STAGE_LABEL, facebookPostStage, isFacebookLotPosted } from "@/lib/facebook-post-rules";
+import { isAuctionListing } from "@/lib/offer-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
@@ -22,16 +13,14 @@ import { PendingLinkMark } from "../offer-badges";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
 import { renderFacebookKitPost } from "./facebook-kit-post";
+import { FacebookPostKit } from "./facebook-post-kit";
 
-// A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
-// alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
-// in one click. Where the post went up is the offer's own listing link (#1668): *Activate* in the
-// header asks for it, as on every platform, and for a lot it is written into every lot of the post.
-//
-// Facebook has no API for posting in groups, so the kit is the whole of posting: the collector pastes
-// the text and uploads the photos by hand. The text is rendered **here**, in the browser, because the
-// closing time it states is a local time and this is the one place the collector's zone is known —
-// the same reason the closing time is typed in the browser (#490).
+// A Facebook offer's card (#1544; ADR-0061 §2, §3): the group it is in and the post that carries it.
+// An offer posted alone has its kit here — the post's text and photos, each taken in one click
+// (`FacebookPostKit`) — and its listing link, which *Activate* in the header asks for as on every
+// platform (#1668). A lot of a post holding several only names its post — *Post #N · lot M of K*, where
+// the post stands, and *Open post* — since the post has a screen of its own (#1842) with every lot, the
+// kit and the moves the post makes as one; the card used to repeat all of that on every lot.
 //
 // While an auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
 // the comments, so the standing bid is typed here, dated, and once the closing time has passed the card
@@ -39,28 +28,12 @@ import { renderFacebookKitPost } from "./facebook-kit-post";
 // *Withdraw* when nobody bid, as on every platform (#1777); the card records neither. A quick buy
 // (#1671) has no bidding, so while it is up the card has nothing of its own to follow.
 //
-// The post is only what its template places (#1692): a missing template or an empty placeholder is
-// named under the text, with a link to where it is set, and nothing is filled in to hide it.
-//
 // An offer may carry its own post template (#1780), overriding its group's for this offer only: the
 // card shows *Same as group* with the template it follows, or the offer's own once *Custom for this
 // offer* is ticked — prefilled with the group's, so it is edited rather than written from scratch —
 // the Settings → Facebook pattern (#1661). It is still a template, written for the offer's current
-// type; changing the type on the offer form drops it.
-//
-// The template is Markdown, limited to what Facebook's post editor offers (#1772): the text is shown
-// formatted, with a Source switch back to the template's markup as filled in — the offer description's
-// pattern (#319) — and Copy puts the formatted post and its plain text on the clipboard together.
-//
-// Once the offer is published — Pending or Active, whichever comes first — the text is **frozen**
-// (#1800): it is drawn as it was posted, so editing a template, the offer's own or its figures no
-// longer changes it. A repost puts the current template up again and freezes that; an offer taken
-// back to Ready follows the template again.
-//
-// A post of several lots may be **captioned** (#1841) — its group's setting, which the post can
-// override until it goes up: the kit is then the post's shared text, and per lot one photo with its
-// caption, each copied on its own; the download gives one photo per lot, in lot order. The offer's own
-// template, if any, writes its caption.
+// type; changing the type on the offer form drops it. In a captioned post (#1841) it writes the lot's
+// caption.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -83,19 +56,6 @@ const SECTION_LABEL: React.CSSProperties = {
   fontWeight: 600,
 };
 
-const POST_TEXT: React.CSSProperties = {
-  margin: 0,
-  padding: "0.625rem 0.75rem",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.375rem",
-  background: "var(--color-bg-subtle)",
-  color: "var(--color-text-primary)",
-  fontSize: "0.8125rem",
-  fontFamily: "inherit",
-  whiteSpace: "pre-wrap",
-  maxHeight: "16rem",
-  overflowY: "auto",
-};
 
 const INPUT: React.CSSProperties = {
   ...formControl,
@@ -109,37 +69,8 @@ const INPUT: React.CSSProperties = {
   minWidth: 0,
 };
 
-const LOT_PHOTO: React.CSSProperties = {
-  width: "6rem",
-  height: "6rem",
-  objectFit: "contain",
-  flexShrink: 0,
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.375rem",
-  background: "var(--color-bg-subtle)",
-};
 
-const SELECT: React.CSSProperties = {
-  ...formControl,
-  padding: "0.25rem 0.5rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-};
 
-const SMALL_BTN: React.CSSProperties = {
-  fontSize: "0.6875rem",
-  fontWeight: 600,
-  padding: "0.1875rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border-strong)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-elevated)",
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
 
 const TEMPLATE_INPUT: React.CSSProperties = {
   ...formControl,
@@ -180,15 +111,6 @@ const LINK_BTN: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/** Why a placeholder came out empty, in the words of what is missing where that is plain. */
-const EMPTY_PLACEHOLDER_REASON: Record<string, string> = {
-  "{description}": "the offer has no description",
-  "{startingPrice}": "no starting price",
-  "{increment}": "no bid increment",
-  "{closesAt}": "no closing time",
-  "{price}": "no price",
-  [FACEBOOK_TERMS_PLACEHOLDER.token]: "no note on shipping, payment and terms",
-};
 
 export function OfferFacebookCard({
   collectionSlug,
@@ -208,29 +130,16 @@ export function OfferFacebookCard({
   const [bid, setBid] = useState("");
   // The offer's own template being written (#1780) — null while nothing is typed that is not saved.
   const [draft, setDraft] = useState<string | null>(null);
-  const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const self = kit.lots.find((l) => l.offerId === offerId) ?? kit.lots[0];
-  const multiLot = kit.post !== null;
 
   const auction = isAuctionListing(self.listingType);
-  const {
-    source: postText,
-    html,
-    plain,
-    gaps,
-    frozenAt,
-    layout,
-    captions,
-  } = useMemo(() => renderFacebookKitPost(kit), [kit]);
+  // How the post is laid out — as posted once it is up (#1800) — which decides whether this offer's
+  // own template writes its lot of the post's text or its photo's caption (#1841).
+  const { layout } = useMemo(() => renderFacebookKitPost(kit), [kit]);
   const captioned = layout === "captions";
-  // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661).
-  const settingHref = (setting: FacebookGroupSetting) =>
-    `/c/${collectionSlug}/settings?tab=facebook&row=${encodeURIComponent(
-      kit.group.custom.includes(setting) ? kit.group.id : "facebook:defaults"
-    )}`;
 
   // This offer's own template (#1780), and the group's it otherwise follows for its type — its
   // caption's in a captioned post (#1841).
@@ -245,10 +154,8 @@ export function OfferFacebookCard({
   const customTemplate = ownTemplate !== null || draft !== null;
   const templateText = draft ?? ownTemplate ?? "";
 
-  // Posted: once any lot has gone up — the lots of a post go up together.
-  const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
-  // What stands between the post and going up: every lot must be Ready, the gate publishing asks.
-  const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "pending" && l.state !== "active");
+  // Posted: once the offer has gone up — anything past Ready.
+  const posted = isFacebookLotPosted(self.state);
 
   // Up in the group: the offer is running — an auction may have closed and wait for its result.
   const up = self.state === "active" || self.state === "paused";
@@ -304,22 +211,6 @@ export function OfferFacebookCard({
     });
   }
 
-  function setLayout(value: FacebookMultiLotLayout | null) {
-    if (!kit.post) return;
-    const postId = kit.post.id;
-    run(async () => {
-      const { setFacebookPostLayoutAction } = await import("@/app/actions/facebook");
-      return setFacebookPostLayoutAction(postId, value);
-    });
-  }
-
-  function leavePost() {
-    run(async () => {
-      const { removeFacebookLotAction } = await import("@/app/actions/facebook");
-      return removeFacebookLotAction(offerId);
-    });
-  }
-
   return (
     <section style={CARD} aria-label={auction ? "Facebook auction" : "Facebook quick buy"}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
@@ -335,228 +226,29 @@ export function OfferFacebookCard({
         </span>
       </div>
 
-      {/* The post: alone, or the lots of a post holding several, in lot order. */}
+      {/* The post: alone, with its kit here — or a lot of a post holding several, which has a screen
+          of its own (#1842) where the lots, the kit and the post's moves are; this card only names it. */}
       <div style={{ marginTop: "0.75rem" }}>
-        {multiLot ? (
-          <>
-            <p style={SECTION_LABEL}>
-              Lot {self.lotNo} of a post with {kit.lots.length} lots
+        {kit.post ? (
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
+            <p style={{ ...MUTED, margin: 0 }}>
+              <strong style={{ color: "var(--color-text-primary)" }}>Post #{kit.post.postNo}</strong> · lot {self.lotNo}{" "}
+              of {kit.lots.length} · {FACEBOOK_POST_STAGE_LABEL[facebookPostStage(kit.lots)]}
             </p>
-            <ol style={{ margin: 0, paddingLeft: "1.25rem", ...MUTED }}>
-              {kit.lots.map((lot) => (
-                <li key={lot.offerId} value={lot.lotNo ?? undefined}>
-                  {lot.offerId === offerId ? (
-                    <strong style={{ color: "var(--color-text-primary)" }}>{lot.title}</strong>
-                  ) : (
-                    <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
-                      #{lot.offerNo} {lot.title}
-                    </Link>
-                  )}{" "}
-                  · {OFFER_LISTING_TYPE_LABEL[lot.listingType]} · {OFFER_STATE_LABEL[lot.state]}
-                  {lot.url && (
-                    <>
-                      {" "}
-                      ·{" "}
-                      <a href={lot.url} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)" }}>
-                        link ↗
-                      </a>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ol>
-            {!posted && (
-              <button type="button" style={{ ...LINK_BTN, marginTop: "0.25rem" }} disabled={isPending} onClick={leavePost}>
-                Take this lot out of the post
-              </button>
-            )}
-            {/* How the post is laid out (#1841): the group's setting, or the post's own until it is up. */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-              <label htmlFor={`facebook-post-layout-${offerId}`} style={MUTED}>
-                Layout
-              </label>
-              {posted ? (
-                <span style={{ ...MUTED, color: "var(--color-text-primary)" }}>
-                  {FACEBOOK_MULTI_LOT_LAYOUT_LABEL[layout]}
-                </span>
-              ) : (
-                <select
-                  id={`facebook-post-layout-${offerId}`}
-                  value={kit.post?.layout ?? ""}
-                  disabled={isPending}
-                  onChange={(e) => setLayout(e.target.value === "" ? null : (e.target.value as FacebookMultiLotLayout))}
-                  style={SELECT}
-                >
-                  <option value="">
-                    Same as group — {FACEBOOK_MULTI_LOT_LAYOUT_LABEL[kit.group.multiLotLayout].toLowerCase()}
-                  </option>
-                  {FACEBOOK_MULTI_LOT_LAYOUTS.map((l) => (
-                    <option key={l} value={l}>
-                      {FACEBOOK_MULTI_LOT_LAYOUT_LABEL[l]}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </>
-        ) : (
-          <p style={{ ...MUTED, margin: 0 }}>
-            Posted alone — one {auction ? "auction" : "quick buy"}, one post.
-          </p>
-        )}
-      </div>
-
-      {/* The kit: the post's text and its photos, one click each. */}
-      <div style={{ marginTop: "0.875rem" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-          <p style={{ ...SECTION_LABEL, margin: 0 }}>Post text</p>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            {postText.trim() && (
-              <Tooltip content={showSource ? "Show the post the way Facebook will" : "Show the post's Markdown"}>
-                <button type="button" onClick={() => setShowSource((v) => !v)} style={SMALL_BTN}>
-                  {showSource ? "Rendered" : "Source"}
-                </button>
-              </Tooltip>
-            )}
-            <CopyButton value={plain} html={html} label="post text" />
-            <a href={kit.photoZipPath} download style={{ ...MUTED, color: "var(--color-accent)" }}>
-              ↓ Photos{captioned ? ", one per lot" : multiLot ? ", in lot order" : ""}
-            </a>
+            <Link
+              href={`/c/${collectionSlug}/offers/posts/${kit.post.postNo}`}
+              style={{ ...MUTED, color: "var(--color-accent)", whiteSpace: "nowrap" }}
+            >
+              Open post →
+            </Link>
           </div>
-        </div>
-        {postText.trim() ? (
-          showSource ? (
-            <pre style={POST_TEXT}>{postText}</pre>
-          ) : (
-            <RenderedHtml html={html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
-          )
         ) : (
-          <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
-        )}
-        {/* A captioned post (#1841): per lot, in post order, its one photo and the caption under it. */}
-        {captioned && (
-          <ol style={{ listStyle: "none", margin: "0.625rem 0 0", padding: 0, display: "grid", gap: "0.625rem" }}>
-            {captions.map((caption) => (
-              <li key={caption.offerId} style={{ display: "flex", gap: "0.625rem", alignItems: "flex-start" }}>
-                {kit.lotPhotoBase && (
-                  <a
-                    href={`${kit.lotPhotoBase}${caption.offerId}/photo?download`}
-                    download
-                    aria-label={`Download lot ${caption.lotNo}'s photo`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- drawn on demand by our own route */}
-                    <img
-                      src={`${kit.lotPhotoBase}${caption.offerId}/photo`}
-                      alt={`Lot ${caption.lotNo}`}
-                      loading="lazy"
-                      style={LOT_PHOTO}
-                    />
-                  </a>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-                    <p style={{ ...SECTION_LABEL, margin: 0 }}>
-                      Lot {caption.lotNo} · #{caption.offerNo} caption
-                    </p>
-                    <CopyButton value={caption.plain} html={caption.html} label="caption" />
-                  </div>
-                  {caption.source.trim() ? (
-                    showSource ? (
-                      <pre style={POST_TEXT}>{caption.source}</pre>
-                    ) : (
-                      <RenderedHtml html={caption.html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
-                    )
-                  ) : (
-                    <p style={{ ...MUTED, margin: 0 }}>The caption is empty.</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-        {frozenAt && (
-          <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-            As posted on {formatInstant(frozenAt)} — editing a template no longer changes it.
-          </p>
-        )}
-        {(gaps.missingPostText ||
-          gaps.missingTemplates.length > 0 ||
-          gaps.emptyOwnTemplates.length > 0 ||
-          gaps.emptyPlaceholders.length > 0) && (
-          <ul style={{ ...MUTED, margin: "0.25rem 0 0", paddingLeft: "1.25rem", color: "var(--color-warning)" }}>
-            {gaps.missingPostText && (
-              <li>
-                No post text template set for captioned posts, so the post&apos;s text is empty —{" "}
-                <Link href={settingHref("captionPostTemplate")} style={{ color: "var(--color-accent)" }}>
-                  set it in Settings → Facebook
-                </Link>
-              </li>
-            )}
-            {gaps.missingTemplates.map((type) => (
-              <li key={type}>
-                No {type === "auction" ? "auction" : "quick-buy"} {captioned ? "caption" : "post"} template set
-                {multiLot ? (captioned ? ", so those captions are empty" : ", so those lots are empty") : ""} —{" "}
-                <Link
-                  href={settingHref(
-                    captioned
-                      ? type === "auction"
-                        ? "auctionCaptionTemplate"
-                        : "quickBuyCaptionTemplate"
-                      : type === "auction"
-                        ? "postTemplate"
-                        : "quickBuyTemplate"
-                  )}
-                  style={{ color: "var(--color-accent)" }}
-                >
-                  set it in Settings → Facebook
-                </Link>
-              </li>
-            ))}
-            {gaps.emptyOwnTemplates.map((lotNo) => {
-              const lot = kit.lots.find((l) => l.lotNo === lotNo);
-              const isSelf = !lot || lot.offerId === offerId;
-              return (
-                <li key={`own:${lotNo}`}>
-                  {multiLot ? `Lot ${lotNo}: its` : "This offer's"} own {captioned ? "caption" : "post"} template is
-                  empty{multiLot ? (captioned ? ", so its caption is" : ", so the lot is") : ""}
-                  {isSelf ? (
-                    <> — write it below, or untick it to follow the group&apos;s</>
-                  ) : (
-                    <>
-                      {" "}
-                      —{" "}
-                      <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
-                        open #{lot.offerNo}
-                      </Link>
-                    </>
-                  )}
-                </li>
-              );
-            })}
-            {gaps.emptyPlaceholders.map(({ lotNo, token }) => {
-              const lot = lotNo === null && captioned ? undefined : kit.lots.find((l) => l.lotNo === lotNo);
-              const where = captioned && lotNo === null ? "Post text: " : multiLot ? `Lot ${lotNo}: ` : "";
-              const reason = EMPTY_PLACEHOLDER_REASON[token];
-              const fix =
-                token === FACEBOOK_TERMS_PLACEHOLDER.token ? (
-                  <Link href={settingHref("standingNote")} style={{ color: "var(--color-accent)" }}>
-                    set it in Settings → Facebook
-                  </Link>
-                ) : multiLot && lot && lot.offerId !== offerId ? (
-                  <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
-                    open #{lot.offerNo}
-                  </Link>
-                ) : null;
-              return (
-                <li key={`${lotNo}:${token}`}>
-                  {where}
-                  <code>{token}</code> is empty
-                  {reason && <> — {reason}</>}
-                  {fix && <> — {fix}</>}
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            <p style={{ ...MUTED, margin: "0 0 0.875rem" }}>
+              Posted alone — one {auction ? "auction" : "quick buy"}, one post.
+            </p>
+            <FacebookPostKit collectionSlug={collectionSlug} kit={kit} selfOfferId={offerId} onChanged={onChanged} />
+          </>
         )}
       </div>
 
@@ -565,7 +257,7 @@ export function OfferFacebookCard({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.25rem" }}>
           <p style={{ ...SECTION_LABEL, margin: 0 }}>
             {auction ? "Auction" : "Quick-buy"} {captioned ? "caption" : "post"} template
-            {multiLot ? " for this lot" : ""}
+            {kit.post ? " for this lot" : ""}
           </p>
           <label style={{ ...MUTED, display: "inline-flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
             <input
@@ -614,43 +306,42 @@ export function OfferFacebookCard({
         )}
       </div>
 
-      {/* Where the post went up: the offer's own listing link, asked by Activate (#1668). */}
-      <div style={{ marginTop: "0.875rem" }}>
-        <p style={SECTION_LABEL}>Listing link</p>
-        {posted && self.url ? (
-          <>
-            <a href={self.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
-              {self.url} ↗
-            </a>
-            {pendingApproval && <PendingLinkMark />}
-          </>
-        ) : pendingApproval ? (
-          <p style={{ ...MUTED, margin: 0 }}>Waiting for approval, with no link recorded.</p>
-        ) : posted ? (
-          <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add the post&apos;s link as the listing link.</p>
-        ) : (
-          <p style={{ ...MUTED, margin: 0 }}>
-            {waiting.length > 0
-              ? multiLot
-                ? `Every lot must be Ready first: ${waiting.map((l) => `lot ${l.lotNo}`).join(", ")}.`
-                : "Mark the offer Ready first."
-              : multiLot
-                ? `The post's link. Activate asks for it once and it activates all ${kit.lots.length} lots.`
-                : "The post's link. Activate asks for it once the post is up."}
-          </p>
-        )}
-        {/* A quick-buy post a few days old is seen by nobody (#1718): delete it, post it again — the
-            text rebuilt from the current template (#1800), shown in the dialog — and record the new
-            post's link on the same offer. */}
-        {onRepost && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.375rem" }}>
-            <DialogSecondaryButton type="button" disabled={isPending} onClick={onRepost}>
-              Repost…
-            </DialogSecondaryButton>
-            <span style={MUTED}>Post it again — the dialog shows the text as it goes up now — then record the new link.</span>
-          </div>
-        )}
-      </div>
+      {/* Where the post went up: the offer's own listing link, asked by Activate (#1668). A lot's is
+          its post's, recorded from the post's screen (#1842). */}
+      {!kit.post && (
+        <div style={{ marginTop: "0.875rem" }}>
+          <p style={SECTION_LABEL}>Listing link</p>
+          {posted && self.url ? (
+            <>
+              <a href={self.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
+                {self.url} ↗
+              </a>
+              {pendingApproval && <PendingLinkMark />}
+            </>
+          ) : pendingApproval ? (
+            <p style={{ ...MUTED, margin: 0 }}>Waiting for approval, with no link recorded.</p>
+          ) : posted ? (
+            <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add the post&apos;s link as the listing link.</p>
+          ) : (
+            <p style={{ ...MUTED, margin: 0 }}>
+              {self.state === "ready"
+                ? "The post's link. Activate asks for it once the post is up."
+                : "Mark the offer Ready first."}
+            </p>
+          )}
+          {/* A quick-buy post a few days old is seen by nobody (#1718): delete it, post it again — the
+              text rebuilt from the current template (#1800), shown in the dialog — and record the new
+              post's link on the same offer. */}
+          {onRepost && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.375rem" }}>
+              <DialogSecondaryButton type="button" disabled={isPending} onClick={onRepost}>
+                Repost…
+              </DialogSecondaryButton>
+              <span style={MUTED}>Post it again — the dialog shows the text as it goes up now — then record the new link.</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* The bidding, typed by hand while it runs (#1545). Once it has closed the winning bid can still
           be typed before selling — the figure *Sell* puts on the sale (#1777). */}
