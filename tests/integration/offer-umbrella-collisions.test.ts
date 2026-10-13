@@ -247,6 +247,7 @@ describe("umbrella collisions by listed variant (#1347)", () => {
       itemIds,
       filters: {},
       targets: {},
+      skip: [],
       facebook: { facebookGroupId: null, endsAt: null },
     });
 

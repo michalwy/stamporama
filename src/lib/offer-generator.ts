@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { candidateIdsOf } from "./candidate-set-rules";
-import { buildItemFilterWhere, type ItemListFiltersPaginated } from "./items";
+import { buildItemFilterWhere, listItemsPaginated, type ItemListFiltersPaginated, type ItemListItem } from "./items";
 import { listableOnPlatformFilters, loadPoolChecklists } from "./lot-builder";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
@@ -14,7 +14,6 @@ import { formatEntityNo } from "./quick-jump";
 import { FACEBOOK_PLATFORM_MODULE, usesPlatformCatalogue } from "./platform-modules";
 import { resolveListedStampIds } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
-import { sortPhotos, type PhotoSummary } from "./photos";
 import {
   GenerationChangedError,
   collisionStampIds,
@@ -29,6 +28,8 @@ import {
   findPlanDrift,
   fingerprintPlan,
   generatorCombinationParts,
+  generatorSelection,
+  keptFingerprint,
   planOffers,
   seriesSubtitle,
   SKIP_REASON_LABEL,
@@ -331,15 +332,6 @@ export interface GeneratorCombinationPart {
   name: string;
 }
 
-/** One copy of a set, as the expanded line shows it for checking against the desk (#1368). */
-export interface GeneratorCopyView {
-  itemId: string;
-  itemNo: number;
-  /** The copy's own catalogue number, bare — the line's catalogue already names the vendor. */
-  catalog: string;
-  photos: PhotoSummary[];
-}
-
 export interface GeneratorLineView {
   id: string;
   kind: "series" | "single" | "carrier";
@@ -354,8 +346,9 @@ export interface GeneratorLineView {
   catalog: string;
   /** The variants filling a slot of the series in place of their parent (#661), by catalogue number. */
   variantLabels: string[];
-  /** The copies of every set. */
-  sets: GeneratorCopyView[][];
+  /** The copies of every set, each as the Copies list's own row reads it (#1887), so an expanded line
+   *  draws them with the row every other screen draws a copy with. */
+  sets: ItemListItem[][];
   target: { kind: "new" } | { kind: "existing"; offerId: string };
   /** Offers that may receive the sets (#732), lowest number first — the choice offered. */
   matches: GeneratorOfferRef[];
@@ -374,6 +367,7 @@ export interface OfferGeneratorPreview {
   /** Why offers cannot be created in this status the way quick offer mode creates them, if so. */
   creationBlock: string | null;
   lines: GeneratorLineView[];
+  /** What every line together makes — the dialog's own count follows the ticks (`generatorSelection`). */
   totals: { newOffers: number; changedOffers: number; sets: number; copies: number };
   /** What confirming sends back, to be compared with a fresh plan (#717). */
   fingerprint: PlanFingerprint;
@@ -388,7 +382,7 @@ export async function previewOfferGeneration(
 ): Promise<OfferGeneratorPreview> {
   const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
   const [lines, creationBlock] = await Promise.all([
-    nameLines(collectionId, state),
+    nameLines(ownerId, collectionId, state),
     quickOfferCreationBlock(
       ownerId,
       collectionId,
@@ -405,21 +399,16 @@ export async function previewOfferGeneration(
     otherModeCopies: plan.otherModeCopies,
     creationBlock,
     lines,
-    totals: {
-      newOffers: plan.lines.filter((line) => line.target.kind === "new").length,
-      changedOffers: new Set(
-        plan.lines.flatMap((line) => (line.target.kind === "existing" ? [line.target.offerId] : []))
-      ).size,
-      sets: plan.lines.reduce((n, line) => n + line.sets.length, 0),
-      copies: plan.lines.reduce((n, line) => n + line.sets.reduce((m, set) => m + set.copies.length, 0), 0),
-    },
+    totals: (({ newOffers, changedOffers, sets, copies }) => ({ newOffers, changedOffers, sets, copies }))(
+      generatorSelection(lines, new Set())
+    ),
     fingerprint: fingerprintPlan(plan, state.offers),
   };
 }
 
 /** The names behind the plan's ids: checklists and issues, stamps, the combination, the offers, and
- * the copies' photos for the line expanded to check a set against the desk (#1368). */
-async function nameLines(collectionId: string, state: GeneratorState): Promise<GeneratorLineView[]> {
+ * the copies as full rows for the line expanded to check a set against the desk (#1368, #1887). */
+async function nameLines(ownerId: string, collectionId: string, state: GeneratorState): Promise<GeneratorLineView[]> {
   const { plan } = state;
   if (plan.lines.length === 0) return [];
   const stampIds = new Set<string>();
@@ -445,7 +434,7 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
   }
 
   const dictionarySelect = { id: true, name: true, abbreviation: true } as const;
-  const [checklists, stamps, photoRows, offers, conditions, certificates, formats, labeller] = await Promise.all([
+  const [checklists, stamps, { items: copyRows }, offers, conditions, certificates, formats, labeller] = await Promise.all([
     prisma.checklist.findMany({
       where: { id: { in: [...checklistIds] }, collectionId },
       select: { id: true, name: true, issue: { select: { name: true } } },
@@ -454,10 +443,7 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
       where: { id: { in: [...stampIds] }, collectionId },
       select: { id: true, ...STAMP_LABEL_SELECT.stamp.select },
     }),
-    prisma.item.findMany({
-      where: { id: { in: [...itemIds] }, collectionId },
-      select: { id: true, photos: { select: { id: true, role: true, title: true, sortOrder: true } } },
-    }),
+    listItemsPaginated(ownerId, collectionId, { ids: [...itemIds], pageSize: itemIds.size }),
     prisma.offer.findMany({
       where: { id: { in: [...offerIds] }, collectionId },
       select: {
@@ -476,14 +462,7 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
   ]);
   const checklistById = new Map(checklists.map((row) => [row.id, row]));
   const stampById = new Map(stamps.map((row) => [row.id, row]));
-  const photosOf = new Map(
-    photoRows.map((row) => [
-      row.id,
-      row.photos
-        .map((photo): PhotoSummary => ({ ...photo, role: isSlotPhotoRole(photo.role) ? photo.role : null }))
-        .sort(sortPhotos),
-    ])
-  );
+  const copyById = new Map(copyRows.map((row) => [row.id, row]));
   const dictionary = (rows: { id: string; name: string; abbreviation: string | null }[]) =>
     new Map(rows.map((row) => [row.id, { name: row.name, label: row.abbreviation || row.name }]));
   const names = {
@@ -539,25 +518,15 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
       variantLabels: members
         ? [...new Set(firstSet.filter((copy) => !members.has(copy.stampId)).map((copy) => copyCatalog(copy.stampId)))]
         : [],
-      sets: line.sets.map((set) =>
-        set.copies.map((copy) => ({
-          itemId: copy.itemId,
-          itemNo: copy.itemNo,
-          catalog: copyCatalog(copy.stampId),
-          photos: photosOf.get(copy.itemId) ?? [],
-        }))
-      ),
+      // Every copy in the plan was read from the pool a moment ago, so a row is missing only when it
+      // changed in between — and then the commit refuses by name anyway.
+      sets: line.sets.map((set) => set.copies.flatMap((copy) => copyById.get(copy.itemId) ?? [])),
       target: line.target,
       matches: refs(line.matches),
       biddingMatches: refs(line.biddingMatches),
       resultingSetCount: line.resultingSetCount,
     };
   });
-}
-
-/** The reserved photo slots (#112); any other stored role reads as none. */
-function isSlotPhotoRole(role: string | null): role is "front" | "back" | "main" {
-  return role === "front" || role === "back" || role === "main";
 }
 
 // ── The commit ─────────────────────────────────────────────────────────────────────────────────────
@@ -575,7 +544,8 @@ export interface OfferGeneratorResult {
  * **Re-reads and re-plans from the request** (#717), then compares the fresh plan with the one the
  * collector confirmed: a copy that has since sold, gone onto an offer, changed or newly matches the
  * filters, or a receiving offer that changed state, set count or bidding, refuses the pass by name.
- * The pass is all or nothing — `writeGeneratedOffers` writes it in one transaction and asks the same
+ * Only the lines the collector left ticked are written and compared (#1887): an unticked line's copies
+ * stay where they are, so a change among them refuses nothing. The pass is all or nothing — `writeGeneratedOffers` writes it in one transaction and asks the same
  * questions once more inside it.
  */
 export async function commitOfferGeneration(
@@ -586,11 +556,15 @@ export async function commitOfferGeneration(
   includeSpecialised = false
 ): Promise<OfferGeneratorResult> {
   const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
-  const drift = findPlanDrift(expected, fingerprintPlan(state.plan, state.offers));
+  const skip = new Set(input.skip);
+  const drift = findPlanDrift(keptFingerprint(expected, skip), keptFingerprint(fingerprintPlan(state.plan, state.offers), skip));
   if (drift) throw new OfferActionBlockedError("not-eligible", await describeDrift(collectionId, drift));
-  const { lines } = state.plan;
-  if (lines.length === 0) {
+  if (state.plan.lines.length === 0) {
     throw new OfferActionBlockedError("empty", "There is nothing to generate: none of these copies makes an offer in this mode.");
+  }
+  const lines = state.plan.lines.filter((line) => !skip.has(line.id));
+  if (lines.length === 0) {
+    throw new OfferActionBlockedError("empty", "There is nothing to generate: every proposed offer is unticked.");
   }
   const block = await quickOfferCreationBlock(
     ownerId,

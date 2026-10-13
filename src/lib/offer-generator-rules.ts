@@ -382,6 +382,81 @@ export function findPlanDrift(expected: PlanFingerprint, actual: PlanFingerprint
   return null;
 }
 
+// Leaving offers out (#1887) ---------------------------------------------------------------------
+//
+// The preview proposes every offer the pass can make, and the collector ticks the ones to create.
+// **Unticking drops a line and nothing else**: the plan is not re-run without it, so its copies go to
+// no other line and simply stay where they are. That is why the ticks never travel with the preview's
+// query — a tick needs no fresh plan — and travel only with the commit, which writes the kept lines.
+
+/** One line as the selection reads it: its id, its sets (only their sizes count), where they go and
+ *  how many sets the receiving offer was to hold. Both a plan line's view and the plan line fit. */
+export interface GeneratorSelectionLine {
+  id: string;
+  sets: readonly (readonly unknown[])[];
+  target: LineTarget;
+  resultingSetCount: number;
+}
+
+/** What the ticked lines make, and what the unticked ones leave where it is. */
+export interface GeneratorSelection {
+  newOffers: number;
+  changedOffers: number;
+  sets: number;
+  copies: number;
+  /** Lines left unticked, and the copies in them. */
+  leftOffers: number;
+  leftCopies: number;
+}
+
+export function generatorSelection(
+  lines: readonly GeneratorSelectionLine[],
+  skip: ReadonlySet<string>
+): GeneratorSelection {
+  const kept = lines.filter((line) => !skip.has(line.id));
+  const copiesOf = (line: GeneratorSelectionLine) => line.sets.reduce((n, set) => n + set.length, 0);
+  return {
+    newOffers: kept.filter((line) => line.target.kind === "new").length,
+    changedOffers: new Set(kept.flatMap((line) => (line.target.kind === "existing" ? [line.target.offerId] : []))).size,
+    sets: kept.reduce((n, line) => n + line.sets.length, 0),
+    copies: kept.reduce((n, line) => n + copiesOf(line), 0),
+    leftOffers: lines.length - kept.length,
+    leftCopies: lines.filter((line) => skip.has(line.id)).reduce((n, line) => n + copiesOf(line), 0),
+  };
+}
+
+/**
+ * How many sets a receiving offer will hold after a kept line, once the unticked lines are out. The
+ * plan counts every earlier line bound for the same offer (`resultingSetCount`); an unticked one no
+ * longer adds its sets, so they come off. A line's own sets are always counted — the figure is what
+ * the line would leave the offer with if it were ticked.
+ */
+export function keptResultingSetCount(
+  lines: readonly GeneratorSelectionLine[],
+  skip: ReadonlySet<string>,
+  lineId: string
+): number {
+  const index = lines.findIndex((line) => line.id === lineId);
+  if (index < 0) return 0;
+  const line = lines[index];
+  if (line.target.kind !== "existing") return line.resultingSetCount;
+  const offerId = line.target.offerId;
+  const dropped = lines
+    .slice(0, index)
+    .filter((other) => skip.has(other.id) && other.target.kind === "existing" && other.target.offerId === offerId)
+    .reduce((n, other) => n + other.sets.length, 0);
+  return line.resultingSetCount - dropped;
+}
+
+/**
+ * The part of a fingerprint the commit is answerable for: the lines left ticked. A drift on an
+ * unticked line — a copy in it that sold since — refuses nothing, because nothing of it is written;
+ * a copy moving between a kept line and anywhere else still shows on the kept side.
+ */
+export function keptFingerprint(fingerprint: PlanFingerprint, skip: ReadonlySet<string>): PlanFingerprint {
+  return { lines: fingerprint.lines.filter((line) => !skip.has(line.id)) };
+}
+
 /** A fingerprint handed across the wire, checked for shape. Null when it is not one. */
 export function parsePlanFingerprint(value: unknown): PlanFingerprint | null {
   if (typeof value !== "object" || value === null || !Array.isArray((value as { lines?: unknown }).lines)) return null;
@@ -484,6 +559,8 @@ export interface GeneratorRequest {
   itemIds: string[] | null;
   filters: string;
   targets: Record<string, string>;
+  /** Lines the collector unticked (#1887), by id — only the commit carries any. */
+  skip: string[];
   /** The group every new offer is an auction in, and when it closes, on Facebook (#1663). */
   facebook: FacebookCreateChoice;
 }
@@ -500,6 +577,7 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([lineId, offerId]) => `${lineId}:${offerId}`);
   if (targets.length > 0) params.set("targets", targets.join(","));
+  if (request.skip.length > 0) params.set("skip", [...request.skip].sort().join(","));
   if (request.facebook.facebookGroupId) params.set("facebookGroupId", request.facebook.facebookGroupId);
   if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
   return params;
@@ -529,6 +607,7 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     itemIds: sp.has("ids") ? (ids ?? "").split(",").filter(Boolean) : null,
     filters: sp.get("filters") ?? "",
     targets,
+    skip: (sp.get("skip") ?? "").split(",").filter(Boolean),
     facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
   };
 }
