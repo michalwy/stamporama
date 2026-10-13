@@ -115,52 +115,80 @@ const NAME_LINK_STYLE: React.CSSProperties = {
  * leaving for the area, issue or stamp it lives on. The saved text is the entity's own translation,
  * so it applies everywhere that name is used in that language. */
 export function TitleFallbackNote({ tokens, fix }: { tokens: readonly string[]; fix?: TitleFallbackFix }) {
-  const [open, setOpen] = useState<{ key: string; anchor: AnchorRect } | null>(null);
   if (tokens.length === 0) return null;
   const language = fix?.language ?? null;
   const gaps = fix && language ? fix.gaps : [];
-  const languageName = language ? languageLabel(language) : "";
-  // A name whose translation was just saved leaves the refreshed `gaps`, and its field goes with it.
-  const openGap = open ? gaps.find((g) => titleFallbackKey(g) === open.key) : undefined;
   return (
     <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
       Default language used for {tokens.join(", ")} — no translation entered for this language
-      {gaps.length === 0 ? (
-        "."
-      ) : (
+      {fix && language && gaps.length > 0 ? (
         <>
           :{" "}
-          {gaps.map((gap, i) => (
-            <span key={titleFallbackKey(gap)}>
-              {i > 0 && ", "}
-              <Tooltip
-                content={`${gapLabel(gap)} — click to enter its ${languageName} text`}
-                style={{ display: "inline" }}
-              >
-                <button
-                  type="button"
-                  style={NAME_LINK_STYLE}
-                  onClick={(e) => {
-                    setOpen({ key: titleFallbackKey(gap), anchor: e.currentTarget.getBoundingClientRect() });
-                  }}
-                >
-                  {gap.defaultValue} → {languageName}
-                </button>
-              </Tooltip>
-            </span>
-          ))}
+          <TranslationGapLinks
+            collectionId={fix.collectionId}
+            language={language}
+            gaps={gaps}
+            onSaved={fix.onSaved}
+          />
         </>
+      ) : (
+        "."
       )}
-      {fix && language && open && openGap && (
+    </p>
+  );
+}
+
+/** Each untranslated name as a link (*Netherlands → Polish*), comma-separated, opening the field
+ * for that one name (#1733) — the warning line's half, and a Facebook post's list of the names it
+ * prints untranslated (#1889). One save path: the popover is the compose dialog's (#300). */
+export function TranslationGapLinks({
+  collectionId,
+  language,
+  gaps,
+  onSaved,
+}: {
+  collectionId: string;
+  language: string;
+  gaps: readonly TitleFallback[];
+  /** Called once a translation is stored; the caller re-reads, and the fresh `gaps` no longer carry
+   * the one just filled. */
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState<{ key: string; anchor: AnchorRect } | null>(null);
+  const languageName = languageLabel(language);
+  // A name whose translation was just saved leaves the refreshed `gaps`, and its field goes with it.
+  const openGap = open ? gaps.find((g) => titleFallbackKey(g) === open.key) : undefined;
+  return (
+    <>
+      {gaps.map((gap, i) => (
+        <span key={titleFallbackKey(gap)}>
+          {i > 0 && ", "}
+          <Tooltip
+            content={`${gapLabel(gap)} — click to enter its ${languageName} text`}
+            style={{ display: "inline" }}
+          >
+            <button
+              type="button"
+              style={NAME_LINK_STYLE}
+              onClick={(e) => {
+                setOpen({ key: titleFallbackKey(gap), anchor: e.currentTarget.getBoundingClientRect() });
+              }}
+            >
+              {gap.defaultValue} → {languageName}
+            </button>
+          </Tooltip>
+        </span>
+      ))}
+      {open && openGap && (
         <TranslationGapPopover
-          collectionId={fix.collectionId}
+          collectionId={collectionId}
           language={language}
           gaps={[openGap]}
           anchor={open.anchor}
-          onSaved={fix.onSaved}
+          onSaved={onSaved}
           onClose={() => setOpen(null)}
         />
       )}
-    </p>
+    </>
   );
 }

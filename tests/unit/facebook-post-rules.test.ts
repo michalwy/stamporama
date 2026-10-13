@@ -4,6 +4,7 @@ import {
   describeFacebookAuctionCopies,
   describeRefusedLots,
   facebookLotAddRefusal,
+  facebookLotPrintedTexts,
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
   facebookMixedTypesRefusal,
@@ -1011,5 +1012,20 @@ describe("a post's title (#1862)", () => {
     it("has no post for an offer posted alone", () => {
       assert.equal(facebookPostSource(group, [one(null)], () => "").post, null);
     });
+  });
+});
+
+describe("facebookLotPrintedTexts (#1889)", () => {
+  it("names the offer's texts a lot's template prints — {title} its title, {description} its description", () => {
+    assert.deepEqual(facebookLotPrintedTexts("{lot}. {title}"), ["name"]);
+    assert.deepEqual(facebookLotPrintedTexts("{description}\n{title} {description}"), ["name", "description"]);
+    assert.deepEqual(facebookLotPrintedTexts("{description}"), ["description"]);
+  });
+
+  it("names neither where the template prints only figures, numbers and the collector's words", () => {
+    assert.deepEqual(facebookLotPrintedTexts("Lot {lot} · offer {offer} · {startingPrice} {terms} {postTitle}"), []);
+    assert.deepEqual(facebookLotPrintedTexts(""), []);
+    // A near miss is not the token.
+    assert.deepEqual(facebookLotPrintedTexts("{Title} {titles} title"), []);
   });
 });

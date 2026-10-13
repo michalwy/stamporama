@@ -411,6 +411,25 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the refused under the *Lots* heading. The integration test is
   `tests/integration/facebook-post-add-lots.test.ts`.
 
+- **A post's screen lists the names it prints untranslated** (#1889, raised by the collector on
+  2026-10-13; #1733's links on a third surface). `FacebookPostScreen.translations` — null once any lot
+  is up, its text frozen (#1800) — is `facebookPostTranslations`: per lot, the template it is written
+  from in the post's layout (`facebookLayoutLotTemplate`), which of its offer's texts that prints
+  (`facebookLotPrintedTexts`, pure: `{title}` the name, `{description}` the description; nothing else
+  a post or caption prints is translatable), then `offersPrintedTextGaps` (`offers.ts`). That one is
+  **not** `offerTranslationGaps`: it reads a field only while it **follows** its template (not
+  `*Edited`, not null) and off the template ↻ would use (`effectiveTemplate`, the offer's own first),
+  so it names what is actually in the words and exactly what `syncGeneratedTexts` would rewrite; one
+  copy read per language for the whole post. The answer is the names once each in lot order plus
+  `byLot` (offer id → `titleFallbackKey`s). The panel draws them above *Lots* through
+  `TranslationGapLinks` (`shared/title-preview.tsx`, split out of `TitleFallbackNote`, so one popover
+  and one save path), and each lot's row an *Untranslated* fact. **Saving re-renders, unlike the offer
+  screen's panel (#299)**: its `onSaved` calls `refreshFacebookPostTexts` → `syncGeneratedTexts(name,
+  description)` on every lot, refused once the post is up — the issue asked for the text to change at
+  once, and the `*Edited` flags already keep hand-written wording, which was #299's reason not to. The
+  integration test is `tests/integration/facebook-post-translations.test.ts` (checked when written to
+  fail with the edited filter, the refresh, the layout's template or the posted gate removed).
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

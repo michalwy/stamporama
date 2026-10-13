@@ -405,6 +405,16 @@ keeps the title it went up with, as it keeps everything else.
   one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
   The download is named by the post's number and title — `12-generalgouvernement-1940-44-photos.zip`,
   or `12-photos.zip` for a post with no title.
+- **Untranslated names** — until the post is up, a line above the lots names every name its text and
+  captions print in the collection's default language because no translation is entered for the
+  group's language: *No Polish translation — the default text is printed for Netherlands → Polish,
+  Mercury → Polish*. Each name is listed once, however many lots print it. Click one to type its
+  translation beside the default text; it is saved on the area, issue or stamp itself — the same
+  translation you would enter there, used everywhere that name appears in that language — and the
+  post's text and captions are rewritten with it at once. Only names the lots' generated titles and
+  descriptions print are listed: a title or description you wrote by hand keeps your words, and is
+  not rewritten. Each lot's row says which of the names its own part of the post prints, under
+  **Untranslated**. Once the post is up its text stays as posted, so the line is no longer shown.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,

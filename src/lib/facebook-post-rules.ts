@@ -340,6 +340,17 @@ export function facebookLayoutLotTemplate(
   return layout === "captions" ? facebookCaptionLotTemplate(captions, lot) : facebookLotTemplate(templates, lot);
 }
 
+/** Which of its offer's texts a lot's template prints (#1889): `{title}` the title, `{description}`
+ *  the description — the two through which a name of the offer's own templates reaches the post. The
+ *  post's and the caption's other placeholders are figures, numbers and the collector's own words. */
+export function facebookLotPrintedTexts(template: string): ("name" | "description")[] {
+  const tokens = new Set(template.match(TOKEN) ?? []);
+  return [
+    ...(tokens.has("{title}") ? (["name"] as const) : []),
+    ...(tokens.has("{description}") ? (["description"] as const) : []),
+  ];
+}
+
 function inLotOrder<T extends { lotNo: number | null }>(lots: readonly T[]): T[] {
   return [...lots].sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0));
 }
