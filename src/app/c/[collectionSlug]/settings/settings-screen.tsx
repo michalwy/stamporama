@@ -51,6 +51,7 @@ import { FacebookSettingsBody } from "./facebook-settings-page";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
+import { PackingSuppliesPanel } from "./packing-supplies-panel";
 import { HawidStockPanel } from "./hawid-stock-panel";
 import { AlbumTemplatesPanel } from "./album-templates-panel";
 import { AlbumOrnamentsPanel } from "./album-ornaments-panel";
@@ -78,6 +79,7 @@ import { STAMP_ATTRIBUTE_KINDS, type StampAttributeKind } from "@/lib/stamp-attr
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
 import type { CarrierData } from "@/lib/carriers";
+import type { PackingSupplyData } from "@/lib/packing-supplies";
 import type { HawidStripData } from "@/lib/hawid-stock";
 import type { AlbumTemplateData } from "@/lib/album-templates";
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
@@ -126,6 +128,8 @@ interface SettingsScreenProps {
   initialAlbumTemplates: AlbumTemplateData[];
   /** The collection's carriers (#491) — the tracking-address side of shipping. */
   initialCarriers: CarrierData[];
+  /** The collection's packing supplies (#1897) — named only; their cost comes from purchases. */
+  initialPackingSupplies: PackingSupplyData[];
   initialColnectMappings: ColnectMappingData[];
   /** Every condition with the Colnect grade it maps to (#404) — one row each, mapped or not. */
   initialColnectConditionMappings: ColnectConditionMappingData[];
@@ -714,6 +718,7 @@ function SettingsEntryBody({
   initialHawidStrips,
   initialAlbumTemplates,
   initialCarriers,
+  initialPackingSupplies,
   initialColnectMappings,
   initialColnectConditionMappings,
   initialColnectListMappings,
@@ -890,6 +895,14 @@ function SettingsEntryBody({
       // (#468/#491) — a marketplace quotes the postage, a carrier moves the parcel and tracks it the
       // same way whichever marketplace it came from.
       return <CarriersPanel collectionId={collectionId} initialCarriers={initialCarriers} />;
+    case "packing-supplies":
+      return (
+        <PackingSuppliesPanel
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          initialSupplies={initialPackingSupplies}
+        />
+      );
     case "allegro":
       return (
         <AllegroSettingsBody

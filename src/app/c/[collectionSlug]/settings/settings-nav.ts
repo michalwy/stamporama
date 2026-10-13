@@ -55,6 +55,7 @@ export type SettingsEntryKey =
   | "refcards"
   | "collages"
   | "shipping"
+  | "packing-supplies"
   | "allegro"
   | "delcampe"
   | "facebook"
@@ -222,6 +223,14 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "selling",
     label: "Carriers",
     hint: "Who moves your parcels, and the address a tracking number opens.",
+  },
+  // Selling's, beside Carriers (#1897): what goes into a parcel is bought on purchase orders, but
+  // it is spent on sales, and a sale's shipping cost is what the track is for.
+  {
+    key: "packing-supplies",
+    group: "selling",
+    label: "Packing supplies",
+    hint: "The envelopes, cards and the like your parcels are packed with. Their cost comes from the purchases they were bought on.",
   },
   {
     key: "allegro",

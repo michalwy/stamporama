@@ -67,7 +67,7 @@ export interface ContactPurchaseRow {
   status: string;
   platformName: string | null;
   currency: string;
-  /** What the order cost — lots, expenses and shipping (#852) — in its own currency. */
+  /** What the order cost — lots, expenses, packing supplies and shipping (#852, #1897) — in its own currency. */
   total: string;
   /** Copies on the order, not-delivered ones aside. */
   copyCount: number;
@@ -335,11 +335,12 @@ function orderSpend(
     currency: string;
     lots: readonly { price: unknown }[];
     expenses: readonly { price: unknown }[];
+    supplyLines: readonly { price: unknown }[];
   },
   costs: ReturnType<typeof purchaseCostsOf>,
   baseCurrency: string
 ) {
-  const linesTx = [...p.lots, ...p.expenses].reduce<number>(
+  const linesTx = [...p.lots, ...p.expenses, ...p.supplyLines].reduce<number>(
     (sum, l) => (l.price == null ? sum : sum + Number(l.price)),
     0
   );
@@ -372,6 +373,7 @@ async function readPurchases(
       platform: { select: { name: true } },
       lots: { select: { id: true, price: true, status: true } },
       expenses: { select: { id: true, price: true } },
+      supplyLines: { select: { id: true, price: true } },
     },
   });
 
@@ -690,6 +692,7 @@ async function readPlatform(
         shippingCost: true,
         lots: { select: { id: true, price: true } },
         expenses: { select: { id: true, price: true } },
+        supplyLines: { select: { id: true, price: true } },
       },
     }),
   ]);

@@ -48,6 +48,29 @@ export interface SpendBreakdown {
   shipping: string;
 }
 
+/** The priced lines behind an order's `price`, by kind. */
+export interface SpendLines {
+  lots: number;
+  expenses: number;
+  supplies: number;
+}
+
+/**
+ * What the order's *Price* row says about the lines in it that are not stamps (#852, #1897), or
+ * undefined when every line is a lot.
+ */
+export function nonInventoryLinesNote(lines: SpendLines): string | undefined {
+  const parts = [
+    lines.expenses > 0
+      ? `${lines.expenses} non-inventory expense${lines.expenses === 1 ? "" : "s"}`
+      : null,
+    lines.supplies > 0
+      ? `${lines.supplies} packing-supply line${lines.supplies === 1 ? "" : "s"}`
+      : null,
+  ].filter((p): p is string => p != null);
+  return parts.length > 0 ? `includes ${parts.join(" and ")}` : undefined;
+}
+
 /** What one scope cost, in both currencies (#852). */
 export interface PurchaseSpend {
   /**
@@ -82,11 +105,11 @@ export interface PurchaseSpend {
    */
   shippingShareOf: string | null;
   /**
-   * How many priced lines are behind `price` on an **order**: inventory lots and non-inventory
-   * expenses (ADR-0009 §1), which are counted apart because an expense is not a stamp. Null on
-   * a lot, whose price is one line.
+   * How many priced lines are behind `price` on an **order**: inventory lots, non-inventory
+   * expenses (ADR-0009 §1) and packing-supply lines (#1897), which are counted apart because
+   * neither an expense nor a box of envelopes is a stamp. Null on a lot, whose price is one line.
    */
-  lines: { lots: number; expenses: number } | null;
+  lines: SpendLines | null;
 }
 
 export interface SpendInput {
@@ -102,7 +125,7 @@ export interface SpendInput {
   /** The order's whole shipping charge, when this scope is one lot of it. */
   shippingShareOf?: number | null;
   /** Line counts, when this scope is a whole order. */
-  lines?: { lots: number; expenses: number } | null;
+  lines?: SpendLines | null;
 }
 
 /**

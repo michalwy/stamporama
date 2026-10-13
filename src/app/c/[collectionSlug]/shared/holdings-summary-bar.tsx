@@ -6,7 +6,7 @@ import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
 import { costWithEstimates, type CostBasisTotal } from "@/lib/cost-basis";
 import type { OpeningValue } from "@/lib/opening-value";
 import type { PurchaseReturn } from "@/lib/purchase-return";
-import type { PurchaseSpend } from "@/lib/purchase-spend";
+import { nonInventoryLinesNote, type PurchaseSpend } from "@/lib/purchase-spend";
 import { costPercent, formatCostPercent, type CostToCatalog } from "@/lib/cost-to-catalog";
 import {
   NOT_APPLICABLE,
@@ -1054,11 +1054,7 @@ export function HoldingsSummaryBar({
                 spend={spend}
                 part="price"
                 emphasis="breakdown"
-                prefix={
-                  spend.lines && spend.lines.expenses > 0
-                    ? `includes ${spend.lines.expenses} non-inventory expense${spend.lines.expenses === 1 ? "" : "s"}`
-                    : undefined
-                }
+                prefix={spend.lines ? nonInventoryLinesNote(spend.lines) : undefined}
               />
               <SpendRow
                 label="Shipping"

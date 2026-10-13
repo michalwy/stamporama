@@ -315,3 +315,14 @@ the pure `src/lib/purchase-status.ts`.
 - **No migration.** The column is an unconstrained string; the valid set is closed in code, as it
   always was. An opening balance still has no delivery status of its own and stays `arrived` (ADR-0054)
   — until #1461 let it be marked `completed` as well, which is ADR-0054's addendum.
+
+## Addendum: a third kind of line — packing supplies (#1897)
+
+[ADR-0068](0068-packing-supplies.md) adds `PurchaseSupplyLine` beside `PurchaseLot` and
+`PurchaseExpense` (§1): a packing supply bought on the order, with a quantity, which is a batch in that
+supply's stock. It is a table of its own for §1's reason — it is stock, so not an expense, and it
+holds no copies, so not a lot.
+
+§3.1 now spreads the shared cost across lots, expenses **and supply lines** by price, so a box of
+envelopes on an order of stamps takes its share of the shipping exactly as an expense does, and the
+lots' pools shrink by the same amount. A supply line's share is part of its batch's unit cost.

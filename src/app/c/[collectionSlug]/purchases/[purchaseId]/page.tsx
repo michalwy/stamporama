@@ -11,6 +11,7 @@ import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
+import { listPackingSupplies } from "@/lib/packing-supplies";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { intakeDocumentName } from "@/lib/purchase-kind";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
@@ -47,11 +48,12 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase || purchase.collectionId !== collection.id) notFound();
 
-  const [conditions, certificateStatuses, areas, locations] = await Promise.all([
+  const [conditions, certificateStatuses, areas, locations, packingSupplies] = await Promise.all([
     getStampConditions(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
+    listPackingSupplies(session.user.id, collection.id),
   ]);
 
   // Copies now stream into each lot card via paginated client queries (#172), so the page no
@@ -97,6 +99,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         locations={locations}
         conditions={conditions}
         certificateStatuses={certificateStatuses}
+        packingSupplies={packingSupplies}
       />
     </Screen>
   );

@@ -98,6 +98,20 @@ export interface PurchaseExpenseData {
   price: string;
 }
 
+/** A packing-supply line of an order (#1897) — one batch in the supply's stock. */
+export interface PurchaseSupplyLineData {
+  id: string;
+  supplyId: string;
+  supplyName: string;
+  quantity: number;
+  /** Line price, transaction currency (2 dp); the opening value on an opening balance. */
+  price: string;
+  /** The line's share of the order's shipping, transaction currency (2 dp). */
+  shippingShare: string;
+  /** One unit's cost — (price + share) ÷ quantity — transaction currency, to 4 dp. */
+  unitCost: string;
+}
+
 /** Full purchase, with its lines, for the edit dialog. */
 export interface PurchaseData {
   id: string;
@@ -119,8 +133,8 @@ export interface PurchaseData {
   expenses: PurchaseExpenseData[];
 }
 
-/** A row in the Intake documents list. `total` is lots + expenses + shipping, in the
- * transaction currency (2 dp). */
+/** A row in the Intake documents list. `total` is lots + expenses + packing supplies + shipping,
+ * in the transaction currency (2 dp). */
 export interface PurchaseListItem {
   id: string;
   kind: PurchaseKind;
@@ -305,6 +319,7 @@ export async function listPurchasesPaginated(
       platform: { select: { name: true } },
       lots: { select: { price: true } },
       expenses: { select: { price: true } },
+      supplyLines: { select: { price: true } },
     },
   });
 
@@ -312,7 +327,12 @@ export async function listPurchasesPaginated(
   const page = hasMore ? rows.slice(0, pageSize) : rows;
 
   const items: PurchaseListItem[] = page.map((row) => {
-    const valued = [...row.lots, ...row.expenses].flatMap((l) => (l.price == null ? [] : [l.price]));
+    // A purchase's packing supplies were paid for and count in its total (#1897); an opening
+    // balance's total stays the opening value of its lots, which its own screen leads with.
+    const supplyLines = isOpeningBalance(row) ? [] : row.supplyLines;
+    const valued = [...row.lots, ...row.expenses, ...supplyLines].flatMap((l) =>
+      l.price == null ? [] : [l.price]
+    );
     const linesTotal = valued.reduce((sum, price) => sum.add(price), new Prisma.Decimal(0));
     const total = row.shippingCost ? linesTotal.add(row.shippingCost) : linesTotal;
     const kind = row.kind as PurchaseKind;

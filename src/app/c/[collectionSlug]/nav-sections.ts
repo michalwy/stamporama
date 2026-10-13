@@ -27,7 +27,7 @@ export const SECTION_ROUTES: Record<SectionKey, string[]> = {
   // screen filters by. #775 gave them a page in Collection; only the section moved, not the address.
   catalog: ["/issues", "/stamps", "/checklists", "/areas"],
   collection: ["/inventory", "/locations", "/albums"],
-  selling: ["/offers", "/sales"],
+  selling: ["/offers", "/sales", "/supplies"],
   buying: ["/wants", "/purchases", "/auctions"],
   partners: ["/trades", "/contacts", "/colnect"],
 };

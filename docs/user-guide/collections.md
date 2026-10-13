@@ -68,7 +68,7 @@ it serves:
   presets and Duplicate numbers.
 - **Collection** — Scanners, Tags, Album templates, Hawid stock, Corner ornaments and Ref card
   templates.
-- **Selling** — Collage templates, Carriers, Allegro, Delcampe and Philasearch.
+- **Selling** — Collage templates, Carriers, Packing supplies, Allegro, Delcampe and Philasearch.
 - **Intake** — Acceptance profiles, Bid recommendation and Auction reminder.
 - **Partners** — Colnect.
 - **System** — Assistant & API, [Email](email.md).
@@ -119,7 +119,7 @@ setting, so it finds nothing here.
 
 The dictionaries in Settings — the **Catalog** group's Catalogs, Conditions, Certificate statuses,
 Formats (and its Multipliers), Subtypes, the four Attributes lists and Size presets, and beside them
-Scanners, Tags, Hawid stock, Corner ornaments, Carriers, Acceptance profiles and the token list on
+Scanners, Tags, Hawid stock, Corner ornaments, Carriers, Packing supplies, Acceptance profiles and the token list on
 Assistant & API — are a **list beside the selected row's detail**. The list is on the left; click a row and its fields open on the right, where
 you change them in place:
 
@@ -1248,6 +1248,18 @@ one and tracks both at the same address. A carrier named on a shipping method is
 each sale records the carrier that actually took its parcel when you mark it sent, and shows its
 [tracking number as a link](sales.md#tracking-the-shipment) from there. A carrier still used by a
 shipping method or named on a sale can't be deleted — detach it there first.
+
+## Packing supplies
+
+The envelopes, transport cards and the like you pack parcels with, kept under **Settings → Packing
+supplies** as a [list beside the selected supply's detail](#pages-with-a-list). A supply is just a
+**name** — *C6 envelope*, *Transport card A6* — and there is no price to type: what a supply costs
+comes from the purchases you buy it on, as [packing-supply lines](purchases.md#packing-supplies).
+A supply nobody has bought yet says *never bought* on its row.
+
+A supply that has been bought can't be deleted — its order lines are its stock. What you have on
+hand, and what it is worth, is on the [Packing supplies](purchases.md#the-packing-supplies-screen)
+screen under Selling.
 
 ## Collage templates
 

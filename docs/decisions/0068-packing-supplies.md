@@ -1,0 +1,97 @@
+# ADR-0068: Packing Supplies — Bought on Purchase Orders, Held in Stock, Costed FIFO
+
+## Status
+
+Accepted. Decided with the collector on 2026-10-13 and built by #1897, the foundation of a track:
+#1898 takes supplies onto a sale's shipping cost, #1899 gives a shipping method its default supplies,
+#1900 takes supplies out of stock without a sale. Amends [ADR-0009](0009-purchase-record-model.md) §1
+and §3 with a third kind of purchase line.
+
+## Context
+
+What a parcel costs the collector is more than postage: envelopes and transport cards go into every
+parcel. Until now the collector added these up by hand for every sale and typed one amount as the
+sale's shipping cost. The app knew nothing of the supplies themselves, what they cost or how many were
+on hand.
+
+The supplies are bought like anything else — a box of 100 C6 envelopes from a stationer, or on the same
+order as stamps — so the purchase model already holds most of what is needed: a dated order in one
+currency, with shipping spread over its lines by price.
+
+## Decision
+
+### 1. A supply is a name, and its price is never typed
+
+`PackingSupply` is a dictionary entry per collection — *C6 envelope*, *bubble envelope 15×21*,
+*transport card A6* — managed under **Settings → Packing supplies**, with nothing else to set. Its
+name is unique within the collection, as a carrier's is.
+
+**Supply prices come from purchases** (the collector's call): what an envelope costs follows from the
+purchase it was bought on. A typed unit price was rejected — it would be a second figure beside the
+money actually paid, and it would go stale the next time a box cost more.
+
+### 2. A supply is bought as a line of an ordinary purchase order
+
+`PurchaseSupplyLine` is a **third kind of purchase line** beside ADR-0009's inventory `PurchaseLot`
+and non-inventory `PurchaseExpense`: it names the supply, a whole quantity (> 0) and the line price
+(≥ 0, `Decimal(10,2)`). A supply line sits on an order alone or beside stamps, with its supplier and
+date like any purchase.
+
+It is a **table of its own** for ADR-0009 §1's reason: a lot holds copies and has a lifecycle, an
+expense is not stock, and a supply line is stock with a quantity — a discriminator over one table
+would leave half of every row meaningless.
+
+### 3. Each supply line is a batch, and its unit cost includes its share of the shipping
+
+ADR-0009 §3.1 spreads the order's shipping across **all** its lines by price; supply lines join that
+split (`distributeSharedCost` reads lots, expenses and supplies). A box of envelopes therefore absorbs
+its fair share and does not make the stamps dearer, and a batch's cost is
+
+> (line price + its share of the order's shipping) ÷ quantity per unit.
+
+`StoredPurchaseCosts.supplyLines` is **required**, not optional: a reader that left supply lines out
+would split the shipping differently from every other reader, and the compiler is what keeps them in
+step.
+
+The unit cost is **derived, not stored**. It moves while the order's shipping or its other lines are
+still being restated, exactly as an open lot's estimate does. What freezes a figure is using the
+supplies — that is #1898's to record, at the cost of the batch it took from.
+
+### 4. Stock is costed FIFO
+
+Supplies leave stock **oldest batch first**, each unit at the unit cost of its own batch (the
+collector's call). "Oldest" is the purchase date, then the order the lines were written in. The rule
+is pure in `src/lib/supply-stock.ts` (`fifoSupplyStock`) so the screen that shows what is on hand and
+the sale that takes from it cannot disagree about which batch went first. Weighted average was not
+chosen.
+
+The **Supplies** screen (`/c/[slug]/supplies`, under Selling) shows per supply the quantity on hand,
+its value at FIFO cost in the base currency, and its batches with the intake document each came from.
+A batch bought in a foreign currency with no frozen rate has no base-currency cost; a supply holding
+one states **no value** rather than a partial sum (#1184), and says how many batches are why.
+
+### 5. An opening balance brings supplies in, at a required value
+
+Supplies on hand before tracking starts are entered through an opening balance (ADR-0054), as stamps
+are. The line's price is then the batch's **opening value**, and it is **required** there too — the
+collector's call on 2026-10-14, departing from an opening-balance lot, whose value is optional: a
+batch without a cost would leave every parcel packed from it without one. An opening balance carries
+no shipping, so its unit cost is simply value ÷ quantity.
+
+An opening balance's **opening value** (ADR-0054 §7, the lead line of its panel and its total on the
+Intake documents list) stays the value of its **lots** — what the copies bring in. Its supply lines
+are shown, with their value, on the order's *Packing supplies* card and on the Supplies screen. A
+purchase's total and spend do count its supply lines: they were paid for.
+
+### 6. A supply that was bought cannot be deleted
+
+The line's reference to its supply is `NO ACTION`: the app refuses the delete and says why, and a whole
+collection — cascading to its supplies and its purchases in one statement — still deletes. Deleting a
+purchase takes its supply lines, and with them their batches, as it takes its lots and expenses.
+
+## Consequences
+
+- Every reader of an order's money (`getPurchaseDetail`, `closeLot`, the copy estimates, the contact
+  page, the Intake documents list) reads the supply lines, so a lot's pool is the same everywhere.
+- The agent API's purchase totals include supply lines; it has no operations over them yet.
+- #1898 adds the use of supplies, which is the only thing `fifoSupplyStock`'s `used` waits for.
