@@ -496,6 +496,11 @@ export function AuctionLotLinesDialog({
           onClose={() => {
             if (!isPending) setPricing(null);
           }}
+          onVariantsSaved={() => {
+            setPricing(null);
+            setPriceError(undefined);
+            void reload();
+          }}
           onSubmit={(entries) => {
             const line = pricing;
             setPriceError(undefined);

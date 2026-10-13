@@ -69,6 +69,11 @@ import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-pric
  * controls, and the full-grid button sits in the heading, so the browser's own order goes from one
  * price to the next. **Enter** writes the field and then submits the step, which is what Enter in
  * the one catalogue-value field does — and only once the write is in, so a refusal stays on screen.
+ *
+ * **The quick catalogue-value dialog draws the same section** (#1901) when the copy it was opened on
+ * is an umbrella: `pinnedOpen`, since there the section is the whole dialog rather than a part of a
+ * step, and `flush` plus `onWritten`, so that dialog's **Done** writes what is still in a field and
+ * then refreshes the screen behind it only when something was written.
  */
 
 /** What the dialog's focus claim reaches for (#534): see {@link IntakeVariantPricesSection}. */
@@ -76,6 +81,9 @@ export interface IntakeVariantPricesHandle {
   /** Put the cursor in the first variant price, or on the heading while the section is closed. Once
    *  the tree is read — until then the claim waits for it. */
   claimFocus: () => void;
+  /** Write every field typed into and not yet left — true once all of them are in, false when any
+   *  was refused (the refusal stays under the section, and the field stays queued for the next try). */
+  flush: () => Promise<boolean>;
 }
 
 interface Axes {
@@ -98,9 +106,25 @@ export const IntakeVariantPricesSection = forwardRef<
     /** The same, drawn: the condition and certificate as their chips, the format as a word (#1657). */
     subject: React.ReactNode;
     disabled: boolean;
+    /** Always open, with no fold — for the quick catalogue-value dialog, where nothing else is on
+     *  screen to fold it away for (#1901). The remembered fold is neither read nor written. */
+    pinnedOpen?: boolean;
+    /** Told after each price that reaches the server, from a field or from the full grid. */
+    onWritten?: () => void;
   }
 >(function IntakeVariantPricesSection(
-  { collectionId, stampId, conditionId, certificateStatusId, formatId, subjectLabel, subject, disabled },
+  {
+    collectionId,
+    stampId,
+    conditionId,
+    certificateStatusId,
+    formatId,
+    subjectLabel,
+    subject,
+    disabled,
+    pinnedOpen = false,
+    onWritten,
+  },
   ref
 ) {
   const scope: VariantPriceScope = useMemo(
@@ -119,9 +143,17 @@ export const IntakeVariantPricesSection = forwardRef<
     gcTime: 0,
   });
   // Written from the full grid: what this section holds is stale once it closes having saved.
-  const fullGrid = useVariantPriceGrid({ onSaved: () => void refetch() });
+  const fullGrid = useVariantPriceGrid({
+    onSaved: () => {
+      void refetch();
+      onWritten?.();
+    },
+  });
 
-  const [open, setOpen] = useState(() => readLast(LS_VARIANT_PRICES_CLOSED, collectionId) === "");
+  const [foldedOpen, setOpen] = useState(
+    () => pinnedOpen || readLast(LS_VARIANT_PRICES_CLOSED, collectionId) === ""
+  );
+  const open = pinnedOpen || foldedOpen;
   const toggle = () => {
     const next = !open;
     setOpen(next);
@@ -227,10 +259,22 @@ export const IntakeVariantPricesSection = forwardRef<
     const r = await writeCell(id, editionId, a, normalized);
     if (r !== null) {
       setIn(setErrors, key, r);
+      // Still owed: the next flush, or the way out, tries it again.
+      dirty.current.set(key, { stampId: id, axes: a, raw: normalized });
       return false;
     }
     setIn(setSaved, key, normalized === "" ? undefined : normalized);
+    onWritten?.();
     return true;
+  }
+
+  /** Every queued field written, one after another — the quick dialog's Done (#1901). */
+  async function flush(): Promise<boolean> {
+    let settled = true;
+    for (const { stampId: id, axes: a, raw } of [...dirty.current.values()]) {
+      if (!(await commit(id, a, raw))) settled = false;
+    }
+    return settled;
   }
 
   // The way out that is not a blur: Escape, Back or a submit unmount the dialog with the caret still
@@ -280,8 +324,10 @@ export const IntakeVariantPricesSection = forwardRef<
         if (grid) takeFocus();
         else claim.current = true;
       },
-    }),
-    [grid, takeFocus]
+      flush,
+    })
+    // No dependency list: `flush` reaches `saved` and the edition through `commit`, so the handle is
+    // renewed on every render rather than holding a stale one.
   );
   // A claim made before the tree was read is taken the moment it is — once, and still only if
   // nothing has started typing meanwhile (`takeFocus`' own guard).
@@ -303,17 +349,21 @@ export const IntakeVariantPricesSection = forwardRef<
   return (
     <div style={{ marginTop: "0.75rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minHeight: "1.75rem" }}>
-        <button
-          ref={toggleRef}
-          type="button"
-          aria-expanded={open}
-          aria-controls={open ? "intake-variant-prices" : undefined}
-          onClick={toggle}
-          style={TOGGLE_BTN}
-        >
-          <Icon name={open ? "collapse" : "expand"} size="xs" />
-          Variant prices
-        </button>
+        {pinnedOpen ? (
+          <span style={{ ...TOGGLE_BTN, cursor: "default" }}>Variant prices</span>
+        ) : (
+          <button
+            ref={toggleRef}
+            type="button"
+            aria-expanded={open}
+            aria-controls={open ? "intake-variant-prices" : undefined}
+            onClick={toggle}
+            style={TOGGLE_BTN}
+          >
+            <Icon name={open ? "collapse" : "expand"} size="xs" />
+            Variant prices
+          </button>
+        )}
         {/* What matters while closed (#1337): the umbrella's value and the gaps behind it. */}
         <span style={{ ...MUTED, flex: 1, minWidth: 0 }}>
           {summary ? (
@@ -452,7 +502,8 @@ export const IntakeVariantPricesSection = forwardRef<
           ))}
           <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
             This stamp&apos;s value is the lowest of its variants&apos;. Each price is saved as you
-            leave its field, and stays saved whether or not you finish identifying.
+            leave its field
+            {pinnedOpen ? "." : ", and stays saved whether or not you finish identifying."}
             {axes?.formatId
               ? " Dashed fields show the value derived from the single's price by this format's multiplier — nothing is stored until you type over one."
               : ""}

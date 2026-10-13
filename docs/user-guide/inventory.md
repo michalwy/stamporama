@@ -978,6 +978,28 @@ To price a multiple *differently* from what the multiplier gives — a block tha
 in its own right — use the stamp's **Prices** tab (a copy's **⋮** → **Edit stamp**), which shows the
 whole condition × format grid and what each derived value would otherwise have been.
 
+### A copy of unknown variant
+
+When the copy's stamp has **variants of its own** — the copy carries the *unknown variant* chip — the
+catalogue has no price for the stamp itself: it prices each variant, and the copy is worth the
+lowest of them. So the dialog asks for those instead. In place of the per-catalog inputs it shows the
+same **Variant prices** list the [identification step](purchases.md#pricing-an-umbrellas-variants-while-identifying)
+does: one field per variant down the tree, for your primary catalogue's latest edition, at the
+copy's **condition, certificate and format**, with the stamp's resulting value and how many variants
+are still unpriced in the heading — *≈3.20 EUR · 2 of 5 variants unpriced* — updating as you type.
+
+- Each price is saved as you leave its field (**Tab** goes to the next variant).
+- **Done** saves the field you are still in and closes the dialog; the copy's value updates in
+  place. There is no Cancel, because there is nothing left to undo.
+- On a copy that is not a single, a variant with no price of its own for that format shows the value
+  worked out from its single's price as a dashed placeholder — typing over it records a price for
+  that format explicitly.
+- **Full grid…** opens every condition, certificate and format of the tree, and is where a price is
+  recorded on the umbrella itself.
+
+The same holds wherever a copy's **+ catalog value** opens — a purchase order, an offer, a trade, an
+auction lot.
+
 To work through the gaps in bulk, turn on the **Missing catalog value** filter to list only the
 copies that still need pricing, then click each row's **+ catalog value** in turn.
 

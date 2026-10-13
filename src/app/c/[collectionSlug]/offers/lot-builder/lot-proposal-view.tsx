@@ -312,6 +312,11 @@ export function LotProposalView({
             setQuickPriceItem(null);
             setPriceError(undefined);
           }}
+          onVariantsSaved={() => {
+            setQuickPriceItem(null);
+            setPriceError(undefined);
+            void invalidateAll(collectionId);
+          }}
           onSubmit={(entries) => {
             const item = quickPriceItem;
             setPriceError(undefined);

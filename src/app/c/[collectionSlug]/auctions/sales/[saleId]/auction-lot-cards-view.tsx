@@ -1035,6 +1035,11 @@ export function AuctionLotCardsView({
           onClose={() => {
             if (!linePending) setPricing(null);
           }}
+          onVariantsSaved={() => {
+            setPricing(null);
+            setPriceError(undefined);
+            onChanged();
+          }}
           onSubmit={(entries) => {
             const line = pricing;
             setPriceError(undefined);

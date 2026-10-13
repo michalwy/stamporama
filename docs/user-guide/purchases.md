@@ -2455,7 +2455,9 @@ primary catalog's number highlighted), the condition it applies to (shown as a b
 this **copy's photos** (click a thumbnail to open the lightbox, with prev/next and Esc to close),
 plus any prices already recorded for it (across editions, conditions, and certificates) so you
 can price consistently — the target rows are marked with an arrow. Closing still only requires a
-**primary-catalog** price. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
+**primary-catalog** price. On a copy of **unknown variant** the dialog prices the stamp's
+**variants** instead, exactly as identifying a tile does — see
+[A copy of unknown variant](inventory.md#a-copy-of-unknown-variant). (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
 **Prices** tab.) Then try the close again.
 
 A **piece carrying several stamps** is split by the value you **recorded** on it instead, since no

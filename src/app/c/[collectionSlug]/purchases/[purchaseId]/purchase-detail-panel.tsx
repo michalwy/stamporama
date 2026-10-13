@@ -2107,6 +2107,16 @@ function useCopyEditing(ctx: {
               setCopyError(undefined);
             }
           }}
+          onVariantsSaved={() => {
+            const it = quickPriceItem;
+            setCopyError(undefined);
+            // The variants' prices are already in; this is the re-read. The umbrella's lineage
+            // reaches its variants, so every lot holding a copy of the tree is re-read (#1409).
+            run(
+              async () => ({ status: "success", refresh: { stampIds: [it.stampId] } }),
+              () => setQuickPriceItem(null)
+            );
+          }}
           onSubmit={(entries) => {
             const it = quickPriceItem;
             setCopyError(undefined);

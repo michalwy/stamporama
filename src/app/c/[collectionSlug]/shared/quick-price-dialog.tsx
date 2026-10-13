@@ -26,6 +26,10 @@ import {
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { formControl } from "@/app/control-style";
+import {
+  IntakeVariantPricesSection,
+  type IntakeVariantPricesHandle,
+} from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-variant-prices";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -92,6 +96,23 @@ export interface QuickPriceSubject {
  * derivation is a deliberate act: an explicit row on the stamp's **Prices** tab, the one screen that
  * shows the grid it deviates from. When such a row already exists the line says so and names it,
  * because then nothing typed here changes what that copy is worth.
+ *
+ * ## An umbrella is priced through its variants (#1901)
+ *
+ * A stamp with variants of its own — a copy of *unknown variant* — has no figure of its own on the
+ * catalogue page: the page prices each variant, and the umbrella is worth the lowest of them (#238).
+ * So when the context says `isUmbrella`, the per-catalogue inputs give way to the identification
+ * step's own **Variant prices** section (#1317, #1337) — the same component, so the two cannot
+ * drift: every variant down the tree, narrowed to the subject's condition, certificate **and**
+ * format on the primary catalogue's latest edition, with the umbrella's resulting value in its
+ * heading. The format is an axis there, as it is in identification: the section fixes all three
+ * axes of the piece in hand and draws a multiple's figures as single-derived placeholders, so
+ * nothing is written for a format until a figure is typed over one.
+ *
+ * Each price is written as its field is left, so there is nothing for the caller to save:
+ * **Done** writes what is still in a field and then calls `onVariantsSaved` — the caller's
+ * refresh-and-close — or plain `onClose` when nothing was written. Closing by the cross or Escape
+ * takes the same path, refusals aside.
  */
 export function QuickPriceDialog({
   subject: item,
@@ -103,6 +124,7 @@ export function QuickPriceDialog({
   error,
   onClose,
   onSubmit,
+  onVariantsSaved,
 }: {
   subject: QuickPriceSubject;
   collectionId: string;
@@ -113,18 +135,27 @@ export function QuickPriceDialog({
   error?: string;
   onClose: () => void;
   onSubmit: (entries: Array<{ catalogNameId: string; amount: string }>) => void;
+  /** An umbrella's variant prices were written from here: refresh what shows the copy's value and
+   *  close, as after a successful `onSubmit`. */
+  onVariantsSaved: () => void;
 }) {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [context, setContext] = useState<QuickCatalogPriceContext | null>(null);
   const [loadError, setLoadError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const primaryInputRef = useRef<HTMLInputElement>(null);
+  const variantsRef = useRef<IntakeVariantPricesHandle>(null);
+  /** Whether any variant price reached the server — what decides between refreshing and closing. */
+  const variantsWritten = useRef(false);
+  const [finishing, setFinishing] = useState(false);
 
   // Focus the primary catalog's field once inputs are enabled (autoFocus can't fire while
   // they are disabled during the context load).
   useEffect(() => {
-    if (!loading && !loadError) primaryInputRef.current?.focus();
-  }, [loading, loadError]);
+    if (loading || loadError) return;
+    if (context?.isUmbrella) variantsRef.current?.claimFocus();
+    else primaryInputRef.current?.focus();
+  }, [loading, loadError, context]);
 
   // Keyed on the identity fields, not the subject object: a caller building the subject
   // inline (the Issue list's stamp rows) would otherwise refetch on every render.
@@ -170,9 +201,26 @@ export function QuickPriceDialog({
     [context, amounts]
   );
 
+  const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
+  const variantMode = hasCatalogs && context?.isUmbrella === true;
+
+  /** Done, or the way out, while pricing an umbrella's variants: the fields still typed into are
+   *  written first. A refusal keeps Done's dialog open on it; the cross and Escape close anyway, the
+   *  section retrying the field as it goes, as identification does. */
+  async function finishVariants(closing: boolean) {
+    if (finishing) return;
+    setFinishing(true);
+    const settled = (await variantsRef.current?.flush()) ?? true;
+    setFinishing(false);
+    if (!settled && !closing) return;
+    if (variantsWritten.current) onVariantsSaved();
+    else onClose();
+  }
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    onSubmit(filledEntries);
+    if (variantMode) void finishVariants(false);
+    else onSubmit(filledEntries);
   }
 
   /**
@@ -207,7 +255,6 @@ export function QuickPriceDialog({
     return `${fmt.abbreviation}: × ${fmt.factor} = ${deriveFormatPrice(typed, fmt.factor).toFixed(2)} ${c.currency}`;
   }
 
-  const hasCatalogs = (context?.catalogs.length ?? 0) > 0;
   const canSave = !isPending && !loading && !loadError && filledEntries.length > 0;
 
   const issueLabel = item.issueName
@@ -227,7 +274,11 @@ export function QuickPriceDialog({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <DialogShell title="Set catalog value" onClose={onClose} maxWidth="32rem">
+    <DialogShell
+      title="Set catalog value"
+      onClose={variantMode ? () => void finishVariants(true) : onClose}
+      maxWidth="32rem"
+    >
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
           <div
@@ -303,7 +354,9 @@ export function QuickPriceDialog({
             )}
           </div>
 
-          {context && context.otherPrices.length > 0 && (
+          {/* An umbrella's own recorded prices are not what it is worth once its variants are
+              priced, so they are left to the section's umbrella row and the full grid. */}
+          {context && !variantMode && context.otherPrices.length > 0 && (
             <div style={{ marginBottom: "1rem" }}>
               <div
                 style={{
@@ -357,6 +410,47 @@ export function QuickPriceDialog({
               No catalog with an edition is set up for this stamp&apos;s area. Add a catalog edition on
               the Catalog screen to record a value.
             </p>
+          ) : variantMode ? (
+            <IntakeVariantPricesSection
+              ref={variantsRef}
+              collectionId={collectionId}
+              stampId={stampId}
+              conditionId={conditionId}
+              certificateStatusId={certificateStatusId ?? ""}
+              formatId={displayFormatId ?? ""}
+              subjectLabel={[
+                item.conditionAbbreviation,
+                item.certificateStatusName,
+                context!.displayFormat?.abbreviation,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              subject={
+                <>
+                  <ConditionChip
+                    collectionId={collectionId}
+                    conditionId={item.conditionId}
+                    label={item.conditionAbbreviation}
+                  />
+                  {item.certificateStatusName && (
+                    <>
+                      {" "}
+                      <CertificateStatusChip
+                        collectionId={collectionId}
+                        certificateStatusId={item.certificateStatusId}
+                        label={item.certificateStatusName}
+                      />
+                    </>
+                  )}
+                  {context!.displayFormat && ` · ${context!.displayFormat.abbreviation}`}
+                </>
+              }
+              disabled={isPending || finishing}
+              pinnedOpen
+              onWritten={() => {
+                variantsWritten.current = true;
+              }}
+            />
           ) : (
             <>
               <div
@@ -464,12 +558,22 @@ export function QuickPriceDialog({
           {/* Cancel stays enabled while no amount is entered — only saving is gated by
               `canSave`; disabling both (via DialogActions' single `disabled`) would trap the
               user in the dialog until they typed a value. */}
-          <DialogSecondaryButton onClick={onClose} disabled={isPending}>
-            Cancel
-          </DialogSecondaryButton>
-          <DialogPrimaryButton type="submit" disabled={!canSave}>
-            {isPending ? "Saving…" : "Save"}
-          </DialogPrimaryButton>
+          {variantMode ? (
+            // No Cancel: each price is already saved as its field is left, so there is nothing to
+            // take back — only the fields still being typed in to write.
+            <DialogPrimaryButton type="submit" disabled={isPending || finishing}>
+              {isPending || finishing ? "Saving…" : "Done"}
+            </DialogPrimaryButton>
+          ) : (
+            <>
+              <DialogSecondaryButton onClick={onClose} disabled={isPending}>
+                Cancel
+              </DialogSecondaryButton>
+              <DialogPrimaryButton type="submit" disabled={!canSave}>
+                {isPending ? "Saving…" : "Save"}
+              </DialogPrimaryButton>
+            </>
+          )}
         </DialogFooter>
       </form>
     </DialogShell>,

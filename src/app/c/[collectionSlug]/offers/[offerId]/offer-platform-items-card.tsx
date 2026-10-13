@@ -1270,6 +1270,12 @@ export function OfferPlatformItemsCard({
             setQuickPriceItem(null);
             setPriceError(undefined);
           }}
+          onVariantsSaved={() => {
+            setQuickPriceItem(null);
+            setPriceError(undefined);
+            void invalidateAll(collectionId);
+            void invalidateStampsAndIssues(collectionId);
+          }}
           onSubmit={(entries) => {
             const copy = quickPriceItem;
             setPriceError(undefined);
