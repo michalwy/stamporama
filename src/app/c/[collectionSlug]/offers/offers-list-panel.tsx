@@ -833,6 +833,20 @@ export function OffersListPanel({
         </div>
 
         <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem" }}>
+          {/* Price and ready the offers still being prepared (#1894), the platform filter carried
+              across as Bulk listing's is. */}
+          <Link
+            href={`/c/${collectionSlug}/offers/prepare${platformId ? `?platform=${platformId}` : ""}`}
+            style={{
+              ...FILTER_CONTROL_STYLE,
+              display: "inline-flex",
+              alignItems: "center",
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            Prepare →
+          </Link>
           {/* Post a prepared batch (#322). Carries the platform filter across: the workspace posts to
               one platform, and the one being looked at here is the one meant. */}
           <Link

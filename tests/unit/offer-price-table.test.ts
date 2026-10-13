@@ -8,9 +8,11 @@ import {
   estimateSets,
   formatPriceMargin,
   marginSign,
+  offerPriceFigures,
   offerPriceRows,
   priceMargin,
   type CopyEstimateInput,
+  type PriceFigureSet,
 } from "../../src/lib/offer-price-table";
 
 // The offer's price table (#1829, made to read without its tooltips in #1839, its notes shrunk in
@@ -258,5 +260,81 @@ describe("the table's rows", () => {
         ["own", null],
       ]
     );
+  });
+});
+
+// The figures themselves, over an offer's sets (#1894): one function for the offer's own screen and
+// the Prepare screen, so the two cannot disagree.
+describe("the price table's figures over an offer's sets", () => {
+  const set = (over: {
+    catalogue?: string;
+    priced?: number;
+    reduction?: string;
+    reduced?: number;
+    market?: string;
+    marketCopies?: number;
+    noEvidence?: number;
+    cost?: string | null;
+    estimates?: CopyEstimateInput[];
+  } = {}): PriceFigureSet => ({
+    holdings: {
+      pricedCount: over.priced ?? 1,
+      totalBaseAmount: over.catalogue ?? "30.00",
+      faultReductionBaseAmount: over.reduction ?? "0.00",
+      faultReducedCount: over.reduced ?? 0,
+      market: {
+        valuedCount: over.marketCopies ?? 0,
+        totalBaseAmount: over.market ?? "0.00",
+        noEvidenceCount: over.noEvidence ?? 0,
+      },
+    },
+    cost: {
+      amount: over.cost === undefined ? "10.00" : over.cost,
+      knownCount: 1,
+      estimatedCount: 0,
+      unestimated: [],
+      noneCount: 0,
+      estimated: false,
+    },
+    estimates: over.estimates ?? [copy()],
+  });
+
+  it("averages each figure over the sets that carry it, in the offer's currency", () => {
+    const figures = offerPriceFigures(
+      [
+        set({ catalogue: "30.00", market: "12.00", marketCopies: 1, cost: "10.00" }),
+        set({ catalogue: "10.00", priced: 1, cost: null, estimates: [] }),
+        set({ priced: 0, catalogue: "0.00", cost: "20.00", noEvidence: 1, estimates: [] }),
+      ],
+      2
+    );
+    // Catalogue over the two priced sets, ×2.
+    assert.equal(figures.catalogPrice, "40.00");
+    assert.equal(figures.catalogUnpricedSets, 1);
+    // Estimated over the one set with an estimate: 100 × 0.3, ×2.
+    assert.equal(figures.suggestedPrice, "60.00");
+    assert.equal(figures.marketPrice?.amount, "24.00");
+    assert.equal(figures.marketPrice?.noEvidenceCopies, 1);
+    // COST over the two costed sets: (10 + 20) / 2, ×2.
+    assert.equal(figures.costPrice, "30.00");
+    assert.equal(figures.costAverageBase, 15);
+  });
+
+  it("names the full catalogue value only where a fault lowered it", () => {
+    assert.equal(offerPriceFigures([set()], 1).catalogFullPrice, null);
+    const lowered = offerPriceFigures([set({ catalogue: "20.00", reduction: "10.00", reduced: 1 })], 1);
+    assert.equal(lowered.catalogFullPrice, "30.00");
+    assert.equal(lowered.catalogFaultReducedCount, 1);
+  });
+
+  it("states nothing in a currency it has no rate for", () => {
+    const figures = offerPriceFigures([set({ market: "12.00", marketCopies: 1 })], null);
+    assert.equal(figures.catalogPrice, null);
+    assert.equal(figures.suggestedPrice, null);
+    assert.equal(figures.suggestedEstimate, null);
+    assert.equal(figures.costPrice, null);
+    assert.equal(figures.marketPrice, null);
+    // Results exist; it is the rate that is missing — the Market row says so.
+    assert.equal(figures.marketUnconvertible, true);
   });
 });

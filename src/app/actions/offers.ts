@@ -37,6 +37,7 @@ import {
   OfferActionBlockedError,
   type OfferInput,
   repostOffer,
+  applyEstimatedPrices,
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import type { PlanChecklistSlot } from "@/lib/offer-photo-plan";
@@ -1128,6 +1129,22 @@ export async function markOffersReadyAction(offerIds: string[]): Promise<BulkMar
   });
   if (awaitingPhotos.length > 0) kickOfferPhotoWorker();
   return { ...result, awaitingPhotos };
+}
+
+/** *Use estimated price* on the Prepare screen (#1894): each ticked offer without a stated price takes
+ * its Estimated value, computed on the server now. An offer that has gained a price meanwhile, or has
+ * nothing to estimate, is named rather than failing the batch. */
+export async function applyEstimatedPricesAction(
+  collectionId: string,
+  offerIds: string[]
+): Promise<BulkOfferActionState> {
+  const session = await getSession();
+  try {
+    return await applyEstimatedPrices(session.user.id, collectionId, offerIds);
+  } catch (e) {
+    const message = fail(e, "Failed to set the prices.").message;
+    return { succeeded: [], skipped: offerIds.map((offerId) => ({ offerId, message })) };
+  }
 }
 
 /** Delete a selection of offers in one motion. Same guard as the single-row delete: an offer with a

@@ -274,3 +274,137 @@ export function OfferPriceTable({
     </div>
   );
 }
+
+const STRIP_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
+
+/**
+ * The price table **in compact form** (#1894), for a row of the Prepare screen: the same figures in
+ * the same order — Minimum, Catalogue, Estimated, Market, Cost — laid across rather than down, each
+ * a column of its name, its price and its profit over the cost, and the offer's own price as the last
+ * column, where it is typed. Built from {@link offerPriceRows} over the same fields as the table, so a
+ * figure and a margin read exactly as they do on the offer's own screen — except that every column is
+ * drawn on every row, `—` where the figure does not exist, so the columns line up down the list.
+ *
+ * What the table says in a bracketed note after a name is said in the name's hover here, beside what
+ * it already said there — a row of a long list has no room for it. Estimated keeps its standing as the
+ * suggestion by its colour. Every price is a link writing the figure the seller states, as on the
+ * table, and the margin under the offer's own price follows `ownAmount` — the figure being typed —
+ * so what a price would give is read before it is saved.
+ */
+export function OfferPriceStrip({
+  offer,
+  ownAmount,
+  target,
+  ownLabel,
+  priceEditor,
+  disabled,
+  onApply,
+}: {
+  offer: OfferPriceTableOffer;
+  /** The stated figure as it stands in the field — typed or saved — or null while it is empty. */
+  ownAmount: string | null;
+  target: string;
+  ownLabel: string;
+  priceEditor: React.ReactNode;
+  disabled: boolean;
+  onApply: (amount: string) => void;
+}) {
+  const rows = offerPriceRows({
+    minimum: offer.platformMinimumPrice,
+    catalogue: offer.catalogPrice,
+    estimated: offer.suggestedPrice,
+    market: offer.marketPrice?.amount ?? null,
+    cost: offer.costPrice,
+    own: ownAmount,
+  });
+  // Every column on every row, a missing figure drawn `—`: down a list the columns are read across
+  // rows, and one that came and went with its figure would put Market under Estimated on the next row.
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const columns = STRIP_ORDER.map((key) => byKey.get(key) ?? { key, amount: null, margin: null });
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: "auto auto auto",
+        gridAutoFlow: "column",
+        gridAutoColumns: "minmax(3.5rem, auto)",
+        columnGap: "0.875rem",
+        rowGap: "0.0625rem",
+        alignItems: "baseline",
+        fontSize: "0.75rem",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {columns.map((row) => {
+        const own = row.key === "own";
+        const rowNote = note(row, offer);
+        const hint = [about(row, offer, ownLabel, !own), rowNote && !own ? rowNote.text : null]
+          .filter(Boolean)
+          .join(" — ");
+        const linked = !own && row.amount !== null && Number(row.amount) > 0 && ownAmount !== row.amount;
+        const sign = row.margin ? marginSign(row.margin) : 0;
+        return (
+          <div key={row.key} style={{ display: "contents" }}>
+            <span
+              style={{
+                justifySelf: "end",
+                fontWeight: own || row.key === "estimated" ? 600 : 400,
+                color:
+                  row.key === "estimated"
+                    ? rowNote?.warn
+                      ? "var(--color-warning)"
+                      : "var(--color-accent)"
+                    : "var(--color-text-muted)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Tooltip content={hint} align="end">
+                <span>{own ? ownLabel : NAME[row.key as Exclude<OfferPriceRowKey, "own">]}</span>
+              </Tooltip>
+            </span>
+            <span style={{ justifySelf: "end", whiteSpace: "nowrap" }}>
+              {own ? (
+                priceEditor
+              ) : row.amount === null ? (
+                <span style={MUTED}>—</span>
+              ) : linked ? (
+                <Tooltip content={`Use as the offer's ${target}`} align="end">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    disabled={disabled}
+                    onClick={() => onApply(row.amount!)}
+                    style={{
+                      padding: 0,
+                      background: "none",
+                      border: "none",
+                      font: "inherit",
+                      color: "var(--color-accent)",
+                      textDecoration: "underline",
+                      textUnderlineOffset: "2px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {row.amount}
+                  </button>
+                </Tooltip>
+              ) : (
+                <span style={{ color: "var(--color-text-secondary)" }}>{row.amount}</span>
+              )}
+            </span>
+            <span
+              style={{
+                justifySelf: "end",
+                whiteSpace: "nowrap",
+                color:
+                  sign < 0 ? "var(--color-warning)" : sign > 0 ? "var(--color-success)" : "var(--color-text-muted)",
+              }}
+            >
+              {row.margin ? formatPriceMargin(row.margin) : " "}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

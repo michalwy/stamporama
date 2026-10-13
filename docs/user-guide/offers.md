@@ -14,6 +14,9 @@ then a **Marketplaces** group holding one screen per platform, named for the pla
   See [Building a bulk lot](#building-a-bulk-lot).
 - **Series from singles** — the series you listed stamp by stamp that could now go out whole. See
   [Series from singles](#series-from-singles).
+- **Prepare** — the offers still being prepared, priced in place and marked ready together. See
+  [Prepare](#prepare--pricing-and-readying-many-offers). Also reachable from the offer list's
+  toolbar, which carries the platform filter across.
 - **Bulk listing** — where you post a batch that is prepared and ready to go live. See
   [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
   list's toolbar as well, which carries the platform filter across.
@@ -1872,6 +1875,66 @@ is redrawn without it.
 
 **Created in this sitting**, above the series, lists the offers composed since you opened the
 screen, each with the series it took and a link to it. The list is cleared when you leave the screen.
+
+## Prepare — pricing and readying many offers
+
+After a bulk generation leaves dozens of offers in **Preparing**, pricing them one at a time — open an
+offer, set its price, mark it ready, next — is the slow part. The **Prepare** screen lists every offer
+still being prepared, one row each, so you can price them all on one screen and then mark them ready
+together.
+
+Each row shows:
+
+- **Pictures of the stamps** — the offer's generated listing photos once it has any, and until then
+  each copy's own photo. Rest the pointer on one to see it larger; click it to open them all full size.
+- **What the offer is** — its number and title (a link to the offer), the platform and Facebook group,
+  and how many sets and copies it holds.
+- **What still stops it from being marked ready** — a missing price, and the same reasons the offer's
+  own **Mark ready** button gives (an unmatched stamp, a text over the platform's limit, photos not yet
+  checked for symbols, a set sold elsewhere). Hover a reason for what to do about it. Missing or
+  out-of-date photos are not listed as a reason: **Mark ready** generates them itself. A row with
+  nothing in the way says **Can be marked ready**.
+- **The price table, compact** — the same figures as on the offer's own screen
+  ([the price table](#the-price-table)), side by side: **Minimum**, **Catalogue**, **Estimated** (the
+  suggestion, in colour), **Market** and **Cost**, each per set with the profit it would make over the
+  cost underneath. Hover a name for what the figure is. A figure that does not exist shows **—**.
+- **Your price** — the field at the end of the row. On an auction it is the **starting price**.
+
+### Setting the prices
+
+Type a price into a row's field and press **Enter**: the price is saved and the cursor moves to the
+next row's field, so you can work down the list without touching the mouse. Leaving the field with
+**Tab** or a click saves it too; **Escape** puts back what was there. The profit under the field
+follows what you type, so you see what a price would make before you save it. A sum such as `12*0.8`
+is worked out when you leave the field.
+
+Click any figure in the table — the estimate, the catalogue value, the minimum — to use it as the
+price, exactly as on the offer's own screen.
+
+### Acting on several offers
+
+Tick offers, or tick the box above the list to select every row loaded so far. Two actions act on the
+ticked offers in view:
+
+- **Use estimated price** gives every ticked offer that has **no price yet** its estimated value. Offers
+  that already have a price keep it, so you only need to type the exceptions. The count on the button
+  says how many it will price.
+- **Mark ready** moves the ticked offers to **Ready**. Where only the photos are missing it generates
+  them first, and the offer turns ready once they are done — the row says so while it waits. An offer
+  that cannot be marked ready stays ticked and is named under the bar with the reason.
+
+As on the Offers list, changing a filter never unticks anything: ticks the filter is hiding are kept,
+and the actions only reach the rows you can see.
+
+### Filtering
+
+- **Platform** — and, on Facebook, the **group**. The platform is the one the Offers list is filtered
+  to, and changing it here changes it there.
+- **Area** — the area tree on the left. An offer matches an area only when every copy it holds is
+  inside it (or inside one of its sub-areas), as on the Bulk listing screen.
+- **No price yet** — only the offers still without a price.
+
+The list loads more rows as you scroll.
 
 ## Bulk listing — posting a prepared batch
 

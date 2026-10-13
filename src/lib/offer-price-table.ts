@@ -30,6 +30,7 @@
 // moved to their rows' tooltips. Minimum joined the rows that are always drawn — `—` on a platform
 // that sets none — and Cost became a price that can be clicked like the others.
 
+import { offerCostTotals, type OfferSetCost } from "./offer-cost";
 import { isStatedRatio, type RatioBucketLevel } from "./realization-ratio";
 
 /** One held copy's estimate: its catalogue value and the ratio its bucket resolved to. */
@@ -260,4 +261,114 @@ export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
     rows.push({ key, amount, margin: known ? priceMargin(value, cost) : null });
   }
   return rows;
+}
+
+/** One set as {@link offerPriceFigures} reads it: the set's holdings summary (catalogue and market,
+ *  base currency), its COST (#1736) and its copies' estimates (#1829). Structural, so this module
+ *  stays pure. */
+export interface PriceFigureSet {
+  holdings: {
+    pricedCount: number;
+    totalBaseAmount: string;
+    faultReductionBaseAmount: string;
+    faultReducedCount: number;
+    market: { valuedCount: number; totalBaseAmount: string; noEvidenceCount: number };
+  };
+  /** The set's COST (#1736), base currency. */
+  cost: OfferSetCost;
+  estimates: readonly CopyEstimateInput[];
+}
+
+/** The price table's figures over an offer's sets, in the offer's currency — every one per set. */
+export interface OfferPriceFigureSummary {
+  /** Catalogue value per set; null when nothing is valued or no rate converts it. */
+  catalogPrice: string | null;
+  /** {@link catalogPrice} without the copies' fault reductions (#1560); null when nothing was lowered. */
+  catalogFullPrice: string | null;
+  catalogUnpricedSets: number;
+  catalogFaultReducedCount: number;
+  /** Estimated value per set — the suggestion (#1829). */
+  suggestedPrice: string | null;
+  suggestedEstimate: { valuedSets: number; copies: number; ratio: number; source: EstimateSource } | null;
+  catalogNames: string[];
+  marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
+  marketUnconvertible: boolean;
+  /** The COST per set; null when no set's cost is known or no rate converts it. */
+  costPrice: string | null;
+  /** The base-currency sums the catalogue figure was taken from, for the offer's totals (#378). */
+  catalogue: { sumBase: number; reductionBase: number; valuedSets: number };
+  /** The COST per set, base currency (#1736). */
+  costAverageBase: number | null;
+}
+
+/**
+ * The figures the price table is drawn from (#1829/#1839/#1843), over an offer's sets.
+ *
+ * One function for every surface that draws the table — the offer's own screen and the Prepare
+ * screen (#1894) — so a figure cannot read one way on the offer and another beside it in a batch.
+ * `toOffer` converts base to the offer's currency: 1 when the offer prices in the base currency, null
+ * when no rate is known, which leaves every figure null rather than one in the wrong currency.
+ *
+ * A set counts towards the catalogue figure when *some* copy of it priced (#378), towards the market
+ * one when some copy has recorded results (#458), and towards the COST when its cost is known.
+ */
+export function offerPriceFigures(
+  sets: readonly PriceFigureSet[],
+  toOffer: number | null
+): OfferPriceFigureSummary {
+  const inOffer = (base: number | null) => (base === null || toOffer === null ? null : (base * toOffer).toFixed(2));
+
+  let sumSetCV = 0;
+  let valuedSets = 0;
+  let sumSetReduction = 0;
+  let faultReducedCount = 0;
+  for (const s of sets) {
+    if (s.holdings.pricedCount === 0) continue;
+    sumSetCV += Number(s.holdings.totalBaseAmount);
+    sumSetReduction += Number(s.holdings.faultReductionBaseAmount);
+    faultReducedCount += s.holdings.faultReducedCount;
+    valuedSets++;
+  }
+  const catalogPrice = valuedSets > 0 ? inOffer(sumSetCV / valuedSets) : null;
+  const catalogFullPrice =
+    valuedSets > 0 && faultReducedCount > 0 ? inOffer((sumSetCV + sumSetReduction) / valuedSets) : null;
+
+  const estimate = estimateSets(sets.map((s) => s.estimates));
+  const suggestedPrice = estimate ? inOffer(estimate.averageBase) : null;
+
+  let sumSetMarket = 0;
+  let marketSets = 0;
+  let marketCopies = 0;
+  let noEvidenceCopies = 0;
+  for (const s of sets) {
+    noEvidenceCopies += s.holdings.market.noEvidenceCount;
+    if (s.holdings.market.valuedCount === 0) continue;
+    sumSetMarket += Number(s.holdings.market.totalBaseAmount);
+    marketCopies += s.holdings.market.valuedCount;
+    marketSets++;
+  }
+  const marketAmount = marketSets > 0 ? inOffer(sumSetMarket / marketSets) : null;
+
+  const costAverageBase = offerCostTotals(sets.map((s) => s.cost)).average;
+
+  return {
+    catalogPrice,
+    catalogFullPrice,
+    catalogUnpricedSets: sets.length - valuedSets,
+    catalogFaultReducedCount: faultReducedCount,
+    suggestedPrice,
+    suggestedEstimate:
+      estimate && suggestedPrice !== null
+        ? { valuedSets: estimate.valuedSets, copies: estimate.copies, ratio: estimate.ratio, source: estimate.source }
+        : null,
+    catalogNames: estimate?.catalogues ?? [],
+    marketPrice:
+      marketAmount === null
+        ? null
+        : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
+    marketUnconvertible: marketSets > 0 && marketAmount === null,
+    costPrice: inOffer(costAverageBase),
+    catalogue: { sumBase: sumSetCV, reductionBase: sumSetReduction, valuedSets },
+    costAverageBase,
+  };
 }
