@@ -181,13 +181,19 @@ any of them is.
    straight away. An offer
    needs at least one set **and an asking price** before it can be marked ready or activated — an
    unpriced offer shows *Set a price to…* beside its price, and the quick-advance button waits until
-   you set one. It also needs its [listing photos](#generating-the-photos) **generated and current**:
-   an offer whose plan would render images but has none, whose stored images are *Out of date*, whose
-   run failed, or whose run is still going cannot be marked ready — the button says which, and you fix
-   it on the **Photos** card. An offer whose plan renders nothing at all (no collage configured and no
-   attachments) is asked nothing about photos. **⚡ List via Assistant** beside it is the exception,
-   and deliberately: it generates the photos itself before it opens the form, so a missing plan never
-   disables *that* button — see [List via Assistant](#list-via-assistant). On the platform named as Colnect it also needs to pass the
+   you set one. It also needs its [listing photos](#generating-the-photos) **generated and current** —
+   but when the photos are **all** that stands in the way (none generated yet, *Out of date*, a failed
+   run, or a run still going), **Mark ready** does not refuse: it starts the generation itself, and
+   the offer **turns Ready by itself once the photos are done**. Meanwhile the offer stays
+   **Preparing** with a **Generating photos — Ready when done** chip in place of the button, on its
+   row and on its own screen, and you can move on to the next one. If the run fails, or something
+   else stands in the way once the photos are done (a price cleared in the meantime, say), the offer
+   stays **Preparing** with a **Not marked ready** chip whose hover hint says why — nothing is marked
+   Ready on a guess. Anything else that blocks it — a missing price, photos not yet checked for
+   symbols to cover, a listing precondition — is refused at once, as before, and no photos are
+   generated. An offer whose plan renders nothing at all (no collage configured and no
+   attachments) is asked nothing about photos. **⚡ List via Assistant** beside it generates the
+   photos too, before it opens the form — see [List via Assistant](#list-via-assistant). On the platform named as Colnect it also needs to pass the
    [listing preconditions](#what-the-assistant-cant-post) — every stamp matched, every condition
    mapped, the sets interchangeable — before it can be marked ready. On **every** platform, none of
    its texts may be [over the platform's cap](#how-long-the-text-may-be). For the same reason you cannot clear the price of an offer that is already **Ready**
@@ -788,7 +794,9 @@ there.
 
 On a **Preparing** offer, *Out of date* is more than a reminder: an offer cannot be marked **Ready**
 while its images are stale, missing, still rendering or left by a failed run — Ready means the listing
-is assembled, and images that no longer show what is being sold are not that. A listing already
+is assembled, and images that no longer show what is being sold are not that. Pressing **Mark
+ready** anyway regenerates them, and the offer turns Ready once they are done (see
+[step 5](#creating-and-composing-an-offer) above). A listing already
 **Ready** or live is never held back this way: it exists on the platform, and stepping it back to
 **Preparing** is what lets you re-prepare it.
 
@@ -2118,9 +2126,10 @@ for is satisfied. Pressing it marks the offer ready and goes straight on to the 
 offer that passes every check is one you have finished assembling, and pressing **Mark ready** first
 only to press this next decides nothing. The hover hint says what the press is about to do, in order.
 
-**Missing photos are not one of the things that stop it.** **Mark ready** beside it is still disabled
-until the images exist, but this button is not, because generating them is the first thing it does —
-it makes the pictures, marks the offer ready with them in place, and opens the form. What still
+**Missing photos are not one of the things that stop it** — nor do they stop **Mark ready** beside
+it, which generates them and lets the offer turn Ready once they are done. This button goes one step
+further, because generating them is the first thing it does: it makes the pictures, marks the offer
+ready with them in place, and opens the form. What still
 disables it is the rest of that list: a stamp with no item-ID, a condition the platform has no grade
 for, sets that are not interchangeable, a text over the platform's cap. Those are yours to fix, and
 **Mark ready**'s own hint is where they are listed. The bulk listing workspace is unchanged: it is a
@@ -2695,12 +2704,19 @@ Every row in the offers list carries a **checkbox** on its left, and a bar at th
 carries one for **all of them**. Tick a few rows, or tick the bar's box to take everything, and the
 bar turns into a count with the actions that work on a selection:
 
+- **Mark ready** — marks the ticked **Preparing** offers ready, each exactly as its own **Mark ready**
+  does: one whose photos are all that stands in the way has them generated and turns Ready once they
+  are done, and one held back by anything else is listed under the bar with the reason. It is offered
+  while at least one ticked offer in view is Preparing, and acts on those alone — ticked offers in
+  other states are left as they are, and the button says how many it will mark (*Mark 3 ready*) when
+  they are not all Preparing. Nothing is lost by it, so it asks for no confirmation.
 - **Withdraw** — takes those listings down, exactly as the row's own **Withdraw** does. Withdrawn is
   final: to sell there again, create a new offer. The copies are untouched.
 - **Clear** puts the selection back to nothing.
 - **Delete** — permanently removes those offers and their sets. The copies stay in your inventory.
 
-Both ask for confirmation first, naming how many offers are about to be affected.
+**Withdraw** and **Delete** ask for confirmation first, naming how many offers are about to be
+affected.
 
 **Select all means the rows loaded so far.** The list loads more offers as you scroll, so the box
 takes what is on screen and says how many that is — it never reaches offers you have not seen. Scroll
@@ -2723,7 +2739,7 @@ So the number moving when you press a chip is the filter, not a lost selection. 
 place those five are still visible. **Clear** is the other way round: it is you saying you are done
 with the selection, so it unticks all five, hidden ones included, and its hint says so.
 
-**Every row is selectable, and what an action cannot do it says.** The two actions disagree about
+**Every row is selectable, and what an action cannot do it says.** The actions disagree about
 what they can touch — a closed listing has nothing to withdraw, while an offer with a sold set can be
 withdrawn but never deleted — so nothing is greyed out in advance. A run does what it can and lists
 what it could not, one line per offer with the reason, under the bar. Those offers **stay ticked**,

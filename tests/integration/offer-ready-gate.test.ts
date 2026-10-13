@@ -11,13 +11,16 @@ import {
   addOfferSet,
   createOffer,
   getOfferDetail,
+  markOfferReady,
   setOfferState,
+  settleReadyAfterPhotos,
   updateOfferPhotoConfig,
 } from "../../src/lib/offers";
 import { applyPhotoChangeSet, stageUpload } from "../../src/lib/photos";
 import {
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
+  failOfferPhotoGeneration,
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import { setColnectConditionMapping } from "../../src/lib/colnect";
@@ -492,6 +495,146 @@ describe("marking an offer ready with listing photos (#311)", () => {
     await enqueueOfferPhotoGeneration(userId, offerId);
     await assert.rejects(() => setOfferState(userId, offerId, "ready"), /still being generated/);
     assert.equal(await stateOf(offerId), "preparing");
+  });
+
+  // ── Mark ready generates the photos (#1893) ────────────────────────────────────────────────────
+
+  /** Stand in for the worker on a run already queued: claim, render, end the wait. */
+  async function workerRun(offerId: string): Promise<void> {
+    await claimNextOfferPhotoGeneration({ offerId });
+    try {
+      await runOfferPhotoGeneration(offerId);
+    } catch (err) {
+      await failOfferPhotoGeneration(offerId, err);
+      await settleReadyAfterPhotos(offerId, err instanceof Error ? err.message : String(err));
+      return;
+    }
+    await settleReadyAfterPhotos(offerId, null);
+  }
+
+  const waitOf = async (offerId: string) =>
+    prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { state: true, readyAfterPhotosAt: true, readyAfterPhotosRefusal: true },
+    });
+
+  const runStatusOf = async (offerId: string) =>
+    (await prisma.offerPhotoGeneration.findUnique({ where: { offerId }, select: { status: true } }))
+      ?.status ?? null;
+
+  it("Mark ready queues missing photos and the offer turns ready once they are done (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+
+    // Still preparing, waiting, and the run queued — and the screen says so.
+    const waiting = await waitOf(offerId);
+    assert.equal(waiting.state, "preparing");
+    assert.notEqual(waiting.readyAfterPhotosAt, null);
+    assert.equal(await runStatusOf(offerId), "queued");
+    assert.equal((await getOfferDetail(userId, offerId))?.readyAfterPhotos, true);
+
+    await workerRun(offerId);
+    const done = await waitOf(offerId);
+    assert.equal(done.state, "ready");
+    assert.equal(done.readyAfterPhotosAt, null);
+    assert.equal(done.readyAfterPhotosRefusal, null);
+  });
+
+  it("Mark ready regenerates out-of-date photos the same way (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    await generate(offerId);
+    await addOfferSet(userId, offerId, [await scannedCopy()]);
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    assert.equal(await runStatusOf(offerId), "queued");
+    await workerRun(offerId);
+    assert.equal((await waitOf(offerId)).state, "ready");
+  });
+
+  it("Mark ready joins a run already in flight rather than stacking one (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    await claimNextOfferPhotoGeneration({ offerId });
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    assert.equal(await runStatusOf(offerId), "running");
+    await runOfferPhotoGeneration(offerId);
+    await settleReadyAfterPhotos(offerId, null);
+    assert.equal((await waitOf(offerId)).state, "ready");
+  });
+
+  it("marks a generated offer ready at once, generating nothing (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    await generate(offerId);
+    assert.equal(await markOfferReady(userId, offerId), "ready");
+    assert.equal((await waitOf(offerId)).state, "ready");
+    assert.equal(await runStatusOf(offerId), "ready");
+  });
+
+  it("refuses at once, generating nothing, when something besides the photos blocks it (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    await prisma.offer.update({ where: { id: offerId }, data: { price: "0" } });
+    await assert.rejects(() => markOfferReady(userId, offerId), /asking price/);
+    const after = await waitOf(offerId);
+    assert.equal(after.state, "preparing");
+    assert.equal(after.readyAfterPhotosAt, null);
+    assert.equal(await runStatusOf(offerId), null);
+  });
+
+  it("leaves the offer unready with the reason when the run fails (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    await claimNextOfferPhotoGeneration({ offerId });
+    await failOfferPhotoGeneration(offerId, new Error("the scan could not be read"));
+    await settleReadyAfterPhotos(offerId, "the scan could not be read");
+
+    const after = await waitOf(offerId);
+    assert.equal(after.state, "preparing");
+    assert.equal(after.readyAfterPhotosAt, null);
+    assert.match(after.readyAfterPhotosRefusal ?? "", /could not be generated: the scan could not be read/);
+    const detail = await getOfferDetail(userId, offerId);
+    assert.equal(detail?.readyAfterPhotos, false);
+    assert.match(detail?.readyAfterPhotosRefusal ?? "", /the scan could not be read/);
+
+    // Marking it ready again starts a new wait and puts the old reason away; success clears it.
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    assert.equal((await waitOf(offerId)).readyAfterPhotosRefusal, null);
+    await workerRun(offerId);
+    assert.equal((await waitOf(offerId)).state, "ready");
+  });
+
+  it("leaves the offer unready with the reason when another blocker appears during the wait (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    // The price is cleared while the images render: the whole gate is asked again at the end.
+    await prisma.offer.update({ where: { id: offerId }, data: { price: "0" } });
+    await workerRun(offerId);
+
+    const after = await waitOf(offerId);
+    assert.equal(after.state, "preparing");
+    assert.equal(after.readyAfterPhotosAt, null);
+    assert.match(after.readyAfterPhotosRefusal ?? "", /asking price/);
+    // The photos themselves are done and stay done.
+    assert.equal(await runStatusOf(offerId), "ready");
+  });
+
+  it("ends the wait without a move when the offer left Preparing meanwhile (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    assert.equal(await markOfferReady(userId, offerId), "awaiting-photos");
+    await setOfferState(userId, offerId, "withdrawn");
+    assert.equal((await waitOf(offerId)).readyAfterPhotosAt, null);
+    await workerRun(offerId);
+    const after = await waitOf(offerId);
+    assert.equal(after.state, "withdrawn");
+    assert.equal(after.readyAfterPhotosRefusal, null);
+  });
+
+  it("marks only a Preparing offer ready — never a rejection, never twice (#1893)", async () => {
+    const offerId = await offerWithPhotoPlan();
+    await generate(offerId);
+    await setOfferState(userId, offerId, "ready");
+    await assert.rejects(() => markOfferReady(userId, offerId), /already ready/);
+    await setOfferState(userId, offerId, "pending");
+    await assert.rejects(() => markOfferReady(userId, offerId), /Only a Preparing offer/);
+    assert.equal((await waitOf(offerId)).state, "pending");
   });
 
   it("never blocks a later transition over stale photos", async () => {

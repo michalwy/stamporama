@@ -17,6 +17,8 @@ import {
   RefreshDueChip,
   ListingTypeChip,
   PlatformSaleChip,
+  ReadyWhenPhotosDoneChip,
+  NotMarkedReadyChip,
 } from "../offer-badges";
 import {
   useOfferDetail,
@@ -410,10 +412,10 @@ export function OfferDetailPanel({
     advanceTo !== null && (!requiresSets(advanceTo) || offer.sets.length > 0) && pricedForAdvance;
   const readyBlockers = advanceReady && advanceTo === "ready" ? offer.readyBlockers : [];
   const canAdvance = advanceReady && readyBlockers.length === 0;
-  // The photo half of that gate, told apart from the rest (#727). **Mark ready** is still refused on
-  // it — `readyBlockers` above is whole — but **List via Assistant** is not: its first step is to
-  // render the images itself, so a photo gap is something the click *fixes* rather than a reason to
-  // withhold it. What is left is the gate's other half, which is nobody's errand but the
+  // The photo half of that gate, told apart from the rest (#727). Neither button is withheld over it
+  // alone: **List via Assistant** renders the images as its first step, and **Mark ready** queues
+  // them and lets the offer turn Ready once they are done (#1893) — so a photo gap is something the
+  // click *fixes* rather than a reason to withhold it. What is left is the gate's other half, which is nobody's errand but the
   // collector's: a wrong grade or an over-long title is fixed before anything is posted.
   const photoGap = readyBlockers.some(isPhotoReadinessBlocker);
   // Photos never checked for symbols (#1665) — the one ready-gate reason fixed in a dialog that opens
@@ -621,7 +623,11 @@ export function OfferDetailPanel({
         invalidateAll(collectionId);
         // No link — this is the offer's own screen. The state word is at the top of a page the
         // collector may have scrolled a long way down.
-        toast({ message: `This offer is now ${OFFER_STATE_LABEL[next].toLowerCase()}` });
+        toast({
+          message: result.awaitingPhotos
+            ? "Generating the photos — this offer turns ready when they are done"
+            : `This offer is now ${OFFER_STATE_LABEL[next].toLowerCase()}`,
+        });
       } else setActionError(result.message);
     });
   }
@@ -660,6 +666,11 @@ export function OfferDetailPanel({
       const result = await setOfferStateAction(offerId, "ready");
       if (result.status !== "success") return result.message;
       invalidateAll(collectionId);
+      // The photos went out of date again between the run and this step (#1893): Mark ready queued
+      // another, and the kit is served only to a Ready offer.
+      if (result.awaitingPhotos) {
+        return "The offer changed while its photos were generated, so they are being generated again — it turns ready when they are done; list it then.";
+      }
       return null;
     });
   }
@@ -941,9 +952,17 @@ export function OfferDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />
-            {(canAdvance || readyBlockers.length > 0) && advanceTo && (() => {
+            {/* Mark ready was pressed while the photos were all that stood in the way (#1893): the
+                chip stands where the button was, as it does on the offer's row. */}
+            {offer.readyAfterPhotos && <ReadyWhenPhotosDoneChip />}
+            {!offer.readyAfterPhotos && offer.readyAfterPhotosRefusal && (
+              <NotMarkedReadyChip reason={offer.readyAfterPhotosRefusal} />
+            )}
+            {!offer.readyAfterPhotos && (canAdvance || readyBlockers.length > 0) && advanceTo && (() => {
               const { label, icon } = advanceLabel(offer.state, advanceTo, offer.facebook !== null);
-              const blocked = readyBlockers.length > 0;
+              // Photos alone do not block Mark ready (#1893): pressing it generates them and the
+              // offer turns Ready once they are done. Anything else still does, photos included.
+              const blocked = readyBlockers.some((b) => !isPhotoReadinessBlocker(b));
               return (
                 <Tooltip
                   maxWidth="26rem"
@@ -989,6 +1008,8 @@ export function OfferDetailPanel({
                           </span>
                         ))}
                       </span>
+                    ) : photoGap ? (
+                      "Generates the listing photos first — the offer is marked ready once they are done."
                     ) : (
                       label
                     )
@@ -1612,6 +1633,13 @@ export function OfferDetailPanel({
       />
 
       {actionError && <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</p>}
+      {/* Why the last wait for the photos did not end in Ready (#1893) — the collector had moved on,
+          so the refusal is kept here until the offer is marked ready again or leaves Preparing. */}
+      {offer.readyAfterPhotosRefusal && !offer.readyAfterPhotos && (
+        <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>
+          Not marked ready: {offer.readyAfterPhotosRefusal}
+        </p>
+      )}
 
       {composing && (
         <ComposeSetDialog

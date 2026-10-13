@@ -95,8 +95,8 @@ const LINK_BTN: React.CSSProperties = {
   textDecoration: "underline",
 };
 
-/** A bulk action in the selection bar. Both are destructive, so neither is drawn as the primary
- * button on the screen — the emphasis belongs to *New offer*, not to deleting a dozen listings. */
+/** A bulk action in the selection bar. None is drawn as the primary button on the screen — the
+ * emphasis belongs to *New offer*, not to deleting a dozen listings. */
 const BULK_BTN: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -474,6 +474,41 @@ export function OffersListPanel({
     });
   }
 
+  /** Mark the ticked **Preparing** offers in view ready (#1893), each as its own button would: one
+   * whose photos are all that stands in the way has them generated and turns Ready once they are
+   * done, anything else is refused and named against its row. Reversible, so no confirmation. Ticked
+   * offers in other states are not in the batch and stay ticked — the run settled nothing about them. */
+  function markReadyBulk() {
+    const batch = selectedInView.filter((o) => o.state === "preparing");
+    if (batch.length === 0) return;
+    const noById = new Map(batch.map((o) => [o.id, o.offerNo] as const));
+    setActionError(undefined);
+    startTransition(async () => {
+      const { markOffersReadyAction } = await import("@/app/actions/offers");
+      const result = await markOffersReadyAction(batch.map((o) => o.id));
+      invalidateAll(collectionId);
+      setBulkSkips(
+        result.skipped.map((s) => ({ offerNo: noById.get(s.offerId) ?? 0, message: s.message }))
+      );
+      setSelection((prev) =>
+        keptAfterBulkRun(
+          prev,
+          batch.map((o) => o.id),
+          result.skipped.map((s) => s.offerId)
+        )
+      );
+      const waiting = result.awaitingPhotos.length;
+      const ready = result.succeeded.length - waiting;
+      const parts = [
+        ...(ready > 0 ? [`${ready} offer${ready === 1 ? "" : "s"} marked ready`] : []),
+        ...(waiting > 0
+          ? [`${waiting} ${waiting === 1 ? "turns" : "turn"} ready once ${waiting === 1 ? "its" : "their"} photos are done`]
+          : []),
+      ];
+      if (parts.length > 0) toast({ message: parts.join(" · ") });
+    });
+  }
+
   /** Put the ticked Facebook offers **in view** into one post (#1544; ADR-0061 §2), numbered as
    * lots in the order they were ticked, under the title the dialog asked for (#1862). The server says
    * why when they cannot be — different groups, one already up, auctions and quick buys in a group
@@ -602,7 +637,9 @@ export function OffersListPanel({
       if (result.status === "success") {
         invalidateAll(collectionId);
         toast({
-          message: `Offer #${offer.offerNo} is now ${OFFER_STATE_LABEL[next].toLowerCase()}`,
+          message: result.awaitingPhotos
+            ? `Generating offer #${offer.offerNo}'s photos — it turns ready when they are done`
+            : `Offer #${offer.offerNo} is now ${OFFER_STATE_LABEL[next].toLowerCase()}`,
           href: `/c/${collectionSlug}/offers/${offer.id}`,
           linkLabel: "Open offer",
         });
@@ -1028,6 +1065,25 @@ export function OffersListPanel({
                           </button>
                         </Tooltip>
                       )}
+                      {/* Mark ready (#1893), offered while a ticked offer in view is Preparing; it
+                          runs on those alone, and says how many when the others are ticked too. */}
+                      {(() => {
+                        const preparing = selectedInView.filter((o) => o.state === "preparing").length;
+                        if (preparing === 0) return null;
+                        return (
+                          <Tooltip content="Mark the ticked Preparing offers ready. Missing or out-of-date photos are generated first, and the offer turns ready once they are done.">
+                            <button
+                              type="button"
+                              onClick={markReadyBulk}
+                              disabled={isPending}
+                              style={BULK_BTN}
+                            >
+                              <Icon name="check" size="sm" />{" "}
+                              {preparing < selectedOffers.length ? `Mark ${preparing} ready` : "Mark ready"}
+                            </button>
+                          </Tooltip>
+                        );
+                      })()}
                       <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
                         <button
                           type="button"
@@ -1063,7 +1119,7 @@ export function OffersListPanel({
                 </>
               ) : (
                 <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                  Select offers to withdraw or delete them together
+                  Select offers to mark ready, withdraw or delete them together
                 </span>
               )}
             </div>

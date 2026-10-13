@@ -176,6 +176,28 @@ export function ListingOutOfDateChip({ since }: { since: Date | string | null })
 }
 
 /**
+ * *Mark ready* is waiting for this offer's photos (#1893): they are being generated, and the offer
+ * turns Ready by itself once they are done if nothing else stands in the way. `info`, like the
+ * Preparing state it qualifies — nothing is wrong, it is only not finished.
+ */
+export function ReadyWhenPhotosDoneChip() {
+  return tinted(
+    "info",
+    "Generating photos — Ready when done",
+    "Mark ready queued the listing photos. When they are done, the offer is marked ready by itself if nothing else stands in the way."
+  );
+}
+
+/**
+ * The last wait for the photos did not end in Ready (#1893) — the run failed, or something else
+ * stood in the way once they were done. `warning`: the collector had moved on, and the offer is
+ * still Preparing. The hover hint is the refusal in its own words.
+ */
+export function NotMarkedReadyChip({ reason }: { reason: string }) {
+  return tinted("warning", "Not marked ready", reason);
+}
+
+/**
  * An active quick buy up longer than its platform's refresh threshold (#1718): a post that old is
  * seen by nobody, so it wants posting again. `info`-tinted rather than `warning`: nothing about the
  * listing is wrong, it has only sunk.
