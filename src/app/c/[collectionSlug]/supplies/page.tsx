@@ -17,7 +17,8 @@ interface SuppliesPageProps {
 
 // The packing supplies' stock (#1897, ADR-0068): per supply, what is on hand, what it is worth at
 // FIFO cost, and the batches it is made of with the intake document each came from. A screen that
-// reads — the batches are written on their orders, the supplies named in Settings.
+// reads — the batches are written on their orders, the supplies named in Settings, and what sales
+// used (#1898) on the sales.
 
 const NUM: CSSProperties = { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
 const CELL: CSSProperties = { padding: "0.375rem 0.75rem", borderTop: "1px solid var(--color-border)" };
@@ -59,7 +60,7 @@ export default async function SuppliesPage({ params }: SuppliesPageProps) {
       </div>
       <p style={{ margin: "0 0 1.5rem", fontSize: "0.9375rem", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
         Each supply line of a purchase order is a batch, costed at its price plus its share of the
-        order&apos;s shipping. Supplies are used oldest batch first.{" "}
+        order&apos;s shipping. A sale&apos;s packing supplies are taken oldest batch first.{" "}
         <Link href={`${base}/settings?tab=packing-supplies`}>Name your supplies in Settings</Link>.
       </p>
 
@@ -106,6 +107,12 @@ function SupplySection({
           {supply.valueBase != null ? `${supply.valueBase} ${baseCurrency}` : "—"}
         </span>
       </div>
+      {supply.shortUnits > 0 && (
+        <p style={{ margin: 0, padding: "0 1.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-warning, var(--color-text-muted))" }}>
+          {supply.shortUnits} used on sales but not in stock — those sales&apos; shipping lacks their
+          cost until a purchase of this supply covers them.
+        </p>
+      )}
       {supply.unvaluedBatches > 0 && (
         <p style={{ margin: 0, padding: "0 1.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           {supply.unvaluedBatches} batch{supply.unvaluedBatches === 1 ? "" : "es"} bought in another

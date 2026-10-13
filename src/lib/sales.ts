@@ -38,6 +38,14 @@ import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
 import { readShareAddress, type ShareAddress } from "./share-address";
 import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard-sales-rules";
+import { settleSupplies } from "./supply-settlement";
+import {
+  SALE_SUPPLY_COST_SELECT,
+  saleSupplyLineCostOf,
+  saleSuppliesCostOf,
+  type SaleSupplyCostRow,
+} from "./sale-supplies";
+import { suppliesCostIncomplete, type SuppliesCost } from "./supply-stock";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -1282,6 +1290,7 @@ const SALE_LIST_SELECT = {
   lines: {
     select: { price: true, setChoicePending: true, _count: { select: { items: true } } },
   },
+  supplyLines: SALE_SUPPLY_COST_SELECT,
 } as const;
 
 function num(v: Prisma.Decimal | null): number {
@@ -1310,6 +1319,29 @@ function shippingToBase(
   return Number(shippingCost) * Number(shippingFxRateToBase);
 }
 
+/** My shipping (#1898): the postage in the base currency (`shippingToBase`) plus what the packing
+ * supplies the parcel used cost (`saleSuppliesCostOf`). A sale with no supply lines — every sale
+ * recorded before them — is its postage alone, which is the amount it always had. Units without a
+ * cost (short of stock, or from a batch with no rate) add nothing, and `supplies` says how many. */
+function myShipping(
+  sale: {
+    shippingCost: Prisma.Decimal | null;
+    shippingCurrency: string | null;
+    shippingFxRateToBase: Prisma.Decimal | null;
+    supplyLines: readonly SaleSupplyCostRow[];
+  },
+  baseCurrency: string
+): { postageBase: number; supplies: SuppliesCost; totalBase: number } {
+  const postageBase = shippingToBase(
+    sale.shippingCost,
+    sale.shippingCurrency,
+    sale.shippingFxRateToBase,
+    baseCurrency
+  );
+  const supplies = saleSuppliesCostOf(sale.supplyLines, baseCurrency);
+  return { postageBase, supplies, totalBase: postageBase + supplies.costBase };
+}
+
 /** The columns of a sale its line nets are resolved from. */
 const SALE_AMOUNTS_SELECT = {
   currency: true,
@@ -1320,6 +1352,7 @@ const SALE_AMOUNTS_SELECT = {
   shippingCost: true,
   shippingCurrency: true,
   shippingFxRateToBase: true,
+  supplyLines: SALE_SUPPLY_COST_SELECT,
 } as const;
 
 interface SaleAmountsRow {
@@ -1331,6 +1364,7 @@ interface SaleAmountsRow {
   shippingCost: Prisma.Decimal | null;
   shippingCurrency: string | null;
   shippingFxRateToBase: Prisma.Decimal | null;
+  supplyLines: SaleSupplyCostRow[];
   lines: { id: string; price: Prisma.Decimal }[];
 }
 
@@ -1350,13 +1384,10 @@ function resolveSaleNets(sale: SaleAmountsRow, baseCurrency: string) {
     sale.buyerPaidTotal,
     gross
   );
-  // Shipping is my cost in my own currency, converted straight to base (#206).
-  const shippingBase = shippingToBase(
-    sale.shippingCost,
-    sale.shippingCurrency,
-    sale.shippingFxRateToBase,
-    baseCurrency
-  );
+  // Shipping is my cost in my own currency, converted straight to base (#206): the postage plus the
+  // packing supplies the parcel used (#1898).
+  const shipping = myShipping(sale, baseCurrency);
+  const shippingBase = shipping.totalBase;
   const shared = {
     buyerHandling: handling,
     shippingBase,
@@ -1371,6 +1402,8 @@ function resolveSaleNets(sale: SaleAmountsRow, baseCurrency: string) {
     handling,
     totalBelowGross,
     shippingBase,
+    postageBase: shipping.postageBase,
+    supplies: shipping.supplies,
     shared,
     netOf: (lineId: string): SaleLineNet | undefined => netById.get(lineId),
     netBaseOf: (line: { id: string; price: Prisma.Decimal }): number =>
@@ -1489,6 +1522,7 @@ function toSaleListItem(
     platform: { name: string };
     buyer: { name: string } | null;
     lines: { price: Prisma.Decimal; setChoicePending: boolean; _count: { items: number } }[];
+    supplyLines: SaleSupplyCostRow[];
   },
   baseCurrency: string
 ): SaleListItem {
@@ -1498,13 +1532,7 @@ function toSaleListItem(
   // (base == transaction, or the rare unknown-rate window the detail flags separately).
   const buyerNetTx = gross + handling - num(row.commission);
   const rate = row.fxRateToBase == null ? 1 : Number(row.fxRateToBase);
-  const shippingBase = shippingToBase(
-    row.shippingCost,
-    row.shippingCurrency,
-    row.shippingFxRateToBase,
-    baseCurrency
-  );
-  const netBase = buyerNetTx * rate - shippingBase;
+  const netBase = buyerNetTx * rate - myShipping(row, baseCurrency).totalBase;
   return {
     id: row.id,
     saleNo: row.saleNo,
@@ -1742,6 +1770,32 @@ export interface SaleShareState {
   lastUsedAt: string | null;
 }
 
+/** One packing-supply line of a sale (#1898). */
+export interface SaleSupplyLineData {
+  id: string;
+  supplyId: string;
+  supplyName: string;
+  /** Units the parcel used. */
+  quantity: number;
+  /** What the units that have a cost cost, base currency (2 dp). */
+  costBase: string;
+  /** Units not in stock when used — uncosted until a purchase covers them. */
+  shortUnits: number;
+  /** Units from a batch bought in a currency with no rate into the base. */
+  unratedUnits: number;
+}
+
+/** A sale's packing supplies (#1898): its lines and their cost together. */
+export interface SaleSuppliesData {
+  lines: SaleSupplyLineData[];
+  /** Σ the lines' {@link SaleSupplyLineData.costBase}, base currency (2 dp). */
+  costBase: string;
+  shortUnits: number;
+  unratedUnits: number;
+  /** Some units have no cost, so {@link costBase} — and *my shipping* with it — is low by theirs. */
+  incomplete: boolean;
+}
+
 export interface SaleDetail {
   id: string;
   /** Short per-collection sale number (#432) — the collection's own name for this transaction, as
@@ -1783,6 +1837,12 @@ export interface SaleDetail {
   /** True when shipping is in a foreign currency but no FX rate to base is known — the cost can't
    * be converted, so it is excluded from the base net until a rate exists. */
   shippingRateMissing: boolean;
+  /** The packing supplies the parcel used (#1898), each costed from stock FIFO. Empty on a sale
+   * recorded before them, whose {@link shippingCost} is then the whole of its shipping. */
+  supplies: SaleSuppliesData;
+  /** My shipping in the base currency (#1898): the postage ({@link shippingBase}, nothing when it
+   * has no rate) plus {@link supplies}' cost. What the net subtracts. */
+  myShippingBase: string;
   /** The shipment's tracking number (#491), or null. Editable in place in any status. */
   trackingCode: string | null;
   /** The carrier in force for this parcel: the one the sale recorded, else the **default** named on
@@ -1852,6 +1912,15 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       shippingCost: true,
       shippingCurrency: true,
       shippingFxRateToBase: true,
+      // The parcel's packing supplies (#1898), in the order they were written.
+      supplyLines: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          ...SALE_SUPPLY_COST_SELECT.select,
+          supplyId: true,
+          supply: { select: { name: true } },
+        },
+      },
       trackingCode: true,
       // The sale's own carrier, and the method's as the fallback default (#491). Only the *link* is
       // derived from either — it is a way of looking the parcel up, not a fact the sale freezes, so
@@ -1988,8 +2057,27 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     shippingMethodName: sale.shippingMethodName,
     shippingCost: money(sale.shippingCost),
     shippingCurrency: sale.shippingCurrency,
-    shippingBase: sale.shippingCost == null ? null : shippingBase.toFixed(2),
+    shippingBase: sale.shippingCost == null ? null : resolved.postageBase.toFixed(2),
     shippingRateMissing,
+    supplies: {
+      lines: sale.supplyLines.map((line) => {
+        const cost = saleSupplyLineCostOf(line, baseCurrency);
+        return {
+          id: line.id,
+          supplyId: line.supplyId,
+          supplyName: line.supply.name,
+          quantity: line.quantity,
+          costBase: cost.costBase.toFixed(2),
+          shortUnits: cost.shortUnits,
+          unratedUnits: cost.unratedUnits,
+        };
+      }),
+      costBase: resolved.supplies.costBase.toFixed(2),
+      shortUnits: resolved.supplies.shortUnits,
+      unratedUnits: resolved.supplies.unratedUnits,
+      incomplete: suppliesCostIncomplete(resolved.supplies),
+    },
+    myShippingBase: shippingBase.toFixed(2),
     trackingCode: sale.trackingCode,
     carrierId: carrier?.id ?? null,
     carrierName: carrier?.name ?? null,
@@ -2018,13 +2106,15 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
 // ── Delete ──────────────────────────────────────────────────────────────────
 
 /** Delete a sale (ADR-0013). Cascades its lines + line items, so the copies become available
- * again (their sold state is derived). Offers the sale marked `sold` revert to `active`. */
+ * again (their sold state is derived), and its packing-supply lines, which return to stock (#1898).
+ * Offers the sale marked `sold` revert to `active`. */
 export async function deleteSale(ownerId: string, saleId: string): Promise<void> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
     select: {
       collection: { select: { ownerId: true } },
       lines: { select: { offerId: true } },
+      supplyLines: { select: { supplyId: true } },
     },
   });
   if (!sale || sale.collection.ownerId !== ownerId) {
@@ -2034,6 +2124,12 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
 
   await prisma.$transaction(async (tx) => {
     await tx.sale.delete({ where: { id: saleId } });
+    // The packing supplies it used go back to stock — to the batches they came from — and cover
+    // any other sale still short of them (#1898).
+    await settleSupplies(
+      tx,
+      sale.supplyLines.map((l) => l.supplyId)
+    );
     if (offerIds.length > 0) {
       await tx.offer.updateMany({
         where: { id: { in: offerIds }, state: "sold" },

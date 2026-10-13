@@ -16,9 +16,16 @@ import {
   PackingSupplyInUseError,
   type PurchaseSupplyLineInput,
 } from "@/lib/packing-supplies";
+import {
+  createSaleSupplyLine,
+  updateSaleSupplyLine,
+  deleteSaleSupplyLine,
+  type SaleSupplyLineInput,
+} from "@/lib/sale-supplies";
 
-// Server actions for packing supplies (#1897): the Settings dictionary and the supply lines of a
-// purchase order. Thin wrappers over `packing-supplies.ts`, which holds every rule.
+// Server actions for packing supplies (#1897): the Settings dictionary, the supply lines of a
+// purchase order, and those of a sale (#1898). Thin wrappers over `packing-supplies.ts` and
+// `sale-supplies.ts`, which hold every rule.
 
 export type PackingSupplyActionState =
   | { status: "idle" }
@@ -91,9 +98,14 @@ export async function deletePackingSupplyAction(
     if (e instanceof PackingSupplyInUseError) {
       return {
         status: "error",
-        message: `This supply was bought on ${e.lineCount} order line${
-          e.lineCount === 1 ? "" : "s"
-        } and cannot be deleted — those lines are its stock.`,
+        message:
+          e.lineCount > 0
+            ? `This supply was bought on ${e.lineCount} order line${
+                e.lineCount === 1 ? "" : "s"
+              } and cannot be deleted — those lines are its stock.`
+            : `This supply was used on ${e.saleLineCount} sale line${
+                e.saleLineCount === 1 ? "" : "s"
+              } and cannot be deleted — it is part of those sales' shipping cost.`,
       };
     }
     return failure(e, "Failed to delete the packing supply. Please try again.");
@@ -156,5 +168,61 @@ export async function deletePurchaseSupplyLineAction(
     return { status: "success" };
   } catch (e) {
     return failure(e, "Failed to delete the supply line. Please try again.");
+  }
+}
+
+// ── Supply lines of a sale (#1898) ───────────────────────────────────────────────────────────
+
+/** A sale line's supply and quantity from its dialog — no price: its cost comes from stock. */
+function parseSaleLine(formData: FormData): SaleSupplyLineInput | string {
+  const supplyId = str(formData, "supplyId");
+  if (!supplyId) return "Choose a packing supply.";
+  const quantityRaw = str(formData, "quantity");
+  const quantity = Number(quantityRaw);
+  if (!quantityRaw || !Number.isInteger(quantity) || quantity < 1) {
+    return "Enter how many units the parcel used — a whole number of at least 1.";
+  }
+  return { supplyId, quantity };
+}
+
+export async function createSaleSupplyLineAction(
+  saleId: string,
+  formData: FormData
+): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  const input = parseSaleLine(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    const id = await createSaleSupplyLine(session.user.id, saleId, input);
+    return { status: "success", id };
+  } catch (e) {
+    return failure(e, "Failed to add the packing supplies. Please try again.");
+  }
+}
+
+export async function updateSaleSupplyLineAction(
+  lineId: string,
+  formData: FormData
+): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  const input = parseSaleLine(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    await updateSaleSupplyLine(session.user.id, lineId, input);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "Failed to update the packing supplies. Please try again.");
+  }
+}
+
+export async function deleteSaleSupplyLineAction(
+  lineId: string
+): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  try {
+    await deleteSaleSupplyLine(session.user.id, lineId);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "Failed to remove the packing supplies. Please try again.");
   }
 }
