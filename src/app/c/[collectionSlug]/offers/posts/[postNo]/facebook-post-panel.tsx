@@ -10,11 +10,16 @@ import {
   facebookPostStage,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
+import { languageLabel } from "@/lib/languages";
+import type { TitleFallback } from "@/lib/offer-title-template";
 import { isAuctionListing, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
+import { TranslationGapLinks } from "@/app/c/[collectionSlug]/shared/title-preview";
+import { gapKey } from "@/app/c/[collectionSlug]/shared/translation-gaps";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
@@ -42,6 +47,9 @@ import { AddLotsDialog } from "./add-lots-dialog";
 //   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up.
 // - **Add lots…** (#1870), beside the lots' heading while the post is not up: offers picked from those
 //   that could join become its next lots, and any the server turns away is named under the heading.
+// - **Untranslated names** (#1889), above the lots while the post is not up: every name its text and
+//   captions print in the default language, once each, as #1733's links — the translation is the
+//   entity's own, and saving it re-renders the lots' texts at once. Each lot's row names its own.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -142,7 +150,7 @@ export function FacebookPostPanel({
     );
   }
 
-  const { kit, postNo, title } = screen;
+  const { kit, postNo, title, translations } = screen;
   const lots = kit.lots;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
@@ -187,6 +195,21 @@ export function FacebookPostPanel({
           : `Post #${postNo} is up — all ${lots.length} lots active`
     );
   }
+
+  // A translation entered from the list is the entity's own; the lots' titles and descriptions are then
+  // re-rendered so the post's text and captions read it at once (#1889).
+  function refreshTexts() {
+    startTransition(async () => {
+      const { refreshFacebookPostTextsAction } = await import("@/app/actions/facebook");
+      const result = await refreshFacebookPostTextsAction(postId);
+      if (result.status === "error") toast({ message: result.message, tone: "error" });
+      invalidateAll(collectionId);
+    });
+  }
+
+  const gapsByKey = new Map((translations?.gaps ?? []).map((g) => [gapKey(g), g]));
+  const untranslatedOf = (lot: FacebookKitLot): TitleFallback[] =>
+    (translations?.byLot[lot.offerId] ?? []).flatMap((key) => gapsByKey.get(key) ?? []);
 
   // Said where it was typed rather than in the moves' card: a refused title is the heading's (#1862).
   function rename(next: string) {
@@ -397,6 +420,17 @@ export function FacebookPostPanel({
           onChanged={() => invalidateAll(collectionId)}
           renderLots={(lotKit) => (
             <>
+              {translations?.language && translations.gaps.length > 0 && (
+                <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "1.25rem 0 0" }}>
+                  No {languageLabel(translations.language)} translation — the default text is printed for{" "}
+                  <TranslationGapLinks
+                    collectionId={collectionId}
+                    language={translations.language}
+                    gaps={translations.gaps}
+                    onSaved={refreshTexts}
+                  />
+                </p>
+              )}
               <div
                 style={{
                   display: "flex",
@@ -436,6 +470,7 @@ export function FacebookPostPanel({
                       sales={screen.sales[lot.offerId] ?? []}
                       photos={photos}
                       caption={caption}
+                      untranslated={untranslatedOf(lot)}
                       actions={lotActions(lot)}
                     />
                   );
@@ -564,6 +599,7 @@ function LotRow({
   sales,
   photos,
   caption,
+  untranslated,
   actions,
 }: {
   collectionSlug: string;
@@ -571,6 +607,8 @@ function LotRow({
   sales: { id: string; saleNo: number }[];
   photos: React.ReactNode;
   caption: React.ReactNode | null;
+  /** The names this lot's part of the post prints untranslated (#1889); empty when none. */
+  untranslated: TitleFallback[];
   actions: RowAction[];
 }) {
   const price = lotPrice(lot);
@@ -636,6 +674,21 @@ function LotRow({
               <span style={MUTED}>—</span>
             )}
           </dd>
+          {untranslated.length > 0 && (
+            <>
+              <dt style={MUTED}>Untranslated</dt>
+              <dd style={{ margin: 0 }}>
+                <Tooltip
+                  content={`Printed in this lot's ${caption ? "caption" : "text"} in the default language — translate it in the list above the lots`}
+                  style={{ display: "inline" }}
+                >
+                  <span style={{ color: "var(--color-warning)" }}>
+                    {untranslated.map((g) => g.defaultValue).join(", ")}
+                  </span>
+                </Tooltip>
+              </dd>
+            </>
+          )}
         </dl>
       </div>
       {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}

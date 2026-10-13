@@ -16,7 +16,9 @@ import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./faceb
 import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
   describeRefusedLots,
+  facebookLayoutLotTemplate,
   facebookLotAddRefusal,
+  facebookLotPrintedTexts,
   facebookPostLink,
   facebookPostRefusal,
   facebookPostStage,
@@ -28,10 +30,13 @@ import {
 import { allocateEntityNumber } from "./items";
 import {
   OfferActionBlockedError,
+  offersPrintedTextGaps,
   publishOffer,
   readSoldElsewhereRefusal,
   setOfferState,
+  syncGeneratedTexts,
 } from "./offers";
+import { titleFallbackKey, type TitleFallback } from "./offer-title-template";
 import {
   CLOSED_OFFER_STATES,
   OFFER_STATES,
@@ -284,6 +289,21 @@ export interface FacebookPostScreen {
   /** Keyed by the lot's offer id; a lot sold on no sale is absent. Several only when its sets were
    *  sold apart. */
   sales: Record<string, { id: string; saleNo: number }[]>;
+  /** The names its text and captions print untranslated (#1889), or null once the post is up — its
+   *  text is frozen then (#1800) and a translation would change nothing in it. */
+  translations: FacebookPostTranslations | null;
+}
+
+/** The untranslated names a post not yet up prints (#1889), each once, and which lot prints each. */
+export interface FacebookPostTranslations {
+  /** The post's language — its platform's listing language; null, the collection's default, can fall
+   *  back to nothing. */
+  language: string | null;
+  /** Every name across the lots, once each, in lot order. */
+  gaps: TitleFallback[];
+  /** By the lot's offer id: the keys (`titleFallbackKey`) of the names its part of the post prints. A
+   *  lot printing none is absent. */
+  byLot: Record<string, string[]>;
 }
 
 /** The post a collection numbers `postNo` (#1842), or null — what its screen's address is resolved by. */
@@ -343,7 +363,68 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     kit,
     platform: post.lots[0].platform,
     sales,
+    translations: kit.lots.some((l) => isFacebookLotPosted(l.state))
+      ? null
+      : await facebookPostTranslations(ownerId, post.collectionId, kit),
   };
+}
+
+/**
+ * What a post not yet up prints untranslated (#1889): for each lot, the names behind the texts its
+ * template prints (`{title}`, `{description}` — `facebookLotPrintedTexts`), read off the template it
+ * is written from in the post's layout — its text's, or its caption's — and only while that text
+ * follows its own template (`offersPrintedTextGaps`): a title written by hand prints no template's
+ * names.
+ */
+async function facebookPostTranslations(
+  ownerId: string,
+  collectionId: string,
+  kit: FacebookOfferKit
+): Promise<FacebookPostTranslations> {
+  const { group } = kit;
+  const templates = { auction: group.postTemplate, quickBuy: group.quickBuyTemplate };
+  const captions = {
+    auction: group.auctionCaptionTemplate,
+    quickBuy: group.quickBuyCaptionTemplate,
+    post: group.captionPostTemplate,
+  };
+  const wanted = new Map(
+    kit.lots.map((lot) => [
+      lot.offerId,
+      facebookLotPrintedTexts(facebookLayoutLotTemplate(kit.layout, templates, captions, lot)),
+    ])
+  );
+  const found = await offersPrintedTextGaps(ownerId, collectionId, wanted);
+  const gaps = new Map<string, TitleFallback>();
+  const byLot: Record<string, string[]> = {};
+  let language: string | null = null;
+  for (const lot of kit.lots) {
+    const lotGaps = found.get(lot.offerId);
+    if (!lotGaps) continue;
+    language ??= lotGaps.language;
+    if (lotGaps.gaps.length === 0) continue;
+    byLot[lot.offerId] = lotGaps.gaps.map(titleFallbackKey);
+    for (const gap of lotGaps.gaps) if (!gaps.has(titleFallbackKey(gap))) gaps.set(titleFallbackKey(gap), gap);
+  }
+  return { language, gaps: [...gaps.values()], byLot };
+}
+
+/**
+ * Bring a post's lots' titles and descriptions back in step with their templates (#1889) — what the
+ * post's screen asks once a missing translation is entered there, so its text and captions read the
+ * new name at once. `syncGeneratedTexts` is the rule: a text written by hand keeps its words. Only
+ * while no lot is up: a published post's text is frozen (#1800).
+ */
+export async function refreshFacebookPostTexts(ownerId: string, postId: string): Promise<void> {
+  await assertPostOwner(ownerId, postId);
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    select: { id: true, state: true },
+  });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
+  }
+  for (const lot of lots) await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
 }
 
 /** One multi-lot post as the list of posts draws it (#1850). */

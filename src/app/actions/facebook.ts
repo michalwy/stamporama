@@ -21,6 +21,7 @@ import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/fa
 import {
   addFacebookLots,
   createFacebookPost,
+  refreshFacebookPostTexts,
   removeFacebookLot,
   setFacebookPostLayout,
   setFacebookPostTitle,
@@ -204,6 +205,18 @@ export async function setFacebookPostTitleAction(postId: string, title: string):
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to save the post's title.");
+  }
+}
+
+/** Re-render a post's lots' titles and descriptions after a translation was entered on its screen
+ *  (#1889), so its text and captions read the new name at once. */
+export async function refreshFacebookPostTextsAction(postId: string): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await refreshFacebookPostTexts(session.user.id, postId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to bring the post's text up to date.");
   }
 }
 

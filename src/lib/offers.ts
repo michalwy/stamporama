@@ -144,6 +144,7 @@ import {
   offerTitleCopies,
   titleFallbackTokens,
   titleFallbacks,
+  titleFallbackKey,
   listingFallbacks,
   templateUsesOfferContext,
   templateUsesListedAs,
@@ -1015,16 +1016,109 @@ export async function offerTranslationGaps(
   ];
   // The three templates overlap heavily — a description usually repeats the title's tokens — so the
   // union is deduplicated on the entity row, exactly as each template's own list is.
+  return { language, gaps: uniqueGaps(gaps) };
+}
+
+/** Gaps once each, on the entity row a translation would be written on, in first-seen order. */
+function uniqueGaps(gaps: readonly TitleFallback[]): TitleFallback[] {
   const seen = new Set<string>();
-  return {
-    language,
-    gaps: gaps.filter((g) => {
-      const key = `${g.entityType}:${g.entityId}:${g.entityField}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
-  };
+  return gaps.filter((g) => {
+    const key = titleFallbackKey(g);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** The two of an offer's texts a buyer reads, and so the two a Facebook post prints (#1889). */
+export type OfferPrintedText = "name" | "description";
+
+/**
+ * The entity translations missing behind **the words an offer's title and description hold now**
+ * (#1889) — what a Facebook post prints of each lot. {@link offerTranslationGaps} reports every gap
+ * behind the platform's templates; here a field counts only while it **follows** its template: one
+ * written by hand (`*Edited`) holds the collector's words and none of the template's names, and an
+ * empty one holds nothing. Each is read off the template it is regenerated from — the offer's own,
+ * else the platform's ({@link effectiveTemplate}) — in the platform's listing language, so it names
+ * exactly what {@link syncGeneratedTexts} would rewrite once the translation is entered.
+ *
+ * `wanted` says which fields each offer is asked about; the answer is keyed the same way, an offer
+ * listing in the collection's default language reporting no gaps. One copy read per language.
+ */
+export async function offersPrintedTextGaps(
+  ownerId: string,
+  collectionId: string,
+  wanted: ReadonlyMap<string, readonly OfferPrintedText[]>
+): Promise<Map<string, { language: string | null; gaps: TitleFallback[] }>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const out = new Map<string, { language: string | null; gaps: TitleFallback[] }>();
+  if (wanted.size === 0) return out;
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: [...wanted.keys()] }, collectionId },
+    select: {
+      id: true,
+      platformId: true,
+      name: true,
+      nameEdited: true,
+      description: true,
+      descriptionEdited: true,
+      nameTemplate: true,
+      descriptionTemplate: true,
+      sets: { select: { title: true, items: { select: SET_ITEM_ORDER_SELECT } }, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const platforms = new Map<string, PlatformTemplates>();
+  for (const platformId of new Set(offers.map((o) => o.platformId))) {
+    platforms.set(platformId, await assertPlatform(collectionId, platformId));
+  }
+
+  // Which template each asked-about field follows, and over which composition — before any copy is read.
+  const asked = offers.map((offer) => {
+    const platform = platforms.get(offer.platformId)!;
+    const follows = (field: OfferPrintedText) =>
+      field === "name"
+        ? !offer.nameEdited && offer.name !== null
+        : !offer.descriptionEdited && offer.description !== null;
+    const templates = (wanted.get(offer.id) ?? [])
+      .filter(follows)
+      .map((field) => ({ field, template: effectiveTemplate(field, offer, platform) }))
+      .filter((t): t is { field: OfferPrintedText; template: string } => !!t.template?.trim());
+    const composition = offer.sets.map((s) => ({ title: s.title, itemIds: orderedItemIds(s.items) }));
+    return { offerId: offer.id, language: platform.titleLanguage, templates, composition };
+  });
+
+  const byLanguage = new Map<string, Set<string>>();
+  for (const a of asked) {
+    if (!a.language || a.templates.length === 0) continue;
+    const ids = byLanguage.get(a.language) ?? new Set<string>();
+    for (const s of a.composition) for (const id of s.itemIds) ids.add(id);
+    byLanguage.set(a.language, ids);
+  }
+  const copies = new Map<string, Map<string, TitleTemplateCopy>>();
+  for (const [language, ids] of byLanguage) {
+    copies.set(language, await titleCopiesById(ownerId, collectionId, [...ids], language));
+  }
+
+  for (const a of asked) {
+    const byId = a.language ? copies.get(a.language) : undefined;
+    if (!a.language || !byId) {
+      out.set(a.offerId, { language: a.language, gaps: [] });
+      continue;
+    }
+    // `templateSets`' shape, over the copies already read.
+    const sets: TemplateSet[] = a.composition.map((s) => ({
+      title: s.title,
+      copies: s.itemIds.flatMap((id) => {
+        const copy = byId.get(id);
+        return copy ? [copy] : [];
+      }),
+    }));
+    const gaps = a.templates.flatMap(({ field, template }) =>
+      field === "name" ? titleFallbacks(template, offerTitleCopies(sets)) : listingFallbacks(template, sets)
+    );
+    out.set(a.offerId, { language: a.language, gaps: uniqueGaps(gaps) });
+  }
+  return out;
 }
 
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
