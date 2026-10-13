@@ -178,6 +178,8 @@ interface CollectionAreaFormProps {
   defaultCatalogPrefix?: string | null;
   /** The markets anchoring this area's valuations, as set on it (#1634). */
   defaultAnchorMarkets?: string[];
+  /** Whether its stamps may carry forbidden symbols, as set on it (#1891); null follows the parent. */
+  defaultCoverSymbols?: boolean | null;
   defaultCatalogEntries?: AreaCatalogEntry[];
   defaultVendorEntries?: AreaVendorEntry[];
   defaultAssignable?: boolean;
@@ -209,6 +211,7 @@ export function CollectionAreaForm({
   defaultPrimaryCatalogVendorId,
   defaultCatalogPrefix,
   defaultAnchorMarkets,
+  defaultCoverSymbols = null,
   defaultCatalogEntries,
   defaultVendorEntries,
   defaultAssignable = true,
@@ -251,6 +254,7 @@ export function CollectionAreaForm({
     inheritedCatalogPrefix,
     inheritedPrefixes,
     inheritedAnchorMarkets,
+    inheritedCoverSymbols,
   } = useMemo(() => resolveInheritedAreaValues(areas, parentId), [areas, parentId]);
   const [anchorMarkets, setAnchorMarkets] = useState((defaultAnchorMarkets ?? []).join(", "));
 
@@ -818,6 +822,38 @@ export function CollectionAreaForm({
             )}
             .
           </p>
+        </div>
+
+        {/* **Forbidden symbols** (#1891): whether offer photos of this area's stamps are asked about
+            before an offer on a platform that covers symbols goes Ready. Inherited down the tree. One
+            control and its ⓘ on one line — the right column is the tall one (#1747). */}
+        <div style={{ marginTop: "1rem" }}>
+          <SectionHeading
+            title="Forbidden symbols"
+            hint="Whether offer photos of this area's stamps are checked for symbols to cover."
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <select
+              id="f-area-cover-symbols"
+              name="coverSymbols"
+              aria-label="May carry forbidden symbols"
+              defaultValue={defaultCoverSymbols == null ? "" : defaultCoverSymbols ? "on" : "off"}
+              disabled={isPending}
+              style={{ ...INPUT_STYLE, width: "16rem", cursor: "pointer" }}
+            >
+              <option value="">
+                {parentId ? "Same as parent" : "Not set"} ({inheritedCoverSymbols ? "on" : "off"})
+              </option>
+              <option value="on">On — may carry them</option>
+              <option value="off">Off — carry none</option>
+            </select>
+            <InfoHint>
+              On a platform that needs symbols covered, every photo of a copy whose stamp is in an area
+              with this on must be checked — covered, or marked nothing to cover — before the offer can
+              go Ready. Photos from other areas are not asked about, but can still be covered from the
+              offer. Sub-areas follow this unless they set their own.
+            </InfoHint>
+          </div>
         </div>
       </div>
 

@@ -39,16 +39,18 @@ export type NothingToCoverActionState =
   | { status: "error"; message: string };
 
 /** Mark the offer's unchecked photos *nothing to cover* (#1701) — all of them, or with `itemId` only
- *  that copy's. */
+ *  that copy's. All of them means the ones asked about, and the rest only with `includeOtherAreas`
+ *  (#1891). */
 export async function markOfferNothingToCoverAction(
   offerId: string,
-  itemId: string | null
+  itemId: string | null,
+  includeOtherAreas = false
 ): Promise<NothingToCoverActionState> {
   const session = await getSession();
   try {
     return {
       status: "success",
-      photoIds: await markOfferPhotosNothingToCover(session.user.id, offerId, itemId),
+      photoIds: await markOfferPhotosNothingToCover(session.user.id, offerId, itemId, includeOtherAreas),
     };
   } catch (err) {
     if (err instanceof OfferPhotoGenerationError) return { status: "error", message: err.message };

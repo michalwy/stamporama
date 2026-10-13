@@ -1139,8 +1139,9 @@ export function OfferPhotosCard({
           </Tooltip>
           {/* Covering symbols (#1665): the walk through the unchecked photos while there are any, a
               revisit of every one afterwards — and, while any are unchecked, marking them all
-              *nothing to cover* at once (#1701). Offered only where the offer needs covers. */}
-          {plan.covers.needed && plan.covers.photoCount > 0 && (
+              *nothing to cover* at once (#1701). Offered only where the offer needs covers, and
+              still offered when no photo is asked about (#1891), to cover one anyway. */}
+          {plan.covers.needed && plan.covers.photoCount + plan.covers.otherCount > 0 && (
             <Tooltip
               content={
                 plan.covers.uncheckedCount > 0
@@ -1205,12 +1206,18 @@ export function OfferPhotosCard({
             </p>
           )}
 
-          {plan.covers.needed && plan.covers.photoCount > 0 && (
+          {plan.covers.needed && plan.covers.photoCount + plan.covers.otherCount > 0 && (
             <p style={NOTE}>
-              Symbols are covered on this offer&apos;s images:{" "}
-              {plan.covers.uncheckedCount === 0
-                ? `all ${plan.covers.photoCount} photos checked.`
-                : `${plan.covers.photoCount - plan.covers.uncheckedCount} of ${plan.covers.photoCount} photos checked.`}{" "}
+              {plan.covers.photoCount === 0
+                ? "No photo needs checking for symbols: none of these copies is from an area whose stamps may carry them."
+                : <>
+                    Symbols are covered on this offer&apos;s images:{" "}
+                    {plan.covers.uncheckedCount === 0
+                      ? `all ${plan.covers.photoCount} photos checked.`
+                      : `${plan.covers.photoCount - plan.covers.uncheckedCount} of ${plan.covers.photoCount} photos checked.`}
+                    {plan.covers.otherCount > 0 &&
+                      ` ${plan.covers.otherCount} more ${plan.covers.otherCount === 1 ? "is" : "are"} from areas whose stamps carry none.`}
+                  </>}{" "}
               <button
                 type="button"
                 disabled={isPending}
@@ -1320,6 +1327,7 @@ export function OfferPhotosCard({
       {attachDialog}
       {coverWalk && (
         <OfferCoverWalk
+          includeOtherAreas={plan?.covers.photoCount === 0}
           collectionId={collectionId}
           offerId={offerId}
           mode={coverWalk}

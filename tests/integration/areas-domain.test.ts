@@ -257,6 +257,34 @@ describe("updateCollectionArea", () => {
     );
   });
 
+  // Whether the area's stamps may carry forbidden symbols (#1891): three states, and an update that
+  // does not mention it leaves it alone.
+  it("writes the forbidden-symbols flag, reads it back, and leaves it when not sent", async () => {
+    const base = { name: "Updated", primaryCatalogNameId: catalogNameId };
+    await updateCollectionArea(userId, areaId, { ...base, coverSymbols: true });
+    const read = async () =>
+      (await getCollectionAreas(userId, collectionId)).find((a) => a.id === areaId)?.coverSymbols;
+    assert.equal(await read(), true);
+    await updateCollectionArea(userId, areaId, base);
+    assert.equal(await read(), true);
+    await updateCollectionArea(userId, areaId, { ...base, coverSymbols: false });
+    assert.equal(await read(), false);
+    await updateCollectionArea(userId, areaId, { ...base, coverSymbols: null });
+    assert.equal(await read(), null);
+
+    const { id } = await createCollectionArea(userId, collectionId, {
+      name: `Flagged-${Date.now()}`,
+      parentId: areaId,
+      coverSymbols: true,
+    });
+    assert.equal((await prisma.collectionArea.findUniqueOrThrow({ where: { id } })).coverSymbols, true);
+    const { id: plain } = await createCollectionArea(userId, collectionId, {
+      name: `Plain-${Date.now()}`,
+      parentId: areaId,
+    });
+    assert.equal((await prisma.collectionArea.findUniqueOrThrow({ where: { id: plain } })).coverSymbols, null);
+  });
+
   it("throws when collection is not owned by user", async () => {
     await assert.rejects(
       () => updateCollectionArea("wrong-user", areaId, { name: "X" }),

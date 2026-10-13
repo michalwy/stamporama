@@ -5,6 +5,7 @@ import {
   carryAfterSave,
   cleanPhotoCovers,
   coverFingerprintRows,
+  coverAskedItemIds,
   coverWalkPhotos,
   DEFAULT_PHOTO_COVER_COLOR,
   NO_CARRIED_COVERS,
@@ -141,13 +142,14 @@ describe("coverWalkPhotos", () => {
         { tiles: [{ photoId: "x1", itemId: "i1" }] },
       ],
       new Set(["b1"]),
-      copyPhotos
+      copyPhotos,
+      new Set(["i1"])
     );
     assert.deepEqual(walk, [
-      { photoId: "f1", itemId: "i1", checked: false },
-      { photoId: "b1", itemId: "i1", checked: true },
-      { photoId: "f2", itemId: "i2", checked: false },
-      { photoId: "x1", itemId: "i1", checked: false },
+      { photoId: "f1", itemId: "i1", checked: false, asked: true },
+      { photoId: "b1", itemId: "i1", checked: true, asked: true },
+      { photoId: "f2", itemId: "i2", checked: false, asked: false },
+      { photoId: "x1", itemId: "i1", checked: false, asked: true },
     ]);
   });
 
@@ -155,9 +157,32 @@ describe("coverWalkPhotos", () => {
     const walk = coverWalkPhotos(
       [{ tiles: [{ photoId: "up", itemId: null }, { photoId: "f1", itemId: "i1" }] }],
       new Set(),
-      copyPhotos
+      copyPhotos,
+      new Set()
     );
     assert.deepEqual(walk.map((w) => w.photoId), ["f1"]);
+  });
+});
+
+// Only copies with a stamp in an area that may carry forbidden symbols are asked about (#1891).
+describe("coverAskedItemIds", () => {
+  const flagged = new Set(["reich", "gg"]);
+
+  it("asks about a copy whose stamp is in a flagged area, and not one whose stamp is not", () => {
+    const asked = coverAskedItemIds(
+      [
+        { itemId: "i-reich", areaIds: ["reich"] },
+        { itemId: "i-poland", areaIds: ["poland"] },
+        { itemId: "i-none", areaIds: [] },
+      ],
+      flagged
+    );
+    assert.deepEqual([...asked], ["i-reich"]);
+  });
+
+  it("asks about a copy carrying several stamps when any one of them is in a flagged area", () => {
+    const asked = coverAskedItemIds([{ itemId: "cover", areaIds: ["poland", "gg", "netherlands"] }], flagged);
+    assert.deepEqual([...asked], ["cover"]);
   });
 });
 

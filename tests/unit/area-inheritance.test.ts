@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { CollectionAreaData } from "../../src/lib/areas";
 import {
+  coverSymbolAreaIds,
   resolveEffectiveCatalogPrefix,
+  resolveEffectiveCoverSymbols,
   resolveEffectivePrimaryCatalogNameId,
   resolveInheritedAreaValues,
 } from "../../src/lib/area-inheritance";
@@ -29,6 +31,7 @@ function area(
     titleName: null,
     titleNameByLanguage: {},
     symbol: null,
+    coverSymbols: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,
@@ -102,6 +105,7 @@ describe("resolveInheritedAreaValues", () => {
         inheritedCatalogPrefix: null,
         inheritedPrefixes: [],
         inheritedAnchorMarkets: [],
+        inheritedCoverSymbols: false,
       });
     }
   });
@@ -116,6 +120,53 @@ describe("resolveInheritedAreaValues", () => {
       inheritedCatalogPrefix: null,
       inheritedPrefixes: [],
       inheritedAnchorMarkets: [],
+      inheritedCoverSymbols: false,
     });
+  });
+});
+
+// Whether an area's stamps may carry forbidden symbols (#1891): inherited down the tree, any lower
+// area may override it either way, and a tree that says nothing is off.
+describe("resolveEffectiveCoverSymbols", () => {
+  const reich = [
+    area("germany", null),
+    area("reich", "germany", { coverSymbols: true }),
+    area("gg", "reich"),
+    area("gg-locals", "gg", { coverSymbols: false }),
+    area("gg-locals-town", "gg-locals"),
+    area("bizone", "germany"),
+  ];
+
+  it("is off where nothing in the chain says anything", () => {
+    assert.equal(resolveEffectiveCoverSymbols(reich, "germany"), false);
+    assert.equal(resolveEffectiveCoverSymbols(reich, "bizone"), false);
+  });
+
+  it("is inherited down the tree from the nearest area that sets it", () => {
+    assert.equal(resolveEffectiveCoverSymbols(reich, "reich"), true);
+    assert.equal(resolveEffectiveCoverSymbols(reich, "gg"), true);
+  });
+
+  it("is overridden off by a lower area, and that passes down in turn", () => {
+    assert.equal(resolveEffectiveCoverSymbols(reich, "gg-locals"), false);
+    assert.equal(resolveEffectiveCoverSymbols(reich, "gg-locals-town"), false);
+  });
+
+  it("is overridden on below an area that set it off", () => {
+    const areas = [...reich, area("overprint", "gg-locals-town", { coverSymbols: true })];
+    assert.equal(resolveEffectiveCoverSymbols(areas, "overprint"), true);
+  });
+
+  it("is off for an id naming no area", () => {
+    assert.equal(resolveEffectiveCoverSymbols(reich, "deleted"), false);
+  });
+
+  it("lists every area it resolves on for", () => {
+    assert.deepEqual([...coverSymbolAreaIds(reich)].sort(), ["gg", "reich"]);
+  });
+
+  it("is what Same as parent shows in the area dialog", () => {
+    assert.equal(resolveInheritedAreaValues(reich, "gg").inheritedCoverSymbols, true);
+    assert.equal(resolveInheritedAreaValues(reich, "gg-locals").inheritedCoverSymbols, false);
   });
 });

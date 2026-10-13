@@ -38,7 +38,9 @@ import { loadChecklistSlots } from "./offer-photo-checklists";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
 import { applyPhotoCovers } from "./photos/covers";
 import { markPhotosNothingToCover } from "./photo-covers";
+import { coverSymbolAreaIds } from "./area-inheritance";
 import {
+  coverAskedItemIds,
   coverFingerprintRows,
   coverWalkPhotos,
   normalizePhotoCoverStyle,
@@ -296,10 +298,14 @@ export interface OfferPhotoPlanState {
 
 export interface OfferPhotoCoverState {
   needed: boolean;
-  /** Copy photos the plan's images are made from. */
+  /** Copy photos the plan's images are made from whose copy is in an area that may carry forbidden
+   *  symbols (#1891) — the photos asked about. */
   photoCount: number;
   /** Of those, the ones never checked — what keeps the offer from being marked Ready. */
   uncheckedCount: number;
+  /** The plan's other copy photos, from areas that carry none (#1891): never asked about, but the
+   *  walk can still show them, and a cover drawn on one is applied. */
+  otherCount: number;
 }
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
@@ -450,6 +456,10 @@ interface GenerationInputs {
   coverStyle: PhotoCoverStyle;
   /** The colour the first bar starts in (#1702) — the platform's, for the walk only. */
   coverColor: string;
+  /** The copies whose photos are asked about (#1891): those with a stamp in an area that may carry
+   *  forbidden symbols. Read whether or not the offer needs covers, since the walk can be opened on
+   *  any offer's photos. */
+  coverAskedItemIds: Set<string>;
 }
 
 const SIDE_ROLES = ["front", "back"];
@@ -734,13 +744,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
     ...attachments.flatMap((a) => a.tiles.flatMap((tile) => (tile.itemId ? [tile.itemId] : []))),
   ];
-  const tileLabels = await readTileLabels(
-    offer.collection.ownerId,
-    offer.collectionId,
-    [...new Set(labelSubjects)],
-    { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
-    offer.platform.titleLanguage
-  );
+  const [tileLabels, askedItemIds] = await Promise.all([
+    readTileLabels(
+      offer.collection.ownerId,
+      offer.collectionId,
+      [...new Set(labelSubjects)],
+      { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
+      offer.platform.titleLanguage
+    ),
+    readCoverAskedItemIds(offer.collectionId, [...new Set(labelSubjects)]),
+  ]);
   // An attachment naming a copy the offer no longer sells leaves the plan with the copy (#461),
   // exactly as the set it came from does (#315) — attaching one is guarded
   // (`attachOfferCopyPhoto`), and a copy leaving the offer afterwards is now guarded here. Only the
@@ -805,7 +818,44 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     needsCovers: offerNeedsCovers(offer.coverSymbols, offer.platform.coverSymbols),
     coverStyle: normalizePhotoCoverStyle(offer.platform.coverStyle),
     coverColor: normalizePlatformCoverColor(offer.platform.coverColor),
+    coverAskedItemIds: askedItemIds,
   };
+}
+
+/**
+ * The copies among `itemIds` whose photos are asked about for covers (#1891): those with any stamp
+ * (#744) filed under an area that may carry forbidden symbols, the flag resolved down the area tree.
+ * Two reads — the collection's area tree, light, and the copies' stamps' area links.
+ */
+async function readCoverAskedItemIds(
+  collectionId: string,
+  itemIds: readonly string[]
+): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const [areas, items] = await Promise.all([
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: { id: true, parentId: true, coverSymbols: true },
+    }),
+    prisma.item.findMany({
+      where: { id: { in: [...itemIds] }, collectionId },
+      select: {
+        id: true,
+        stamps: {
+          select: { stamp: { select: { stampAreaLinks: { select: { collectionAreaId: true } } } } },
+        },
+      },
+    }),
+  ]);
+  const flagged = coverSymbolAreaIds(areas);
+  if (flagged.size === 0) return new Set();
+  return coverAskedItemIds(
+    items.map((item) => ({
+      itemId: item.id,
+      areaIds: item.stamps.flatMap((s) => s.stamp.stampAreaLinks.map((l) => l.collectionAreaId)),
+    })),
+    flagged
+  );
 }
 
 /**
@@ -824,7 +874,7 @@ function coverCandidatesFor(
     if (source.itemId) copyPhotos.add(id);
     if (source.coversCheckedAt) checked.add(id);
   }
-  return coverWalkPhotos(plan.images, checked, copyPhotos);
+  return coverWalkPhotos(plan.images, checked, copyPhotos, inputs.coverAskedItemIds);
 }
 
 /**
@@ -1048,8 +1098,9 @@ export async function getOfferPhotoPlanState(
     images,
     covers: {
       needed: inputs.needsCovers,
-      photoCount: coverCandidates.length,
-      uncheckedCount: coverCandidates.filter((c) => !c.checked).length,
+      photoCount: coverCandidates.filter((c) => c.asked).length,
+      uncheckedCount: coverCandidates.filter((c) => c.asked && !c.checked).length,
+      otherCount: coverCandidates.filter((c) => !c.asked).length,
     },
     plan: {
       configured: plan.configured,
@@ -1156,7 +1207,9 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
       generation.fingerprint !== fingerprintFor(inputs, plan),
     storedCount,
     plannedCount: plan.images.length,
-    uncheckedCoverCount: coverCandidatesFor(inputs, plan).filter((c) => !c.checked).length,
+    // Only the photos asked about (#1891): a copy from an area that carries no forbidden symbols
+    // never holds the offer back.
+    uncheckedCoverCount: coverCandidatesFor(inputs, plan).filter((c) => c.asked && !c.checked).length,
   };
 }
 
@@ -1175,6 +1228,9 @@ export interface OfferCoverWalkPhoto {
   width: number;
   height: number;
   checked: boolean;
+  /** Whether the ready gate asks about it (#1891): its copy has a stamp in an area that may carry
+   *  forbidden symbols. The walk shows the others only on demand. */
+  asked: boolean;
   covers: PhotoCover[];
 }
 
@@ -1185,8 +1241,9 @@ export interface OfferCoverWalk {
   defaultStyle: PhotoCoverStyle;
   /** The colour the first bar starts in (#1702): the platform's. Later bars start in the last used. */
   defaultColor: string;
-  /** Every copy photo the offer's images are made from, checked or not, in plan order. The walk
-   *  itself shows the unchecked ones; revisiting shows them all. */
+  /** Every copy photo the offer's images are made from, checked or not, asked about or not, in plan
+   *  order. The walk itself shows the unchecked ones asked about; revisiting shows every one asked
+   *  about; *Include photos from other areas* adds the rest (#1891). */
   photos: OfferCoverWalkPhoto[];
 }
 
@@ -1217,6 +1274,7 @@ export async function readOfferCoverWalk(ownerId: string, offerId: string): Prom
         width: source.width,
         height: source.height,
         checked: candidate.checked,
+        asked: candidate.asked,
         covers: coversOf(source),
       };
     }),
@@ -1226,20 +1284,25 @@ export async function readOfferCoverWalk(ownerId: string, offerId: string): Prom
 /**
  * Mark an offer's unchecked photos *nothing to cover* in one action (#1701): every photo its walk
  * would still ask about, or — with `itemId` — only that copy's. Photos with covers, and photos
- * already checked, are left as they were. Owner-checked; returns the ids marked, which is what the
- * walk needs to tick them off.
+ * already checked, are left as they were. Without `itemId`, the photos of copies from areas that
+ * carry no forbidden symbols are marked only with `includeOtherAreas` (#1891) — exactly the photos the
+ * walk is showing. Owner-checked; returns the ids marked, which is what the walk needs to tick them
+ * off.
  */
 export async function markOfferPhotosNothingToCover(
   ownerId: string,
   offerId: string,
-  itemId: string | null = null
+  itemId: string | null = null,
+  includeOtherAreas = false
 ): Promise<string[]> {
   await assertOfferOwner(ownerId, offerId);
   const inputs = await readInputs(offerId);
   if (!inputs) throw new OfferPhotoGenerationError("Offer not found.");
   // The same candidates the walk lists, so the count the collector confirmed is the count marked.
   const unchecked = coverCandidatesFor({ ...inputs, needsCovers: true }, planFor(inputs)).filter(
-    (c) => !c.checked && (itemId == null || c.itemId === itemId)
+    (c) =>
+      !c.checked &&
+      (itemId != null ? c.itemId === itemId : c.asked || includeOtherAreas)
   );
   return markPhotosNothingToCover(
     ownerId,

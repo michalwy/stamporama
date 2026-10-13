@@ -298,8 +298,8 @@ tree opens. It is laid out in two columns so that everything is in view at once:
 
 - **On the left, the area itself** — its **Name** with its **Symbol** beside it, the **Parent area**,
   the **Title name** (with its translations button), the **Description**, and **Can hold issues**.
-- **On the right, its catalogue settings** — **Numbering**, **Price sources** and **Valuation**, in
-  that order, each described below.
+- **On the right, its catalogue settings** — **Numbering**, **Price sources**, **Valuation** and
+  **Forbidden symbols**, in that order, each described below.
 
 **Cancel** and **Save** sit across the bottom. Where a field's explanation is longer than one line,
 the line under it is the short version and the **ⓘ** beside it shows the rest when you rest the
@@ -329,6 +329,26 @@ markets** — the countries whose auction results its market value and bid recom
 Leave it blank to inherit from the area above (the placeholder shows what that is), or the
 [home market](#home-market) when nothing above sets any. See
 [Markets — which results count](#markets--which-results-count).
+
+### Forbidden symbols
+
+The **Forbidden symbols** section of the **Add area** / **Edit area** dialog says whether this area's
+stamps **may carry forbidden symbols** — a swastika, a portrait of Hitler — that a platform such as
+Facebook punishes on a photo. On a platform that [covers symbols](offers.md#covering-symbols), only the
+photos of copies from an area with this **on** have to be checked before the offer can be marked
+Ready; copies from Poland or the Netherlands then need nothing marked at all.
+
+- **Same as parent** (the default) follows the area above, and the option names what that is —
+  *Same as parent (on)*. A top-level area that says nothing reads **Not set (off)**.
+- **On** or **Off** sets it here, and every sub-area that says nothing follows it — so turning it on
+  for the Third Reich covers the Generalgouvernement beneath it, and a sub-area can still be set
+  **Off** again, or a sub-area of Poland **On**.
+
+Every area starts **off**: turn it on for the areas that need it. A copy carrying several stamps is
+asked about when any of its stamps is in an area with it on, and so is a stamp filed under several
+areas when any of them has it. The setting decides only what is asked: a cover you have drawn on a
+photo is applied whatever its area says, and the photos of other areas can still be covered from
+the offer.
 
 ### Catalog settings: numbering and price sources
 

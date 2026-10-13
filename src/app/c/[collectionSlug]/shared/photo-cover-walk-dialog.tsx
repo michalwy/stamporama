@@ -141,8 +141,10 @@ export function PhotoCoverWalkDialog({
   onMarkNothingToCover?: MarkNothingToCover;
   /** Offered by an offer's walk (#1703): covers saved on one photo proposed on the next of its side. */
   carryCovers?: boolean;
-  /** After every save, so the caller can pick up the counts it shows. */
-  onSaved?: () => void;
+  /** After every save, so the caller can pick up the counts it shows. `saved` is true for a photo
+   *  saved — what `changed` on close counts — and false for a bulk *nothing to cover*, which draws
+   *  nothing. */
+  onSaved?: (saved: boolean) => void;
   /** `changed` is whether anything was saved while the walk was open. */
   onClose: (changed: boolean) => void;
 }) {
@@ -220,7 +222,7 @@ export function PhotoCoverWalkDialog({
       const carry = carryAfterSave(carried, entry.side, result.state.covers);
       setCarried(carry);
       setDirty(false);
-      onSaved?.();
+      onSaved?.(true);
       if (last) onClose(true);
       else go(index + 1, updated, carry);
     });
@@ -242,7 +244,7 @@ export function PhotoCoverWalkDialog({
       setBulk(null);
       // The photos just marked are *nothing to cover*, and pass nothing on (#1703).
       setCarried(NO_CARRIED_COVERS);
-      onSaved?.();
+      onSaved?.(false);
       // Nothing left to check closes the walk; otherwise it goes on from the next photo still
       // unchecked. Nothing drawn changed, so the images need no regenerating on its account.
       const next = [...updated.slice(index + 1), ...updated.slice(0, index + 1)].find((e) => !e.checked);

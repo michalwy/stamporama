@@ -19,6 +19,35 @@ export interface AreaInheritedValues {
   /** The nearest ancestor's anchoring markets (#1634); empty when no ancestor names any, and the
    * area then anchors on the collection's home market. */
   inheritedAnchorMarkets: string[];
+  /** Whether the parent chain says its stamps may carry forbidden symbols (#1891) — what *Same as
+   * parent* resolves to. False for a top-level area, as for a chain that says nothing. */
+  inheritedCoverSymbols: boolean;
+}
+
+/** The fields the forbidden-symbols walk reads (#1891), so the server can resolve it off a light read
+ * of the tree rather than the whole of {@link CollectionAreaData}. */
+export type CoverSymbolsArea = Pick<CollectionAreaData, "id" | "parentId" | "coverSymbols">;
+
+/** Whether an area's stamps may carry forbidden symbols (#1891): the nearest ancestor-or-self that
+ * says either way, and off when none does. */
+export function resolveEffectiveCoverSymbols(
+  areas: readonly CoverSymbolsArea[],
+  areaId: string
+): boolean {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  let current: CoverSymbolsArea | undefined = byId.get(areaId);
+  let depth = 0;
+  while (current && depth < 50) {
+    if (current.coverSymbols !== null) return current.coverSymbols;
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return false;
+}
+
+/** Every area whose stamps may carry forbidden symbols (#1891), the flag resolved down the tree. */
+export function coverSymbolAreaIds(areas: readonly CoverSymbolsArea[]): Set<string> {
+  return new Set(areas.filter((a) => resolveEffectiveCoverSymbols(areas, a.id)).map((a) => a.id));
 }
 
 /** The nearest ancestor-or-self area's anchoring markets (#1634) — the whole list, as the server's
@@ -90,6 +119,7 @@ export function resolveInheritedAreaValues(
       inheritedCatalogPrefix: null,
       inheritedPrefixes: [],
       inheritedAnchorMarkets: [],
+      inheritedCoverSymbols: false,
     };
   }
   return {
@@ -98,5 +128,6 @@ export function resolveInheritedAreaValues(
     inheritedCatalogPrefix: resolveEffectiveCatalogPrefix(areas, parentId),
     inheritedPrefixes: effectiveVendorsForArea(areas, parentId),
     inheritedAnchorMarkets: resolveEffectiveAnchorMarkets(areas, parentId),
+    inheritedCoverSymbols: resolveEffectiveCoverSymbols(areas, parentId),
   };
 }

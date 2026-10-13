@@ -956,9 +956,16 @@ swastika on German Reich material. On a platform set to
 [photo settings](#photo-settings), you cover them on the photos **of the offer** — the copy's and
 the stamp's own photos never change.
 
-**Each photo is checked once.** The Photos card says how many of the photos the offer's images are
-made from have not been checked yet, and **Check N photos** in its header (also beside **Mark
-ready** while those photos are what holds the offer back) walks you through them one at a time:
+**Only stamps that may carry symbols are asked about.** Whether a stamp may is a property of where
+it comes from, so it is set on the **area** — [Forbidden symbols](collections.md#forbidden-symbols)
+in the area dialog, inherited by its sub-areas, and off until you turn it on. The photos of copies
+whose stamps are in an area with it on are the ones the offer asks about; the rest never hold the
+offer back. An offer made entirely of stamps from other areas can be marked Ready without checking a
+single photo, and its Photos card says that no photo needs checking.
+
+**Each photo is checked once.** The Photos card says how many of the photos asked about have not
+been checked yet, and **Check N photos** in its header (also beside **Mark ready** while those
+photos are what holds the offer back) walks you through them one at a time:
 
 - The photo is shown large. **Drag** across a symbol to cover it; drag a cover to move it, its
   corners to resize it, and press **Delete** to remove the selected one. **Shape** in the toolbar,
@@ -980,6 +987,11 @@ ready** while those photos are what holds the offer back) walks you through them
 - The counter says how many are left. Only the sides the offer actually photographs are asked
   about, plus any extra you attached on its own; an image you uploaded to the offer is not a copy's
   photo and is never asked.
+- **Include photos from other areas**, in the walk's footer, adds the photos of copies from areas
+  whose stamps carry no forbidden symbols — for a postmark, say, that needs covering anyway. They
+  are never asked about, but a cover you draw on one is applied like any other. Switching it starts
+  the walk over from the first photo. When no photo on the offer is asked about, the walk opens with
+  it ticked.
 - **Covers carry on to the next photo.** Listing a series, the symbols sit in the same places on
   every stamp, so the covers you save on a front are laid on the next unchecked front, and a back's
   on the next back — in the same place on the stamp, whatever size the photo is. They are marked
@@ -989,10 +1001,11 @@ ready** while those photos are what holds the offer back) walks you through them
   anything. **Carry covers to the next photo**, beside the counter, turns it off — it is on until
   you do, and this browser remembers your choice.
 
-**When nothing needs covering, mark them all at once.** For a country whose stamps certainly show
+**When nothing needs covering, mark them all at once.** For a set whose stamps certainly show
 nothing to hide, **Nothing to cover on the remaining N photos** — beside **Check N photos** on the
-Photos card, and in the walk's footer — marks every photo still unchecked in one go, after one
-confirmation naming the count. In the walk, **Nothing to cover on this copy's remaining N photos**
+Photos card, and in the walk's footer — marks every photo asked about and still unchecked in one go,
+after one confirmation naming the count (in the walk, the other areas' photos too while they are
+included). In the walk, **Nothing to cover on this copy's remaining N photos**
 does the same for the copy you are looking at, and the walk carries on with the next copy. Only
 unchecked photos are marked: one you have drawn covers on keeps them, and one already checked is left
 alone. It is recorded exactly as pressing *Nothing to cover* on each would be, so later offers reuse
@@ -1009,12 +1022,13 @@ attachments alike. Changing a cover marks the stored images **out of date**, lik
 the walk's **Regenerate photos when done** (ticked by default) queues the new run when you close it
 having saved something.
 
-**An offer needing covers cannot be marked Ready while any of its photos is unchecked** — the ready
-button's hint says how many. Marking a photo *nothing to cover* changes no image, so it does not make
+**An offer needing covers cannot be marked Ready while any photo it asks about is unchecked** — the
+ready button's hint says how many. Marking a photo *nothing to cover* changes no image, so it does not make
 anything out of date.
 
 To look at the covers again, press **Covers** (once every photo is checked) or **Review every photo**
-under the card's summary — the walk then shows every photo, checked ones included. A copy's own page
+under the card's summary — the walk then shows every photo asked about, checked ones included, and
+the others with **Include photos from other areas**. A copy's own page
 shows them too: tick **Offer covers** on its Photos card to see them laid over the photos, and click
 a photo to edit them there.
 

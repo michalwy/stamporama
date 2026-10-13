@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { offerKeys, useInvalidateOffers } from "../use-offers-query";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -19,12 +19,13 @@ import type { OfferCoverWalk, OfferCoverWalkPhoto } from "@/lib/offer-photo-gene
 // (#1701), offered on the Photos card and inside the walk. Its walk carries covers from one photo to
 // the next of the same side (#1703); the copy page's, one copy's sides, has nothing to carry.
 
-/** Mark the offer's unchecked photos *nothing to cover* — all, or one copy's (#1701). */
+/** Mark the offer's unchecked photos *nothing to cover* — all, or one copy's (#1701). All of them is
+ *  the photos asked about, and the other areas' too while the walk includes them (#1891). */
 const markNothingToCover =
-  (offerId: string): MarkNothingToCover =>
+  (offerId: string, includeOtherAreas = false): MarkNothingToCover =>
   async (itemId) => {
     const { markOfferNothingToCoverAction } = await import("@/app/actions/photo-covers");
-    const result = await markOfferNothingToCoverAction(offerId, itemId);
+    const result = await markOfferNothingToCoverAction(offerId, itemId, includeOtherAreas);
     return result.status === "error" ? { error: result.message } : { photoIds: result.photoIds };
   };
 
@@ -38,23 +39,36 @@ function photoLabel(photo: OfferCoverWalkPhoto): string {
  * every one. With `regenerate` the offer's images are queued again when the walk closes having
  * changed something, which is what *regenerated when covers change* means in practice — a stale image
  * would otherwise keep a symbol showing the collector has just covered.
+ *
+ * Either way only the photos asked about are walked — copies with a stamp in an area that may carry
+ * forbidden symbols (#1891) — until *Include photos from other areas* adds the rest; it starts ticked
+ * with `includeOtherAreas`, for an offer with nothing asked about. Switching it reads the list again
+ * and starts the walk over, so what was saved meanwhile shows as saved.
  */
 export function OfferCoverWalk({
   collectionId,
   offerId,
   mode,
+  includeOtherAreas = false,
   onClose,
 }: {
   collectionId: string;
   offerId: string;
   mode: "unchecked" | "all";
+  includeOtherAreas?: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
   const { invalidateDetail } = useInvalidateOffers();
   const [regenerate, setRegenerate] = useState(true);
+  const [includeOthers, setIncludeOthers] = useState(includeOtherAreas);
+  // Bumped when the walk starts over — a key of its own, so a refetch for any other reason (the
+  // window regaining focus) never restarts the walk under the collector.
+  const [walkNo, setWalkNo] = useState(0);
+  // A photo saved before the walk was started over still counts when it closes.
+  const savedRef = useRef(false);
   const [, startTransition] = useTransition();
-  const { data, isLoading } = useQuery<OfferCoverWalk>({
+  const { data, isLoading, isFetching, refetch } = useQuery<OfferCoverWalk>({
     queryKey: offerKeys.coverWalk(collectionId, offerId),
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/offers/${offerId}/photo-covers`);
@@ -68,8 +82,9 @@ export function OfferCoverWalk({
 
   if (isLoading || !data) return null;
 
+  const otherCount = data.photos.filter((p) => !p.asked).length;
   const photos: CoverWalkEntry[] = data.photos
-    .filter((p) => mode === "all" || !p.checked)
+    .filter((p) => (p.asked || includeOthers) && (mode === "all" || !p.checked))
     .map((p) => ({
       photoId: p.photoId,
       itemId: p.itemId,
@@ -84,26 +99,52 @@ export function OfferCoverWalk({
     void invalidateDetail(collectionId, offerId);
   };
 
+  const switchOthers = (next: boolean) => {
+    void refetch().then(() => {
+      setIncludeOthers(next);
+      setWalkNo((n) => n + 1);
+    });
+  };
+
   return (
     <PhotoCoverWalkDialog
+      key={walkNo}
       collectionId={collectionId}
       title={mode === "all" ? "Covers on this offer's photos" : "Check photos for symbols to cover"}
       photos={photos}
       defaultStyle={data.defaultStyle}
       defaultColor={data.defaultColor}
-      onMarkNothingToCover={markNothingToCover(offerId)}
+      onMarkNothingToCover={markNothingToCover(offerId, includeOthers)}
       carryCovers
-      onSaved={refresh}
+      onSaved={(saved) => {
+        if (saved) savedRef.current = true;
+        refresh();
+      }}
       footerNote={
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", color: "var(--color-text-secondary)" }}>
-          <input type="checkbox" checked={regenerate} onChange={(e) => setRegenerate(e.target.checked)} />
-          Regenerate photos when done
-        </label>
+        <span style={{ display: "inline-flex", gap: "1rem", color: "var(--color-text-secondary)" }}>
+          {otherCount > 0 && (
+            <Tooltip content="Photos of copies from areas whose stamps carry no forbidden symbols — never asked about, but they can still be covered">
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                <input
+                  type="checkbox"
+                  checked={includeOthers}
+                  disabled={isFetching}
+                  onChange={(e) => switchOthers(e.target.checked)}
+                />
+                Include photos from other areas
+              </label>
+            </Tooltip>
+          )}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+            <input type="checkbox" checked={regenerate} onChange={(e) => setRegenerate(e.target.checked)} />
+            Regenerate photos when done
+          </label>
+        </span>
       }
       onClose={(changed) => {
         onClose();
         refresh();
-        if (!changed || !regenerate) return;
+        if (!(changed || savedRef.current) || !regenerate) return;
         startTransition(async () => {
           const { generateOfferPhotosAction } = await import("@/app/actions/offers");
           // A plan with nothing to render refuses; there is nothing to say about that here.

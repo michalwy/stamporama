@@ -3237,6 +3237,11 @@ model CollectionArea {
   // and null until the collector sets it; the same in every language, so it has no translation. It
   // does **not** roll up: a sub-area without one renders `{areaSymbol}` empty (#1692).
   symbol               String?
+  // Whether this area's stamps may carry forbidden symbols (#1891; ADR-0066 §4) — only the photos of
+  // copies in such an area are asked about before an offer on a covering platform goes Ready. Null
+  // follows the parent area; true and false are set here and pass down. A tree that says nothing is
+  // off. It decides what is asked, never what is drawn: a cover on a photo is applied regardless.
+  coverSymbols         Boolean?
   // Grouping-only areas (e.g. "Europe") have `assignable = false`: they organize child
   // areas but cannot themselves receive Issues/stamps directly. Leaf areas that hold
   // material have `assignable = true`. Defaults true. Mirrors `Location.assignable` (#56, #263).
