@@ -71,6 +71,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   titleName: null,
   titleNameByLanguage: {},
   symbol: null,
+  coverSymbols: null,
   assignable: true,
   sortOrder: 0,
   stampCount: 0,

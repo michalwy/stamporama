@@ -716,6 +716,7 @@ export function AreasPanel({
                 defaultPrimaryCatalogVendorId={dialog.area.primaryCatalogVendorId}
                 defaultCatalogPrefix={dialog.area.catalogPrefix}
                 defaultAnchorMarkets={dialog.area.anchorMarkets}
+                defaultCoverSymbols={dialog.area.coverSymbols}
                 defaultCatalogEntries={dialog.area.catalogEntries}
                 defaultVendorEntries={dialog.area.vendorEntries}
                 defaultAssignable={dialog.area.assignable}

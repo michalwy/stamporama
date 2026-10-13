@@ -222,6 +222,9 @@ export interface CoverWalkCandidate {
   photoId: string;
   itemId: string;
   checked: boolean;
+  /** Whether the ready gate asks about it (#1891): its copy has a stamp in an area that may carry
+   *  forbidden symbols. A photo not asked about can still be reviewed and covered. */
+  asked: boolean;
 }
 
 /**
@@ -229,20 +232,25 @@ export interface CoverWalkCandidate {
  * walk goes through and what the ready gate counts (#1665). Built from the plan's tiles so a side the
  * offer does not photograph is never asked about, and a copy's extra attached on its own is. An
  * image uploaded straight to the offer is not a copy's photo and is left out.
+ *
+ * Each is marked `asked` when its copy is one of `askedItemIds` (#1891) — the copies with a stamp in
+ * an area that may carry forbidden symbols. Every candidate is still listed, because a cover drawn on
+ * any of them is applied and the walk can review them all on demand.
  */
 export function coverWalkPhotos(
   images: readonly {
     tiles: readonly { photoId: string; itemId: string | null; pairedPhotoId?: string | null }[];
   }[],
   checkedPhotoIds: ReadonlySet<string>,
-  copyPhotoIds: ReadonlySet<string>
+  copyPhotoIds: ReadonlySet<string>,
+  askedItemIds: ReadonlySet<string>
 ): CoverWalkCandidate[] {
   const seen = new Set<string>();
   const out: CoverWalkCandidate[] = [];
   const add = (photoId: string, itemId: string | null) => {
     if (!itemId || seen.has(photoId) || !copyPhotoIds.has(photoId)) return;
     seen.add(photoId);
-    out.push({ photoId, itemId, checked: checkedPhotoIds.has(photoId) });
+    out.push({ photoId, itemId, checked: checkedPhotoIds.has(photoId), asked: askedItemIds.has(itemId) });
   };
   for (const image of images) {
     for (const tile of image.tiles) {
@@ -251,6 +259,19 @@ export function coverWalkPhotos(
     }
   }
   return out;
+}
+
+/**
+ * The copies an offer asks about (#1891): those with **any** of their stamps (#744) filed under an
+ * area that may carry forbidden symbols — a stamp under several areas counts if any one of them is.
+ */
+export function coverAskedItemIds(
+  copies: readonly { itemId: string; areaIds: readonly string[] }[],
+  coverSymbolAreas: ReadonlySet<string>
+): Set<string> {
+  return new Set(
+    copies.filter((c) => c.areaIds.some((id) => coverSymbolAreas.has(id))).map((c) => c.itemId)
+  );
 }
 
 // ── Carrying covers to the next photo (#1703) ────────────────────────────────

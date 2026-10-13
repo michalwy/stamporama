@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Decided with the collector on 2026-10-07 and built by #1665.
+Accepted. Decided with the collector on 2026-10-07 and built by #1665. §4–5 amended by #1891
+(2026-10-13): only areas whose stamps may carry forbidden symbols are asked about.
 
 ## Context
 
@@ -72,6 +73,18 @@ decide what to cover. The covers drawn on the photos an offer renders join its p
 marked *nothing to cover* declares an unchanged image out of date. Nothing is regenerated
 implicitly; the walk offers *Regenerate photos when done*, ticked by default, exactly as the photo
 settings dialog does (#328).
+
+*Amended by #1891:* only the photos of copies **from an area whose stamps may carry forbidden
+symbols** are asked about. Whether a stamp can carry them is mostly where it comes from — the Third
+Reich and the Generalgouvernement, not Poland or the Netherlands — so it is a flag on the area,
+`CollectionArea.coverSymbols`: null follows the parent, true and false are set there and pass down,
+and a tree that says nothing is off. Every area starts off; the collector turns it on where needed. A
+copy is asked about when any area of any of its stamps (ADR-0044) resolves on, erring toward the
+question. The walk and the ready gate count only those photos; the walk can still show the others on
+demand (*Include photos from other areas*), and a cover drawn on any photo is applied whatever its
+area says — **the flag decides what is asked, never what is drawn**, so the fingerprint is unchanged.
+This is a judgement about a whole area made by the collector, and leaves #1763's refusal of a
+per-stamp *nothing to cover* standing: within a flagged area, every photo is still checked on its own.
 
 *Amended by #1701:* checking need not be photo by photo. An offer's unchecked photos — all of them,
 or one copy's from inside the walk — can be marked *nothing to cover* in one confirmed action, which

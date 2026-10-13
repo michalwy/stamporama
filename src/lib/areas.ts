@@ -182,6 +182,9 @@ export interface CollectionAreaData {
   /** The area's symbol (#1740) — usually its flag as an emoji — behind `{areaSymbol}`; null when
    * unset. The same in every language, and it does not roll up from an ancestor. */
   symbol: string | null;
+  /** Whether this area's stamps may carry forbidden symbols (#1891), as set **here** — null when it
+   * says nothing and the question passes to its parent; a tree that says nothing is off. */
+  coverSymbols: boolean | null;
   /** Grouping-only areas (#263) organize children but can't receive Issues/stamps directly. */
   assignable: boolean;
   /** Custom sibling display order (#78); lower sorts first, ties break by name. */
@@ -226,6 +229,7 @@ export async function readCollectionAreas(
       anchorMarkets: true,
       titleName: true,
       symbol: true,
+      coverSymbols: true,
       assignable: true,
       sortOrder: true,
       translations: { select: { language: true, titleName: true } },
@@ -268,6 +272,7 @@ export async function readCollectionAreas(
     titleName: a.titleName,
     titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
     symbol: a.symbol,
+    coverSymbols: a.coverSymbols,
     assignable: a.assignable,
     sortOrder: a.sortOrder,
     stampCount: a._count.stampAreaLinks,
@@ -327,6 +332,8 @@ export async function createCollectionArea(
     titleName?: string | null;
     /** The area's symbol (#1740), usually its flag as an emoji; blank stores null. */
     symbol?: string | null;
+    /** Whether its stamps may carry forbidden symbols (#1891); null or omitted follows the parent. */
+    coverSymbols?: boolean | null;
     /** Per-language `titleName` overrides (#293), keyed by ISO 639-1 code then field key. A blank
      * / null value removes that language's row. Languages absent from the record are left
      * untouched. */
@@ -363,6 +370,7 @@ export async function createCollectionArea(
       anchorMarkets: anchorMarketsData(data.anchorMarkets) ?? [],
       titleName: data.titleName ?? null,
       symbol: blankToNull(data.symbol),
+      coverSymbols: data.coverSymbols ?? null,
       assignable: data.assignable ?? true,
       // Append to the end of the sibling group (#78).
       sortOrder: await nextSiblingSortOrder(collectionId, data.parentId ?? null),
@@ -432,6 +440,9 @@ export async function updateCollectionArea(
     /** The area's symbol (#1740); blank clears it, and **omitted leaves it as it is** — as with
      * `anchorMarkets`, so a caller restating the area for another reason cannot clear it. */
     symbol?: string | null;
+    /** Whether its stamps may carry forbidden symbols (#1891); null follows the parent, and
+     * **omitted leaves it as it is**, as with `symbol`. */
+    coverSymbols?: boolean | null;
     /** Per-language `titleName` overrides (#293); see {@link createCollectionArea}. */
     translations?: TranslationValueMap;
     assignable?: boolean;
@@ -511,6 +522,7 @@ export async function updateCollectionArea(
       ...(data.anchorMarkets !== undefined ? { anchorMarkets: anchorMarketsData(data.anchorMarkets) } : {}),
       titleName: data.titleName ?? null,
       ...(data.symbol !== undefined ? { symbol: blankToNull(data.symbol) } : {}),
+      ...(data.coverSymbols !== undefined ? { coverSymbols: data.coverSymbols } : {}),
       ...(data.assignable !== undefined ? { assignable: data.assignable } : {}),
       ...(parentChanged
         ? { sortOrder: await nextSiblingSortOrder(collectionId, nextParentId) }

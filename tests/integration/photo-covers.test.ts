@@ -44,6 +44,12 @@ describe("covering symbols on offer photos (#1665)", () => {
   let coveredPlatformId: string;
   /** One that does not. */
   let plainPlatformId: string;
+  /** An area whose stamps may carry forbidden symbols (#1891), and a sub-area that says nothing. */
+  let reichAreaId: string;
+  let ggAreaId: string;
+  /** A sub-area of the Reich set off, and an area that never says anything. */
+  let reichLocalsAreaId: string;
+  let polandAreaId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -81,6 +87,12 @@ describe("covering symbols on offer photos (#1665)", () => {
         data: { collectionId, name: `Plain ${ts}`, platform: true, maxPhotoEdge: 600 },
       })
     ).id;
+    const area = async (name: string, parentId: string | null, coverSymbols: boolean | null) =>
+      (await prisma.collectionArea.create({ data: { collectionId, name, parentId, coverSymbols } })).id;
+    reichAreaId = await area("Deutsches Reich", null, true);
+    ggAreaId = await area("Generalgouvernement", reichAreaId, null);
+    reichLocalsAreaId = await area("Local issues", reichAreaId, false);
+    polandAreaId = await area("Poland", null, null);
   });
 
   after(async () => {
@@ -91,11 +103,19 @@ describe("covering symbols on offer photos (#1665)", () => {
 
   let seq = 0;
 
-  /** A copy with a bright red front scan, so a black bar drawn over it is unmistakable. */
-  async function scannedCopy(): Promise<{ itemId: string; photoId: string }> {
+  /** A copy with a bright red front scan, so a black bar drawn over it is unmistakable. Its stamp is
+   *  filed under `areaIds` — the Reich unless said otherwise, so its photos are asked about (#1891). */
+  async function scannedCopy(areaIds: string[] = [reichAreaId]): Promise<{ itemId: string; photoId: string }> {
     seq += 1;
     const stampRow = await prisma.stamp.create({
-      data: { collectionId, name: `Reich ${seq}`, primaryCatalogSortKey: catalogSortKeyOf(String(seq)) },
+      data: {
+        collectionId,
+        name: `Reich ${seq}`,
+        primaryCatalogSortKey: catalogSortKeyOf(String(seq)),
+        stampAreaLinks: {
+          create: areaIds.map((collectionAreaId, i) => ({ collectionAreaId, isPrimary: i === 0 })),
+        },
+      },
     });
     const item = await createItem(userId, collectionId, { stampId: stampRow.id, conditionId, forSale: true });
     const bytes = await sharp({
@@ -416,5 +436,91 @@ describe("covering symbols on offer photos (#1665)", () => {
     await prisma.contact.update({ where: { id: fb }, data: { coverSymbols: false } });
     await setFacebookPlatform(userId, collectionId, fb);
     assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: fb } })).coverSymbols, false);
+  });
+  // Only copies whose stamp is in an area that may carry forbidden symbols are asked about (#1891).
+  describe("an area says whether its stamps may carry forbidden symbols (#1891)", () => {
+    it("lets an offer whose copies are all from areas carrying none go Ready without checking a photo", async () => {
+      const poland = await scannedCopy([polandAreaId]);
+      const locals = await scannedCopy([reichLocalsAreaId]);
+      const offerId = await preparingOffer(coveredPlatformId, [poland.itemId, locals.itemId]);
+      await generate(offerId);
+      assert.deepEqual(await codes(offerId), []);
+      const covers = (await getOfferPhotoPlanState(userId, offerId)).covers;
+      assert.deepEqual(
+        { photoCount: covers.photoCount, uncheckedCount: covers.uncheckedCount, otherCount: covers.otherCount },
+        { photoCount: 0, uncheckedCount: 0, otherCount: 2 }
+      );
+      await setOfferState(userId, offerId, "ready");
+    });
+
+    it("still asks about the copies from a flagged area — the flag inherited by a sub-area — and only those", async () => {
+      const poland = await scannedCopy([polandAreaId]);
+      const gg = await scannedCopy([ggAreaId]);
+      const offerId = await preparingOffer(coveredPlatformId, [poland.itemId, gg.itemId]);
+      await generate(offerId);
+      const blocker = (await getOfferDetail(userId, offerId))?.readyBlockers.find(
+        (r) => r.code === "photo-covers-unchecked"
+      );
+      assert.ok(blocker && "count" in blocker && blocker.count === 1);
+
+      // The walk still lists both, saying which is asked about, so the other can be reviewed on demand.
+      const walk = await readOfferCoverWalk(userId, offerId);
+      assert.deepEqual(
+        walk.photos.map((p) => [p.photoId, p.asked]),
+        [
+          [poland.photoId, false],
+          [gg.photoId, true],
+        ]
+      );
+
+      // Marking the remaining photos marks the ones asked about, and the others only when included.
+      assert.deepEqual(await markOfferPhotosNothingToCover(userId, offerId), [gg.photoId]);
+      assert.deepEqual(await codes(offerId), []);
+      assert.deepEqual(await markOfferPhotosNothingToCover(userId, offerId, null, true), [poland.photoId]);
+    });
+
+    it("asks about a stamp filed under several areas when any one of them is flagged", async () => {
+      const both = await scannedCopy([polandAreaId, ggAreaId]);
+      const offerId = await preparingOffer(coveredPlatformId, [both.itemId]);
+      assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 1);
+    });
+
+    it("asks about a copy carrying several stamps when any of them is in a flagged area", async () => {
+      const carrier = await scannedCopy([polandAreaId]);
+      const reichStamp = await prisma.stamp.create({
+        data: {
+          collectionId,
+          name: `Reich extra ${seq}`,
+          stampAreaLinks: { create: [{ collectionAreaId: reichAreaId, isPrimary: true }] },
+        },
+      });
+      await prisma.itemStamp.create({ data: { itemId: carrier.itemId, stampId: reichStamp.id, sortOrder: 1 } });
+      const offerId = await preparingOffer(coveredPlatformId, [carrier.itemId]);
+      assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 1);
+    });
+
+    it("applies a cover drawn on a photo whatever its area says", async () => {
+      const poland = await scannedCopy([polandAreaId]);
+      const offerId = await preparingOffer(coveredPlatformId, [poland.itemId]);
+      await savePhotoCovers(userId, poland.photoId, [
+        { shape: "rect", style: "bar", x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+      ]);
+      await generate(offerId);
+      const centre = await generatedCentre(offerId);
+      assert.ok(centre.every((c) => c < 40), `the covered centre is black, got ${centre}`);
+      assert.deepEqual(await codes(offerId), []);
+    });
+
+    it("follows the area when the collector turns its flag on or off", async () => {
+      const poland = await scannedCopy([polandAreaId]);
+      const offerId = await preparingOffer(coveredPlatformId, [poland.itemId]);
+      assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 0);
+      await prisma.collectionArea.update({ where: { id: polandAreaId }, data: { coverSymbols: true } });
+      try {
+        assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 1);
+      } finally {
+        await prisma.collectionArea.update({ where: { id: polandAreaId }, data: { coverSymbols: null } });
+      }
+    });
   });
 });

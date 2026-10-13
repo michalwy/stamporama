@@ -116,6 +116,13 @@ export async function getAreaFormOptionsAction(
   };
 }
 
+/** Whether the area's stamps may carry forbidden symbols (#1891), as the dialog posts it: `on`, `off`,
+ * or blank for *same as parent*. */
+function parseCoverSymbols(formData: FormData): boolean | null {
+  const raw = str(formData, "coverSymbols");
+  return raw === "on" ? true : raw === "off" ? false : null;
+}
+
 /** The anchoring markets as typed (#1634): codes separated by commas or spaces. Always present, so
  * clearing the field clears them and the area inherits again. */
 function parseMarketList(formData: FormData): string[] {
@@ -142,6 +149,7 @@ export async function createCollectionAreaAction(
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       symbol: optionalStr(formData, "symbol"),
+      coverSymbols: parseCoverSymbols(formData),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
@@ -174,6 +182,7 @@ export async function updateCollectionAreaAction(
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       symbol: optionalStr(formData, "symbol"),
+      coverSymbols: parseCoverSymbols(formData),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });

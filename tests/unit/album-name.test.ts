@@ -15,6 +15,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     titleName: null,
     titleNameByLanguage: {},
     symbol: null,
+    coverSymbols: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,
