@@ -10,7 +10,9 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
-import type { SaleCopyRef, SaleDetail } from "@/lib/sales";
+import type { SaleCopyRef, SaleDetail, SaleSuppliesData } from "@/lib/sales";
+import type { PackingSupplyData } from "@/lib/packing-supplies";
+import { describeUncostedSupplies } from "@/lib/supply-stock";
 import type { SaleBuyerMessage } from "@/lib/sale-buyer-message";
 import {
   describeEstimated,
@@ -36,6 +38,7 @@ import { BuyerMessageDialog } from "./buyer-message-dialog";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
+import { SaleSuppliesCard } from "./sale-supplies-card";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
@@ -120,6 +123,8 @@ interface SaleDetailPanelProps {
   sale: SaleDetail;
   /** The collection's carriers (#491) — what the shipment dialog picks from. */
   carriers: CarrierData[];
+  /** The collection's packing supplies (#1898) — what a supply line of the parcel can name. */
+  packingSupplies: PackingSupplyData[];
   /** The message to the buyer rendered for this sale (#1815), or null when its platform has no
    *  template — and then there is no *Message to buyer* at all. */
   buyerMessage: SaleBuyerMessage | null;
@@ -132,6 +137,7 @@ export function SaleDetailPanel({
   collectionId,
   sale,
   carriers,
+  packingSupplies,
   buyerMessage,
   areas,
   locations,
@@ -628,6 +634,9 @@ export function SaleDetailPanel({
             />
           )}
           <EditableShippingRow
+            // With supply lines the typed amount is the postage alone, and the supplies follow it
+            // (#1898); a sale without them shows the row it always had.
+            label={sale.supplies.lines.length > 0 ? "− Postage" : "− My shipping"}
             platformId={sale.platformId}
             methodId={sale.shippingMethodId}
             methodName={sale.shippingMethodName}
@@ -646,6 +655,9 @@ export function SaleDetailPanel({
               })
             }
           />
+          {sale.supplies.lines.length > 0 && (
+            <SuppliesRow supplies={sale.supplies} baseCurrency={sale.baseCurrency} showBase={showBase} />
+          )}
           <EditableAmountRow
             label="− Commission"
             value={sale.commission}
@@ -688,12 +700,27 @@ export function SaleDetailPanel({
             <ProfitRows
               profit={sale.profit}
               copiesWithoutCost={sale.copiesWithoutCost}
+              supplies={sale.supplies}
               baseCurrency={sale.baseCurrency}
               showBase={showBase}
             />
           )}
         </div>
       </div>
+
+      {/* The parcel's packing supplies (#1898): with the postage, what my shipping is. */}
+      <SaleSuppliesCard
+        saleId={sale.id}
+        supplies={sale.supplies}
+        postageBase={sale.shippingRateMissing ? null : sale.shippingBase}
+        myShippingBase={sale.myShippingBase}
+        baseCurrency={sale.baseCurrency}
+        dictionary={packingSupplies}
+        isPending={isPending}
+        error={error}
+        run={run}
+        clearError={() => setError(undefined)}
+      />
 
       {/* Sold units */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1066,11 +1093,15 @@ const PROFIT_NOTE: React.CSSProperties = {
 function ProfitRows({
   profit,
   copiesWithoutCost,
+  supplies,
   baseCurrency,
   showBase,
 }: {
   profit: EstimatedProfitFigures;
   copiesWithoutCost: readonly SaleCopyRef[];
+  /** The parcel's packing supplies (#1898): units without a cost leave *my shipping* low, so the
+   * profit is incomplete and a ceiling, as with a copy without cost. */
+  supplies: SaleSuppliesData;
   baseCurrency: string;
   showBase: boolean;
 }) {
@@ -1112,10 +1143,11 @@ function ProfitRows({
   const n = Number(profit.profit);
   const leftOut = profit.countedCount < profit.copyCount;
   const withoutCost = copiesWithoutCost.length > 0;
-  const incomplete = leftOut || withoutCost;
+  const uncostedSupplies = supplies.incomplete ? describeUncostedSupplies(supplies) : null;
+  const incomplete = leftOut || withoutCost || uncostedSupplies != null;
   const estimateNote = describeEstimated(profit.estimatedCount);
   const mark = estimateNote ? "~" : "";
-  const ceiling = withoutCost ? "≤ " : "";
+  const ceiling = withoutCost || uncostedSupplies != null ? "≤ " : "";
   const estimateStyle = estimateNote ? COST_ESTIMATE_STYLE : {};
   const qualifiers = [incomplete && "incomplete", estimateNote && "estimated"].filter(Boolean);
   return (
@@ -1144,11 +1176,60 @@ function ProfitRows({
           {explainWithoutCost(copiesWithoutCost.length).toLowerCase()}.
         </p>
       )}
+      {uncostedSupplies && (
+        <p style={PROFIT_NOTE}>
+          Packing supplies: {uncostedSupplies} — my shipping leaves their cost out, so the profit is
+          overstated by it until a purchase of the supply covers them.
+        </p>
+      )}
       {leftOut && (
         <p style={PROFIT_NOTE}>
           Counted over {profit.countedCount} of {profit.copyCount} copies, whose proceeds are{" "}
           {profit.proceeds} {baseCurrency}. Left out: {reasons}.
         </p>
+      )}
+    </>
+  );
+}
+
+/** The "− Packing supplies" row under the postage (#1898): what the parcel's supplies cost, in the
+ * base currency — they are costed from stock there. Edited on the supplies card, not here. One
+ * leaving units out says so, since *my shipping* is then low by their cost. */
+function SuppliesRow({
+  supplies,
+  baseCurrency,
+  showBase,
+}: {
+  supplies: SaleSuppliesData;
+  baseCurrency: string;
+  showBase: boolean;
+}) {
+  const uncosted = supplies.incomplete ? describeUncostedSupplies(supplies) : null;
+  const figure = (
+    <>
+      {supplies.costBase} {baseCurrency}
+      {uncosted && (
+        <Tooltip content={`Incomplete: ${uncosted}`} align="end">
+          <span style={{ marginLeft: "0.375rem", color: "var(--color-warning)" }}>+ ?</span>
+        </Tooltip>
+      )}
+    </>
+  );
+  return (
+    <>
+      <div style={ROW_LABEL}>− Packing supplies</div>
+      {showBase ? (
+        <>
+          <div style={ORIG_CELL} />
+          <div style={BASE_CELL}>{figure}</div>
+        </>
+      ) : (
+        <>
+          <div style={ORIG_CELL}>
+            <span style={{ paddingRight: VALUE_INSET }}>{figure}</span>
+          </div>
+          <div style={BASE_CELL} />
+        </>
       )}
     </>
   );
@@ -1280,6 +1361,7 @@ const SHIP_ICON_BTN: React.CSSProperties = {
  * Picking a method from the platform's dictionary re-fills the cost with what that method normally
  * costs, exactly as the header form does — the figure is a default, not a reading. */
 function EditableShippingRow({
+  label,
   platformId,
   methodId,
   methodName,
@@ -1293,6 +1375,7 @@ function EditableShippingRow({
   disabled,
   onSave,
 }: {
+  label: string;
   platformId: string;
   methodId: string | null;
   methodName: string | null;
@@ -1371,7 +1454,7 @@ function EditableShippingRow({
 
   return (
     <>
-      <div style={ROW_LABEL}>− My shipping</div>
+      <div style={ROW_LABEL}>{label}</div>
       <div style={ORIG_CELL}>
         {editing ? (
           <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>

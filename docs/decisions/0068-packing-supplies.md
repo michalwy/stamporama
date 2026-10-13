@@ -55,7 +55,8 @@ step.
 
 The unit cost is **derived, not stored**. It moves while the order's shipping or its other lines are
 still being restated, exactly as an open lot's estimate does. What freezes a figure is using the
-supplies — that is #1898's to record, at the cost of the batch it took from.
+supplies — that is #1898's to record, at the cost of the batch it took from. *(Amended by §7: a use
+records the batch, and its cost stays derived from it.)*
 
 ### 4. Stock is costed FIFO
 
@@ -89,9 +90,44 @@ The line's reference to its supply is `NO ACTION`: the app refuses the delete an
 collection — cascading to its supplies and its purchases in one statement — still deletes. Deleting a
 purchase takes its supply lines, and with them their batches, as it takes its lots and expenses.
 
+### 7. A sale uses supplies: postage plus supplies is *my shipping* (#1898)
+
+Added 2026-10-14 by #1898. The collector decided on 2026-10-13 that **a sale's shipping cost is the
+postage plus the supplies used**, summed by the app instead of typed, and that **the supplies are
+taken from stock FIFO** at their batches' unit costs.
+
+- **The postage is `Sale.shippingCost`**, typed or prefilled from the shipping method as before
+  (#468). A sale recorded before #1898 has no supply lines, so its typed amount stays the whole of
+  its shipping and nothing is migrated.
+- **`SaleSupplyLine`** names a supply and how many units the parcel used. **`SaleSupplyUse`** records
+  how many of them came from which batch. *My shipping* = postage in the base currency + the sum of
+  the uses at their batches' unit costs; every reader of a sale's net computes it the same way.
+- **Which batch a unit came from is recorded, not replayed.** Replaying FIFO over every sale in date
+  order would need no table, but returning one sale's envelope would then re-assign later sales to
+  other batches and move their figures; the issue decided that a returned supply goes back **at the
+  cost it was taken at**. So a write takes FIFO at that moment and the record stands.
+- **A use's cost is derived from its batch, not frozen** — departing from §3's last sentence. A frozen
+  unit cost would stop agreeing with its batch the moment the order's shipping, its other lines or its
+  rate were restated, and the stock's value plus what sales used would no longer add up to what was
+  paid. Recording the batch is what "at the cost of the batch it took from" needs; the figure
+  settles when the purchase does, as a lot's estimate does.
+- **Using more than is on hand is allowed** (the issue's decision): the line holds what stock had and
+  the rest is **short**, uncosted, the total marked incomplete as #1875 marks a profit with a missing
+  cost. A unit from a batch with no rate into the base currency is uncosted the same way.
+- **One rule keeps uses and stock in step** (`settleSupplyUses`, pure; `settleSupplies` runs it in the
+  transaction of every write that changes a supply's stock or demand). It never moves a unit that
+  still fits; it gives back what a lowered line or a lowered batch no longer covers — a line's
+  newest-batch units first, a batch's latest-sale units first — and then covers short lines,
+  earliest sale first, from the oldest batch with units left. Afterwards a supply never has both a
+  short line and units on hand, so a purchase covers a shortfall by itself and a new line is FIFO.
+- Changing or removing a sale's line, or deleting the sale, returns its units to their batches;
+  deleting or lowering a batch hands its units back to the sales that held them, which take them
+  from the supply's other batches where they can. A supply a sale used cannot be deleted.
+
 ## Consequences
 
 - Every reader of an order's money (`getPurchaseDetail`, `closeLot`, the copy estimates, the contact
   page, the Intake documents list) reads the supply lines, so a lot's pool is the same everywhere.
 - The agent API's purchase totals include supply lines; it has no operations over them yet.
-- #1898 adds the use of supplies, which is the only thing `fifoSupplyStock`'s `used` waits for.
+- #1898 adds the use of supplies (§7): the Supplies screen's quantity on hand is what the batches hold
+  after the uses recorded against them, and it says how many units sales are short of.

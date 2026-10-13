@@ -111,7 +111,9 @@ export function PackingSuppliesPanel({
                       disabledHint:
                         current.lineCount > 0
                           ? `Bought on ${countLabel(current.lineCount, "order line", "order lines")} — those lines are its stock, so it stays.`
-                          : undefined,
+                          : current.saleLineCount > 0
+                            ? `Used on ${countLabel(current.saleLineCount, "sale line", "sale lines")} — part of those sales' shipping, so it stays.`
+                            : undefined,
                     }
                   : undefined
               }

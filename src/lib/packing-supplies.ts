@@ -8,7 +8,8 @@ import {
   computeSupplyBatchCost,
   purchaseCostsOf,
 } from "./purchase-allocation";
-import { fifoSupplyStock, formatUnitCost } from "./supply-stock";
+import { supplyStock, formatUnitCost } from "./supply-stock";
+import { settleSupplies } from "./supply-settlement";
 
 // Packing supplies (#1897, ADR-0068) — envelopes, transport cards and the like: the dictionary, the
 // supply lines of purchase orders, and the stock those lines make up.
@@ -32,6 +33,8 @@ export interface PackingSupplyData {
   name: string;
   /** Supply lines that bought it. A supply with any cannot be deleted. */
   lineCount: number;
+  /** Sales' supply lines that used it (#1898). A supply with any cannot be deleted either. */
+  saleLineCount: number;
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -65,9 +68,14 @@ export async function listPackingSupplies(
   const rows = await prisma.packingSupply.findMany({
     where: { collectionId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, _count: { select: { lines: true } } },
+    select: { id: true, name: true, _count: { select: { lines: true, saleLines: true } } },
   });
-  return rows.map((r) => ({ id: r.id, name: r.name, lineCount: r._count.lines }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    lineCount: r._count.lines,
+    saleLineCount: r._count.saleLines,
+  }));
 }
 
 function supplyName(name: string): string {
@@ -98,19 +106,28 @@ export async function renamePackingSupply(
   await prisma.packingSupply.update({ where: { id: supplyId }, data: { name: supplyName(name) } });
 }
 
-/** Thrown when a supply that was bought is deleted: its batches are what its stock is. */
+/** Thrown when a supply that was bought, or used on a sale (#1898), is deleted: its batches are what
+ * its stock is, and its uses are part of those sales' shipping cost. */
 export class PackingSupplyInUseError extends Error {
-  constructor(readonly lineCount: number) {
-    super("Packing supply has been bought.");
+  constructor(
+    readonly lineCount: number,
+    readonly saleLineCount: number
+  ) {
+    super("Packing supply has been bought or used.");
     this.name = "PackingSupplyInUseError";
   }
 }
 
-/** Delete a supply nothing has bought. The constraint is the backstop; this says why. */
+/** Delete a supply nothing has bought or used. The constraints are the backstop; this says why. */
 export async function deletePackingSupply(ownerId: string, supplyId: string): Promise<void> {
   await assertSupplyOwner(ownerId, supplyId);
-  const lineCount = await prisma.purchaseSupplyLine.count({ where: { supplyId } });
-  if (lineCount > 0) throw new PackingSupplyInUseError(lineCount);
+  const [lineCount, saleLineCount] = await Promise.all([
+    prisma.purchaseSupplyLine.count({ where: { supplyId } }),
+    prisma.saleSupplyLine.count({ where: { supplyId } }),
+  ]);
+  if (lineCount > 0 || saleLineCount > 0) {
+    throw new PackingSupplyInUseError(lineCount, saleLineCount);
+  }
   await prisma.packingSupply.delete({ where: { id: supplyId } });
 }
 
@@ -177,14 +194,20 @@ export async function createPurchaseSupplyLine(
 ): Promise<string> {
   const collectionId = await assertPurchase(ownerId, purchaseId);
   await assertSupplyInCollection(collectionId, input.supplyId);
-  const created = await prisma.purchaseSupplyLine.create({
-    data: { purchaseId, supplyId: input.supplyId, ...lineData(input) },
-    select: { id: true },
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.purchaseSupplyLine.create({
+      data: { purchaseId, supplyId: input.supplyId, ...lineData(input) },
+      select: { id: true },
+    });
+    // New stock covers what sales are still short of (#1898).
+    await settleSupplies(tx, [input.supplyId]);
+    return created.id;
   });
-  return created.id;
 }
 
-/** Restate a line's supply, quantity and price. */
+/** Restate a line's supply, quantity and price. A batch lowered below what sales took from it gives
+ * the latest of those units back, and the supply's other batches cover them where they can (#1898);
+ * a batch moved to another supply gives back everything taken from it. */
 export async function updatePurchaseSupplyLine(
   ownerId: string,
   lineId: string,
@@ -192,16 +215,33 @@ export async function updatePurchaseSupplyLine(
 ): Promise<void> {
   const collectionId = await assertLine(ownerId, lineId);
   await assertSupplyInCollection(collectionId, input.supplyId);
-  await prisma.purchaseSupplyLine.update({
-    where: { id: lineId },
-    data: { supplyId: input.supplyId, ...lineData(input) },
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.purchaseSupplyLine.findUniqueOrThrow({
+      where: { id: lineId },
+      select: { supplyId: true },
+    });
+    if (before.supplyId !== input.supplyId) {
+      await tx.saleSupplyUse.deleteMany({ where: { batchId: lineId } });
+    }
+    await tx.purchaseSupplyLine.update({
+      where: { id: lineId },
+      data: { supplyId: input.supplyId, ...lineData(input) },
+    });
+    await settleSupplies(tx, [before.supplyId, input.supplyId]);
   });
 }
 
-/** Remove a line, and with it its batch from the supply's stock. */
+/** Remove a line, and with it its batch from the supply's stock. What sales took from it is then
+ * short, and the supply's other batches cover it where they can (#1898). */
 export async function deletePurchaseSupplyLine(ownerId: string, lineId: string): Promise<void> {
   await assertLine(ownerId, lineId);
-  await prisma.purchaseSupplyLine.delete({ where: { id: lineId } });
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.purchaseSupplyLine.delete({
+      where: { id: lineId },
+      select: { supplyId: true },
+    });
+    await settleSupplies(tx, [line.supplyId]);
+  });
 }
 
 // ── The stock ────────────────────────────────────────────────────────────────────────────────
@@ -238,6 +278,8 @@ export interface SupplyStockData {
   /** On hand at FIFO cost, base currency (2 dp); null when a batch with units left has no rate. */
   valueBase: string | null;
   unvaluedBatches: number;
+  /** Units sales used that were not in stock (#1898) — waiting for a purchase to cover them. */
+  shortUnits: number;
   batches: SupplyBatchData[];
 }
 
@@ -269,6 +311,8 @@ export async function getSuppliesStock(
           id: true,
           quantity: true,
           createdAt: true,
+          // What sales took from the batch (#1898).
+          uses: { select: { quantity: true } },
           purchase: {
             select: {
               id: true,
@@ -290,6 +334,7 @@ export async function getSuppliesStock(
           },
         },
       },
+      saleLines: { select: { quantity: true } },
     },
   });
 
@@ -326,8 +371,12 @@ export async function getSuppliesStock(
         costTx: cost.costTx.toFixed(2),
       };
     });
-    // Nothing takes supplies out of stock yet (#1898), so every batch is whole.
-    const stock = fifoSupplyStock(batches, 0);
+    const used = new Map(
+      supply.lines.map((line) => [line.id, line.uses.reduce((sum, u) => sum + u.quantity, 0)])
+    );
+    const stock = supplyStock(batches, used);
+    const usedOnSales = supply.saleLines.reduce((sum, l) => sum + l.quantity, 0);
+    const takenFromStock = [...used.values()].reduce((sum, q) => sum + q, 0);
     const byId = new Map(batches.map((b) => [b.id, b]));
     if (stock.valueBase == null) anyUnvalued = true;
     else totalCents += Math.round(stock.valueBase * 100);
@@ -337,6 +386,7 @@ export async function getSuppliesStock(
       onHand: stock.onHand,
       valueBase: stock.valueBase?.toFixed(2) ?? null,
       unvaluedBatches: stock.unvaluedBatches,
+      shortUnits: Math.max(0, usedOnSales - takenFromStock),
       batches: stock.batches.map((b) => {
         const own = byId.get(b.id)!;
         return {

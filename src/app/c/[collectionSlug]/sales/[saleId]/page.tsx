@@ -10,6 +10,7 @@ import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getCarriers } from "@/lib/carriers";
+import { listPackingSupplies } from "@/lib/packing-supplies";
 import { readSaleBuyerMessage } from "@/lib/sale-buyer-message";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
@@ -43,12 +44,14 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
 
   // Supporting data for the sold-unit copy rows (packing view). Copies themselves stream in per
   // unit via client queries, so the page only preloads the small, shared lookups.
-  const [areas, locations, issueIds, carriers, buyerMessage] = await Promise.all([
+  const [areas, locations, issueIds, carriers, packingSupplies, buyerMessage] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getSaleIssueIds(saleId),
     // Short list, and the shipment dialog needs it the moment the header renders (#491).
     getCarriers(session.user.id, collection.id),
+    // What the parcel's supply lines can name (#1898) — a short dictionary.
+    listPackingSupplies(session.user.id, collection.id),
     // Rendered on every load (#1815), so it is the sale as it stands after any edit's refresh.
     readSaleBuyerMessage(session.user.id, saleId),
   ]);
@@ -75,6 +78,7 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
         collectionId={collection.id}
         sale={sale}
         carriers={carriers}
+        packingSupplies={packingSupplies}
         buyerMessage={buyerMessage}
         areas={areas}
         locations={locations}

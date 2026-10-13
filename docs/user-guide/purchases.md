@@ -329,6 +329,11 @@ divided by the quantity — to the hundredth of a cent; hover it to see the sum.
 
 Every line is a **batch** in its supply's stock. Supplies are used **oldest batch first** (FIFO),
 each unit at the cost of its own batch, so what is on hand is valued at what the newest boxes cost.
+They leave stock when a sale's parcel uses them ([Packing supplies on a sale](sales.md#packing-supplies)),
+and a new batch first covers any sale that used more than you had. Lowering a batch below what sales
+took from it, or deleting it, gives those units back to the sales' supply lines, which take them from
+the supply's other batches where there are any — so their cost may change, and if none are left they
+wait for the next purchase.
 
 **On an opening balance** the card brings in the supplies already on your shelf: the line's **Value**
 is what the batch is worth, and it is required — a batch without a cost would leave every parcel
@@ -343,7 +348,8 @@ document each came from (a link back to it), its date, how many it brought in an
 what the batch cost in its own currency, and the unit cost and remaining value in your base currency.
 The total of all supplies on hand heads the screen. A batch bought in another currency with **no
 recorded exchange rate** has no base-currency cost; its supply then states no value rather than a sum
-that leaves it out, and says why.
+that leaves it out, and says why. When sales have used more of a supply than you had, the supply says
+how many units they are waiting for — a purchase of it covers them.
 
 **What the order cost.** (An opening balance opens with its opening value instead — see
 [The values bar on an opening balance](#the-values-bar-on-an-opening-balance).) The values bar at

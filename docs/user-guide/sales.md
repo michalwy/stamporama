@@ -53,8 +53,9 @@ the field shows is what is saved. An empty field stays empty.
     handling until you add them. A total below the offer prices — which would make handling
     negative — is flagged and can't be saved.
 
-- **Shipping method** and **My shipping** — how the buyer asked for it to be sent, and what
-  posting it costs you (**subtracts**). The method list is the platform's own: the options you set
+- **Shipping method** and **Postage** — how the buyer asked for it to be sent, and what
+  posting it costs you (**subtracts**). The envelope and cards it goes in are added on the sale
+  itself — see [Packing supplies](#packing-supplies). The method list is the platform's own: the options you set
   up on the [contact](contacts.md#shipping-methods), each with its usual price. Picking one fills
   in the cost and its currency for you; change either afterwards whenever this parcel cost
   something else. **Custom…** lets you name a one-off method that isn't worth adding to the list.
@@ -136,6 +137,34 @@ the sale date, and it's the base amount that feeds profit. The row shows the bas
 a foreign-currency amount (or flags **no rate** if none is known yet). Because shipping lands in the
 base currency, the **net proceeds** figure — on the sale, its rows, and the list — is shown in the
 **base currency**. For a single-currency collection (base = sale currency) nothing looks different.
+
+### Packing supplies
+
+What a parcel costs you is more than its postage: the envelope and the transport cards go in too.
+The **Packing supplies** card under the amounts records them — **Add supplies**, pick a supply and
+say how many the parcel used (*C6 envelope × 1*, *Transport card A6 × 2*). There is no price to
+type: the supplies are **taken from your stock**, oldest batch first, and each unit costs what it
+cost in the batch it came from ([Packing supplies](purchases.md#packing-supplies)). Name your
+supplies once under **Settings → Packing supplies** first.
+
+**My shipping is then the postage plus the supplies**, added up for you. The amounts show it as two
+rows — **− Postage** and **− Packing supplies**, the latter in your base currency — and the card's
+header states the sum with its parts: *Postage 12.00 + supplies 1.40 = my shipping 13.40 PLN*. The
+net and the profit use that total.
+
+- **Changing or removing a line returns the supplies to stock**, to the batches they came from, at
+  the costs they were taken at. Using fewer gives back the units taken last. Deleting the sale
+  returns all of them.
+- **You can use more than you have on hand.** The line is kept, the units your stock did not have
+  are named on it (*2 units not in stock*) and cost nothing yet, and the supplies figure and the
+  profit are marked **incomplete** — the profit with `≤`, since the true figure can only be lower.
+  The next purchase of that supply covers them by itself, earliest sale first, and the mark goes.
+  The **Packing supplies** screen says how many units sales are waiting for.
+- A unit from a batch bought in another currency with **no rate** into your base currency is
+  counted the same way — no cost yet, the total incomplete — until the purchase has a rate.
+- **A sale recorded before supplies existed keeps its typed amount** as its whole shipping, and its
+  row still reads **− My shipping**. Add supply lines to it only if you want to restate it as
+  postage plus supplies — then lower the typed amount to the postage alone.
 
 If the sale is anchored on the **total paid** (the default), the breakdown instead shows an
 editable **Total paid by buyer** row and a read-only **buyer handling** derived below it — the
@@ -235,6 +264,11 @@ figure as **incomplete**, e.g. *profit ≤ +18.40 EUR · 1 copy without cost*.
 A copy from an opening balance with no value is still left out (see above): its cost is not missing,
 it was deliberately not stated. And as with estimates, only the sale's own screen counts these
 copies: the profit and loss screen and the Overview still leave them out.
+
+**Packing supplies without a cost** — units used beyond your stock, or from a batch with no exchange
+rate ([Packing supplies](#packing-supplies)) — mark the sale's **Profit / loss** as **incomplete** in
+the same way, with `≤` and a note saying how many units. They cost nothing in *my shipping* until a
+purchase covers them, and so on the profit and loss screen and the Overview as well.
 
 ### The profit and loss screen
 
@@ -545,7 +579,8 @@ The sheet always prints in light colours, even if you use the dark [theme](appea
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
-available again, and returns any offers it marked sold to **Active**.
+available again, returns any offers it marked sold to **Active**, and returns its packing supplies
+to stock.
 
 ## Finding a sale
 

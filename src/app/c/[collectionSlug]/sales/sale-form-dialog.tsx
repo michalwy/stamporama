@@ -614,7 +614,7 @@ export function SaleFormDialog({
 
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-shipping-cost">My shipping</LabelWithError>
+              <LabelWithError htmlFor="sale-shipping-cost">Postage</LabelWithError>
               <NumericInput
                 kind="amount"
                 id="sale-shipping-cost"
@@ -625,7 +625,7 @@ export function SaleFormDialog({
                 style={INPUT_STYLE}
               />
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                − what posting it costs me
+                − what posting it costs me; packing supplies are added on the sale
               </p>
             </div>
             <div style={{ flex: 1 }}>

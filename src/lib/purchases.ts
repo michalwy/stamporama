@@ -19,6 +19,7 @@ import {
   type PurchaseKind,
 } from "./purchase-kind";
 import { isPurchaseStatus, statusChangeStamp, type PurchaseStatus } from "./purchase-status";
+import { settleSupplies } from "./supply-settlement";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -827,8 +828,20 @@ export async function deletePurchase(
   // Read off the purchase itself since #586: the scans hang here rather than on the lots, which is
   // also why deleting a lot no longer reaches for them at all.
   const scanBytes = await collectScanStorageRefs([purchaseId]);
+  // Its supply lines are batches; what sales took from them is then short, and the supplies' other
+  // batches cover it where they can (#1898).
+  const supplyLines = await prisma.purchaseSupplyLine.findMany({
+    where: { purchaseId },
+    select: { supplyId: true },
+  });
   try {
-    await prisma.purchase.delete({ where: { id: purchaseId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.purchase.delete({ where: { id: purchaseId } });
+      await settleSupplies(
+        tx,
+        supplyLines.map((l) => l.supplyId)
+      );
+    });
   } catch (err) {
     if (isRestrictViolation(err)) {
       throw new Error(

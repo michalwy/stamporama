@@ -4511,6 +4511,8 @@ model PackingSupply {
 
   collection Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   lines      PurchaseSupplyLine[]
+  // What sales packed with it (#1898).
+  saleLines  SaleSupplyLine[]
 
   // The name is the pick-list, as it is for carriers.
   @@unique([collectionId, name])
@@ -4544,10 +4546,59 @@ model PurchaseSupplyLine {
 
   purchase Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   supply   PackingSupply @relation(fields: [supplyId], references: [id], onDelete: NoAction)
+  // The units sales have taken from this batch (#1898).
+  uses     SaleSupplyUse[]
 
   @@index([purchaseId])
   @@index([supplyId])
   @@map("purchase_supply_line")
+}
+
+// Packing supplies used on a sale (#1898, ADR-0068 §7) — *C6 envelope × 1*, *transport card A6 × 2*.
+// The sale's own shipping cost (*my shipping*) is its postage plus what these lines cost, summed by
+// the app rather than typed. A sale recorded before has none, and keeps its typed amount.
+//
+// `quantity` is what the parcel used. Where those units came from is `SaleSupplyUse`: taken from
+// stock FIFO when the line is written, and **fewer than `quantity` when stock ran short** — the
+// shortfall is the difference, uncosted, and covered by the next purchase of the supply.
+//
+// `onDelete: NoAction` on the supply, as on a purchase line: a supply a sale used cannot be deleted,
+// while a whole collection still deletes.
+model SaleSupplyLine {
+  id        String   @id @default(cuid())
+  saleId    String
+  supplyId  String
+  // Units the parcel used. Always positive.
+  quantity  Int
+  createdAt DateTime @default(now())
+
+  sale   Sale            @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  supply PackingSupply   @relation(fields: [supplyId], references: [id], onDelete: NoAction)
+  uses   SaleSupplyUse[]
+
+  @@index([saleId])
+  @@index([supplyId])
+  @@map("sale_supply_line")
+}
+
+// Units of a sale's supply line taken from one batch (#1898, ADR-0068 §7). Each costs its batch's
+// unit cost, derived as the batch's is — so the sale's figure settles when the purchase does — and
+// going back to stock means going back to **this** batch, at the cost it was taken at. Deleting the
+// line or the sale returns them (cascade); deleting the batch turns them into a shortfall, which the
+// app at once covers from the supply's other batches where it can.
+model SaleSupplyUse {
+  id       String @id @default(cuid())
+  lineId   String
+  batchId  String
+  // Units taken from the batch. Always positive.
+  quantity Int
+
+  line  SaleSupplyLine     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  batch PurchaseSupplyLine @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([lineId, batchId])
+  @@index([batchId])
+  @@map("sale_supply_use")
 }
 
 // Auction tracking (ADR-0021, #23/#350): a bidding watchlist with a fork at the end. Three levels,
@@ -5730,6 +5781,10 @@ model Sale {
   // any currency (#206) — converted straight to the base currency for profit, not to the sale's
   // transaction currency. Pre-filled from the chosen method's cost (#468) and editable afterwards:
   // what the method costs is what it usually costs, not what this parcel cost.
+  //
+  // Since #1898 this is the **postage**: *my shipping* is it plus the packing supplies the parcel
+  // used (`supplyLines`), summed by the app. A sale recorded before has no supply lines, so its
+  // typed amount is still the whole of it.
   shippingCost  Decimal? @db.Decimal(10, 2)
   // Currency `shippingCost` was paid in (#206), independent of the sale's transaction currency.
   // Null when no shipping cost is recorded; defaults to the sale currency in the UI.
@@ -5766,6 +5821,8 @@ model Sale {
   shippingMethod ShippingMethod?  @relation(fields: [shippingMethodId], references: [id], onDelete: Restrict)
   carrier       Carrier?          @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
+  // Packing supplies the parcel used (#1898): with the postage, what *my shipping* is.
+  supplyLines   SaleSupplyLine[]
   statusEvents  SaleStatusEvent[]
   /** The buyer's link for choosing their own copy (#699), or none. At most one — see
    *  {@link SaleShareToken}. */
