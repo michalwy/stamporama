@@ -36,6 +36,8 @@ import {
   RefreshDueChip,
   ListingTypeChip,
   FacebookPostChip,
+  ReadyWhenPhotosDoneChip,
+  NotMarkedReadyChip,
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
@@ -343,7 +345,14 @@ export function OfferRow({
             />
           )}
           <OfferStateChip state={offer.state} />
-          {canAdvance && advanceTo && (() => {
+          {/* Mark ready waiting for the photos, or why the last wait did not end in Ready (#1893) —
+              the same two chips the offer's own screen shows. The button gives way to the first:
+              pressing it again would only join the wait. */}
+          {offer.readyAfterPhotos && <ReadyWhenPhotosDoneChip />}
+          {!offer.readyAfterPhotos && offer.readyAfterPhotosRefusal && (
+            <NotMarkedReadyChip reason={offer.readyAfterPhotosRefusal} />
+          )}
+          {canAdvance && advanceTo && !offer.readyAfterPhotos && (() => {
             const { label, icon } = advanceLabel(offer.state, advanceTo, offer.facebookGroupId !== null);
             return (
               <Tooltip content={label}>

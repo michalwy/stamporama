@@ -129,8 +129,17 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    // An offer waiting for its photos turns Ready in the background (#1893); the list is asked again
+    // while one it shows is waiting, so the row moves on without a reload.
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) => page.items.some((o) => o.readyAfterPhotos))
+        ? READY_WAIT_POLL_MS
+        : false,
   });
 }
+
+/** How often a screen showing an offer that waits for its photos to turn Ready asks again (#1893). */
+const READY_WAIT_POLL_MS = 3_000;
 
 /**
  * Full offer (header + sets) for the offer detail / compose screen.
@@ -150,6 +159,10 @@ export function useOfferDetail(collectionId: string, offerId: string) {
       return res.json();
     },
     refetchOnWindowFocus: true,
+    // Waiting for its photos, the offer turns Ready in the background (#1893). The photos card's own
+    // poll invalidates this on the run's end, but the Ready step comes just after it — so the header
+    // asks again until the wait is over.
+    refetchInterval: (query) => (query.state.data?.readyAfterPhotos ? READY_WAIT_POLL_MS : false),
   });
 }
 

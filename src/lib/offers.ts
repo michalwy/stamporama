@@ -126,6 +126,7 @@ import {
 import {
   evaluateCoverReadiness,
   evaluatePhotoReadiness,
+  isPhotoReadinessBlocker,
   type CoverReadinessBlocker,
   type ListingCardBlocker,
   type PhotoReadinessBlocker,
@@ -166,6 +167,7 @@ import { normalizeCollageGridMode, normalizeCollageGridShape } from "./collage-t
 import { evaluateListingTextLimits, type PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
+  enqueueOfferPhotoGeneration,
   readOfferPhotoReadiness,
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
@@ -2467,6 +2469,11 @@ export interface OfferListItem {
   /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
    *  changing the listing type drops it. */
   facebookOwnTemplate: boolean;
+  /** *Mark ready* is waiting for this offer's photos to be generated, and it turns Ready once they
+   *  are done (#1893). */
+  readyAfterPhotos: boolean;
+  /** Why the last such wait did not end in Ready (#1893), null otherwise. */
+  readyAfterPhotosRefusal: string | null;
   createdAt: Date;
 }
 
@@ -2494,6 +2501,8 @@ const OFFER_SELECT = {
   facebookLotNo: true,
   facebookPost: { select: { postNo: true, title: true } },
   facebookPostTemplate: true,
+  readyAfterPhotosAt: true,
+  readyAfterPhotosRefusal: true,
   createdAt: true,
   platform: { select: { name: true } },
   sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
@@ -2523,6 +2532,8 @@ type OfferRow = {
   facebookLotNo: number | null;
   facebookPost: { postNo: number; title: string | null } | null;
   facebookPostTemplate: string | null;
+  readyAfterPhotosAt: Date | null;
+  readyAfterPhotosRefusal: string | null;
   createdAt: Date;
   platform: { name: string };
   sets: OfferSetRow[];
@@ -2612,6 +2623,8 @@ function toListItem(
         ? { postNo: row.facebookPost.postNo, title: row.facebookPost.title, lotNo: row.facebookLotNo }
         : null,
     facebookOwnTemplate: row.facebookPostTemplate !== null,
+    readyAfterPhotos: row.readyAfterPhotosAt !== null,
+    readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
     createdAt: row.createdAt,
   };
 }
@@ -4595,6 +4608,10 @@ export interface OfferDetail {
    * has, is not assembled. Non-empty only while `preparing`, which is the one transition the gate
    * sits on; every other state reports nothing, because there is no such step to take from it. */
   readyBlockers: ReadyBlocker[];
+  /** *Mark ready* is waiting for the photos and the offer turns Ready once they are done (#1893). */
+  readyAfterPhotos: boolean;
+  /** Why the last such wait did not end in Ready (#1893), null otherwise. */
+  readyAfterPhotosRefusal: string | null;
   /** The offer's stamps as Colnect's catalogue knows them (#423), on every platform (#669) — empty
    * only for an offer holding no copies yet. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
@@ -4776,6 +4793,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         orderBy: [{ endedAt: "desc" }, { id: "desc" }],
       },
       listingContentChangedAt: true,
+      readyAfterPhotosAt: true,
+      readyAfterPhotosRefusal: true,
       createdAt: true,
       // What publishing through Allegro's API left behind (#477), which is what decides whether the
       // header offers **Publish to Allegro** or **Activate on Allegro**.
@@ -5323,6 +5342,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // the reasons rather than let the collector press it and be refused. The preconditions reuse this
     // screen's own sets and condition map — a second read would be the same answer at twice the cost;
     // the photo state (#311) is the one thing here that costs a read of its own.
+    readyAfterPhotos: offer.readyAfterPhotosAt !== null,
+    readyAfterPhotosRefusal: offer.readyAfterPhotosRefusal,
     readyBlockers:
       state === "preparing"
         ? [
@@ -6973,6 +6994,96 @@ export async function syncGeneratedTexts(
  * Publishing — `ready → active`, or the approval `pending → active` — also stamps the listing date
  * (#320); see the note at the update. Rejection — `pending → ready` — clears the pending link. */
 export async function setOfferState(ownerId: string, offerId: string, to: OfferState): Promise<void> {
+  await transitionOffer(ownerId, offerId, to, false);
+}
+
+/** The state an offer is in, for a caller that routes on it — the owner's offer only. */
+export async function readOwnOfferState(ownerId: string, offerId: string): Promise<OfferState> {
+  return (await assertOfferOwner(ownerId, offerId)).state;
+}
+
+/** What {@link markOfferReady} did: the offer is Ready now, or it waits for its photos (#1893). */
+export type MarkReadyOutcome = "ready" | "awaiting-photos";
+
+/**
+ * **Mark ready** on a Preparing offer (#1893): `preparing → ready`, except that listing photos which
+ * are missing, out of date, failed or still rendering are not a refusal but an errand — the
+ * generation is queued and the offer turns Ready by itself once the run succeeds
+ * ({@link settleReadyAfterPhotos}).
+ *
+ * Only when the photos are **all** that stands in the way. Everything else the move would be refused
+ * on — no set, no price, a set sold elsewhere, a listing precondition, an over-long text, photos not
+ * yet checked for symbols — is refused at once, exactly as before, and nothing is generated: a run
+ * that could only end in the same refusal is a wait for nothing.
+ *
+ * Only from Preparing. `pending → ready` is the rejection of a post (#1778), which is a different act
+ * with its own path, and it is never what a bulk *Mark ready* means.
+ */
+export async function markOfferReady(ownerId: string, offerId: string): Promise<MarkReadyOutcome> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  if (ref.state !== "preparing") {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      ref.state === "ready"
+        ? "This offer is already ready."
+        : `Only a Preparing offer can be marked ready — this one is ${ref.state}.`
+    );
+  }
+  return transitionOffer(ownerId, offerId, "ready", true);
+}
+
+/**
+ * The end of a wait {@link markOfferReady} started (#1893), called by the photo worker when a run on
+ * this offer ends — `failure` is the run's error, null when it succeeded. A no-op for an offer that
+ * is not waiting.
+ *
+ * The wait is claimed first, so it ends once whatever calls this. A succeeded run then asks the
+ * **whole** gate again through {@link setOfferState}, never only the photos: anything changed while
+ * the images were rendering — a price cleared, a set sold elsewhere, a set added that put the new
+ * images out of date at once — refuses the move, and the refusal is kept on the offer in its own
+ * words. An offer that left Preparing meanwhile is left alone; leaving it cleared the wait already.
+ */
+export async function settleReadyAfterPhotos(offerId: string, failure: string | null): Promise<void> {
+  const { count } = await prisma.offer.updateMany({
+    where: { id: offerId, readyAfterPhotosAt: { not: null } },
+    data: { readyAfterPhotosAt: null },
+  });
+  if (count === 0) return;
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { state: true, collection: { select: { ownerId: true } } },
+  });
+  if (!offer || offer.state !== "preparing") return;
+  let refusal: string | null = null;
+  if (failure !== null) {
+    refusal = `The listing photos could not be generated: ${failure}`;
+  } else {
+    try {
+      await setOfferState(offer.collection.ownerId, offerId, "ready");
+    } catch (e) {
+      refusal = e instanceof Error ? e.message : "The offer could not be marked ready.";
+    }
+  }
+  if (refusal !== null) {
+    await prisma.offer.updateMany({
+      where: { id: offerId, state: "preparing" },
+      data: { readyAfterPhotosRefusal: refusal.slice(0, 1000) },
+    });
+  }
+}
+
+/**
+ * The one lifecycle move, with the gate (#418/#311) and every other refusal in one place.
+ * `generatePhotos` is {@link markOfferReady}'s: a ready gate that fails on the photos alone is not
+ * thrown but turned into a queued generation, and every check after the gate still runs first, so a
+ * missing price is refused before anything is queued.
+ */
+async function transitionOffer(
+  ownerId: string,
+  offerId: string,
+  to: OfferState,
+  generatePhotos: boolean
+): Promise<MarkReadyOutcome> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (to === "sold") {
     throw new OfferActionBlockedError("bad-transition", "An offer is marked sold by recording a sale, not directly.");
@@ -6999,9 +7110,15 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // are asked — see {@link readReadyBlockers} for why here and nowhere else in the lifecycle. Not on
   // a rejection (`pending → ready`, #1778): the offer was ready when it was submitted, and refusing to
   // record that a post came back would leave it claiming a submission the platform has turned down.
+  //
+  // Photos alone are what {@link markOfferReady} turns into a queued run (#1893); the moment they
+  // share the gate with anything else, the whole refusal stands and nothing is generated.
+  let awaitingPhotos = false;
   if (to === "ready" && ref.state !== "pending") {
     const blockers = await readReadyBlockers(ref.collectionId, offerId);
-    if (blockers.length > 0) {
+    awaitingPhotos =
+      generatePhotos && blockers.length > 0 && blockers.every(isPhotoReadinessBlocker);
+    if (blockers.length > 0 && !awaitingPhotos) {
       throw new OfferActionBlockedError(
         "listing-preconditions",
         `This offer is not ready to be listed yet: ${blockers.map((b) => b.message).join(" ")}`
@@ -7066,6 +7183,10 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // A **repost** that waited for approval (#1779) is approved the same way, but it was listed long
   // before: its first listing date stays, and the approval is its last posting instead — the moment
   // a quick buy's refresh count starts again ({@link approvalStamp}).
+  if (awaitingPhotos) {
+    await awaitPhotosThenReady(ownerId, offerId);
+    return "awaiting-photos";
+  }
   const publishing = (ref.state === "ready" || ref.state === "pending") && to === "active";
   const submitting = ref.state === "ready" && (to === "active" || to === "pending");
   let stamp: Prisma.OfferUpdateInput = {};
@@ -7101,6 +7222,10 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       ...(submitting ? { listingContentChangedAt: null } : {}),
       ...(rejecting ? { url: null, colnectSaleId: null } : {}),
       ...(unpublishing ? { facebookPostSnapshot: Prisma.DbNull } : {}),
+      // Any move ends a wait for the photos (#1893) and the reason the last one failed: the offer is
+      // no longer the Preparing offer either was about.
+      readyAfterPhotosAt: null,
+      readyAfterPhotosRefusal: null,
     },
   });
   // Going up — Pending or Active, whichever comes first — is publication, and a Facebook offer's post
@@ -7133,6 +7258,29 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     // a Delcampe listing goes up as a CSV uploaded days after the offer was described, so a register
     // that learned at publication would answer the question long after it stopped mattering.
     await learnDelcampeCategoryFromReadyOffer(offerId);
+  }
+  return "ready";
+}
+
+/**
+ * Start the wait {@link markOfferReady} asked for (#1893): mark the offer as waiting, then queue the
+ * generation — a no-op when a run is already queued or in flight, which the wait simply joins.
+ *
+ * The mark is written **before** the run is queued, so a run cannot finish unseen between the two.
+ * A run that finished between the gate's read and the mark is answered by queueing a fresh one, which
+ * ends the wait in its turn; an extra render is the price of never waiting forever. A run that
+ * cannot be queued at all takes the mark back and refuses in its own words.
+ */
+async function awaitPhotosThenReady(ownerId: string, offerId: string): Promise<void> {
+  await prisma.offer.update({
+    where: { id: offerId },
+    data: { readyAfterPhotosAt: new Date(), readyAfterPhotosRefusal: null },
+  });
+  try {
+    await enqueueOfferPhotoGeneration(ownerId, offerId);
+  } catch (e) {
+    await prisma.offer.update({ where: { id: offerId }, data: { readyAfterPhotosAt: null } });
+    throw e;
   }
 }
 

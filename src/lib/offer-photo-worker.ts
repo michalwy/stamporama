@@ -12,6 +12,7 @@ import {
   requeueStalledFacebookLotPhotos,
   runFacebookLotPhoto,
 } from "./facebook-lot-photos";
+import { settleReadyAfterPhotos } from "./offers";
 
 /**
  * In-process worker draining the offer photo generation queue (#311).
@@ -71,8 +72,10 @@ async function drain(): Promise<void> {
         } catch (err) {
           console.error(`[offer-photos] generation failed for offer ${offerId}`, err);
           await failOfferPhotoGeneration(offerId, err);
+          await settleReady(offerId, err instanceof Error ? err.message : String(err));
           continue;
         }
+        await settleReady(offerId, null);
         try {
           await refreshFacebookLotPhotosForOffer(offerId);
         } catch (err) {
@@ -94,6 +97,16 @@ async function drain(): Promise<void> {
     console.error("[offer-photos] worker pass failed", err);
   } finally {
     s.draining = false;
+  }
+}
+
+/** End an offer's wait for Ready on this run (#1893) — a no-op for an offer that is not waiting.
+ * Never throws: the run's own outcome is already recorded, and the queue must keep draining. */
+async function settleReady(offerId: string, failure: string | null): Promise<void> {
+  try {
+    await settleReadyAfterPhotos(offerId, failure);
+  } catch (err) {
+    console.error(`[offer-photos] settling the ready wait of offer ${offerId} failed`, err);
   }
 }
 

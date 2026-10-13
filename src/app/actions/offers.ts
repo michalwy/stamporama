@@ -9,6 +9,8 @@ import {
   duplicateOffer,
   updateOffer,
   setOfferState,
+  markOfferReady,
+  readOwnOfferState,
   acknowledgeOfferBiddingNotice,
   markOfferListingSynced,
   setOfferInActiveBidding,
@@ -115,6 +117,12 @@ import {
 
 export type OfferActionState =
   | { status: "success" }
+  | { status: "error"; message: string };
+
+/** {@link setOfferStateAction}'s answer: on *Mark ready*, also whether the offer is waiting for its
+ *  photos rather than Ready already (#1893). */
+export type OfferStateActionState =
+  | { status: "success"; awaitingPhotos?: boolean }
   | { status: "error"; message: string };
 
 export type CreateOfferActionState =
@@ -1028,10 +1036,18 @@ export async function updateOfferAction(
 export async function setOfferStateAction(
   offerId: string,
   state: OfferState
-): Promise<OfferActionState> {
+): Promise<OfferStateActionState> {
   const session = await getSession();
   if (!isOfferState(state)) return { status: "error", message: "Unknown offer state." };
   try {
+    // Ready from Preparing is *Mark ready*, which generates the photos when they are all that stands
+    // in the way and lets the offer turn Ready once they are done (#1893).
+    if (state === "ready" && (await readOwnOfferState(session.user.id, offerId)) === "preparing") {
+      const outcome = await markOfferReady(session.user.id, offerId);
+      if (outcome === "ready") return { status: "success" };
+      kickOfferPhotoWorker();
+      return { status: "success", awaitingPhotos: true };
+    }
     // Back to Ready is a rejection when the offer is pending (#1778), and a rejected Facebook post
     // takes every lot back with it; anywhere else it is the ordinary step.
     if (state === "ready") await rejectOfferOrPost(session.user.id, offerId);
@@ -1090,6 +1106,28 @@ export async function withdrawOffersAction(offerIds: string[]): Promise<BulkOffe
   return runOverOffers(offerIds, "Failed to withdraw the offer.", (offerId) =>
     withdrawOfferOrPost(session.user.id, offerId)
   );
+}
+
+/** What a bulk *Mark ready* did (#1893): the ordinary outcome, plus which of the offers it ran on are
+ *  waiting for their photos rather than Ready already. */
+export interface BulkMarkReadyState extends BulkOfferActionState {
+  awaitingPhotos: string[];
+}
+
+/** Mark a selection of Preparing offers ready in one motion (#1893). Each goes through
+ * {@link markOfferReady}, as the button on one offer does: missing or out-of-date photos are queued
+ * and the offer turns Ready once they are done, anything else is refused per offer and named. The
+ * worker is nudged once for the whole batch. */
+export async function markOffersReadyAction(offerIds: string[]): Promise<BulkMarkReadyState> {
+  const session = await getSession();
+  const awaitingPhotos: string[] = [];
+  const result = await runOverOffers(offerIds, "Failed to mark the offer ready.", async (offerId) => {
+    if ((await markOfferReady(session.user.id, offerId)) === "awaiting-photos") {
+      awaitingPhotos.push(offerId);
+    }
+  });
+  if (awaitingPhotos.length > 0) kickOfferPhotoWorker();
+  return { ...result, awaitingPhotos };
 }
 
 /** Delete a selection of offers in one motion. Same guard as the single-row delete: an offer with a

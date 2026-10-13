@@ -4966,6 +4966,15 @@ model Offer {
   // default on a create. Offers older than the column carry an estimate: their listing or closing
   // date where one fits the state, their creation otherwise.
   stateChangedAt DateTime @default(now())
+  // *Mark ready* pressed on a Preparing offer whose only blocker was its listing photos (#1893):
+  // the generation was queued, and the offer turns Ready by itself once the run succeeds. Set only
+  // while it waits; the worker clears it when the run ends, either way, and any change of state
+  // clears it too. The offer never turns Ready on it unless the whole gate passes then.
+  readyAfterPhotosAt DateTime?
+  // Why the last such wait did not end in Ready — the run failed, or another blocker stood in the
+  // way once the photos were done (#1893). Shown on the offer until it is marked ready again or
+  // leaves Preparing.
+  readyAfterPhotosRefusal String?
   createdAt    DateTime @default(now())
   // "In active bidding" (#215): an auction-platform offer that has received a bid, committing the
   // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely
