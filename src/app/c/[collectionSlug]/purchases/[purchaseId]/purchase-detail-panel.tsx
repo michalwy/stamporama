@@ -122,6 +122,8 @@ import type { WantMatchForCopy } from "@/lib/wants";
 import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
+import { PurchaseSuppliesCard } from "./purchase-supplies-card";
+import type { PackingSupplyData } from "@/lib/packing-supplies";
 import { ScansCard } from "@/app/c/[collectionSlug]/shared/scans-card";
 import {
   TileIdentifyChainDialogs,
@@ -349,6 +351,8 @@ interface PurchaseDetailPanelProps {
   locations: LocationData[];
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
+  /** The collection's packing supplies (#1897) — what a supply line can name. */
+  packingSupplies: PackingSupplyData[];
 }
 
 export function PurchaseDetailPanel({
@@ -362,6 +366,7 @@ export function PurchaseDetailPanel({
   locations: serverLocations,
   conditions,
   certificateStatuses,
+  packingSupplies,
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
   // Storage locations, re-read client-side rather than taken from the server render (#624). Filing
@@ -1208,6 +1213,24 @@ export function PurchaseDetailPanel({
           purchaseId={purchase.id}
           currency={purchase.currency}
           expenses={purchase.expenses}
+          isPending={isPending}
+          error={error}
+          run={run}
+          clearError={() => setError(undefined)}
+        />
+      )}
+
+      {/* The order's packing supplies (#1897): each line a batch of envelopes or cards in its
+          supply's stock. On an opening balance too — supplies already on the shelf come in as stamps
+          do. Shown on a purchase with none only once a supply is defined, so an order of stamps from
+          a collector who never packs parcels reads as it did. */}
+      {(purchase.supplyLines.length > 0 || packingSupplies.length > 0) && (
+        <PurchaseSuppliesCard
+          purchaseId={purchase.id}
+          currency={purchase.currency}
+          openingBalance={openingBalance}
+          lines={purchase.supplyLines}
+          supplies={packingSupplies}
           isPending={isPending}
           error={error}
           run={run}

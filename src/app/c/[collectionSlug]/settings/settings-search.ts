@@ -71,6 +71,7 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   refcards: [],
   collages: [],
   shipping: [],
+  "packing-supplies": [],
   // The header's platform choice is found on the first tab; the tabs themselves come from `parts`.
   allegro: [
     { label: "Allegro platform" },

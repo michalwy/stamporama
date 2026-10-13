@@ -46,6 +46,9 @@ The order's line items are managed separately, during **lot intake**:
   not itself stock — a magnifier, a catalogue, a stockbook: a label and a price. An expense
   absorbs its fair share of the shipping cost so it does not inflate the value of the stamps.
   They have their own card on the purchase's screen — see [Expenses](#expenses).
+- **Packing supplies** — envelopes, transport cards and the like, bought to pack parcels with: a
+  supply, a quantity and a price. Each such line becomes a **batch** in that supply's stock, and
+  like an expense it takes its share of the shipping — see [Packing supplies](#packing-supplies).
 
 So a freshly recorded purchase has no lines at all — you add them during intake, and its
 list total grows as you do.
@@ -178,7 +181,8 @@ Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.m
 shows its **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, a
 *Trade* mark when the order came from closing a trade, the delivery **status**, a
 short summary of its lines (how many **lots** and **expenses**), and the **total** — the sum
-of every lot, every expense, and the shipping cost, shown in the purchase's currency. A
+of every lot, every expense, every packing-supply line, and the shipping cost, shown in the
+purchase's currency. A
 freshly recorded purchase shows *0 lots* until you add its lines during intake.
 
 An opening balance shows its **title**, the **date**, an *Opening balance* mark (and a *Completed*
@@ -309,10 +313,43 @@ the order's shipping by price, exactly as a lot does, so adding one lowers the s
 open lot — a closed lot's copies keep the cost they were closed with. An opening balance has no
 Expenses card: nothing was paid for it.
 
+### Packing supplies
+
+Envelopes, transport cards and the rest of what goes into a parcel are bought like anything else, so
+they are recorded on the purchase they were bought on — alone, or on the same order as stamps. Name
+your supplies once under **Settings → Packing supplies**
+([Packing supplies](collections.md#packing-supplies)); the order screen then has a **Packing
+supplies** card under the values bar (it appears once at least one supply is defined).
+
+**Add supplies** asks for the **supply**, the **quantity** (a box of 100 envelopes is 100) and the
+**price** of the line in the order's currency; each line's **⋮** menu lets you **Edit line** or
+**Delete line**. Like an expense, a supply line takes its share of the order's **shipping** by price,
+so it does not make the stamps dearer. Each line shows its **unit cost** — the price plus that share,
+divided by the quantity — to the hundredth of a cent; hover it to see the sum.
+
+Every line is a **batch** in its supply's stock. Supplies are used **oldest batch first** (FIFO),
+each unit at the cost of its own batch, so what is on hand is valued at what the newest boxes cost.
+
+**On an opening balance** the card brings in the supplies already on your shelf: the line's **Value**
+is what the batch is worth, and it is required — a batch without a cost would leave every parcel
+packed from it without one. The opening balance's own *opening value* stays the value of its lots;
+the supplies are counted on the card and on the Packing supplies screen.
+
+#### The Packing supplies screen
+
+**Selling → Packing supplies** lists every supply with the quantity **on hand** and its **value**
+at FIFO cost in your base currency, and under it the supply's **batches**, oldest first: the intake
+document each came from (a link back to it), its date, how many it brought in and how many are left,
+what the batch cost in its own currency, and the unit cost and remaining value in your base currency.
+The total of all supplies on hand heads the screen. A batch bought in another currency with **no
+recorded exchange rate** has no base-currency cost; its supply then states no value rather than a sum
+that leaves it out, and says why.
+
 **What the order cost.** (An opening balance opens with its opening value instead — see
 [The values bar on an opening balance](#the-values-bar-on-an-opening-balance).) The values bar at
 the top of the page opens with the **order total** —
-what the whole parcel cost you: every lot, every expense and the shipping, added up. It is stated
+what the whole parcel cost you: every lot, every expense, every packing-supply line and the
+shipping, added up. It is stated
 in the order's own transaction currency (what you actually paid, and what a receipt would show)
 and, next to it, in your **base currency** at the rate frozen on the order — the only figure you can
 compare with anything else in the app. When the order is already in your base currency there is one
@@ -326,8 +363,8 @@ should be able to read without reading anything else.
 Open the bar with **More** and the total splits into **Price** and **Shipping**, each with the same
 base-currency equivalent. They are **indented under the total**, behind a rule, because they are its
 breakdown rather than two further totals: they add up to the figure above them. *Price* covers every
-priced line of the order, so it includes any non-inventory **expenses**, and the row says how many
-there are when there are some.
+priced line of the order, so it includes any non-inventory **expenses** and **packing-supply
+lines**, and the row says how many there are when there are some.
 
 Each lot's own bar answers the same question for that lot: its **lot total** is its price plus its
 share of the order's shipping — the pool that gets split across its copies when you close it. The

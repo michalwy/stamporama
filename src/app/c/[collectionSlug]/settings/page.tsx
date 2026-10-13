@@ -38,6 +38,7 @@ import { listFacebookGroups } from "@/lib/facebook-groups";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
 import { getCarriers } from "@/lib/carriers";
+import { listPackingSupplies } from "@/lib/packing-supplies";
 import { getHawidStrips } from "@/lib/hawid-stock";
 import { getAlbumTemplates } from "@/lib/album-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
@@ -96,6 +97,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     hawidStrips,
     albumTemplates,
     carriers,
+    packingSupplies,
     colnectMappings,
     colnectConditionMappings,
     colnectListMappings,
@@ -135,6 +137,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getHawidStrips(session.user.id, collection.id),
     getAlbumTemplates(session.user.id, collection.id),
     getCarriers(session.user.id, collection.id),
+    listPackingSupplies(session.user.id, collection.id),
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
     getColnectListMappings(session.user.id, collection.id),
@@ -205,6 +208,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           initialHawidStrips={hawidStrips}
           initialAlbumTemplates={albumTemplates}
           initialCarriers={carriers}
+          initialPackingSupplies={packingSupplies}
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
           initialColnectListMappings={colnectListMappings}

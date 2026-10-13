@@ -672,7 +672,7 @@ including today.
 Then one section for each part the contact plays:
 
 - **Purchases** (the contact as **seller**) — how many purchases, the **total spent** (each order's
-  total: its lots, expenses and shipping), the **share of catalogue** paid across them, the
+  total: its lots, expenses, packing supplies and shipping), the **share of catalogue** paid across them, the
   **copies bought**, the **last purchase**'s date and how many purchases are **not yet delivered**
   (*Preparing* or *In transit*). The trades you made with the contact are not purchases and are not
   counted here.

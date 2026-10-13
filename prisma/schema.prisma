@@ -180,6 +180,8 @@ model Collection {
   sales           Sale[]
   shippingMethods ShippingMethod[]
   carriers        Carrier[]
+  // Envelopes, transport cards and the like (#1897, ADR-0068): bought on purchase orders, held in stock.
+  packingSupplies PackingSupply[]
   auctionSales    AuctionSale[]
   priceObservations PriceObservation[]
   trades          Trade[]
@@ -3972,6 +3974,9 @@ model Purchase {
   platform   Contact?          @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   lots       PurchaseLot[]
   expenses   PurchaseExpense[]
+  // Packing supplies bought on this order, or brought in by this opening balance (#1897) — each a
+  // batch in its supply's stock.
+  supplyLines PurchaseSupplyLine[]
   // Retained card scans and the tiles cut from them (#566/#586, ADR-0033).
   scanSheets ScanSheet[]
   scanTiles  ScanTile[]
@@ -4492,6 +4497,57 @@ model PurchaseExpense {
 
   @@index([purchaseId])
   @@map("purchase_expense")
+}
+
+// A packing supply (#1897, ADR-0068) — *C6 envelope*, *bubble envelope 15×21*, *transport card A6*:
+// what goes into a parcel besides the stamps. A named dictionary entry per collection with nothing
+// else to set; its **price is never typed** — it comes from the purchase-order lines it was bought
+// on (`PurchaseSupplyLine`), each of which is a batch in its stock, costed FIFO.
+model PackingSupply {
+  id           String   @id @default(cuid())
+  collectionId String
+  name         String
+  createdAt    DateTime @default(now())
+
+  collection Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  lines      PurchaseSupplyLine[]
+
+  // The name is the pick-list, as it is for carriers.
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("packing_supply")
+}
+
+// A packing supply bought on a purchase order, or brought in by an opening balance (#1897,
+// ADR-0068) — and **a batch in that supply's stock**. A line of its own beside the order's lots and
+// expenses (ADR-0009 §1): it holds no copies, so it is not a lot, and it is stock, so it is not an
+// expense. Like both it absorbs its share of the order's shipping by price (ADR-0009 §3.1), and the
+// batch's unit cost is *(price + that share) ÷ quantity*, derived rather than stored: it moves while
+// the order's shipping is still being restated, exactly as an open lot's estimate does.
+//
+// On an opening balance `price` is the batch's opening value, and it is required there too — the
+// collector's call on 2026-10-14: a batch without a cost would leave every parcel packed from it
+// without one.
+//
+// `onDelete: NoAction` on the supply: a supply that was bought cannot be deleted (the app checks
+// first and says why), while a whole collection — cascading to its supplies and its purchases in one
+// statement — still deletes.
+model PurchaseSupplyLine {
+  id         String   @id @default(cuid())
+  purchaseId String
+  supplyId   String
+  // How many units the line bought: a box of 100 envelopes is 100. Always positive.
+  quantity   Int
+  // Line price in the purchase's transaction currency (>= 0); the opening value on an opening balance.
+  price      Decimal  @db.Decimal(10, 2)
+  createdAt  DateTime @default(now())
+
+  purchase Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supply   PackingSupply @relation(fields: [supplyId], references: [id], onDelete: NoAction)
+
+  @@index([purchaseId])
+  @@index([supplyId])
+  @@map("purchase_supply_line")
 }
 
 // Auction tracking (ADR-0021, #23/#350): a bidding watchlist with a fork at the end. Three levels,

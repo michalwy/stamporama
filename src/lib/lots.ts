@@ -28,12 +28,12 @@ import { hasPurchaseArrived } from "./purchase-status";
 import type { ArrivingCopy } from "./want-rules";
 import {
   computeLotPool,
+  computeSupplyBatchCost,
   allocateLot,
   canExpressInBase,
   lotPoolBase,
   purchaseCostsOf,
   LotCloseBlockedError,
-  type PurchaseCosts,
   type LotItem,
   type DeliveryState,
 } from "./purchase-allocation";
@@ -44,7 +44,8 @@ import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
 import { foldLocationRefCounts, type LocationRefInUse } from "./location-ref";
 import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
-import type { PurchaseExpenseData } from "./purchases";
+import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
+import { formatUnitCost } from "./supply-stock";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -190,7 +191,10 @@ export interface PurchaseDetail {
   /** The order's non-inventory lines, oldest first (#1390) — the card they are added, restated and
    *  removed on. Empty on an opening balance, which has none. */
   expenses: PurchaseExpenseData[];
-  /** lots + expenses + shipping, transaction currency (2 dp). */
+  /** The order's packing-supply lines (#1897), oldest first — each a batch in its supply's stock.
+   *  On an opening balance too, where the price is the batch's opening value. */
+  supplyLines: PurchaseSupplyLineData[];
+  /** lots + expenses + packing supplies + shipping, transaction currency (2 dp). */
   total: string;
   /** What the whole order cost, in both currencies, broken into its priced lines and its
    *  shipping (#852) — the one figure the screen held every part of and never added up. */
@@ -288,6 +292,15 @@ export async function getPurchaseDetail(
         orderBy: { id: "asc" },
       },
       expenses: { select: { id: true, label: true, price: true }, orderBy: { id: "asc" } },
+      supplyLines: {
+        select: {
+          id: true,
+          quantity: true,
+          price: true,
+          supply: { select: { id: true, name: true } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
     },
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
@@ -349,7 +362,7 @@ export async function getPurchaseDetail(
     };
   });
 
-  const linesTotal = [...row.lots, ...row.expenses].reduce(
+  const linesTotal = [...row.lots, ...row.expenses, ...row.supplyLines].reduce(
     (sum, l) => (l.price == null ? sum : sum.add(l.price)),
     new Prisma.Decimal(0)
   );
@@ -363,7 +376,11 @@ export async function getPurchaseDetail(
     currency: row.currency,
     baseCurrency: row.collection.baseCurrency,
     fxRateToBase,
-    lines: { lots: row.lots.length, expenses: row.expenses.length },
+    lines: {
+      lots: row.lots.length,
+      expenses: row.expenses.length,
+      supplies: row.supplyLines.length,
+    },
   });
 
   return {
@@ -384,6 +401,18 @@ export async function getPurchaseDetail(
     lots,
     expenseCount: row.expenses.length,
     expenses: row.expenses.map((e) => ({ id: e.id, label: e.label, price: e.price.toFixed(2) })),
+    supplyLines: row.supplyLines.map((l) => {
+      const cost = computeSupplyBatchCost(costs, l.id, canExpressBase);
+      return {
+        id: l.id,
+        supplyId: l.supply.id,
+        supplyName: l.supply.name,
+        quantity: l.quantity,
+        price: l.price.toFixed(2),
+        shippingShare: cost.sharedCost.toFixed(2),
+        unitCost: formatUnitCost(cost.costTx / l.quantity),
+      };
+    }),
     total: total.toFixed(2),
     spend,
     openingValue: openingValueOf(
@@ -1096,6 +1125,7 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
           fxRateToBase: true,
           lots: { select: { id: true, price: true } },
           expenses: { select: { id: true, price: true } },
+          supplyLines: { select: { id: true, price: true } },
         },
       });
       const items = await tx.item.findMany({
@@ -1106,12 +1136,7 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
         throw new Error("The lot became empty during close. Refresh and try again.");
       }
 
-      const costs: PurchaseCosts = {
-        shippingCost: purchase.shippingCost != null ? Number(purchase.shippingCost) : 0,
-        lots: purchase.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
-        expenses: purchase.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
-        fxRateToBase: purchase.fxRateToBase != null ? Number(purchase.fxRateToBase) : null,
-      };
+      const costs = purchaseCostsOf(purchase);
       // A lot with no opening value (#1323) has nothing to split, and still closes **exactly as a
       // purchase lot does** — including the block on a copy without a primary-catalogue price, which
       // the collector chose over an exemption (cataloguing discipline, #1321). So the engine runs

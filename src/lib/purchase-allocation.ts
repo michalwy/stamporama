@@ -4,9 +4,10 @@
 //
 // The pipeline, all money in the purchase's transaction currency unless noted:
 //
-//   1. Shared cost (shipping) is distributed across ALL lines — inventory `PurchaseLot`s
-//      and non-inventory `PurchaseExpense`s — proportionally to line price, so an expense
-//      absorbs its fair share and does not inflate the stamps.
+//   1. Shared cost (shipping) is distributed across ALL lines — inventory `PurchaseLot`s,
+//      non-inventory `PurchaseExpense`s and packing-supply `PurchaseSupplyLine`s (#1897) —
+//      proportionally to line price, so an expense or a box of envelopes absorbs its fair share
+//      and does not inflate the stamps.
 //   2. A lot's pool = its price + its share of the shared cost.
 //   3. The pool is converted to the base currency with the FX rate frozen at the purchase
 //      date, then, on lot close, distributed to the lot's items proportionally to the
@@ -24,7 +25,7 @@
 
 import type { DeliveryState } from "./delivery-state";
 
-/** A priced line of a purchase — a `PurchaseLot` or a `PurchaseExpense`. */
+/** A priced line of a purchase — a `PurchaseLot`, a `PurchaseExpense` or a `PurchaseSupplyLine`. */
 export interface PurchaseLine {
   id: string;
   /** Line price in the purchase's transaction currency (>= 0). */
@@ -39,6 +40,9 @@ export interface PurchaseCosts {
   lots: PurchaseLine[];
   /** Non-inventory lines (magnifier, etc.). They absorb shared cost but hold no items. */
   expenses: PurchaseLine[];
+  /** Packing-supply lines (#1897): batches of envelopes and cards. They absorb shared cost, and
+   *  their share is part of the batch's unit cost ({@link computeSupplyBatchCost}). */
+  supplies: PurchaseLine[];
   /** Base-currency rate frozen at the purchase date; null when base == transaction currency. */
   fxRateToBase: number | null;
 }
@@ -162,11 +166,11 @@ export function apportionMoney(total: number, weights: number[]): number[] {
 }
 
 /**
- * Distribute the shared cost across every line (lots + expenses) by price (ADR-0009 §3.1).
- * Shares sum exactly to `shippingCost`. Line order is lots first, then expenses.
+ * Distribute the shared cost across every line (lots + expenses + supplies) by price (ADR-0009
+ * §3.1). Shares sum exactly to `shippingCost`. Line order is lots, then expenses, then supplies.
  */
 export function distributeSharedCost(costs: PurchaseCosts): LineShare[] {
-  const lines = [...costs.lots, ...costs.expenses];
+  const lines = [...costs.lots, ...costs.expenses, ...costs.supplies];
   const shares = apportionMoney(costs.shippingCost, lines.map((l) => l.price));
   return lines.map((l, i) => ({ id: l.id, price: l.price, sharedCost: shares[i] }));
 }
@@ -175,6 +179,42 @@ export function distributeSharedCost(costs: PurchaseCosts): LineShare[] {
 function toBase(amountTx: number, fxRateToBase: number | null): number {
   if (fxRateToBase == null) return toCents(amountTx) / 100;
   return toCents(amountTx * fxRateToBase) / 100;
+}
+
+/** A packing-supply batch's cost (#1897, ADR-0068): its line price plus its share of the order's
+ * shipping, in both currencies. */
+export interface SupplyBatchCost {
+  /** Line price (transaction currency). */
+  price: number;
+  /** The line's share of the shared cost (transaction currency). */
+  sharedCost: number;
+  /** price + sharedCost, transaction currency, 2 dp. */
+  costTx: number;
+  /** costTx in the base currency at the frozen rate, 2 dp; null when the purchase has no rate into
+   *  the base currency — the batch's cost is then unknown there, never guessed. */
+  costBase: number | null;
+}
+
+/**
+ * One supply line's cost: the same share of the shipping a lot or an expense would get at the same
+ * price (ADR-0009 §3.1), so a box of envelopes bought beside stamps does not make the stamps dearer.
+ * Its unit cost is this ÷ the line's quantity, which `supply-stock.ts` keeps unrounded.
+ * Throws if `lineId` is unknown.
+ */
+export function computeSupplyBatchCost(
+  costs: PurchaseCosts,
+  lineId: string,
+  canExpressBase: boolean
+): SupplyBatchCost {
+  const share = distributeSharedCost(costs).find((s) => s.id === lineId);
+  if (!share) throw new Error(`computeSupplyBatchCost: unknown supply line ${lineId}`);
+  const costTx = toCents(share.price + share.sharedCost) / 100;
+  return {
+    price: share.price,
+    sharedCost: share.sharedCost,
+    costTx,
+    costBase: canExpressBase ? toBase(costTx, costs.fxRateToBase) : null,
+  };
 }
 
 /**
@@ -275,6 +315,9 @@ export interface StoredPurchaseCosts {
   fxRateToBase: unknown;
   lots: readonly { id: string; price: unknown }[];
   expenses: readonly { id: string; price: unknown }[];
+  /** Required rather than optional (#1897): a reader that left the supply lines out would split the
+   *  shipping differently from every other reader, and the compiler is what keeps them in step. */
+  supplyLines: readonly { id: string; price: unknown }[];
 }
 
 /** The engine's input off a stored purchase. A lot with no value weighs nothing in the shipping
@@ -284,6 +327,7 @@ export function purchaseCostsOf(row: StoredPurchaseCosts): PurchaseCosts {
     shippingCost: row.shippingCost != null ? Number(row.shippingCost) : 0,
     lots: row.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
     expenses: row.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
+    supplies: row.supplyLines.map((l) => ({ id: l.id, price: Number(l.price) })),
     fxRateToBase: row.fxRateToBase != null ? Number(row.fxRateToBase) : null,
   };
 }

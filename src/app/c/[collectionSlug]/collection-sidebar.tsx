@@ -680,6 +680,15 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
+          {/* What parcels are packed with (#1897): the envelopes and cards bought on purchase orders,
+              what is on hand and what it is worth. Selling's, closing it, because a sale is where
+              supplies are spent — the shipping cost is what the track is for. */}
+          <NavItem
+            href={`${base}/supplies`}
+            icon={<Icon name="parcel" />}
+            label="Packing supplies"
+            active={isActive(`${base}/supplies`)}
+          />
         </NavSection>
 
         <NavSection {...sectionProps("buying")}>

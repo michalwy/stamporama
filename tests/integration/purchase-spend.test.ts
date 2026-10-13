@@ -118,7 +118,7 @@ describe("purchase spend (what an order cost, in both currencies)", () => {
     assert.equal(detail.spend.tx.currency, "PLN");
     // …and it is the very figure the header has always printed, from the same rows.
     assert.equal(detail.spend.tx.total, detail.total);
-    assert.deepEqual(detail.spend.lines, { lots: 2, expenses: 1 });
+    assert.deepEqual(detail.spend.lines, { lots: 2, expenses: 1, supplies: 0 });
     // An order's shipping is the charge itself, not a share of anything.
     assert.equal(detail.spend.shippingShareOf, null);
   });

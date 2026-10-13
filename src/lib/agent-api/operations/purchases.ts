@@ -233,7 +233,7 @@ export const listPurchasesOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "The purchases. `total` is lots, expenses and shipping added up in the purchase's own `currency`; `get_purchase` states the same money in the collection's base currency too. `fromTrade` marks the incoming half of a trade, which this surface reads and does not edit.",
+      "The purchases. `total` is lots, expenses, packing-supply lines and shipping added up in the purchase's own `currency`; `get_purchase` states the same money in the collection's base currency too. `fromTrade` marks the incoming half of a trade, which this surface reads and does not edit.",
   },
   handler: async (context, params) => readPurchases(context, params),
 };
@@ -456,7 +456,7 @@ const SHIPPING_PARAMETER: ParameterSpec = {
   type: "string",
   required: false,
   description:
-    "What was paid for postage and handling on the whole order, in the purchase's currency, as \"12.50\". It is spread over the lots and expenses by price.",
+    "What was paid for postage and handling on the whole order, in the purchase's currency, as \"12.50\". It is spread over the lots, expenses and packing-supply lines by price.",
 };
 
 const CURRENCY_PARAMETER: ParameterSpec = {

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { resolvePurchaseSpend } from "../../src/lib/purchase-spend";
+import { nonInventoryLinesNote, resolvePurchaseSpend } from "../../src/lib/purchase-spend";
 
 // What an order or a lot cost, in both currencies (#852). The arithmetic is one multiplication and
 // one apportionment, and both of the things that can go wrong with it are silent:
@@ -21,13 +21,13 @@ describe("resolvePurchaseSpend", () => {
       currency: "PLN",
       baseCurrency: "EUR",
       fxRateToBase: 0.23,
-      lines: { lots: 3, expenses: 1 },
+      lines: { lots: 3, expenses: 1, supplies: 0 },
     });
     assert.equal(spend.tx.currency, "PLN");
     assert.equal(spend.tx.price, "120.00");
     assert.equal(spend.tx.shipping, "14.50");
     assert.equal(spend.tx.total, "134.50");
-    assert.deepEqual(spend.lines, { lots: 3, expenses: 1 });
+    assert.deepEqual(spend.lines, { lots: 3, expenses: 1, supplies: 0 });
     assert.equal(spend.scope, "order");
   });
 
@@ -154,5 +154,26 @@ describe("resolvePurchaseSpend", () => {
       price: "0.00",
       shipping: "0.00",
     });
+  });
+});
+
+describe("nonInventoryLinesNote", () => {
+  it("says nothing when every line is a lot", () => {
+    assert.equal(nonInventoryLinesNote({ lots: 2, expenses: 0, supplies: 0 }), undefined);
+  });
+
+  it("names expenses and packing-supply lines, each counted", () => {
+    assert.equal(
+      nonInventoryLinesNote({ lots: 1, expenses: 1, supplies: 0 }),
+      "includes 1 non-inventory expense"
+    );
+    assert.equal(
+      nonInventoryLinesNote({ lots: 1, expenses: 0, supplies: 2 }),
+      "includes 2 packing-supply lines"
+    );
+    assert.equal(
+      nonInventoryLinesNote({ lots: 0, expenses: 2, supplies: 1 }),
+      "includes 2 non-inventory expenses and 1 packing-supply line"
+    );
   });
 });

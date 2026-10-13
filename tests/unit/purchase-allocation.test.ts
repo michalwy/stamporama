@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   distributeSharedCost,
   computeLotPool,
+  computeSupplyBatchCost,
   allocateLot,
   estimateLot,
   closeLot,
@@ -43,6 +44,7 @@ describe("distributeSharedCost", () => {
         { id: "lot-b", price: 30 },
       ],
       expenses: [{ id: "exp-1", price: 10 }],
+      supplies: [],
       fxRateToBase: null,
     };
     const shares = distributeSharedCost(costs);
@@ -67,6 +69,7 @@ describe("distributeSharedCost", () => {
         { id: "c", price: 1 },
       ],
       expenses: [],
+      supplies: [],
       fxRateToBase: null,
     };
     const shares = distributeSharedCost(costs);
@@ -83,6 +86,7 @@ describe("distributeSharedCost", () => {
       shippingCost: 0,
       lots: [{ id: "a", price: 5 }],
       expenses: [],
+      supplies: [],
       fxRateToBase: null,
     });
     assert.equal(shares[0].sharedCost, 0);
@@ -100,6 +104,7 @@ describe("computeLotPool", () => {
         { id: "lot-b", price: 30 },
       ],
       expenses: [{ id: "exp-1", price: 10 }],
+      supplies: [],
       fxRateToBase: null,
     };
     const pool = computeLotPool(costs, "lot-a");
@@ -115,6 +120,7 @@ describe("computeLotPool", () => {
       shippingCost: 0,
       lots: [{ id: "lot-a", price: 100 }],
       expenses: [],
+      supplies: [],
       fxRateToBase: 0.85, // e.g. USD purchase, EUR base
     };
     const pool = computeLotPool(costs, "lot-a");
@@ -125,7 +131,7 @@ describe("computeLotPool", () => {
   it("throws for an unknown lot", () => {
     assert.throws(() =>
       computeLotPool(
-        { shippingCost: 0, lots: [], expenses: [], fxRateToBase: null },
+        { shippingCost: 0, lots: [], expenses: [], supplies: [], fxRateToBase: null },
         "nope"
       )
     );
@@ -172,6 +178,7 @@ describe("closeLot — multi-lot order (scenario 3)", () => {
         { id: "lot-b", price: 40 }, // share 8  -> pool 48
       ],
       expenses: [],
+      supplies: [],
       fxRateToBase: null,
     };
     const a = closeLot(costs, "lot-a", [item("a1", 2), item("a2", 1)]);
@@ -415,6 +422,7 @@ describe("lotPoolBase — the pool an open lot is estimated from", () => {
       { id: "l2", price: null },
     ],
     expenses: [{ id: "e1", price: "10.00" }],
+    supplyLines: [],
   });
 
   it("reads stored money, a valueless lot weighing nothing in the shipping split", () => {
@@ -426,6 +434,7 @@ describe("lotPoolBase — the pool an open lot is estimated from", () => {
         { id: "l2", price: 0 },
       ],
       expenses: [{ id: "e1", price: 10 }],
+      supplies: [],
     });
   });
 
@@ -454,6 +463,7 @@ describe("estimateLotCopies", () => {
     fxRateToBase: null,
     lots: [{ id: "L", price: 100 }],
     expenses: [],
+    supplyLines: [],
   };
 
   it("splits the lot's pool by catalogue weight over the whole lot", () => {
@@ -480,5 +490,62 @@ describe("estimateLotCopies", () => {
       "PLN"
     );
     assert.deepEqual(estimates.get("a"), { amount: null, gap: "no_rate" });
+  });
+});
+
+// A packing-supply line is a batch (#1897, ADR-0068): it takes its share of the shipping exactly as
+// a lot or an expense of the same price would, and that share is part of its cost.
+describe("computeSupplyBatchCost", () => {
+  const costs: PurchaseCosts = {
+    shippingCost: 10,
+    lots: [{ id: "lot", price: 60 }],
+    expenses: [{ id: "exp", price: 20 }],
+    supplies: [{ id: "env", price: 20 }],
+    fxRateToBase: 4,
+  };
+
+  it("splits the shipping over lots, expenses and supply lines alike", () => {
+    const shares = distributeSharedCost(costs);
+    assert.deepEqual(
+      shares.map((s) => [s.id, s.sharedCost]),
+      [
+        ["lot", 6],
+        ["exp", 2],
+        ["env", 2],
+      ]
+    );
+  });
+
+  it("does not make the stamps dearer: the lot's pool leaves the supply line's share out", () => {
+    assert.equal(computeLotPool(costs, "lot").poolTx, 66);
+  });
+
+  it("is the line's price plus its share, in both currencies", () => {
+    assert.deepEqual(computeSupplyBatchCost(costs, "env", true), {
+      price: 20,
+      sharedCost: 2,
+      costTx: 22,
+      costBase: 88,
+    });
+  });
+
+  it("has no base cost when the purchase cannot be stated in the base currency", () => {
+    assert.equal(computeSupplyBatchCost(costs, "env", false).costBase, null);
+  });
+
+  it("reads stored supply lines", () => {
+    const stored = purchaseCostsOf({
+      shippingCost: null,
+      fxRateToBase: null,
+      lots: [],
+      expenses: [],
+      supplyLines: [{ id: "s1", price: "12.50" }],
+    });
+    assert.deepEqual(stored.supplies, [{ id: "s1", price: 12.5 }]);
+    assert.equal(computeSupplyBatchCost(stored, "s1", true).costBase, 12.5);
+  });
+
+  it("refuses a line the purchase does not have", () => {
+    assert.throws(() => computeSupplyBatchCost(costs, "nope", true));
   });
 });
