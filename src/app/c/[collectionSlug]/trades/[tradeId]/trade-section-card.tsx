@@ -495,6 +495,11 @@ export function TradeSectionCard({
               setQuickPriceError(undefined);
             }
           }}
+          onVariantsSaved={() => {
+            setDialog({ kind: "none" });
+            setQuickPriceError(undefined);
+            invalidateTrade(collectionId);
+          }}
           onSubmit={(entries) => {
             const { subject } = dialog.target;
             setQuickPriceError(undefined);

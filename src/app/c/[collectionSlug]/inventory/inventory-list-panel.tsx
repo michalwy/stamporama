@@ -2205,6 +2205,7 @@ export function InventoryListPanel({
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
+          onVariantsSaved={handleSuccess}
           onSubmit={(entries) => {
             const it = dialog.item;
             setActionError(undefined);

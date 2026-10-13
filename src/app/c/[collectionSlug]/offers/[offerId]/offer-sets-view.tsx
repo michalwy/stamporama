@@ -1403,6 +1403,11 @@ export function OfferSetsView({
               setCopyError(undefined);
             }
           }}
+          onVariantsSaved={() => {
+            setQuickPriceItem(null);
+            setCopyError(undefined);
+            invalidateAll(collectionId); // refresh copies + the suggested price
+          }}
           onSubmit={(entries) => {
             const it = quickPriceItem;
             setCopyError(undefined);

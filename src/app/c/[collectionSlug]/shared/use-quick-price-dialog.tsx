@@ -55,6 +55,11 @@ export function useQuickPriceDialog({
           setIsOpen(false);
           setError(undefined);
         }}
+        onVariantsSaved={() => {
+          setIsOpen(false);
+          setError(undefined);
+          void onSaved?.();
+        }}
         onSubmit={(entries) => {
           setError(undefined);
           startTransition(async () => {
