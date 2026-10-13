@@ -2110,6 +2110,9 @@ export function InventoryListPanel({
       {dialog.kind === "generateOffers" && (
         <OfferGeneratorDialog
           collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
           platformId={dialog.platformId}
           platformName={dialog.platformName}
           state={dialog.state}

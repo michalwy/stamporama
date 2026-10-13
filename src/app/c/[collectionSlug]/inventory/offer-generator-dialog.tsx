@@ -4,14 +4,18 @@ import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
   generatorRequestParams,
+  generatorSelection,
+  keptResultingSetCount,
   type GeneratorMode,
   type GeneratorPackaging,
+  type GeneratorSelection,
 } from "@/lib/offer-generator-rules";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
-import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
-import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
+import { DIALOG_MAX_HEIGHT, DIALOG_MAX_WIDTH, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CertificateStatusChip, ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
@@ -19,9 +23,11 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
-import { useCollectionItemNoPad } from "./use-inventory-query";
-import { PhotoThumb } from "./photo-thumb";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { InventoryItemRow } from "./inventory-item-row";
+import { SELECT_STRIP } from "./inventory-copy-list";
 
 // Generating offers in bulk (#1287): quick offer mode's platform and status (#537), applied to every
 // copy the collector can see in one pass instead of one click per offer. The dialog asks the two
@@ -29,6 +35,11 @@ import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/spe
 // and shows the whole plan before anything is written: every offer on one line, new or added to an
 // existing one (#1368), its copies a click away, and the copies left out and why. Confirming sends the plan
 // back only to be compared with a fresh one (#717).
+//
+// Every proposed offer is ticked to begin with and can be left out (#1887). A tick asks for no fresh
+// plan — an unticked offer's copies go to no other offer, they stay where they are — so the ticks are
+// this dialog's own state, the counts follow them through `generatorSelection`, and only the commit
+// carries them (`skip`). An expanded offer draws its copies with the app's own copy row.
 
 /** Which copies the pass is over: the ticked ones in view, or everything the list's filters show. */
 export type OfferGeneratorInput =
@@ -95,14 +106,15 @@ const OPTION: React.CSSProperties = {
 
 const HINT: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-secondary)" };
 
-// Fixed columns, so fifty lines read as a table: toggle, name, combination, catalogue, quantity,
-// outcome (#1368).
+// Fixed columns, so fifty lines read as a table: tick, toggle, name, combination, catalogue, quantity,
+// outcome (#1368, the tick #1887). The tick is the copy list's own strip, so it runs from the row's
+// left edge and the row pads only on the right.
 const LINE: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1.25rem minmax(0, 1fr) 8rem minmax(0, 14rem) 2.5rem 13rem",
+  gridTemplateColumns: "2.5rem 1.25rem minmax(0, 1fr) 8rem minmax(0, 1fr) 2.5rem 16rem",
   alignItems: "center",
-  gap: "0.75rem",
-  padding: "0.375rem 0.75rem",
+  columnGap: "0.75rem",
+  padding: "0.375rem 0.75rem 0.375rem 0",
   fontSize: "0.8125rem",
   cursor: "pointer",
 };
@@ -144,6 +156,9 @@ function plural(n: number, one: string, many: string): string {
 
 export function OfferGeneratorDialog({
   collectionId,
+  areas,
+  locations,
+  baseCurrency,
   platformId,
   platformName,
   state,
@@ -153,6 +168,10 @@ export function OfferGeneratorDialog({
   onDone,
 }: {
   collectionId: string;
+  /** What an expanded offer's copy rows are drawn with (#1887). */
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  baseCurrency: string;
   platformId: string;
   platformName: string;
   state: OfferState;
@@ -165,28 +184,51 @@ export function OfferGeneratorDialog({
   const [mode, setMode] = useState<GeneratorMode>("checklists");
   const [packaging, setPackaging] = useState<GeneratorPackaging>("multi");
   const [targets, setTargets] = useState<Record<string, string>>({});
+  // The lines left out, by id — kept rather than the ticked ones, so every offer starts ticked and a
+  // line the plan newly proposes after a change of mode or packaging is ticked too (#1887).
+  const [skip, setSkip] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
-  const pad = useCollectionItemNoPad(collectionId);
+  const vendorMaps = useAreaVendorMaps(areas, collectionId);
 
-  const query = useMemo(
-    () =>
-      generatorRequestParams({
-        platformId,
-        state,
-        mode,
-        packaging,
-        itemIds: input.kind === "ticked" ? input.itemIds : null,
-        filters: input.kind === "filtered" ? input.filters : "",
-        targets,
-        facebook,
-      }).toString(),
+  const request = useMemo(
+    () => ({
+      platformId,
+      state,
+      mode,
+      packaging,
+      itemIds: input.kind === "ticked" ? input.itemIds : null,
+      filters: input.kind === "filtered" ? input.filters : "",
+      targets,
+      skip: [] as string[],
+      facebook,
+    }),
     [platformId, state, mode, packaging, input, targets, facebook]
   );
+  // The preview's query never carries the ticks: a tick changes what is written, not the plan.
+  const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
   const { data: preview, isLoading, isError } = useOfferGeneratorPreview(collectionId, query);
 
-  const { newOffers = 0, changedOffers = 0 } = preview?.totals ?? {};
-  const canConfirm = !!preview && preview.lines.length > 0 && !preview.creationBlock && !isPending;
+  const lines = useMemo(() => preview?.lines ?? [], [preview]);
+  const selection = useMemo(() => generatorSelection(lines, skip), [lines, skip]);
+  const { newOffers, changedOffers } = selection;
+  const canConfirm =
+    !!preview && newOffers + changedOffers > 0 && !preview.creationBlock && !isPending;
+  const allTicked = lines.length > 0 && selection.leftOffers === 0;
+
+  function toggleLine(lineId: string) {
+    setSkip((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineId)) next.delete(lineId);
+      else next.add(lineId);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSkip(allTicked ? new Set(lines.map((line) => line.id)) : new Set());
+  }
+
   const actionLabel =
     changedOffers > 0 && newOffers > 0
       ? `Create ${plural(newOffers, "offer", "offers")}, add to ${changedOffers}`
@@ -198,9 +240,14 @@ export function OfferGeneratorDialog({
     if (!preview) return;
     setError(undefined);
     const shown = preview.fingerprint;
+    // Only the ids of lines on screen: one left over from another mode names nothing in this plan.
+    const commitQuery = generatorRequestParams({
+      ...request,
+      skip: lines.flatMap((line) => (skip.has(line.id) ? [line.id] : [])),
+    }).toString();
     startTransition(async () => {
       const { generateOffersAction } = await import("@/app/actions/offers");
-      const result = await generateOffersAction(collectionId, query, shown);
+      const result = await generateOffersAction(collectionId, commitQuery, shown);
       if (result.status === "success") {
         onDone({ createdOffers: result.createdOffers, changedOffers: result.changedOffers });
       } else {
@@ -215,8 +262,8 @@ export function OfferGeneratorDialog({
       onClose={() => {
         if (!isPending) onClose();
       }}
-      maxWidth="60rem"
-      height="85vh"
+      maxWidth={DIALOG_MAX_WIDTH}
+      height={DIALOG_MAX_HEIGHT}
     >
       <DialogBody>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -276,7 +323,7 @@ export function OfferGeneratorDialog({
             <Callout tone="warning">The offers could not be planned. Close the dialog and try again.</Callout>
           ) : (
             <>
-              <Summary preview={preview} mode={mode} />
+              <Summary preview={preview} selection={selection} mode={mode} />
               {preview.creationBlock && <Callout tone="warning">{preview.creationBlock}</Callout>}
               {preview.lines.length === 0 ? (
                 <Empty>
@@ -286,14 +333,26 @@ export function OfferGeneratorDialog({
                 </Empty>
               ) : (
                 <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.5rem", overflow: "clip" }}>
-                  {preview.lines.map((line, index) => (
+                  <SelectAllStrip
+                    ticked={lines.length - selection.leftOffers}
+                    total={lines.length}
+                    allTicked={allTicked}
+                    disabled={isPending}
+                    onToggle={toggleAll}
+                  />
+                  {lines.map((line) => (
                     <Line
                       key={line.id}
                       collectionId={collectionId}
+                      areas={areas}
+                      locations={locations}
+                      baseCurrency={baseCurrency}
+                      vendorMaps={vendorMaps}
                       line={line}
-                      first={index === 0}
-                      pad={pad}
+                      ticked={!skip.has(line.id)}
+                      resultingSetCount={keptResultingSetCount(lines, skip, line.id)}
                       disabled={isPending}
+                      onToggleTick={() => toggleLine(line.id)}
                       onChooseTarget={(offerId) => setTargets((prev) => ({ ...prev, [line.id]: offerId }))}
                     />
                   ))}
@@ -315,22 +374,26 @@ export function OfferGeneratorDialog({
   );
 }
 
+/** What the ticked offers make; then what was left out and why, the unticked offers among it. */
 function Summary({
   preview,
+  selection,
   mode,
 }: {
   preview: NonNullable<ReturnType<typeof useOfferGeneratorPreview>["data"]>;
+  selection: GeneratorSelection;
   mode: GeneratorMode;
 }) {
-  const { totals, skipped, otherModeCopies } = preview;
+  const { skipped, otherModeCopies } = preview;
   const skippedCount = skipped.reduce((n, entry) => n + entry.count, 0);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", fontSize: "0.8125rem" }}>
       <div style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
-        {plural(totals.newOffers, "new offer", "new offers")}
-        {totals.changedOffers > 0 && `, ${plural(totals.changedOffers, "existing offer", "existing offers")} receiving sets`}
+        {plural(selection.newOffers, "new offer", "new offers")}
+        {selection.changedOffers > 0 &&
+          `, ${plural(selection.changedOffers, "existing offer", "existing offers")} receiving sets`}
         {" · "}
-        {plural(totals.sets, "set", "sets")} · {plural(totals.copies, "copy", "copies")}
+        {plural(selection.sets, "set", "sets")} · {plural(selection.copies, "copy", "copies")}
       </div>
       {skippedCount > 0 && (
         <div style={HINT}>
@@ -345,6 +408,63 @@ function Summary({
             : `${plural(otherModeCopies, "copy belongs", "copies belong")} to complete sets and ${otherModeCopies === 1 ? "is" : "are"} left for Complete sets.`}
         </div>
       )}
+      {/* Not added to the count above (#1887, confirmed with the collector): these copies do make an
+          offer in this mode, so the other one would not list them either. */}
+      {selection.leftOffers > 0 && (
+        <div style={HINT}>
+          {plural(selection.leftCopies, "copy", "copies")} in {plural(selection.leftOffers, "unticked offer", "unticked offers")}{" "}
+          {selection.leftCopies === 1 ? "stays" : "stay"} where {selection.leftCopies === 1 ? "it is" : "they are"}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The list's own select-all box (#1887), drawn as the offers list draws it: the whole strip toggles
+ *  it, and it reads partial while some offers are unticked. */
+function SelectAllStrip({
+  ticked,
+  total,
+  allTicked,
+  disabled,
+  onToggle,
+}: {
+  ticked: number;
+  total: number;
+  allTicked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        padding: "0.375rem 0.75rem 0.375rem 0",
+        borderBottom: "1px solid var(--color-border)",
+        background: "var(--color-bg-page)",
+        fontSize: "0.8125rem",
+      }}
+    >
+      <Tooltip content={allTicked ? "Unselect all" : "Select all"} style={{ ...SELECT_STRIP, alignSelf: "stretch" }}>
+        <CheckCell disabled={disabled} bleed={{ top: "0.375rem", bottom: "0.375rem" }} style={{ flex: 1 }}>
+          <input
+            type="checkbox"
+            checked={allTicked}
+            ref={(el) => {
+              if (el) el.indeterminate = ticked > 0 && !allTicked;
+            }}
+            onChange={onToggle}
+            disabled={disabled}
+            aria-label={allTicked ? "Unselect all offers" : "Select all offers"}
+            style={{ cursor: disabled ? "default" : "pointer" }}
+          />
+        </CheckCell>
+      </Tooltip>
+      <span style={{ color: "var(--color-text-secondary)" }}>
+        {ticked === total ? `All ${plural(total, "offer", "offers")} ticked` : `${ticked} of ${plural(total, "offer", "offers")} ticked`}
+      </span>
     </div>
   );
 }
@@ -353,22 +473,35 @@ function offerOption(offer: GeneratorOfferRef): string {
   return `${formatEntityNo(offer.offerNo)} ${offer.label} (${OFFER_STATE_LABEL[offer.state]})`;
 }
 
-/** One proposed offer on one line (#1368): the name once, the combination short, what a set is by
- * catalogue number, the quantity and the outcome — collapsed, so fifty offers read as fifty lines.
- * Expanding it shows the copies with their photos and numbers, to check a set against the desk. */
+type VendorMaps = ReturnType<typeof useAreaVendorMaps>;
+
+/** One proposed offer on one line (#1368): its tick (#1887), the name once, the combination short,
+ * what a set is by catalogue number, the quantity and the outcome — collapsed, so fifty offers read
+ * as fifty lines. Expanding it shows the copies as full copy rows, to check a set against the desk. */
 function Line({
   collectionId,
+  areas,
+  locations,
+  baseCurrency,
+  vendorMaps,
   line,
-  first,
-  pad,
+  ticked,
+  resultingSetCount,
   disabled,
+  onToggleTick,
   onChooseTarget,
 }: {
   collectionId: string;
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  baseCurrency: string;
+  vendorMaps: VendorMaps;
   line: GeneratorLineView;
-  first: boolean;
-  pad: number;
+  ticked: boolean;
+  /** What the receiving offer will hold, the unticked lines before it left out. */
+  resultingSetCount: number;
   disabled: boolean;
+  onToggleTick: () => void;
   onChooseTarget: (offerId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -377,8 +510,20 @@ function Line({
   const name = line.subtitle ? `${line.title} — ${line.subtitle}` : line.title;
   const catalog = line.variantLabels.length > 0 ? `${line.catalog}, with ${line.variantLabels.join(", ")}` : line.catalog;
   return (
-    <div style={first ? undefined : { borderTop: "1px solid var(--color-border)" }}>
+    <div style={{ borderTop: "1px solid var(--color-border)" }}>
       <div style={LINE} onClick={() => setOpen((o) => !o)}>
+        {/* The whole strip, to the row's top and bottom, ticks it (#1589); the cell stops the click,
+            so ticking never also expands the line. */}
+        <CheckCell disabled={disabled} bleed={{ top: "0.375rem", bottom: "0.375rem" }} style={SELECT_STRIP}>
+          <input
+            type="checkbox"
+            checked={ticked}
+            onChange={onToggleTick}
+            disabled={disabled}
+            aria-label={`Create the offer of ${line.title}`}
+            style={{ cursor: disabled ? "default" : "pointer" }}
+          />
+        </CheckCell>
         <button
           type="button"
           aria-expanded={open}
@@ -431,7 +576,7 @@ function Line({
                 </select>
               </>
             ) : (
-              <Tooltip content={`${target.label} — it will then have ${plural(line.resultingSetCount, "set", "sets")}.`}>
+              <Tooltip content={`${target.label} — it will then have ${plural(resultingSetCount, "set", "sets")}.`}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
                   Added to {formatEntityNo(target.offerNo)} <OfferStateChip state={target.state} />
                 </span>
@@ -449,7 +594,18 @@ function Line({
           )}
         </span>
       </div>
-      {open && <LineCopies collectionId={collectionId} line={line} target={target} pad={pad} />}
+      {open && (
+        <LineCopies
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          vendorMaps={vendorMaps}
+          line={line}
+          target={target}
+          resultingSetCount={resultingSetCount}
+        />
+      )}
     </div>
   );
 }
@@ -476,45 +632,59 @@ function CombinationChip({ collectionId, part }: { collectionId: string; part: G
   );
 }
 
-/** The expanded line: every set's copies, each with its photos, inventory number and catalogue number. */
+/** The expanded line: every set's copies, each as the app's own copy row (#1887) — read-only, as the
+ *  add-to-offer dialog draws a set's copies — with the set's number above it where there are several. */
 function LineCopies({
   collectionId,
+  areas,
+  locations,
+  baseCurrency,
+  vendorMaps,
   line,
   target,
-  pad,
+  resultingSetCount,
 }: {
   collectionId: string;
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  baseCurrency: string;
+  vendorMaps: VendorMaps;
   line: GeneratorLineView;
   target: GeneratorOfferRef | null;
-  pad: number;
+  resultingSetCount: number;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", padding: "0 0.75rem 0.625rem 2.5rem" }}>
+    <div style={{ background: "var(--color-bg-page)", padding: "0 0.75rem 0.625rem 3.75rem" }}>
       {line.sets.map((set, index) => (
-        <div key={set.map((copy) => copy.itemId).join(",")} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-          {line.sets.length > 1 && (
-            <span style={{ ...HINT, width: "3rem", flexShrink: 0, paddingTop: "0.25rem" }}>Set {index + 1}</span>
-          )}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            {set.map((copy) => (
-              <div key={copy.itemId} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.125rem", width: "4rem" }}>
-                <PhotoThumb collectionId={collectionId} photos={copy.photos} size="3.5rem" reserveWhenEmpty />
-                <span style={{ ...HINT, fontVariantNumeric: "tabular-nums" }}>{formatItemNo(copy.itemNo, pad)}</span>
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-primary)", textAlign: "center", overflowWrap: "anywhere" }}>
-                  {copy.catalog}
-                </span>
-              </div>
+        <div key={set.map((copy) => copy.id).join(",")}>
+          {line.sets.length > 1 && <div style={{ ...HINT, padding: "0.5rem 0 0.25rem" }}>Set {index + 1}</div>}
+          <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.375rem", overflow: "clip" }}>
+            {set.map((copy, i) => (
+              <InventoryItemRow
+                key={copy.id}
+                collectionId={collectionId}
+                item={copy}
+                areas={areas}
+                locations={locations}
+                baseCurrency={baseCurrency}
+                primaryVendorId={copy.areaId ? (vendorMaps.primaryVendorByArea.get(copy.areaId) ?? null) : null}
+                vendorMap={vendorMaps.vendorMapFor(copy.areaId, copy.issueId)}
+                isLast={i === set.length - 1}
+                readOnly
+              />
             ))}
           </div>
         </div>
       ))}
       {target && (
-        <div style={HINT}>
+        <div style={{ ...HINT, paddingTop: "0.5rem" }}>
           Added to {formatEntityNo(target.offerNo)} {target.label} — it will then have{" "}
-          {plural(line.resultingSetCount, "set", "sets")}.
+          {plural(resultingSetCount, "set", "sets")}.
         </div>
       )}
-      {!target && line.biddingMatches.length > 0 && <div style={HINT}>{biddingNote(line.biddingMatches)}</div>}
+      {!target && line.biddingMatches.length > 0 && (
+        <div style={{ ...HINT, paddingTop: "0.5rem" }}>{biddingNote(line.biddingMatches)}</div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,9 @@ import {
   fingerprintPlan,
   generatorCombinationParts,
   generatorRequestParams,
+  generatorSelection,
+  keptFingerprint,
+  keptResultingSetCount,
   parseGeneratorRequest,
   parsePlanFingerprint,
   planOffers,
@@ -16,6 +19,7 @@ import {
   type GeneratorCopy,
   type GeneratorOffer,
   type GeneratorPlanInput,
+  type GeneratorSelectionLine,
   type SkipFacts,
 } from "../../src/lib/offer-generator-rules";
 
@@ -328,6 +332,63 @@ describe("findPlanDrift (#717's rule, #1287)", () => {
   });
 });
 
+describe("leaving proposed offers out (#1887)", () => {
+  const line = (id: string, sets: number, target: string | null, resultingSetCount = sets): GeneratorSelectionLine => ({
+    id,
+    sets: Array.from({ length: sets }, () => ["a", "b"]),
+    target: target ? { kind: "existing", offerId: target } : { kind: "new" },
+    resultingSetCount,
+  });
+  // Two lines bound for o7, which holds one set: the plan counts the first line's two sets into the
+  // second's figure.
+  const lines = [line("n1", 1, null), line("x1", 2, "o7", 3), line("n2", 3, null), line("x2", 1, "o7", 4)];
+
+  it("counts every line while all are ticked", () => {
+    assert.deepEqual(generatorSelection(lines, new Set()), {
+      newOffers: 2,
+      changedOffers: 1,
+      sets: 7,
+      copies: 14,
+      leftOffers: 0,
+      leftCopies: 0,
+    });
+  });
+
+  it("counts only the ticked lines, and reports the unticked ones and their copies apart", () => {
+    assert.deepEqual(generatorSelection(lines, new Set(["n2", "x1"])), {
+      newOffers: 1,
+      changedOffers: 1,
+      sets: 2,
+      copies: 4,
+      leftOffers: 2,
+      leftCopies: 10,
+    });
+    assert.equal(generatorSelection(lines, new Set(["x1", "x2"])).changedOffers, 0);
+  });
+
+  it("takes an unticked line's sets off what a later line leaves the same offer holding", () => {
+    assert.equal(keptResultingSetCount(lines, new Set(), "x2"), 4);
+    assert.equal(keptResultingSetCount(lines, new Set(["x1"]), "x2"), 2);
+    assert.equal(keptResultingSetCount(lines, new Set(["x2"]), "x1"), 3, "a later line changes nothing before it");
+    assert.equal(keptResultingSetCount(lines, new Set(["n1"]), "x2"), 4, "a line bound elsewhere changes nothing");
+  });
+
+  it("refuses nothing over a drift on an unticked line, and still names one on a ticked line", () => {
+    const offers = new Map<string, GeneratorOffer>();
+    const before = fingerprintPlan(plan({ copies: [copy("a", "s5"), copy("b", "s6")], mode: "singles" }), offers);
+    const after = fingerprintPlan(plan({ copies: [copy("a", "s5")], mode: "singles" }), offers);
+    const lineOf = (itemId: string) => before.lines.find((l) => l.sets[0][0] === itemId)!.id;
+    assert.deepEqual(findPlanDrift(before, after), { kind: "copy", itemId: "b" });
+    const skipB = new Set([lineOf("b")]);
+    assert.equal(findPlanDrift(keptFingerprint(before, skipB), keptFingerprint(after, skipB)), null);
+    const skipA = new Set([lineOf("a")]);
+    assert.deepEqual(findPlanDrift(keptFingerprint(before, skipA), keptFingerprint(after, skipA)), {
+      kind: "copy",
+      itemId: "b",
+    });
+  });
+});
+
 describe("skipReason (#1287)", () => {
   const listable: SkipFacts = {
     gone: false,
@@ -359,17 +420,19 @@ describe("the generator request (#1287)", () => {
       itemIds: ["i1", "i2"],
       filters: "",
       targets: { abc: "o1" },
+      skip: ["l2", "l1"],
       facebook: { facebookGroupId: null, endsAt: null },
     };
-    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(request)), request);
-    const filtered = { ...request, itemIds: null, filters: "conditionIds=mnh&areaIds=a1", targets: {} };
+    // The unticked lines come back sorted: the query is the same whatever order they were unticked in.
+    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(request)), { ...request, skip: ["l1", "l2"] });
+    const filtered = { ...request, itemIds: null, filters: "conditionIds=mnh&areaIds=a1", targets: {}, skip: [] };
     assert.deepEqual(parseGeneratorRequest(generatorRequestParams(filtered)), filtered);
     // On Facebook the group and its closing time travel with the rest (#1663).
     const facebook = {
       ...request,
       facebook: { facebookGroupId: "g1", endsAt: "2026-10-10T18:00:00.000Z" },
     };
-    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(facebook)), facebook);
+    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(facebook)), { ...facebook, skip: ["l1", "l2"] });
   });
 
   it("refuses a request missing a choice, rather than guessing it", () => {
@@ -381,6 +444,7 @@ describe("the generator request (#1287)", () => {
       itemIds: null,
       filters: "",
       targets: {},
+      skip: [],
       facebook: { facebookGroupId: null, endsAt: null },
     });
     for (const key of ["platformId", "state", "mode", "packaging"]) {

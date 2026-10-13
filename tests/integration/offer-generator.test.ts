@@ -112,6 +112,7 @@ describe("offer generator (#1287)", () => {
       itemIds,
       filters: {},
       targets: {},
+      skip: [],
       facebook: { facebookGroupId: null, endsAt: null },
       ...extra,
     };
@@ -318,6 +319,70 @@ describe("offer generator (#1287)", () => {
       (e: Error) => e.message.startsWith(named)
     );
     assert.equal((await offersHolding([first])).length, 0, "nothing was created for the copy still available");
+  });
+
+  it("creates only the ticked offers, and an unticked offer's copies stay where they are (#1887)", async () => {
+    const [s1, s2] = await stamps(2);
+    const kept = await copy(s1);
+    const left = await copy(s2);
+    const preview = await previewOfferGeneration(userId, collectionId, ticked([kept, left], { mode: "singles" }));
+    assert.equal(preview.lines.length, 2);
+    // Each copy comes as the Copies list's own row.
+    const rows = preview.lines.flatMap((line) => line.sets.flat());
+    assert.deepEqual(rows.map((row) => row.id).sort(), [kept, left].sort());
+    assert.ok(rows.every((row) => typeof row.stampName === "string" && Array.isArray(row.catalogNumbers)));
+
+    const leftLine = preview.lines.find((line) => line.sets[0][0].id === left)!;
+    const result = await commitOfferGeneration(
+      userId,
+      collectionId,
+      ticked([kept, left], { mode: "singles", skip: [leftLine.id] }),
+      preview.fingerprint
+    );
+    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 1 });
+    assert.equal((await offersHolding([kept])).length, 1);
+    assert.equal((await offersHolding([left])).length, 0, "the unticked offer's copy is in no offer");
+  });
+
+  it("refuses nothing over a change to a copy in an unticked offer (#1887)", async () => {
+    const [s1, s2] = await stamps(2);
+    const kept = await copy(s1);
+    const left = await copy(s2);
+    const input = ticked([kept, left], { mode: "singles" });
+    const preview = await previewOfferGeneration(userId, collectionId, input);
+    const leftLine = preview.lines.find((line) => line.sets[0][0].id === left)!;
+    // Nothing of the unticked offer is written, so a copy in it changing since the preview is no
+    // reason to refuse the rest.
+    await prisma.item.update({ where: { id: left }, data: { forSale: false } });
+    await commitOfferGeneration(userId, collectionId, { ...input, skip: [leftLine.id] }, preview.fingerprint);
+    assert.equal((await offersHolding([kept])).length, 1);
+  });
+
+  it("still refuses a drift on a ticked offer while another is unticked (#1887)", async () => {
+    const [s1, s2] = await stamps(2);
+    const kept = await copy(s1);
+    const left = await copy(s2);
+    const input = ticked([kept, left], { mode: "singles" });
+    const preview = await previewOfferGeneration(userId, collectionId, input);
+    const leftLine = preview.lines.find((line) => line.sets[0][0].id === left)!;
+    await prisma.item.update({ where: { id: kept }, data: { forSale: false } });
+    await assert.rejects(
+      commitOfferGeneration(userId, collectionId, { ...input, skip: [leftLine.id] }, preview.fingerprint),
+      /has changed/
+    );
+    assert.equal((await offersHolding([kept, left])).length, 0);
+  });
+
+  it("refuses a pass with every offer unticked (#1887)", async () => {
+    const [s1] = await stamps(1);
+    const single = await copy(s1);
+    const input = ticked([single], { mode: "singles" });
+    const preview = await previewOfferGeneration(userId, collectionId, input);
+    await assert.rejects(
+      commitOfferGeneration(userId, collectionId, { ...input, skip: preview.lines.map((line) => line.id) }, preview.fingerprint),
+      /every proposed offer is unticked/
+    );
+    assert.equal((await offersHolding([single])).length, 0);
   });
 
   it("refuses when the offer due to receive sets changed state, and writes nothing", async () => {

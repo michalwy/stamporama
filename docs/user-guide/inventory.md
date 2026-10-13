@@ -1330,20 +1330,31 @@ in its colour — with the certificate status and format only when there is one 
 catalogue numbers, run together as a range where they follow on (`Mi·PL 865-870`), any variant
 standing in for its parent, how many sets (`×3`), and whether it is a **new offer** or **added to
 #N**. Hover *added to #N* for the offer's name and how many sets it will then have. Click a line to
-open it: each set's copies with their photos, inventory numbers and catalogue numbers, so a set can
-be checked against the stamps on the desk. Above the list it
-counts the copies it left out and why — already offered on the platform, not for sale, not in hand,
-set aside from the platform, in an offer in active bidding, or no longer held — and how many copies
-the other mode would list.
+open it: each set's copies as full copy rows — photo, catalogue numbers, condition, storage location
+and the rest, as the Copies list shows them — so a set can be checked against the stamps on the desk.
+The dialog takes the width of the window, so a long pass reads as a table.
+
+**Every proposed offer has a tick box, and all of them start ticked.** Untick an offer to leave it
+out of this pass; the box at the top of the list ticks or unticks them all at once. Only the ticked
+offers are created, and the button (*Create 12 offers*) and the count above the list follow the
+ticks. Leaving an offer out does not hand its copies to another offer — they simply stay where they
+are, and the line under the count says how many copies in how many unticked offers that is. Run the
+pass again later to list them.
+
+Above the list it also counts the copies it left out and why — already offered on the platform, not
+for sale, not in hand, set aside from the platform, in an offer in active bidding, or no longer held —
+and how many copies the other mode would list.
 
 The new offers are created exactly as quick offer mode creates them: no asking price, no listing URL,
 titles and descriptions from the platform's templates. That is also why *Ready* and *Active* only work
 where the platform supplies a starting price of its own; otherwise the preview tells you to start the
 offers as *Preparing*.
 
-Confirming creates **all of the offers or none of them**. If anything changed since the preview — a
-copy sold or went onto another offer, or an offer due to receive sets changed status — nothing is
-created and the message names the copy or the offer. Look at the preview again and confirm once more.
+Confirming creates **all of the ticked offers or none of them**. If anything changed since the
+preview in a ticked offer — a copy sold or went onto another offer, or an offer due to receive sets
+changed status — nothing is created and the message names the copy or the offer. Look at the preview
+again and confirm once more. A change among the copies of an unticked offer does not stop the rest,
+since nothing of that offer is created.
 
 ## Bulk editing the selection
 
