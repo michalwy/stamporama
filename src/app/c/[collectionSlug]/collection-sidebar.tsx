@@ -597,6 +597,7 @@ export function CollectionSidebar({
             active={isActive(`${base}/offers`, false, [
               `${base}/offers/lot-builder`,
               `${base}/offers/series-from-singles`,
+              `${base}/offers/prepare`,
               `${base}/offers/listing`,
               `${base}/offers/allegro`,
               `${base}/offers/delcampe`,
@@ -616,6 +617,15 @@ export function CollectionSidebar({
               href={`${base}/offers/series-from-singles`}
               label="Series from Singles"
               active={isActive(`${base}/offers/series-from-singles`)}
+              nested
+            />
+            {/* The step between composing and posting (#1894): the offers still being prepared,
+                priced in place and marked ready together — Bulk Listing does the same for the Ready
+                ones, so the two stand side by side in the order an offer passes through them. */}
+            <NavItem
+              href={`${base}/offers/prepare`}
+              label="Prepare"
+              active={isActive(`${base}/offers/prepare`)}
               nested
             />
             <NavItem

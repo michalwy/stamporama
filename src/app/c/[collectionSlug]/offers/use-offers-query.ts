@@ -1,6 +1,12 @@
 "use client";
 
-import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -15,6 +21,7 @@ import type {
   OfferFilterCounts,
   OffersSummary,
   ListingWorkspaceOffer,
+  PrepareOffer,
   OfferLookupTarget,
   OfferListNeighbours,
 } from "@/lib/offers";
@@ -91,6 +98,10 @@ export const offerKeys = {
    *  any offer refreshes it. */
   facebookLotCandidates: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-lot-candidates", postId] as const,
+  /** The Prepare screen's pages (#1894) — under the offers key, so every write to an offer refreshes
+   *  the row it is on. */
+  prepare: (collectionId: string, filters: PrepareFilters) =>
+    ["offers", collectionId, "prepare", filters] as const,
   /** The list of multi-lot Facebook posts (#1850) — under the offers key for the same reason. */
   facebookPosts: (collectionId: string, filters: FacebookPostFilters) =>
     ["offers", collectionId, "facebook-posts", filters] as const,
@@ -140,6 +151,40 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
 
 /** How often a screen showing an offer that waits for its photos to turn Ready asks again (#1893). */
 const READY_WAIT_POLL_MS = 3_000;
+
+/** The Prepare screen's filters (#1894). `areaIds` is the area selection already expanded to its
+ *  subtree (`resolveAreaFilterIds`). */
+export interface PrepareFilters {
+  platformId?: string;
+  groupId?: string;
+  areaIds?: string[];
+  noPrice?: boolean;
+}
+
+/** The collection's Preparing offers for the Prepare screen (#1894), a page at a time. Asked again
+ *  while a row it shows waits for its photos to turn it Ready (#1893), so the row leaves by itself. */
+export function usePrepareOffersInfinite(collectionId: string, filters: PrepareFilters) {
+  return useInfiniteQuery<{ items: PrepareOffer[]; nextCursor: string | null }>({
+    queryKey: offerKeys.prepare(collectionId, filters),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("offset", pageParam as string);
+      if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.groupId) params.set("groupId", filters.groupId);
+      if (filters.areaIds?.length) params.set("areaIds", filters.areaIds.join(","));
+      if (filters.noPrice) params.set("noPrice", "1");
+      const res = await fetch(`/api/collections/${collectionId}/offers/prepare?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch the offers being prepared");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((page) => page.items.some((o) => o.readyAfterPhotos))
+        ? READY_WAIT_POLL_MS
+        : false,
+  });
+}
 
 /**
  * Full offer (header + sets) for the offer detail / compose screen.
@@ -742,5 +787,37 @@ export function useInvalidateOffers() {
      *  invalidating every offer list on the collection would be noise for one header. */
     invalidateDetail: (collectionId: string, offerId: string) =>
       queryClient.invalidateQueries({ queryKey: offerKeys.detail(collectionId, offerId) }),
+    /** A price typed on the Prepare screen (#1894): written into the row in place, and every other
+     *  offer read marked stale. Refetching the screen itself would rebuild every loaded page — a
+     *  valuation and a photo plan per row — for each of a run of prices typed one after another, and
+     *  nothing else on its row follows from the price but what the row works out itself. */
+    settlePreparePrice: (
+      collectionId: string,
+      offerId: string,
+      field: "price" | "startingPrice",
+      value: string | null
+    ) => {
+      queryClient.setQueriesData<InfiniteData<{ items: PrepareOffer[]; nextCursor: string | null }>>(
+        { queryKey: ["offers", collectionId, "prepare"] },
+        (data) =>
+          data && {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              items: page.items.map((o) =>
+                o.id !== offerId
+                  ? o
+                  : field === "price"
+                    ? { ...o, price: value ?? "0.00" }
+                    : { ...o, startingPrice: value }
+              ),
+            })),
+          }
+      );
+      return queryClient.invalidateQueries({
+        queryKey: offerKeys.all(collectionId),
+        predicate: (query) => query.queryKey[2] !== "prepare",
+      });
+    },
   };
 }

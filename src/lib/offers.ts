@@ -11,11 +11,12 @@ import {
   type ItemListItem,
 } from "./items";
 import { estimateCopiesByGroup } from "./copy-estimates";
-import { estimateSets, type EstimateSource } from "./offer-price-table";
+import { estimateSets, offerPriceFigures, type EstimateSource } from "./offer-price-table";
 import type { HoldingsSummary } from "./valuation";
 import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-basis";
 import { loadCostEstimates } from "./cost-estimates";
 import { isHeld } from "./disposal";
+import { normalizeRole, sortPhotos } from "./photos";
 import { offerCostTotals, offerSetCost, type OfferSetCost } from "./offer-cost";
 import {
   collidingItemIdsByOffer,
@@ -3919,6 +3920,436 @@ export async function listReadyOffersForListing(
   return items;
 }
 
+// ── The Prepare screen (#1894) ────────────────────────────────────────────────────────────────────
+
+/** One picture on a Prepare row (#1894): a generated listing image once the offer has any, and until
+ *  then each copy's own first photo — the stamps the price is being set for. */
+export interface PreparePicture {
+  photoId: string;
+  label: string;
+}
+
+/**
+ * One `preparing` offer as the Prepare screen lists it (#1894): what it holds, the price table's
+ * figures (#1829/#1839/#1843) read by the same computation the offer's own screen reads, its stated
+ * price, and what still stands between it and Ready.
+ */
+export interface PrepareOffer {
+  id: string;
+  offerNo: number;
+  /** The stored listing title, or null — the row composes `name ?? label` (#1024). */
+  name: string | null;
+  label: string;
+  platformId: string;
+  platformName: string;
+  facebookGroupId: string | null;
+  facebookGroupName: string | null;
+  listingType: OfferListingType;
+  /** The asking price of a quick buy; `0.00` while it has none. */
+  price: string;
+  /** What an auction opens at — the figure the seller states on one (#449); null when unset. */
+  startingPrice: string | null;
+  currency: string;
+  baseCurrency: string;
+  setCount: number;
+  itemCount: number;
+  platformMinimumPrice: string | null;
+  suggestedPrice: string | null;
+  suggestedEstimate: { valuedSets: number; copies: number; ratio: number; source: EstimateSource } | null;
+  catalogNames: string[];
+  catalogPrice: string | null;
+  catalogUnpricedSets: number;
+  catalogFaultReducedCount: number;
+  catalogFullPrice: string | null;
+  marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
+  marketUnconvertible: boolean;
+  costPrice: string | null;
+  setsTotals: { setCount: number; costEstimated: boolean };
+  pictures: PreparePicture[];
+  /** {@link pictures} are the offer's generated listing images rather than the copies' photos. */
+  picturesGenerated: boolean;
+  /** The ready gate's reasons (#418), the same evaluation the offer's own screen disables **Mark
+   *  ready** on — the photo half included, which *Mark ready* fixes by generating (#1893). The
+   *  missing price is the screen's own to say, from the price it shows. */
+  readyBlockers: ReadyBlocker[];
+  readyAfterPhotos: boolean;
+  readyAfterPhotosRefusal: string | null;
+}
+
+export interface PrepareOfferFilters {
+  platformId?: string;
+  facebookGroupId?: string;
+  /** The area selection, already expanded to its subtree on the client (`resolveAreaFilterIds`). An
+   *  offer matches when **every** copy's stamp is filed in it — the bulk listing workspace's rule
+   *  (#322), so a narrowed sitting never holds a listing that is half from somewhere else. */
+  areaIds?: string[];
+  /** Only offers whose stated price is not set yet. */
+  noPrice?: boolean;
+  offset?: number;
+  pageSize?: number;
+}
+
+/** How many offers a Prepare page holds. Each row asks the photo plan its own question (the ready
+ *  gate's photo half and the covers), so a page is kept to what one screen shows. */
+const PREPARE_PAGE_SIZE = 25;
+
+/** How many offers' photo plans are read at once — a page's worth all at once would crowd the pool. */
+const PREPARE_PHOTO_READS = 5;
+
+const PREPARE_SETS_SELECT = {
+  ...LISTING_SETS_SELECT,
+  items: {
+    select: {
+      ...LISTING_SETS_SELECT.items.select,
+      item: {
+        select: {
+          ...LISTING_SETS_SELECT.items.select.item.select,
+          // The COST (#1736): whether the copy's cost is still pending on an open lot.
+          costBasis: true,
+          lotId: true,
+          lot: { select: { status: true, price: true, purchase: { select: { kind: true } } } },
+          disposedAt: true,
+          deliveryState: true,
+          // The row's pictures until the offer has generated images of its own.
+          photos: { select: { id: true, role: true, sortOrder: true } },
+          // A copy that is one of several candidates (#1651) is labelled by them.
+          candidates: { select: { stampId: true, stamp: STAMP_LABEL_SELECT.stamp } },
+        },
+      },
+    },
+  },
+} as const;
+
+const PREPARE_OFFER_SELECT = {
+  id: true,
+  offerNo: true,
+  name: true,
+  // The two long texts, for the platform's caps (#636) — part of the ready gate.
+  description: true,
+  privateNote: true,
+  platformId: true,
+  facebookGroupId: true,
+  facebookGroup: { select: { name: true } },
+  listingType: true,
+  price: true,
+  startingPrice: true,
+  currency: true,
+  readyAfterPhotosAt: true,
+  readyAfterPhotosRefusal: true,
+  platform: {
+    select: {
+      name: true,
+      platformModule: true,
+      minimumPrice: true,
+      maxTitleLength: true,
+      maxDescriptionLength: true,
+      maxPrivateNoteLength: true,
+    },
+  },
+  photoEntries: { select: { photoId: true, side: true }, orderBy: { sortOrder: "asc" } },
+  sets: { select: PREPARE_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+} satisfies Prisma.OfferSelect;
+
+type PrepareOfferRow = Prisma.OfferGetPayload<{ select: typeof PREPARE_OFFER_SELECT }>;
+
+/** The Prepare screen's `where`: the collection's `preparing` offers, narrowed by its filters. */
+function prepareOfferWhere(collectionId: string, filters: PrepareOfferFilters): Prisma.OfferWhereInput {
+  const and: Prisma.OfferWhereInput[] = [];
+  if (filters.areaIds?.length) {
+    const inArea = { stampAreaLinks: { some: { collectionAreaId: { in: filters.areaIds } } } };
+    // Every copy inside the selection, and at least one copy — an empty offer is in no area.
+    and.push(
+      { sets: { some: { items: { some: {} } } } },
+      { sets: { every: { items: { every: { item: { stamp: inArea } } } } } }
+    );
+  }
+  if (filters.noPrice) {
+    // The figure the seller states (#449): a quick buy's asking price, an auction's starting price.
+    and.push({
+      OR: [
+        { listingType: { not: "auction" }, price: { lte: 0 } },
+        { listingType: "auction", OR: [{ startingPrice: null }, { startingPrice: { lte: 0 } }] },
+      ],
+    });
+  }
+  return {
+    collectionId,
+    state: "preparing",
+    ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    ...(filters.facebookGroupId ? { facebookGroupId: filters.facebookGroupId } : {}),
+    ...(and.length > 0 ? { AND: and } : {}),
+  };
+}
+
+/**
+ * The collection's `preparing` offers for the Prepare screen (#1894), a page at a time, in the
+ * Offers list's own order.
+ *
+ * Paginated rather than read whole like the bulk listing workspace's `ready` batch (#322): a bulk
+ * generation (#1287) leaves hundreds of offers in Preparing, and every row here costs a valuation and
+ * a photo-plan read.
+ */
+export async function listPreparingOffers(
+  ownerId: string,
+  collectionId: string,
+  filters: PrepareOfferFilters = {}
+): Promise<{ items: PrepareOffer[]; nextCursor: string | null }> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = filters.pageSize ?? PREPARE_PAGE_SIZE;
+  const offset = filters.offset ?? 0;
+  const rows = await prisma.offer.findMany({
+    where: prepareOfferWhere(collectionId, filters),
+    orderBy: OFFER_LIST_ORDER_BY,
+    take: pageSize + 1,
+    skip: offset,
+    select: PREPARE_OFFER_SELECT,
+  });
+  const hasMore = rows.length > pageSize;
+  const page = hasMore ? rows.slice(0, pageSize) : rows;
+  return {
+    items: await buildPrepareOffers(collectionId, baseCurrency, page),
+    nextCursor: hasMore ? String(offset + pageSize) : null,
+  };
+}
+
+/** The given offers as Prepare rows, in the order asked — only those still `preparing` in the
+ *  collection. What the bulk *Use estimated price* re-reads, so it writes the figure the server
+ *  computes now rather than one a screen was holding. */
+async function readPrepareOffers(collectionId: string, offerIds: readonly string[]): Promise<PrepareOffer[]> {
+  if (offerIds.length === 0) return [];
+  const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { baseCurrency: true },
+  });
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] }, collectionId, state: "preparing" },
+    select: PREPARE_OFFER_SELECT,
+  });
+  const order = new Map(offerIds.map((id, i) => [id, i]));
+  rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  return buildPrepareOffers(collectionId, baseCurrency, rows);
+}
+
+/**
+ * Prepare rows over a page of offers, every lookup asked **once for the page** — the holdings,
+ * estimates and COST estimates keyed by set across every offer, the item-ID derivation per platform
+ * module, the condition map, the rates per currency — except the photo plan, which is per offer.
+ *
+ * The price table's figures come from {@link offerPriceFigures}, the function the offer's own screen
+ * reads, and the ready gate is assembled from the same parts {@link getOfferDetail} assembles it from,
+ * so a row cannot say something the offer's screen would not.
+ */
+async function buildPrepareOffers(
+  collectionId: string,
+  baseCurrency: string,
+  rows: PrepareOfferRow[]
+): Promise<PrepareOffer[]> {
+  if (rows.length === 0) return [];
+  const allSets = rows.flatMap((row) => row.sets);
+  const allIds = allSets.flatMap((s) => s.items.map((li) => li.itemId));
+
+  // Copies whose cost is still pending (#1736), exactly as the offer's own screen picks them.
+  const pendingCopies = allSets.flatMap((s) =>
+    s.items
+      .filter((li) => isHeld(li.item) && !lotIsOpeningBalance(li.item.lot))
+      .map((li) => ({
+        id: li.itemId,
+        costBasis: li.item.costBasis == null ? null : li.item.costBasis.toString(),
+        lotId: li.item.lotId,
+        ...lotCostInputs(li.item.lot),
+      }))
+      .filter((c) => resolveCostBasis(c).state === "pending")
+  );
+  const setGroups = allSets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }));
+  const anyConditions = rows.some((row) => usesPlatformConditions(row.platform.platformModule));
+  const [labeller, holdingsBySet, costEstimates, estimatesBySet, conditionMap, soldRows] = await Promise.all([
+    makeOfferLabeller(collectionId),
+    getHoldingsValuationByGroup(collectionId, setGroups),
+    loadCostEstimates(collectionId, pendingCopies),
+    estimateCopiesByGroup(collectionId, setGroups),
+    anyConditions ? loadColnectConditionMap(collectionId) : Promise.resolve(new Map<string, string>()),
+    // Which copies sold, and through which set (#1876).
+    allIds.length > 0
+      ? prisma.saleLineItem.findMany({
+          where: { itemId: { in: allIds } },
+          select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const pendingIds = new Set(pendingCopies.map((c) => c.id));
+  const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+
+  // What each copy is listed under (#616), derived once per platform module across the page — the
+  // module decides whether a catalogue is listed against at all (#493).
+  const catalogIds = new Map<string, ResolvedCatalogItemId>();
+  const byModule = new Map<string | null, PrepareOfferRow[]>();
+  for (const row of rows) {
+    const key = row.platform.platformModule;
+    byModule.set(key, [...(byModule.get(key) ?? []), row]);
+  }
+  for (const [platformModule, moduleRows] of byModule) {
+    if (!hasListingModule(platformModule)) continue;
+    const resolved = await resolveSetCatalogItemIds(
+      collectionId,
+      moduleRows.flatMap((row) => row.sets),
+      platformModule,
+      labeller
+    );
+    for (const [itemId, value] of resolved) catalogIds.set(itemId, value);
+  }
+
+  // base → offer currency, once per currency; null where no rate is known.
+  const toOfferRates = new Map<string, number | null>();
+  for (const currency of new Set(rows.map((row) => row.currency))) {
+    if (currency === baseCurrency) {
+      toOfferRates.set(currency, 1);
+      continue;
+    }
+    try {
+      toOfferRates.set(currency, (await getOrFetchRate(collectionId, baseCurrency, currency)).rate);
+    } catch {
+      toOfferRates.set(currency, null);
+    }
+  }
+
+  // The photo half of the ready gate (#311) and the covers (#1665), per offer — a few at a time.
+  const photoBlockers = new Map<string, (PhotoReadinessBlocker | CoverReadinessBlocker)[]>();
+  for (let i = 0; i < rows.length; i += PREPARE_PHOTO_READS) {
+    const chunk = rows.slice(i, i + PREPARE_PHOTO_READS);
+    const answers = await Promise.all(chunk.map((row) => readOfferPhotoBlockers(row.id)));
+    chunk.forEach((row, j) => photoBlockers.set(row.id, answers[j]));
+  }
+
+  return rows.map((row) => {
+    const platformModule = row.platform.platformModule;
+    const sets = row.sets.map((s) => {
+      const items = orderedItems(s.items);
+      const holdings = holdingsBySet.get(s.id)!;
+      const cost = offerSetCost(
+        { total: holdings.cost.totalCostBasis, count: holdings.cost.knownCount, noneCount: holdings.cost.noneCount },
+        items
+          .filter((li) => pendingIds.has(li.itemId))
+          .map((li) => ({ label: labeller.copyOf(li.item), estimate: costEstimates.get(li.itemId)?.amount ?? null }))
+      );
+      const sold = s.saleLines.length > 0;
+      const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: items.map((li) => li.itemId) }, soldVia);
+      return { id: s.id, items, holdings, cost, soldElsewhere };
+    });
+    const figures = offerPriceFigures(
+      sets.map((s) => ({ holdings: s.holdings, cost: s.cost, estimates: estimatesBySet.get(s.id) ?? [] })),
+      toOfferRates.get(row.currency) ?? null
+    );
+    const textBlockers = evaluateListingTextLimits(row, {
+      maxTitleLength: row.platform.maxTitleLength,
+      maxDescriptionLength: row.platform.maxDescriptionLength,
+      maxPrivateNoteLength: row.platform.maxPrivateNoteLength,
+    });
+
+    // The generated images once there are any; until then each copy's first photo, front first.
+    const generated = row.photoEntries.map((entry, i) => ({
+      photoId: entry.photoId,
+      label: `Image ${i + 1}${entry.side ? ` · ${entry.side}` : ""}`,
+    }));
+    const copyPictures = sets.flatMap((s) =>
+      s.items.flatMap((li) => {
+        const photo = li.item.photos.map((p) => ({ ...p, role: normalizeRole(p.role) })).sort(sortPhotos)[0];
+        return photo ? [{ photoId: photo.id, label: labeller.copyOf(li.item) }] : [];
+      })
+    );
+
+    return {
+      id: row.id,
+      offerNo: row.offerNo,
+      name: row.name,
+      label: labeller.offer(row.sets),
+      platformId: row.platformId,
+      platformName: row.platform.name,
+      facebookGroupId: row.facebookGroupId,
+      facebookGroupName: row.facebookGroup?.name ?? null,
+      listingType: normalizeListingType(row.listingType),
+      price: row.price.toFixed(2),
+      startingPrice: row.startingPrice?.toFixed(2) ?? null,
+      currency: row.currency,
+      baseCurrency,
+      setCount: row.sets.length,
+      itemCount: row.sets.reduce((n, s) => n + s.items.length, 0),
+      platformMinimumPrice: row.platform.minimumPrice?.toFixed(2) ?? null,
+      suggestedPrice: figures.suggestedPrice,
+      suggestedEstimate: figures.suggestedEstimate,
+      catalogNames: figures.catalogNames,
+      catalogPrice: figures.catalogPrice,
+      catalogUnpricedSets: figures.catalogUnpricedSets,
+      catalogFaultReducedCount: figures.catalogFaultReducedCount,
+      catalogFullPrice: figures.catalogFullPrice,
+      marketPrice: figures.marketPrice,
+      marketUnconvertible: figures.marketUnconvertible,
+      costPrice: figures.costPrice,
+      setsTotals: { setCount: sets.length, costEstimated: sets.some((s) => s.cost.estimated) },
+      pictures: generated.length > 0 ? generated : copyPictures,
+      picturesGenerated: generated.length > 0,
+      readyBlockers: [
+        ...listingBlockersFor(row.sets, platformModule, labeller, conditionMap, catalogIds, "ready"),
+        ...textBlockers,
+        ...(photoBlockers.get(row.id) ?? []),
+        ...evaluateSoldElsewhereReadiness(
+          sets.filter((s) => s.soldElsewhere).length,
+          transitionVerb("ready")
+        ),
+      ],
+      readyAfterPhotos: row.readyAfterPhotosAt !== null,
+      readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
+    };
+  });
+}
+
+/**
+ * *Use estimated price* on the Prepare screen (#1894): each of these offers that has **no stated
+ * price yet** takes its Estimated value (#1829) — the figure the price table suggests, computed now
+ * rather than taken from the screen. The stated figure is the asking price of a quick buy and the
+ * starting price of an auction (#449), through {@link patchOffer} as a click on the table writes it.
+ *
+ * An offer that has since been given a price is left as it is and named, as is one with nothing to
+ * estimate; refusals are collected per offer (#323), never thrown for the batch.
+ */
+export async function applyEstimatedPrices(
+  ownerId: string,
+  collectionId: string,
+  offerIds: readonly string[]
+): Promise<{ succeeded: string[]; skipped: { offerId: string; message: string }[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const offers = await readPrepareOffers(collectionId, offerIds);
+  const found = new Map(offers.map((o) => [o.id, o]));
+  const succeeded: string[] = [];
+  const skipped: { offerId: string; message: string }[] = [];
+  for (const offerId of offerIds) {
+    const offer = found.get(offerId);
+    if (!offer) {
+      skipped.push({ offerId, message: "Not being prepared any more." });
+      continue;
+    }
+    const auction = isAuctionListing(offer.listingType);
+    if (pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice)) {
+      skipped.push({ offerId, message: `Already has ${auction ? "a starting price" : "a price"}.` });
+      continue;
+    }
+    if (offer.suggestedPrice === null) {
+      skipped.push({ offerId, message: "No estimated value to use — its copies carry no catalogue value." });
+      continue;
+    }
+    try {
+      await patchOffer(
+        ownerId,
+        offerId,
+        auction ? { startingPrice: offer.suggestedPrice } : { price: offer.suggestedPrice }
+      );
+      succeeded.push(offerId);
+    } catch (e) {
+      skipped.push({ offerId, message: e instanceof Error ? e.message : "Failed to set the price." });
+    }
+  }
+  return { succeeded, skipped };
+}
+
 /** One of the batch's sets, exactly as {@link LISTING_SETS_SELECT} returns it. */
 type ListingSetRow = Prisma.OfferSetGetPayload<{ select: typeof LISTING_SETS_SELECT }>;
 
@@ -5052,53 +5483,17 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     };
   });
 
-  // The catalogue value per set: average base-currency catalog value per set (a buyer takes one
-  // set), converted to the offer's currency at the current rate. Summed from the per-set figures
-  // above rather than from a second valuation pass — a set counts as valued when *some* copy of it
-  // priced, which is exactly what `pricedCount` says. It was the suggested price until #1829.
-  let sumSetCV = 0;
-  let valuedSets = 0;
-  // What the copies' fault reductions took off (#1560), so the figure can name its full value.
-  let sumSetReduction = 0;
-  let faultReducedCount = 0;
-  for (const s of sets) {
-    if (s.holdings.pricedCount === 0) continue;
-    sumSetCV += Number(s.holdings.totalBaseAmount);
-    sumSetReduction += Number(s.holdings.faultReductionBaseAmount);
-    faultReducedCount += s.holdings.faultReducedCount;
-    valuedSets++;
-  }
-  // Same rate the per-set figures used — an offer already in base converts 1:1, and a missing rate
-  // leaves no figure rather than one in the wrong currency.
-  const toOffer = offer.currency === baseCurrency ? 1 : baseToOffer;
-  const inOfferCurrencyOrNull = (base: number | null) =>
-    base === null || toOffer === null ? null : (base * toOffer).toFixed(2);
-  let catalogPrice: string | null = null;
-  let catalogFullPrice: string | null = null;
-  if (valuedSets > 0) {
-    catalogPrice = inOfferCurrencyOrNull(sumSetCV / valuedSets);
-    if (faultReducedCount > 0) {
-      catalogFullPrice = inOfferCurrencyOrNull((sumSetCV + sumSetReduction) / valuedSets);
-    }
-  }
-
-  // The suggestion (#1829): Estimated value per set, over the same sets and in the same currency.
-  const estimate = estimateSets(sets.map((s) => estimatesBySet.get(s.id) ?? []));
-  const suggestedPrice = estimate ? inOfferCurrencyOrNull(estimate.averageBase) : null;
-
-  // What the market paid per set (#458), averaged over the sets any copy of which has results.
-  let sumSetMarket = 0;
-  let marketSets = 0;
-  let marketCopies = 0;
-  let noEvidenceCopies = 0;
-  for (const s of sets) {
-    noEvidenceCopies += s.holdings.market.noEvidenceCount;
-    if (s.holdings.market.valuedCount === 0) continue;
-    sumSetMarket += Number(s.holdings.market.totalBaseAmount);
-    marketCopies += s.holdings.market.valuedCount;
-    marketSets++;
-  }
-  const marketAmount = marketSets > 0 ? inOfferCurrencyOrNull(sumSetMarket / marketSets) : null;
+  // The price table's figures (#1829): the catalogue value, Estimated value (the suggestion), the
+  // market and the COST, each per set and in the offer's currency — the one computation the Prepare
+  // screen (#1894) reads too, so the two cannot disagree. Same rate the per-set figures used: an offer
+  // already in base converts 1:1, and a missing rate leaves no figure rather than one in the wrong
+  // currency. A set counts as valued when *some* copy of it priced, which is what `pricedCount` says.
+  const figures = offerPriceFigures(
+    sets.map((s) => ({ holdings: s.holdings, cost: s.cost, estimates: estimatesBySet.get(s.id) ?? [] })),
+    offer.currency === baseCurrency ? 1 : baseToOffer
+  );
+  const { sumBase: sumSetCV, reductionBase: sumSetReduction, valuedSets } = figures.catalogue;
+  const faultReducedCount = figures.catalogFaultReducedCount;
 
   // The same two figures over the whole listing (#378): summed, and averaged over the sets that
   // carried one. Summed from the per-set figures rather than re-aggregated, because an offer never
@@ -5220,27 +5615,16 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     needsAction: sets.some((s) => s.needsAction),
     inActiveBidding: biddingLive(offer.inActiveBidding, state),
     platformSale,
-    suggestedPrice,
-    suggestedEstimate:
-      estimate && suggestedPrice !== null
-        ? {
-            valuedSets: estimate.valuedSets,
-            copies: estimate.copies,
-            ratio: estimate.ratio,
-            source: estimate.source,
-          }
-        : null,
-    catalogNames: estimate?.catalogues ?? [],
-    catalogPrice,
-    catalogUnpricedSets: offer.sets.length - valuedSets,
-    catalogFaultReducedCount: faultReducedCount,
-    catalogFullPrice,
-    marketPrice:
-      marketAmount === null
-        ? null
-        : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
-    marketUnconvertible: marketSets > 0 && marketAmount === null,
-    costPrice: inOfferCurrencyOrNull(costTotals.average),
+    suggestedPrice: figures.suggestedPrice,
+    suggestedEstimate: figures.suggestedEstimate,
+    catalogNames: figures.catalogNames,
+    catalogPrice: figures.catalogPrice,
+    catalogUnpricedSets: figures.catalogUnpricedSets,
+    catalogFaultReducedCount: figures.catalogFaultReducedCount,
+    catalogFullPrice: figures.catalogFullPrice,
+    marketPrice: figures.marketPrice,
+    marketUnconvertible: figures.marketUnconvertible,
+    costPrice: figures.costPrice,
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     platformMinimumPrice: offer.platform.minimumPrice?.toFixed(2) ?? null,
     sets,

@@ -59,7 +59,7 @@ export type PhotoRole = "front" | "back" | "main" | null;
 
 const VALID_ROLES = new Set(["front", "back", "main"]);
 
-function normalizeRole(role: unknown): PhotoRole {
+export function normalizeRole(role: unknown): PhotoRole {
   return typeof role === "string" && VALID_ROLES.has(role)
     ? (role as PhotoRole)
     : null;
