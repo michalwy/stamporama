@@ -53,15 +53,17 @@ the field shows is what is saved. An empty field stays empty.
     handling until you add them. A total below the offer prices — which would make handling
     negative — is flagged and can't be saved.
 
-- **Shipping method** and **Postage** — how the buyer asked for it to be sent, and what
+- **Shipping option** and **Postage** — how the buyer asked for it to be sent, and what
   posting it costs you (**subtracts**). The envelope and cards it goes in are added on the sale
-  itself — see [Packing supplies](#packing-supplies). The method list is the platform's own: the options you set
-  up on the [contact](contacts.md#shipping-methods), each with its usual price. Picking one fills
-  in the cost and its currency for you; change either afterwards whenever this parcel cost
-  something else. **Custom…** lets you name a one-off method that isn't worth adding to the list.
-  Both stay editable on the detail screen — the real postage often turns up later than the order.
-  A method can also name the **carrier** it usually posts by — a default for the
-  [shipment](#tracking-the-shipment), overridable on each sale.
+  itself — see [Packing supplies](#packing-supplies). The list is the platform's own: the
+  [shipping options](contacts.md#shipping-options) you set up on the contact, each shown with what
+  the buyer pays for it. Picking one fills in the postage and its currency from the carrier service
+  the option is linked to — what that service costs *you*, from your rate list under
+  [Settings → Carriers](collections.md#carriers); an option linked to no service leaves the postage
+  for you to enter. Change either afterwards whenever this parcel cost something else. **Custom…**
+  lets you name a one-off option that isn't worth adding to the list. Both stay editable on the
+  detail screen — the real postage often turns up later than the order. The service's carrier is a
+  default for the [shipment](#tracking-the-shipment), overridable on each sale.
 
 **Continue** creates the sale and opens its detail screen.
 
@@ -162,13 +164,14 @@ net and the profit use that total.
   The **Packing supplies** screen says how many units sales are waiting for.
 - A unit from a batch bought in another currency with **no rate** into your base currency is
   counted the same way — no cost yet, the total incomplete — until the purchase has a rate.
-- **A shipping method can fill them in.** When the platform's
-  [shipping method](contacts.md#shipping-methods) lists its usual supplies, choosing it — when you
-  record the sale, on the **Postage** row or in **Edit header** — adds those lines, taken from stock
-  like any other; adjust them for this parcel as you need. **Changing the method** swaps the lines
-  that are still exactly the old method's for the new method's, and keeps any line you changed or
-  added yourself (a line you raised to *5 cards* stays, and the new method's cards are not added
-  beside it). Saving the same method again brings back nothing you removed.
+- **A shipping option can fill them in.** When the [carrier service](collections.md#carriers) a
+  platform's [shipping option](contacts.md#shipping-options) is linked to lists its usual supplies,
+  choosing the option — when you record the sale, on the **Postage** row or in **Edit header** —
+  adds those lines, taken from stock like any other; adjust them for this parcel as you need.
+  **Changing the option** swaps the lines that are still exactly the old service's for the new
+  one's, and keeps any line you changed or added yourself (a line you raised to *5 cards* stays, and
+  the new service's cards are not added beside it). Saving the same option again brings back nothing
+  you removed.
 - **A sale recorded before supplies existed keeps its typed amount** as its whole shipping, and its
   row still reads **− My shipping**. Add supply lines to it only if you want to restate it as
   postage plus supplies — then lower the typed amount to the postage alone.
@@ -354,7 +357,7 @@ sale back to Packed from Sent is a correction, not a packing decision.
 
 **Moving to Sent asks about the parcel.** The moment it goes is the moment you know which courier
 took it and hold the receipt with the number on it, so a **Mark as sent** prompt asks for both. The
-carrier arrives **pre-selected** from the sale's shipping method — change it when the parcel went
+carrier arrives **pre-selected** from the sale's shipping option — change it when the parcel went
 another way — and the prompt says what the choice means: whether that carrier will turn the number
 into a link, or whether it has no tracking page recorded. **Skip** moves the sale to Sent without a
 number, which is the right answer for postage that carries no tracking at all. As with the paid
@@ -368,10 +371,11 @@ exactly as the carrier gave it to you. Both live in one **Shipment** dialog: it 
 number** when there is none, or the **✎** beside the 📦 chip to correct what was recorded. Like the
 transaction link, either can be set or changed whatever the sale's status is.
 
-**The carrier on a shipping method is only a default.** On a marketplace you offer a *service* —
-"Courier" — and which courier actually takes the parcel is settled at the counter, so what the
-method names is a suggestion the Shipment dialog pre-selects and you override per sale. A sale that
-never says anything of its own keeps following its method's carrier.
+**The carrier of a shipping option is only a default.** It is the carrier of the service the
+option is linked to. On a marketplace you offer a *service* — "Courier" — and which courier actually
+takes the parcel is settled at the counter, so the option's carrier is a suggestion the Shipment
+dialog pre-selects and you override per sale. A sale that never says anything of its own keeps
+following its option's carrier.
 
 Whether the number becomes a **link** depends on that carrier:
 
@@ -379,8 +383,8 @@ Whether the number becomes a **link** depends on that carrier:
    looks a parcel up, with `{code}` where the tracking number goes, e.g.
    `https://emonitoring.poczta-polska.pl/?numer={code}`. Leave the address blank for a carrier with
    no tracking page.
-2. Name a usual carrier on the platform's [shipping method](contacts.md#shipping-methods), so the
-   common case needs no thought.
+2. Link the platform's [shipping option](contacts.md#shipping-options) to one of the carrier's
+   services, so the common case needs no thought.
 3. Record the sale, pick the carrier that actually took it when you mark it Sent, and the tracking
    number becomes a **📦 link** straight to the parcel.
 
@@ -502,19 +506,19 @@ template; the rest are placeholders:
 | `{buyer}` | the buyer's name |
 | `{items}` | the items sold, one per line: the offer's number and title (`#412 Austria 1850 Mercury`) |
 | `{itemsTotal}` | what the items come to |
-| `{shipping}` | the shipping method on the sale and what the buyer pays for it — empty until a method is chosen |
+| `{shipping}` | the shipping option on the sale and what the buyer pays for it — empty until an option is chosen |
 | `{total}` | what the buyer owes |
-| `{shippingOptions}` | the platform's shipping methods, one per line, each with its price |
+| `{shippingOptions}` | the platform's shipping options, one per line, each with what the buyer pays for it |
 | `{sale}` | the sale's number |
 
-**The total includes the shipping once a shipping method is on the sale**: the items plus the
+**The total includes the shipping once a shipping option is on the sale**: the items plus the
 postage the buyer pays — the sale's **buyer handling**, or what is left of the **total paid by
-buyer** after the items. Before a method is chosen the total is the items alone, and
-`{shippingOptions}` lists what the buyer can choose from, at each method's price on the platform's
-list. Amounts read `15 PLN`, or `15.50 PLN` when they are not whole. A placeholder the sale has
+buyer** after the items. Before an option is chosen the total is the items alone, and
+`{shippingOptions}` lists what the buyer can choose from, at each option's **buyer price** — never
+what the service costs you. Amounts read `15 PLN`, or `15.50 PLN` when they are not whole. A placeholder the sale has
 nothing for — no buyer recorded, say — comes out empty; nothing is filled in in its place.
 
-The message is written from the sale as it stands, so choose the shipping method or add a sold set
+The message is written from the sale as it stands, so choose the shipping option or add a sold set
 and the message follows.
 
 ## Printing a packing list
@@ -527,7 +531,7 @@ laid out as a walk through your shelves:
   the transaction, and the reference to quote when the sheet is talked about on paper — plus the
   platform, buyer, order number, sale date, [status](#fulfillment-status), and the copy/packed
   counts. The **order number** beside it is a different thing: that one is the *marketplace's*
-  number for the same sale. When the sale records a **shipping method**, it prints there too, so
+  number for the same sale. When the sale records a **shipping option**, it prints there too, so
   the sheet says how the parcel goes out; sales without one simply don't show the field.
 - One **section per storage [location](locations.md)**, in shelf order, with the copies filed
   nowhere in a trailing **No location** section.

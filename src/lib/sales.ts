@@ -32,7 +32,7 @@ import {
   type ItemListItem,
 } from "./items";
 import { attributeLineToPurchase } from "./purchase-return";
-import { resolveShippingMethodForPlatform } from "./shipping-methods";
+import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
@@ -41,7 +41,7 @@ import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard
 import { settleSupplies } from "./supply-settlement";
 import {
   SALE_SUPPLY_COST_SELECT,
-  applyMethodSupplies,
+  applyOptionSupplies,
   saleSupplyLineCostOf,
   saleSuppliesCostOf,
   type SaleSupplyCostRow,
@@ -372,18 +372,19 @@ export interface SaleHeaderInput {
   shipping?: SaleShippingInput | null;
 }
 
-/** The shipping side of a sale as a form submits it (#468): which method, and what it cost me.
+/** The shipping side of a sale as a form submits it (#468, #1909): which of the platform's options
+ * the buyer chose, and what the postage cost me.
  *
- * The two halves are independent. A method with no cost is a legitimate record — it says how the
- * parcel went even before the postage receipt turns up — and a cost with no method is exactly what
- * every sale recorded before the dictionary existed carries. */
+ * The two halves are independent. An option with no cost is a legitimate record — it says how the
+ * parcel went even before the postage receipt turns up — and a cost with no option is exactly what
+ * every sale recorded before the list existed carries. */
 export interface SaleShippingInput {
-  /** A row from the platform's dictionary, or null for a one-off *Custom* method (or none at all). */
-  methodId: string | null;
-  /** The one-off method's name. Ignored when `methodId` is set: a dictionary method's snapshot is
+  /** One of the platform's shipping options, or null for a one-off *Custom* one (or none at all). */
+  optionId: string | null;
+  /** The one-off option's name. Ignored when `optionId` is set: a listed option's snapshot is
    * taken from the row itself, so the client cannot write a name the platform never offered. */
-  methodName: string | null;
-  /** My postage cost. Null (a blank field) clears the money fields; the method, if any, stays. */
+  optionName: string | null;
+  /** My postage cost. Null (a blank field) clears the money fields; the option, if any, stays. */
   cost: string | null;
   /** Currency the postage was paid in (#206) — independent of the sale's transaction currency. */
   currency: string;
@@ -422,8 +423,8 @@ async function freezeFxRate(
 
 /** The four shipping columns a write sets together (#468/#206). */
 interface SaleShippingData {
-  shippingMethodId: string | null;
-  shippingMethodName: string | null;
+  shippingOptionId: string | null;
+  shippingOptionName: string | null;
   shippingCost: string | null;
   shippingCurrency: string | null;
   shippingFxRateToBase: Prisma.Decimal | null;
@@ -432,12 +433,12 @@ interface SaleShippingData {
 /**
  * Turn what a form submitted about shipping into the columns to write (#468).
  *
- * A dictionary method is re-read here rather than trusted from the client: it must belong to *this
+ * A listed option is re-read here rather than trusted from the client: it must belong to *this
  * sale's platform* (the price list is the platform's), and its **current** name is what gets
  * snapshotted onto the sale. A custom one-off keeps the typed name and has no row behind it.
  *
- * The cost is a separate fact from the method. A blank one clears the money fields — including the
- * frozen rate, which describes a cost that no longer exists — and leaves the method standing, since
+ * The cost is a separate fact from the option. A blank one clears the money fields — including the
+ * frozen rate, which describes a cost that no longer exists — and leaves the option standing, since
  * how a parcel went is worth recording before the postage receipt turns up.
  */
 async function resolveSaleShipping(
@@ -446,20 +447,20 @@ async function resolveSaleShipping(
   baseCurrency: string,
   input: SaleShippingInput
 ): Promise<SaleShippingData> {
-  let methodId: string | null = null;
-  let methodName: string | null = null;
-  if (input.methodId) {
-    const method = await resolveShippingMethodForPlatform(platformId, input.methodId);
-    methodId = method.id;
-    methodName = method.name;
-  } else if (input.methodName?.trim()) {
-    methodName = input.methodName.trim();
+  let optionId: string | null = null;
+  let optionName: string | null = null;
+  if (input.optionId) {
+    const option = await resolveShippingOptionForPlatform(platformId, input.optionId);
+    optionId = option.id;
+    optionName = option.name;
+  } else if (input.optionName?.trim()) {
+    optionName = input.optionName.trim();
   }
 
   if (input.cost == null) {
     return {
-      shippingMethodId: methodId,
-      shippingMethodName: methodName,
+      shippingOptionId: optionId,
+      shippingOptionName: optionName,
       shippingCost: null,
       shippingCurrency: null,
       shippingFxRateToBase: null,
@@ -467,8 +468,8 @@ async function resolveSaleShipping(
   }
   const currency = input.currency.trim() || baseCurrency;
   return {
-    shippingMethodId: methodId,
-    shippingMethodName: methodName,
+    shippingOptionId: optionId,
+    shippingOptionName: optionName,
     shippingCost: input.cost,
     shippingCurrency: currency,
     shippingFxRateToBase: await freezeFxRate(collectionId, currency, baseCurrency),
@@ -546,13 +547,13 @@ export async function createSale(
 
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
   // How it is being sent, when the form asked (#468). Recorded at creation because the buyer picks
-  // the method *when they order* — it is known before the parcel, let alone the receipt, exists.
+  // the option *when they order* — it is known before the parcel, let alone the receipt, exists.
   const shipping = input.shipping
     ? await resolveSaleShipping(collectionId, input.platformId, baseCurrency, input.shipping)
     : null;
   // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
-  // row it belongs to stand or fall together — and so does the method's usual packing supplies
-  // (#1899), filled in as the sale's supply lines.
+  // row it belongs to stand or fall together — and so do the usual packing supplies of the option's
+  // carrier service (#1899, #1909), filled in as the sale's supply lines.
   const sale = await prisma.$transaction(async (tx) => {
     const created = await tx.sale.create({
       data: {
@@ -575,7 +576,7 @@ export async function createSale(
       },
       select: { id: true },
     });
-    await applyMethodSupplies(tx, created.id, null, shipping?.shippingMethodId ?? null);
+    await applyOptionSupplies(tx, created.id, null, shipping?.shippingOptionId ?? null);
     return created;
   });
   return sale.id;
@@ -678,15 +679,15 @@ export async function updateSaleHeader(
     }
   }
   const fxRateToBase = await freezeFxRate(ref.collectionId, ref.currency, ref.baseCurrency);
-  // Resolved against the platform the sale is *moving to*, so a method can never outlive the
-  // platform whose price list it came from.
+  // Resolved against the platform the sale is *moving to*, so an option can never outlive the
+  // platform whose list it came from.
   const shipping = input.shipping
     ? await resolveSaleShipping(ref.collectionId, input.platformId, ref.baseCurrency, input.shipping)
     : null;
   await prisma.$transaction(async (tx) => {
     const before = await tx.sale.findUniqueOrThrow({
       where: { id: saleId },
-      select: { shippingMethodId: true },
+      select: { shippingOptionId: true },
     });
     await tx.sale.update({
       where: { id: saleId },
@@ -701,19 +702,19 @@ export async function updateSaleHeader(
         buyerPaidTotal: input.buyerPaidTotal,
         commission: input.commission,
         ...(shipping ?? {}),
-        // A method belongs to a platform's price list, so moving the sale to another platform drops
+        // An option belongs to a platform's list, so moving the sale to another platform drops
         // it — the *name* stays, because that is a snapshot of how the parcel actually went and no
         // change of platform makes it untrue. Only when the form did not submit shipping itself; when
-        // it did, the resolver above already validated the method against the new platform.
+        // it did, the resolver above already validated the option against the new platform.
         ...(shipping == null && input.platformId !== ref.platformId
-          ? { shippingMethodId: null }
+          ? { shippingOptionId: null }
           : {}),
       },
     });
-    // Only a method the form chose swaps the supply lines (#1899). The one dropped above with a change
+    // Only an option the form chose swaps the supply lines (#1899). The one dropped above with a change
     // of platform was not chosen away: the parcel went as it went, and its supplies with it.
     if (shipping) {
-      await applyMethodSupplies(tx, saleId, before.shippingMethodId, shipping.shippingMethodId);
+      await applyOptionSupplies(tx, saleId, before.shippingOptionId, shipping.shippingOptionId);
     }
   });
 }
@@ -753,7 +754,7 @@ export async function updateSaleTransactionUrl(
 
 /** What the collector says about the parcel itself (#491): who carried it and its tracking number. */
 export interface SaleShipmentInput {
-  /** The carrier that actually took it, or null to fall back on the shipping method's default. */
+  /** The carrier that actually took it, or null to fall back on the shipping option's default. */
   carrierId: string | null;
   /** Free text — every carrier numbers its consignments its own way. Null when cleared. */
   trackingCode: string | null;
@@ -784,7 +785,7 @@ export async function updateSaleShipment(
 
 /** Set (or clear) how a sale was shipped and what it cost me (#206/#468), from the detail screen's
  * shipping row. Freezes the shipping currency's base rate at save time — independent of the sale's
- * transaction currency — so profit is computed in the base currency. The method is resolved against
+ * transaction currency — so profit is computed in the base currency. The option is resolved against
  * the sale's own platform; a blank amount clears the cost, its currency and the frozen rate. */
 export async function updateSaleShipping(
   ownerId: string,
@@ -796,11 +797,11 @@ export async function updateSaleShipping(
   await prisma.$transaction(async (tx) => {
     const before = await tx.sale.findUniqueOrThrow({
       where: { id: saleId },
-      select: { shippingMethodId: true },
+      select: { shippingOptionId: true },
     });
     await tx.sale.update({ where: { id: saleId }, data });
-    // A method chosen here fills in its usual supplies, swapping the old one's (#1899).
-    await applyMethodSupplies(tx, saleId, before.shippingMethodId, data.shippingMethodId);
+    // An option chosen here fills in its service's usual supplies, swapping the old one's (#1899).
+    await applyOptionSupplies(tx, saleId, before.shippingOptionId, data.shippingOptionId);
   });
 }
 
@@ -1845,11 +1846,11 @@ export interface SaleDetail {
   /** True when total-anchored and the total is below the offer prices — handling would be negative,
    * so it is clamped to 0 and this flags the error state. */
   totalBelowGross: boolean;
-  /** The dictionary method this sale was sent by (#468), or null for a one-off / none. */
-  shippingMethodId: string | null;
-  /** What the method was called at sale time — the snapshot, so a renamed or deleted dictionary
-   * row never rewrites what this sale says. Null when no method was recorded. */
-  shippingMethodName: string | null;
+  /** The platform's shipping option the buyer chose (#468), or null for a one-off / none. */
+  shippingOptionId: string | null;
+  /** What the option was called at sale time — the snapshot, so a renamed or deleted option never
+   * rewrites what this sale says. Null when no option was recorded. */
+  shippingOptionName: string | null;
   /** My shipping cost as originally entered, in `shippingCurrency` (#206). */
   shippingCost: string | null;
   /** Currency the shipping cost was paid in; defaults to the sale currency for new entries. Null
@@ -1868,10 +1869,11 @@ export interface SaleDetail {
   myShippingBase: string;
   /** The shipment's tracking number (#491), or null. Editable in place in any status. */
   trackingCode: string | null;
-  /** The carrier in force for this parcel: the one the sale recorded, else the **default** named on
-   * its shipping method. Null when neither says. The distinction is deliberate — the buyer picks a
-   * service, the courier is chosen at the counter — but everything downstream wants the effective
-   * answer, so the fallback is resolved here rather than in three screens. */
+  /** The carrier in force for this parcel: the one the sale recorded, else the **default** — the
+   * carrier of the service its shipping option is linked to (#1909). Null when neither says. The
+   * distinction is deliberate — the buyer picks a service, the courier is chosen at the counter — but
+   * everything downstream wants the effective answer, so the fallback is resolved here rather than
+   * in three screens. */
   carrierId: string | null;
   /** {@link carrierId}'s name — what the tracking chip is attributed to. */
   carrierName: string | null;
@@ -1930,8 +1932,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       fxRateToBase: true,
       buyerHandling: true,
       buyerPaidTotal: true,
-      shippingMethodId: true,
-      shippingMethodName: true,
+      shippingOptionId: true,
+      shippingOptionName: true,
       shippingCost: true,
       shippingCurrency: true,
       shippingFxRateToBase: true,
@@ -1945,12 +1947,16 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
         },
       },
       trackingCode: true,
-      // The sale's own carrier, and the method's as the fallback default (#491). Only the *link* is
+      // The sale's own carrier, and its option's service's as the fallback default (#491, #1909). Only the *link* is
       // derived from either — it is a way of looking the parcel up, not a fact the sale freezes, so
       // a carrier that moves its tracking site is corrected once and every sale it carried follows.
       carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
-      shippingMethod: {
-        select: { carrier: { select: { id: true, name: true, trackingUrlTemplate: true } } },
+      shippingOption: {
+        select: {
+          service: {
+            select: { carrier: { select: { id: true, name: true, trackingUrlTemplate: true } } },
+          },
+        },
       },
       commission: true,
       status: true,
@@ -2049,8 +2055,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const buyerNetTx = gross + shared.buyerHandling - shared.commission;
   const net = buyerNetTx * rate - shippingBase;
 
-  // What the sale said, else the default its shipping method carries (#491).
-  const carrier = sale.carrier ?? sale.shippingMethod?.carrier ?? null;
+  // What the sale said, else the carrier of its option's service (#491, #1909).
+  const carrier = sale.carrier ?? sale.shippingOption?.service?.carrier ?? null;
 
   // "All packed" hint (#192): true only when the sale has copies and every one is packed. Never
   // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
@@ -2076,8 +2082,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     buyerHandling: sale.buyerPaidTotal != null ? effHandling.toFixed(2) : money(sale.buyerHandling),
     buyerPaidTotal: money(sale.buyerPaidTotal),
     totalBelowGross,
-    shippingMethodId: sale.shippingMethodId,
-    shippingMethodName: sale.shippingMethodName,
+    shippingOptionId: sale.shippingOptionId,
+    shippingOptionName: sale.shippingOptionName,
     shippingCost: money(sale.shippingCost),
     shippingCurrency: sale.shippingCurrency,
     shippingBase: sale.shippingCost == null ? null : resolved.postageBase.toFixed(2),

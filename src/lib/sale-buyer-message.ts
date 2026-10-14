@@ -34,7 +34,7 @@ const MESSAGE_SALE_SELECT = {
   currency: true,
   buyerHandling: true,
   buyerPaidTotal: true,
-  shippingMethodName: true,
+  shippingOptionName: true,
   collection: { select: { ownerId: true } },
   buyer: { select: { name: true } },
   platform: {
@@ -92,7 +92,7 @@ async function facebookTemplate(
 
 /**
  * The buyer message for a sale, or null when its platform has no template for it. Read on every render
- * of the sale's screen, so it is always the sale as it stands: a shipping method chosen a moment ago is
+ * of the sale's screen, so it is always the sale as it stands: a shipping option chosen a moment ago is
  * in the total.
  */
 export async function readSaleBuyerMessage(ownerId: string, saleId: string): Promise<SaleBuyerMessage | null> {
@@ -116,10 +116,10 @@ export async function readSaleBuyerMessage(ownerId: string, saleId: string): Pro
     sale.buyerHandling == null && sale.buyerPaidTotal == null
       ? null
       : resolveBuyerHandling(sale.buyerHandling, sale.buyerPaidTotal, gross).handling.toFixed(2);
-  const methods = await prisma.shippingMethod.findMany({
+  const options = await prisma.shippingOption.findMany({
     where: { platformId: sale.platform.id },
     orderBy: { name: "asc" },
-    select: { name: true, cost: true, currency: true },
+    select: { name: true, price: true, currency: true },
   });
 
   const input: BuyerMessageSale = {
@@ -133,9 +133,9 @@ export async function readSaleBuyerMessage(ownerId: string, saleId: string): Pro
         : (l.offerSet.title?.trim() ?? ""),
       price: l.price.toFixed(2),
     })),
-    shippingMethodName: sale.shippingMethodName,
+    shippingOptionName: sale.shippingOptionName,
     buyerHandling: handling,
-    shippingOptions: methods.map((m) => ({ name: m.name, cost: m.cost.toFixed(2), currency: m.currency })),
+    shippingOptions: options.map((o) => ({ name: o.name, price: o.price.toFixed(2), currency: o.currency })),
   };
   return { text: renderBuyerMessage(template, input), source };
 }

@@ -528,48 +528,44 @@ it blank** to fall back to Stamporama's plain catalog/copy label. Generated titl
 starting point — you can always edit an offer's title by hand afterwards (see
 [Offers → Listing title](offers.md#listing-title)).
 
-### Shipping methods
+### Shipping options
 
-Ticking **Platform** also reveals a **Shipping methods** row with a **Methods…** button. This is the
-platform's own postage price list — the services buyers here can choose from, each with what sending
-by it costs *you*:
+Ticking **Platform** also reveals a **Shipping options** row with an **Options…** button. This is
+what buyers on this platform can choose from, **at the price they pay** for it, each linked to the
+carrier service it goes by:
 
-| Method | Carrier | Cost | Currency |
+| Option | Sent by | Buyer pays | Currency |
 | --- | --- | --- | --- |
-| Registered letter | Poczta Polska | 12.00 | PLN |
-| Courier | DPD | 25.00 | PLN |
+| Registered letter | Poczta Polska › List polecony ekonomiczny | 9.00 | PLN |
+| Courier | InPost › Kurier | 18.00 | PLN |
 
-**Carrier** is optional and is only a **default**: it says who *usually* moves a parcel sent this
-way, and is pre-selected when you mark a sale sent — where you change it if this one went with
-somebody else. That matters because a marketplace sells a service, not a company: Allegro's
-"Courier" is whichever courier you walk it to. Naming one is what lets a sale's
-[tracking number](sales.md#tracking-the-shipment) become a link to the carrier's own tracking page.
-Carriers are kept per collection under **Settings → Carriers**, not per platform — the same post
-office carries parcels for every marketplace you sell on.
+**What sending costs *you* is not set here.** It belongs to the carrier's service, in the rate list
+under [Settings → Carriers](collections.md#carriers): the same registered letter costs you the same
+whether the stamp sold on Allegro, Colnect or Facebook, so its price is kept once and every
+platform's option links to it. A linked row also shows what the service costs you and the packing
+supplies it usually takes.
 
-Add a row by filling in the fields at the bottom and pressing **+**. Each row's **⋮** menu
-edits or deletes it; a delete confirms on the row itself. Names are unique per platform, so two
-"Courier" rows can't shadow one another — but two different platforms can each have their own
-Courier at their own price. The list is available once the contact has been saved: a method has to
-hang off a platform that exists.
+**Sent by** is optional. Linking a service is what lets a sale fill itself in: picking the option on
+a [sale](sales.md) fills in the **postage** with the service's cost and the service's usual
+[packing supplies](sales.md#packing-supplies), all still editable there — the service's price is
+what postage usually costs, not what a particular parcel cost. It also gives the sale a default
+carrier, so its [tracking number](sales.md#tracking-the-shipment) becomes a link. An option linked
+to no service leaves the postage for you to enter.
+
+Add a row by filling in the fields at the bottom and pressing **+**. Each row's **⋮** menu edits or
+deletes it; a delete confirms on the row itself. Names are unique per platform, so two "Courier"
+rows can't shadow one another — but two different platforms can each have their own Courier at
+their own price. The list is available once the contact has been saved: an option has to hang off a
+platform that exists.
 
 Unlike everything else in this dialog, these rows **save as you edit them** — they are records of
 their own, not fields of the contact, so nothing here waits for the contact's **Save**.
 
-Picking a method on a [sale](sales.md) fills in **my shipping** with the cost above, still editable
-there — a method's price is what it usually costs, not what a particular parcel cost. Re-pricing or
-renaming a method never touches a sale already recorded: each sale keeps the name it was sent under.
-That is also why a method a sale points at can't be deleted — rename it instead. A sale can always
-name a **one-off** method without one being listed here, so the list is for what you actually post
-with regularly.
-
-**A method can list its usual packing supplies.** Once you have named supplies under
-**Settings → Packing supplies**, each row's editor (and the add form) shows **Packed with** and a
-**+ Supply** button: pick a supply and how many a parcel sent this way takes — *C6 envelope × 1,
-Transport card A6 × 2*. The row then reads *Packed with C6 envelope × 1, Transport card A6 × 2*.
-Choosing the method on a sale fills those in as the sale's
-[packing supplies](sales.md#packing-supplies), still editable there. Changing the list affects only
-sales whose method you choose afterwards; a method with none listed fills in nothing.
+Re-pricing or renaming an option, or its service, never touches a sale already recorded: each sale
+keeps the name it was sent under and the postage it was given. That is also why an option a sale
+points at can't be deleted — rename it instead. A sale can always name a **one-off** option without
+one being listed here, so the list is for what you actually offer regularly. The buyer prices are
+what the [message to the buyer](sales.md#message-to-the-buyer) lists for `{shippingOptions}`.
 
 ### Message to buyer
 

@@ -10,13 +10,20 @@ import {
   createCarrier,
   updateCarrier,
   deleteCarrier,
+  createCarrierService,
+  updateCarrierService,
+  deleteCarrierService,
   CarrierInUseError,
+  CarrierServiceInUseError,
+  CarrierServiceSuppliesError,
   type CarrierData,
 } from "@/lib/carriers";
 import { parseTrackingUrlTemplate } from "@/lib/tracking-rules";
+import { parseAmount } from "@/lib/sale-rules";
+import type { SupplyQuantity } from "@/lib/service-supplies";
 
-// Server actions for the carrier dictionary (#491). Thin wrappers over the `carriers` domain
-// module, mirroring the shipping-method actions (#468) it sits beside.
+// Server actions for the carriers (#491) and their rate lists (#1909). Thin wrappers over the
+// `carriers` domain module, mirroring the shipping-option actions (#468) beside them.
 
 export type CarrierActionState =
   | { status: "idle" }
@@ -95,13 +102,116 @@ export async function deleteCarrierAction(carrierId: string): Promise<CarrierAct
     return { status: "success" };
   } catch (e) {
     if (e instanceof CarrierInUseError) {
-      return {
-        status: "error",
-        message: `This carrier is used by ${e.methodCount} shipping method${
-          e.methodCount === 1 ? "" : "s"
-        } and cannot be deleted. Detach it there first.`,
-      };
+      return { status: "error", message: carrierInUseMessage(e) };
     }
     return { status: "error", message: "Failed to delete the carrier. Please try again." };
+  }
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function carrierInUseMessage(e: CarrierInUseError): string {
+  if (e.serviceCount > 0) {
+    return `This carrier has ${plural(e.serviceCount, "service", "services")} and cannot be deleted. Delete them first.`;
+  }
+  return `This carrier is recorded on ${plural(e.saleCount, "sale", "sales")} and cannot be deleted. Rename it instead.`;
+}
+
+// ── Services ─────────────────────────────────────────────────────────────────────────────────
+
+/** A service's cost is required — a rate list whose row has no price is the free-entry amount it
+ * exists to replace. */
+function parseServiceFields(
+  formData: FormData
+):
+  | { ok: true; name: string; cost: string; currency: string; supplies?: SupplyQuantity[] }
+  | { ok: false; message: string } {
+  const name = ((formData.get("name") as string | null) ?? "").trim();
+  if (!name) return { ok: false, message: "Name is required." };
+  const currency = ((formData.get("currency") as string | null) ?? "").trim();
+  if (!currency) return { ok: false, message: "Choose the currency this service is paid in." };
+  const cost = parseAmount((formData.get("cost") as string | null) ?? "", "Cost");
+  if (!cost.ok) return { ok: false, message: cost.message };
+  if (cost.value == null) return { ok: false, message: "Cost is required." };
+  const supplies = parseSupplies(formData.get("supplies"));
+  if (supplies === false) {
+    return { ok: false, message: "Each supply needs a whole number of at least 1." };
+  }
+  return { ok: true, name, cost: cost.value, currency, supplies };
+}
+
+/** The service's usual supplies (#1899), sent as JSON `[{ supplyId, quantity }]`. Absent leaves the
+ * list as it is; `false` when a row is malformed. The domain checks the supplies are the collection's
+ * and none is listed twice. */
+function parseSupplies(raw: FormDataEntryValue | null): SupplyQuantity[] | undefined | false {
+  if (typeof raw !== "string") return undefined;
+  let rows: unknown;
+  try {
+    rows = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(rows)) return false;
+  const out: SupplyQuantity[] = [];
+  for (const row of rows) {
+    const supplyId = typeof row?.supplyId === "string" ? row.supplyId : "";
+    const quantity = Number(row?.quantity);
+    if (!supplyId || !Number.isInteger(quantity) || quantity < 1) return false;
+    out.push({ supplyId, quantity });
+  }
+  return out;
+}
+
+const DUPLICATE_SERVICE_MESSAGE = "This carrier already has a service with that name.";
+
+export async function createCarrierServiceAction(
+  carrierId: string,
+  formData: FormData
+): Promise<CarrierActionState> {
+  const session = await getSession();
+  const parsed = parseServiceFields(formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    await createCarrierService(session.user.id, carrierId, parsed);
+    return { status: "success" };
+  } catch (e) {
+    if (isDuplicateName(e)) return { status: "error", message: DUPLICATE_SERVICE_MESSAGE };
+    if (e instanceof CarrierServiceSuppliesError) return { status: "error", message: e.message };
+    return { status: "error", message: "Failed to add the service. Please try again." };
+  }
+}
+
+export async function updateCarrierServiceAction(
+  serviceId: string,
+  formData: FormData
+): Promise<CarrierActionState> {
+  const session = await getSession();
+  const parsed = parseServiceFields(formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    await updateCarrierService(session.user.id, serviceId, parsed);
+    return { status: "success" };
+  } catch (e) {
+    if (isDuplicateName(e)) return { status: "error", message: DUPLICATE_SERVICE_MESSAGE };
+    if (e instanceof CarrierServiceSuppliesError) return { status: "error", message: e.message };
+    return { status: "error", message: "Failed to save the service. Please try again." };
+  }
+}
+
+export async function deleteCarrierServiceAction(serviceId: string): Promise<CarrierActionState> {
+  const session = await getSession();
+  try {
+    await deleteCarrierService(session.user.id, serviceId);
+    return { status: "success" };
+  } catch (e) {
+    if (e instanceof CarrierServiceInUseError) {
+      return {
+        status: "error",
+        message: `This service is linked from ${plural(e.optionCount, "shipping option", "shipping options")} and cannot be deleted. Unlink it there first.`,
+      };
+    }
+    return { status: "error", message: "Failed to delete the service. Please try again." };
   }
 }

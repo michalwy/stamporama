@@ -1,7 +1,7 @@
 import "server-only";
 import { resolvePurchaseContact } from "./contacts";
 import { resolveFacebookBuyer } from "./facebook-sales";
-import { parseAmount, parseSaleDate, CUSTOM_SHIPPING_METHOD } from "./sale-rules";
+import { parseAmount, parseSaleDate, CUSTOM_SHIPPING_OPTION } from "./sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "./offer-rules";
@@ -47,11 +47,11 @@ export interface SaleHeaderRaw {
   shipping?: SaleShippingRaw;
 }
 
-/** The shipping block of the sale form (#468). `methodId` is a dictionary row's id, or `CUSTOM_
- * SHIPPING_METHOD` for a one-off named in `methodName`; blank is no method at all. */
+/** The shipping block of the sale form (#468). `optionId` is one of the platform's shipping options,
+ * or `CUSTOM_SHIPPING_OPTION` for a one-off named in `optionName`; blank is no option at all. */
 export interface SaleShippingRaw {
-  methodId: string;
-  methodName: string;
+  optionId: string;
+  optionName: string;
   cost: string;
   currency: string;
 }
@@ -70,17 +70,17 @@ export interface ResolvedSaleHeader {
 }
 
 /** Parse the form's shipping block into the domain's input (#468). A one-off carries its typed
- * name; a dictionary pick carries only the id, since the domain re-reads the row for the name. */
+ * name; a listed option carries only the id, since the domain re-reads the row for the name. */
 export function resolveSaleShipping(
   raw: SaleShippingRaw | undefined
 ): { ok: true; value: SaleShippingInput | null } | { ok: false; message: string } {
   if (!raw) return { ok: true, value: null };
   const cost = parseAmount(raw.cost, "Shipping cost");
   if (!cost.ok) return { ok: false, message: cost.message };
-  const custom = raw.methodId === CUSTOM_SHIPPING_METHOD;
-  const methodName = raw.methodName.trim();
-  if (custom && !methodName) {
-    return { ok: false, message: "Name the shipping method, or pick one from the list." };
+  const custom = raw.optionId === CUSTOM_SHIPPING_OPTION;
+  const optionName = raw.optionName.trim();
+  if (custom && !optionName) {
+    return { ok: false, message: "Name the shipping option, or pick one from the list." };
   }
   const currency = raw.currency.trim().toUpperCase();
   if (cost.value != null && !currency) {
@@ -89,8 +89,8 @@ export function resolveSaleShipping(
   return {
     ok: true,
     value: {
-      methodId: custom ? null : raw.methodId.trim() || null,
-      methodName: custom ? methodName : null,
+      optionId: custom ? null : raw.optionId.trim() || null,
+      optionName: custom ? optionName : null,
       cost: cost.value,
       currency,
     },

@@ -131,7 +131,7 @@ function toData(row: ProfileRow, defaultProfileId: string | null): DelcampeListi
 }
 
 /** Every profile of the collection's Delcampe platform, ordered by name — a pick list is read by
- *  looking for the one you already know the name of, as the shipping methods and Allegro's profiles
+ *  looking for the one you already know the name of, as the shipping options and Allegro's profiles
  *  are. */
 export async function listDelcampeListingProfiles(
   ownerId: string,

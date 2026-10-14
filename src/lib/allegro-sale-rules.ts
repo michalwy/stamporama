@@ -3,7 +3,7 @@
  * that are **Allegro's own**.
  *
  * Same split as `allegro-sync-rules.ts` beside `allegro-sync.ts`, and for the same reason: which
- * shipping method the buyer picked is a *rule*, and a rule that lives inside the module doing the
+ * shipping option the buyer picked is a *rule*, and a rule that lives inside the module doing the
  * reads and writes is a rule nobody tests. `allegro-sale.ts` is the half that fetches and writes; it
  * makes no judgement of its own.
  *
@@ -15,22 +15,22 @@
  * The register here is #355's: **a wrong composition is worse than none.**
  */
 
-/** A shipping method as the platform's dictionary (#468) states it, narrowed to what a match needs. */
-export interface MatchableShippingMethod {
+/** A shipping option as the platform's list (#468) states it, narrowed to what a match needs: its
+ * name, and the postage of the carrier service it is linked to (#1909), if any. */
+export interface MatchableShippingOption {
   id: string;
   name: string;
-  cost: string;
-  currency: string;
+  service: { cost: string; currency: string } | null;
 }
 
 /** What the sale's shipping block should open with. */
 export interface ShippingPrefill {
-  /** A dictionary row's id, or null for a one-off named below. */
-  methodId: string | null;
-  /** How the method reads — the dictionary's name where one matched, else Allegro's own wording. */
-  methodName: string;
-  /** What the collector's own postage normally costs, from the dictionary row. Blank where nothing
-   *  matched: Allegro's delivery figure is what the **buyer** paid, which is a different number and
+  /** One of the platform's options, or null for a one-off named below. */
+  optionId: string | null;
+  /** How the option reads — the list's name where one matched, else Allegro's own wording. */
+  optionName: string;
+  /** What the collector's own postage normally costs, from the matched option's carrier service
+   *  (#1909). Blank where nothing matched, or the option links to no service: Allegro's delivery figure is what the **buyer** paid, which is a different number and
    *  is already inside the order's total. Filling it in here would put the buyer's money in the
    *  column that subtracts from the collector's. */
   cost: string;
@@ -38,25 +38,30 @@ export interface ShippingPrefill {
 }
 
 /**
- * Which of the platform's shipping methods the buyer chose.
+ * Which of the platform's shipping options the buyer chose.
  *
  * Matched **by name**, case- and space-insensitively, because that is the only thing the two lists
  * share: the dictionary is the collector's own price list, written in their words, and Allegro's
- * method ids belong to Allegro. A method that matches nothing is a *Custom* one carrying Allegro's
- * wording verbatim — never a new dictionary row, which is a decision about a price list and not
+ * method ids belong to Allegro. A name that matches nothing is a *Custom* option carrying Allegro's
+ * wording verbatim — never a new listed option, which is a decision about the list and not
  * something a sale should make on the way past.
  */
-export function matchShippingMethod(
-  methods: readonly MatchableShippingMethod[],
+export function matchShippingOption(
+  options: readonly MatchableShippingOption[],
   deliveryMethodName: string | null
 ): ShippingPrefill | null {
   const wanted = normalizeMethodName(deliveryMethodName);
   if (!wanted) return null;
-  const hit = methods.find((method) => normalizeMethodName(method.name) === wanted);
+  const hit = options.find((option) => normalizeMethodName(option.name) === wanted);
   if (hit) {
-    return { methodId: hit.id, methodName: hit.name, cost: hit.cost, currency: hit.currency };
+    return {
+      optionId: hit.id,
+      optionName: hit.name,
+      cost: hit.service?.cost ?? "",
+      currency: hit.service?.currency ?? "",
+    };
   }
-  return { methodId: null, methodName: deliveryMethodName!.trim(), cost: "", currency: "" };
+  return { optionId: null, optionName: deliveryMethodName!.trim(), cost: "", currency: "" };
 }
 
 function normalizeMethodName(name: string | null | undefined): string {

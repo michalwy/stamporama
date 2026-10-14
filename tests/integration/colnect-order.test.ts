@@ -4,7 +4,7 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer } from "../../src/lib/offers";
 import { setColnectPlatform } from "../../src/lib/colnect";
-import { createShippingMethod } from "../../src/lib/shipping-methods";
+import { createShippingOption } from "../../src/lib/shipping-options";
 import {
   ColnectOrderError,
   findSalesForColnectOrders,
@@ -177,8 +177,8 @@ describe("Colnect transaction import (#698)", () => {
         buyerPaidTotal: true,
         buyerHandling: true,
         platformId: true,
-        shippingMethodId: true,
-        shippingMethodName: true,
+        shippingOptionId: true,
+        shippingOptionName: true,
         shippingCost: true,
         lines: {
           select: { offerId: true, price: true, setChoicePending: true },
@@ -198,10 +198,10 @@ describe("Colnect transaction import (#698)", () => {
     // `Total with shipping` is the anchor (#205) — never `Items total`, which is the goods alone.
     assert.equal(sale.buyerPaidTotal?.toFixed(2), "7.40");
     assert.equal(sale.buyerHandling, null);
-    // The method as Colnect printed it, with no cost: what this parcel cost the collector is not on
+    // The option as Colnect printed it, with no cost: what this parcel cost the collector is not on
     // that page and is learned when the postage receipt turns up (#206).
-    assert.equal(sale.shippingMethodName, "Stamps→domestic: Registered mail (Poczta Polska)");
-    assert.equal(sale.shippingMethodId, null);
+    assert.equal(sale.shippingOptionName, "Stamps→domestic: Registered mail (Poczta Polska)");
+    assert.equal(sale.shippingOptionId, null);
     assert.equal(sale.shippingCost, null);
     assert.deepEqual(
       sale.lines.map((line) => [line.offerId, line.price.toFixed(2), line.setChoicePending]),
@@ -221,12 +221,12 @@ describe("Colnect transaction import (#698)", () => {
     );
   });
 
-  it("points the sale at the platform's own shipping method when the printed name is one of them", async () => {
-    await createShippingMethod(userId, collectionId, platformId, {
+  it("points the sale at the platform's own shipping option when the printed name is one of them", async () => {
+    await createShippingOption(userId, collectionId, platformId, {
       name: "stamps→domestic: registered mail (poczta polska)",
-      cost: "2.40",
+      price: "2.40",
       currency: "EUR",
-      carrierId: null,
+      serviceId: null,
     });
     const offer = await listedOffer("Poland 1963 animals", "5.00", "kLmNo02");
 
@@ -237,12 +237,12 @@ describe("Colnect transaction import (#698)", () => {
     );
     const sale = await prisma.sale.findUniqueOrThrow({
       where: { id: result.saleId },
-      select: { shippingMethodId: true, shippingMethodName: true, shippingCost: true },
+      select: { shippingOptionId: true, shippingOptionName: true, shippingCost: true },
     });
-    assert.notEqual(sale.shippingMethodId, null);
+    assert.notEqual(sale.shippingOptionId, null);
     // The dictionary row's own wording, matched case- and space-insensitively — the same method.
-    assert.equal(sale.shippingMethodName, "stamps→domestic: registered mail (poczta polska)");
-    // Still no cost: the dictionary says what postage usually costs, not what this parcel did.
+    assert.equal(sale.shippingOptionName, "stamps→domestic: registered mail (poczta polska)");
+    // Still no cost: a linked service says what postage usually costs, not what this parcel did.
     assert.equal(sale.shippingCost, null);
     assert.ok(offer.id);
   });

@@ -4,9 +4,9 @@ import { COLNECT_PLATFORM_MODULE } from "./platform-modules";
 import { getModulePlatform } from "./module-platform";
 import { resolvePurchaseContact } from "./contacts";
 import { addSaleLines, createSale, deleteSale, listSellableOffers } from "./sales";
-import { getShippingMethods } from "./shipping-methods";
+import { getShippingOptions } from "./shipping-options";
 import { offerNumberLabel } from "./offer-set-rules";
-import { matchShippingMethod } from "./allegro-sale-rules";
+import { matchShippingOption } from "./allegro-sale-rules";
 import { parseSaleDate } from "./sale-rules";
 import { saleImportSummary, type ImportedSaleSummary } from "./order-import-summary";
 import {
@@ -34,8 +34,8 @@ import {
 //   * **A pick instead of a refusal** (#697). A matched offer with more sets left than the row
 //     bought records the lowest ones and flags the line: the sets of one offer are the same thing at
 //     the same price, so which copy leaves is the seller's own choice at the packing table.
-//   * **A shipping method** (#468). Colnect names one, so it is written as printed, and matched
-//     against the platform's own dictionary where the name is one the collector already keeps. The
+//   * **A shipping option** (#468). Colnect names one, so it is written as printed, and matched
+//     against the platform's own options where the name is one the collector already keeps. The
 //     FK is the convenience; the printed name is the record.
 //
 // **Nothing is written to Colnect.** The Assistant reads these screens and clicks none of their
@@ -211,14 +211,14 @@ export async function importColnectOrder(
     ? await resolvePurchaseContact(collectionId, { name: plan.buyer.name, role: "buyer" })
     : null;
 
-  // How it went, as Colnect printed it (#468). Matched against the platform's own price list by
-  // name, which is the only thing the two lists share — an unmatched name is recorded as a one-off
-  // and still records the sale, because what carried the parcel is a fact whether or not the
-  // collector keeps a row for it. **No cost**: the dictionary's figure is what postage *usually*
-  // costs the collector, and nothing on this page says what this parcel cost them (#206).
-  const printedMethod = plan.shippingMethodName;
+  // How it went, as Colnect printed it (#468). Matched against the platform's own shipping options
+  // by name, which is the only thing the two lists share — an unmatched name is recorded as a
+  // one-off and still records the sale, because what carried the parcel is a fact whether or not the
+  // collector keeps a row for it. **No cost**: the linked carrier service's figure is what postage
+  // *usually* costs the collector, and nothing on this page says what this parcel cost them (#206).
+  const printedMethod = plan.shippingOptionName;
   const shipping = printedMethod
-    ? matchShippingMethod(await getShippingMethods(ownerId, platform.id), printedMethod)
+    ? matchShippingOption(await getShippingOptions(ownerId, platform.id), printedMethod)
     : null;
 
   const saleId = await createSale(ownerId, collectionId, {
@@ -233,7 +233,7 @@ export async function importColnectOrder(
     buyerPaidTotal: plan.buyerPaidTotal,
     commission: null,
     shipping: shipping
-      ? { methodId: shipping.methodId, methodName: shipping.methodName, cost: null, currency: "" }
+      ? { optionId: shipping.optionId, optionName: shipping.optionName, cost: null, currency: "" }
       : null,
   });
 

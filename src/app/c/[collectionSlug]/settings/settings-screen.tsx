@@ -126,7 +126,7 @@ interface SettingsScreenProps {
   /** The collection's album templates (#766) — how a page looks, seeded onto an album rather than
    *  referenced by one. */
   initialAlbumTemplates: AlbumTemplateData[];
-  /** The collection's carriers (#491) — the tracking-address side of shipping. */
+  /** The collection's carriers (#491) and their rate lists (#1909). */
   initialCarriers: CarrierData[];
   /** The collection's packing supplies (#1897) — named only; their cost comes from purchases. */
   initialPackingSupplies: PackingSupplyData[];
@@ -891,10 +891,17 @@ function SettingsEntryBody({
         />
       );
     case "shipping":
-      // Carriers are the collection's, while the price list they are named on is each platform's
-      // (#468/#491) — a marketplace quotes the postage, a carrier moves the parcel and tracks it the
-      // same way whichever marketplace it came from.
-      return <CarriersPanel collectionId={collectionId} initialCarriers={initialCarriers} />;
+      // Carriers and their rate lists are the collection's, tied to no platform (#491, #1909): a
+      // carrier moves the parcel, tracks it and charges for it the same way whichever marketplace
+      // it sold on. A platform only offers its buyers shipping options linked to a service here.
+      return (
+        <CarriersPanel
+          collectionId={collectionId}
+          initialCarriers={initialCarriers}
+          packingSupplies={initialPackingSupplies}
+          baseCurrency={baseCurrency}
+        />
+      );
     case "packing-supplies":
       return (
         <PackingSuppliesPanel

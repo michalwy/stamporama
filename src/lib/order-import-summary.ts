@@ -29,7 +29,9 @@ export interface ImportedSaleSummary {
   gross: string;
   /** #205's anchor as stored, or null where the page stated no total this app could take. */
   buyerPaidTotal: string | null;
-  /** The delivery method recorded on the sale (#468), as stored. */
+  /** The shipping option recorded on the sale (#468), as stored. Still named for the method it was
+   *  until #1909: the extension reads it by this name, and an installed one is not updated with the
+   *  app. */
   shippingMethodName: string | null;
   /** How many lines name a set **nobody has chosen** (#697) — the one thing in an imported sale that
    *  still wants a decision, and the reason the window says so rather than leaving it to be found. */
@@ -53,7 +55,7 @@ export async function saleImportSummary(
       soldAt: true,
       currency: true,
       buyerPaidTotal: true,
-      shippingMethodName: true,
+      shippingOptionName: true,
       buyer: { select: { name: true } },
       lines: { select: { price: true, setChoicePending: true } },
     },
@@ -70,7 +72,7 @@ export async function saleImportSummary(
     lineCount: sale.lines.length,
     gross: gross.toFixed(2),
     buyerPaidTotal: sale.buyerPaidTotal?.toFixed(2) ?? null,
-    shippingMethodName: sale.shippingMethodName,
+    shippingMethodName: sale.shippingOptionName,
     setChoicePending: sale.lines.filter((line) => line.setChoicePending).length,
   };
 }

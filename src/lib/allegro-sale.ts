@@ -5,11 +5,11 @@ import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
 import { getAllegroAccessToken } from "./allegro-connection";
 import { getAllegroOrder, type AllegroOrder as AllegroApiOrder } from "./allegro-api";
 import { allegroOrderPageUrl } from "./allegro-oauth";
-import { getShippingMethods } from "./shipping-methods";
+import { getShippingOptions } from "./shipping-options";
 import { offerNumberLabel } from "./offer-set-rules";
 import { listSellableOffers, createSale, addSaleLines, setSaleStatus } from "./sales";
 import type { AllegroPaymentStatus } from "./allegro-sync-rules";
-import { matchShippingMethod, type ShippingPrefill } from "./allegro-sale-rules";
+import { matchShippingOption, type ShippingPrefill } from "./allegro-sale-rules";
 // The three an order-shaped sale needs whatever marketplace it came from (#612 moved them out of
 // the Allegro-named module): which sets a line stands for, what day it is dated, who the buyer is.
 import {
@@ -271,13 +271,13 @@ export async function getAllegroOrderSalePrefill(
     };
   });
 
-  // How it is being sent, matched against the platform's own price list (#468). Only from the live
-  // read: the sync never stored a delivery method, so a failed read means there is nothing to match
-  // and the field opens empty rather than opening on a guess.
+  // How it is being sent, matched against the platform's own shipping options (#468). Only from the
+  // live read: the sync never stored a delivery method, so a failed read means there is nothing to
+  // match and the field opens empty rather than opening on a guess.
   const shipping =
     platform && live.order?.delivery
-      ? matchShippingMethod(
-          await getShippingMethods(ownerId, platform.id),
+      ? matchShippingOption(
+          await getShippingOptions(ownerId, platform.id),
           live.order.delivery.methodName
         )
       : null;

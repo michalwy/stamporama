@@ -1231,23 +1231,40 @@ Tags are their own subject and have their own page: see [Tags](tags.md).
 
 ## Carriers
 
-The post offices and couriers you post with, kept under **Settings → Carriers** as a
-[list beside the selected carrier's detail](#pages-with-a-list). A carrier is a name
-and a **tracking address** — the page where it looks a parcel up, written with `{code}` where the
-tracking number goes:
+The post offices and couriers you post with, and what each of their services costs you — your
+**rate list** — kept under **Settings → Carriers** as a tree beside the selected item's detail, the
+way [Catalogs](#pages-with-a-list) is: each carrier with its services indented under it. A carrier
+is a name and a **tracking address** — the page where it looks a parcel up, written with `{code}`
+where the tracking number goes:
 
 `https://emonitoring.poczta-polska.pl/?numer={code}`
 
 Leave the address blank for a carrier with no tracking page worth linking to; sales still record
 their tracking numbers, they simply aren't links.
 
-Carriers belong to the **collection** rather than to a platform, unlike the
-[shipping methods](contacts.md#shipping-methods) that name them: postage is priced by the
-marketplace a parcel sold on, but the same Poczta Polska carries an Allegro parcel and a Delcampe
-one and tracks both at the same address. A carrier named on a shipping method is a **default** —
-each sale records the carrier that actually took its parcel when you mark it sent, and shows its
-[tracking number as a link](sales.md#tracking-the-shipment) from there. A carrier still used by a
-shipping method or named on a sale can't be deleted — detach it there first.
+Select a carrier and press **Add service** to add one of its services: a **name** — *List polecony
+ekonomiczny* — and **what it costs you** to send by it, with its currency. Where you have named
+[packing supplies](#packing-supplies), a service also lists the ones a parcel sent this way usually
+takes — *C6 envelope × 1, Transport card A6 × 2*. Service names are unique within their carrier.
+
+Carriers and their rate lists belong to the **collection**, never to a platform: the same Poczta
+Polska carries an Allegro parcel and a Delcampe one, tracks both at the same address and charges you
+the same for both. What a platform has is its [shipping options](contacts.md#shipping-options) — what
+buyers there choose from, at the price *they* pay — each linked to a service here. Choosing an option
+on a sale fills in the postage with its service's cost and the sale's
+[packing supplies](sales.md#packing-supplies) with its service's list, all still editable on the
+sale; changing a cost or a list never touches a sale already recorded. The service's carrier is the
+sale's **default** carrier — each sale records the carrier that actually took its parcel when you
+mark it sent, and shows its [tracking number as a link](sales.md#tracking-the-shipment) from there.
+
+A carrier with services, or one a sale names, can't be deleted; nor can a service a platform's
+option is linked to — unlink it there first.
+
+The shipping methods kept per platform before this were moved over on their own: each became that
+platform's shipping option, at the same amount as its buyer price, and each distinct method became a
+service — under the carrier the method named, or under a carrier called **Unassigned** for you to
+sort into real ones. Where one carrier ended up with two services of the same name at different
+costs, each name carries its cost after it.
 
 ## Packing supplies
 

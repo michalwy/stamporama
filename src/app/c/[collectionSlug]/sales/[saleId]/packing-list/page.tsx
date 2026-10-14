@@ -126,7 +126,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           {/* How the parcel goes out (#468) — printed only when the buyer's choice is recorded,
               since an empty "Shipping: —" tells the packer nothing they can act on. It sits beside
               the buyer because it is the other half of "where this parcel is going". */}
-          {sale.shippingMethodName && <Meta label="Shipping" value={sale.shippingMethodName} />}
+          {sale.shippingOptionName && <Meta label="Shipping" value={sale.shippingOptionName} />}
           <Meta label="Status" value={status.label} />
           <Meta
             label="Copies"

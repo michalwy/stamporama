@@ -142,7 +142,7 @@ describe("planColnectOrderSale", () => {
     assert.equal(result.currency, "EUR");
     assert.deepEqual(result.buyer, { name: "samplebuyer", fullName: "Sample Buyer" });
     assert.equal(result.buyerPaidTotal, "7.03");
-    assert.equal(result.shippingMethodName, "Stamps→domestic: Registered mail (Poczta Polska)");
+    assert.equal(result.shippingOptionName, "Stamps→domestic: Registered mail (Poczta Polska)");
     assert.deepEqual(result.lines, [
       { offerId: "o1", offerSetId: "s1", price: "2.00", itemIds: ["i1"], setChoicePending: false },
       { offerId: "o2", offerSetId: "s2", price: "3.00", itemIds: ["i2"], setChoicePending: false },

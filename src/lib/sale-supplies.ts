@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
-import { changeMethodSupplies } from "./method-supplies";
+import { changeServiceSupplies } from "./service-supplies";
 import { canExpressInBase, computeSupplyBatchCost, purchaseCostsOf } from "./purchase-allocation";
 import { settleSupplies } from "./supply-settlement";
 import {
@@ -13,10 +13,10 @@ import {
 // Packing supplies used on a sale (#1898, ADR-0068 §7) — the parcel's envelope and transport cards.
 //
 // A sale's own shipping cost (*my shipping*) is its **postage** (`Sale.shippingCost`, typed or
-// prefilled from the shipping method as before) **plus what its supply lines cost**, summed by the
-// app. Each line names a supply and how many units the parcel used; the units are taken from stock
-// FIFO when the line is written (`settleSupplies`), and each costs the unit cost of the batch it came
-// from — derived, as the batch's own is, so the sale's figure settles when the purchase does.
+// prefilled from the shipping option's carrier service) **plus what its supply lines cost**, summed
+// by the app. Each line names a supply and how many units the parcel used; the units are taken from
+// stock FIFO when the line is written (`settleSupplies`), and each costs the unit cost of the batch it
+// came from — derived, as the batch's own is, so the sale's figure settles when the purchase does.
 //
 // Using more than is on hand is allowed: the line records what it used, holds what stock had, and
 // the rest is **short** — uncosted, the total marked incomplete, until a purchase covers it. A sale
@@ -213,32 +213,36 @@ export async function deleteSaleSupplyLine(ownerId: string, lineId: string): Pro
   });
 }
 
-// ── A shipping method's usual supplies (#1899) ──────────────────────────────────────────────
+// ── A shipping option's usual supplies (#1899) ──────────────────────────────────────────────
 
 /**
- * Apply a change of a sale's shipping method to its supply lines (ADR-0068 §8): the lines that still
- * match the old method's list go, the new method's list is filled in, and lines the collector changed
- * by hand stay (`changeMethodSupplies`). A sale being recorded passes `before` null and simply gets
- * the method's list. A no-op when the method did not change — re-saving the same method must not
- * bring back a default the collector removed.
+ * Apply a change of a sale's shipping option to its supply lines (ADR-0068 §8, ADR-0069): the lines
+ * that still match the list of the old option's carrier service go, the new one's list is filled in,
+ * and lines the collector changed by hand stay (`changeServiceSupplies`). A sale being recorded
+ * passes `before` null and simply gets the list. A no-op when the option did not change — re-saving
+ * the same option must not bring back a default the collector removed. An option linked to no
+ * service has no list.
  *
  * Runs inside the caller's transaction, after the sale's own write, and settles every supply it
  * touched there, so the new lines take their units from stock FIFO as a typed line would.
  */
-export async function applyMethodSupplies(
+export async function applyOptionSupplies(
   tx: DbTransaction,
   saleId: string,
   before: string | null,
   after: string | null
 ): Promise<void> {
   if (before === after) return;
-  const listOf = (methodId: string | null) =>
-    methodId
-      ? tx.shippingMethodSupply.findMany({
-          where: { methodId },
-          select: { supplyId: true, quantity: true },
-        })
-      : Promise.resolve([]);
+  // Each list is read through the option's link as it stands now: a sale stores no service of its
+  // own, and lines filled from a list since changed simply read as the collector's and stay.
+  const listOf = async (optionId: string | null) => {
+    if (!optionId) return [];
+    const option = await tx.shippingOption.findUnique({
+      where: { id: optionId },
+      select: { service: { select: { supplies: { select: { supplyId: true, quantity: true } } } } },
+    });
+    return option?.service?.supplies ?? [];
+  };
   const [lines, beforeList, afterList] = await Promise.all([
     tx.saleSupplyLine.findMany({
       where: { saleId },
@@ -248,7 +252,7 @@ export async function applyMethodSupplies(
     listOf(before),
     listOf(after),
   ]);
-  const { remove, add } = changeMethodSupplies(lines, beforeList, afterList);
+  const { remove, add } = changeServiceSupplies(lines, beforeList, afterList);
   if (remove.length === 0 && add.length === 0) return;
   if (remove.length > 0) await tx.saleSupplyLine.deleteMany({ where: { id: { in: remove } } });
   if (add.length > 0) {

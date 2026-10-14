@@ -7,9 +7,9 @@ import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purcha
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
-import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
-import type { ShippingMethodData } from "@/lib/shipping-methods";
-import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
+import { getShippingOptionsAction } from "@/app/actions/shipping-options";
+import type { ShippingOptionData } from "@/lib/shipping-options";
+import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 import type { FacebookBuyerLookup } from "@/lib/facebook-sales";
@@ -43,11 +43,11 @@ export interface SaleFormDialogInitial {
    * mode the dialog opens in. */
   buyerPaidTotal: string;
   commission: string;
-  /** The dictionary method the sale is recorded against (#468), `CUSTOM_SHIPPING_METHOD` for a
-   * one-off, or "" for none. */
-  shippingMethodId: string;
-  /** The one-off's name; ignored for a dictionary pick, whose name is read from the row. */
-  shippingMethodName: string;
+  /** The platform's shipping option the sale is recorded against (#468), `CUSTOM_SHIPPING_OPTION`
+   * for a one-off, or "" for none. */
+  shippingOptionId: string;
+  /** The one-off's name; ignored for a listed option, whose name is read from the row. */
+  shippingOptionName: string;
   shippingCost: string;
   shippingCurrency: string;
 }
@@ -82,8 +82,9 @@ export interface SaleFormDialogProps {
 
 /** Create or edit a sale header (ADR-0012, #166): platform, buyer, date, currency, the two
  * sale-time shared amounts (buyer handling + commission), and how it is being shipped (#468/#206)
- * — the method the buyer chose and what posting it costs me. The sold units are managed on the
- * sale's detail screen, where shipping stays editable too. Mirrors the purchase header form (#120). */
+ * — the shipping option the buyer chose and what posting it costs me. The sold units are managed on
+ * the sale's detail screen, where shipping stays editable too. Mirrors the purchase header form
+ * (#120). */
 export function SaleFormDialog({
   mode,
   collectionId,
@@ -127,32 +128,32 @@ export function SaleFormDialog({
   const [commission, setCommission] = useState(initial?.commission ?? "");
 
   // ── Shipping (#468/#206) ──────────────────────────────────────────────────
-  // How the parcel is going, picked from the platform's own price list, and what it costs me. The
-  // buyer chooses the method *when they order*, so it belongs on the header the sale starts from —
+  // How the parcel is going, picked from the platform's own shipping options, and what it costs me.
+  // The buyer chooses the option *when they order*, so it belongs on the header the sale starts from —
   // and it stays editable on the detail screen, where the real postage cost turns up later.
   // Keyed by the platform they were loaded for, so the options are *derived* against the platform
   // currently picked rather than corrected by a setState in an effect: switching platform shows an
   // empty list on the same render, and switching back shows the loaded one again.
-  const [loadedMethods, setLoadedMethods] = useState<{ platformId: string; rows: ShippingMethodData[] }>({
+  const [loadedOptions, setLoadedOptions] = useState<{ platformId: string; rows: ShippingOptionData[] }>({
     platformId: "",
     rows: [],
   });
-  const [shippingMethodId, setShippingMethodId] = useState(initial?.shippingMethodId ?? "");
-  const [shippingMethodName, setShippingMethodName] = useState(initial?.shippingMethodName ?? "");
+  const [shippingOptionId, setShippingOptionId] = useState(initial?.shippingOptionId ?? "");
+  const [shippingOptionName, setShippingOptionName] = useState(initial?.shippingOptionName ?? "");
   const [shippingCost, setShippingCost] = useState(initial?.shippingCost ?? "");
-  // Blank until a method or the platform answers it; resolved against the sale currency on submit,
+  // Blank until an option's service or the platform answers it; resolved against the sale currency on submit,
   // since shipping is usually paid in a currency of its own (#206).
   const [shippingCurrency, setShippingCurrency] = useState(initial?.shippingCurrency ?? "");
 
-  // The dictionary belongs to the platform, so the list is re-read whenever the platform changes —
-  // and a method picked from the *previous* platform's list is dropped, because it was never an
+  // The options belong to the platform, so the list is re-read whenever the platform changes —
+  // and an option picked from the *previous* platform's list is dropped, because it was never an
   // option here. A typed (not-yet-created) platform has no list at all.
   useEffect(() => {
     if (!platformId) return;
     let cancelled = false;
-    getShippingMethodsAction(platformId)
+    getShippingOptionsAction(platformId)
       .then((rows) => {
-        if (!cancelled) setLoadedMethods({ platformId, rows });
+        if (!cancelled) setLoadedOptions({ platformId, rows });
       })
       .catch(() => {});
     return () => {
@@ -160,37 +161,37 @@ export function SaleFormDialog({
     };
   }, [platformId]);
 
-  const methodsLoaded = loadedMethods.platformId === platformId;
-  const shippingMethods = methodsLoaded ? loadedMethods.rows : [];
-  // A method picked from *another* platform's list was never an option here, so it reads as none
+  const optionsLoaded = loadedOptions.platformId === platformId;
+  const shippingOptions = optionsLoaded ? loadedOptions.rows : [];
+  // An option picked from *another* platform's list was never an option here, so it reads as none
   // until the collector picks again — derived, never written back over their choice, which is what
   // lets switching platform and switching back leave the selection intact.
   //
-  // Only once the list has actually arrived, though: saying "no method" while it is still in flight
-  // would let a quick Save drop the method an existing sale already carries. Until then the stored
+  // Only once the list has actually arrived, though: saying "no option" while it is still in flight
+  // would let a quick Save drop the option an existing sale already carries. Until then the stored
   // pick stands, shown through the placeholder option below.
-  const effectiveShippingMethodId =
-    !methodsLoaded ||
-    shippingMethodId === CUSTOM_SHIPPING_METHOD ||
-    shippingMethods.some((m) => m.id === shippingMethodId)
-      ? shippingMethodId
+  const effectiveShippingOptionId =
+    !optionsLoaded ||
+    shippingOptionId === CUSTOM_SHIPPING_OPTION ||
+    shippingOptions.some((m) => m.id === shippingOptionId)
+      ? shippingOptionId
       : "";
-  /** The stored method, while the platform's list is still loading — so the select shows the name
+  /** The stored option, while the platform's list is still loading — so the select shows the name
    * the sale carries rather than an empty box it would then save. */
-  const pendingMethodLabel =
-    !methodsLoaded && shippingMethodId && shippingMethodId !== CUSTOM_SHIPPING_METHOD
-      ? (initial?.shippingMethodName ?? "…")
+  const pendingOptionLabel =
+    !optionsLoaded && shippingOptionId && shippingOptionId !== CUSTOM_SHIPPING_OPTION
+      ? (initial?.shippingOptionName ?? "…")
       : null;
 
-  /** Picking a method fills in what it normally costs (#468) — the figure is a default, not a
-   * reading, so it stays editable for the parcel that cost something else. */
-  function pickShippingMethod(next: string) {
-    setShippingMethodId(next);
-    const method = shippingMethods.find((m) => m.id === next);
-    if (method) {
-      setShippingCost(method.cost);
-      setShippingCurrency(method.currency);
-    }
+  /** Picking an option fills in what its carrier service normally costs (#468, #1909) — the figure
+   * is a default, not a reading, so it stays editable for the parcel that cost something else. An
+   * option linked to no service leaves the postage to be entered. */
+  function pickShippingOption(next: string) {
+    setShippingOptionId(next);
+    const option = shippingOptions.find((o) => o.id === next);
+    if (!option) return;
+    setShippingCost(option.service?.cost ?? "");
+    if (option.service) setShippingCurrency(option.service.currency);
   }
 
   // Who the buyer typed by their Facebook profile is (#1777), re-read a moment after typing stops: the
@@ -298,11 +299,11 @@ export function SaleFormDialog({
       buyerPaidTotal: totalPaid,
       commission,
       shipping: {
-        methodId: effectiveShippingMethodId,
-        methodName: shippingMethodName,
+        optionId: effectiveShippingOptionId,
+        optionName: shippingOptionName,
         cost: shippingCost,
         // Shipping is entered in its own currency (#206); the sale's is the sensible default when
-        // neither a method nor the collector has said otherwise.
+        // neither a service nor the collector has said otherwise.
         currency: shippingCurrency || resolvedCurrency,
       },
     });
@@ -568,41 +569,42 @@ export function SaleFormDialog({
             </div>
           </div>
 
-          {/* Shipping (#468/#206). The method comes from the platform's own price list — the buyer
+          {/* Shipping (#468/#206/#1909). The option comes from the platform's own list — the buyer
               picked it when they ordered, so it is known before the parcel exists — and choosing one
-              fills in what it normally costs. The cost stays editable here and on the detail screen:
-              a method's price is what it usually costs, not what this parcel cost. */}
+              fills in what its carrier service normally costs. The cost stays editable here and on
+              the detail screen: a service's price is what it usually costs, not what this parcel
+              cost. */}
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-shipping-method">Shipping method</LabelWithError>
+              <LabelWithError htmlFor="sale-shipping-option">Shipping option</LabelWithError>
               <select
-                id="sale-shipping-method"
-                value={effectiveShippingMethodId}
-                onChange={(e) => pickShippingMethod(e.target.value)}
+                id="sale-shipping-option"
+                value={effectiveShippingOptionId}
+                onChange={(e) => pickShippingOption(e.target.value)}
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, cursor: "pointer" }}
               >
                 <option value="">
-                  {methodsLoaded && shippingMethods.length === 0
+                  {optionsLoaded && shippingOptions.length === 0
                     ? "— none defined for this platform —"
                     : "— none —"}
                 </option>
-                {pendingMethodLabel && <option value={shippingMethodId}>{pendingMethodLabel}</option>}
-                {shippingMethods.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} — {m.cost} {m.currency}
+                {pendingOptionLabel && <option value={shippingOptionId}>{pendingOptionLabel}</option>}
+                {shippingOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} — {o.price} {o.currency}
                   </option>
                 ))}
-                <option value={CUSTOM_SHIPPING_METHOD}>Custom…</option>
+                <option value={CUSTOM_SHIPPING_OPTION}>Custom…</option>
               </select>
             </div>
-            {effectiveShippingMethodId === CUSTOM_SHIPPING_METHOD && (
+            {effectiveShippingOptionId === CUSTOM_SHIPPING_OPTION && (
               <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="sale-shipping-method-name">Method name</LabelWithError>
+                <LabelWithError htmlFor="sale-shipping-option-name">Option name</LabelWithError>
                 <TextInput
-                  id="sale-shipping-method-name"
-                  value={shippingMethodName}
-                  onChange={(e) => setShippingMethodName(e.target.value)}
+                  id="sale-shipping-option-name"
+                  value={shippingOptionName}
+                  onChange={(e) => setShippingOptionName(e.target.value)}
                   placeholder="e.g. Courier, one-off"
                   disabled={isPending}
                   {...NO_AUTOFILL}

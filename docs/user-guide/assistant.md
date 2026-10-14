@@ -665,7 +665,8 @@ the line stating when it started, beside the buyer, gains a small mark:
   the screen you were packing from keeps its place.
 - **Import** — it is not recorded yet, and one click records it: the buyer, the transaction's date,
   its id, a link back to it, one line per listing matched to the offer it was here and priced at what
-  it sold for, and the shipping method Colnect names.
+  it sold for, and the shipping Colnect names — matched to one of the platform's
+  [shipping options](contacts.md#shipping-options) by name where one is called the same.
 
 On the **transactions list** the same mark appears beside each row's *Details* link, but it only ever
 **answers** — **Sale #34** or **Not recorded**. There is no button there, and that is deliberate: the

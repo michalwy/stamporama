@@ -1,10 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { changeMethodSupplies } from "../../src/lib/method-supplies";
+import { changeServiceSupplies } from "../../src/lib/service-supplies";
 
-// A shipping method's usual packing supplies applied to a sale (#1899, ADR-0068 §8): choosing a
-// method fills its list in, changing it swaps the lines that still match the old list and keeps the
-// ones the collector changed.
+// A carrier service's usual packing supplies applied to a sale (#1899, ADR-0068 §8, ADR-0069):
+// choosing an option fills its service's list in, changing it swaps the lines that still match the
+// old list and keeps the ones the collector changed.
 
 const ENV = "envelope";
 const CARD = "card";
@@ -19,21 +19,21 @@ const parcel = [
   { supplyId: CARD, quantity: 2 },
 ];
 
-describe("changeMethodSupplies", () => {
-  it("fills a new sale in with the method's list", () => {
-    assert.deepEqual(changeMethodSupplies([], [], letter), { remove: [], add: letter });
+describe("changeServiceSupplies", () => {
+  it("fills a new sale in with the service's list", () => {
+    assert.deepEqual(changeServiceSupplies([], [], letter), { remove: [], add: letter });
   });
 
-  it("fills in nothing for a method with no list", () => {
-    assert.deepEqual(changeMethodSupplies([], [], []), { remove: [], add: [] });
+  it("fills in nothing for a service with no list", () => {
+    assert.deepEqual(changeServiceSupplies([], [], []), { remove: [], add: [] });
   });
 
-  it("swaps untouched lines for the new method's, keeping one that is the same in both", () => {
+  it("swaps untouched lines for the new service's, keeping one that is the same in both", () => {
     const lines = [
       { id: "l1", supplyId: ENV, quantity: 1 },
       { id: "l2", supplyId: CARD, quantity: 2 },
     ];
-    assert.deepEqual(changeMethodSupplies(lines, letter, parcel), {
+    assert.deepEqual(changeServiceSupplies(lines, letter, parcel), {
       remove: ["l1"],
       add: [{ supplyId: BUBBLE, quantity: 1 }],
     });
@@ -44,7 +44,7 @@ describe("changeMethodSupplies", () => {
       { id: "l1", supplyId: ENV, quantity: 1 },
       { id: "l2", supplyId: CARD, quantity: 5 },
     ];
-    assert.deepEqual(changeMethodSupplies(lines, letter, parcel), {
+    assert.deepEqual(changeServiceSupplies(lines, letter, parcel), {
       remove: ["l1"],
       add: [{ supplyId: BUBBLE, quantity: 1 }],
     });
@@ -56,12 +56,12 @@ describe("changeMethodSupplies", () => {
       { id: "l2", supplyId: CARD, quantity: 2 },
       { id: "l3", supplyId: "tape", quantity: 1 },
     ];
-    assert.deepEqual(changeMethodSupplies(lines, letter, []), { remove: ["l1", "l2"], add: [] });
+    assert.deepEqual(changeServiceSupplies(lines, letter, []), { remove: ["l1", "l2"], add: [] });
   });
 
-  it("adds a default the collector removed, when the method changes", () => {
+  it("adds a default the collector removed, when the option changes", () => {
     const lines = [{ id: "l2", supplyId: CARD, quantity: 2 }];
-    assert.deepEqual(changeMethodSupplies(lines, letter, parcel), {
+    assert.deepEqual(changeServiceSupplies(lines, letter, parcel), {
       remove: [],
       add: [{ supplyId: BUBBLE, quantity: 1 }],
     });
@@ -72,6 +72,6 @@ describe("changeMethodSupplies", () => {
       { id: "l1", supplyId: ENV, quantity: 1 },
       { id: "l2", supplyId: ENV, quantity: 1 },
     ];
-    assert.deepEqual(changeMethodSupplies(lines, letter, []), { remove: ["l1"], add: [] });
+    assert.deepEqual(changeServiceSupplies(lines, letter, []), { remove: ["l1"], add: [] });
   });
 });

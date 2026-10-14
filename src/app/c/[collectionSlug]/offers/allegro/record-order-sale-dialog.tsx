@@ -15,7 +15,7 @@ import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog"
 import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useInvalidateOffers } from "../use-offers-query";
 import { recordAllegroOrderSaleAction } from "@/app/actions/allegro";
-import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
+import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
 import type { AllegroSalePrefill, AllegroSaleLineInput } from "@/lib/allegro-sale";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
 import type { WorklistOrder } from "@/lib/allegro-worklist";
@@ -179,10 +179,10 @@ export function RecordOrderSaleDialog({
           buyerHandling: "",
           buyerPaidTotal: prefill.totalPaid,
           commission: "",
-          shippingMethodId: prefill.shipping
-            ? (prefill.shipping.methodId ?? CUSTOM_SHIPPING_METHOD)
+          shippingOptionId: prefill.shipping
+            ? (prefill.shipping.optionId ?? CUSTOM_SHIPPING_OPTION)
             : "",
-          shippingMethodName: prefill.shipping?.methodName ?? "",
+          shippingOptionName: prefill.shipping?.optionName ?? "",
           shippingCost: prefill.shipping?.cost ?? "",
           shippingCurrency: prefill.shipping?.currency ?? "",
         }}
@@ -308,13 +308,13 @@ export function RecordOrderSaleDialog({
                 <Detail>
                   {prefill.shipping ? (
                     <>
-                      {prefill.shipping.methodName}
-                      {prefill.shipping.methodId ? (
-                        <span style={{ color: MUTED }}> · from this platform&apos;s methods</span>
+                      {prefill.shipping.optionName}
+                      {prefill.shipping.optionId ? (
+                        <span style={{ color: MUTED }}> · from this platform&apos;s shipping options</span>
                       ) : (
                         <span style={{ color: MUTED }}>
                           {" "}
-                          · not in this platform&apos;s methods, so it is recorded as a one-off
+                          · not in this platform&apos;s shipping options, so it is recorded as a one-off
                         </span>
                       )}
                     </>

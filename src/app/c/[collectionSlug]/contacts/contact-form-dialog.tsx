@@ -16,7 +16,7 @@ import {
   ListingTemplatesDialog,
   type ListingTemplates,
 } from "./listing-templates-dialog";
-import { ShippingMethodsDialog } from "./shipping-methods-dialog";
+import { ShippingOptionsDialog } from "./shipping-options-dialog";
 import { CONTACT_ROLES } from "./contact-roles";
 import { NumericInput } from "../shared/numeric-input";
 import {
@@ -25,7 +25,7 @@ import {
   type DescriptionFormat,
 } from "@/lib/description-format";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
-import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
+import { getShippingOptionsAction } from "@/app/actions/shipping-options";
 import type { CollageTemplateData } from "@/lib/collage-templates";
 import { normalizeCollageGridMode } from "@/lib/collage-template-rules";
 import {
@@ -195,12 +195,13 @@ export function ContactFormDialog({
   // number nothing would ever read.
   const [defaultListingType, setDefaultListingType] = useState(contact?.defaultListingType ?? "");
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  // The platform's shipping methods (#468) are records of their own, not fields of the contact, so
-  // they save themselves as they are edited. Only the count is kept here, for the summary line —
-  // and only for a platform that already exists, since a method has to hang off a saved contact.
+  // The platform's shipping options (#468, #1909) are records of their own, not fields of the
+  // contact, so they save themselves as they are edited. Only the count is kept here, for the summary
+  // line — and only for a platform that already exists, since an option has to hang off a saved
+  // contact.
   const [shippingOpen, setShippingOpen] = useState(false);
-  const [shippingMethodCount, setShippingMethodCount] = useState<number | null>(null);
-  // Controlled so the shipping-methods dialog can default a new method to the currency being
+  const [shippingOptionCount, setShippingOptionCount] = useState<number | null>(null);
+  // Controlled so the shipping-options dialog can default a new option to the currency being
   // configured right now, rather than the one the contact was opened with.
   const [platformCurrency, setPlatformCurrency] = useState(contact?.platformCurrency ?? "");
   // Which tab the collector asked for. The tab actually shown is **derived** from it against the
@@ -238,9 +239,9 @@ export function ContactFormDialog({
   useEffect(() => {
     if (!isPlatform || !contactId) return;
     let cancelled = false;
-    getShippingMethodsAction(contactId)
+    getShippingOptionsAction(contactId)
       .then((rows) => {
-        if (!cancelled) setShippingMethodCount(rows.length);
+        if (!cancelled) setShippingOptionCount(rows.length);
       })
       .catch(() => {});
     return () => {
@@ -799,30 +800,30 @@ export function ContactFormDialog({
                   </p>
                 </div>
 
-                {/* Shipping methods (#468): what buyers here can choose from, and what each costs to
-                    send. Kept in its own dialog for the same reason the templates are — a price list
-                    is a list, not a field — but unlike the templates it saves itself: the rows are
-                    records of their own, so there is nothing for this form's Save to carry. That is
-                    also why it needs a platform that already exists. */}
+                {/* Shipping options (#468, #1909): what buyers here can choose from, at the price they
+                    pay. Kept in its own dialog for the same reason the templates are — a list is not
+                    a field — but unlike the templates it saves itself: the rows are records of their
+                    own, so there is nothing for this form's Save to carry. That is also why it needs
+                    a platform that already exists. */}
                 <div style={FIELD_GAP}>
-                  <LabelWithError>Shipping methods</LabelWithError>
+                  <LabelWithError>Shipping options</LabelWithError>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <div
                       style={{
                         flex: 1,
                         minWidth: 0,
                         ...INPUT_STYLE,
-                        color: shippingMethodCount
+                        color: shippingOptionCount
                           ? "var(--color-text-primary)"
                           : "var(--color-text-muted)",
                       }}
                     >
                       {contact
-                        ? shippingMethodCount == null
+                        ? shippingOptionCount == null
                           ? "…"
-                          : shippingMethodCount === 0
-                            ? "None — a sale here names its own method"
-                            : `${shippingMethodCount} method${shippingMethodCount === 1 ? "" : "s"}`
+                          : shippingOptionCount === 0
+                            ? "None — a sale here names its own shipping"
+                            : `${shippingOptionCount} option${shippingOptionCount === 1 ? "" : "s"}`
                         : "Available once the contact is saved"}
                     </div>
                     <button
@@ -838,13 +839,13 @@ export function ContactFormDialog({
                         color: contact ? "var(--color-text-primary)" : "var(--color-text-muted)",
                       }}
                     >
-                      Methods…
+                      Options…
                     </button>
                   </div>
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-                    The postage options buyers on this platform choose from, each with what it costs
-                    you to send. Picking one on a sale fills in my shipping cost — still editable
-                    there, and a sale can always name a one-off method instead.
+                    The shipping buyers on this platform choose from, at what they pay for it, each
+                    linked to a carrier service. Picking one on a sale fills in the postage from that
+                    service — still editable there, and a sale can always name a one-off instead.
                   </p>
                 </div>
 
@@ -1129,13 +1130,13 @@ export function ContactFormDialog({
     </DialogShell>
 
     {shippingOpen && contact && (
-      <ShippingMethodsDialog
+      <ShippingOptionsDialog
         collectionId={collectionId}
         platformId={contact.id}
         platformName={contact.name}
         defaultCurrency={platformCurrency || COMMON_CURRENCIES[0]}
         onClose={() => setShippingOpen(false)}
-        onCountChange={setShippingMethodCount}
+        onCountChange={setShippingOptionCount}
       />
     )}
 

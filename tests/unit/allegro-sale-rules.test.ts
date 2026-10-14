@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { matchShippingMethod, type MatchableShippingMethod } from "../../src/lib/allegro-sale-rules";
+import { matchShippingOption, type MatchableShippingOption } from "../../src/lib/allegro-sale-rules";
 import {
   buyerIdentityFor,
   mapLineToSets,
@@ -8,34 +8,44 @@ import {
   type MappableSet,
 } from "../../src/lib/order-sale-rules";
 
-const METHODS: MatchableShippingMethod[] = [
-  { id: "m1", name: "List polecony ekonomiczny", cost: "8.50", currency: "PLN" },
-  { id: "m2", name: "Kurier InPost", cost: "14.99", currency: "PLN" },
+const OPTIONS: MatchableShippingOption[] = [
+  { id: "m1", name: "List polecony ekonomiczny", service: { cost: "8.50", currency: "PLN" } },
+  { id: "m2", name: "Kurier InPost", service: { cost: "14.99", currency: "PLN" } },
+  { id: "m3", name: "Odbiór osobisty", service: null },
 ];
 
-describe("matchShippingMethod", () => {
-  it("matches the platform's own method by name, and carries its cost", () => {
-    const prefill = matchShippingMethod(METHODS, "Kurier InPost");
+describe("matchShippingOption", () => {
+  it("matches the platform's own option by name, and carries its service's cost", () => {
+    const prefill = matchShippingOption(OPTIONS, "Kurier InPost");
     assert.deepEqual(prefill, {
-      methodId: "m2",
-      methodName: "Kurier InPost",
+      optionId: "m2",
+      optionName: "Kurier InPost",
       cost: "14.99",
       currency: "PLN",
     });
   });
 
   it("ignores case and runs of whitespace — the two lists are written by different hands", () => {
-    const prefill = matchShippingMethod(METHODS, "  kurier   inpost ");
-    assert.equal(prefill?.methodId, "m2");
-    // The dictionary's own wording wins for the name, not Allegro's.
-    assert.equal(prefill?.methodName, "Kurier InPost");
+    const prefill = matchShippingOption(OPTIONS, "  kurier   inpost ");
+    assert.equal(prefill?.optionId, "m2");
+    // The option's own wording wins for the name, not Allegro's.
+    assert.equal(prefill?.optionName, "Kurier InPost");
+  });
+
+  it("matches an option linked to no carrier service, leaving the postage to be entered", () => {
+    assert.deepEqual(matchShippingOption(OPTIONS, "Odbiór osobisty"), {
+      optionId: "m3",
+      optionName: "Odbiór osobisty",
+      cost: "",
+      currency: "",
+    });
   });
 
   it("falls back to a one-off carrying Allegro's wording, with no cost", () => {
-    const prefill = matchShippingMethod(METHODS, "Paczkomat 24/7");
+    const prefill = matchShippingOption(OPTIONS, "Paczkomat 24/7");
     assert.deepEqual(prefill, {
-      methodId: null,
-      methodName: "Paczkomat 24/7",
+      optionId: null,
+      optionName: "Paczkomat 24/7",
       // Blank on purpose: Allegro's delivery figure is what the *buyer* paid, and the shipping cost
       // column is what posting it costs the collector.
       cost: "",
@@ -43,9 +53,9 @@ describe("matchShippingMethod", () => {
     });
   });
 
-  it("says nothing at all when the order carries no method", () => {
-    assert.equal(matchShippingMethod(METHODS, null), null);
-    assert.equal(matchShippingMethod(METHODS, "   "), null);
+  it("says nothing at all when the order carries no delivery method", () => {
+    assert.equal(matchShippingOption(OPTIONS, null), null);
+    assert.equal(matchShippingOption(OPTIONS, "   "), null);
   });
 });
 

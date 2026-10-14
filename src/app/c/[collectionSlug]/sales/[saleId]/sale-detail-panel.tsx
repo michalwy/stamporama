@@ -23,10 +23,10 @@ import {
 import { CopiesWithoutCost } from "./copies-without-cost";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
-import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
-import type { ShippingMethodData } from "@/lib/shipping-methods";
+import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
+import type { ShippingOptionData } from "@/lib/shipping-options";
 import type { CarrierData } from "@/lib/carriers";
-import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
+import { getShippingOptionsAction } from "@/app/actions/shipping-options";
 import type { SaleShippingRaw } from "@/app/actions/sales";
 import { SaleFormDialog } from "../sale-form-dialog";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
@@ -638,8 +638,8 @@ export function SaleDetailPanel({
             // (#1898); a sale without them shows the row it always had.
             label={sale.supplies.lines.length > 0 ? "− Postage" : "− My shipping"}
             platformId={sale.platformId}
-            methodId={sale.shippingMethodId}
-            methodName={sale.shippingMethodName}
+            optionId={sale.shippingOptionId}
+            optionName={sale.shippingOptionName}
             amount={sale.shippingCost}
             currency={sale.shippingCurrency ?? sale.currency}
             saleCurrency={sale.currency}
@@ -789,10 +789,10 @@ export function SaleDetailPanel({
             buyerHandling: sale.buyerPaidTotal != null ? "" : (sale.buyerHandling ?? ""),
             buyerPaidTotal: sale.buyerPaidTotal ?? "",
             commission: sale.commission ?? "",
-            // A stored method id means a dictionary row; a name without one is the one-off (#468).
-            shippingMethodId:
-              sale.shippingMethodId ?? (sale.shippingMethodName ? CUSTOM_SHIPPING_METHOD : ""),
-            shippingMethodName: sale.shippingMethodName ?? "",
+            // A stored option id means a listed option; a name without one is the one-off (#468).
+            shippingOptionId:
+              sale.shippingOptionId ?? (sale.shippingOptionName ? CUSTOM_SHIPPING_OPTION : ""),
+            shippingOptionName: sale.shippingOptionName ?? "",
             shippingCost: sale.shippingCost ?? "",
             shippingCurrency: sale.shippingCurrency ?? sale.currency,
           }}
@@ -923,7 +923,7 @@ export function SaleDetailPanel({
       {dialog.kind === "shipment" && (
         <ShipmentDialog
           mode={dialog.mode}
-          shippingMethodName={sale.shippingMethodName}
+          shippingOptionName={sale.shippingOptionName}
           carriers={carriers}
           carrierId={sale.carrierId}
           trackingCode={sale.trackingCode}
@@ -1351,20 +1351,20 @@ const SHIP_ICON_BTN: React.CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
-/** The "− My shipping" row (#206/#468): the **method** the parcel went by, its cost, and the
- * currency that cost was paid in — shipping can be paid in a currency other than the sale's.
- * Read-only it shows the method name beside the amount and — when the currency differs from base —
+/** The "− My shipping" row (#206/#468): the **shipping option** the parcel went by, its cost, and
+ * the currency that cost was paid in — shipping can be paid in a currency other than the sale's.
+ * Read-only it shows the option name beside the amount and — when the currency differs from base —
  * the base-currency equivalent (or a "no rate" flag when unconvertible). Editing commits all of it
  * together via explicit ✓/✕ (a `select` can't share the blur-to-commit trick the single-value rows
  * use).
  *
- * Picking a method from the platform's dictionary re-fills the cost with what that method normally
- * costs, exactly as the header form does — the figure is a default, not a reading. */
+ * Picking one of the platform's options re-fills the cost with what its carrier service normally
+ * costs (#1909), exactly as the header form does — the figure is a default, not a reading. */
 function EditableShippingRow({
   label,
   platformId,
-  methodId,
-  methodName,
+  optionId,
+  optionName,
   amount,
   currency,
   saleCurrency,
@@ -1377,8 +1377,8 @@ function EditableShippingRow({
 }: {
   label: string;
   platformId: string;
-  methodId: string | null;
-  methodName: string | null;
+  optionId: string | null;
+  optionName: string | null;
   amount: string | null;
   currency: string;
   saleCurrency: string;
@@ -1394,22 +1394,22 @@ function EditableShippingRow({
   const [hovered, setHovered] = useState(false);
   const [draftAmount, setDraftAmount] = useState("");
   const [draftCcy, setDraftCcy] = useState(saleCurrency);
-  const [draftMethod, setDraftMethod] = useState("");
-  const [draftMethodName, setDraftMethodName] = useState("");
-  const [methods, setMethods] = useState<ShippingMethodData[]>([]);
+  const [draftOption, setDraftOption] = useState("");
+  const [draftOptionName, setDraftOptionName] = useState("");
+  const [options, setOptions] = useState<ShippingOptionData[]>([]);
 
-  /** The stored method as the select's value: a dictionary id, the custom token when only a name
-   * was kept, or "" for a sale that says nothing about how it went. */
-  const storedMethodValue = methodId ?? (methodName ? CUSTOM_SHIPPING_METHOD : "");
+  /** The stored option as the select's value: a listed option's id, the custom token when only a
+   * name was kept, or "" for a sale that says nothing about how it went. */
+  const storedOptionValue = optionId ?? (optionName ? CUSTOM_SHIPPING_OPTION : "");
 
-  // The dictionary is loaded when the row is opened, not with the screen: most visits to a sale
+  // The options are loaded when the row is opened, not with the screen: most visits to a sale
   // never touch shipping, and the list is only ever needed inside this editor.
   useEffect(() => {
     if (!editing) return;
     let cancelled = false;
-    getShippingMethodsAction(platformId)
+    getShippingOptionsAction(platformId)
       .then((rows) => {
-        if (!cancelled) setMethods(rows);
+        if (!cancelled) setOptions(rows);
       })
       .catch(() => {});
     return () => {
@@ -1421,17 +1421,17 @@ function EditableShippingRow({
     if (disabled) return;
     setDraftAmount(amount ?? "");
     setDraftCcy(currency || saleCurrency);
-    setDraftMethod(storedMethodValue);
-    setDraftMethodName(methodName ?? "");
+    setDraftOption(storedOptionValue);
+    setDraftOptionName(optionName ?? "");
     setEditing(true);
   }
-  function pickMethod(next: string) {
-    setDraftMethod(next);
-    const method = methods.find((m) => m.id === next);
-    if (method) {
-      setDraftAmount(method.cost);
-      setDraftCcy(method.currency);
-    }
+  function pickOption(next: string) {
+    setDraftOption(next);
+    const option = options.find((o) => o.id === next);
+    if (!option) return;
+    // An option linked to no carrier service leaves the postage to be entered.
+    setDraftAmount(option.service?.cost ?? "");
+    if (option.service) setDraftCcy(option.service.currency);
   }
   function commit() {
     setEditing(false);
@@ -1439,14 +1439,14 @@ function EditableShippingRow({
     if (
       draftAmount.trim() === (amount ?? "") &&
       draftCcy === (currency || saleCurrency) &&
-      draftMethod === storedMethodValue &&
-      draftMethodName.trim() === (methodName ?? "")
+      draftOption === storedOptionValue &&
+      draftOptionName.trim() === (optionName ?? "")
     ) {
       return;
     }
     onSave({
-      methodId: draftMethod,
-      methodName: draftMethodName,
+      optionId: draftOption,
+      optionName: draftOptionName,
       cost: draftAmount,
       currency: draftCcy,
     });
@@ -1458,27 +1458,27 @@ function EditableShippingRow({
       <div style={ORIG_CELL}>
         {editing ? (
           <span style={{ display: "inline-flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
-            {/* The method leads: picking one answers the two fields after it. */}
+            {/* The option leads: picking one answers the two fields after it. */}
             <select
-              aria-label="Shipping method"
-              value={draftMethod}
-              onChange={(e) => pickMethod(e.target.value)}
+              aria-label="Shipping option"
+              value={draftOption}
+              onChange={(e) => pickOption(e.target.value)}
               style={{ ...INPUT_STYLE, width: "11rem", padding: "0.125rem 0.375rem", cursor: "pointer" }}
             >
-              <option value="">— no method —</option>
-              {methods.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — {m.cost} {m.currency}
+              <option value="">— no option —</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} — {o.price} {o.currency}
                 </option>
               ))}
-              <option value={CUSTOM_SHIPPING_METHOD}>Custom…</option>
+              <option value={CUSTOM_SHIPPING_OPTION}>Custom…</option>
             </select>
-            {draftMethod === CUSTOM_SHIPPING_METHOD && (
+            {draftOption === CUSTOM_SHIPPING_OPTION && (
               <TextInput
-                aria-label="Custom method name"
-                placeholder="Method name"
-                value={draftMethodName}
-                onChange={(e) => setDraftMethodName(e.target.value)}
+                aria-label="Custom option name"
+                placeholder="Option name"
+                value={draftOptionName}
+                onChange={(e) => setDraftOptionName(e.target.value)}
                 style={{ ...INPUT_STYLE, width: "9rem", padding: "0.125rem 0.375rem" }}
               />
             )}
@@ -1546,13 +1546,13 @@ function EditableShippingRow({
               <span aria-hidden style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", opacity: hovered ? 1 : 0.55 }}>
                 <Icon name="edit" size="sm" />
               </span>
-              {/* The method is the fact the row leads with once there is one — the cost answers
-                  "how much", the method answers "how it went", and a sale often has the second
+              {/* The option is the fact the row leads with once there is one — the cost answers
+                  "how much", the option answers "how it went", and a sale often has the second
                   before the postage receipt turns up. */}
-              {methodName && (
-                <span style={{ color: "var(--color-text-secondary)" }}>{methodName}</span>
+              {optionName && (
+                <span style={{ color: "var(--color-text-secondary)" }}>{optionName}</span>
               )}
-              <span>{amount ? `${amount} ${currency}` : methodName ? "" : "Set"}</span>
+              <span>{amount ? `${amount} ${currency}` : optionName ? "" : "Set"}</span>
             </button>
           </Tooltip>
         )}

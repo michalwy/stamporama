@@ -12,18 +12,16 @@ import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { NumericInput } from "../shared/numeric-input";
 import { NO_AUTOFILL } from "../shared/no-autofill";
 import { RowActionsMenu } from "../shared/row-actions-menu";
-import type { ShippingMethodData } from "@/lib/shipping-methods";
+import type { ShippingOptionData } from "@/lib/shipping-options";
 import type { CarrierData } from "@/lib/carriers";
 import { getCarriersAction } from "@/app/actions/carriers";
-import type { PackingSupplyData } from "@/lib/packing-supplies";
-import { listPackingSuppliesAction } from "@/app/actions/packing-supplies";
 import {
-  getShippingMethodsAction,
-  createShippingMethodAction,
-  updateShippingMethodAction,
-  deleteShippingMethodAction,
-  type ShippingMethodActionState,
-} from "@/app/actions/shipping-methods";
+  getShippingOptionsAction,
+  createShippingOptionAction,
+  updateShippingOptionAction,
+  deleteShippingOptionAction,
+  type ShippingOptionActionState,
+} from "@/app/actions/shipping-options";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
@@ -39,14 +37,14 @@ const INPUT_STYLE: React.CSSProperties = {
   background: "var(--color-bg-elevated)",
 };
 
-/** name · carrier · cost · currency · actions — one grid so the rows, the editor and the add form
- * line up.
+/** name · carrier service · buyer price · currency · actions — one grid so the rows, the editor and
+ * the add form line up.
  * The last column is sized for the **widest** thing that lands in it, the editor's ✓ + ✕ pair, not
  * for the single `⋮` a resting row shows; a column cut to the narrower case clips the other. Its
  * contents are flush right, so a resting row's `⋮` still sits at the edge. */
 const GRID: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 9rem 6rem 5rem 4.5rem",
+  gridTemplateColumns: "1fr 13rem 6rem 5rem 4.5rem",
   alignItems: "center",
   gap: "0.5rem",
 };
@@ -61,15 +59,14 @@ const ACTIONS_CELL: React.CSSProperties = {
   justifyContent: "flex-end",
 };
 
-export interface ShippingMethodsDialogProps {
+export interface ShippingOptionsDialogProps {
   collectionId: string;
-  /** The platform whose price list this is. Only ever a *saved* contact — the dialog cannot be
-   * opened while adding one, since a method has to hang off a platform that exists. */
+  /** The platform whose options these are. Only ever a *saved* contact — the dialog cannot be
+   * opened while adding one, since an option has to hang off a platform that exists. */
   platformId: string;
   platformName: string;
-  /** The platform's transaction currency (#196), used as the default for a new method. Postage is
-   * usually paid in the collector's own currency, but the platform's is the better first guess than
-   * nothing, and every row picks its own anyway. */
+  /** The platform's transaction currency (#196), used as the default for a new option — the buyer
+   * pays in it — and every row can pick its own anyway. */
   defaultCurrency: string;
   onClose: () => void;
   /** Raised with the current count after every change, so the contact form's summary line stays
@@ -79,43 +76,35 @@ export interface ShippingMethodsDialogProps {
 
 type RowState = { kind: "none" } | { kind: "edit"; id: string } | { kind: "delete"; id: string };
 
-/** One row of the draft's usual supplies (#1899); the quantity is the field's text until saved. */
-interface DraftSupply {
-  supplyId: string;
-  quantity: string;
-}
-
 /** This dialog stacks above the contact form at `zIndexBase` 200, so its panel sits at 201 — the
  * row menus portal to `<body>` and have to be raised past it, or they open behind the panel. */
 const DIALOG_Z_INDEX_BASE = 200;
 const ROW_MENU_Z_INDEX = DIALOG_Z_INDEX_BASE + 100;
 
 /**
- * The platform's shipping-method dictionary (#468) — what its buyers can choose from, and what
- * sending by each costs. Opened from the contact dialog's Platform tab, beside the listing
- * templates, because it is the same kind of fact: something configured once per marketplace and
- * then picked from on every sale.
+ * The platform's shipping options (#468, #1909) — what its buyers can choose from, at the price they
+ * pay, each linked to the carrier service it is sent by. What sending costs the collector is not
+ * here: it is the service's, in the global rate list under Settings → Carriers. Opened from the
+ * contact dialog's Platform tab, beside the listing templates, because it is the same kind of fact:
+ * something configured once per marketplace and then picked from on every sale.
  *
  * Unlike the templates dialog, this one **writes as you go**: its rows are their own records, not
  * fields of the contact, so there is nothing for the contact's Save to carry. Deletion confirms
  * inline rather than in a nested `ConfirmDialog` — a third stacked dialog for one row is more
  * ceremony than the act deserves, and the rows are cheap to re-add.
  */
-export function ShippingMethodsDialog({
+export function ShippingOptionsDialog({
   collectionId,
   platformId,
   platformName,
   defaultCurrency,
   onClose,
   onCountChange,
-}: ShippingMethodsDialogProps) {
-  const [methods, setMethods] = useState<ShippingMethodData[]>([]);
-  // The collection's carriers (#491) — what a method can name as the one that actually posts by it.
-  // Loaded once beside the methods; the list is short and maintained in Settings, not here.
+}: ShippingOptionsDialogProps) {
+  const [options, setOptions] = useState<ShippingOptionData[]>([]);
+  // The collection's carriers and their services (#1909) — what an option can be sent by. Loaded
+  // once beside the options; the rate list is maintained in Settings → Carriers, not here.
   const [carriers, setCarriers] = useState<CarrierData[]>([]);
-  // The collection's packing supplies (#1899) — what a method can list as a parcel's usual ones. A
-  // collection with none sees no supplies here at all, as on the order and sale screens.
-  const [packingSupplies, setPackingSupplies] = useState<PackingSupplyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<RowState>({ kind: "none" });
   // A row menu owns Escape while it is open (it is not an escape layer of its own), so the dialog
@@ -126,34 +115,28 @@ export function ShippingMethodsDialog({
 
   // Draft fields, shared by the editor and the add form — only one of them is ever open.
   const [name, setName] = useState("");
-  const [cost, setCost] = useState("");
+  const [price, setPrice] = useState("");
   const [currency, setCurrency] = useState(defaultCurrency);
-  const [carrierId, setCarrierId] = useState("");
-  const [supplies, setSupplies] = useState<DraftSupply[]>([]);
+  const [serviceId, setServiceId] = useState("");
 
   async function reload() {
-    const rows = await getShippingMethodsAction(platformId);
-    setMethods(rows);
+    const rows = await getShippingOptionsAction(platformId);
+    setOptions(rows);
     onCountChange?.(rows.length);
     return rows;
   }
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      getShippingMethodsAction(platformId),
-      getCarriersAction(collectionId),
-      listPackingSuppliesAction(collectionId),
-    ])
-      .then(([rows, carrierRows, supplyRows]) => {
+    Promise.all([getShippingOptionsAction(platformId), getCarriersAction(collectionId)])
+      .then(([rows, carrierRows]) => {
         if (cancelled) return;
-        setMethods(rows);
+        setOptions(rows);
         setCarriers(carrierRows);
-        setPackingSupplies(supplyRows);
         onCountChange?.(rows.length);
       })
       .catch(() => {
-        if (!cancelled) setError("Could not load this platform's shipping methods.");
+        if (!cancelled) setError("Could not load this platform's shipping options.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -169,35 +152,26 @@ export function ShippingMethodsDialog({
     setError(undefined);
     setRow({ kind: "none" });
     setName("");
-    setCost("");
+    setPrice("");
     setCurrency(defaultCurrency);
-    setCarrierId("");
-    setSupplies([]);
+    setServiceId("");
   }
 
-  function startEdit(m: ShippingMethodData) {
+  function startEdit(o: ShippingOptionData) {
     setError(undefined);
-    setName(m.name);
-    setCost(m.cost);
-    setCurrency(m.currency);
-    setCarrierId(m.carrierId ?? "");
-    setSupplies(m.supplies.map((s) => ({ supplyId: s.supplyId, quantity: String(s.quantity) })));
-    setRow({ kind: "edit", id: m.id });
+    setName(o.name);
+    setPrice(o.price);
+    setCurrency(o.currency);
+    setServiceId(o.service?.id ?? "");
+    setRow({ kind: "edit", id: o.id });
   }
 
-  function submit(action: (fd: FormData) => Promise<ShippingMethodActionState>) {
+  function submit(action: (fd: FormData) => Promise<ShippingOptionActionState>) {
     const fd = new FormData();
     fd.set("name", name);
-    fd.set("cost", cost);
+    fd.set("price", price);
     fd.set("currency", currency);
-    fd.set("carrierId", carrierId);
-    // Sent only where there is a list to edit, so a collection without supplies writes none.
-    if (packingSupplies.length > 0) {
-      fd.set(
-        "supplies",
-        JSON.stringify(supplies.map((s) => ({ supplyId: s.supplyId, quantity: Number(s.quantity.trim()) })))
-      );
-    }
+    fd.set("serviceId", serviceId);
     startTransition(async () => {
       const result = await action(fd);
       if (result.status === "error") {
@@ -213,7 +187,7 @@ export function ShippingMethodsDialog({
 
   function confirmDelete(id: string) {
     startTransition(async () => {
-      const result = await deleteShippingMethodAction(id);
+      const result = await deleteShippingOptionAction(id);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -227,72 +201,69 @@ export function ShippingMethodsDialog({
   const draft = {
     name,
     setName,
-    cost,
-    setCost,
+    price,
+    setPrice,
     currency,
     setCurrency,
-    carrierId,
-    setCarrierId,
+    serviceId,
+    setServiceId,
     carriers,
     disabled: isPending,
   };
-  const suppliesDraft = { supplies, setSupplies, packingSupplies, disabled: isPending };
-  const carrierNameById = new Map(carriers.map((c) => [c.id, c.name]));
 
   return (
     <DialogShell
-      title={`Shipping methods — ${platformName}`}
+      title={`Shipping options — ${platformName}`}
       onClose={onClose}
-      maxWidth="44rem"
+      maxWidth="48rem"
       minHeight="24rem"
       zIndexBase={DIALOG_Z_INDEX_BASE}
       dismissable={!menuOpen}
     >
       <DialogBody>
         <p style={{ margin: "0 0 1rem", fontSize: "0.8125rem", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
-          What buyers on this platform can choose from, and what sending by each costs you. Picking
-          one on a sale fills in <strong>my shipping</strong> with the cost below — still editable
-          there, since a method&apos;s price is what it usually costs, not what this parcel cost.
-          {packingSupplies.length > 0 && <> Its usual packing supplies are filled in the same way.</>}
+          What buyers on this platform can choose from, at the price <strong>they</strong> pay. Link
+          each to the carrier service it goes by: picking it on a sale fills in the postage and the
+          usual packing supplies from that service, still editable there.
         </p>
 
         {/* The header and the add form carry the list rows' own horizontal padding, or their
             columns would sit 0.625rem to the left of the rows they label. */}
         <div style={{ ...GRID, padding: ROW_INSET, marginBottom: "0.375rem" }}>
-          <LabelWithError>Method</LabelWithError>
-          <LabelWithError>Carrier</LabelWithError>
-          <LabelWithError>Cost</LabelWithError>
+          <LabelWithError>Option</LabelWithError>
+          <LabelWithError>Sent by</LabelWithError>
+          <LabelWithError>Buyer pays</LabelWithError>
           <LabelWithError>Currency</LabelWithError>
           <span />
         </div>
 
         {loading ? (
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Loading…</p>
-        ) : methods.length === 0 ? (
+        ) : options.length === 0 ? (
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)", margin: "0 0 0.75rem" }}>
-            No methods yet. Add the services you actually post with — a sale can still name a one-off
-            method without one being listed here.
+            No options yet. Add the shipping you offer buyers here — a sale can still name a one-off
+            without one being listed.
           </p>
         ) : (
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.5rem", overflow: "hidden" }}>
-            {methods.map((m, i) => (
+            {options.map((o, i) => (
               <div
-                key={m.id}
+                key={o.id}
                 style={{
                   ...GRID,
                   padding: "0.5rem 0.625rem",
-                  borderBottom: i < methods.length - 1 ? "1px solid var(--color-border)" : "none",
+                  borderBottom: i < options.length - 1 ? "1px solid var(--color-border)" : "none",
                   background: "var(--color-bg-elevated)",
                 }}
               >
-                {row.kind === "edit" && row.id === m.id ? (
+                {row.kind === "edit" && row.id === o.id ? (
                   <>
-                    <DraftFields idPrefix={`ship-edit-${m.id}`} {...draft} />
+                    <DraftFields idPrefix={`ship-edit-${o.id}`} {...draft} />
                     <div style={ACTIONS_CELL}>
                       <IconButton
                         label="Save"
                         disabled={isPending}
-                        onClick={() => submit((fd) => updateShippingMethodAction(m.id, fd))}
+                        onClick={() => submit((fd) => updateShippingOptionAction(o.id, fd))}
                       >
                         <Icon name="check" size="sm" />
                       </IconButton>
@@ -300,18 +271,17 @@ export function ShippingMethodsDialog({
                         <Icon name="close" size="sm" />
                       </IconButton>
                     </div>
-                    <SuppliesDraft idPrefix={`ship-edit-${m.id}`} {...suppliesDraft} />
                   </>
-                ) : row.kind === "delete" && row.id === m.id ? (
+                ) : row.kind === "delete" && row.id === o.id ? (
                   <>
                     <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
-                      Delete <strong>{m.name}</strong>?
+                      Delete <strong>{o.name}</strong>?
                     </span>
                     <span />
                     <span />
                     <span />
                     <div style={ACTIONS_CELL}>
-                      <IconButton label="Delete" danger disabled={isPending} onClick={() => confirmDelete(m.id)}>
+                      <IconButton label="Delete" danger disabled={isPending} onClick={() => confirmDelete(o.id)}>
                         <Icon name="check" size="sm" />
                       </IconButton>
                       <IconButton label="Keep" disabled={isPending} onClick={() => setRow({ kind: "none" })}>
@@ -322,7 +292,7 @@ export function ShippingMethodsDialog({
                 ) : (
                   <>
                     <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                      {m.name}
+                      {o.name}
                     </span>
                     <span
                       style={{
@@ -333,7 +303,7 @@ export function ShippingMethodsDialog({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {m.carrierId ? (carrierNameById.get(m.carrierId) ?? "—") : "—"}
+                      {o.service ? `${o.service.carrierName} › ${o.service.name}` : "—"}
                     </span>
                     <span
                       style={{
@@ -343,16 +313,16 @@ export function ShippingMethodsDialog({
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {m.cost}
+                      {o.price}
                     </span>
-                    <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>{m.currency}</span>
+                    <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>{o.currency}</span>
                     <div style={ACTIONS_CELL}>
                     <RowActionsMenu
-                      ariaLabel={`Actions for ${m.name}`}
+                      ariaLabel={`Actions for ${o.name}`}
                       zIndex={ROW_MENU_Z_INDEX}
                       onOpenChange={setMenuOpen}
                       actions={[
-                        { key: "edit", label: "Edit", icon: "edit", onSelect: () => startEdit(m) },
+                        { key: "edit", label: "Edit", icon: "edit", onSelect: () => startEdit(o) },
                         {
                           key: "delete",
                           label: "Delete",
@@ -361,16 +331,17 @@ export function ShippingMethodsDialog({
                           separatorBefore: true,
                           onSelect: () => {
                             setError(undefined);
-                            setRow({ kind: "delete", id: m.id });
+                            setRow({ kind: "delete", id: o.id });
                           },
                         },
                       ]}
                     />
                     </div>
-                    {m.supplies.length > 0 && (
+                    {o.service && (
                       <span style={{ gridColumn: "1 / -1", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                        Packed with{" "}
-                        {m.supplies.map((s) => `${s.name} × ${s.quantity}`).join(", ")}
+                        Costs you {o.service.cost} {o.service.currency}
+                        {o.service.supplies.length > 0 &&
+                          ` · packed with ${o.service.supplies.map((s) => `${s.name} × ${s.quantity}`).join(", ")}`}
                       </span>
                     )}
                   </>
@@ -380,21 +351,20 @@ export function ShippingMethodsDialog({
           </div>
         )}
 
-        {/* The add form is always there rather than behind a button: a price list is entered in one
-            sitting, and a row that is already open costs one click less per method. */}
+        {/* The add form is always there rather than behind a button: a platform's options are
+            entered in one sitting, and a row that is already open costs one click less per option. */}
         {row.kind === "none" && (
           <div style={{ ...GRID, padding: ROW_INSET, marginTop: "0.75rem" }}>
             <DraftFields idPrefix="ship-add" {...draft} />
             <div style={ACTIONS_CELL}>
               <IconButton
-                label="Add method"
-                disabled={isPending || !name.trim() || !cost.trim()}
-                onClick={() => submit((fd) => createShippingMethodAction(collectionId, platformId, fd))}
+                label="Add option"
+                disabled={isPending || !name.trim() || !price.trim()}
+                onClick={() => submit((fd) => createShippingOptionAction(collectionId, platformId, fd))}
               >
                 +
               </IconButton>
             </div>
-            <SuppliesDraft idPrefix="ship-add" {...suppliesDraft} />
           </div>
         )}
 
@@ -420,24 +390,24 @@ function DraftFields({
   idPrefix,
   name,
   setName,
-  cost,
-  setCost,
+  price,
+  setPrice,
   currency,
   setCurrency,
-  carrierId,
-  setCarrierId,
+  serviceId,
+  setServiceId,
   carriers,
   disabled,
 }: {
   idPrefix: string;
   name: string;
   setName: (v: string) => void;
-  cost: string;
-  setCost: (v: string) => void;
+  price: string;
+  setPrice: (v: string) => void;
   currency: string;
   setCurrency: (v: string) => void;
-  carrierId: string;
-  setCarrierId: (v: string) => void;
+  serviceId: string;
+  setServiceId: (v: string) => void;
   carriers: CarrierData[];
   disabled: boolean;
 }) {
@@ -449,36 +419,42 @@ function DraftFields({
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Registered letter"
         disabled={disabled}
-        aria-label="Shipping method name"
+        aria-label="Shipping option name"
         {...NO_AUTOFILL}
         style={INPUT_STYLE}
       />
-      {/* Optional (#491), and only ever about tracking: naming the carrier is what turns a sale's
-          tracking number into a link to its own consignment. Carriers are kept in
-          Settings → Carriers, because the same one carries parcels for every platform. */}
+      {/* Optional: linking the service is what fills a sale's postage and supplies in, and turns its
+          tracking number into a link. The rate list is kept in Settings → Carriers, because the same
+          service carries parcels for every platform at the same cost. */}
       <select
-        id={`${idPrefix}-carrier`}
-        value={carrierId}
-        onChange={(e) => setCarrierId(e.target.value)}
+        id={`${idPrefix}-service`}
+        value={serviceId}
+        onChange={(e) => setServiceId(e.target.value)}
         disabled={disabled}
-        aria-label="Carrier"
+        aria-label="Carrier service"
         style={{ ...INPUT_STYLE, cursor: "pointer" }}
       >
-        <option value="">— no carrier —</option>
-        {carriers.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
+        <option value="">— no service —</option>
+        {carriers
+          .filter((c) => c.services.length > 0)
+          .map((c) => (
+            <optgroup key={c.id} label={c.name}>
+              {c.services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.cost} {s.currency}
+                </option>
+              ))}
+            </optgroup>
+          ))}
       </select>
       <NumericInput
         kind="amount"
-        id={`${idPrefix}-cost`}
-        value={cost}
-        onChange={(e) => setCost(e.target.value)}
+        id={`${idPrefix}-price`}
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
         placeholder="0.00"
         disabled={disabled}
-        aria-label="Cost"
+        aria-label="Buyer price"
         style={{ ...INPUT_STYLE, textAlign: "right" }}
       />
       <select
@@ -486,7 +462,7 @@ function DraftFields({
         value={currency}
         onChange={(e) => setCurrency(e.target.value)}
         disabled={disabled}
-        aria-label="Cost currency"
+        aria-label="Buyer price currency"
         style={{ ...INPUT_STYLE, cursor: "pointer" }}
       >
         {COMMON_CURRENCIES.map((c) => (
@@ -498,82 +474,6 @@ function DraftFields({
     </>
   );
 }
-
-/** A method's usual packing supplies (#1899), under its other fields in the editor and the add form:
- * a supply and a quantity per row, each supply once. Nothing at all when the collection has no
- * supplies. Module level for `DraftFields`' reason. */
-function SuppliesDraft({
-  idPrefix,
-  supplies,
-  setSupplies,
-  packingSupplies,
-  disabled,
-}: {
-  idPrefix: string;
-  supplies: DraftSupply[];
-  setSupplies: (next: DraftSupply[]) => void;
-  packingSupplies: PackingSupplyData[];
-  disabled: boolean;
-}) {
-  if (packingSupplies.length === 0) return null;
-  const listed = new Set(supplies.map((s) => s.supplyId));
-  const unlisted = packingSupplies.filter((p) => !listed.has(p.id));
-  const update = (i: number, patch: Partial<DraftSupply>) =>
-    setSupplies(supplies.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  return (
-    <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
-      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Packed with</span>
-      {supplies.map((s, i) => (
-        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-          <select
-            id={`${idPrefix}-supply-${i}`}
-            value={s.supplyId}
-            onChange={(e) => update(i, { supplyId: e.target.value })}
-            disabled={disabled}
-            aria-label="Packing supply"
-            style={{ ...INPUT_STYLE, width: "11rem", cursor: "pointer" }}
-          >
-            {packingSupplies
-              .filter((p) => p.id === s.supplyId || !listed.has(p.id))
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </select>
-          <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>×</span>
-          <TextInput
-            id={`${idPrefix}-supply-${i}-quantity`}
-            value={s.quantity}
-            onChange={(e) => update(i, { quantity: e.target.value })}
-            inputMode="numeric"
-            disabled={disabled}
-            aria-label="Quantity"
-            {...NO_AUTOFILL}
-            style={{ ...INPUT_STYLE, width: "3.5rem", textAlign: "right" }}
-          />
-          <IconButton
-            label="Remove supply"
-            disabled={disabled}
-            onClick={() => setSupplies(supplies.filter((_, j) => j !== i))}
-          >
-            <Icon name="close" size="sm" />
-          </IconButton>
-        </span>
-      ))}
-      {unlisted.length > 0 && (
-        <IconButton
-          label="Add packing supply"
-          disabled={disabled}
-          onClick={() => setSupplies([...supplies, { supplyId: unlisted[0].id, quantity: "1" }])}
-        >
-          + Supply
-        </IconButton>
-      )}
-    </div>
-  );
-}
-
 function IconButton({
   label,
   danger,
