@@ -182,6 +182,8 @@ model Collection {
   carriers        Carrier[]
   // Envelopes, transport cards and the like (#1897, ADR-0068): bought on purchase orders, held in stock.
   packingSupplies PackingSupply[]
+  // Packing supplies taken out of stock without a sale (#1900).
+  supplyOwnUses   SupplyOwnUse[]
   auctionSales    AuctionSale[]
   priceObservations PriceObservation[]
   trades          Trade[]
@@ -4515,6 +4517,8 @@ model PackingSupply {
   saleLines  SaleSupplyLine[]
   // The shipping methods that usually use it (#1899).
   methodDefaults ShippingMethodSupply[]
+  // What was taken out of stock without a sale (#1900).
+  ownUses    SupplyOwnUse[]
 
   // The name is the pick-list, as it is for carriers.
   @@unique([collectionId, name])
@@ -4550,6 +4554,8 @@ model PurchaseSupplyLine {
   supply   PackingSupply @relation(fields: [supplyId], references: [id], onDelete: NoAction)
   // The units sales have taken from this batch (#1898).
   uses     SaleSupplyUse[]
+  // The units taken from this batch without a sale (#1900).
+  ownUseTakes SupplyOwnUseTake[]
 
   @@index([purchaseId])
   @@index([supplyId])
@@ -4601,6 +4607,54 @@ model SaleSupplyUse {
   @@unique([lineId, batchId])
   @@index([batchId])
   @@map("sale_supply_use")
+}
+
+// Packing supplies taken out of stock **without a sale** (#1900, ADR-0068 §9) — transport cards the
+// collector keeps stamps in at home. A quantity, the day it was used and an optional note; its units
+// leave stock FIFO under the same rule as a sale's (`settleSupplyUses`), and its cost is charged to
+// no sale and no copy: the Supplies screen states it as a cost of its own, by period.
+//
+// Taking more than is on hand is refused when the use is written. A batch lowered or deleted later
+// can still leave it short, as it can a sale (the collector's call, 2026-10-14): it is then covered
+// from the supply's other batches, or by the next purchase.
+//
+// `onDelete: NoAction` on the supply, for `PurchaseSupplyLine`'s reason; the collection cascades.
+model SupplyOwnUse {
+  id           String   @id @default(cuid())
+  collectionId String
+  supplyId     String
+  // Units taken. Always positive.
+  quantity     Int
+  // The day the supplies were used: what "first" means beside the sales' dates.
+  usedAt       DateTime @db.Date
+  // What they were used for — *storage*. Optional.
+  note         String?
+  createdAt    DateTime @default(now())
+
+  collection Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  supply     PackingSupply      @relation(fields: [supplyId], references: [id], onDelete: NoAction)
+  takes      SupplyOwnUseTake[]
+
+  @@index([collectionId, usedAt])
+  @@index([supplyId])
+  @@map("supply_own_use")
+}
+
+// Units of an own use taken from one batch (#1900) — `SaleSupplyUse`'s twin. Its cost is the batch's
+// unit cost, derived on read; deleting the use returns the units to this batch (cascade).
+model SupplyOwnUseTake {
+  id       String @id @default(cuid())
+  useId    String
+  batchId  String
+  // Units taken from the batch. Always positive.
+  quantity Int
+
+  use   SupplyOwnUse       @relation(fields: [useId], references: [id], onDelete: Cascade)
+  batch PurchaseSupplyLine @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([useId, batchId])
+  @@index([batchId])
+  @@map("supply_own_use_take")
 }
 
 // Auction tracking (ADR-0021, #23/#350): a bidding watchlist with a fork at the end. Three levels,

@@ -113,7 +113,9 @@ export function PackingSuppliesPanel({
                           ? `Bought on ${countLabel(current.lineCount, "order line", "order lines")} — those lines are its stock, so it stays.`
                           : current.saleLineCount > 0
                             ? `Used on ${countLabel(current.saleLineCount, "sale line", "sale lines")} — part of those sales' shipping, so it stays.`
-                            : undefined,
+                            : current.ownUseCount > 0
+                              ? `Used outside sales ${countLabel(current.ownUseCount, "time", "times")} — delete those uses on the Supplies screen first.`
+                              : undefined,
                     }
                   : undefined
               }

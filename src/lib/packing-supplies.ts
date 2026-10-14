@@ -8,7 +8,7 @@ import {
   computeSupplyBatchCost,
   purchaseCostsOf,
 } from "./purchase-allocation";
-import { supplyStock, formatUnitCost } from "./supply-stock";
+import { supplyStock, supplyLineCost, formatUnitCost, type SuppliesCost } from "./supply-stock";
 import { settleSupplies } from "./supply-settlement";
 
 // Packing supplies (#1897, ADR-0068) — envelopes, transport cards and the like: the dictionary, the
@@ -35,6 +35,8 @@ export interface PackingSupplyData {
   lineCount: number;
   /** Sales' supply lines that used it (#1898). A supply with any cannot be deleted either. */
   saleLineCount: number;
+  /** Uses without a sale (#1900). A supply with any cannot be deleted either. */
+  ownUseCount: number;
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -68,13 +70,18 @@ export async function listPackingSupplies(
   const rows = await prisma.packingSupply.findMany({
     where: { collectionId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, _count: { select: { lines: true, saleLines: true } } },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { lines: true, saleLines: true, ownUses: true } },
+    },
   });
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     lineCount: r._count.lines,
     saleLineCount: r._count.saleLines,
+    ownUseCount: r._count.ownUses,
   }));
 }
 
@@ -106,12 +113,13 @@ export async function renamePackingSupply(
   await prisma.packingSupply.update({ where: { id: supplyId }, data: { name: supplyName(name) } });
 }
 
-/** Thrown when a supply that was bought, or used on a sale (#1898), is deleted: its batches are what
- * its stock is, and its uses are part of those sales' shipping cost. */
+/** Thrown when a supply that was bought, or used on a sale (#1898) or without one (#1900), is
+ * deleted: its batches are what its stock is, and its uses are part of what they cost. */
 export class PackingSupplyInUseError extends Error {
   constructor(
     readonly lineCount: number,
-    readonly saleLineCount: number
+    readonly saleLineCount: number,
+    readonly ownUseCount: number
   ) {
     super("Packing supply has been bought or used.");
     this.name = "PackingSupplyInUseError";
@@ -121,12 +129,13 @@ export class PackingSupplyInUseError extends Error {
 /** Delete a supply nothing has bought or used. The constraints are the backstop; this says why. */
 export async function deletePackingSupply(ownerId: string, supplyId: string): Promise<void> {
   await assertSupplyOwner(ownerId, supplyId);
-  const [lineCount, saleLineCount] = await Promise.all([
+  const [lineCount, saleLineCount, ownUseCount] = await Promise.all([
     prisma.purchaseSupplyLine.count({ where: { supplyId } }),
     prisma.saleSupplyLine.count({ where: { supplyId } }),
+    prisma.supplyOwnUse.count({ where: { supplyId } }),
   ]);
-  if (lineCount > 0 || saleLineCount > 0) {
-    throw new PackingSupplyInUseError(lineCount, saleLineCount);
+  if (lineCount > 0 || saleLineCount > 0 || ownUseCount > 0) {
+    throw new PackingSupplyInUseError(lineCount, saleLineCount, ownUseCount);
   }
   await prisma.packingSupply.delete({ where: { id: supplyId } });
 }
@@ -205,8 +214,8 @@ export async function createPurchaseSupplyLine(
   });
 }
 
-/** Restate a line's supply, quantity and price. A batch lowered below what sales took from it gives
- * the latest of those units back, and the supply's other batches cover them where they can (#1898);
+/** Restate a line's supply, quantity and price. A batch lowered below what sales (and uses without a
+ * sale, #1900) took from it gives the latest of those units back, and the supply's other batches cover them where they can (#1898);
  * a batch moved to another supply gives back everything taken from it. */
 export async function updatePurchaseSupplyLine(
   ownerId: string,
@@ -222,6 +231,7 @@ export async function updatePurchaseSupplyLine(
     });
     if (before.supplyId !== input.supplyId) {
       await tx.saleSupplyUse.deleteMany({ where: { batchId: lineId } });
+      await tx.supplyOwnUseTake.deleteMany({ where: { batchId: lineId } });
     }
     await tx.purchaseSupplyLine.update({
       where: { id: lineId },
@@ -270,6 +280,32 @@ export interface SupplyBatchData {
   valueBase: string | null;
 }
 
+/** What a use cost, as the Supplies screen reads it: base currency (2 dp), with the units left out. */
+interface SupplyUseCost extends Omit<SuppliesCost, "costBase"> {
+  costBase: string;
+}
+
+/** One entry of a supply's history (#1900): a sale that packed with it, or a use without a sale. */
+export type SupplyUseEntry =
+  | (SupplyUseCost & {
+      kind: "sale";
+      /** The sale's supply line. */
+      id: string;
+      /** yyyy-mm-dd — the sale's date. */
+      usedOn: string;
+      quantity: number;
+      sale: { id: string; saleNo: number; platformName: string };
+    })
+  | (SupplyUseCost & {
+      kind: "own";
+      /** The use itself — what *Edit* and *Delete* act on. */
+      id: string;
+      supplyId: string;
+      usedOn: string;
+      quantity: number;
+      note: string | null;
+    });
+
 /** One supply's stock on the Supplies screen. */
 export interface SupplyStockData {
   id: string;
@@ -280,7 +316,12 @@ export interface SupplyStockData {
   unvaluedBatches: number;
   /** Units sales used that were not in stock (#1898) — waiting for a purchase to cover them. */
   shortUnits: number;
+  /** Units used without a sale that are not in stock (#1900): only a batch lowered or deleted after
+   * the use leaves any, since a use asking for more than is on hand is refused. */
+  ownShortUnits: number;
   batches: SupplyBatchData[];
+  /** Every use of the supply — sales and uses without one — newest first (#1900). */
+  history: SupplyUseEntry[];
 }
 
 export interface SuppliesStock {
@@ -311,8 +352,9 @@ export async function getSuppliesStock(
           id: true,
           quantity: true,
           createdAt: true,
-          // What sales took from the batch (#1898).
+          // What sales (#1898) and uses without a sale (#1900) took from the batch.
           uses: { select: { quantity: true } },
+          ownUseTakes: { select: { quantity: true } },
           purchase: {
             select: {
               id: true,
@@ -334,7 +376,25 @@ export async function getSuppliesStock(
           },
         },
       },
-      saleLines: { select: { quantity: true } },
+      saleLines: {
+        select: {
+          id: true,
+          quantity: true,
+          createdAt: true,
+          sale: { select: { id: true, saleNo: true, soldAt: true, platform: { select: { name: true } } } },
+          uses: { select: { batchId: true, quantity: true } },
+        },
+      },
+      ownUses: {
+        select: {
+          id: true,
+          quantity: true,
+          usedAt: true,
+          note: true,
+          createdAt: true,
+          takes: { select: { batchId: true, quantity: true } },
+        },
+      },
     },
   });
 
@@ -372,12 +432,62 @@ export async function getSuppliesStock(
       };
     });
     const used = new Map(
-      supply.lines.map((line) => [line.id, line.uses.reduce((sum, u) => sum + u.quantity, 0)])
+      supply.lines.map((line) => [
+        line.id,
+        line.uses.reduce((sum, u) => sum + u.quantity, 0) +
+          line.ownUseTakes.reduce((sum, t) => sum + t.quantity, 0),
+      ])
     );
     const stock = supplyStock(batches, used);
-    const usedOnSales = supply.saleLines.reduce((sum, l) => sum + l.quantity, 0);
-    const takenFromStock = [...used.values()].reduce((sum, q) => sum + q, 0);
     const byId = new Map(batches.map((b) => [b.id, b]));
+
+    // A use's units at their batches' unit costs, as a sale's line is costed (#1898).
+    const costOf = (
+      quantity: number,
+      takes: readonly { batchId: string; quantity: number }[]
+    ): SupplyUseCost => {
+      const cost = supplyLineCost({
+        quantity,
+        uses: takes.map((t) => {
+          const batch = byId.get(t.batchId);
+          return {
+            quantity: t.quantity,
+            unitCostBase: batch?.costBase == null ? null : batch.costBase / batch.quantity,
+          };
+        }),
+      });
+      return { ...cost, costBase: cost.costBase.toFixed(2) };
+    };
+    // Newest first; two uses of one day by when they were written.
+    const history: SupplyUseEntry[] = [
+      ...supply.saleLines.map((l) => ({
+        at: l.createdAt.toISOString(),
+        entry: {
+          kind: "sale" as const,
+          id: l.id,
+          usedOn: l.sale.soldAt.toISOString().slice(0, 10),
+          quantity: l.quantity,
+          sale: { id: l.sale.id, saleNo: l.sale.saleNo, platformName: l.sale.platform.name },
+          ...costOf(l.quantity, l.uses),
+        },
+      })),
+      ...supply.ownUses.map((u) => ({
+        at: u.createdAt.toISOString(),
+        entry: {
+          kind: "own" as const,
+          id: u.id,
+          supplyId: supply.id,
+          usedOn: u.usedAt.toISOString().slice(0, 10),
+          quantity: u.quantity,
+          note: u.note,
+          ...costOf(u.quantity, u.takes),
+        },
+      })),
+    ]
+      .sort((a, b) => b.entry.usedOn.localeCompare(a.entry.usedOn) || b.at.localeCompare(a.at))
+      .map((h) => h.entry);
+    const shortOf = (kind: SupplyUseEntry["kind"]) =>
+      history.filter((h) => h.kind === kind).reduce((sum, h) => sum + h.shortUnits, 0);
     if (stock.valueBase == null) anyUnvalued = true;
     else totalCents += Math.round(stock.valueBase * 100);
     return {
@@ -386,7 +496,8 @@ export async function getSuppliesStock(
       onHand: stock.onHand,
       valueBase: stock.valueBase?.toFixed(2) ?? null,
       unvaluedBatches: stock.unvaluedBatches,
-      shortUnits: Math.max(0, usedOnSales - takenFromStock),
+      shortUnits: shortOf("sale"),
+      ownShortUnits: shortOf("own"),
       batches: stock.batches.map((b) => {
         const own = byId.get(b.id)!;
         return {
@@ -400,6 +511,7 @@ export async function getSuppliesStock(
           valueBase: b.valueBase?.toFixed(2) ?? null,
         };
       }),
+      history,
     };
   });
 

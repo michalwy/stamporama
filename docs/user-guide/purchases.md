@@ -330,10 +330,11 @@ divided by the quantity — to the hundredth of a cent; hover it to see the sum.
 Every line is a **batch** in its supply's stock. Supplies are used **oldest batch first** (FIFO),
 each unit at the cost of its own batch, so what is on hand is valued at what the newest boxes cost.
 They leave stock when a sale's parcel uses them ([Packing supplies on a sale](sales.md#packing-supplies)),
-and a new batch first covers any sale that used more than you had. Lowering a batch below what sales
-took from it, or deleting it, gives those units back to the sales' supply lines, which take them from
-the supply's other batches where there are any — so their cost may change, and if none are left they
-wait for the next purchase.
+or when you take them for something else ([Using supplies outside sales](#using-supplies-outside-sales)),
+and a new batch first covers any sale that used more than you had. Lowering a batch below what was
+taken from it, or deleting it, gives those units back to the sales and uses that took them, which take
+them from the supply's other batches where there are any — so their cost may change, and if none are
+left they wait for the next purchase.
 
 **On an opening balance** the card brings in the supplies already on your shelf: the line's **Value**
 is what the batch is worth, and it is required — a batch without a cost would leave every parcel
@@ -350,6 +351,29 @@ The total of all supplies on hand heads the screen. A batch bought in another cu
 recorded exchange rate** has no base-currency cost; its supply then states no value rather than a sum
 that leaves it out, and says why. When sales have used more of a supply than you had, the supply says
 how many units they are waiting for — a purchase of it covers them.
+
+Under the batches, **Used** lists everything that took the supply, newest first: each sale that
+packed with it (a link to the sale) and each use outside sales with its note, with the date, the
+units and what they cost at their batches' unit costs.
+
+#### Using supplies outside sales
+
+Supplies do not only go into parcels — transport cards also hold stamps in your own storage. To keep
+the stock true, take those out with **Use…** on the supply's row of the Packing supplies screen: the
+**quantity**, the **date** (today unless you change it) and an optional **note** such as *storage*.
+They leave stock **oldest batch first**, exactly as a sale's do, and the use appears under **Used**
+with its cost. Its **⋮** menu lets you **Edit use** or **Delete use**; fewer units, or deleting it,
+returns them to the batches they came from.
+
+- **You cannot use more than is on hand.** Unlike a sale — where the parcel has already gone and the
+  next purchase covers it — nothing is waiting here, so the dialog refuses and says how many there
+  are. *Use…* is greyed out on a supply with nothing on hand.
+- **The cost is charged to no sale and no copy.** It is a cost of its own: **Used outside sales** at
+  the top of the screen totals it by **Month** or **Year**, with how many uses and units each period
+  holds. It does not appear on the Profit and loss screen.
+- **A batch lowered or deleted later can leave a use short**, as it can a sale: the use is marked
+  *incomplete* and the supply says how many units are missing, until a purchase covers them. You can
+  still correct its note, date or a lower quantity, or delete it.
 
 **What the order cost.** (An opening balance opens with its opening value instead — see
 [The values bar on an opening balance](#the-values-bar-on-an-opening-balance).) The values bar at
