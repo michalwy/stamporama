@@ -46,6 +46,7 @@ import { foldLocationRefCounts, type LocationRefInUse } from "./location-ref";
 import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
 import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
 import { formatUnitCost } from "./supply-stock";
+import { formatItemNo } from "./item-number";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -790,6 +791,117 @@ export async function attachItemsToLot(
     });
   }
   return { attached: toAttach.length, refused };
+}
+
+/** A copy a move did not take, named as the collector would find it on the screen (#1918). */
+export interface MoveRefusal {
+  itemId: string;
+  /** The copy's stamp and internal number, e.g. `Chopin 1949 (#00042)`. */
+  copy: string;
+  reason: string;
+}
+
+/**
+ * Move copies to another lot **of the same purchase** (#1918) — the correction for a copy
+ * identified into the wrong lot, started from the copies themselves rather than from the target's
+ * *Attach existing copies…* picker (#388).
+ *
+ * It is that attach, narrowed to one purchase, so its rules hold unchanged: only `lotId` changes
+ * (delivery state, dispositions, condition, location, `itemNo` and photos stay), and both ends must
+ * be **open**, because a cost basis is frozen at close (ADR-0009 §3). A closed target refuses the
+ * whole move; a copy on a closed lot is refused **by itself**, named, and the rest are moved. There
+ * is no re-link warning — nothing leaves the order. A copy on another purchase, or on none, is
+ * refused rather than pulled in: crossing purchases stays *Attach existing copies…*, with its own
+ * confirmation (#1770).
+ *
+ * The copies are named either as ids (a row's `⋮`, or a handful of ticks) or as the selection
+ * bar's server-resolved scope (#571), which is bounded to the target's purchase whatever it says.
+ * A scan tile that became one of these copies points at the copy, not at a lot, so it follows the
+ * move with nothing written here.
+ *
+ * Returns how many were moved, the refusals, and every lot touched — the target and each lot a
+ * copy left — for the screen to re-read (#1409).
+ */
+export async function moveItemsToLot(
+  ownerId: string,
+  lotId: string,
+  copies: { itemIds: string[] } | { scope: LotBulkScope }
+): Promise<{ moved: number; refused: MoveRefusal[]; lotIds: string[] }> {
+  const { collectionId, purchaseId, status } = await assertLotOwner(ownerId, lotId);
+  if (status !== "open") {
+    throw new Error("This lot is closed. Reopen it before moving copies into it.");
+  }
+
+  let ids: string[];
+  if ("itemIds" in copies) {
+    ids = [...new Set(copies.itemIds.filter(Boolean))];
+  } else {
+    // The purchase is the target's own, never the client's: a scope can only name copies of the
+    // order the move is within.
+    const where = await resolveLotBulkScope(collectionId, { ...copies.scope, purchaseId });
+    ids = (await prisma.item.findMany({ where, select: { id: true } })).map((i) => i.id);
+  }
+  if (ids.length === 0) throw new Error("Nothing selected to move.");
+
+  const items = await prisma.item.findMany({
+    where: { id: { in: ids }, collectionId },
+    select: {
+      id: true,
+      itemNo: true,
+      lotId: true,
+      stamp: { select: { name: true } },
+      collection: { select: { itemNoPad: true } },
+      lot: { select: { purchaseId: true, status: true, title: true } },
+    },
+  });
+  const found = new Set(items.map((i) => i.id));
+  const refused: MoveRefusal[] = ids
+    .filter((id) => !found.has(id))
+    .map((id) => ({ itemId: id, copy: "A copy", reason: "Copy not found in this collection." }));
+
+  const toMove: string[] = [];
+  const sourceLots = new Set<string>();
+  for (const item of items) {
+    if (item.lotId === lotId) continue; // already here — nothing to do
+    const copy = `${item.stamp.name || "(unnamed stamp)"} (${formatItemNo(
+      item.itemNo,
+      item.collection.itemNoPad
+    )})`;
+    if (!item.lot || item.lot.purchaseId !== purchaseId) {
+      refused.push({
+        itemId: item.id,
+        copy,
+        reason:
+          "It is not on this purchase. Use Attach existing copies… on the lot to bring it here.",
+      });
+      continue;
+    }
+    if (item.lot.status !== "open") {
+      const from = item.lot.title ? `Its lot, ${item.lot.title},` : "Its lot";
+      refused.push({
+        itemId: item.id,
+        copy,
+        reason: `${from} is closed, so its cost is already split. Reopen that lot before moving it.`,
+      });
+      continue;
+    }
+    toMove.push(item.id);
+    if (item.lotId) sourceLots.add(item.lotId);
+  }
+
+  if (toMove.length > 0) {
+    await prisma.item.updateMany({
+      where: { id: { in: toMove }, collectionId },
+      // Both ends are open, so the basis was pending and stays so — set explicitly for
+      // `attachItemsToLot`'s reason: the invariant holds whichever way the copy arrived.
+      data: { lotId, costBasis: null },
+    });
+  }
+  return {
+    moved: toMove.length,
+    refused,
+    lotIds: toMove.length > 0 ? [lotId, ...sourceLots] : [],
+  };
 }
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single

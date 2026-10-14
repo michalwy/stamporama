@@ -29,6 +29,7 @@ import {
   deleteLot,
   removeLotItem,
   attachItemsToLot,
+  moveItemsToLot,
   intakeStamps,
   closeLot,
   reopenLot,
@@ -426,6 +427,48 @@ export async function attachCopiesToLotAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to attach copies. Please try again.",
+    };
+  }
+}
+
+/** Outcome of a move between lots of one purchase (#1918). Refusals are per copy and named — the
+ * rest of the selection moves. `lotIds` is every lot it touched, for the screen to re-read. */
+export type MoveCopiesActionState =
+  | {
+      status: "success";
+      moved: number;
+      refusals: { copy: string; reason: string }[];
+      lotIds: string[];
+    }
+  | { status: "error"; message: string };
+
+/** Move copies to another lot of the same purchase (#1918): the copy ids as `itemIds`, or the
+ * selection bar's scope in the fields `readLotBulkScope` reads. */
+export async function moveCopiesToLotAction(
+  lotId: string,
+  formData: FormData
+): Promise<MoveCopiesActionState> {
+  const session = await getSession();
+  const itemIds = str(formData, "itemIds")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const copies =
+    formData.get("scoped") === "true"
+      ? { scope: readLotBulkScope((name) => formData.get(name)?.toString() ?? null) }
+      : { itemIds };
+  try {
+    const result = await moveItemsToLot(session.user.id, lotId, copies);
+    return {
+      status: "success",
+      moved: result.moved,
+      refusals: result.refused.map(({ copy, reason }) => ({ copy, reason })),
+      lotIds: result.lotIds,
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to move copies. Please try again.",
     };
   }
 }

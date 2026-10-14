@@ -436,6 +436,7 @@ const PURCHASE_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["intakeStamps", { module: "lots", why: "identifies copies into a lot" }],
   ["createLotWithStamps", { module: "lots", why: "creates a lot together with its copies" }],
   ["attachItemsToLot", { module: "lots", why: "moves existing copies into a lot" }],
+  ["moveItemsToLot", { module: "lots", why: "moves copies between a purchase's lots" }],
   ["removeLotItem", { module: "lots", why: "deletes a copy off its lot" }],
   ["deleteLot", { module: "lots", why: "deletes a lot and every copy on it" }],
   ["bulkUpdateLotItems", { module: "lots", why: "edits a lot's copies" }],
