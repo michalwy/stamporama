@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes and #1635 price observations; both wrappers exist and the registry carries **eighty-four operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps and #1910 the shipping and packing data; both wrappers exist and the registry carries **one hundred operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1168's bid recommendation, and #1037's catalog-number
 resolver. Thirteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -21,10 +21,10 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628) and *the registry carries eighty operations* (from #1628 until #1635).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) and *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following).
 
-**Fifty of them write** since #1635 added three; *forty-seven of them write* was the count from #1628 until
-then, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
+**Sixty-two of them write** since #1910 added eleven; *fifty of them write* was the count from #1635 until
+then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that was a boundary the collector
@@ -140,6 +140,7 @@ src/lib/agent-api/
   catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
   area-reads.ts     the area row, the tree order, the catalogue spelling, the refusals (#1539)
   auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627, #1628)
+  shipping-reads.ts carriers, options, supplies and uses as told; amounts, "supply: quantity", naming a supply or service (#1910)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -165,10 +166,11 @@ src/lib/agent-api/
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
     areas.ts        the six area operations (#1539)                     ← server-side
     auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
+    shipping.ts     the fourteen carrier, option, supply and use operations (#1910)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1760,6 +1762,16 @@ than rounded behind the agent's back. **Writes on a lot or an expense answer wit
 order's new `spend`**, not the whole purchase: an auction settlement can carry forty lots, and the
 shipping split every one of them moves is what the agent needs to read back.
 
+**An order's packing supplies are added here too** (#1910): `add_purchase_supply_line` writes a line
+through `createPurchaseSupplyLine`, the purchase screen's own, and answers with the line and the
+order's new `spend`; `get_purchase` lists the order's `supplyLines`. It is held to this section's
+boundary rather than the screen's — the collector's call on #1910, 2026-10-14: the screen adds a
+supply line to any order, the incoming half of a trade and an opening balance included, while the
+agent is refused on the first and does not reach the second, exactly as for a lot or an expense. A
+line is never corrected or removed here (`updatePurchaseSupplyLine` and `deletePurchaseSupplyLine`
+are in `SHIPPING_CLOSED`): one lowered or moved after sales took from it hands their units back, a
+correction made on the order's screen with the batch in view.
+
 **The incoming half of a trade is read and never written.** Its lot prices are the carried-over
 cost basis of the copies that went the other way (#644), kept in step by `syncTradePurchasePool` —
 not money anybody paid — so every write refuses it and `get_purchase` says `editable: false`.
@@ -2278,6 +2290,71 @@ Every entry is checked — the key, the row in this collection, words to transla
 row is written. **No operation clears a translation**: a blank entry is refused, and taking one away
 stays on the entity's screen.
 
+## Setting up shipping and packing
+
+**Fifteen operations, eleven of which write** (#1910): the carriers and their rate lists, each
+platform's shipping options, the packing supplies with their stock, and the supplies taken out of
+stock without a sale — the data the collector would otherwise type in under Settings → Carriers,
+on a platform's contact dialog, under Settings → Packing supplies and on the Supplies screen. The
+model is #1897–#1900 and #1909 (ADR-0068, ADR-0069); nothing about it changed.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_carriers` | no | every carrier with its tracking address and rate list: each service's cost, usual supplies and `optionCount` |
+| `create_carrier` / `update_carrier` | yes | a carrier's name and tracking address; `clear: ["tracking_url"]` takes it off |
+| `add_carrier_service` / `update_carrier_service` | yes | a service's name, cost, currency and usual supplies (`POST /carriers/{carrierId}/services`, `PATCH /carrier-services/{serviceId}`) |
+| `list_shipping_options` | no | the options by platform, or one platform's, each with its linked service |
+| `create_shipping_option` / `update_shipping_option` | yes | an option's platform, name, buyer price, currency and service; `clear: ["service"]` unlinks it |
+| `list_packing_supplies` | no | each supply's stock: on hand, value at FIFO cost, short units, its batches |
+| `get_packing_supply_history` | no | a supply's uses, newest first: sales that packed with it and uses without a sale |
+| `create_packing_supply` / `update_packing_supply` | yes | a supply's name — nothing else is typed |
+| `record_supply_use` / `update_supply_use` | yes | supplies taken out of stock without a sale (`/supply-uses`) |
+
+`add_purchase_supply_line` is the fifteenth, and lives with the purchase
+operations — see *Entering purchases* above.
+
+**No deleting, and that is the collector's decision on #1910**, the shape #1438 and #1539 have: a
+carrier, a service, an option, a supply or a use is deleted in the app. `SHIPPING_WRITES` in
+`tests/unit/agent-api-operation-boundary.test.ts` pins each allowed writer to its one operation
+module, and `SHIPPING_CLOSED` keeps every delete — with a purchase line's correction and removal, and
+all three of a sale's supply-line writers — out of every module. A sale's packing supplies are the
+sale's and are not written here at all.
+
+**Every write is the screen's own domain call, and every refusal is the screen's, checked first.**
+The screens' duplicate-name refusals are a unique index caught as `P2002` in the server action, and
+the domain throws plain `Error`s, neither of which #706 relays — so the operation looks for the row
+already holding the name (a carrier or a supply in the collection, a service within its carrier, an
+option on its platform) and refuses with its id. The comparison is exact, as the index is: `C6
+envelope` and `c6 envelope` are two names to the screen and to the agent alike. The tracking address
+goes through `parseTrackingUrlTemplate`, the carrier form's parser, so a template without `{code}`
+is refused in the form's words. A use larger than what is on hand is the domain's
+`SupplyOwnUseShortError`, relayed with the purchase operation that would cure it.
+
+**An edit restates what it does not change**, because `updateCarrier`, `updateCarrierService`,
+`updateShippingOption` and `updateSupplyOwnUse` each write the whole row. A service's `supplies`
+replaces its whole list, as the dialog's does, and `clear: ["supplies"]` empties it; left out, the
+list is kept (`CarrierServiceInput.supplies` undefined).
+
+**A supply and a service are named, not only identified.** A supply answers to its name, a service to
+its `label` — `"Poczta Polska / List polecony"`, which is what `list_carriers` hands out — and to its
+own name where only one carrier has a service called that. An unknown name is refused with the names
+it would take and an ambiguous one with the ids (`resolveNamedRow`, `resolveVocabularyValue`'s rule
+pointed at these reads instead of the vocabulary). A platform goes through the vocabulary, as every
+platform parameter does. **A service's usual supplies are `"name: quantity"` entries**, the
+catalogue writes' `key: value` spelling read from the **last** colon so a name may carry one, and the
+quantity is required: the dialog asks for it, and a defaulted `1` would be the agent's figure.
+
+**Currencies are the screens' defaults.** A service's cost defaults to the collection's base
+currency, as the rate-list dialog pre-selects it; an option's buyer price to its platform's currency
+(#196), then the base currency — the shipping-options dialog's order. Both take `COMMON_CURRENCIES`.
+
+**The reads are the screens'.** `list_carriers` is `getCarriers` with each service's `optionCount`,
+`list_shipping_options` is `getShippingOptions` per platform, and the two supply reads are
+`getSuppliesStock` whole — so a batch's cost, a supply's value and a use's cost are the Supplies
+screen's figures, absent rather than zero where an order has no rate into the base currency. A supply
+row carries its batches and a count of its `uses`; the history is the second read, paged, because it
+grows with every sale.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -2309,6 +2386,9 @@ exist cannot be.
   a book or an edition — see *Pricing the catalogue* — and moves and orders areas and moves an issue
   to another area — see *Organising the area tree*.
 - **The agent never deletes an area** (#1539).
+- **The agent never deletes shipping or packing data** (#1910): no carrier, service, option, supply or
+  use without a sale, and no purchase supply line corrected or removed. See *Setting up shipping and
+  packing* above.
 - **Price observations are deleted** (#1635): they are market facts the assistant itself records,
   not the collector's transactions, and a misread one must be removable — see *Recording price
   observations* above.
@@ -2540,7 +2620,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries eighty-four operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2560,9 +2640,14 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 `update_area`, `move_area`, `set_area_order` and `move_issue_to_area`; #1627 added `add_auction_lot`,
 `update_auction_lot`, `set_auction_lot_lines`, `set_auction_lot_ceiling` and `update_auction_sale`;
 #1628 added `record_auction_lot_outcome`; #1635 added `list_price_observations`,
-`record_price_observations`, `update_price_observation` and `delete_price_observation`.
+`record_price_observations`, `update_price_observation` and `delete_price_observation`; #1651 added
+`set_copy_stamp`; #1910 added `add_purchase_supply_line`, `list_carriers`, `create_carrier`,
+`update_carrier`, `add_carrier_service`, `update_carrier_service`, `list_shipping_options`,
+`create_shipping_option`, `update_shipping_option`, `list_packing_supplies`,
+`get_packing_supply_history`, `create_packing_supply`, `update_packing_supply`, `record_supply_use`
+and `update_supply_use`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

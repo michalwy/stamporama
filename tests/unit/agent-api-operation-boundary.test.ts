@@ -814,3 +814,103 @@ describe("the agent API's operation modules (#1626)", () => {
     }
   });
 });
+
+/**
+ * **The shipping and packing writes the agent may make, the modules that may make them, and the
+ * deletes it may not** (#1910). The collector allowed carriers, their services, platform shipping
+ * options and packing supplies to be created and edited, supply lines to be added to a purchase, and
+ * uses without a sale to be recorded and corrected — and **no deleting**, as #1438 and #1539 have it.
+ * Pinned both ways, as {@link AREA_WRITES} is: each writer is imported by its one module and by no
+ * other, and every delete stays out of every operation module.
+ *
+ * Correcting or removing a purchase's supply line is on the closed list with the deletes: #1910
+ * asks for supply lines to be *added*, and a line lowered or moved after sales took from it hands
+ * those sales' units back — a correction the order's screen makes with the batch in view. A sale's
+ * supply lines are the sale's, which the agent does not write at all.
+ */
+const SHIPPING_WRITES = new Map<string, { module: string; operations: string }>([
+  ["createCarrier", { module: "src/lib/carriers.ts", operations: "operations/shipping.ts" }],
+  ["updateCarrier", { module: "src/lib/carriers.ts", operations: "operations/shipping.ts" }],
+  ["createCarrierService", { module: "src/lib/carriers.ts", operations: "operations/shipping.ts" }],
+  ["updateCarrierService", { module: "src/lib/carriers.ts", operations: "operations/shipping.ts" }],
+  ["createShippingOption", { module: "src/lib/shipping-options.ts", operations: "operations/shipping.ts" }],
+  ["updateShippingOption", { module: "src/lib/shipping-options.ts", operations: "operations/shipping.ts" }],
+  ["createPackingSupply", { module: "src/lib/packing-supplies.ts", operations: "operations/shipping.ts" }],
+  ["renamePackingSupply", { module: "src/lib/packing-supplies.ts", operations: "operations/shipping.ts" }],
+  ["createSupplyOwnUse", { module: "src/lib/supply-own-uses.ts", operations: "operations/shipping.ts" }],
+  ["updateSupplyOwnUse", { module: "src/lib/supply-own-uses.ts", operations: "operations/shipping.ts" }],
+  ["createPurchaseSupplyLine", { module: "src/lib/packing-supplies.ts", operations: "operations/purchases.ts" }],
+]);
+
+const SHIPPING_CLOSED = new Map<string, string>([
+  ["deleteCarrier", "src/lib/carriers.ts"],
+  ["deleteCarrierService", "src/lib/carriers.ts"],
+  ["deleteShippingOption", "src/lib/shipping-options.ts"],
+  ["deletePackingSupply", "src/lib/packing-supplies.ts"],
+  ["updatePurchaseSupplyLine", "src/lib/packing-supplies.ts"],
+  ["deletePurchaseSupplyLine", "src/lib/packing-supplies.ts"],
+  ["deleteSupplyOwnUse", "src/lib/supply-own-uses.ts"],
+  ["createSaleSupplyLine", "src/lib/sale-supplies.ts"],
+  ["updateSaleSupplyLine", "src/lib/sale-supplies.ts"],
+  ["deleteSaleSupplyLine", "src/lib/sale-supplies.ts"],
+]);
+
+describe("the agent API's operation modules (#1910)", () => {
+  it("make shipping and packing writes only in their own modules, and only the ones allowed", () => {
+    const shippingModule = path.join(AGENT_API, "operations/shipping.ts");
+    const fromDomain = importedBindings(shippingModule)
+      .filter((binding) =>
+        ["../../carriers", "../../shipping-options", "../../packing-supplies", "../../supply-own-uses"].includes(binding.from)
+      )
+      .map((binding) => binding.name)
+      .filter((name) => /^(create|update|rename|delete|set|remove)/.test(name));
+    assert.deepEqual(
+      fromDomain.sort(),
+      [...SHIPPING_WRITES]
+        .filter(([, { operations }]) => operations === "operations/shipping.ts")
+        .map(([name]) => name)
+        .sort(),
+      "operations/shipping.ts imports exactly the writes #1910 allows"
+    );
+
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      const relative = path.relative(AGENT_API, file);
+      for (const { name, from } of importedBindings(file)) {
+        const rule = SHIPPING_WRITES.get(name);
+        if (rule && rule.operations !== relative) {
+          misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        }
+      }
+    }
+    assert.deepEqual(misplaced, [], "each shipping write belongs to its one operation module (#1910)");
+  });
+
+  it("reach no delete of a carrier, service, option, supply or use, and no sale's supplies", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (SHIPPING_CLOSED.has(name)) breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `Deleting shipping and packing data stays in the app (#1910).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("names only real exports", () => {
+    const all = [
+      ...[...SHIPPING_WRITES].map(([name, { module }]) => [name, module] as const),
+      ...SHIPPING_CLOSED,
+    ];
+    for (const [name, module] of all) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+  });
+});
