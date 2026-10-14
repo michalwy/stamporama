@@ -780,7 +780,7 @@ async function commitFrontCut(args: {
             ...r.marks,
           },
         });
-        await tx.photo.create({ data: photoData(r, collectionId, "front") });
+        await tx.photo.create({ data: photoData(r, collectionId, "front", sheetId) });
       }
     });
   } catch (err) {
@@ -927,7 +927,7 @@ async function commitBackCut(args: {
             },
           });
         }
-        await tx.photo.create({ data: photoData(r, collectionId, "back") });
+        await tx.photo.create({ data: photoData(r, collectionId, "back", sheetId) });
       }
     });
   } catch (err) {
@@ -956,11 +956,15 @@ async function commitBackCut(args: {
 function photoData(
   r: { tileId: string; photoId: string; crop: Crops[number] },
   collectionId: string,
-  role: "front" | "back"
+  role: "front" | "back",
+  /** The sheet the crop was cut from (#1915) — what a removed back scan finds its pictures by, on
+   * the tile or on the copy it became. Null only for a turned picture whose side has no sheet. */
+  scanSheetId: string | null
 ) {
   return {
     id: r.photoId,
     tileId: r.tileId,
+    scanSheetId,
     role,
     storageBackend: getActiveStorage().backend,
     storageKey: permanentPrefix(collectionId, r.photoId),
@@ -1610,7 +1614,12 @@ export async function setBackTurnover(
         const tile = backs.find((b) => b.id === tileId)!;
         await tx.photo.delete({ where: { id: tile.photos[0].id } });
         await tx.photo.create({
-          data: photoData({ tileId, photoId: t.photoId, crop: t.crop }, collectionId, "back"),
+          data: photoData(
+            { tileId, photoId: t.photoId, crop: t.crop },
+            collectionId,
+            "back",
+            backSheet.id
+          ),
         });
         await tx.scanTile.update({ where: { id: tileId }, data: { backTurn: t.turn } });
       }
@@ -1801,6 +1810,8 @@ export async function turnTileSide(
       backH: true,
       frontTurn: true,
       backTurn: true,
+      frontSheetId: true,
+      backSheetId: true,
       frontSheet: sheetSelect,
       backSheet: sheetSelect,
       photos: {
@@ -1856,7 +1867,14 @@ export async function turnTileSide(
     await prisma.$transaction(async (tx) => {
       // Deleted first: `(tileId, role)` is unique, and the new row takes the same slot.
       await tx.photo.delete({ where: { id: photo.id } });
-      await tx.photo.create({ data: photoData({ tileId, photoId, crop }, tile.collectionId, side) });
+      await tx.photo.create({
+        data: photoData(
+          { tileId, photoId, crop },
+          tile.collectionId,
+          side,
+          side === "front" ? tile.frontSheetId : tile.backSheetId
+        ),
+      });
       await tx.scanTile.update({
         where: { id: tileId },
         data: side === "front" ? { frontTurn: turn } : { backTurn: turn },
@@ -2012,6 +2030,105 @@ export async function deleteBatches(
     ...sheets.map((s) => deleteSheetVariants(s.storageBackend, s.storageKey, s.mime)),
   ]);
   return { batches, copiesKept };
+}
+
+// ── Removing a batch's back scan (#1915) ──────────────────────────────────────────────────────
+
+/** What removing a back scan did, for the collector to read. */
+export interface BackScanRemoval {
+  /** Tiles that kept their front and lost their back. */
+  unpaired: number;
+  /** Backs on no tile, which went with the scan. */
+  backOnly: number;
+  /** Copies that lost the back picture the scan had given them. */
+  copies: number;
+}
+
+/**
+ * Take a batch's back scan off it, leaving the front scan, its cut and its tiles where they are
+ * (#1915). **Replace back scan…** is this followed by the ordinary *Add back scan*.
+ *
+ * The way out of a wrong file uploaded as the back: before this, a batch with a back offered no
+ * second back, and the only escape was deleting the batch — front, cut and tiles with it — which is
+ * not even possible once copies have been made from the card.
+ *
+ * - **Every back cut from the scan comes off.** A tile keeps its front, its state and identification,
+ *   and its mark — the mark is the tile's, one value however it was arrived at (#1550); a back on no
+ *   tile, and whatever was marked on it alone, goes with the scan.
+ * - **A copy loses exactly the picture the scan gave it**, found by `Photo.scanSheetId` rather than by
+ *   role, so a back the collector photographed on the copy afterwards is never touched. Nothing else
+ *   about the copy changes.
+ * - **The scan's bytes are a source and go only here**, after the commit — `deleteBatches`' ordering,
+ *   so a refusal never destroys a scan on the way to its message.
+ *
+ * One transaction, so a failure leaves the batch exactly as it was.
+ */
+export async function removeBackScan(
+  ownerId: string,
+  ref: ScanOwnerRef,
+  batchNo: number
+): Promise<BackScanRemoval> {
+  const owner = await assertScanOwner(ownerId, ref);
+  const scope = scanOwnerWhere(owner);
+
+  const { sheet, photos, report } = await prisma.$transaction(async (tx) => {
+    const sheet = await tx.scanSheet.findFirst({
+      where: { ...scope, batchNo, side: "back" },
+      select: { id: true, storageBackend: true, storageKey: true, mime: true },
+    });
+    if (!sheet) throw new ScanValidationError("This batch has no back scan.");
+
+    const backOnly = await tx.scanTile.findMany({
+      where: { ...scope, batchNo, backSheetId: sheet.id, frontSheetId: null },
+      select: { id: true },
+    });
+    const backOnlyIds = backOnly.map((t) => t.id);
+    // The scan's crops wherever they now are — on a tile or on a copy — and anything else a back on
+    // no tile owns, which its row's cascade would otherwise take without its bytes.
+    const photos = await tx.photo.findMany({
+      where: { OR: [{ scanSheetId: sheet.id }, { tileId: { in: backOnlyIds } }] },
+      select: { id: true, itemId: true, storageBackend: true, storageKey: true, mime: true },
+    });
+    const copies = new Set(photos.flatMap((p) => (p.itemId ? [p.itemId] : []))).size;
+
+    await tx.photo.deleteMany({ where: { id: { in: photos.map((p) => p.id) } } });
+    await tx.scanTile.deleteMany({ where: { id: { in: backOnlyIds } } });
+    const { count: unpaired } = await tx.scanTile.updateMany({
+      where: { ...scope, batchNo, backSheetId: sheet.id },
+      data: {
+        backSheetId: null,
+        backX: null,
+        backY: null,
+        backW: null,
+        backH: null,
+        backTurn: 0,
+        backPairedByHand: false,
+      },
+    });
+    await tx.scanSheet.delete({ where: { id: sheet.id } });
+
+    // A back on no tile still waiting was the last thing open on a card whose fronts are all dealt
+    // with: the batch is finished with now, and is stamped as `stampBatchIfFinished` would. A batch
+    // with no tiles at all has nothing cut and is not finished with anything.
+    const [remaining, open] = await Promise.all([
+      tx.scanTile.count({ where: { ...scope, batchNo } }),
+      tx.scanTile.count({ where: { ...scope, batchNo, state: { in: [...OPEN_TILE_STATES] } } }),
+    ]);
+    if (remaining > 0 && open === 0) {
+      await tx.scanSheet.updateMany({
+        where: { ...scope, batchNo, batchDoneAt: null },
+        data: { batchDoneAt: new Date() },
+      });
+    }
+
+    return { sheet, photos, report: { unpaired, backOnly: backOnlyIds.length, copies } };
+  });
+
+  await Promise.all([
+    ...photos.map((p) => deletePhotoVariants(p.storageBackend, p.storageKey, p.mime)),
+    deleteSheetVariants(sheet.storageBackend, sheet.storageKey, sheet.mime),
+  ]);
+  return report;
 }
 
 /** Delete tiles matching a scope, taking their photo bytes with them. Prisma's cascade drops the
@@ -2302,6 +2419,10 @@ export interface ScanTileData {
     createdAt: string;
     frontPhotoId: string | null;
     backPhotoId: string | null;
+    /** The card scan the copy's back picture was cut from (#1915), or null for a back the
+     * collector gave the copy themselves. Removing that scan takes the picture, so its confirmation
+     * names the copies whose back this is. */
+    backPhotoSheetId: string | null;
     stampName: string | null;
     catalogNumbers: { catalogVendorId: string; number: string }[];
     /** The issue this copy's stamp is reported under, and that issue's area — the **first**
@@ -2642,7 +2763,10 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             // The very rows this tile handed over, now owned by the copy. Both sides, since the
             // tile's own dialog shows them at full size (#584) — the strip only ever wanted the
             // front.
-            photos: { where: { role: { in: ["front", "back"] } }, select: { id: true, role: true } },
+            photos: {
+              where: { role: { in: ["front", "back"] } },
+              select: { id: true, role: true, scanSheetId: true },
+            },
             // The stamps on the piece (#750), in `item-stamps.ts`' own order — see
             // `ScanTileData.item.stamps`.
             stamps: {
@@ -2762,6 +2886,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             forTrade: t.item.forTrade,
             frontPhotoId: t.item.photos.find((p) => p.role === "front")?.id ?? null,
             backPhotoId: t.item.photos.find((p) => p.role === "back")?.id ?? null,
+            backPhotoSheetId:
+              t.item.photos.find((p) => p.role === "back")?.scanSheetId ?? null,
             stampName: t.item.stamp.name,
             catalogNumbers: t.item.stamp.catalogNumbers.map((c) => ({
               catalogVendorId: c.catalogVendorId,

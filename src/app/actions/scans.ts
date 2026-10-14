@@ -11,6 +11,7 @@ import {
   pickBox,
   proposeCut,
   recutBatch,
+  removeBackScan,
   setBatchKind,
   setBackTurnover,
   setBatchLabel,
@@ -277,6 +278,27 @@ export async function recutBatchAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to re-cut the batch. Please try again.",
+    };
+  }
+}
+
+/**
+ * Take a batch's back scan off it (#1915) — every back cut from it comes off its tile, copies lose
+ * the back picture it gave them, and the front, its cut and its tiles stay. *Replace back scan…* is
+ * this followed by the ordinary back upload.
+ */
+export async function removeBackScanAction(
+  owner: ScanOwnerRef,
+  batchNo: number
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await removeBackScan(session.user.id, owner, batchNo);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to remove the back scan. Please try again.",
     };
   }
 }
