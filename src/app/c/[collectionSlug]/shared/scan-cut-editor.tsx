@@ -11,6 +11,7 @@ import {
   DIALOG_MAX_HEIGHT,
   DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
+import { DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
 import {
   MIN_BOX_EDGE_PX,
   mergeBoxes,
@@ -896,7 +897,7 @@ export function ScanCutEditor({
       <DialogFooter>
         <span
           style={{
-            marginRight: "auto",
+            ...DIALOG_FOOTER_LEADING,
             fontSize: "0.8125rem",
             color: "var(--color-text-muted)",
           }}

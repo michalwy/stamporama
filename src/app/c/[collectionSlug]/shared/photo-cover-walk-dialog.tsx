@@ -10,6 +10,7 @@ import {
   DialogSecondaryButton,
   DialogShell,
 } from "@/app/dialog-shell";
+import { DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
 import { photoFullUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { Tooltip } from "./tooltip";
 import {
@@ -332,7 +333,7 @@ export function PhotoCoverWalkDialog({
           )}
         </div>
         <DialogFooter error={error}>
-          {footerNote && <span style={{ marginRight: "auto", fontSize: "0.8125rem" }}>{footerNote}</span>}
+          {footerNote && <span style={{ ...DIALOG_FOOTER_LEADING, fontSize: "0.8125rem" }}>{footerNote}</span>}
           {onMarkNothingToCover && copyLeft > 0 && copyLeft < left && (
             <DialogSecondaryButton disabled={isPending || dirty} onClick={() => setBulk("copy")}>
               {nothingToCoverLabel(copyLeft, "copy")}

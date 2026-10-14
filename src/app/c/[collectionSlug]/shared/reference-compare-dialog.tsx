@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { DialogFooter, DialogSecondaryButton, DialogShell } from "@/app/dialog-shell";
+import { DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { THUMB_OBJECT_FIT, photoThumbUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { useIssuesMembers } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
@@ -541,7 +542,7 @@ export function ReferenceCompareDialog({
         />
       </div>
       <DialogFooter>
-        <span style={{ marginRight: "auto", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+        <span style={{ ...DIALOG_FOOTER_LEADING, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           Nothing here is stored — the pictures are only laid over each other.
         </span>
         <DialogSecondaryButton onClick={onClose}>Close</DialogSecondaryButton>
