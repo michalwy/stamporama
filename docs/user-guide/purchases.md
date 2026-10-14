@@ -1490,6 +1490,14 @@ stamps first, then the other stamps of its issue — and **its own details**.
 - **Copy details are set once and overridden per tile.** Tick a field under *its own details* and that
   tile keeps its own value — its row says *own condition*, for instance — and changing the shared
   value afterwards does not touch it. Untick it to follow the run again.
+- **Every row shows the tile beside the stamp it is linked to** — the tile's picture first, the
+  stamp's own picture second, at the same size — so a tile on the wrong stamp shows down the column
+  without looking anywhere else. A stamp with no picture of its own shows an empty frame saying so;
+  it never borrows another stamp's, not even the one its variant belongs to. Rest the pointer on
+  either to see it enlarged; **press either to open both enlarged side by side**, with the tile's
+  back beside its front when one is paired. *‹* and *›* — or <kbd>←</kbd> and <kbd>→</kbd> — step to
+  the next row's pair, taking that tile in hand. Give a row another stamp, or take a tile out, and
+  its pictures change at once.
 - **Every row shows its tile's condition as the coloured chip** it has on every list, and its
   certificate as a second chip when it has one — so a run of tiles marked in mixed conditions reads
   down the column at a glance. A tile following the shared condition draws the same chip as one with
@@ -1520,9 +1528,10 @@ refused and nothing is created.
 has a **catalog value** field for your primary catalogue, for that tile's condition and certificate,
 so you can copy a column of numbers off the catalogue page without selecting any tile first:
 
-- **Each row reads on one line**: its position in the run, the tile's picture, the stamp's catalogue
-  number, the tile, its condition (and certificate), and the value. Rest the pointer on the picture to
-  see it enlarged; clicking it takes that tile in hand but leaves the cursor where you are typing.
+- **Each row reads on one line**: its position in the run, the tile's picture and its stamp's, the
+  stamp's catalogue number, the tile, its condition (and certificate), and the value. Rest the pointer
+  on a picture to see it enlarged; pressing one takes that tile in hand and opens both pictures
+  enlarged, but leaves the cursor where you are typing.
 - **The rows follow the run**, which is the order the tiles take the checklist's stamps in — the
   order you read the values off the page.
 - **Type straight into the field and press Tab for the next value**, Shift+Tab for the previous one.

@@ -62,9 +62,13 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { catalogChipLabels } from "@/lib/area-vendor";
 import {
+  PhotoCompareLightbox,
   PhotoThumb,
   THUMB_OBJECT_FIT,
   ThumbPreview,
+  photoFullUrl,
+  photoThumbUrl,
+  type CompareSlide,
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
@@ -865,6 +869,42 @@ export function IssueRunDialog({
   const comparingIndex = comparingId ? inRun.findIndex((p) => p.tileId === comparingId) : -1;
   const comparingStampId = comparingIndex >= 0 ? assignments[comparingIndex].stampId : null;
 
+  /** The row whose pictures are open enlarged side by side (#1920), by tile so a row taken out or
+   * re-pointed meanwhile is still the one shown — read from the run as it stands, so a new stamp or
+   * tile on the row is what the overlay shows. */
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const viewingIndex = viewingId ? inRun.findIndex((p) => p.tileId === viewingId) : -1;
+  /** The stamp's own picture — its main photo first — and never another stamp's (#1920). */
+  const stampPhotoOf = (stampId: string | null) =>
+    (stampId ? memberById.get(stampId)?.photos[0] : undefined) ?? null;
+  const viewSlides: CompareSlide[] =
+    viewingIndex < 0
+      ? []
+      : inRun.map((piece, i) => {
+          const stampId = assignments[i].stampId;
+          const stampPhoto = stampPhotoOf(stampId);
+          const stampLabel = labelOf(stampId);
+          return {
+            key: piece.tileId,
+            label: `#${i + 1} · tile ${piece.position + 1} as ${stampLabel ?? "no stamp"}`,
+            panels: [
+              // What is in hand first, its back beside its front where one is paired (#1920), then
+              // what it is being called.
+              ...piece.sides.map((side) => ({
+                key: `${side.side}:${side.photoId}`,
+                label: `Tile ${piece.position + 1} — ${side.side}`,
+                src: photoFullUrl(collectionId, side.photoId),
+              })),
+              {
+                key: `stamp:${stampId ?? ""}`,
+                label: stampLabel ?? "No stamp",
+                src: stampPhoto ? photoFullUrl(collectionId, stampPhoto.id) : null,
+                empty: stampId ? "This stamp has no picture of its own" : "No stamp yet",
+              },
+            ],
+          };
+        });
+
   /** Whether the run's values note is drawn, which the run's counts then sit beside. */
   const valuesNoteShown =
     priceSubjects.length > 0 &&
@@ -895,8 +935,9 @@ export function IssueRunDialog({
         onClose={onClose}
         // Wider since #1229, so a run row holds its value field on the same line as the rest, and
         // again since #1583, so its held line and disposition chips fit on the line below it, and
-        // since #1584, so a variant nested in the stamp list keeps its chips and price on one line.
-        maxWidth="min(98vw, 136rem)"
+        // since #1584, so a variant nested in the stamp list keeps its chips and price on one line,
+        // and since #1920 by the run rows' second picture.
+        maxWidth="min(98vw, 142rem)"
         height="92vh"
         // A stamp being created over this dialog owns Escape, as the picker hands it over.
         dismissable={!addingStamp}
@@ -955,9 +996,11 @@ export function IssueRunDialog({
           </div>
 
           {/* The answers given once, and the run. */}
+          {/* 54rem since #1920 (48rem since #1583): a row's two pictures take the room its one
+              small one did plus 6rem, and the stamp's chips keep theirs. */}
           <div
             style={{
-              width: "48rem",
+              width: "54rem",
               flexShrink: 0,
               overflowY: "auto",
               display: "flex",
@@ -1158,9 +1201,9 @@ export function IssueRunDialog({
               {assignments.map((a, i) => {
                 const piece = inRun[i];
                 const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
-                const thumb = front
-                  ? `/api/collections/${collectionId}/photos/${front.photoId}/thumb`
-                  : null;
+                const back = piece.sides.find((s) => s.side === "back") ?? null;
+                const thumb = front ? photoThumbUrl(collectionId, front.photoId) : null;
+                const stampPhoto = stampPhotoOf(a.stampId);
                 const ownDetails = overrides.get(a.tileId);
                 const own = overriddenFields(ownDetails);
                 // Own details that are still the tile's marks (#1550), said as such: the row reads
@@ -1254,33 +1297,28 @@ export function IssueRunDialog({
                         <strong style={{ width: "1.75rem", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                           #{i + 1}
                         </strong>
+                        {/* The tile beside the stamp it is being called (#1920): what is in hand first,
+                            at one size, so a wrong pairing shows down the column. A press on either
+                            takes this tile in hand — leaving the cursor in the value being typed
+                            (#1223) — and opens both enlarged together. */}
                         <span
-                          // A press on the picture takes this tile in hand but leaves the cursor in the
-                          // value being typed (#1223).
                           onMouseDown={(e) => e.preventDefault()}
-                          style={{ width: "2.5rem", height: "2.5rem", flexShrink: 0 }}
+                          style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}
                         >
-                          {front && thumb && (
-                            <ThumbPreview
-                              src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
-                              thumbSrc={thumb}
-                              label={`Tile ${piece.position + 1}`}
-                              style={{ width: "100%", height: "100%" }}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={thumb}
-                                alt={`Tile ${piece.position + 1}`}
-                                draggable={false}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: THUMB_OBJECT_FIT,
-                                  display: "block",
-                                }}
-                              />
-                            </ThumbPreview>
-                          )}
+                          <RunPicture
+                            src={front ? photoFullUrl(collectionId, front.photoId) : null}
+                            thumbSrc={thumb}
+                            label={`Tile ${piece.position + 1}${back ? " — front; a press shows its back too" : ""}`}
+                            empty="No picture"
+                            onOpen={() => setViewingId(a.tileId)}
+                          />
+                          <RunPicture
+                            src={stampPhoto ? photoFullUrl(collectionId, stampPhoto.id) : null}
+                            thumbSrc={stampPhoto ? photoThumbUrl(collectionId, stampPhoto.id) : null}
+                            label={a.stampId ? label : "No stamp yet"}
+                            empty={a.stampId ? "No picture" : "No stamp"}
+                            onOpen={() => setViewingId(a.tileId)}
+                          />
                         </span>
                         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                           {a.stampId ? (
@@ -1405,8 +1443,8 @@ export function IssueRunDialog({
                           alignItems: "center",
                           columnGap: "0.75rem",
                           rowGap: "0.25rem",
-                          // Under the stamp, past the row's number and picture.
-                          padding: "0 0.5rem 0.375rem 5.75rem",
+                          // Under the stamp, past the row's number and its two pictures.
+                          padding: `0 0.5rem 0.375rem calc(3.25rem + 2 * ${RUN_PICTURE} + 0.25rem)`,
                         }}
                       >
                         <div style={{ flex: "1 1 14rem", minWidth: 0 }}>
@@ -1804,6 +1842,20 @@ export function IssueRunDialog({
         />
       )}
 
+      {viewingIndex >= 0 && (
+        <PhotoCompareLightbox
+          slides={viewSlides}
+          index={viewingIndex}
+          onIndex={(i) => {
+            const tileId = inRun[i]?.tileId;
+            if (!tileId) return;
+            setViewingId(tileId);
+            setActiveId(tileId);
+          }}
+          onClose={() => setViewingId(null)}
+        />
+      )}
+
       {/* Portalled to the body: the shell's panel is transformed and would otherwise crop the
           comparison's fixed overlay to this dialog — the condition step's own reason (#1207). */}
       {comparingStampId &&
@@ -1828,6 +1880,77 @@ export function IssueRunDialog({
 }
 
 // ── Pieces ───────────────────────────────────────────────────────────────────────────────────────
+
+/** Edge of each of a run row's two pictures (#1920): the list thumbnail's size, large enough to
+ * compare a design with — the tile's 2.5rem before it was not. */
+const RUN_PICTURE = "4rem";
+
+/** One of a run row's two pictures — the tile, or the stamp it is linked to (#1920). Hovering enlarges
+ * it as any thumbnail does; a press opens both enlarged together. With nothing to show it is an empty
+ * frame that says so, never another picture standing in. */
+function RunPicture({
+  src,
+  thumbSrc,
+  label,
+  empty,
+  onOpen,
+}: {
+  src: string | null;
+  thumbSrc: string | null;
+  label: string;
+  empty: string;
+  onOpen: () => void;
+}) {
+  const frame: React.CSSProperties = {
+    width: RUN_PICTURE,
+    height: RUN_PICTURE,
+    flexShrink: 0,
+    borderRadius: "0.375rem",
+    overflow: "hidden",
+    background: "var(--color-bg-page)",
+  };
+  if (!src || !thumbSrc) {
+    return (
+      <span
+        onClick={onOpen}
+        style={{
+          ...frame,
+          cursor: "zoom-in",
+          border: "1px dashed var(--color-border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          fontSize: "0.625rem",
+          lineHeight: 1.2,
+          color: "var(--color-text-muted)",
+          padding: "0.25rem",
+          boxSizing: "border-box",
+        }}
+      >
+        {empty}
+      </span>
+    );
+  }
+  return (
+    <ThumbPreview src={src} thumbSrc={thumbSrc} label={label} style={frame}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={thumbSrc}
+        alt={label}
+        draggable={false}
+        onClick={onOpen}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: THUMB_OBJECT_FIT,
+          display: "block",
+          cursor: "zoom-in",
+        }}
+      />
+    </ThumbPreview>
+  );
+}
 
 /**
  * A run row's catalogue value (#1229).
