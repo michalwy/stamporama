@@ -4513,6 +4513,8 @@ model PackingSupply {
   lines      PurchaseSupplyLine[]
   // What sales packed with it (#1898).
   saleLines  SaleSupplyLine[]
+  // The shipping methods that usually use it (#1899).
+  methodDefaults ShippingMethodSupply[]
 
   // The name is the pick-list, as it is for carriers.
   @@unique([collectionId, name])
@@ -5873,6 +5875,8 @@ model ShippingMethod {
   platform   Contact    @relation("PlatformShippingMethod", fields: [platformId], references: [id], onDelete: Cascade)
   carrier    Carrier?   @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   sales      Sale[]
+  // The packing supplies a parcel sent this way usually takes (#1899).
+  supplies   ShippingMethodSupply[]
 
   // Names are the pick-list, so they are unique per platform — two "Courier" rows would be a
   // select nobody could choose from.
@@ -5881,6 +5885,29 @@ model ShippingMethod {
   @@index([platformId])
   @@index([carrierId])
   @@map("shipping_method")
+}
+
+// A packing supply a shipping method usually uses, and how many (#1899, ADR-0068 §8) — *registered
+// letter: C6 envelope × 1, transport card A6 × 2*. A **default**, read only when a sale's method is
+// chosen or changed: choosing it fills the sale's supply lines in, editable there, and changing the
+// method swaps the lines that still match the old method's list for the new one's. Nothing here
+// reaches a sale already recorded.
+//
+// One row per supply per method. Both references cascade: the list goes with its method, and a
+// supply deleted (only one nothing bought or used) leaves the lists it was on.
+model ShippingMethodSupply {
+  id       String @id @default(cuid())
+  methodId String
+  supplyId String
+  // Units a parcel sent this way usually takes. Always positive.
+  quantity Int
+
+  method ShippingMethod @relation(fields: [methodId], references: [id], onDelete: Cascade)
+  supply PackingSupply  @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  @@unique([methodId, supplyId])
+  @@index([supplyId])
+  @@map("shipping_method_supply")
 }
 
 // A carrier the collection posts with (#491) — the post office or courier that actually moves the

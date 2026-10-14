@@ -7,6 +7,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth";
 import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
 import {
+  listPackingSupplies,
   createPackingSupply,
   renamePackingSupply,
   deletePackingSupply,
@@ -14,6 +15,7 @@ import {
   updatePurchaseSupplyLine,
   deletePurchaseSupplyLine,
   PackingSupplyInUseError,
+  type PackingSupplyData,
   type PurchaseSupplyLineInput,
 } from "@/lib/packing-supplies";
 import {
@@ -47,6 +49,13 @@ function failure(e: unknown, fallback: string): PackingSupplyActionState {
 }
 
 // ── The dictionary ────────────────────────────────────────────────────────────────────────────
+
+/** The collection's supplies, for a picker opened outside a page that already loaded them — a
+ * shipping method's usual supplies (#1899). */
+export async function listPackingSuppliesAction(collectionId: string): Promise<PackingSupplyData[]> {
+  const session = await getSession();
+  return listPackingSupplies(session.user.id, collectionId);
+}
 
 /** The unique index on (collection, name) keeps the pick-list's names distinct. */
 function isDuplicateName(e: unknown): boolean {

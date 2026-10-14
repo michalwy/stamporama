@@ -11,9 +11,11 @@ import {
   updateShippingMethod,
   deleteShippingMethod,
   ShippingMethodInUseError,
+  ShippingMethodSuppliesError,
   type ShippingMethodData,
 } from "@/lib/shipping-methods";
 import { parseAmount } from "@/lib/sale-rules";
+import type { SupplyQuantity } from "@/lib/method-supplies";
 
 // Server actions for the per-platform shipping-method dictionary (#468). Thin wrappers over the
 // `shipping-methods` domain module, mirroring the other dictionary actions (#93/#94).
@@ -39,7 +41,14 @@ export async function getShippingMethodsAction(platformId: string): Promise<Ship
 function parseFields(
   formData: FormData
 ):
-  | { ok: true; name: string; cost: string; currency: string; carrierId: string | null }
+  | {
+      ok: true;
+      name: string;
+      cost: string;
+      currency: string;
+      carrierId: string | null;
+      supplies?: SupplyQuantity[];
+    }
   | { ok: false; message: string } {
   const name = ((formData.get("name") as string | null) ?? "").trim();
   if (!name) return { ok: false, message: "Name is required." };
@@ -51,7 +60,33 @@ function parseFields(
   // Optional (#491): a method whose carrier was never said is a complete method — the carrier only
   // decides whether a tracking number becomes a link.
   const carrierId = ((formData.get("carrierId") as string | null) ?? "").trim() || null;
-  return { ok: true, name, cost: cost.value, currency, carrierId };
+  const supplies = parseSupplies(formData.get("supplies"));
+  if (supplies === false) {
+    return { ok: false, message: "Each supply needs a whole number of at least 1." };
+  }
+  return { ok: true, name, cost: cost.value, currency, carrierId, supplies };
+}
+
+/** The method's usual supplies (#1899), sent as JSON `[{ supplyId, quantity }]`. Absent leaves the
+ * list as it is; `false` when a row is malformed. The domain checks the supplies are the collection's
+ * and none is listed twice. */
+function parseSupplies(raw: FormDataEntryValue | null): SupplyQuantity[] | undefined | false {
+  if (typeof raw !== "string") return undefined;
+  let rows: unknown;
+  try {
+    rows = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(rows)) return false;
+  const out: SupplyQuantity[] = [];
+  for (const row of rows) {
+    const supplyId = typeof row?.supplyId === "string" ? row.supplyId : "";
+    const quantity = Number(row?.quantity);
+    if (!supplyId || !Number.isInteger(quantity) || quantity < 1) return false;
+    out.push({ supplyId, quantity });
+  }
+  return out;
 }
 
 /** The unique index on (platform, name) is what enforces the pick-list's distinct names, so the
@@ -75,6 +110,7 @@ export async function createShippingMethodAction(
     return { status: "success" };
   } catch (e) {
     if (isDuplicateName(e)) return { status: "error", message: DUPLICATE_MESSAGE };
+    if (e instanceof ShippingMethodSuppliesError) return { status: "error", message: e.message };
     return { status: "error", message: "Failed to add the shipping method. Please try again." };
   }
 }
@@ -91,6 +127,7 @@ export async function updateShippingMethodAction(
     return { status: "success" };
   } catch (e) {
     if (isDuplicateName(e)) return { status: "error", message: DUPLICATE_MESSAGE };
+    if (e instanceof ShippingMethodSuppliesError) return { status: "error", message: e.message };
     return { status: "error", message: "Failed to save the shipping method. Please try again." };
   }
 }

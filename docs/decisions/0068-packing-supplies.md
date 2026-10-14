@@ -124,6 +124,32 @@ taken from stock FIFO** at their batches' unit costs.
   deleting or lowering a batch hands its units back to the sales that held them, which take them
   from the supply's other batches where they can. A supply a sale used cannot be deleted.
 
+### 8. A shipping method carries its usual supplies (#1899)
+
+Most parcels of one kind take the same supplies — a registered letter goes in a C6 envelope with two
+transport cards — so a platform's shipping method can list them, with quantities
+(`ShippingMethodSupply`: method, supply, a whole quantity > 0, each supply once per method).
+
+- **The list is a default, read only when a sale's method is chosen or changed.** Recording a sale
+  with the method, or picking it on the sale's shipping row or in its header, fills the list in as the
+  sale's supply lines, which take their units from stock FIFO (§7) and stay editable. Changing a
+  method's list never reaches a sale already recorded.
+- **Changing the method swaps the lines that still match the old method's list** — the same supply
+  at the same quantity — for the new one's, and keeps the lines the collector changed or added by
+  hand. "Untouched" is read off the line rather than stored: a flag would have to be kept in step
+  with every edit, and a line edited back to its default is, for every purpose here, the default.
+  The rule is the pure `changeMethodSupplies` (`src/lib/method-supplies.ts`), applied by
+  `applyMethodSupplies` in the transaction of the write that changed the method.
+- **A kept line wins over the new default of the same supply**: a parcel whose cards were raised to
+  five by hand does not get two more beside them. A line that is the same in both lists stays as it
+  is rather than going back to stock and being taken again.
+- **Only a method chosen swaps anything.** Re-saving the same method brings back no default the
+  collector removed, and the method dropped when a sale moves to another platform (#468) leaves the
+  parcel's supplies where they are — the parcel went as it went.
+- A method with no list, or a one-off *Custom* method, fills in none — nothing is guessed (#1692).
+- Both references cascade: the list goes with its method, and a supply that may be deleted at all
+  (§6) leaves the lists it was on.
+
 ## Consequences
 
 - Every reader of an order's money (`getPurchaseDetail`, `closeLot`, the copy estimates, the contact

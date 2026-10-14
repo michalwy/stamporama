@@ -1,5 +1,6 @@
 import "server-only";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
+import { changeMethodSupplies } from "./method-supplies";
 import { canExpressInBase, computeSupplyBatchCost, purchaseCostsOf } from "./purchase-allocation";
 import { settleSupplies } from "./supply-settlement";
 import {
@@ -210,4 +211,51 @@ export async function deleteSaleSupplyLine(ownerId: string, lineId: string): Pro
     await tx.saleSupplyLine.delete({ where: { id: lineId } });
     await settleSupplies(tx, [supplyId]);
   });
+}
+
+// ── A shipping method's usual supplies (#1899) ──────────────────────────────────────────────
+
+/**
+ * Apply a change of a sale's shipping method to its supply lines (ADR-0068 §8): the lines that still
+ * match the old method's list go, the new method's list is filled in, and lines the collector changed
+ * by hand stay (`changeMethodSupplies`). A sale being recorded passes `before` null and simply gets
+ * the method's list. A no-op when the method did not change — re-saving the same method must not
+ * bring back a default the collector removed.
+ *
+ * Runs inside the caller's transaction, after the sale's own write, and settles every supply it
+ * touched there, so the new lines take their units from stock FIFO as a typed line would.
+ */
+export async function applyMethodSupplies(
+  tx: DbTransaction,
+  saleId: string,
+  before: string | null,
+  after: string | null
+): Promise<void> {
+  if (before === after) return;
+  const listOf = (methodId: string | null) =>
+    methodId
+      ? tx.shippingMethodSupply.findMany({
+          where: { methodId },
+          select: { supplyId: true, quantity: true },
+        })
+      : Promise.resolve([]);
+  const [lines, beforeList, afterList] = await Promise.all([
+    tx.saleSupplyLine.findMany({
+      where: { saleId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, supplyId: true, quantity: true },
+    }),
+    listOf(before),
+    listOf(after),
+  ]);
+  const { remove, add } = changeMethodSupplies(lines, beforeList, afterList);
+  if (remove.length === 0 && add.length === 0) return;
+  if (remove.length > 0) await tx.saleSupplyLine.deleteMany({ where: { id: { in: remove } } });
+  if (add.length > 0) {
+    await tx.saleSupplyLine.createMany({ data: add.map((a) => ({ saleId, ...a })) });
+  }
+  await settleSupplies(tx, [
+    ...lines.filter((l) => remove.includes(l.id)).map((l) => l.supplyId),
+    ...add.map((a) => a.supplyId),
+  ]);
 }

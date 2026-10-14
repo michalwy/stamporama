@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { assertCarrierInCollection } from "./carriers";
+import type { SupplyQuantity } from "./method-supplies";
 
 // Per-platform shipping methods (#468) — the dictionary a sale's shipping method is picked from.
 // Shaped after `certificate-statuses.ts` (owner assertion, `*InUseError` on delete), with one
@@ -22,6 +23,16 @@ export interface ShippingMethodData {
    * back into one already recorded. */
   cost: string;
   currency: string;
+  /** The packing supplies a parcel sent this way usually takes (#1899), by supply name. Filled in as
+   * a sale's supply lines when the method is chosen on it. */
+  supplies: ShippingMethodSupplyData[];
+}
+
+/** One entry of a method's usual supplies. */
+export interface ShippingMethodSupplyData {
+  supplyId: string;
+  name: string;
+  quantity: number;
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -70,7 +81,18 @@ export async function getShippingMethods(
   const rows = await prisma.shippingMethod.findMany({
     where: { platformId },
     orderBy: { name: "asc" },
-    select: { id: true, platformId: true, carrierId: true, name: true, cost: true, currency: true },
+    select: {
+      id: true,
+      platformId: true,
+      carrierId: true,
+      name: true,
+      cost: true,
+      currency: true,
+      supplies: {
+        orderBy: { supply: { name: "asc" } },
+        select: { supplyId: true, quantity: true, supply: { select: { name: true } } },
+      },
+    },
   });
   return rows.map((m) => ({
     id: m.id,
@@ -79,6 +101,11 @@ export async function getShippingMethods(
     name: m.name,
     cost: m.cost.toFixed(2),
     currency: m.currency,
+    supplies: m.supplies.map((s) => ({
+      supplyId: s.supplyId,
+      name: s.supply.name,
+      quantity: s.quantity,
+    })),
   }));
 }
 
@@ -89,6 +116,45 @@ export interface ShippingMethodInput {
   /** The carrier that posts by this method (#491), or null for none. Checked against the method's
    * own collection, since the carrier dictionary is the collection's. */
   carrierId: string | null;
+  /** The supplies a parcel sent this way usually takes (#1899) — the whole list, replacing what the
+   * method had; left out, an update keeps the list and a new method has none. Each supply at most
+   * once, each quantity a whole number of at least 1. */
+  supplies?: SupplyQuantity[];
+}
+
+/** A method's supply list that cannot be saved as given; the message says why. */
+export class ShippingMethodSuppliesError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ShippingMethodSuppliesError";
+  }
+}
+
+/** Check a method's supply list: every supply the collection's own, none twice, every quantity a
+ * whole number of at least 1. */
+async function resolveSupplies(
+  collectionId: string,
+  supplies: readonly SupplyQuantity[]
+): Promise<SupplyQuantity[]> {
+  const ids = new Set<string>();
+  for (const s of supplies) {
+    if (!Number.isInteger(s.quantity) || s.quantity < 1) {
+      throw new ShippingMethodSuppliesError(
+        "A supply's quantity must be a whole number of at least 1."
+      );
+    }
+    if (ids.has(s.supplyId)) {
+      throw new ShippingMethodSuppliesError("Each packing supply can be listed once per method.");
+    }
+    ids.add(s.supplyId);
+  }
+  if (ids.size > 0) {
+    const found = await prisma.packingSupply.count({ where: { id: { in: [...ids] }, collectionId } });
+    if (found !== ids.size) {
+      throw new ShippingMethodSuppliesError("Packing supply not found in this collection.");
+    }
+  }
+  return supplies.map((s) => ({ supplyId: s.supplyId, quantity: s.quantity }));
 }
 
 /** Resolve the carrier half of a method's input, checking it belongs to the same collection. */
@@ -109,6 +175,7 @@ export async function createShippingMethod(
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   await assertPlatform(collectionId, platformId);
+  const supplies = await resolveSupplies(collectionId, input.supplies ?? []);
   await prisma.shippingMethod.create({
     data: {
       collectionId,
@@ -117,6 +184,7 @@ export async function createShippingMethod(
       name: input.name,
       cost: input.cost,
       currency: input.currency,
+      supplies: { create: supplies },
     },
   });
 }
@@ -127,6 +195,9 @@ export async function updateShippingMethod(
   input: ShippingMethodInput
 ): Promise<void> {
   const { collectionId } = await assertMethodOwner(ownerId, methodId);
+  const supplies = input.supplies && (await resolveSupplies(collectionId, input.supplies));
+  // The list is replaced whole. Sales already recorded keep their lines: the list is a default, read
+  // only when a sale's method is chosen or changed.
   await prisma.shippingMethod.update({
     where: { id: methodId },
     data: {
@@ -134,6 +205,7 @@ export async function updateShippingMethod(
       name: input.name,
       cost: input.cost,
       currency: input.currency,
+      ...(supplies ? { supplies: { deleteMany: {}, create: supplies } } : {}),
     },
   });
 }
