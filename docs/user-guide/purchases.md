@@ -2365,6 +2365,26 @@ where they are, press **Untick these** on its line: every ticked copy from that 
 at once, including those you ticked under another area or year that are not on screen. When no
 ticked copy belongs to another purchase any more, the warning and its confirmation go away.
 
+### Moving copies to another lot of the same purchase
+
+A copy identified into the wrong lot of this order is moved from the copy itself, not from the
+lot it should be on. Use the copy's **⋮** menu → **Move to lot…**, or tick several copies and press
+**Move to lot…** in the bar at the top of the order. The dialog lists the purchase's other lots by
+name with their state and copy count; pick one and press **Move 3 copies**.
+
+A move is the same change as attaching: the copy's **lot and nothing else** — its condition,
+storage, delivery status, dispositions, photos and internal number stay. A card-scan tile that
+became the copy follows it and shows it in its new lot. The same two cost rules hold:
+
+- **A closed lot cannot be chosen.** It is listed, marked *Closed — reopen it first*, because its
+  pool is already split across the copies it held.
+- **A copy on a closed lot is not moved.** The rest of the selection is; the dialog then names
+  each copy that stayed — its stamp and internal number — and why. Reopen that lot to move it.
+
+**Move to lot…** appears only when the purchase has a second lot, and only on copies of an open
+lot. It never crosses purchases: to bring in a copy from another order, use **Attach existing
+copies…** on the lot, which names the purchase being left and asks you to confirm.
+
 ### The delivery lifecycle: ordered → to sort → delivered
 
 Each copy carries a **delivery status** shown as a chip on its row, separate from its
@@ -2476,6 +2496,10 @@ their delivery status — anything else you set still applies to them.
 delivery status. That is the act of filing a parcel into an incoming box on arrival, or
 shifting a card between boxes months later. Its location is **required** — the change of
 address *is* the act.
+
+On a purchase with more than one lot the bar carries a third button, **Move to lot…**, which is
+not a sorting act at all: it corrects which lot of this order the copies were identified into —
+see [Moving copies to another lot](#moving-copies-to-another-lot-of-the-same-purchase).
 
 Ticked copies survive the filter chips and scrolling, so you can narrow to **N to sort**, tick
 your way down the list, and clear the chip without losing what you picked. The bar also offers

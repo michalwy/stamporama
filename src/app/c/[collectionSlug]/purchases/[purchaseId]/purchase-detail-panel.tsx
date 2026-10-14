@@ -121,6 +121,7 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
+import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
 import { PurchaseSuppliesCard } from "./purchase-supplies-card";
 import type { PackingSupplyData } from "@/lib/packing-supplies";
@@ -754,6 +755,18 @@ export function PurchaseDetailPanel({
     });
   }
 
+  // The lots *Move to lot…* chooses among (#1918), named as the tile identification names them.
+  const moveLots: MoveLotOption[] = useMemo(
+    () =>
+      purchase.lots.map((l, i) => ({
+        id: l.id,
+        label: l.title ?? `Lot ${i + 1}`,
+        status: l.status,
+        itemCount: l.itemCount,
+      })),
+    [purchase.lots]
+  );
+
   // The bar's own copy of the bulk dialogs (Store / Move). The cards keep theirs for the per-copy
   // actions on a row; these two belong to the selection, which lives here.
   const selectionEditing = useCopyEditing({
@@ -765,6 +778,7 @@ export function PurchaseDetailPanel({
     isPending,
     run,
     onBulkDone: clearSelection,
+    moveLots,
   });
 
   // Whole containers resolve to a server-side scope, since their copies run past the loaded rows;
@@ -1616,6 +1630,11 @@ export function PurchaseDetailPanel({
             onClear={clearSelection}
             onStore={() => selectionEditing.setBulkStore(selectionTarget)}
             onMove={() => selectionEditing.setBulkMove(selectionTarget)}
+            onMoveToLot={
+              selectionEditing.canMoveToLot
+                ? () => selectionEditing.setMoveToLot({ target: selectionTarget, fromLotId: null })
+                : null
+            }
           />
         )}
       </div>
@@ -1665,6 +1684,7 @@ export function PurchaseDetailPanel({
               stickyTop={pinnedHeaderHeight + selectionBarHeight}
               selection={selection}
               setSelection={setSelection}
+              moveLots={moveLots}
               onRun={run}
             />
           ))}
@@ -1690,6 +1710,7 @@ export function PurchaseDetailPanel({
           isPending={isPending}
           selection={selection}
           setSelection={setSelection}
+          moveLots={moveLots}
           run={run}
         />
       )}
@@ -2024,6 +2045,8 @@ interface LotCardProps {
    *  lots, and a selection per card would put an action bar over every one of them. */
   selection: CopySelection;
   setSelection: React.Dispatch<React.SetStateAction<CopySelection>>;
+  /** The purchase's lots, for a copy's *Move to lot…* (#1918). */
+  moveLots: MoveLotOption[];
   onRun: RunFn;
 }
 
@@ -2074,9 +2097,12 @@ function useCopyEditing(ctx: {
   /** Called after any bulk change lands, so a caller holding a selection can drop it — the copies
    * it named have just been acted on (#565). */
   onBulkDone?: () => void;
+  /** The purchase's lots, which *Move to lot…* chooses among (#1918). */
+  moveLots: MoveLotOption[];
 }) {
   const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
-  const { onBulkDone } = ctx;
+  const { onBulkDone, moveLots } = ctx;
+  const { invalidateScans } = useInvalidateScans();
   // Catalog-number rendering context for the quick-price dialog (#147): reuse the same
   // per-area vendor maps the copy rows use so numbers format identically.
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -2089,6 +2115,15 @@ function useCopyEditing(ctx: {
   const [copyError, setCopyError] = useState<string | undefined>();
   const [bulkMove, setBulkMove] = useState<BulkTarget | null>(null);
   const [bulkStore, setBulkStore] = useState<BulkTarget | null>(null);
+  /** *Move to lot…* (#1918): the copies, and the lot a single one is on (left out of the choice). */
+  const [moveToLot, setMoveToLot] = useState<{
+    target: BulkTarget;
+    fromLotId: string | null;
+  } | null>(null);
+  /** What a move that landed did not take — the dialog stays open to name them. */
+  const [moveRefusals, setMoveRefusals] = useState<MoveLotRefusal[] | null>(null);
+  /** Whether *Move to lot…* has anywhere to go: a second lot on the purchase. */
+  const canMoveToLot = moveLots.length > 1;
 
   /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
   function runBulk(itemIds: string[], changes: BulkCopyChanges) {
@@ -2138,6 +2173,45 @@ function useCopyEditing(ctx: {
   function applyBulk(target: BulkTarget, changes: BulkCopyChanges) {
     if (target.kind === "ids") runBulk(target.ids, changes);
     else runScopedBulk(target.scope, changes);
+  }
+
+  /** Move copies to another lot of the purchase (#1918). The lots the copies left and the one they
+   *  joined are re-read, and so is the order's own render, whose lot lines carry their copy counts.
+   *  The card-scan strip too: a tile that became one of these copies shows the lot it is on now. */
+  function runMoveToLot(target: BulkTarget, lotId: string) {
+    setCopyError(undefined);
+    let refused: MoveLotRefusal[] = [];
+    run(
+      async () => {
+        const fd = new FormData();
+        if (target.kind === "ids") fd.set("itemIds", target.ids.join(","));
+        else {
+          fd.set("scoped", "true");
+          for (const [name, value] of bulkScopeFields(target.scope)) fd.set(name, value);
+        }
+        const { moveCopiesToLotAction } = await import("@/app/actions/purchases");
+        const r = await moveCopiesToLotAction(lotId, fd);
+        if (r.status === "error") {
+          setCopyError(r.message);
+          return r;
+        }
+        refused = r.refusals;
+        void invalidateScans(collectionId);
+        return { status: "success", refresh: { lotIds: r.lotIds, orderChanged: true } };
+      },
+      () => {
+        onBulkDone?.();
+        if (refused.length > 0) setMoveRefusals(refused);
+        else setMoveToLot(null);
+      }
+    );
+  }
+
+  function closeMoveToLot() {
+    if (isPending) return;
+    setMoveToLot(null);
+    setMoveRefusals(null);
+    setCopyError(undefined);
   }
 
   function removeCopy(item: ItemListItem) {
@@ -2339,6 +2413,19 @@ function useCopyEditing(ctx: {
         />
       )}
 
+      {moveToLot && (
+        <MoveToLotDialog
+          count={bulkTargetCount(moveToLot.target)}
+          lots={moveLots}
+          currentLotId={moveToLot.fromLotId}
+          isPending={isPending}
+          error={copyError}
+          refusals={moveRefusals}
+          onClose={closeMoveToLot}
+          onConfirm={(lotId) => runMoveToLot(moveToLot.target, lotId)}
+        />
+      )}
+
       {bulkStore && (
         <StoreCopiesDialog
           count={bulkTargetCount(bulkStore)}
@@ -2379,6 +2466,8 @@ function useCopyEditing(ctx: {
     removeCopy,
     setBulkMove,
     setBulkStore,
+    canMoveToLot,
+    setMoveToLot,
     setEditCopyItem,
     setEditStampItem,
     setIdentifyItem,
@@ -2480,6 +2569,21 @@ function CopyRow({
           icon: "variant",
           onSelect: () => copy.setEditStampItem(item),
         },
+        // Only off an open lot, and only with another lot to go to: a closed lot's cost is split.
+        ...(open && copy.canMoveToLot
+          ? ([
+              {
+                key: "move-to-lot",
+                label: "Move to lot…",
+                icon: "move",
+                onSelect: () =>
+                  copy.setMoveToLot({
+                    target: { kind: "ids", ids: [item.id] },
+                    fromLotId: item.lotId,
+                  }),
+              },
+            ] satisfies RowAction[])
+          : []),
         {
           key: "remove",
           label: "Remove from lot",
@@ -2605,6 +2709,7 @@ function CopySelectionBar({
   onClear,
   onStore,
   onMove,
+  onMoveToLot,
 }: {
   /** Undefined while the server is still counting a scope — the bar keeps its shape and says so
    *  rather than flashing a wrong number. */
@@ -2620,6 +2725,8 @@ function CopySelectionBar({
   onClear: () => void;
   onStore: () => void;
   onMove: () => void;
+  /** *Move to lot…* (#1918); null when the purchase has no second lot to move to. */
+  onMoveToLot: (() => void) | null;
 }) {
   return (
     <div
@@ -2654,6 +2761,25 @@ function CopySelectionBar({
         Clear
       </button>
       <span style={{ flex: 1 }} />
+      {onMoveToLot && (
+        <Tooltip content="Put these copies on another lot of this purchase, and change nothing else about them.">
+          <button
+            type="button"
+            disabled={isPending || !count}
+            onClick={onMoveToLot}
+            style={{
+              ...INPUT_STYLE,
+              width: "auto",
+              cursor: isPending ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              padding: "0.3125rem 0.75rem",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Icon name="move" size="sm" /> Move to lot…
+          </button>
+        </Tooltip>
+      )}
       <Tooltip content="Change where these copies live, and nothing else about them.">
         <button
           type="button"
@@ -3034,6 +3160,7 @@ function LotCard({
   stickyTop,
   selection,
   setSelection,
+  moveLots,
   onRun,
 }: LotCardProps) {
   const [dialog, setDialog] = useState<
@@ -3125,6 +3252,7 @@ function LotCard({
     certificateStatuses,
     isPending,
     run: onRun,
+    moveLots,
   });
   const { copyError, setCopyError } = copy;
 
@@ -3917,6 +4045,7 @@ function OrderCopiesView({
   isPending,
   selection,
   setSelection,
+  moveLots,
   run,
 }: {
   collectionId: string;
@@ -3948,6 +4077,8 @@ function OrderCopiesView({
    *  grouped is a change of view, not of what was picked. */
   selection: CopySelection;
   setSelection: React.Dispatch<React.SetStateAction<CopySelection>>;
+  /** The purchase's lots, for a copy's *Move to lot…* (#1918). */
+  moveLots: MoveLotOption[];
   run: RunFn;
 }) {
   const copy = useCopyEditing({
@@ -3958,6 +4089,7 @@ function OrderCopiesView({
     certificateStatuses,
     isPending,
     run,
+    moveLots,
   });
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
