@@ -387,6 +387,10 @@ export function PurchaseDetailPanel({
   // The order header's own edit (#752) — supplier, platform, date, currency, status and shipping,
   // through the Purchases list's own dialog. Everything below the header has its own controls.
   const [editingHeader, setEditingHeader] = useState(false);
+  // The order's other lines (#1907): an Expenses or Packing supplies card is drawn only once it has
+  // one, so adding the first is the header's `⋮`, and the dialog it opens is held here.
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [addingSupplies, setAddingSupplies] = useState(false);
   const [arriving, setArriving] = useState(false);
   // Marking the order completed with work still left on it (#1449): the dialog that says what.
   const [completing, setCompleting] = useState(false);
@@ -870,6 +874,36 @@ export function PurchaseDetailPanel({
   // The order's header row and its value bar, each drawn twice (#1410): where they sit, and again in
   // the pinned layer once the page has scrolled them away. One element and one set of props, so the
   // pinned copy cannot drift from the one it stands in for.
+  const headerLineActions: RowAction[] = [
+    ...(openingBalance
+      ? []
+      : [
+          {
+            key: "add-expense",
+            label: "Add expense",
+            icon: "add" as const,
+            disabled: isPending,
+            onSelect: () => {
+              setError(undefined);
+              setAddingExpense(true);
+            },
+          },
+        ]),
+    ...(packingSupplies.length > 0
+      ? [
+          {
+            key: "add-supplies",
+            label: "Add packing supplies",
+            icon: "add" as const,
+            disabled: isPending,
+            onSelect: () => {
+              setError(undefined);
+              setAddingSupplies(true);
+            },
+          },
+        ]
+      : []),
+  ];
   const headerRow = (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
       <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -1030,6 +1064,12 @@ export function PurchaseDetailPanel({
             <Icon name="edit" size="sm" /> Edit header
           </button>
         </Tooltip>
+        {/* The order's other lines (#1907) — beside *Edit header*, since they too belong to the order
+            rather than to a lot. An expense is a purchase's only; *Add packing supplies* waits for a
+            supply to be defined, so a collector who never packs parcels is not offered it (#1897). */}
+        {headerLineActions.length > 0 && (
+          <RowActionsMenu actions={headerLineActions} ariaLabel="Purchase actions" />
+        )}
         {/* The suggestion (#1449): once nothing is left, the step the order is waiting for is
             completing it, and it takes the place *Mark arrived* had. Only ever a suggestion — the
             status control above completes an order with work left too, after saying what. */}
@@ -1207,12 +1247,15 @@ export function PurchaseDetailPanel({
       </div>
 
       {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.
-          A purchase's only: an opening balance paid for nothing. */}
+          A purchase's only: an opening balance paid for nothing. Drawn only once it has a line
+          (#1907); mounted regardless, because the header's *Add expense* dialog is its own. */}
       {!openingBalance && (
         <PurchaseExpensesCard
           purchaseId={purchase.id}
           currency={purchase.currency}
           expenses={purchase.expenses}
+          adding={addingExpense}
+          onAddingChange={setAddingExpense}
           isPending={isPending}
           error={error}
           run={run}
@@ -1222,21 +1265,20 @@ export function PurchaseDetailPanel({
 
       {/* The order's packing supplies (#1897): each line a batch of envelopes or cards in its
           supply's stock. On an opening balance too — supplies already on the shelf come in as stamps
-          do. Shown on a purchase with none only once a supply is defined, so an order of stamps from
-          a collector who never packs parcels reads as it did. */}
-      {(purchase.supplyLines.length > 0 || packingSupplies.length > 0) && (
-        <PurchaseSuppliesCard
-          purchaseId={purchase.id}
-          currency={purchase.currency}
-          openingBalance={openingBalance}
-          lines={purchase.supplyLines}
-          supplies={packingSupplies}
-          isPending={isPending}
-          error={error}
-          run={run}
-          clearError={() => setError(undefined)}
-        />
-      )}
+          do. Drawn only once it has a line, as the Expenses card is (#1907). */}
+      <PurchaseSuppliesCard
+        purchaseId={purchase.id}
+        currency={purchase.currency}
+        openingBalance={openingBalance}
+        lines={purchase.supplyLines}
+        supplies={packingSupplies}
+        adding={addingSupplies}
+        onAddingChange={setAddingSupplies}
+        isPending={isPending}
+        error={error}
+        run={run}
+        clearError={() => setError(undefined)}
+      />
 
       {/* Card scans (#566, moved here by #586). **Above the lots**, because that is the order the
           pass runs in and the level the card exists at: a parcel arrives, its cards are scanned and

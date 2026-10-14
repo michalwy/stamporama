@@ -268,6 +268,9 @@ Beside them, **Edit header** opens the same dialog the Purchases list's **⋮ �
 this order: supplier, platform, date, transaction currency, status and shipping cost. It edits the
 **header only** — the lots below and the copies in them have their own controls on their own cards.
 
+The **⋮** beside it adds the order's other lines: **Add expense** and **Add packing supplies** (see
+[Expenses](#expenses) and [Packing supplies](#packing-supplies)).
+
 ### Lots
 
 There are two ways to add a lot:
@@ -306,22 +309,25 @@ lot's price can only be edited while it is open.
 
 ### Expenses
 
-Right under the values bar, a purchase has an **Expenses** card listing its non-inventory lines, each
-with its label and price in the purchase's currency. **Add expense** asks for a label and a price;
-each line's **⋮** menu lets you **Edit expense** or **Delete expense**. An expense takes its share of
+Most orders have no expenses, so the card is not shown until there is one. The header's **⋮ → Add
+expense** asks for a label and a price; once a purchase has an expense, an **Expenses** card right
+under the values bar lists its non-inventory lines, each with its label and price in the purchase's
+currency, and goes away again when the last one is deleted. Each line's **⋮** menu lets you **Edit
+expense** or **Delete expense**. An expense takes its share of
 the order's shipping by price, exactly as a lot does, so adding one lowers the shipping share of every
 open lot — a closed lot's copies keep the cost they were closed with. An opening balance has no
-Expenses card: nothing was paid for it.
+expenses: nothing was paid for it.
 
 ### Packing supplies
 
 Envelopes, transport cards and the rest of what goes into a parcel are bought like anything else, so
 they are recorded on the purchase they were bought on — alone, or on the same order as stamps. Name
 your supplies once under **Settings → Packing supplies**
-([Packing supplies](collections.md#packing-supplies)); the order screen then has a **Packing
-supplies** card under the values bar (it appears once at least one supply is defined).
+([Packing supplies](collections.md#packing-supplies)); the header's **⋮** then offers **Add packing
+supplies** (it appears once at least one supply is defined). Like the Expenses card, the **Packing
+supplies** card under the values bar is shown only while the order has a supply line.
 
-**Add supplies** asks for the **supply**, the **quantity** (a box of 100 envelopes is 100) and the
+**Add packing supplies** asks for the **supply**, the **quantity** (a box of 100 envelopes is 100) and the
 **price** of the line in the order's currency; each line's **⋮** menu lets you **Edit line** or
 **Delete line**. Like an expense, a supply line takes its share of the order's **shipping** by price,
 so it does not make the stamps dearer. Each line shows its **unit cost** — the price plus that share,
@@ -336,7 +342,7 @@ taken from it, or deleting it, gives those units back to the sales and uses that
 them from the supply's other batches where there are any — so their cost may change, and if none are
 left they wait for the next purchase.
 
-**On an opening balance** the card brings in the supplies already on your shelf: the line's **Value**
+**On an opening balance** these lines bring in the supplies already on your shelf: the line's **Value**
 is what the batch is worth, and it is required — a batch without a cost would leave every parcel
 packed from it without one. The opening balance's own *opening value* stays the value of its lots;
 the supplies are counted on the card and on the Packing supplies screen.
