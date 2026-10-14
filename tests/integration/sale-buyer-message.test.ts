@@ -65,10 +65,16 @@ describe("The message to a buyer (#1815)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" } })
     ).id;
     await setFacebookPlatform(userId, collectionId, facebookId);
-    await prisma.shippingMethod.createMany({
+    // The Delcampe letter is sent by a service that costs the collector less than the buyer pays: the
+    // message lists the buyer's price (#1909).
+    const carrier = await prisma.carrier.create({ data: { collectionId, name: "La Poste" } });
+    const service = await prisma.carrierService.create({
+      data: { collectionId, carrierId: carrier.id, name: "Lettre", cost: "1.80", currency: "EUR" },
+    });
+    await prisma.shippingOption.createMany({
       data: [
-        { collectionId, platformId: delcampeId, name: "Letter", cost: "2.50", currency: "EUR" },
-        { collectionId, platformId: facebookId, name: "Registered letter", cost: "12.00", currency: "PLN" },
+        { collectionId, platformId: delcampeId, name: "Letter", price: "2.50", currency: "EUR", serviceId: service.id },
+        { collectionId, platformId: facebookId, name: "Registered letter", price: "12.00", currency: "PLN" },
       ],
     });
     buyerId = (await prisma.contact.create({ data: { collectionId, name: "Jan Kowalski", buyer: true } })).id;
@@ -130,7 +136,7 @@ describe("The message to a buyer (#1815)", () => {
   async function sale(
     platformId: string,
     offers: Awaited<ReturnType<typeof offer>>[],
-    extra: { shippingMethodName?: string; buyerHandling?: string; buyerPaidTotal?: string } = {}
+    extra: { shippingOptionName?: string; buyerHandling?: string; buyerPaidTotal?: string } = {}
   ): Promise<string> {
     const created = await prisma.sale.create({
       data: {
@@ -177,10 +183,10 @@ describe("The message to a buyer (#1815)", () => {
       text: `Own group: #${a.offerNo} Mercury\n#${b.offerNo} Eagle\n\nTotal 30.50 PLN`,
       source: "own",
     });
-    // A method chosen, and the postage worked out from the total the buyer paid (#205).
+    // An option chosen, and the postage worked out from the total the buyer paid (#205).
     const chosen = await readSaleBuyerMessage(
       userId,
-      await sale(facebookId, [a, b], { shippingMethodName: "Registered letter", buyerPaidTotal: "42.50" })
+      await sale(facebookId, [a, b], { shippingOptionName: "Registered letter", buyerPaidTotal: "42.50" })
     );
     assert.equal(
       chosen?.text,
@@ -193,7 +199,7 @@ describe("The message to a buyer (#1815)", () => {
     const following = await offer("Eagle", "10.00", facebookId, followingGroupId);
     const followed = await readSaleBuyerMessage(
       userId,
-      await sale(facebookId, [following], { shippingMethodName: "Registered letter", buyerHandling: "12.00" })
+      await sale(facebookId, [following], { shippingOptionName: "Registered letter", buyerHandling: "12.00" })
     );
     assert.deepEqual(followed, { text: `Facebook: #${following.offerNo} Eagle\nTotal 22 PLN`, source: "Facebook" });
     const across = await readSaleBuyerMessage(userId, await sale(facebookId, [own, following]));

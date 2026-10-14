@@ -29,12 +29,13 @@ interface ShipmentDialogProps {
   /** `sent` is the prompt on the way to Sent — it saves and advances in one step, and offers Skip.
    * `edit` is the same dialog reopened from the header to correct what was recorded. */
   mode: "sent" | "edit";
-  /** How the parcel is going, as recorded on the sale — the method's snapshot name, so the prompt
-   * says which service this is about. Null when the sale names no method. */
-  shippingMethodName: string | null;
+  /** How the parcel is going, as recorded on the sale — the option's snapshot name, so the prompt
+   * says which service this is about. Null when the sale names no option. */
+  shippingOptionName: string | null;
   /** The collection's carriers, to pick from. Maintained under Settings → Carriers. */
   carriers: CarrierData[];
-  /** The carrier in force: the sale's own answer, else the **default** its shipping method carries.
+  /** The carrier in force: the sale's own answer, else the **default** — the carrier of the service
+   * its shipping option is linked to (#1909).
    * Pre-selected, because the usual case is that the default is right. */
   carrierId: string | null;
   trackingCode: string | null;
@@ -55,8 +56,8 @@ interface ShipmentDialogProps {
  *
  * Both live here because they are one act. The buyer picks a *service* at checkout — "Courier" —
  * and which courier that turns out to be is decided days later at the parcel counter, at exactly the
- * moment the receipt with the number on it is handed over. So the carrier named on the shipping
- * method is a **default** rather than the truth: it arrives pre-selected and is changed when the
+ * moment the receipt with the number on it is handed over. So the carrier of the shipping option's
+ * service is a **default** rather than the truth: it arrives pre-selected and is changed when the
  * parcel went another way.
  *
  * Prompting at the transition is the same reasoning that puts the buyer-paid total on **Paid**
@@ -66,7 +67,7 @@ interface ShipmentDialogProps {
  */
 export function ShipmentDialog({
   mode,
-  shippingMethodName,
+  shippingOptionName,
   carriers,
   carrierId: initialCarrierId,
   trackingCode: initialTrackingCode,
@@ -116,9 +117,9 @@ export function ShipmentDialog({
             ))}
           </select>
           <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0.375rem 0 1rem" }}>
-            {shippingMethodName
-              ? `Going by ${shippingMethodName}, which suggests the carrier above — change it if the parcel went another way.`
-              : "No shipping method is recorded on this sale, so there is no carrier to suggest."}
+            {shippingOptionName
+              ? `Going by ${shippingOptionName}, which suggests the carrier above — change it if the parcel went another way.`
+              : "No shipping option is recorded on this sale, so there is no carrier to suggest."}
           </p>
 
           <LabelWithError htmlFor="sale-tracking-code">Tracking number</LabelWithError>

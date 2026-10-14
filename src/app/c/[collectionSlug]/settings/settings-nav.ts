@@ -222,7 +222,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     key: "shipping",
     group: "selling",
     label: "Carriers",
-    hint: "Who moves your parcels, and the address a tracking number opens.",
+    hint: "Who moves your parcels, what each of their services costs you, and the address a tracking number opens.",
   },
   // Selling's, beside Carriers (#1897): what goes into a parcel is bought on purchase orders, but
   // it is spent on sales, and a sale's shipping cost is what the track is for.

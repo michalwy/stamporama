@@ -213,8 +213,8 @@ unsaved changes asks first.
 ### What is in one
 
 - **Shipping rate set** — one of the delivery price lists defined in your Allegro account. This is
-  not the same thing as the platform's **shipping methods** you pick from when recording a sale:
-  that one records what the buyer actually paid, this one is Allegro's own table of what a listing
+  not the same thing as the platform's **shipping options** you pick from when recording a sale:
+  that one records what the buyer chose, this one is Allegro's own table of what a listing
   offers.
 - **Handling time** — how long after payment you send.
 - **Listing duration** and **re-list automatically** — how long the offer runs and whether Allegro

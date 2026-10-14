@@ -9,7 +9,7 @@ import {
 } from "../../src/lib/buyer-message-rules";
 
 // The message to a buyer after a sale (#1815): what each placeholder comes out as, and the total
-// that includes the shipping only once a method is on the sale. Which template a sale takes is the
+// that includes the shipping only once an option is on the sale. Which template a sale takes is the
 // database half — `tests/integration/sale-buyer-message.test.ts`.
 
 function sale(overrides: Partial<BuyerMessageSale> = {}): BuyerMessageSale {
@@ -21,11 +21,11 @@ function sale(overrides: Partial<BuyerMessageSale> = {}): BuyerMessageSale {
       { offerNo: 412, title: "Austria 1850 Mercury", price: "25.00" },
       { offerNo: 413, title: "Poland 1860 No. 1", price: "10.50" },
     ],
-    shippingMethodName: null,
+    shippingOptionName: null,
     buyerHandling: null,
     shippingOptions: [
-      { name: "Letter", cost: "8.00", currency: "PLN" },
-      { name: "Registered letter", cost: "12.50", currency: "PLN" },
+      { name: "Letter", price: "8.00", currency: "PLN" },
+      { name: "Registered letter", price: "12.50", currency: "PLN" },
     ],
     ...overrides,
   };
@@ -39,7 +39,7 @@ describe("buyerMessageValues (#1815)", () => {
     }
   });
 
-  it("states the items alone before a shipping method is chosen, and lists the methods", () => {
+  it("states the items alone before a shipping option is chosen, and lists the options", () => {
     const values = buyerMessageValues(sale({ buyerHandling: "12.00" }));
     assert.equal(values["{buyer}"], "Jan Kowalski");
     assert.equal(values["{items}"], "#412 Austria 1850 Mercury\n#413 Poland 1860 No. 1");
@@ -53,13 +53,13 @@ describe("buyerMessageValues (#1815)", () => {
   });
 
   it("adds what the buyer pays for postage once a method is on the sale", () => {
-    const values = buyerMessageValues(sale({ shippingMethodName: "Registered letter", buyerHandling: "12.50" }));
+    const values = buyerMessageValues(sale({ shippingOptionName: "Registered letter", buyerHandling: "12.50" }));
     assert.equal(values["{shipping}"], "Registered letter — 12.50 PLN");
     assert.equal(values["{total}"], "48 PLN");
   });
 
   it("names a chosen method with no postage recorded, and totals the items alone", () => {
-    const values = buyerMessageValues(sale({ shippingMethodName: "Letter" }));
+    const values = buyerMessageValues(sale({ shippingOptionName: "Letter" }));
     assert.equal(values["{shipping}"], "Letter");
     assert.equal(values["{total}"], "35.50 PLN");
   });

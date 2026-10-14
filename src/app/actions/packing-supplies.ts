@@ -57,7 +57,7 @@ function failure(e: unknown, fallback: string): PackingSupplyActionState {
 // ── The dictionary ────────────────────────────────────────────────────────────────────────────
 
 /** The collection's supplies, for a picker opened outside a page that already loaded them — a
- * shipping method's usual supplies (#1899). */
+ * carrier service's usual supplies (#1899, #1909). */
 export async function listPackingSuppliesAction(collectionId: string): Promise<PackingSupplyData[]> {
   const session = await getSession();
   return listPackingSupplies(session.user.id, collectionId);

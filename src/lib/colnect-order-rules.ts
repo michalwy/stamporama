@@ -283,7 +283,7 @@ export type ColnectOrderPlan =
       /** The delivery method as Colnect printed it (#468), or null where it printed none. Matching
        *  it against the platform's own dictionary is the caller's job — the FK is a convenience and
        *  the printed name is the record. */
-      shippingMethodName: string | null;
+      shippingOptionName: string | null;
       lines: PlannedColnectSaleLine[];
     }
   | { ok: false; problems: ColnectOrderProblem[] };
@@ -442,7 +442,7 @@ export function planColnectOrderSale(
     currency: context.currency,
     buyer: buyerIdentityFor({ buyerLogin: order.buyerLogin, buyerName: order.buyerName }),
     buyerPaidTotal,
-    shippingMethodName: order.shippingMethodText?.trim() || null,
+    shippingOptionName: order.shippingMethodText?.trim() || null,
     lines,
   };
 }

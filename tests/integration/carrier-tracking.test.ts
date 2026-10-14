@@ -6,17 +6,20 @@ import {
   createCarrier,
   updateCarrier,
   deleteCarrier,
+  createCarrierService,
+  deleteCarrierService,
   CarrierInUseError,
 } from "../../src/lib/carriers";
 import {
-  createShippingMethod,
-  getShippingMethods,
-  updateShippingMethod,
-} from "../../src/lib/shipping-methods";
+  createShippingOption,
+  getShippingOptions,
+  updateShippingOption,
+} from "../../src/lib/shipping-options";
 import { createSale, getSaleDetail, updateSaleShipment } from "../../src/lib/sales";
 
-// Carriers and shipment tracking (#491): the dictionary itself, and the one thing it is for — a
-// sale's tracking number resolving to a link through the method that carried the parcel.
+// Carriers and shipment tracking (#491): the dictionary itself, and what it is for — a sale's tracking
+// number resolving to a link through the carrier of the service its shipping option is linked to
+// (#1909).
 
 const TS = Date.now();
 const TEMPLATE = "https://emonitoring.poczta-polska.pl/?numer={code}";
@@ -26,7 +29,8 @@ describe("carriers + sale tracking", () => {
   let collectionId: string;
   let platformId: string;
   let carrierId: string;
-  let methodId: string;
+  let serviceId: string;
+  let optionId: string;
 
   before(async () => {
     userId = (
@@ -57,7 +61,7 @@ describe("carriers + sale tracking", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  async function newSale(methodIdForSale: string | null): Promise<string> {
+  async function newSale(optionIdForSale: string | null): Promise<string> {
     return createSale(userId, collectionId, {
       platformId,
       buyerId: null,
@@ -68,8 +72,8 @@ describe("carriers + sale tracking", () => {
       buyerHandling: null,
       buyerPaidTotal: null,
       commission: null,
-      shipping: methodIdForSale
-        ? { methodId: methodIdForSale, methodName: null, cost: "12.00", currency: "PLN" }
+      shipping: optionIdForSale
+        ? { optionId: optionIdForSale, optionName: null, cost: "12.00", currency: "PLN" }
         : null,
     });
   }
@@ -90,38 +94,44 @@ describe("carriers + sale tracking", () => {
     await assert.rejects(() => getCarriers("stranger", collectionId), /access denied/i);
   });
 
-  it("attaches a carrier to a platform's shipping method", async () => {
-    await createShippingMethod(userId, collectionId, platformId, {
+  it("links a platform's shipping option to a service of the carrier's", async () => {
+    await createCarrierService(userId, carrierId, { name: "List polecony", cost: "12.00", currency: "PLN" });
+    serviceId = (await getCarriers(userId, collectionId)).find((c) => c.id === carrierId)!.services[0].id;
+    await createShippingOption(userId, collectionId, platformId, {
       name: "Registered letter",
-      cost: "12.00",
+      price: "14.00",
       currency: "PLN",
-      carrierId,
+      serviceId,
     });
-    const method = (await getShippingMethods(userId, platformId))[0];
-    methodId = method.id;
-    assert.equal(method.carrierId, carrierId);
+    const option = (await getShippingOptions(userId, platformId))[0];
+    optionId = option.id;
+    assert.equal(option.service?.id, serviceId);
+    assert.equal(option.service?.carrierId, carrierId);
+    assert.equal(option.service?.carrierName, "Poczta Polska");
   });
 
-  it("refuses a carrier from outside the collection", async () => {
+  it("refuses a service from outside the collection", async () => {
     const otherCollection = await prisma.collection.create({
       data: { slug: `col-carrier-other-${TS}`, name: "Other", baseCurrency: "EUR", ownerId: userId },
     });
     await createCarrier(userId, otherCollection.id, { name: "Elsewhere", trackingUrlTemplate: null });
     const [elsewhere] = await getCarriers(userId, otherCollection.id);
+    await createCarrierService(userId, elsewhere.id, { name: "Letter", cost: "5.00", currency: "EUR" });
+    const [farService] = (await getCarriers(userId, otherCollection.id))[0].services;
     await assert.rejects(
       () =>
-        updateShippingMethod(userId, methodId, {
+        updateShippingOption(userId, optionId, {
           name: "Registered letter",
-          cost: "12.00",
+          price: "14.00",
           currency: "PLN",
-          carrierId: elsewhere.id,
+          serviceId: farService.id,
         }),
       /not found in this collection/i
     );
   });
 
-  it("falls back to the method's carrier when the sale says nothing", async () => {
-    const saleId = await newSale(methodId);
+  it("falls back to the carrier of the option's service when the sale says nothing", async () => {
+    const saleId = await newSale(optionId);
     await updateSaleShipment(userId, saleId, { carrierId: null, trackingCode: "PL123456789" });
     const detail = await getSaleDetail(userId, saleId);
     assert.equal(detail?.trackingCode, "PL123456789");
@@ -130,13 +140,13 @@ describe("carriers + sale tracking", () => {
     assert.equal(detail?.trackingUrl, "https://emonitoring.poczta-polska.pl/?numer=PL123456789");
   });
 
-  it("lets the sale's own carrier override the method's default", async () => {
+  it("lets the sale's own carrier override the option's default", async () => {
     await createCarrier(userId, collectionId, {
       name: "DPD",
       trackingUrlTemplate: "https://tracktrace.dpd.com.pl/findParcel?p1={code}",
     });
     const dpd = (await getCarriers(userId, collectionId)).find((c) => c.name === "DPD")!;
-    const saleId = await newSale(methodId);
+    const saleId = await newSale(optionId);
     await updateSaleShipment(userId, saleId, { carrierId: dpd.id, trackingCode: "DPD9" });
     const detail = await getSaleDetail(userId, saleId);
     assert.equal(detail?.carrierId, dpd.id);
@@ -150,7 +160,7 @@ describe("carriers + sale tracking", () => {
     });
     await createCarrier(userId, otherCollection.id, { name: "Far away", trackingUrlTemplate: null });
     const [far] = await getCarriers(userId, otherCollection.id);
-    const saleId = await newSale(methodId);
+    const saleId = await newSale(optionId);
     await assert.rejects(
       () => updateSaleShipment(userId, saleId, { carrierId: far.id, trackingCode: "X1" }),
       /not found in this collection/i
@@ -168,7 +178,7 @@ describe("carriers + sale tracking", () => {
   });
 
   it("follows the carrier to its new address rather than freezing it on the sale", async () => {
-    const saleId = await newSale(methodId);
+    const saleId = await newSale(optionId);
     await updateSaleShipment(userId, saleId, { carrierId, trackingCode: "PL42" });
     await updateCarrier(userId, carrierId, {
       name: "Poczta Polska",
@@ -179,7 +189,7 @@ describe("carriers + sale tracking", () => {
   });
 
   it("clears the number when it is blanked", async () => {
-    const saleId = await newSale(methodId);
+    const saleId = await newSale(optionId);
     await updateSaleShipment(userId, saleId, { carrierId: null, trackingCode: "PL7" });
     await updateSaleShipment(userId, saleId, { carrierId: null, trackingCode: null });
     const detail = await getSaleDetail(userId, saleId);
@@ -187,22 +197,25 @@ describe("carriers + sale tracking", () => {
     assert.equal(detail?.trackingUrl, null);
   });
 
-  it("refuses to delete a carrier a shipping method still posts with", async () => {
+  it("refuses to delete a carrier that still has services", async () => {
     await assert.rejects(
       () => deleteCarrier(userId, carrierId),
-      (e: unknown) => e instanceof CarrierInUseError && e.methodCount === 1
+      (e: unknown) => e instanceof CarrierInUseError && e.serviceCount === 1
     );
   });
 
-  it("refuses to delete a carrier a sale still names, once nothing else points at it", async () => {
-    await updateShippingMethod(userId, methodId, {
+  it("refuses to delete a carrier a sale still names, once it has no services", async () => {
+    await updateShippingOption(userId, optionId, {
       name: "Registered letter",
-      cost: "12.00",
+      price: "14.00",
       currency: "PLN",
-      carrierId: null,
+      serviceId: null,
     });
-    // The sales recorded above still carry it, so the database's own RESTRICT is what stops this —
-    // the same detach-before-delete guard, one level further along.
-    await assert.rejects(() => deleteCarrier(userId, carrierId), /foreign key|constraint/i);
+    await deleteCarrierService(userId, serviceId);
+    // The sales recorded above still carry it as the carrier that took their parcel.
+    await assert.rejects(
+      () => deleteCarrier(userId, carrierId),
+      (e: unknown) => e instanceof CarrierInUseError && e.serviceCount === 0 && e.saleCount > 0
+    );
   });
 });

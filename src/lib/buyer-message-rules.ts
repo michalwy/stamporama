@@ -29,7 +29,7 @@ export const BUYER_MESSAGE_PLACEHOLDERS: readonly BuyerMessagePlaceholder[] = [
   { token: "{itemsTotal}", label: "Items' total", example: "25 PLN" },
   { token: "{shipping}", label: "Chosen shipping and its price", example: "Registered letter — 12 PLN" },
   { token: "{total}", label: "Total to pay", example: "37 PLN" },
-  { token: "{shippingOptions}", label: "Shipping methods, one per line", example: "Registered letter — 12 PLN" },
+  { token: "{shippingOptions}", label: "Shipping options at the buyer's price, one per line", example: "Registered letter — 12 PLN" },
   { token: "{sale}", label: "Sale number", example: "57" },
 ];
 
@@ -42,11 +42,11 @@ export interface BuyerMessageItem {
   price: string;
 }
 
-/** One of the platform's shipping methods, as `{shippingOptions}` lists it. */
+/** One of the platform's shipping options, as `{shippingOptions}` lists it. */
 export interface BuyerMessageShippingOption {
   name: string;
-  /** The method's price in its own currency, as a 2-dp string. */
-  cost: string;
+  /** What the buyer pays for it (#1909), in its own currency, as a 2-dp string. */
+  price: string;
   currency: string;
 }
 
@@ -56,8 +56,8 @@ export interface BuyerMessageSale {
   buyerName: string | null;
   currency: string;
   items: readonly BuyerMessageItem[];
-  /** The shipping method on the sale, or null before one is chosen. */
-  shippingMethodName: string | null;
+  /** The shipping option on the sale, or null before one is chosen. */
+  shippingOptionName: string | null;
   /** What the buyer pays for postage — the sale's buyer handling, entered or derived from the total
    *  they paid (#205) — as a 2-dp string, or null where the sale records none. */
   buyerHandling: string | null;
@@ -74,17 +74,18 @@ function priced(name: string, price: string | null): string {
 }
 
 /**
- * Each placeholder's value for this sale. **The total includes the postage once a shipping method is
+ * Each placeholder's value for this sale. **The total includes the postage once a shipping option is
  * on the sale** (decided with the collector, 2026-10-11): the items plus what the buyer pays for it;
  * before that it is the items alone, and `{shippingOptions}` lets the buyer choose. The price of a
- * chosen method is what the sale says the buyer pays — its buyer handling — while the options list
- * each method's price from the platform's price list (the collector's choice, the same day).
+ * chosen option is what the sale says the buyer pays — its buyer handling — while the options list
+ * each one's buyer price from the platform's options (the collector's choice, the same day; the
+ * buyer's price rather than the collector's cost since #1909).
  */
 export function buyerMessageValues(sale: BuyerMessageSale): Record<string, string> {
   // Summed in cents: the prices are 2-dp strings, and a float sum of them can land a cent off.
   const cents = (amount: string) => Math.round(Number(amount) * 100);
   const itemsCents = sale.items.reduce((sum, item) => sum + cents(item.price), 0);
-  const chosen = sale.shippingMethodName;
+  const chosen = sale.shippingOptionName;
   const postageCents = chosen !== null && sale.buyerHandling !== null ? cents(sale.buyerHandling) : 0;
   return {
     "{buyer}": sale.buyerName ?? "",
@@ -98,7 +99,7 @@ export function buyerMessageValues(sale: BuyerMessageSale): Record<string, strin
         : priced(chosen, sale.buyerHandling === null ? null : money(sale.buyerHandling, sale.currency)),
     "{total}": money(((itemsCents + postageCents) / 100).toFixed(2), sale.currency),
     "{shippingOptions}": sale.shippingOptions
-      .map((option) => priced(option.name, money(option.cost, option.currency)))
+      .map((option) => priced(option.name, money(option.price, option.currency)))
       .join("\n"),
     "{sale}": String(sale.saleNo),
   };

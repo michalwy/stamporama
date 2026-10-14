@@ -1,15 +1,16 @@
-// A shipping method's usual packing supplies, applied to a sale (#1899, ADR-0068 §8). Pure — the
-// writes are `sales.ts`'s, which call this whenever a sale's method is chosen or changed.
+// A carrier service's usual packing supplies, applied to a sale (#1899, ADR-0068 §8; on the service
+// since #1909, ADR-0069). Pure — the writes are `sales.ts`'s, which call this whenever a sale's
+// shipping option is chosen or changed, with the lists of the services the options are linked to.
 //
-// The rule, as the issue states it: **choosing a method fills in its supply lines**, which stay
-// editable on the sale; **changing the method replaces the lines that still match the old method's
-// list** and leaves the lines the collector changed by hand. A method with no list fills in none.
+// The rule, as #1899 states it: **choosing an option fills in its service's supply lines**, which
+// stay editable on the sale; **changing the option replaces the lines that still match the old
+// service's list** and leaves the lines the collector changed by hand. No list fills in none.
 //
 // "Still matches" is read off the line itself — the same supply at the same quantity as an entry of
-// the old method's list — rather than off a flag, so a line edited back to its default counts as
-// untouched again, and nothing has to be stored to tell the two apart.
+// the old list — rather than off a flag, so a line edited back to its default counts as untouched
+// again, and nothing has to be stored to tell the two apart.
 
-/** One entry of a method's list, or a line to add to a sale. */
+/** One entry of a service's list, or a line to add to a sale. */
 export interface SupplyQuantity {
   supplyId: string;
   quantity: number;
@@ -20,15 +21,15 @@ export interface SaleSupplyLineState extends SupplyQuantity {
   id: string;
 }
 
-export interface MethodSuppliesChange {
-  /** The sale's lines that were the old method's defaults and are not the new one's. */
+export interface ServiceSuppliesChange {
+  /** The sale's lines that were the old list's defaults and are not the new one's. */
   remove: string[];
-  /** The new method's entries the sale does not already carry. */
+  /** The new list's entries the sale does not already carry. */
   add: SupplyQuantity[];
 }
 
 /**
- * What changing a sale's method from one whose list is `before` to one whose list is `after` does to
+ * What changing a sale's option from one whose list is `before` to one whose list is `after` does to
  * the sale's supply lines. A sale being recorded has no lines and `before` empty, so it simply gets
  * `after`.
  *
@@ -40,11 +41,11 @@ export interface MethodSuppliesChange {
  * - An entry of `after` is added unless the sale keeps a line of that supply already — a hand-edited
  *   line says how much of it this parcel used, and a second line beside it would double it.
  */
-export function changeMethodSupplies(
+export function changeServiceSupplies(
   lines: readonly SaleSupplyLineState[],
   before: readonly SupplyQuantity[],
   after: readonly SupplyQuantity[]
-): MethodSuppliesChange {
+): ServiceSuppliesChange {
   const untouched = new Set<string>();
   for (const entry of before) {
     const match = lines.find(

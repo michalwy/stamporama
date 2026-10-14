@@ -147,7 +147,7 @@ const PROFILE_SELECT = {
 } as const;
 
 /** Every profile of the collection's Allegro platform, ordered by name — a pick-list is read by
- *  looking for the one you already know the name of, exactly as the shipping methods are. */
+ *  looking for the one you already know the name of, exactly as the shipping options are. */
 export async function listAllegroListingProfiles(
   ownerId: string,
   collectionId: string

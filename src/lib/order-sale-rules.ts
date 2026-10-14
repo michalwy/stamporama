@@ -8,7 +8,7 @@
  * three of the same questions, so they moved here rather than being answered a second way — two
  * modules deciding which copy sold is exactly how two flows come to disagree about it.
  *
- * What stayed behind is genuinely Allegro's: `matchShippingMethod` reads a delivery method off an
+ * What stayed behind is genuinely Allegro's: `matchShippingOption` reads a delivery method off an
  * Allegro order, and a Delcampe sold row states none.
  *
  * The register is #355's throughout: **a wrong composition is worse than none.** Every rule below

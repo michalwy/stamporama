@@ -156,7 +156,7 @@ export async function updateSaleTransactionUrlAction(
 
 /** Record who carried the parcel and its tracking number (#491), from the prompt shown while a sale
  * is marked Sent or the same dialog reopened from the detail header. A blank carrier means "no
- * answer of my own" and falls back to the shipping method's default on read; a blank number clears
+ * answer of my own" and falls back to the shipping option's default on read; a blank number clears
  * it. Nothing else is done to the text — every carrier numbers its consignments its own way. */
 export async function updateSaleShipmentAction(
   saleId: string,

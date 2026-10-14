@@ -1,13 +1,15 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
+import { createShippingOption, getShippingOptions, updateShippingOption } from "../../src/lib/shipping-options";
 import {
-  createShippingMethod,
-  deleteShippingMethod,
-  getShippingMethods,
-  ShippingMethodSuppliesError,
-  updateShippingMethod,
-} from "../../src/lib/shipping-methods";
+  createCarrier,
+  createCarrierService,
+  deleteCarrierService,
+  getCarriers,
+  updateCarrierService,
+  CarrierServiceSuppliesError,
+} from "../../src/lib/carriers";
 import { createSale, getSaleDetail, updateSaleHeader, updateSaleShipping } from "../../src/lib/sales";
 import {
   createPackingSupply,
@@ -17,15 +19,15 @@ import {
 } from "../../src/lib/packing-supplies";
 import { deleteSaleSupplyLine, updateSaleSupplyLine } from "../../src/lib/sale-supplies";
 
-// A shipping method's usual packing supplies (#1899, ADR-0068 §8), read back out of Prisma: the
-// method's list is saved with it, choosing the method on a sale fills the sale's supply lines in and
-// takes their units from stock, and changing it swaps the lines that still match the old list while
-// keeping the ones changed by hand. The swap rule itself is unit-tested
-// (`tests/unit/method-supplies.test.ts`); this covers every write that applies it.
+// A carrier service's usual packing supplies (#1899, ADR-0068 §8; on the service since #1909), read
+// back out of Prisma: the service's list is saved with it, choosing a shipping option linked to it on
+// a sale fills the sale's supply lines in and takes their units from stock, and changing the option
+// swaps the lines that still match the old list while keeping the ones changed by hand. The swap rule itself is unit-tested
+// (`tests/unit/service-supplies.test.ts`); this covers every write that applies it.
 
 const TS = Date.now();
 
-describe("a shipping method's usual packing supplies", () => {
+describe("a carrier service's usual packing supplies", () => {
   let userId: string;
   let collectionId: string;
   let otherCollectionId: string;
@@ -35,6 +37,10 @@ describe("a shipping method's usual packing supplies", () => {
   let cardId: string;
   let bubbleId: string;
   let foreignSupplyId: string;
+  let carrierId: string;
+  let letterServiceId: string;
+  let bareServiceId: string;
+  // The platform's options, each linked to the service of the same kind.
   let letterId: string;
   let parcelId: string;
   let bareId: string;
@@ -61,7 +67,7 @@ describe("a shipping method's usual packing supplies", () => {
     return stock.supplies.find((s) => s.id === supplyId)!.onHand;
   }
 
-  function header(platform: string, methodId: string | null, shipping = true) {
+  function header(platform: string, optionId: string | null, shipping = true) {
     return {
       platformId: platform,
       buyerId: null,
@@ -72,7 +78,7 @@ describe("a shipping method's usual packing supplies", () => {
       buyerHandling: null,
       buyerPaidTotal: null,
       commission: null,
-      shipping: shipping ? { methodId, methodName: null, cost: "5.00", currency: "EUR" } : null,
+      shipping: shipping ? { optionId, optionName: null, cost: "5.00", currency: "EUR" } : null,
     };
   }
 
@@ -80,9 +86,9 @@ describe("a shipping method's usual packing supplies", () => {
     userId = (
       await prisma.user.create({
         data: {
-          id: `test-user-method-supplies-${TS}`,
-          name: "Test User Method Supplies",
-          email: `test-method-supplies-${TS}@example.com`,
+          id: `test-user-service-supplies-${TS}`,
+          name: "Test User Service Supplies",
+          email: `test-service-supplies-${TS}@example.com`,
           emailVerified: true,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -91,12 +97,12 @@ describe("a shipping method's usual packing supplies", () => {
     ).id;
     collectionId = (
       await prisma.collection.create({
-        data: { slug: `col-method-supplies-${TS}`, name: "Method supplies", baseCurrency: "EUR", ownerId: userId },
+        data: { slug: `col-service-supplies-${TS}`, name: "Service supplies", baseCurrency: "EUR", ownerId: userId },
       })
     ).id;
     otherCollectionId = (
       await prisma.collection.create({
-        data: { slug: `col-method-supplies-b-${TS}`, name: "Other", baseCurrency: "EUR", ownerId: userId },
+        data: { slug: `col-service-supplies-b-${TS}`, name: "Other", baseCurrency: "EUR", ownerId: userId },
       })
     ).id;
     platformId = (
@@ -130,46 +136,59 @@ describe("a shipping method's usual packing supplies", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("saves a method's list with it and reads it back by supply name", async () => {
-    await createShippingMethod(userId, collectionId, platformId, {
+  /** The service's list as the option linked to it reads it. */
+  async function optionSupplies(optionId: string) {
+    const option = (await getShippingOptions(userId, platformId)).find((o) => o.id === optionId)!;
+    return option.service?.supplies ?? [];
+  }
+
+  it("saves a service's list with it and reads it back by supply name", async () => {
+    await createCarrier(userId, collectionId, { name: "Poczta Polska", trackingUrlTemplate: null });
+    carrierId = (await getCarriers(userId, collectionId))[0].id;
+    await createCarrierService(userId, carrierId, {
       name: "Registered letter",
       cost: "5.00",
       currency: "EUR",
-      carrierId: null,
       supplies: [
         { supplyId: envelopeId, quantity: 1 },
         { supplyId: cardId, quantity: 2 },
       ],
     });
-    await createShippingMethod(userId, collectionId, platformId, {
+    await createCarrierService(userId, carrierId, {
       name: "Parcel",
       cost: "9.00",
       currency: "EUR",
-      carrierId: null,
       supplies: [
         { supplyId: bubbleId, quantity: 1 },
         { supplyId: cardId, quantity: 2 },
       ],
     });
-    await createShippingMethod(userId, collectionId, platformId, {
-      name: "Hand delivery",
-      cost: "0.00",
-      currency: "EUR",
-      carrierId: null,
-    });
-    const methods = await getShippingMethods(userId, platformId);
-    letterId = methods.find((m) => m.name === "Registered letter")!.id;
-    parcelId = methods.find((m) => m.name === "Parcel")!.id;
-    bareId = methods.find((m) => m.name === "Hand delivery")!.id;
-    assert.deepEqual(methods.find((m) => m.id === letterId)!.supplies, [
+    await createCarrierService(userId, carrierId, { name: "Hand delivery", cost: "0.00", currency: "EUR" });
+    const services = (await getCarriers(userId, collectionId))[0].services;
+    const serviceId = (name: string) => services.find((s) => s.name === name)!.id;
+    letterServiceId = serviceId("Registered letter");
+    bareServiceId = serviceId("Hand delivery");
+    for (const name of ["Registered letter", "Parcel", "Hand delivery"]) {
+      await createShippingOption(userId, collectionId, platformId, {
+        name,
+        price: "6.00",
+        currency: "EUR",
+        serviceId: serviceId(name),
+      });
+    }
+    const options = await getShippingOptions(userId, platformId);
+    letterId = options.find((o) => o.name === "Registered letter")!.id;
+    parcelId = options.find((o) => o.name === "Parcel")!.id;
+    bareId = options.find((o) => o.name === "Hand delivery")!.id;
+    assert.deepEqual(await optionSupplies(letterId), [
       { supplyId: envelopeId, name: "C6 envelope", quantity: 1 },
       { supplyId: cardId, name: "Transport card A6", quantity: 2 },
     ]);
-    assert.deepEqual(methods.find((m) => m.id === bareId)!.supplies, []);
+    assert.deepEqual(await optionSupplies(bareId), []);
   });
 
   it("refuses a supply of another collection, a supply twice, and a quantity below one", async () => {
-    const base = { name: "Registered letter", cost: "5.00", currency: "EUR", carrierId: null };
+    const base = { name: "Registered letter", cost: "5.00", currency: "EUR" };
     for (const supplies of [
       [{ supplyId: foreignSupplyId, quantity: 1 }],
       [
@@ -178,15 +197,17 @@ describe("a shipping method's usual packing supplies", () => {
       ],
       [{ supplyId: cardId, quantity: 0 }],
     ]) {
-      await assert.rejects(updateShippingMethod(userId, letterId, { ...base, supplies }), ShippingMethodSuppliesError);
+      await assert.rejects(
+        updateCarrierService(userId, letterServiceId, { ...base, supplies }),
+        CarrierServiceSuppliesError
+      );
     }
     // An update that leaves the list out keeps it.
-    await updateShippingMethod(userId, letterId, base);
-    const letter = (await getShippingMethods(userId, platformId)).find((m) => m.id === letterId)!;
-    assert.equal(letter.supplies.length, 2);
+    await updateCarrierService(userId, letterServiceId, base);
+    assert.equal((await optionSupplies(letterId)).length, 2);
   });
 
-  it("fills a sale in with its method's list when the sale is recorded, taking the units from stock", async () => {
+  it("fills a sale in with its option's service's list when the sale is recorded, taking the units from stock", async () => {
     const before = await onHand(cardId);
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
     assert.deepEqual(shape(await linesOf(saleId)), ["card×2", "envelope×1"]);
@@ -195,96 +216,118 @@ describe("a shipping method's usual packing supplies", () => {
     assert.equal(detail!.supplies.lines.length, 2);
   });
 
-  it("fills in nothing for a method with no list, or a one-off method", async () => {
+  it("fills in nothing for a service with no list, an option with no service, or a one-off", async () => {
     const bare = await createSale(userId, collectionId, header(platformId, bareId));
     assert.deepEqual(await linesOf(bare), []);
     const custom = await createSale(userId, collectionId, {
       ...header(platformId, null),
-      shipping: { methodId: null, methodName: "Courier", cost: "7.00", currency: "EUR" },
+      shipping: { optionId: null, optionName: "Courier", cost: "7.00", currency: "EUR" },
     });
     assert.deepEqual(await linesOf(custom), []);
+    await createShippingOption(userId, collectionId, platformId, {
+      name: "Pick-up",
+      price: "0.00",
+      currency: "EUR",
+      serviceId: null,
+    });
+    const pickUpId = (await getShippingOptions(userId, platformId)).find((o) => o.name === "Pick-up")!.id;
+    const unlinked = await createSale(userId, collectionId, header(platformId, pickUpId));
+    assert.deepEqual(await linesOf(unlinked), []);
   });
 
-  it("swaps untouched lines on a change of method, keeping the ones changed by hand", async () => {
+  it("swaps untouched lines on a change of option, keeping the ones changed by hand", async () => {
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
     const card = (await linesOf(saleId)).find((l) => l.supply === "card")!;
     await updateSaleSupplyLine(userId, card.id, { supplyId: cardId, quantity: 4 });
     const envelopesBefore = await onHand(envelopeId);
 
-    await updateSaleShipping(userId, saleId, { methodId: parcelId, methodName: null, cost: "9.00", currency: "EUR" });
+    await updateSaleShipping(userId, saleId, { optionId: parcelId, optionName: null, cost: "9.00", currency: "EUR" });
     // The envelope was the letter's and goes back to stock; the four cards were the collector's and
     // stay, so the parcel's two are not added beside them.
     assert.deepEqual(shape(await linesOf(saleId)), ["bubble×1", "card×4"]);
     assert.equal(await onHand(envelopeId), envelopesBefore + 1);
 
-    // Back to a method with no list: only the parcel's untouched bubble envelope goes.
-    await updateSaleShipping(userId, saleId, { methodId: bareId, methodName: null, cost: "0.00", currency: "EUR" });
+    // Back to a service with no list: only the parcel's untouched bubble envelope goes.
+    await updateSaleShipping(userId, saleId, { optionId: bareId, optionName: null, cost: "0.00", currency: "EUR" });
     assert.deepEqual(shape(await linesOf(saleId)), ["card×4"]);
   });
 
   it("keeps a line that is the same in both lists rather than giving it back and taking it again", async () => {
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
     const card = (await linesOf(saleId)).find((l) => l.supply === "card")!;
-    await updateSaleShipping(userId, saleId, { methodId: parcelId, methodName: null, cost: "9.00", currency: "EUR" });
+    await updateSaleShipping(userId, saleId, { optionId: parcelId, optionName: null, cost: "9.00", currency: "EUR" });
     const after = await linesOf(saleId);
     assert.deepEqual(shape(after), ["bubble×1", "card×2"]);
     assert.ok(after.some((l) => l.id === card.id));
   });
 
-  it("does not bring a removed default back when the same method is saved again", async () => {
+  it("does not bring a removed default back when the same option is saved again", async () => {
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
     const envelope = (await linesOf(saleId)).find((l) => l.supply === "envelope")!;
     await deleteSaleSupplyLine(userId, envelope.id);
-    await updateSaleShipping(userId, saleId, { methodId: letterId, methodName: null, cost: "6.00", currency: "EUR" });
+    await updateSaleShipping(userId, saleId, { optionId: letterId, optionName: null, cost: "6.00", currency: "EUR" });
     assert.deepEqual(shape(await linesOf(saleId)), ["card×2"]);
   });
 
-  it("swaps the lines when the header's form changes the method, and keeps them on a change of platform alone", async () => {
+  it("swaps the lines when the header's form changes the option, and keeps them on a change of platform alone", async () => {
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
     await updateSaleHeader(userId, saleId, header(platformId, parcelId));
     assert.deepEqual(shape(await linesOf(saleId)), ["bubble×1", "card×2"]);
 
-    // Moving to another platform without the shipping fields drops the method, not the parcel's supplies.
+    // Moving to another platform without the shipping fields drops the option, not the parcel's supplies.
     await updateSaleHeader(userId, saleId, header(otherPlatformId, null, false));
-    const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { shippingMethodId: true } });
-    assert.equal(sale.shippingMethodId, null);
+    const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { shippingOptionId: true } });
+    assert.equal(sale.shippingOptionId, null);
     assert.deepEqual(shape(await linesOf(saleId)), ["bubble×1", "card×2"]);
   });
 
-  it("leaves sales already recorded alone when a method's list changes", async () => {
+  it("leaves sales already recorded alone when a service's list changes", async () => {
     const saleId = await createSale(userId, collectionId, header(platformId, letterId));
-    await updateShippingMethod(userId, letterId, {
+    await updateCarrierService(userId, letterServiceId, {
       name: "Registered letter",
       cost: "5.00",
       currency: "EUR",
-      carrierId: null,
       supplies: [{ supplyId: bubbleId, quantity: 3 }],
     });
     assert.deepEqual(shape(await linesOf(saleId)), ["card×2", "envelope×1"]);
   });
 
-  it("drops a deleted supply from the lists it was on, and a method's list goes with the method", async () => {
+  it("reads the list through the option's link as it stands, so re-linking an option changes its defaults", async () => {
+    await updateShippingOption(userId, bareId, {
+      name: "Hand delivery",
+      price: "6.00",
+      currency: "EUR",
+      serviceId: letterServiceId,
+    });
+    const saleId = await createSale(userId, collectionId, header(platformId, bareId));
+    assert.deepEqual(shape(await linesOf(saleId)), ["bubble×3"]);
+    await updateShippingOption(userId, bareId, {
+      name: "Hand delivery",
+      price: "6.00",
+      currency: "EUR",
+      serviceId: bareServiceId,
+    });
+  });
+
+  it("drops a deleted supply from the lists it was on, and a service's list goes with the service", async () => {
     const tapeId = await createPackingSupply(userId, collectionId, "Tape");
-    await updateShippingMethod(userId, bareId, {
+    await updateCarrierService(userId, bareServiceId, {
       name: "Hand delivery",
       cost: "0.00",
       currency: "EUR",
-      carrierId: null,
       supplies: [{ supplyId: tapeId, quantity: 1 }],
     });
     await deletePackingSupply(userId, tapeId);
-    const bare = (await getShippingMethods(userId, platformId)).find((m) => m.id === bareId)!;
-    assert.deepEqual(bare.supplies, []);
+    assert.deepEqual(await optionSupplies(bareId), []);
 
-    await createShippingMethod(userId, collectionId, otherPlatformId, {
+    await createCarrierService(userId, carrierId, {
       name: "Throwaway",
       cost: "1.00",
       currency: "EUR",
-      carrierId: null,
       supplies: [{ supplyId: cardId, quantity: 1 }],
     });
-    const throwaway = (await getShippingMethods(userId, otherPlatformId)).find((m) => m.name === "Throwaway")!;
-    await deleteShippingMethod(userId, throwaway.id);
-    assert.equal(await prisma.shippingMethodSupply.count({ where: { methodId: throwaway.id } }), 0);
+    const throwaway = (await getCarriers(userId, collectionId))[0].services.find((s) => s.name === "Throwaway")!;
+    await deleteCarrierService(userId, throwaway.id);
+    assert.equal(await prisma.carrierServiceSupply.count({ where: { serviceId: throwaway.id } }), 0);
   });
 });

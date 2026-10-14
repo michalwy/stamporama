@@ -5,7 +5,9 @@
 Accepted. Decided with the collector on 2026-10-13 and built by #1897, the foundation of a track:
 #1898 takes supplies onto a sale's shipping cost, #1899 gives a shipping method its default supplies,
 #1900 takes supplies out of stock without a sale (§9). Amends [ADR-0009](0009-purchase-record-model.md) §1
-and §3 with a third kind of purchase line.
+and §3 with a third kind of purchase line. §7 and §8 amended by
+[ADR-0069](0069-carrier-rate-lists-and-shipping-options.md) (#1909): the postage and the default
+supplies now come from the carrier service a platform's shipping option is linked to.
 
 ## Context
 
@@ -97,8 +99,9 @@ postage plus the supplies used**, summed by the app instead of typed, and that *
 taken from stock FIFO** at their batches' unit costs.
 
 - **The postage is `Sale.shippingCost`**, typed or prefilled from the shipping method as before
-  (#468). A sale recorded before #1898 has no supply lines, so its typed amount stays the whole of
-  its shipping and nothing is migrated.
+  (#468) — since #1909 from the carrier service the sale's shipping option links to (ADR-0069). A
+  sale recorded before #1898 has no supply lines, so its typed amount stays the whole of its
+  shipping and nothing is migrated.
 - **`SaleSupplyLine`** names a supply and how many units the parcel used. **`SaleSupplyUse`** records
   how many of them came from which batch. *My shipping* = postage in the base currency + the sum of
   the uses at their batches' unit costs; every reader of a sale's net computes it the same way.
@@ -125,6 +128,12 @@ taken from stock FIFO** at their batches' unit costs.
   from the supply's other batches where they can. A supply a sale used cannot be deleted.
 
 ### 8. A shipping method carries its usual supplies (#1899)
+
+> **Amended by [ADR-0069](0069-carrier-rate-lists-and-shipping-options.md) §4 (#1909):** the list
+> now belongs to the **carrier service** (`CarrierServiceSupply`), and a sale reaches it through its
+> shipping option's link to the service; read *method* below as *the option's service*. The rule is
+> unchanged — now `changeServiceSupplies` in `src/lib/service-supplies.ts`, applied by
+> `applyOptionSupplies`.
 
 Most parcels of one kind take the same supplies — a registered letter goes in a C6 envelope with two
 transport cards — so a platform's shipping method can list them, with quantities

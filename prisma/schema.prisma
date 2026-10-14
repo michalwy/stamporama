@@ -178,8 +178,9 @@ model Collection {
   scanUploads     ScanUpload[]
   offers          Offer[]
   sales           Sale[]
-  shippingMethods ShippingMethod[]
+  shippingOptions ShippingOption[]
   carriers        Carrier[]
+  carrierServices CarrierService[]
   // Envelopes, transport cards and the like (#1897, ADR-0068): bought on purchase orders, held in stock.
   packingSupplies PackingSupply[]
   // Packing supplies taken out of stock without a sale (#1900).
@@ -2507,8 +2508,8 @@ model AllegroListingProfile {
   id           String @id @default(cuid())
   collectionId String
   // The platform (a `Contact` carrying the `platform` role, and the one this collection calls
-  // Allegro) whose listings are published with this. Owned by it, exactly as the shipping-method
-  // price list is (#468).
+  // Allegro) whose listings are published with this. Owned by it, exactly as the shipping options
+  // are (#468).
   platformId   String
   // What the collector calls it — "Home, letter rates", "Away, courier". The pick-list, so unique
   // per platform.
@@ -2516,8 +2517,8 @@ model AllegroListingProfile {
 
   // ── Delivery ──────────────────────────────────────────────────────────────────────────────
   // Allegro's own **shipping rate set** (`GET /sale/shipping-rates`), by its id. Not our
-  // `ShippingMethod` (#468), which is a name and a cost recorded when a sale is made: that one
-  // describes what the buyer paid, this one is Allegro's table of what a listing *offers*.
+  // `ShippingOption` (#468, #1909), which is a name and a buyer price picked when a sale is made:
+  // that one describes what the buyer chose, this one is Allegro's table of what a listing *offers*.
   shippingRatesId   String
   shippingRatesName String?
   // How long the collector takes to send, as the ISO-8601 duration Allegro states it in (`PT24H`,
@@ -2572,15 +2573,15 @@ model AllegroListingProfile {
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // A profile belongs to its platform: deleting the platform takes its profiles with it, exactly as
-  // it takes its shipping methods.
+  // it takes its shipping options.
   platform   Contact    @relation("PlatformAllegroListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
   // The back-references of the two `SetNull` pointers at this row: the platform that publishes with
   // it by default, and the offers that named it in place of that default.
   defaultForPlatforms Contact[] @relation("PlatformDefaultAllegroListingProfile")
   offers              Offer[]   @relation("OfferAllegroListingProfile")
 
-  // The names *are* the pick-list, so they are unique per platform — the shipping-method rule, for
-  // the shipping-method reason.
+  // The names *are* the pick-list, so they are unique per platform — the shipping-option rule, for
+  // the shipping-option reason.
   @@unique([platformId, name])
   @@index([collectionId])
   @@index([platformId])
@@ -2606,7 +2607,7 @@ model DelcampeListingProfile {
   id           String @id @default(cuid())
   collectionId String
   // The platform (the `Contact` this collection calls Delcampe) whose uploads use this. Owned by it,
-  // as the Allegro profiles and the shipping-method price list are.
+  // as the Allegro profiles and the shipping options are.
   platformId   String
   // What the collector calls it — "Standard letter", "Heavy lot, tracked". The pick list, so unique
   // per platform.
@@ -4515,8 +4516,8 @@ model PackingSupply {
   lines      PurchaseSupplyLine[]
   // What sales packed with it (#1898).
   saleLines  SaleSupplyLine[]
-  // The shipping methods that usually use it (#1899).
-  methodDefaults ShippingMethodSupply[]
+  // The carrier services that usually use it (#1899, moved there by #1909).
+  serviceDefaults CarrierServiceSupply[]
   // What was taken out of stock without a sale (#1900).
   ownUses    SupplyOwnUse[]
 
@@ -5823,20 +5824,21 @@ model Sale {
   // derived = this − gross (sum of line prices) and recomputed as sold sets change, so `buyerHandling`
   // is null. Null when handling is entered directly.
   buyerPaidTotal Decimal? @db.Decimal(10, 2)
-  // Which shipping method the buyer chose (#468), from the platform's own dictionary. Nullable —
-  // a sale recorded before the dictionary existed, or one whose method was a one-off, carries none.
-  // `onDelete: Restrict`: a method a sale points at cannot be deleted without first detaching it
+  // Which shipping option the buyer chose (#468, #1909), from the platform's own list. Nullable —
+  // a sale recorded before the list existed, or one whose shipping was a one-off, carries none.
+  // `onDelete: Restrict`: an option a sale points at cannot be deleted without first detaching it
   // (the dictionary guard the other reference lists use).
-  shippingMethodId String?
-  // What the method was **called at sale time** — always written beside the FK, and the only thing
-  // written for a one-off *Custom* method (which has no dictionary row). A snapshot on purpose: the
-  // dictionary is a live price list the collector re-prices and renames as the carriers do, and a
-  // sale must keep saying which service was actually bought. Null when no method was recorded.
-  shippingMethodName String?
+  shippingOptionId String?
+  // What the option was **called at sale time** — always written beside the FK, and the only thing
+  // written for a one-off *Custom* option (which has no row). A snapshot on purpose: the options and
+  // the rate list are live lists the collector re-prices and renames as the carriers do, and a sale
+  // must keep saying which service was actually bought. Null when no option was recorded.
+  shippingOptionName String?
   // My actual shipping/postage cost, in `shippingCurrency` (subtracts from proceeds, −). Entered in
   // any currency (#206) — converted straight to the base currency for profit, not to the sale's
-  // transaction currency. Pre-filled from the chosen method's cost (#468) and editable afterwards:
-  // what the method costs is what it usually costs, not what this parcel cost.
+  // transaction currency. Pre-filled from the cost of the carrier service the chosen option is
+  // linked to (#1909) and editable afterwards: what the service costs is what it usually costs, not
+  // what this parcel cost. An option with no linked service leaves it to be entered.
   //
   // Since #1898 this is the **postage**: *my shipping* is it plus the packing supplies the parcel
   // used (`supplyLines`), summed by the app. A sale recorded before has no supply lines, so its
@@ -5855,11 +5857,11 @@ model Sale {
   // than none of them.
   trackingCode  String?
   // Who actually carried **this** parcel (#491). Null on a sale that never said, which then falls
-  // back on read to the carrier named on its shipping method.
+  // back on read to the carrier of the service its shipping option is linked to (#1909).
   //
   // A sale needs its own answer because the two questions are genuinely different: the buyer picks
   // a *service* at checkout ("Courier"), and which courier that turns out to be is decided at the
-  // parcel counter days later. The method's carrier is therefore a **default**, not the truth —
+  // parcel counter days later. The option's carrier is therefore a **default**, not the truth —
   // seeded into the prompt shown while a sale is marked `sent`, and overridable there. `onDelete:
   // Restrict`, the guard every other dictionary reference carries.
   carrierId     String?
@@ -5874,7 +5876,7 @@ model Sale {
   collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
-  shippingMethod ShippingMethod?  @relation(fields: [shippingMethodId], references: [id], onDelete: Restrict)
+  shippingOption ShippingOption?  @relation(fields: [shippingOptionId], references: [id], onDelete: Restrict)
   carrier       Carrier?          @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
   // Packing supplies the parcel used (#1898): with the postage, what *my shipping* is.
@@ -5888,90 +5890,58 @@ model Sale {
   @@index([collectionId])
   @@index([platformId])
   @@index([buyerId])
-  @@index([shippingMethodId])
+  @@index([shippingOptionId])
   @@index([carrierId])
   @@map("sale")
 }
 
-// One shipping service a platform's buyers can choose, with what it costs to send (#468) — a
-// per-platform price list, because postage is quoted by the marketplace the parcel was sold on:
-// "Allegro: registered letter — 12 PLN" says nothing about a Delcampe sale. It is a dictionary in
-// the sense `StampCondition` (#93) and `CertificateStatus` (#94) are — a short list the collector
-// maintains and then picks from — but it hangs off the platform rather than the collection, so it
-// is managed on the contact dialog's Platform tab beside the listing templates.
+// One shipping option a platform offers its buyers, at the price **the buyer** pays for it (#468,
+// #1909) — *registered letter — 9 PLN* on Allegro. What sending it costs the collector is not here:
+// that is the carrier's rate list (`CarrierService`), which is global, because the cost of posting a
+// letter has nothing to do with where the stamp sold. An option is linked to at most one carrier
+// service, and choosing the option on a sale takes the postage and the usual packing supplies from
+// that service. Managed on the contact dialog's Platform tab beside the listing templates.
 //
-// `cost` + `currency` are the **current** price, read when a method is picked and copied onto the
-// sale from there. Nothing recalculates a sale already recorded when the carrier raises its rates.
-model ShippingMethod {
+// `price` + `currency` are the **current** buyer price, listed by the buyer message's
+// `{shippingOptions}` (#1815). Nothing recalculates a sale already recorded when it changes.
+model ShippingOption {
   id           String   @id @default(cuid())
   collectionId String
-  // The platform (a `Contact` carrying the `platform` role) this method is offered on.
+  // The platform (a `Contact` carrying the `platform` role) this option is offered on.
   platformId   String
-  // Who usually carries a parcel sent this way (#491) — a **default**, seeded onto a sale and
-  // overridable there, because the buyer picks a service ("Courier") and which courier it actually
-  // goes with is decided at the parcel counter. Optional, and the only reason it exists is the
-  // tracking link: the method is per platform, the carrier is not, and "Poczta Polska" tracks the
-  // same way whichever marketplace the sale came from. `onDelete: Restrict` — the
-  // detach-before-delete guard every other dictionary reference carries.
-  carrierId    String?
+  // The carrier service a parcel sent this way goes by, or null where it was never said — then a
+  // sale choosing the option has its postage entered by hand and no supplies filled in. `onDelete:
+  // Restrict`, the detach-before-delete guard every other dictionary reference carries.
+  serviceId    String?
   name         String
-  // What sending by this method costs *me* — the seller-side postage, which is what the sale's
-  // `shippingCost` records. Not what the buyer is charged for it (that is `buyerHandling`).
-  cost         Decimal  @db.Decimal(10, 2)
-  // The currency the postage is paid in — usually the collector's own, which is exactly why
-  // shipping carries a currency of its own on the sale (#206) rather than the transaction's.
+  // What the buyer pays for this option on this platform. Not the collector's cost (that is the
+  // linked service's), and not a sale's own buyer handling, which is what this buyer actually paid.
+  price        Decimal  @db.Decimal(10, 2)
   currency     String
   createdAt    DateTime @default(now())
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  // A method belongs to its platform: deleting the platform takes its price list with it. (In
+  collection Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // An option belongs to its platform: deleting the platform takes its options with it. (In
   // practice a platform with sales cannot be deleted at all — `Sale.platformId` is `Restrict`.)
-  platform   Contact    @relation("PlatformShippingMethod", fields: [platformId], references: [id], onDelete: Cascade)
-  carrier    Carrier?   @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  platform   Contact         @relation("PlatformShippingOption", fields: [platformId], references: [id], onDelete: Cascade)
+  service    CarrierService? @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   sales      Sale[]
-  // The packing supplies a parcel sent this way usually takes (#1899).
-  supplies   ShippingMethodSupply[]
 
   // Names are the pick-list, so they are unique per platform — two "Courier" rows would be a
   // select nobody could choose from.
   @@unique([platformId, name])
   @@index([collectionId])
   @@index([platformId])
-  @@index([carrierId])
-  @@map("shipping_method")
-}
-
-// A packing supply a shipping method usually uses, and how many (#1899, ADR-0068 §8) — *registered
-// letter: C6 envelope × 1, transport card A6 × 2*. A **default**, read only when a sale's method is
-// chosen or changed: choosing it fills the sale's supply lines in, editable there, and changing the
-// method swaps the lines that still match the old method's list for the new one's. Nothing here
-// reaches a sale already recorded.
-//
-// One row per supply per method. Both references cascade: the list goes with its method, and a
-// supply deleted (only one nothing bought or used) leaves the lists it was on.
-model ShippingMethodSupply {
-  id       String @id @default(cuid())
-  methodId String
-  supplyId String
-  // Units a parcel sent this way usually takes. Always positive.
-  quantity Int
-
-  method ShippingMethod @relation(fields: [methodId], references: [id], onDelete: Cascade)
-  supply PackingSupply  @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-
-  @@unique([methodId, supplyId])
-  @@index([supplyId])
-  @@map("shipping_method_supply")
+  @@index([serviceId])
+  @@map("shipping_option")
 }
 
 // A carrier the collection posts with (#491) — the post office or courier that actually moves the
-// parcel, and where its consignments are tracked.
+// parcel, where its consignments are tracked, and what its services cost (#1909).
 //
-// A dictionary in the same sense as `StampCondition` (#93) or `ShippingMethod` (#468), but hung off
-// the **collection** rather than a platform, which is the whole point of it existing: a shipping
-// method is per marketplace, and the same Poczta Polska carries an Allegro parcel and a Delcampe one
-// and tracks both at the same address. Storing the tracking address on the method would mean typing
-// it again for every platform, and one of the copies going stale.
+// A dictionary of the **collection**, tied to no platform: the same Poczta Polska carries an
+// Allegro parcel and a Delcampe one, tracks both at the same address and charges the same for both.
+// Managed under Settings → Carriers.
 model Carrier {
   id           String @id @default(cuid())
   collectionId String
@@ -5984,14 +5954,73 @@ model Carrier {
   trackingUrlTemplate String?
   createdAt    DateTime @default(now())
 
-  collection      Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  shippingMethods ShippingMethod[]
-  sales           Sale[]
+  collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Its rate list (#1909).
+  services   CarrierService[]
+  sales      Sale[]
 
-  // The name is the pick-list, as it is for shipping methods.
+  // The name is the pick-list, as it is for shipping options.
   @@unique([collectionId, name])
   @@index([collectionId])
   @@map("carrier")
+}
+
+// One service of a carrier's and what sending by it costs the collector (#1909) — *List polecony
+// ekonomiczny — 9.50 PLN*. The collector's own rate list, global and **never per platform**: a
+// platform's shipping options link to a service, and choosing such an option on a sale pre-fills its
+// postage from `cost` and its packing supplies from `supplies`.
+//
+// `cost` + `currency` are the **current** price, copied onto a sale when an option linked here is
+// chosen. Nothing recalculates a sale already recorded when the carrier raises its rates.
+model CarrierService {
+  id           String   @id @default(cuid())
+  collectionId String
+  carrierId    String
+  name         String
+  // What sending by this service costs *me* — the seller-side postage a sale's `shippingCost`
+  // records. Not what a buyer is charged (that is the platform option's `price`).
+  cost         Decimal  @db.Decimal(10, 2)
+  // The currency the postage is paid in — usually the collector's own, which is exactly why
+  // shipping carries a currency of its own on the sale (#206) rather than the transaction's.
+  currency     String
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // A carrier with services cannot be deleted — its services go first, each one no option links to.
+  carrier    Carrier    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  options    ShippingOption[]
+  // The packing supplies a parcel sent this way usually takes (#1899).
+  supplies   CarrierServiceSupply[]
+
+  // The name is the pick-list within its carrier.
+  @@unique([carrierId, name])
+  @@index([collectionId])
+  @@index([carrierId])
+  @@map("carrier_service")
+}
+
+// A packing supply a carrier service usually uses, and how many (#1899, ADR-0068 §8, moved here
+// from the shipping method by #1909) — *registered letter: C6 envelope × 1, transport card A6 × 2*.
+// A **default**, read only when a sale's shipping option is chosen or changed: choosing it fills the
+// sale's supply lines in from the option's service, editable there, and changing the option swaps
+// the lines that still match the old service's list for the new one's. Nothing here reaches a sale
+// already recorded.
+//
+// One row per supply per service. Both references cascade: the list goes with its service, and a
+// supply deleted (only one nothing bought or used) leaves the lists it was on.
+model CarrierServiceSupply {
+  id        String @id @default(cuid())
+  serviceId String
+  supplyId  String
+  // Units a parcel sent this way usually takes. Always positive.
+  quantity  Int
+
+  service CarrierService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  supply  PackingSupply  @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, supplyId])
+  @@index([supplyId])
+  @@map("carrier_service_supply")
 }
 
 // Append-only fulfillment-status transition log for a sale (#191). One row per status change,
@@ -6913,9 +6942,9 @@ model Contact {
   // guard as purchases).
   offers            Offer[]    @relation("OfferPlatform")
   salesPlatform     Sale[]     @relation("SalePlatform")
-  // The shipping methods this platform's buyers can choose from (#468) — a price list owned by the
-  // platform, so it goes when the platform does.
-  shippingMethods   ShippingMethod[] @relation("PlatformShippingMethod")
+  // The shipping options this platform's buyers can choose from (#468, #1909), at their buyer
+  // prices — owned by the platform, so they go when the platform does.
+  shippingOptions   ShippingOption[] @relation("PlatformShippingOption")
   // The Allegro listing profiles owned by this platform (#486), and the one of them it publishes
   // with by default. Two relations to the same model, the second being a single reference back —
   // the `defaultCollageTemplateId` shape (#308), for the same reason: a default is one row of the
