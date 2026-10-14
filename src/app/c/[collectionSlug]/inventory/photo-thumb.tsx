@@ -4,9 +4,11 @@ import { useCallback, useState, useTransition } from "react";
 import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 import {
+  PhotoCompareLightbox,
   PhotoLightbox as PhotoLightboxView,
   THUMB_OBJECT_FIT,
   ThumbPreview,
+  type CompareSlide,
   type ViewablePhoto,
 } from "@/app/photo-viewer";
 import { Icon } from "@/app/icons";
@@ -16,7 +18,7 @@ import { PhotoMeasureDialog, type PhotoMeasureContext } from "./photo-measure-di
 // The hover preview and the overlay themselves live in `@/app/photo-viewer`, which knows nothing
 // about collections (#666). Re-exported from here because every caller in the app reaches them
 // through this module and a thumbnail's neighbours are what a reader looks for them beside.
-export { THUMB_OBJECT_FIT, ThumbPreview };
+export { PhotoCompareLightbox, THUMB_OBJECT_FIT, ThumbPreview, type CompareSlide };
 
 // Read-only photo display for a list row (#112, #137). Shows a single, larger thumbnail — the
 // first attached photo — meant to sit at the left of a row with the rest of the row's content

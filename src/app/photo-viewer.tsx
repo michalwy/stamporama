@@ -133,11 +133,7 @@ export function ThumbPreview({
 /** Full-size photo overlay with prev/next + Esc, shared by every screen that shows a picture — the
  * copy row and its strip, the offer photos panel (#314), which previews generated images that are
  * not an owner's gallery, and the partner's page (#666), whose pictures are addressed through a
- * token route.
- *
- * Rendered through a portal to `document.body` so it fills the viewport instead of being clipped
- * by an ancestor that establishes a containing block (e.g. a transformed/`overflow:hidden` dialog
- * shell), which would otherwise crop a plain `position: fixed` overlay. */
+ * token route. */
 export function PhotoLightbox({
   photos,
   index,
@@ -157,18 +153,202 @@ export function PhotoLightbox({
   const total = photos.length;
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
   const current = photos[safeIndex];
+  return (
+    <LightboxOverlay
+      label={current?.label ?? ""}
+      open={current != null}
+      total={total}
+      index={safeIndex}
+      onIndex={onIndex}
+      onClose={onClose}
+    >
+      {current && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={current.src}
+            alt={current.label}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "88vw",
+              maxHeight: "80vh",
+              objectFit: "contain",
+              borderRadius: "0.5rem",
+              cursor: "default",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+            }}
+          />
+          <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 500 }}>
+            {current.label}
+            {total > 1 && (
+              <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "0.5rem" }}>
+                {safeIndex + 1} / {total}
+              </span>
+            )}
+          </span>
+          {actions && (
+            <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: "0.5rem" }}>
+              {actions(safeIndex)}
+            </div>
+          )}
+        </>
+      )}
+    </LightboxOverlay>
+  );
+}
+
+/** One picture of a {@link CompareSlide}: a resolved source, or `null` with the words that say why
+ * the frame is empty — an empty frame is an answer, never a stand-in picture. */
+export interface ComparePanel {
+  key: string;
+  label: string;
+  src: string | null;
+  /** What an empty frame says. */
+  empty?: string;
+}
+
+/** Pictures looked at **together**: what is in hand beside what it is being called (#1920). */
+export interface CompareSlide {
+  key: string;
+  /** What the slide is, under the pictures. */
+  label: string;
+  panels: ComparePanel[];
+}
+
+/**
+ * The lightbox with several pictures **side by side** (#1920) — a tile beside the stamp it is being
+ * identified as, at the same size, so a wrong pairing shows at a glance. Prev/next and the arrow keys
+ * step from slide to slide exactly as the single-picture overlay steps from photo to photo; it is the
+ * same overlay, only with more than one picture on it.
+ */
+export function PhotoCompareLightbox({
+  slides,
+  index,
+  onIndex,
+  onClose,
+}: {
+  slides: CompareSlide[];
+  index: number;
+  onIndex: (index: number) => void;
+  onClose: () => void;
+}) {
+  const total = slides.length;
+  const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
+  const current = slides[safeIndex];
+  const across = Math.max(1, current?.panels.length ?? 1);
+  // Every panel gets the same box, so the designs are compared at one size.
+  const width = `min(${Math.floor(80 / across)}vw, 75vh)`;
+  return (
+    <LightboxOverlay
+      label={current?.label ?? ""}
+      open={current != null}
+      total={total}
+      index={safeIndex}
+      onIndex={onIndex}
+      onClose={onClose}
+    >
+      {current && (
+        <>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "flex", alignItems: "flex-start", gap: "1rem", cursor: "default" }}
+          >
+            {current.panels.map((panel) => (
+              <figure
+                key={panel.key}
+                style={{
+                  margin: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                }}
+              >
+                <span
+                  style={{
+                    width,
+                    height: width,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "0.5rem",
+                    border: panel.src ? "none" : "1px dashed rgba(255,255,255,0.35)",
+                    color: "rgba(255,255,255,0.7)",
+                    fontSize: "0.875rem",
+                    textAlign: "center",
+                    padding: panel.src ? 0 : "1rem",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {panel.src ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={panel.src}
+                      alt={panel.label}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        borderRadius: "0.5rem",
+                        boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+                      }}
+                    />
+                  ) : (
+                    panel.empty
+                  )}
+                </span>
+                <figcaption style={{ color: "#fff", fontSize: "0.8125rem" }}>{panel.label}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 500 }}>
+            {current.label}
+            {total > 1 && (
+              <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "0.5rem" }}>
+                {safeIndex + 1} / {total}
+              </span>
+            )}
+          </span>
+        </>
+      )}
+    </LightboxOverlay>
+  );
+}
+
+/** The overlay both lightboxes draw on: the backdrop, close, prev/next, the arrow keys and Escape.
+ *
+ * Rendered through a portal to `document.body` so it fills the viewport instead of being clipped
+ * by an ancestor that establishes a containing block (e.g. a transformed/`overflow:hidden` dialog
+ * shell), which would otherwise crop a plain `position: fixed` overlay. */
+function LightboxOverlay({
+  label,
+  open,
+  total,
+  index,
+  onIndex,
+  onClose,
+  children,
+}: {
+  label: string;
+  open: boolean;
+  total: number;
+  index: number;
+  onIndex: (index: number) => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
   const step = useCallback(
     (delta: number) => {
       if (total === 0) return;
-      onIndex((safeIndex + delta + total) % total);
+      onIndex((index + delta + total) % total);
     },
-    [safeIndex, total, onIndex]
+    [index, total, onIndex]
   );
 
   // The lightbox is a layer like any dialog: opened last, it is topmost, so the shared stack gives
   // it Escape and leaves the dialog it was opened from alone (#361).
   useEscapeLayer(onClose);
-  usePageScrollLock(current != null);
+  usePageScrollLock(open);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -186,14 +366,14 @@ export function PhotoLightbox({
     return () => document.removeEventListener("keydown", onKey, true);
   }, [step]);
 
-  if (typeof document === "undefined" || !current) return null;
+  if (typeof document === "undefined" || !open) return null;
 
   return createPortal(
     <div
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={current.label}
+      aria-label={label}
       style={{
         position: "fixed",
         inset: 0,
@@ -234,33 +414,7 @@ export function PhotoLightbox({
         </>
       )}
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={current.src}
-        alt={current.label}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: "88vw",
-          maxHeight: "80vh",
-          objectFit: "contain",
-          borderRadius: "0.5rem",
-          cursor: "default",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
-        }}
-      />
-      <span style={{ color: "#fff", fontSize: "0.875rem", fontWeight: 500 }}>
-        {current.label}
-        {total > 1 && (
-          <span style={{ color: "rgba(255,255,255,0.6)", marginLeft: "0.5rem" }}>
-            {safeIndex + 1} / {total}
-          </span>
-        )}
-      </span>
-      {actions && (
-        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: "0.5rem" }}>
-          {actions(safeIndex)}
-        </div>
-      )}
+      {children}
     </div>,
     document.body
   );
