@@ -852,6 +852,24 @@ become a copy is not one of them: its pictures belong to that copy now, and they
 copy's own screen. For a discarded tile, put it back in the queue first — the button is in the same
 dialog.
 
+#### Replacing or removing the back scan
+
+Uploaded the wrong file as the back? A batch with a back scan has **Replace back scan…** and
+**Remove back scan** beside **Re-cut**. Neither touches the front scan, its cut or its tiles.
+
+- **Remove back scan** takes the back off every tile it is on. Each tile keeps its front, whatever has
+  been decided about it — identified, parked or discarded — and its marks. Backs that were on no tile
+  go with the scan, together with anything marked on them alone.
+- **Replace back scan…** asks for the new file, then does the same and adds the new file as the back,
+  made the way the old one was. It is cut and paired with the fronts exactly as any back is; change
+  how the backs were made on the batch afterwards if that differed.
+
+A **copy already made from the card** loses the back picture this scan gave it — and only that one: a
+back you photographed on the copy yourself is kept. The confirmation names those copies before
+anything is done. Nothing else about them changes.
+
+The removed scan is **deleted permanently**, once you confirm.
+
 #### Re-cutting
 
 The scan itself is **kept**. If the cut was wrong — and a stockbook that has been broken up cannot

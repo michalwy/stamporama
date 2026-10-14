@@ -15,6 +15,7 @@ import {
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
+  removeBackScanAction,
   setBackTurnoverAction,
   setBatchKindAction,
   setBatchLabelAction,
@@ -376,6 +377,9 @@ export function ScansCard({
      * carries is the **sheet**, not the previous boxes: the boxes are what is being thrown away, so
      * this is the one re-cut that reopens on a fresh proposal. */
     | { kind: "sheetKind"; batchNo: number; to: SheetKind; sheet: ScanCutEditorSheet | null }
+    /** Taking the batch's back scan off it (#1915), or — with a file — replacing it: the removal
+     * and then the ordinary back upload, made the way the removed back was. */
+    | { kind: "removeBack"; batchNo: number; replaceWith: { file: File; turnover: BackTurnover } | null }
     | null
   >(null);
   /** The several-cards delete dialog (#1218), and what it was refused with — its own error rather
@@ -844,6 +848,26 @@ export function ScansCard({
           return;
         }
       }
+      if (target.kind === "removeBack") {
+        const removed = await removeBackScanAction(ownerRef, target.batchNo);
+        if (removed.status === "error") {
+          setError(removed.message);
+          return;
+        }
+        // A copy may have lost its back picture, and those rows are the lot's copies list.
+        refresh(true);
+        // Replacing is the removal and then the ordinary back upload: the new back is prepared, cut
+        // and paired exactly as one added to a batch that never had one.
+        if (target.replaceWith) {
+          upload(
+            [target.replaceWith.file],
+            "back",
+            target.batchNo,
+            target.replaceWith.turnover
+          );
+        }
+        return;
+      }
       const result =
         target.kind === "delete"
           ? await deleteBatchesAction(ownerRef, [target.batchNo])
@@ -1239,6 +1263,18 @@ export function ScansCard({
           onSetTurnover={(to) => changeTurnover(batch.batchNo, to)}
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
+          onRemoveBack={() =>
+            setConfirm({ kind: "removeBack", batchNo: batch.batchNo, replaceWith: null })
+          }
+          onReplaceBack={(file) =>
+            setConfirm({
+              kind: "removeBack",
+              batchNo: batch.batchNo,
+              // Made the way the back it replaces was: a second scan of the same card on the same
+              // scanner is the usual reason, and the select stays on the batch to change it after.
+              replaceWith: { file, turnover: batch.back?.turnover ?? lastBackTurnover },
+            })
+          }
           onRename={(label) => rename(batch.batchNo, label)}
           onSetKind={(kind) => changeKind(batch, kind)}
           onPair={pair}
@@ -1394,14 +1430,22 @@ export function ScansCard({
               ? `Cut this batch as ${confirm.to === "album" ? "an album page" : "a stockbook card"}?`
               : confirm.kind === "recut"
                 ? "Re-cut this batch?"
-                : "Delete this batch?"
+                : confirm.kind === "removeBack"
+                  ? confirm.replaceWith
+                    ? "Replace this batch's back scan?"
+                    : "Remove this batch's back scan?"
+                  : "Delete this batch?"
           }
           actionLabel={
             confirm.kind === "sheetKind"
               ? "Change and re-cut"
               : confirm.kind === "recut"
                 ? "Re-cut"
-                : "Delete"
+                : confirm.kind === "removeBack"
+                  ? confirm.replaceWith
+                    ? "Replace"
+                    : "Remove"
+                  : "Delete"
           }
           isPending={pending}
           message={
@@ -1439,6 +1483,11 @@ export function ScansCard({
                   </>
                 )}
               </>
+            ) : confirm.kind === "removeBack" ? (
+              <BackRemovalMessage
+                batch={batches.find((b) => b.batchNo === confirm.batchNo) ?? null}
+                replacing={confirm.replaceWith?.file.name ?? null}
+              />
             ) : (
               <DeletionMessage
                 batches={batches.filter((b) => b.batchNo === confirm.batchNo)}
@@ -1613,6 +1662,69 @@ function DeletionMessage({ batches }: { batches: ScanBatchData[] }) {
 }
 
 /**
+ * What removing — or replacing — a batch's back scan does, said before it is done (#1915).
+ *
+ * **The copies come first**, by name: they are the one thing outside the card that changes, and a
+ * picture taken off a copy is the part a collector could not guess from the batch line. Then what
+ * happens on the card — backs off their tiles, the fronts and everything known about them kept — and
+ * that the scan itself is deleted.
+ */
+function BackRemovalMessage({
+  batch,
+  replacing,
+}: {
+  batch: ScanBatchData | null;
+  /** The new file's name when this is a replacement, else null. */
+  replacing: string | null;
+}) {
+  const back = batch?.back ?? null;
+  const tiles = batch?.tiles ?? [];
+  const copies = back ? tiles.filter((t) => t.item?.backPhotoSheetId === back.id) : [];
+  const paired = tiles.filter((t) => t.frontBox != null && t.backBox != null).length;
+  const backOnly = tiles.filter((t) => t.frontBox == null).length;
+  return (
+    <>
+      {copies.length > 0 && (
+        <span style={{ display: "block", marginBottom: "0.5rem" }}>
+          <strong>
+            {copies.length === 1 ? "This copy loses" : `These ${copies.length} copies lose`} the
+            back picture this scan gave {copies.length === 1 ? "it" : "them"}:
+          </strong>{" "}
+          {copies
+            .map(
+              (t) =>
+                `copy ${formatItemNo(t.item!.itemNo)} (tile ${t.position + 1}` +
+                (t.item!.stampName ? `, ${t.item!.stampName})` : ")")
+            )
+            .join("; ")}
+          . Nothing else about {copies.length === 1 ? "it" : "them"} changes.
+        </span>
+      )}
+      {paired > 0
+        ? `${paired === 1 ? "The back comes off the tile it is on" : `The backs come off the ${paired} tiles they are on`}; each keeps its front, its identification and its marks. `
+        : "The front scan, its cut and its tiles stay as they are. "}
+      {backOnly > 0 && (
+        <>
+          <strong>
+            {backOnly} {backOnly === 1 ? "back" : "backs"} on no tile
+          </strong>{" "}
+          {backOnly === 1 ? "goes" : "go"} with the scan, with any mark given on{" "}
+          {backOnly === 1 ? "it" : "them"}.{" "}
+        </>
+      )}
+      The back scan is <strong>deleted permanently</strong>.
+      {replacing != null && (
+        <>
+          {" "}
+          <strong>{replacing}</strong> is then added as the back and cut, and its backs pair with the
+          fronts as any back does.
+        </>
+      )}
+    </>
+  );
+}
+
+/**
  * Delete several worked-through card scans in one decision (#1218).
  *
  * Offers only batches that are finished with — the same `doneAt` the *worked-through* count reads,
@@ -1781,6 +1893,8 @@ function BatchSection({
   onSetTurnover,
   onRecut,
   onDelete,
+  onRemoveBack,
+  onReplaceBack,
   onRename,
   onSetKind,
   onPair,
@@ -1831,6 +1945,10 @@ function BatchSection({
    * tiles while they still exist. Null when there is no front scan to reopen on. */
   onRecut: (reopen: EditorTarget | null) => void;
   onDelete: () => void;
+  /** Take the back scan off the batch (#1915); the parent confirms. */
+  onRemoveBack: () => void;
+  /** Replace the back scan with this file (#1915) — the removal, then the ordinary back upload. */
+  onReplaceBack: (file: File) => void;
   /** Name this card, or clear its name (#587). */
   onRename: (label: string) => void;
   /** Say what kind of card this is (#1195). On a batch already cut, the parent confirms and re-cuts;
@@ -2092,6 +2210,22 @@ function BatchSection({
           >
             <Icon name="refresh" size="sm" /> Re-cut
           </SmallButton>
+        )}
+        {/* **A wrong back is not stuck** (#1915). Beside Re-cut, since both correct the cut rather
+            than the pieces; neither touches the front, its cut or its tiles. Not while another back
+            of this batch is on its way, which would land on the batch the removal just emptied. */}
+        {open && batch.back && !backOnItsWay && (
+          <>
+            <UploadButton
+              label="Replace back scan…"
+              small
+              busy={busy}
+              onFiles={([file]) => onReplaceBack(file)}
+            />
+            <SmallButton onClick={onRemoveBack} disabled={busy}>
+              <Icon name="delete" size="sm" /> Remove back scan
+            </SmallButton>
+          </>
         )}
         {/* Greyed out rather than hidden when copies have been made from the card and a tile on
             it is still open (#1218), with the reason in the hint — a button that vanished would

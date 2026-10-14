@@ -84,6 +84,11 @@ and the same byte cleanup as any other. So `Photo` gains `tileId` beside `itemId
 This is also what makes #567 cheap: "the tile's images move onto the new copy" is a reassignment of
 one column, not a byte copy.
 
+*Amended by #1915:* ownership moves and provenance does not, so a crop also records the sheet it was
+cut from in `Photo.scanSheetId` (`SetNull` when the batch is deleted). Removing a batch's back scan
+takes exactly the pictures that name it, on tiles and on copies; a back the collector later gave the
+copy names no sheet and is never taken.
+
 ### 3. The **sheet** is not a `Photo`, and is retained
 
 The opposite call, for the opposite reason. A `Photo` is two *derivatives* of something and the

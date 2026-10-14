@@ -24,6 +24,7 @@ function item(
     forTrade: false,
     frontPhotoId: "p-front",
     backPhotoId: "p-back",
+    backPhotoSheetId: null,
     stampName: "Chopin",
     catalogNumbers: [
       { catalogVendorId: "v-mi", number: "200" },

@@ -3792,6 +3792,12 @@ model Photo {
   /** Fourth owner (#566): a scan tile, holding its front/back crop before any copy exists to hang
    * it on. #567 moves the images onto the new copy by reassigning this column to `itemId`. */
   tileId         String?
+  /** The card scan this picture was cut from (#1915) — a tile's front or back crop, and the same
+   * picture after it has moved onto a copy. Null on everything not cut from a scan, and once the
+   * scan's batch is deleted. Kept apart from `tileId` because ownership moves and provenance does
+   * not: it is what lets a removed back scan take exactly its own pictures off the copies, and never
+   * a back the collector photographed on the copy afterwards. */
+  scanSheetId    String?
   kind           String   @default("original")
   role           String?
   title          String?
@@ -3824,6 +3830,9 @@ model Photo {
   stamp Stamp? @relation(fields: [stampId], references: [id], onDelete: Cascade)
   offer Offer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
   tile  ScanTile? @relation(fields: [tileId], references: [id], onDelete: Cascade)
+  /** `SetNull`: deleting a batch leaves its copies' pictures exactly as they are (#1218), and only
+   * the record of where they were cut from goes with the scan. */
+  scanSheet ScanSheet? @relation(fields: [scanSheetId], references: [id], onDelete: SetNull)
   /** The photo plan entry this image occupies, when it is part of an offer's plan (#311). */
   offerPhotoEntry OfferPhotoEntry?
   /** Manual attachments (#313) that render *from* this image. A copy's scan can be attached to
@@ -3840,6 +3849,7 @@ model Photo {
   @@index([stampId])
   @@index([offerId])
   @@index([tileId])
+  @@index([scanSheetId])
   @@map("photo")
 }
 
@@ -4165,6 +4175,8 @@ model ScanSheet {
   scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: NoAction)
   frontTiles ScanTile[] @relation("ScanTileFrontSheet")
   backTiles  ScanTile[] @relation("ScanTileBackSheet")
+  /** Every picture cut from this sheet (#1915), on a tile or on the copy it became. */
+  photos     Photo[]
   /** The background preparation that made this sheet (#1567), while its row is kept. */
   upload     ScanUpload?
 
