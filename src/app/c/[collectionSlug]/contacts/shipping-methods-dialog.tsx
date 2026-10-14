@@ -15,6 +15,8 @@ import { RowActionsMenu } from "../shared/row-actions-menu";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
 import type { CarrierData } from "@/lib/carriers";
 import { getCarriersAction } from "@/app/actions/carriers";
+import type { PackingSupplyData } from "@/lib/packing-supplies";
+import { listPackingSuppliesAction } from "@/app/actions/packing-supplies";
 import {
   getShippingMethodsAction,
   createShippingMethodAction,
@@ -77,6 +79,12 @@ export interface ShippingMethodsDialogProps {
 
 type RowState = { kind: "none" } | { kind: "edit"; id: string } | { kind: "delete"; id: string };
 
+/** One row of the draft's usual supplies (#1899); the quantity is the field's text until saved. */
+interface DraftSupply {
+  supplyId: string;
+  quantity: string;
+}
+
 /** This dialog stacks above the contact form at `zIndexBase` 200, so its panel sits at 201 — the
  * row menus portal to `<body>` and have to be raised past it, or they open behind the panel. */
 const DIALOG_Z_INDEX_BASE = 200;
@@ -105,6 +113,9 @@ export function ShippingMethodsDialog({
   // The collection's carriers (#491) — what a method can name as the one that actually posts by it.
   // Loaded once beside the methods; the list is short and maintained in Settings, not here.
   const [carriers, setCarriers] = useState<CarrierData[]>([]);
+  // The collection's packing supplies (#1899) — what a method can list as a parcel's usual ones. A
+  // collection with none sees no supplies here at all, as on the order and sale screens.
+  const [packingSupplies, setPackingSupplies] = useState<PackingSupplyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [row, setRow] = useState<RowState>({ kind: "none" });
   // A row menu owns Escape while it is open (it is not an escape layer of its own), so the dialog
@@ -118,6 +129,7 @@ export function ShippingMethodsDialog({
   const [cost, setCost] = useState("");
   const [currency, setCurrency] = useState(defaultCurrency);
   const [carrierId, setCarrierId] = useState("");
+  const [supplies, setSupplies] = useState<DraftSupply[]>([]);
 
   async function reload() {
     const rows = await getShippingMethodsAction(platformId);
@@ -128,11 +140,16 @@ export function ShippingMethodsDialog({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getShippingMethodsAction(platformId), getCarriersAction(collectionId)])
-      .then(([rows, carrierRows]) => {
+    Promise.all([
+      getShippingMethodsAction(platformId),
+      getCarriersAction(collectionId),
+      listPackingSuppliesAction(collectionId),
+    ])
+      .then(([rows, carrierRows, supplyRows]) => {
         if (cancelled) return;
         setMethods(rows);
         setCarriers(carrierRows);
+        setPackingSupplies(supplyRows);
         onCountChange?.(rows.length);
       })
       .catch(() => {
@@ -155,6 +172,7 @@ export function ShippingMethodsDialog({
     setCost("");
     setCurrency(defaultCurrency);
     setCarrierId("");
+    setSupplies([]);
   }
 
   function startEdit(m: ShippingMethodData) {
@@ -163,6 +181,7 @@ export function ShippingMethodsDialog({
     setCost(m.cost);
     setCurrency(m.currency);
     setCarrierId(m.carrierId ?? "");
+    setSupplies(m.supplies.map((s) => ({ supplyId: s.supplyId, quantity: String(s.quantity) })));
     setRow({ kind: "edit", id: m.id });
   }
 
@@ -172,6 +191,13 @@ export function ShippingMethodsDialog({
     fd.set("cost", cost);
     fd.set("currency", currency);
     fd.set("carrierId", carrierId);
+    // Sent only where there is a list to edit, so a collection without supplies writes none.
+    if (packingSupplies.length > 0) {
+      fd.set(
+        "supplies",
+        JSON.stringify(supplies.map((s) => ({ supplyId: s.supplyId, quantity: Number(s.quantity.trim()) })))
+      );
+    }
     startTransition(async () => {
       const result = await action(fd);
       if (result.status === "error") {
@@ -210,6 +236,7 @@ export function ShippingMethodsDialog({
     carriers,
     disabled: isPending,
   };
+  const suppliesDraft = { supplies, setSupplies, packingSupplies, disabled: isPending };
   const carrierNameById = new Map(carriers.map((c) => [c.id, c.name]));
 
   return (
@@ -226,6 +253,7 @@ export function ShippingMethodsDialog({
           What buyers on this platform can choose from, and what sending by each costs you. Picking
           one on a sale fills in <strong>my shipping</strong> with the cost below — still editable
           there, since a method&apos;s price is what it usually costs, not what this parcel cost.
+          {packingSupplies.length > 0 && <> Its usual packing supplies are filled in the same way.</>}
         </p>
 
         {/* The header and the add form carry the list rows' own horizontal padding, or their
@@ -272,6 +300,7 @@ export function ShippingMethodsDialog({
                         <Icon name="close" size="sm" />
                       </IconButton>
                     </div>
+                    <SuppliesDraft idPrefix={`ship-edit-${m.id}`} {...suppliesDraft} />
                   </>
                 ) : row.kind === "delete" && row.id === m.id ? (
                   <>
@@ -338,6 +367,12 @@ export function ShippingMethodsDialog({
                       ]}
                     />
                     </div>
+                    {m.supplies.length > 0 && (
+                      <span style={{ gridColumn: "1 / -1", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                        Packed with{" "}
+                        {m.supplies.map((s) => `${s.name} × ${s.quantity}`).join(", ")}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
@@ -359,6 +394,7 @@ export function ShippingMethodsDialog({
                 +
               </IconButton>
             </div>
+            <SuppliesDraft idPrefix="ship-add" {...suppliesDraft} />
           </div>
         )}
 
@@ -460,6 +496,81 @@ function DraftFields({
         ))}
       </select>
     </>
+  );
+}
+
+/** A method's usual packing supplies (#1899), under its other fields in the editor and the add form:
+ * a supply and a quantity per row, each supply once. Nothing at all when the collection has no
+ * supplies. Module level for `DraftFields`' reason. */
+function SuppliesDraft({
+  idPrefix,
+  supplies,
+  setSupplies,
+  packingSupplies,
+  disabled,
+}: {
+  idPrefix: string;
+  supplies: DraftSupply[];
+  setSupplies: (next: DraftSupply[]) => void;
+  packingSupplies: PackingSupplyData[];
+  disabled: boolean;
+}) {
+  if (packingSupplies.length === 0) return null;
+  const listed = new Set(supplies.map((s) => s.supplyId));
+  const unlisted = packingSupplies.filter((p) => !listed.has(p.id));
+  const update = (i: number, patch: Partial<DraftSupply>) =>
+    setSupplies(supplies.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  return (
+    <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>Packed with</span>
+      {supplies.map((s, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+          <select
+            id={`${idPrefix}-supply-${i}`}
+            value={s.supplyId}
+            onChange={(e) => update(i, { supplyId: e.target.value })}
+            disabled={disabled}
+            aria-label="Packing supply"
+            style={{ ...INPUT_STYLE, width: "11rem", cursor: "pointer" }}
+          >
+            {packingSupplies
+              .filter((p) => p.id === s.supplyId || !listed.has(p.id))
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+          <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>×</span>
+          <TextInput
+            id={`${idPrefix}-supply-${i}-quantity`}
+            value={s.quantity}
+            onChange={(e) => update(i, { quantity: e.target.value })}
+            inputMode="numeric"
+            disabled={disabled}
+            aria-label="Quantity"
+            {...NO_AUTOFILL}
+            style={{ ...INPUT_STYLE, width: "3.5rem", textAlign: "right" }}
+          />
+          <IconButton
+            label="Remove supply"
+            disabled={disabled}
+            onClick={() => setSupplies(supplies.filter((_, j) => j !== i))}
+          >
+            <Icon name="close" size="sm" />
+          </IconButton>
+        </span>
+      ))}
+      {unlisted.length > 0 && (
+        <IconButton
+          label="Add packing supply"
+          disabled={disabled}
+          onClick={() => setSupplies([...supplies, { supplyId: unlisted[0].id, quantity: "1" }])}
+        >
+          + Supply
+        </IconButton>
+      )}
+    </div>
   );
 }
 

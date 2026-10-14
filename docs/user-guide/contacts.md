@@ -563,6 +563,14 @@ That is also why a method a sale points at can't be deleted — rename it instea
 name a **one-off** method without one being listed here, so the list is for what you actually post
 with regularly.
 
+**A method can list its usual packing supplies.** Once you have named supplies under
+**Settings → Packing supplies**, each row's editor (and the add form) shows **Packed with** and a
+**+ Supply** button: pick a supply and how many a parcel sent this way takes — *C6 envelope × 1,
+Transport card A6 × 2*. The row then reads *Packed with C6 envelope × 1, Transport card A6 × 2*.
+Choosing the method on a sale fills those in as the sale's
+[packing supplies](sales.md#packing-supplies), still editable there. Changing the list affects only
+sales whose method you choose afterwards; a method with none listed fills in nothing.
+
 ### Message to buyer
 
 A platform's **Message to buyer** is the template of what you send a buyer after a sale here — what

@@ -41,6 +41,7 @@ import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard
 import { settleSupplies } from "./supply-settlement";
 import {
   SALE_SUPPLY_COST_SELECT,
+  applyMethodSupplies,
   saleSupplyLineCostOf,
   saleSuppliesCostOf,
   type SaleSupplyCostRow,
@@ -550,9 +551,10 @@ export async function createSale(
     ? await resolveSaleShipping(collectionId, input.platformId, baseCurrency, input.shipping)
     : null;
   // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
-  // row it belongs to stand or fall together.
-  const sale = await prisma.$transaction(async (tx) =>
-    tx.sale.create({
+  // row it belongs to stand or fall together — and so does the method's usual packing supplies
+  // (#1899), filled in as the sale's supply lines.
+  const sale = await prisma.$transaction(async (tx) => {
+    const created = await tx.sale.create({
       data: {
         collectionId,
         saleNo: await allocateEntityNumber(tx, collectionId, "sale"),
@@ -572,8 +574,10 @@ export async function createSale(
         statusEvents: { create: { status: "ordered" } },
       },
       select: { id: true },
-    })
-  );
+    });
+    await applyMethodSupplies(tx, created.id, null, shipping?.shippingMethodId ?? null);
+    return created;
+  });
   return sale.id;
 }
 
@@ -679,27 +683,38 @@ export async function updateSaleHeader(
   const shipping = input.shipping
     ? await resolveSaleShipping(ref.collectionId, input.platformId, ref.baseCurrency, input.shipping)
     : null;
-  await prisma.sale.update({
-    where: { id: saleId },
-    data: {
-      platformId: input.platformId,
-      buyerId: input.buyerId,
-      externalRef: input.externalRef,
-      transactionUrl: input.transactionUrl,
-      soldAt: input.soldAt,
-      fxRateToBase,
-      buyerHandling: input.buyerHandling,
-      buyerPaidTotal: input.buyerPaidTotal,
-      commission: input.commission,
-      ...(shipping ?? {}),
-      // A method belongs to a platform's price list, so moving the sale to another platform drops
-      // it — the *name* stays, because that is a snapshot of how the parcel actually went and no
-      // change of platform makes it untrue. Only when the form did not submit shipping itself; when
-      // it did, the resolver above already validated the method against the new platform.
-      ...(shipping == null && input.platformId !== ref.platformId
-        ? { shippingMethodId: null }
-        : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      select: { shippingMethodId: true },
+    });
+    await tx.sale.update({
+      where: { id: saleId },
+      data: {
+        platformId: input.platformId,
+        buyerId: input.buyerId,
+        externalRef: input.externalRef,
+        transactionUrl: input.transactionUrl,
+        soldAt: input.soldAt,
+        fxRateToBase,
+        buyerHandling: input.buyerHandling,
+        buyerPaidTotal: input.buyerPaidTotal,
+        commission: input.commission,
+        ...(shipping ?? {}),
+        // A method belongs to a platform's price list, so moving the sale to another platform drops
+        // it — the *name* stays, because that is a snapshot of how the parcel actually went and no
+        // change of platform makes it untrue. Only when the form did not submit shipping itself; when
+        // it did, the resolver above already validated the method against the new platform.
+        ...(shipping == null && input.platformId !== ref.platformId
+          ? { shippingMethodId: null }
+          : {}),
+      },
+    });
+    // Only a method the form chose swaps the supply lines (#1899). The one dropped above with a change
+    // of platform was not chosen away: the parcel went as it went, and its supplies with it.
+    if (shipping) {
+      await applyMethodSupplies(tx, saleId, before.shippingMethodId, shipping.shippingMethodId);
+    }
   });
 }
 
@@ -778,7 +793,15 @@ export async function updateSaleShipping(
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
   const data = await resolveSaleShipping(ref.collectionId, ref.platformId, ref.baseCurrency, input);
-  await prisma.sale.update({ where: { id: saleId }, data });
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      select: { shippingMethodId: true },
+    });
+    await tx.sale.update({ where: { id: saleId }, data });
+    // A method chosen here fills in its usual supplies, swapping the old one's (#1899).
+    await applyMethodSupplies(tx, saleId, before.shippingMethodId, data.shippingMethodId);
+  });
 }
 
 /** Resolve the effective buyer handling (the number fed to net + allocation) from a sale's two

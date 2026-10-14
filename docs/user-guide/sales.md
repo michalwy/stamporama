@@ -162,6 +162,13 @@ net and the profit use that total.
   The **Packing supplies** screen says how many units sales are waiting for.
 - A unit from a batch bought in another currency with **no rate** into your base currency is
   counted the same way — no cost yet, the total incomplete — until the purchase has a rate.
+- **A shipping method can fill them in.** When the platform's
+  [shipping method](contacts.md#shipping-methods) lists its usual supplies, choosing it — when you
+  record the sale, on the **Postage** row or in **Edit header** — adds those lines, taken from stock
+  like any other; adjust them for this parcel as you need. **Changing the method** swaps the lines
+  that are still exactly the old method's for the new method's, and keeps any line you changed or
+  added yourself (a line you raised to *5 cards* stays, and the new method's cards are not added
+  beside it). Saving the same method again brings back nothing you removed.
 - **A sale recorded before supplies existed keeps its typed amount** as its whole shipping, and its
   row still reads **− My shipping**. Add supply lines to it only if you want to restate it as
   postage plus supplies — then lower the typed amount to the postage alone.
