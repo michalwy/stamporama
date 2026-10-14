@@ -4,7 +4,7 @@
 
 Accepted. Decided with the collector on 2026-10-13 and built by #1897, the foundation of a track:
 #1898 takes supplies onto a sale's shipping cost, #1899 gives a shipping method its default supplies,
-#1900 takes supplies out of stock without a sale. Amends [ADR-0009](0009-purchase-record-model.md) §1
+#1900 takes supplies out of stock without a sale (§9). Amends [ADR-0009](0009-purchase-record-model.md) §1
 and §3 with a third kind of purchase line.
 
 ## Context
@@ -150,6 +150,37 @@ transport cards — so a platform's shipping method can list them, with quantiti
 - Both references cascade: the list goes with its method, and a supply that may be deleted at all
   (§6) leaves the lists it was on.
 
+### 9. Supplies can leave stock without a sale (#1900)
+
+Added 2026-10-14 by #1900. The collector decided on 2026-10-13 that **supplies can be taken out of
+stock without a sale** — transport cards also hold stamps in the collector's own storage, and stock
+would otherwise drift above what is really on hand. The rest was decided in writing the issue and
+implemented as written, with one gap settled with the collector on 2026-10-14 (last bullet). Its
+migration's comment calls this §8: #1899's section took that number while the two were in flight.
+
+- **`SupplyOwnUse`** is a quantity of one supply, the day it was used and an optional note
+  (*storage*), recorded with *Use…* on the Supplies screen. **`SupplyOwnUseTake`** is
+  `SaleSupplyUse`'s twin: the units it took from each batch. A table pair of its own rather than a
+  sale-less `SaleSupplyLine`, because a sale line's whole meaning — its sale, *my shipping* — is
+  what this one does not have.
+- **It leaves stock under §7's rule.** `settleSupplies` hands `settleSupplyUses` the sale lines and
+  the own uses as one list of lines, each keyed by its kind, dated by the sale's date or the use's;
+  the rule itself did not change. So an own use takes FIFO, gives back its newest batches' units
+  when lowered, and a deleted use's units cover a sale still short of them.
+- **Its cost is charged to no sale and no copy.** It is its units at their batches' unit costs,
+  derived as a sale's are. The Supplies screen lists it in the supply's history beside the sales
+  that used the supply, and states the total used outside sales **by month or year** as a cost of
+  its own (`src/lib/supply-own-use-rules.ts`). It is not on the profit-and-loss screen.
+- **Using more than is on hand is refused** — unlike a sale, nothing waits on it. The use is
+  written and settled in one transaction and rolled back if the rule left it short.
+- **A batch lowered or deleted later can still leave a use short**, exactly as it can a sale — the
+  collector's call on 2026-10-14, rather than refusing the purchase's correction. The use is then
+  uncosted for those units and marked incomplete until a purchase covers it. Only a write that
+  leaves the use **shorter than it was** is refused, so a short use's note, date or a lower quantity
+  can still be corrected, and it can always be deleted.
+- A supply with an own use cannot be deleted (`NO ACTION`, checked first in `deletePackingSupply`);
+  the collection cascades to its uses.
+
 ## Consequences
 
 - Every reader of an order's money (`getPurchaseDetail`, `closeLot`, the copy estimates, the contact
@@ -157,3 +188,5 @@ transport cards — so a platform's shipping method can list them, with quantiti
 - The agent API's purchase totals include supply lines; it has no operations over them yet.
 - #1898 adds the use of supplies (§7): the Supplies screen's quantity on hand is what the batches hold
   after the uses recorded against them, and it says how many units sales are short of.
+- #1900 adds uses without a sale (§9): the quantity on hand also subtracts them, and the screen lists
+  every use of a supply and costs the ones outside sales by period.

@@ -1257,7 +1257,8 @@ supplies** as a [list beside the selected supply's detail](#pages-with-a-list). 
 comes from the purchases you buy it on, as [packing-supply lines](purchases.md#packing-supplies).
 A supply nobody has bought yet says *never bought* on its row.
 
-A supply that has been bought can't be deleted — its order lines are its stock. What you have on
+A supply that has been bought can't be deleted — its order lines are its stock — and neither can one
+used on a sale or [outside sales](purchases.md#using-supplies-outside-sales). What you have on
 hand, and what it is worth, is on the [Packing supplies](purchases.md#the-packing-supplies-screen)
 screen under Selling.
 

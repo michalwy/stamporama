@@ -24,10 +24,16 @@ import {
   deleteSaleSupplyLine,
   type SaleSupplyLineInput,
 } from "@/lib/sale-supplies";
+import {
+  createSupplyOwnUse,
+  updateSupplyOwnUse,
+  deleteSupplyOwnUse,
+  type SupplyOwnUseInput,
+} from "@/lib/supply-own-uses";
 
 // Server actions for packing supplies (#1897): the Settings dictionary, the supply lines of a
-// purchase order, and those of a sale (#1898). Thin wrappers over `packing-supplies.ts` and
-// `sale-supplies.ts`, which hold every rule.
+// purchase order, those of a sale (#1898), and uses without a sale (#1900). Thin wrappers over
+// `packing-supplies.ts`, `sale-supplies.ts` and `supply-own-uses.ts`, which hold every rule.
 
 export type PackingSupplyActionState =
   | { status: "idle" }
@@ -112,9 +118,13 @@ export async function deletePackingSupplyAction(
             ? `This supply was bought on ${e.lineCount} order line${
                 e.lineCount === 1 ? "" : "s"
               } and cannot be deleted — those lines are its stock.`
-            : `This supply was used on ${e.saleLineCount} sale line${
-                e.saleLineCount === 1 ? "" : "s"
-              } and cannot be deleted — it is part of those sales' shipping cost.`,
+            : e.saleLineCount > 0
+              ? `This supply was used on ${e.saleLineCount} sale line${
+                  e.saleLineCount === 1 ? "" : "s"
+                } and cannot be deleted — it is part of those sales' shipping cost.`
+              : `This supply was used outside sales ${e.ownUseCount} time${
+                  e.ownUseCount === 1 ? "" : "s"
+                } and cannot be deleted — delete those uses on the Supplies screen first.`,
       };
     }
     return failure(e, "Failed to delete the packing supply. Please try again.");
@@ -233,5 +243,61 @@ export async function deleteSaleSupplyLineAction(
     return { status: "success" };
   } catch (e) {
     return failure(e, "Failed to remove the packing supplies. Please try again.");
+  }
+}
+
+// ── Uses without a sale (#1900) ──────────────────────────────────────────────────────────────
+
+/** A use's supply, quantity, date and note from its dialog — no price: its cost comes from stock. */
+function parseOwnUse(formData: FormData): SupplyOwnUseInput | string {
+  const supplyId = str(formData, "supplyId");
+  if (!supplyId) return "Choose a packing supply.";
+  const quantityRaw = str(formData, "quantity");
+  const quantity = Number(quantityRaw);
+  if (!quantityRaw || !Number.isInteger(quantity) || quantity < 1) {
+    return "Enter how many units were used — a whole number of at least 1.";
+  }
+  const usedOn = str(formData, "usedOn");
+  if (!usedOn) return "Enter the date they were used.";
+  return { supplyId, quantity, usedOn, note: str(formData, "note") || null };
+}
+
+export async function createSupplyOwnUseAction(
+  collectionId: string,
+  formData: FormData
+): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  const input = parseOwnUse(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    const id = await createSupplyOwnUse(session.user.id, collectionId, input);
+    return { status: "success", id };
+  } catch (e) {
+    return failure(e, "Failed to record the use. Please try again.");
+  }
+}
+
+export async function updateSupplyOwnUseAction(
+  useId: string,
+  formData: FormData
+): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  const input = parseOwnUse(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    await updateSupplyOwnUse(session.user.id, useId, input);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "Failed to update the use. Please try again.");
+  }
+}
+
+export async function deleteSupplyOwnUseAction(useId: string): Promise<PackingSupplyActionState> {
+  const session = await getSession();
+  try {
+    await deleteSupplyOwnUse(session.user.id, useId);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "Failed to delete the use. Please try again.");
   }
 }

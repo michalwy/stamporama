@@ -105,10 +105,12 @@ export function supplyStock(
 /** A batch as settling needs it: what it holds and where it stands in FIFO order. */
 export type SettleBatch = Pick<SupplyBatch, "id" | "boughtOn" | "createdAt" | "quantity">;
 
-/** A line that uses the supply — a sale's supply line — and how many units it used. */
+/** A line that uses the supply — a sale's supply line, or a use without a sale (#1900) — and how
+ * many units it used. */
 export interface SettleLine {
   id: string;
-  /** The day the units were used (yyyy-mm-dd) — the sale's date. What "first" means for a shortfall. */
+  /** The day the units were used (yyyy-mm-dd) — the sale's date, or the use's. What "first" means
+   * for a shortfall. */
   usedOn: string;
   /** When the line was written (ISO): the tie-breaker between two lines of one day. */
   createdAt: string;
@@ -116,7 +118,7 @@ export interface SettleLine {
   quantity: number;
 }
 
-/** Units a line took from one batch — a `SaleSupplyUse` row. */
+/** Units a line took from one batch — a `SaleSupplyUse` or `SupplyOwnUseTake` row. */
 export interface SupplyTake {
   lineId: string;
   batchId: string;
