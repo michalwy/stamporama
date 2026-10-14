@@ -10,6 +10,11 @@ import {
 } from "react";
 
 import { baseBtn } from "@/app/button-style";
+import {
+  DIALOG_FOOTER_ACTIONS,
+  DIALOG_FOOTER_LEADING,
+  DIALOG_FOOTER_ROW,
+} from "@/app/dialog-footer-style";
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
 import { usePageScrollLock } from "@/app/page-scroll-lock";
@@ -284,6 +289,10 @@ export function DialogBody({ children }: { children: ReactNode }) {
  * dialog's edge and was cut off at exactly the moment its sentence was the one worth reading. Every
  * dialog that reports a failure passes it here (or through `DialogActions`), so they all show it
  * the same way.
+ *
+ * The buttons fit on one line or wrap onto the next, never one over another (#1908,
+ * `dialog-footer-style.ts`). A line of text set before them spreads `DIALOG_FOOTER_LEADING`, so it
+ * wraps beside the buttons rather than taking a line of its own.
  */
 export function DialogFooter({ children, error }: { children: ReactNode; error?: ReactNode }) {
   return (
@@ -295,16 +304,7 @@ export function DialogFooter({ children, error }: { children: ReactNode; error?:
       }}
     >
       {error ? <DialogError style={{ marginBottom: "0.75rem" }}>{error}</DialogError> : null}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          gap: "0.75rem",
-        }}
-      >
-        {children}
-      </div>
+      <div style={DIALOG_FOOTER_ROW}>{children}</div>
     </div>
   );
 }
@@ -465,18 +465,12 @@ export function DialogActions({
     <DialogFooter error={error}>
       {leading != null && (
         <div
-          style={{
-            marginRight: "auto",
-            minWidth: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-          }}
+          style={{ ...DIALOG_FOOTER_LEADING, display: "flex", alignItems: "center", gap: "0.5rem" }}
         >
           {leading}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <div style={DIALOG_FOOTER_ACTIONS}>
         <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
           {cancelLabel}
         </DialogSecondaryButton>

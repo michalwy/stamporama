@@ -39,6 +39,10 @@ interface UnpackedCopiesDialogProps {
  * flag moves — which is why it is the cancel rather than a third button competing with the other
  * two. Nothing is asked when every copy is already packed: that path is #192's hint and must never
  * gain a dialog.
+ *
+ * **Wide enough for its three buttons on one line** (#1908), the longest target included — *Move to
+ * Delivered anyway*, *Do nothing*, *Mark all packed and move to Delivered*. At 30rem they did not
+ * fit, and the first was drawn over the second.
  */
 export function UnpackedCopiesDialog({
   unpackedCount,
@@ -51,7 +55,7 @@ export function UnpackedCopiesDialog({
 }: UnpackedCopiesDialogProps) {
   const copies = unpackedCount === 1 ? "copy is" : "copies are";
   return (
-    <DialogShell title={`Move to ${targetLabel}?`} onClose={onClose} maxWidth="30rem">
+    <DialogShell title={`Move to ${targetLabel}?`} onClose={onClose} maxWidth="44rem">
       <DialogBody>
         <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
           <strong>
