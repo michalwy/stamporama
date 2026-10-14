@@ -16,12 +16,14 @@ import {
   deletePurchaseExpense,
   updatePurchaseExpense,
 } from "../../purchase-expenses";
+import { createPurchaseSupplyLine } from "../../packing-supplies";
 import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
 import {
   optionalBoolean,
   optionalInteger,
   optionalString,
+  requiredInteger,
   requiredString,
   stringList,
 } from "../params";
@@ -37,6 +39,7 @@ import {
   MAX_SELLER_SUGGESTIONS,
 } from "../purchase-reads";
 import { readCollectionVocabulary } from "./vocabulary";
+import { resolveSupplyParam } from "./shipping";
 import { normalizeMarketCode } from "../../market-anchoring";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type {
@@ -44,6 +47,7 @@ import type {
   AgentPurchaseExpense,
   AgentPurchaseLot,
   AgentPurchaseRow,
+  AgentPurchaseSupplyLine,
   AgentSeller,
   AgentSpend,
   SellerCandidate,
@@ -59,7 +63,10 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // **The purchase itself and nothing past it**: the header, empty lots, and the non-inventory
 // expenses — plus the one thing outside a purchase the collector allowed, **creating its seller**
 // when the address book has nobody by that name yet. Everything written here can be seen and undone
-// on the purchase's own screen.
+// on the purchase's own screen. Since #1910 an order's **packing-supply lines** are added here too
+// (`add_purchase_supply_line`): a batch of envelopes is bought on an order as a lot is, and the
+// same rules hold for it — not on the incoming half of a trade, not on an opening balance (the
+// collector's call on #1910, 2026-10-14), and never corrected or removed through this surface.
 //
 // **No copies, and nothing irreversible.** No operation identifies, adds, moves or removes a copy;
 // none closes or reopens a lot (closing freezes the cost basis onto the copies, ADR-0009 §3.5), marks
@@ -290,7 +297,7 @@ export const getPurchaseOperation: Operation = {
   method: "GET",
   path: "/purchases/{purchaseId}",
   description:
-    "One purchase in full: who it was bought from and through, when, in what currency, its shipping, its lots and its expenses, and what it all cost.",
+    "One purchase in full: who it was bought from and through, when, in what currency, its shipping, its lots, its expenses and its packing-supply lines, and what it all cost.",
   writes: false,
   parameters: [PURCHASE_ID_PARAMETER],
   result: {
@@ -1037,4 +1044,74 @@ export const removePurchaseExpenseOperation: Operation = {
     description: "How many expenses were removed — one — and what the whole order now costs.",
   },
   handler: async (context, params) => removeExpense(context, params),
+};
+
+// ── Packing-supply lines (#1910) ─────────────────────────────────────────────
+
+/** A supply line added answers with it and what the whole order now costs — the order's shipping is
+ * spread over it too, so every other line's share moved. */
+export interface AgentSupplyLineChange {
+  readonly supplyLine: AgentPurchaseSupplyLine;
+  readonly purchaseSpend: AgentSpend;
+}
+
+export async function addSupplyLine(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentSupplyLineChange> {
+  const purchaseId = requiredString(params, "purchaseId");
+  const ref = await assertPurchase(context, purchaseId);
+  assertEditable(ref, "adding packing supplies");
+  const supplyId = await resolveSupplyParam(context, requiredString(params, "supply"));
+  const quantity = requiredInteger(params, "quantity");
+  if (quantity < 1) {
+    throw invalidRequest('"quantity" must be a whole number of at least 1 — a box of 100 envelopes is 100.');
+  }
+  const lineId = await createPurchaseSupplyLine(context.ownerId, purchaseId, {
+    supplyId,
+    quantity,
+    price: parseAmount(requiredString(params, "price"), "price"),
+  });
+  const purchase = await loadPurchase(context, purchaseId, ref);
+  const supplyLine = purchase.supplyLines.find((line) => line.lineId === lineId);
+  if (!supplyLine) throw new Error(`Supply line ${lineId} is not on purchase ${purchaseId}.`);
+  return { supplyLine, purchaseSpend: purchase.spend };
+}
+
+export const addPurchaseSupplyLineOperation: Operation = {
+  name: "add_purchase_supply_line",
+  method: "POST",
+  path: "/purchases/{purchaseId}/supply-lines",
+  description:
+    "Add packing supplies bought on a purchase — a box of envelopes, a pack of transport cards. The line is a batch in the supply's stock, costed at its price plus its share of the order's shipping, and it covers first any units sales were short of. Create the supply first with `create_packing_supply` if `list_packing_supplies` does not have it.",
+  writes: true,
+  parameters: [
+    PURCHASE_ID_PARAMETER,
+    {
+      name: "supply",
+      in: "body",
+      type: "string",
+      required: true,
+      description: "The packing supply — its name from `list_packing_supplies`, or its id.",
+    },
+    {
+      name: "quantity",
+      in: "body",
+      type: "integer",
+      required: true,
+      description: "How many units the line bought: a box of 100 envelopes is 100.",
+    },
+    {
+      name: "price",
+      in: "body",
+      type: "string",
+      required: true,
+      description: "What the line cost, in the purchase's currency, as \"24.90\". The shipping is spread over it separately.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description: "The new line with its unit cost, and what the whole order now costs.",
+  },
+  handler: async (context, params) => addSupplyLine(context, params),
 };

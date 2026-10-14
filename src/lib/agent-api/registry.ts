@@ -17,7 +17,9 @@
 // sixty-eight; #1539 added the six area operations, five of which write, taking it to
 // seventy-four; #1627 added the five auction writes, taking it to seventy-nine; #1628 added
 // `record_auction_lot_outcome`, taking it to eighty; #1635 added the four price-observation
-// operations, three of which write, taking it to **eighty-four**. Each one is an entry here
+// operations, three of which write, taking it to eighty-four; #1651 added `set_copy_stamp`, taking it
+// to eighty-five; #1910 added the fifteen shipping and packing operations, eleven of which write,
+// taking it to **one hundred**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -37,7 +39,10 @@
 // is entered: the lot, its corrections, its contents, its ceiling, and its sale's terms — then the realised prices
 // read off other people's auctions (#1635), in the order a results page is entered: what is already recorded, the
 // page, a correction, a deletion — then purchases (#1390), in the order an order confirmation
-// is entered: is it already here, who sold it, the purchase, its lots, its expenses — then the
+// is entered: is it already here, who sold it, the purchase, its lots, its expenses, its packing
+// supplies (#1910) — then the shipping and packing data (#1910), in the order it is set up: the
+// carriers and their rate lists, the platforms' options that link to them, the supplies with their
+// stock and history, and the uses without a sale — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
 // their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
 // catalogue prices (#1540), in the order a page of them is entered: the editions, what the tree
@@ -122,6 +127,7 @@ import {
 import {
   addPurchaseExpenseOperation,
   addPurchaseLotOperation,
+  addPurchaseSupplyLineOperation,
   createPurchaseOperation,
   createSellerOperation,
   getPurchaseOperation,
@@ -181,6 +187,22 @@ import {
   updateAreaOperation,
 } from "./operations/areas";
 import { setCopyStampOperation } from "./operations/copies";
+import {
+  addCarrierServiceOperation,
+  createCarrierOperation,
+  createPackingSupplyOperation,
+  createShippingOptionOperation,
+  getPackingSupplyHistoryOperation,
+  listCarriersOperation,
+  listPackingSuppliesOperation,
+  listShippingOptionsOperation,
+  recordSupplyUseOperation,
+  updateCarrierOperation,
+  updateCarrierServiceOperation,
+  updatePackingSupplyOperation,
+  updateShippingOptionOperation,
+  updateSupplyUseOperation,
+} from "./operations/shipping";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -237,6 +259,21 @@ export const OPERATIONS: readonly Operation[] = [
   addPurchaseExpenseOperation,
   updatePurchaseExpenseOperation,
   removePurchaseExpenseOperation,
+  addPurchaseSupplyLineOperation,
+  listCarriersOperation,
+  createCarrierOperation,
+  updateCarrierOperation,
+  addCarrierServiceOperation,
+  updateCarrierServiceOperation,
+  listShippingOptionsOperation,
+  createShippingOptionOperation,
+  updateShippingOptionOperation,
+  listPackingSuppliesOperation,
+  getPackingSupplyHistoryOperation,
+  createPackingSupplyOperation,
+  updatePackingSupplyOperation,
+  recordSupplyUseOperation,
+  updateSupplyUseOperation,
   createIssueOperation,
   addIssueStampsOperation,
   addStampVariantsOperation,

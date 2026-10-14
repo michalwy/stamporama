@@ -146,6 +146,9 @@ auction invoice, a seller's email — so you do not retype it. It can:
   a lot that is still empty**;
 - **add, change and remove expenses** — the things bought with the stamps that are not stock, like a
   magnifier or a catalogue;
+- **add packing supplies bought on the order** — a box of 100 envelopes at its price — which become a
+  batch of that supply's stock, as on the purchase screen. It cannot change or remove a supply line
+  once added; that stays on the purchase screen;
 - **add the seller to your Contacts** when you have never bought from them. It always looks for them
   first, by the name they are filed under or their full name, and uses the contact you already have.
   If the name is close to somebody you already know — *Kowalsky* when you have a *Kowalski* — it is
@@ -160,6 +163,33 @@ mark an order in transit or arrived, or delete a purchase, and it will not remov
 holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
 changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
+
+On **shipping and packing**, it can set up the data you would otherwise type in yourself under
+[Settings → Carriers](collections.md#carriers), on a platform's shipping options and under
+[Settings → Packing supplies](collections.md#packing-supplies). It can:
+
+- **read your carriers and their rate lists** — each service, what sending by it costs you, and the
+  packing supplies a parcel sent that way usually takes — **each platform's shipping options** with
+  what the buyer pays and the service each is sent by, and **your packing supplies** with what is on
+  hand, what it is worth and the batches it came in, and each supply's history: the sales that packed
+  with it and what you used outside sales. A **read only** token can do this much;
+- **add a carrier and correct one** — its name and the address its parcels are tracked at, with
+  `{code}` where the tracking number goes, exactly as Settings asks for it;
+- **add a service to a carrier's rate list and correct one** — its name, its cost, its currency and
+  its usual packing supplies, each with how many a parcel takes;
+- **add a shipping option to a platform and correct one** — its name, what the buyer pays, its
+  currency and the carrier service it is sent by, or none;
+- **add a packing supply and rename one**;
+- **record supplies you took out of stock outside a sale** — transport cards kept for storage — and
+  **correct** such a use. As on the [Packing supplies screen](purchases.md#using-supplies-outside-sales),
+  it cannot take more than you have on hand.
+
+The rules are the screens'. A name already used — a carrier or a supply in your collection, a
+service on its carrier, an option on its platform — is refused, and the assistant is told which one
+has it. Changing a rate or a buyer price never changes a sale you already recorded.
+
+**It cannot delete anything here** — no carrier, service, shipping option, packing supply or use —
+and it never touches a sale's own packing supplies. Those stay on their screens.
 
 On **what a copy is**, it can say which stamp one of your copies is — or, when that cannot be told
 from the piece, which stamps it **might** be: *Mi 123aI or 123bI* when the type is clear and the

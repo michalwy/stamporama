@@ -334,6 +334,19 @@ export interface AgentPurchaseExpense {
   readonly price: string;
 }
 
+/** A packing-supply line of the order (#1897) — a batch in its supply's stock. */
+export interface AgentPurchaseSupplyLine {
+  readonly lineId: string;
+  readonly supplyId: string;
+  readonly supply: string;
+  readonly quantity: number;
+  /** The line's price in the purchase's currency, before its share of the shipping. */
+  readonly price: string;
+  /** One unit's cost — price plus shipping share, divided by the quantity — in the purchase's
+   *  currency, to 4 places. */
+  readonly unitCost: string;
+}
+
 /** One purchase in full. */
 export interface AgentPurchase {
   readonly purchaseId: string;
@@ -354,6 +367,8 @@ export interface AgentPurchase {
   readonly spend: AgentSpend;
   readonly lots: readonly AgentPurchaseLot[];
   readonly expenses: readonly AgentPurchaseExpense[];
+  /** Its packing-supply lines (#1910); written with `add_purchase_supply_line`. */
+  readonly supplyLines: readonly AgentPurchaseSupplyLine[];
   readonly path: string;
 }
 
@@ -380,6 +395,15 @@ export interface PurchaseDetailRow {
   readonly spend: SpendRow;
   readonly lots: readonly PurchaseLotRow[];
   readonly expenses: readonly { id: string; label: string; price: string }[];
+  /** The order's packing-supply lines (#1897); absent reads as none. */
+  readonly supplyLines?: readonly {
+    id: string;
+    supplyId: string;
+    supplyName: string;
+    quantity: number;
+    price: string;
+    unitCost: string;
+  }[];
   readonly auctionSale: { name: string } | null;
   readonly trade: unknown | null;
 }
@@ -426,6 +450,14 @@ export function purchase(
       expenseId: expense.id,
       label: expense.label,
       price: expense.price,
+    })),
+    supplyLines: (row.supplyLines ?? []).map((line) => ({
+      lineId: line.id,
+      supplyId: line.supplyId,
+      supply: line.supplyName,
+      quantity: line.quantity,
+      price: line.price,
+      unitCost: line.unitCost,
     })),
     path: extra.path,
   });

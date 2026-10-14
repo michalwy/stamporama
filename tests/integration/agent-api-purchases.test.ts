@@ -407,6 +407,7 @@ describe("the purchase operations (#1390)", () => {
         ["POST", `/purchases/${purchaseId}/expenses`, { label: "x", price: "1.00" }],
         ["PATCH", `/purchase-expenses/${expenseId}`, { price: "1.00" }],
         ["DELETE", `/purchase-expenses/${expenseId}`, undefined],
+        ["POST", `/purchases/${purchaseId}/supply-lines`, { supply: "C6 envelope", quantity: 1, price: "1.00" }],
       ];
       // Every writing purchase operation is on that list — a new one cannot be added and forgotten.
       const writing = OPERATIONS.filter(
@@ -539,6 +540,7 @@ describe("the purchase operations (#1390)", () => {
         "POST /purchases create_purchase",
         "POST /purchases/{purchaseId}/expenses add_purchase_expense",
         "POST /purchases/{purchaseId}/lots add_purchase_lot",
+        "POST /purchases/{purchaseId}/supply-lines add_purchase_supply_line",
         "POST /sellers create_seller",
       ]);
       const forbidden = new Set(["close", "reopen", "arrive", "arrived", "delete", "copy", "copies", "contact", "status"]);
