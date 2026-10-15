@@ -6,6 +6,7 @@ import {
   batchLabelsForFiles,
   isBatchLabelTooLong,
   normalizeBatchLabel,
+  scanTileNumber,
 } from "../../src/lib/scan-batch-label";
 
 // A scan batch's optional name (#587). The rule lives in a pure module because both halves read it
@@ -85,5 +86,12 @@ describe("scan batch labels for several files at once (#1568)", () => {
     for (const label of labels) assert.ok(!isBatchLabelTooLong(label));
     assert.equal(labels[0], `${"x".repeat(MAX_BATCH_LABEL_LENGTH - 2)} 1`);
     assert.equal(labels[11], `${"x".repeat(MAX_BATCH_LABEL_LENGTH - 3)} 12`);
+  });
+});
+
+describe("scanTileNumber (#1924)", () => {
+  it("counts from one, as every `Tile N` on the strip and in the dialogs does", () => {
+    assert.equal(scanTileNumber(0), 1);
+    assert.equal(scanTileNumber(25), 26);
   });
 });

@@ -46,6 +46,8 @@ import type {
   SheetKind,
 } from "@/lib/scan-sheets";
 import { tileSideViews } from "@/lib/scan-tile-view";
+import { scrollIntoView } from "./motion";
+import { TILE_ARRIVAL_PARAM, tileArrival } from "./tile-arrival";
 import {
   TILE_FILTER_PARAM,
   effectiveTileFilter,
@@ -112,6 +114,10 @@ import {
   useMarkDictionaries,
   useMarkTypeahead,
 } from "./tile-mark-picker";
+
+/** How long an arrived tile's square stays marked (#1924) — the order screen's figure for an arrived
+ * lot card, a little past the 2s flash itself. */
+const ARRIVAL_FLASH_MS = 2400;
 
 /**
  * An order's card scans (#566, ADR-0033) and the tiles cut from them (#567).
@@ -422,6 +428,63 @@ export function ScansCard({
   const doneCount = batches.filter((b) => b.doneAt != null).length;
   const showDone = scansUi.showDone;
   const setShowDone = (next: boolean) => patchScansUi({ showDone: next });
+
+  /**
+   * The tile a copy's scan marker asked for (#1924) — `?tile=<id>`, answered the way `?lot=` is
+   * (#876): revealed, scrolled to, flashed once, and the param consumed. What reveals it, and why
+   * those are the collector's own choices rather than a view held for the visit, is
+   * `tile-arrival.ts`.
+   *
+   * The section loads its batches only while open, so opening it is the first step, and the rest
+   * waits for the batches to be there. A tile this order does not hold answers nothing and leaves the
+   * param where it is.
+   */
+  const requestedTileId = searchParams.get(TILE_ARRIVAL_PARAM);
+  /** The tile whose square is flashing — set when the param is answered, released after the flash. */
+  const [arrivedTileId, setArrivedTileId] = useState<string | null>(null);
+  useEffect(() => {
+    if (requestedTileId && !open) patchScansUi({ open: true });
+  }, [requestedTileId, open, patchScansUi]);
+  const answerArrival = () => {
+    const found = tileArrival(requestedTileId, batches, {
+      filter,
+      showDone,
+      isExpanded: expansion.isExpanded,
+    });
+    if (!found) return;
+    const patch: Partial<typeof scansUi> = {};
+    if (found.clearFilter) patch.filter = "all";
+    if (found.showDone) patch.showDone = true;
+    if (found.expand) patch.batches = { ...scansUi.batches, [String(found.batchNo)]: true };
+    if (Object.keys(patch).length > 0) patchScansUi(patch);
+    // One write to the address bar for both halves: the arrival is spent, and a chip lifted to show
+    // the tile leaves with it — two `replace`s from one render would each start from the same stale
+    // parameters and the second would put back what the first removed.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(TILE_ARRIVAL_PARAM);
+    if (found.clearFilter) params.delete(TILE_FILTER_PARAM);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    setArrivedTileId(found.tileId);
+  };
+  const answerArrivalRef = useRef(answerArrival);
+  useEffect(() => {
+    answerArrivalRef.current = answerArrival;
+  });
+  useEffect(() => {
+    if (requestedTileId && data) answerArrivalRef.current();
+  }, [requestedTileId, data]);
+  // Bring the square into view once it is drawn, then release the flash. `block: "center"` for the
+  // reason the lot card gives: the section's header and the selection bar are sticky, and a square
+  // scrolled to the top edge would sit under them.
+  useEffect(() => {
+    if (!arrivedTileId) return;
+    scrollIntoView(document.querySelector(`[data-tile-id="${CSS.escape(arrivedTileId)}"]`), {
+      block: "center",
+    });
+    const timer = setTimeout(() => setArrivedTileId(null), ARRIVAL_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [arrivedTileId]);
 
   /**
    * The tiles ticked to be identified as one stamp (#596) — a plain set of ids, and see
@@ -1259,6 +1322,7 @@ export function ScansCard({
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
           onOpenTile={setTileId}
+          arrivedTileId={arrivedTileId}
           selected={live}
           tickOrdinals={tickOrdinals}
           onToggleTile={(id) => setSelected((s) => toggleTile(s, id))}
@@ -1902,6 +1966,7 @@ function BatchSection({
   expanded,
   onToggleExpanded,
   onOpenTile,
+  arrivedTileId,
   selected,
   tickOrdinals,
   onToggleTile,
@@ -1938,6 +2003,8 @@ function BatchSection({
   expanded: boolean;
   onToggleExpanded: () => void;
   onOpenTile: (tileId: string) => void;
+  /** The tile a copy's scan marker opened the card on (#1924), flashing while this is set. */
+  arrivedTileId: string | null;
   /** The tiles ticked to be identified together (#596) — the whole card's, since one selection
    * spans the batches. */
   selected: ReadonlySet<string>;
@@ -2294,6 +2361,7 @@ function BatchSection({
               // one of the likeliest to want it, the doubt that parked it often being something the
               // other side settles.
               droppable={dragging != null && tile.backPhotoId == null && isSelectableTile(tile)}
+              arrived={tile.id === arrivedTileId}
               selected={selected.has(tile.id)}
               ordinal={tickOrdinals.get(tile.id)}
               onToggleSelected={() => onToggleTile(tile.id)}
@@ -2676,6 +2744,7 @@ function TileCell({
   collectionId,
   worklist,
   droppable,
+  arrived,
   selected,
   ordinal,
   onToggleSelected,
@@ -2696,6 +2765,8 @@ function TileCell({
    * *discarded* goes the other way — twelve squares all saying it is twelve things to read past. */
   worklist: boolean;
   droppable: boolean;
+  /** The square a copy's scan marker came for (#1924) — flashed once, as an arrived lot card is. */
+  arrived: boolean;
   /** Ticked to be identified with the others (#596). */
   selected: boolean;
   /** Its place in the order the ticked tiles were ticked (#1220), while it is ticked. */
@@ -2870,7 +2941,7 @@ function TileCell({
     // been one button since #584 and a control nested in a button is neither valid nor clickable
     // without fighting it. So the box sits over the corner and the rest of the square keeps meaning
     // exactly what it meant — click it and the tile's dialog opens, in every state.
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }} data-tile-id={tile.id}>
       {/* The square's own hint — what the tile is and what became of it, and for a parked one the
           note saying what to check. `display: block` on the wrapper because the cell is a grid
           item: an `inline-flex` span between them would let the picture shrink to its content. */}
@@ -2883,6 +2954,10 @@ function TileCell({
         <button
           type="button"
           data-tile-square
+          // The settings field's flash rather than the lot card's (#1470): a square has no surface
+          // of its own to fade back to, and its resting ring is drawn inline, which an animation
+          // outranks only while it runs.
+          className={arrived ? "field-arrival-flash" : undefined}
           onClick={onOpen}
           onKeyDown={onKey}
           onDragOver={(e) => {

@@ -97,3 +97,13 @@ export function isBatchLabelTooLong(label: string | null): boolean {
 export function scanBatchName(batchNo: number, label: string | null): string {
   return normalizeBatchLabel(label) ?? `Batch ${batchNo}`;
 }
+
+/**
+ * The number a tile goes by on screen (#1924): its place in the card's reading order, counted from
+ * one. Every surface that names a tile says `Tile N` with this number — the strip, the cut editor,
+ * the identification dialogs and, since #1924, a copy's row — so on a card of forty, *tile 26* is
+ * the same square wherever the collector read it.
+ */
+export function scanTileNumber(position: number): number {
+  return position + 1;
+}

@@ -1671,11 +1671,24 @@ export interface ItemTradeMark {
  * certificate labels, disposition flags, and acquisition/purchase fields. */
 /** Where a copy's images came from (#1188): the scan batch, and the card's own name at the moment
  * the list was read. `batchNo` rides along because a card need not be named and the number is what
- * the scans card leads with — {@link scanBatchName} is the one place that decides between them. */
+ * the scans card leads with — {@link scanBatchName} is the one place that decides between them. The
+ * tile rides along too (#1924): on a card of dozens, the card's name says which sheet to pull and
+ * only the tile's number says where on it to look. */
 export interface ItemScanOrigin {
   batchNo: number;
   /** The card's name (#587/#603), or null when it has none. */
   label: string | null;
+  /** The tile itself (#1924) — what the marker links to, so the scans card can open on it. */
+  tileId: string;
+  /** The order whose scans the tile is on (#1924). Usually the one the copy is listed under, but a
+   * copy attached to another order's lot keeps the card it was identified off, so the link goes
+   * where the tile is rather than assuming. */
+  tilePurchaseId: string;
+  /** The tile's place on the card, zero-based — drawn as `tile N` through {@link scanTileNumber}, the
+   * number the cut editor and identification give the same tile. Stable for as long as the link
+   * exists: a batch holding a consumed tile refuses a re-cut, and deleting the batch deletes the
+   * tile, which takes the whole marker with it rather than leaving a number pointing nowhere. */
+  tilePosition: number;
 }
 
 /** One stamp a multi-stamp copy carries, as its row on the Copies list names it (#748). Only what a
@@ -1953,7 +1966,10 @@ const ITEM_LIST_SELECT = {
     orderBy: { createdAt: "asc" },
     take: 1,
     select: {
+      id: true,
+      purchaseId: true,
       batchNo: true,
+      position: true,
       frontSheet: { select: { label: true } },
       backSheet: { select: { label: true } },
     },
@@ -2195,6 +2211,9 @@ function scanOriginOf(row: ItemListRow): ItemScanOrigin | null {
   return {
     batchNo: tile.batchNo,
     label: tile.frontSheet?.label ?? tile.backSheet?.label ?? null,
+    tileId: tile.id,
+    tilePurchaseId: tile.purchaseId,
+    tilePosition: tile.position,
   };
 }
 
