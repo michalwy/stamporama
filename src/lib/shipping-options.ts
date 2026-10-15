@@ -207,6 +207,9 @@ export async function deleteShippingOption(ownerId: string, optionId: string): P
 export interface ResolvedShippingOption {
   id: string;
   name: string;
+  /** The carrier service the option is linked to — what a sale choosing it is *sent as* unless the
+   * sale names another (#1923). */
+  serviceId: string | null;
   postage: { cost: string; currency: string } | null;
 }
 
@@ -218,12 +221,13 @@ export async function resolveShippingOptionForPlatform(
 ): Promise<ResolvedShippingOption> {
   const option = await prisma.shippingOption.findFirst({
     where: { id: optionId, platformId },
-    select: { id: true, name: true, service: { select: { cost: true, currency: true } } },
+    select: { id: true, name: true, serviceId: true, service: { select: { cost: true, currency: true } } },
   });
   if (!option) throw new Error("Shipping option not found on this sale's platform.");
   return {
     id: option.id,
     name: option.name,
+    serviceId: option.serviceId,
     postage: option.service
       ? { cost: option.service.cost.toFixed(2), currency: option.service.currency }
       : null,

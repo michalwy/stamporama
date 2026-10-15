@@ -29,6 +29,7 @@ import type { CarrierData } from "@/lib/carriers";
 import { getShippingOptionsAction } from "@/app/actions/shipping-options";
 import type { SaleShippingRaw } from "@/app/actions/sales";
 import { SaleFormDialog } from "../sale-form-dialog";
+import { SentAsSelect, findCarrierService } from "../sent-as-select";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
@@ -640,6 +641,9 @@ export function SaleDetailPanel({
             platformId={sale.platformId}
             optionId={sale.shippingOptionId}
             optionName={sale.shippingOptionName}
+            carriers={carriers}
+            sentAsServiceId={sale.sentAsServiceId}
+            sentAsLabel={sale.sentAsDiffers && sale.sentAs ? `${sale.sentAs.carrierName}: ${sale.sentAs.serviceName}` : null}
             amount={sale.shippingCost}
             currency={sale.shippingCurrency ?? sale.currency}
             saleCurrency={sale.currency}
@@ -793,6 +797,7 @@ export function SaleDetailPanel({
             shippingOptionId:
               sale.shippingOptionId ?? (sale.shippingOptionName ? CUSTOM_SHIPPING_OPTION : ""),
             shippingOptionName: sale.shippingOptionName ?? "",
+            sentAsServiceId: sale.sentAsServiceId ?? "",
             shippingCost: sale.shippingCost ?? "",
             shippingCurrency: sale.shippingCurrency ?? sale.currency,
           }}
@@ -923,7 +928,7 @@ export function SaleDetailPanel({
       {dialog.kind === "shipment" && (
         <ShipmentDialog
           mode={dialog.mode}
-          shippingOptionName={sale.shippingOptionName}
+          goingBy={sale.sentAsDiffers && sale.sentAs ? sale.sentAs.serviceName : sale.shippingOptionName}
           carriers={carriers}
           carrierId={sale.carrierId}
           trackingCode={sale.trackingCode}
@@ -1365,6 +1370,9 @@ function EditableShippingRow({
   platformId,
   optionId,
   optionName,
+  carriers,
+  sentAsServiceId,
+  sentAsLabel,
   amount,
   currency,
   saleCurrency,
@@ -1379,6 +1387,12 @@ function EditableShippingRow({
   platformId: string;
   optionId: string | null;
   optionName: string | null;
+  /** The rate list *Sent as* picks from (#1923). */
+  carriers: CarrierData[];
+  /** The sale's own *Sent as*, or null for *as the option*. */
+  sentAsServiceId: string | null;
+  /** *Sent as* to show beside the option — only when it is not the option's own service. */
+  sentAsLabel: string | null;
   amount: string | null;
   currency: string;
   saleCurrency: string;
@@ -1396,6 +1410,7 @@ function EditableShippingRow({
   const [draftCcy, setDraftCcy] = useState(saleCurrency);
   const [draftOption, setDraftOption] = useState("");
   const [draftOptionName, setDraftOptionName] = useState("");
+  const [draftSentAs, setDraftSentAs] = useState("");
   const [options, setOptions] = useState<ShippingOptionData[]>([]);
 
   /** The stored option as the select's value: a listed option's id, the custom token when only a
@@ -1423,15 +1438,26 @@ function EditableShippingRow({
     setDraftCcy(currency || saleCurrency);
     setDraftOption(storedOptionValue);
     setDraftOptionName(optionName ?? "");
+    setDraftSentAs(sentAsServiceId ?? "");
     setEditing(true);
   }
+  const optionService = options.find((o) => o.id === draftOption)?.service ?? null;
   function pickOption(next: string) {
     setDraftOption(next);
     const option = options.find((o) => o.id === next);
-    if (!option) return;
+    // A parcel sent as another service (#1923) keeps that service's postage.
+    if (!option || draftSentAs) return;
     // An option linked to no carrier service leaves the postage to be entered.
     setDraftAmount(option.service?.cost ?? "");
     if (option.service) setDraftCcy(option.service.currency);
+  }
+  /** *Sent as* (#1923) fills the postage from the service picked — back to blank, the option's. */
+  function pickSentAs(next: string) {
+    setDraftSentAs(next);
+    const service = next ? findCarrierService(carriers, next) : optionService;
+    if (!service) return;
+    setDraftAmount(service.cost);
+    setDraftCcy(service.currency);
   }
   function commit() {
     setEditing(false);
@@ -1440,7 +1466,8 @@ function EditableShippingRow({
       draftAmount.trim() === (amount ?? "") &&
       draftCcy === (currency || saleCurrency) &&
       draftOption === storedOptionValue &&
-      draftOptionName.trim() === (optionName ?? "")
+      draftOptionName.trim() === (optionName ?? "") &&
+      draftSentAs === (sentAsServiceId ?? "")
     ) {
       return;
     }
@@ -1449,6 +1476,7 @@ function EditableShippingRow({
       optionName: draftOptionName,
       cost: draftAmount,
       currency: draftCcy,
+      sentAsServiceId: draftSentAs,
     });
   }
 
@@ -1482,6 +1510,15 @@ function EditableShippingRow({
                 style={{ ...INPUT_STYLE, width: "9rem", padding: "0.125rem 0.375rem" }}
               />
             )}
+            <SentAsSelect
+              carriers={carriers}
+              value={draftSentAs}
+              optionService={
+                optionService && { id: optionService.id, name: optionService.name, carrierName: optionService.carrierName }
+              }
+              style={{ ...INPUT_STYLE, width: "13rem", padding: "0.125rem 0.375rem" }}
+              onChange={pickSentAs}
+            />
             <NumericInput
               kind="amount"
               placeholder="0.00"
@@ -1552,7 +1589,11 @@ function EditableShippingRow({
               {optionName && (
                 <span style={{ color: "var(--color-text-secondary)" }}>{optionName}</span>
               )}
-              <span>{amount ? `${amount} ${currency}` : optionName ? "" : "Set"}</span>
+              {/* How it actually went (#1923), named only when not as the buyer chose. */}
+              {sentAsLabel && (
+                <span style={{ color: "var(--color-text-muted)" }}>sent as {sentAsLabel}</span>
+              )}
+              <span>{amount ? `${amount} ${currency}` : optionName || sentAsLabel ? "" : "Set"}</span>
             </button>
           </Tooltip>
         )}

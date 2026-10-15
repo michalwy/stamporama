@@ -54,6 +54,9 @@ export interface SaleShippingRaw {
   optionName: string;
   cost: string;
   currency: string;
+  /** The carrier service the parcel was actually sent with (#1923); blank is *as the option*. Left
+   * out by a form that does not show it, which keeps what the sale had. */
+  sentAsServiceId?: string;
 }
 
 export interface ResolvedSaleHeader {
@@ -93,6 +96,7 @@ export function resolveSaleShipping(
       optionName: custom ? optionName : null,
       cost: cost.value,
       currency,
+      ...(raw.sentAsServiceId !== undefined ? { sentAsServiceId: raw.sentAsServiceId.trim() || null } : {}),
     },
   };
 }

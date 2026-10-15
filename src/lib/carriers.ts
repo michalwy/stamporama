@@ -268,18 +268,25 @@ export async function updateCarrierService(
   });
 }
 
-/** A service platform options still link to. The FK is `Restrict`; this names the count. */
+/** A service platform options still link to, or sales say their parcel was sent as (#1923). Both
+ * FKs are `Restrict`; this names the counts. */
 export class CarrierServiceInUseError extends Error {
-  constructor(readonly optionCount: number) {
-    super("Carrier service is linked from shipping options.");
+  constructor(
+    readonly optionCount: number,
+    readonly saleCount: number = 0
+  ) {
+    super("Carrier service is in use.");
     this.name = "CarrierServiceInUseError";
   }
 }
 
 export async function deleteCarrierService(ownerId: string, serviceId: string): Promise<void> {
   await assertServiceOwner(ownerId, serviceId);
-  const optionCount = await prisma.shippingOption.count({ where: { serviceId } });
-  if (optionCount > 0) throw new CarrierServiceInUseError(optionCount);
+  const [optionCount, saleCount] = await Promise.all([
+    prisma.shippingOption.count({ where: { serviceId } }),
+    prisma.sale.count({ where: { sentAsServiceId: serviceId } }),
+  ]);
+  if (optionCount > 0 || saleCount > 0) throw new CarrierServiceInUseError(optionCount, saleCount);
   await prisma.carrierService.delete({ where: { id: serviceId } });
 }
 
