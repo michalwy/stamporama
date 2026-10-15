@@ -6,6 +6,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
@@ -19,7 +21,8 @@ import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
-import { parseFaultReductionInput } from "@/lib/fault-reduction";
+import { describeFaultReductionState, parseFaultReductionInput } from "@/lib/fault-reduction";
+import { InfoHint } from "@/app/c/[collectionSlug]/shared/info-hint";
 import {
   LocationRefField,
   useLocationRefUsage,
@@ -121,6 +124,12 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
  * come back. Every section may be left alone, so the dialog is equally the *move* action, the
  * *re-flag* action and the *re-grade* action; it refuses to submit only when no section says
  * anything.
+ *
+ * It is a **two-column** form dialog (#1930): what the copies *are* — condition, certificate and
+ * format; faults; value reduction — on the left, what is *done* with them — storage location,
+ * disposition, tags — on the right, so its sections fit a 1080-pixel-tall window without
+ * scrolling. Each hint is one line with the rest in an ⓘ, except the identity axes' *a correction,
+ * not a filter*, which prevents a costly mistake and stays beside its controls.
  *
  * The identity axes (#723) are `<select>`s rather than the segmented controls above them for the
  * ordinary reason: a segmented control states every answer at once, which is right for three
@@ -307,7 +316,7 @@ export function BulkEditCopiesDialog({
     <DialogShell
       title={`Bulk edit — ${copiesLabel}`}
       onClose={onClose}
-      maxWidth="30rem"
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
       dismissable={!tagMenuOpen}
     >
       <form
@@ -359,311 +368,97 @@ export function BulkEditCopiesDialog({
             is not written at all, so each copy keeps everything this dialog does not name.
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            <div>
-              <LabelWithError htmlFor="bulk-edit-location-button">Storage location</LabelWithError>
-              <Segmented
-                options={LOCATION_MODES}
-                value={locationMode}
-                onChange={setLocationMode}
-                disabled={isPending}
-                ariaLabel="Storage location"
-              />
-              {locationMode === "move" &&
-                (locations.length === 0 ? (
-                  <p style={{ ...HINT_STYLE, marginTop: "0.625rem" }}>
-                    No locations defined yet. Add some on the Locations screen first.
-                  </p>
-                ) : (
-                  <div style={{ marginTop: "0.625rem" }}>
-                    <LocationTreeSelect
-                      locations={locations}
-                      locationTree={locationTree}
-                      name="bulk-edit-location"
-                      selectedId={locationId}
-                      onSelectedIdChange={(id) => {
-                        setLocationId(id);
-                        // The counter belongs to the location, so a ref typed for the last one
-                        // means nothing here — drop back to the new location's own suggestion.
-                        setTypedRef(null);
-                      }}
-                      onlyAssignableSelectable
-                      disabled={isPending}
-                      noneOptionLabel="— Choose a location"
-                    />
-                    <div style={{ marginTop: "0.625rem" }}>
-                      <LocationRefField
-                        id="bulk-edit-ref"
-                        locationId={locationId}
-                        typedRef={typedRef}
-                        onTypedRefChange={setTypedRef}
-                        disabled={isPending}
-                        count={count}
-                        filingRefs={filingRefs}
-                        usage={refUsage}
-                        extraHint="Cleared on every picked copy if you empty the box — a ref addresses a place inside the location they are leaving."
-                      />
-                    </div>
-                  </div>
-                ))}
-              {locationMode === "clear" && (
-                <p style={HINT_STYLE}>
-                  Takes {count === 1 ? "it" : "them"} out of storage entirely: location and ref both
-                  cleared. Nothing else about the {count === 1 ? "copy" : "copies"} changes.
-                </p>
-              )}
-              {!changesLocation && (
-                <p style={HINT_STYLE}>
-                  {distinctLocations === 0
-                    ? `${count === 1 ? "It is" : "None of them are"} filed anywhere yet.`
-                    : `Filed across ${distinctLocations} location${distinctLocations === 1 ? "" : "s"}${
-                        unfiled > 0 ? `, and ${unfiled} not filed at all` : ""
-                      }.`}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <LabelWithError>Disposition</LabelWithError>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {DISPOSITION_FLAGS.map(({ flag, label }) => {
-                  const op = flagOps[flag];
-                  // How much of the selection the answer would leave untouched — the number that
-                  // says whether this is a re-flag or a no-op.
-                  const already =
-                    op === "keep" ? 0 : copies.filter((c) => c[flag] === (op === "on")).length;
-                  return (
-                    <div
-                      key={flag}
-                      style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}
-                    >
-                      <span
-                        style={{
-                          width: "7.5rem",
-                          flexShrink: 0,
-                          fontSize: "0.8125rem",
-                          color: "var(--color-text-secondary)",
-                        }}
+          <DialogFormColumns>
+            {/* What the copies **are** on the left, what is **done** with them on the right (#1930). */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {/* What the copies **are** (#723): the grade, the certificate and the physical format.
+                  The correction a mixed batch usually needs — a drawer relabelled to a better grade,
+                  a run of pairs recorded as singles — done once instead of copy by copy. */}
+              {identityAxes.length > 0 && (
+                <div>
+                  <LabelWithError>Condition, certificate and format</LabelWithError>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {identityAxes.map((axis) => (
+                      <div
+                        key={axis.key}
+                        style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}
                       >
-                        {label}
-                      </span>
-                      <Segmented
-                        options={FLAG_OPS}
-                        value={op}
-                        onChange={(next) => setFlagOps((prev) => ({ ...prev, [flag]: next }))}
-                        disabled={isPending}
-                        ariaLabel={label}
-                        compact
-                      />
-                      {op !== "keep" && (
-                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                          {describeAlready(already, count)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <p style={HINT_STYLE}>
-                The three are independent — a copy can be in the collection, for sale and for trade
-                at once — so answer as many as the change needs and leave the rest alone. Turning
-                one on while turning another off is one act, applied together.
-              </p>
-            </div>
-
-            {/* What the copies **are** (#723): the grade, the certificate and the physical format.
-                The correction a mixed batch usually needs — a drawer relabelled to a better grade,
-                a run of pairs recorded as singles — done once instead of copy by copy. */}
-            {identityAxes.length > 0 && (
-              <div>
-                <LabelWithError>Condition, certificate and format</LabelWithError>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {identityAxes.map((axis) => (
-                    <div
-                      key={axis.key}
-                      style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}
-                    >
-                      <label
-                        htmlFor={`bulk-edit-${axis.key}`}
-                        style={{
-                          width: "7.5rem",
-                          flexShrink: 0,
-                          fontSize: "0.8125rem",
-                          color: "var(--color-text-secondary)",
-                        }}
-                      >
-                        {axis.label}
-                      </label>
-                      <select
-                        id={`bulk-edit-${axis.key}`}
-                        value={axis.choice}
-                        onChange={(e) => axis.setChoice(e.target.value)}
-                        disabled={isPending}
-                        style={SELECT_STYLE}
-                      >
-                        <option value={KEEP}>Leave as is</option>
-                        {axis.options.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      {axis.choice !== KEEP && (
-                        <span
+                        <label
+                          htmlFor={`bulk-edit-${axis.key}`}
                           style={{
-                            fontSize: "0.75rem",
-                            color: "var(--color-text-muted)",
-                            whiteSpace: "nowrap",
+                            width: "7.5rem",
+                            flexShrink: 0,
+                            fontSize: "0.8125rem",
+                            color: "var(--color-text-secondary)",
                           }}
                         >
-                          {describeAlready(axis.unchanged, count)}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p style={HINT_STYLE}>
-                  Applied to every selected copy, whatever it reads now — this is the correction of a
-                  batch that was recorded wrong, not a filter. Catalog values are looked up per
-                  condition, so a re-graded copy is valued against its new grade from here on.
-                </p>
-              </div>
-            )}
-
-            {/* The copies' faults (#1557), worded and laid out as the tags below: what to put on and
-                what to take off, and every fault not named stays. Hidden while the dictionary is
-                empty — it is seeded, so an empty one is a list the collector emptied on purpose. */}
-            {(faults?.length ?? 0) > 0 && (
-              <div>
-                <LabelWithError>Faults</LabelWithError>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <TagRow
-                    label="Add"
-                    options={(faults ?? [])
-                      .filter((f) => !removeFaultIds.includes(f.id))
-                      .map((f) => ({ id: f.id, label: f.name }))}
-                    selected={addFaultIds}
-                    onChange={setAddFaultIds}
-                    allLabel="No faults to add"
-                    disabled={isPending}
-                    onOpenChange={setTagMenuOpen}
-                    note={
-                      addFaultIds.length === 0
-                        ? null
-                        : describeAlready(
-                            copies.filter((c) =>
-                              addFaultIds.every((id) => c.faults.some((f) => f.id === id))
-                            ).length,
-                            count
-                          )
-                    }
-                  />
-                  <TagRow
-                    label="Remove"
-                    options={(faults ?? [])
-                      .filter((f) => !addFaultIds.includes(f.id))
-                      .map((f) => ({ id: f.id, label: f.name }))}
-                    selected={removeFaultIds}
-                    onChange={setRemoveFaultIds}
-                    allLabel="No faults to remove"
-                    disabled={isPending}
-                    onOpenChange={setTagMenuOpen}
-                    note={
-                      removeFaultIds.length === 0
-                        ? null
-                        : `on ${
-                            copies.filter((c) =>
-                              removeFaultIds.some((id) => c.faults.some((f) => f.id === id))
-                            ).length
-                          } of ${count}`
-                    }
-                  />
-                </div>
-                <p style={HINT_STYLE}>
-                  Only the faults named here change. Every other fault each copy carries stays.
-                </p>
-              </div>
-            )}
-
-            {/* How much the copies' faults take off their value (#1560). Shown whatever the fault
-                dictionary holds, since a piece can be worth less for a reason it does not name. */}
-            <div>
-              <LabelWithError htmlFor="bulk-edit-fault-reduction" error={reductionError ?? undefined}>
-                Value reduction
-              </LabelWithError>
-              <Segmented
-                options={REDUCTION_MODES}
-                value={reductionMode}
-                onChange={setReductionMode}
-                disabled={isPending}
-                ariaLabel="Value reduction"
-              />
-              {reductionMode === "set" && (
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.625rem" }}
-                >
-                  <NumericInput
-                    kind="number"
-                    inputMode="numeric"
-                    id="bulk-edit-fault-reduction"
-                    value={reductionInput}
-                    onChange={(e) => setReductionInput(e.target.value)}
-                    disabled={isPending}
-                    placeholder="e.g. 40"
-                    style={{ ...SELECT_STYLE, width: "6rem", textAlign: "right" }}
-                  />
-                  <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                          {axis.label}
+                        </label>
+                        <select
+                          id={`bulk-edit-${axis.key}`}
+                          value={axis.choice}
+                          onChange={(e) => axis.setChoice(e.target.value)}
+                          disabled={isPending}
+                          style={SELECT_STYLE}
+                        >
+                          <option value={KEEP}>Leave as is</option>
+                          {axis.options.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {axis.choice !== KEEP && (
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--color-text-muted)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {describeAlready(axis.unchanged, count)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* The one hint kept whole beside its control: it prevents the costly mistake of
+                      reading these as filters (#1930). */}
+                  <p style={HINT_STYLE}>
+                    Applied to every selected copy, whatever it reads now — a correction, not a
+                    filter.{" "}
+                    <InfoHint>
+                      This is the correction of a batch that was recorded wrong. Catalog values are
+                      looked up per condition, so a re-graded copy is valued against its new grade
+                      from here on.
+                    </InfoHint>
+                  </p>
                 </div>
               )}
-              <p style={HINT_STYLE}>
-                {reducedNow === 0
-                  ? `${count === 1 ? "It has" : "None of them have"} a reduction yet.`
-                  : `${reducedNow} of ${count} already ${reducedNow === 1 ? "has" : "have"} one.`}
-              </p>
-            </div>
 
-            {/* The collector's own labels (#1181). Two controls, never one: a copy carries any
-                number of tags, so *what these copies are tagged* has no single answer a picker
-                could show — the pass says what to put on and what to take off, and everything it
-                does not name stays. Shown even with an empty dictionary, because nothing is seeded;
-                the link is where a first tag can be made from here, since this pass picks existing
-                tags rather than typing new ones (#1192 left the bulk edit as it was). */}
-            <div>
-              <LabelWithError>Tags</LabelWithError>
-              {(tags?.length ?? 0) === 0 ? (
-                <p style={HINT_STYLE}>
-                  No tags yet.{" "}
-                  <Link
-                    href={`/c/${collectionSlug}/settings?tab=tags`}
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    Add one in Settings
-                  </Link>
-                  .
-                </p>
-              ) : (
-                <>
+              {/* The copies' faults (#1557), worded and laid out as the tags below: what to put on and
+                  what to take off, and every fault not named stays. Hidden while the dictionary is
+                  empty — it is seeded, so an empty one is a list the collector emptied on purpose. */}
+              {(faults?.length ?? 0) > 0 && (
+                <div>
+                  <LabelWithError>Faults</LabelWithError>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                     <TagRow
                       label="Add"
-                      // A tag already ticked to be removed is not offered here, so *put it on and
-                      // take it off in one pass* cannot be stated at all.
-                      options={(tags ?? [])
-                        .filter((t) => !removeTagIds.includes(t.id))
-                        .map((t) => ({ id: t.id, label: t.name }))}
-                      selected={addTagIds}
-                      onChange={setAddTagIds}
-                      allLabel="No tags to add"
+                      options={(faults ?? [])
+                        .filter((f) => !removeFaultIds.includes(f.id))
+                        .map((f) => ({ id: f.id, label: f.name }))}
+                      selected={addFaultIds}
+                      onChange={setAddFaultIds}
+                      allLabel="No faults to add"
                       disabled={isPending}
                       onOpenChange={setTagMenuOpen}
-                      // How many already carry **every** tag being added — the number that says
-                      // whether this is a tagging pass or a no-op, as each row above it does.
                       note={
-                        addTagIds.length === 0
+                        addFaultIds.length === 0
                           ? null
                           : describeAlready(
                               copies.filter((c) =>
-                                addTagIds.every((id) => c.tags.some((t) => t.id === id))
+                                addFaultIds.every((id) => c.faults.some((f) => f.id === id))
                               ).length,
                               count
                             )
@@ -671,35 +466,272 @@ export function BulkEditCopiesDialog({
                     />
                     <TagRow
                       label="Remove"
-                      options={(tags ?? [])
-                        .filter((t) => !addTagIds.includes(t.id))
-                        .map((t) => ({ id: t.id, label: t.name }))}
-                      selected={removeTagIds}
-                      onChange={setRemoveTagIds}
-                      allLabel="No tags to remove"
+                      options={(faults ?? [])
+                        .filter((f) => !addFaultIds.includes(f.id))
+                        .map((f) => ({ id: f.id, label: f.name }))}
+                      selected={removeFaultIds}
+                      onChange={setRemoveFaultIds}
+                      allLabel="No faults to remove"
                       disabled={isPending}
                       onOpenChange={setTagMenuOpen}
-                      // Here the useful count is the opposite one: how many the removal actually
-                      // reaches. A copy not carrying the tag is left alone rather than failing.
                       note={
-                        removeTagIds.length === 0
+                        removeFaultIds.length === 0
                           ? null
                           : `on ${
                               copies.filter((c) =>
-                                removeTagIds.some((id) => c.tags.some((t) => t.id === id))
+                                removeFaultIds.some((id) => c.faults.some((f) => f.id === id))
                               ).length
                             } of ${count}`
                       }
                     />
                   </div>
-                  <p style={HINT_STYLE}>
-                    Only the tags named here change. Every other tag each copy carries is left
-                    exactly as it is — this is not a way to set the tags to one list.
-                  </p>
-                </>
+                  <p style={HINT_STYLE}>Faults not named here stay on each copy.</p>
+                </div>
               )}
+
+              {/* How much the copies' faults take off their value (#1560). Shown whatever the fault
+                  dictionary holds, since a piece can be worth less for a reason it does not name. */}
+              <div>
+                <LabelWithError htmlFor="bulk-edit-fault-reduction" error={reductionError ?? undefined}>
+                  Value reduction
+                </LabelWithError>
+                <Segmented
+                  options={REDUCTION_MODES}
+                  value={reductionMode}
+                  onChange={setReductionMode}
+                  disabled={isPending}
+                  ariaLabel="Value reduction"
+                />
+                {reductionMode === "set" && (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.625rem" }}
+                  >
+                    <NumericInput
+                      kind="number"
+                      inputMode="numeric"
+                      id="bulk-edit-fault-reduction"
+                      value={reductionInput}
+                      onChange={(e) => setReductionInput(e.target.value)}
+                      disabled={isPending}
+                      placeholder="e.g. 40"
+                      style={{ ...SELECT_STYLE, width: "6rem", textAlign: "right" }}
+                    />
+                    <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                  </div>
+                )}
+                <p style={HINT_STYLE}>
+                  {describeFaultReductionState(reducedNow, count)}
+                </p>
+              </div>
             </div>
-          </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div>
+                <LabelWithError htmlFor="bulk-edit-location-button">Storage location</LabelWithError>
+                <Segmented
+                  options={LOCATION_MODES}
+                  value={locationMode}
+                  onChange={setLocationMode}
+                  disabled={isPending}
+                  ariaLabel="Storage location"
+                />
+                {locationMode === "move" &&
+                  (locations.length === 0 ? (
+                    <p style={{ ...HINT_STYLE, marginTop: "0.625rem" }}>
+                      No locations defined yet. Add some on the Locations screen first.
+                    </p>
+                  ) : (
+                    <div style={{ marginTop: "0.625rem" }}>
+                      <LocationTreeSelect
+                        locations={locations}
+                        locationTree={locationTree}
+                        name="bulk-edit-location"
+                        selectedId={locationId}
+                        onSelectedIdChange={(id) => {
+                          setLocationId(id);
+                          // The counter belongs to the location, so a ref typed for the last one
+                          // means nothing here — drop back to the new location's own suggestion.
+                          setTypedRef(null);
+                        }}
+                        onlyAssignableSelectable
+                        disabled={isPending}
+                        noneOptionLabel="— Choose a location"
+                      />
+                      <div style={{ marginTop: "0.625rem" }}>
+                        <LocationRefField
+                          id="bulk-edit-ref"
+                          locationId={locationId}
+                          typedRef={typedRef}
+                          onTypedRefChange={setTypedRef}
+                          disabled={isPending}
+                          count={count}
+                          filingRefs={filingRefs}
+                          usage={refUsage}
+                          extraHint={
+                            <>
+                              An empty box clears their refs.{" "}
+                              <InfoHint>
+                                Cleared on every picked copy if you empty the box — a ref addresses
+                                a place inside the location they are leaving.
+                              </InfoHint>
+                            </>
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+                {locationMode === "clear" && (
+                  <p style={HINT_STYLE}>
+                    Location and ref both cleared.{" "}
+                    <InfoHint>
+                      Takes {count === 1 ? "it" : "them"} out of storage entirely. Nothing else about
+                      the {count === 1 ? "copy" : "copies"} changes.
+                    </InfoHint>
+                  </p>
+                )}
+                {!changesLocation && (
+                  <p style={HINT_STYLE}>
+                    {distinctLocations === 0
+                      ? `${count === 1 ? "It is not" : "None of them are"} filed anywhere yet.`
+                      : `Filed across ${distinctLocations} location${distinctLocations === 1 ? "" : "s"}${
+                          unfiled > 0 ? `, and ${unfiled} not filed at all` : ""
+                        }.`}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <LabelWithError>Disposition</LabelWithError>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {DISPOSITION_FLAGS.map(({ flag, label }) => {
+                    const op = flagOps[flag];
+                    // How much of the selection the answer would leave untouched — the number that
+                    // says whether this is a re-flag or a no-op.
+                    const already =
+                      op === "keep" ? 0 : copies.filter((c) => c[flag] === (op === "on")).length;
+                    return (
+                      <div
+                        key={flag}
+                        style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}
+                      >
+                        <span
+                          style={{
+                            width: "7.5rem",
+                            flexShrink: 0,
+                            fontSize: "0.8125rem",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {label}
+                        </span>
+                        <Segmented
+                          options={FLAG_OPS}
+                          value={op}
+                          onChange={(next) => setFlagOps((prev) => ({ ...prev, [flag]: next }))}
+                          disabled={isPending}
+                          ariaLabel={label}
+                          compact
+                        />
+                        {op !== "keep" && (
+                          <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                            {describeAlready(already, count)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p style={HINT_STYLE}>
+                  Each flag is answered on its own.{" "}
+                  <InfoHint>
+                    The three are independent — a copy can be in the collection, for sale and for
+                    trade at once — so answer as many as the change needs and leave the rest alone.
+                    Turning one on while turning another off is one act, applied together.
+                  </InfoHint>
+                </p>
+              </div>
+
+              {/* The collector's own labels (#1181). Two controls, never one: a copy carries any
+                  number of tags, so *what these copies are tagged* has no single answer a picker
+                  could show — the pass says what to put on and what to take off, and everything it
+                  does not name stays. Shown even with an empty dictionary, because nothing is seeded;
+                  the link is where a first tag can be made from here, since this pass picks existing
+                  tags rather than typing new ones (#1192 left the bulk edit as it was). */}
+              <div>
+                <LabelWithError>Tags</LabelWithError>
+                {(tags?.length ?? 0) === 0 ? (
+                  <p style={HINT_STYLE}>
+                    No tags yet.{" "}
+                    <Link
+                      href={`/c/${collectionSlug}/settings?tab=tags`}
+                      style={{ color: "var(--color-accent)" }}
+                    >
+                      Add one in Settings
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <TagRow
+                        label="Add"
+                        // A tag already ticked to be removed is not offered here, so *put it on and
+                        // take it off in one pass* cannot be stated at all.
+                        options={(tags ?? [])
+                          .filter((t) => !removeTagIds.includes(t.id))
+                          .map((t) => ({ id: t.id, label: t.name }))}
+                        selected={addTagIds}
+                        onChange={setAddTagIds}
+                        allLabel="No tags to add"
+                        disabled={isPending}
+                        onOpenChange={setTagMenuOpen}
+                        // How many already carry **every** tag being added — the number that says
+                        // whether this is a tagging pass or a no-op, as each row above it does.
+                        note={
+                          addTagIds.length === 0
+                            ? null
+                            : describeAlready(
+                                copies.filter((c) =>
+                                  addTagIds.every((id) => c.tags.some((t) => t.id === id))
+                                ).length,
+                                count
+                              )
+                        }
+                      />
+                      <TagRow
+                        label="Remove"
+                        options={(tags ?? [])
+                          .filter((t) => !addTagIds.includes(t.id))
+                          .map((t) => ({ id: t.id, label: t.name }))}
+                        selected={removeTagIds}
+                        onChange={setRemoveTagIds}
+                        allLabel="No tags to remove"
+                        disabled={isPending}
+                        onOpenChange={setTagMenuOpen}
+                        // Here the useful count is the opposite one: how many the removal actually
+                        // reaches. A copy not carrying the tag is left alone rather than failing.
+                        note={
+                          removeTagIds.length === 0
+                            ? null
+                            : `on ${
+                                copies.filter((c) =>
+                                  removeTagIds.some((id) => c.tags.some((t) => t.id === id))
+                                ).length
+                              } of ${count}`
+                        }
+                      />
+                    </div>
+                    <p style={HINT_STYLE}>
+                      Tags not named here stay on each copy.{" "}
+                      <InfoHint>
+                        Every other tag each copy carries is left exactly as it is — this is not a way
+                        to set the tags to one list.
+                      </InfoHint>
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </DialogFormColumns>
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Applying…" : `Apply to ${copiesLabel}`}

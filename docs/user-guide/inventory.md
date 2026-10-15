@@ -1404,6 +1404,11 @@ Every section is optional and every one starts on **Leave as is**, so the dialog
 all — every copy keeps everything the dialog does not name. **Apply** stays greyed out until you
 have said something.
 
+The dialog is wide, its sections in two columns so they all fit on screen at once: what the copies
+**are** on the left — condition, certificate and format, faults, value reduction — and what is
+**done** with them on the right — storage location, disposition, tags. Each section carries one
+short line; hover the ⓘ beside it for the rest.
+
 **Storage location** has three settings:
 
 - **Leave as is** — the copies stay where they are filed. The line underneath tells you what that is
@@ -1440,7 +1445,7 @@ for trade at once), so answer as many as your change needs: moving a drawer from
 *Leave as is* is not written at all, so a mixed selection keeps whatever those flags said. Beside
 each flag you answer, the dialog says how many of the picked copies are already like that.
 
-**Condition, certificate and format** is the third section: one dropdown each, every one starting on
+**Condition, certificate and format** heads the left column: one dropdown each, every one starting on
 **Leave as is**. Pick a value and it is written on **every** picked copy, whatever that copy reads
 now — this is the correction of a batch recorded wrong, not a filter. As with the flags above, the
 line beside each dropdown says how many of the picked copies already read that way, so you can see
@@ -1458,13 +1463,13 @@ The certificate and format rows appear only once your collection defines some.
 
 **Value reduction** sets one percentage on every picked copy (**Set to…**), takes the reduction off
 them (**Clear**), or leaves each copy's own (**Leave as is**). The line under it says how many of the
-picked copies already have one. See
+picked copies already have one (*None has a reduction yet*, *2 of 5 have a reduction*). See
 [Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults).
 
-**Faults**, the fourth section, works the same way as the tags below it: **Add** puts the [faults](faults.md) you name on
+**Faults** works the same way as the tags: **Add** puts the [faults](faults.md) you name on
 every picked copy, **Remove** takes them off, and every fault you do not name stays where it is.
 
-**Tags** is the last section, worded as two verbs rather than as a value:
+**Tags**, at the foot of the right column, are worded as two verbs rather than as a value:
 
 - **Add** puts the tags you name on every picked copy. A copy already carrying one is left as it is.
 - **Remove** takes the tags you name off every picked copy. A copy not carrying one is left as it

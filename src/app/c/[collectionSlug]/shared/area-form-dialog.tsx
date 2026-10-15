@@ -25,6 +25,7 @@ import { TranslationsField } from "./translations-field";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { getDescendantIds } from "./area-helpers";
+import { InfoHint } from "./info-hint";
 import { Tooltip } from "./tooltip";
 import { NO_AUTOFILL } from "./no-autofill";
 import { Icon } from "@/app/icons";
@@ -124,21 +125,6 @@ function SectionHeading({ title, hint }: { title: string; hint: string }) {
         {hint}
       </p>
     </div>
-  );
-}
-
-/** The rest of a hint that was cut to one line (#1747): an ⓘ with the full wording in a tooltip. */
-function InfoHint({ children }: { children: React.ReactNode }) {
-  return (
-    <Tooltip content={children} maxWidth="22rem">
-      <span
-        role="img"
-        aria-label="More about this"
-        style={{ display: "inline-flex", color: "var(--color-text-muted)", cursor: "help", verticalAlign: "middle" }}
-      >
-        <Icon name="info" size="xs" />
-      </span>
-    </Tooltip>
   );
 }
 
