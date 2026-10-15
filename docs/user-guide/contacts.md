@@ -145,7 +145,7 @@ names and abbreviations, and [issue and stamp names](collections.md#issue-and-st
 
 Ticking **Platform** also reveals **Listing templates** — what this platform's [offer](offers.md)
 texts are pre-filled from. Click **Templates…** to open the templates dialog, which holds all five,
-one under another:
+one tab each — the two photo tile labels share a tab, since they are the two ends of one strip:
 
 | Template | Fills in | Left blank |
 | --- | --- | --- |
@@ -156,12 +156,13 @@ one under another:
 | **Photo tile label (right)** | a second annotation on the same strip, flush right, at the same size | that side stays blank |
 
 At the top of the dialog is **Preview on** — the inventory copies every preview below runs on, shared
-by all three so they always describe the same stamps. **🎲 Random** reshuffles them and **Pick copy…**
+by every tab so they always describe the same stamps. **🎲 Random** reshuffles them and **Pick copy…**
 searches out a specific one. Two copies are used, each treated as its own set, so a repeating block
-(see below) previews the way it will read on a real offer. The dialog is a fixed size and scrolls
-inside, and each template **collapses to a single row** (click its heading) so the one you are
-writing has the room — a collapsed row still shows its template on one line, with `⏎` for the line
-breaks. **Save templates** saves them all at once; platforms that have no private note simply leave
+(see below) previews the way it will read on a real offer. Under it are the tabs — **Title**,
+**Description**, **Private note** and **Photo tile labels** — each showing its template with the
+preview beside it, so the dialog fits the window whichever you are writing; a long preview scrolls
+inside its own box. **Template syntax**, at the end of the tab row, explains the token syntax when
+you hover it. Switching tabs keeps what you typed, and **Save templates** saves all of them at once; platforms that have no private note simply leave
 that one empty.
 
 The two photo tile labels behave a little differently from the other three: they are **copied onto
@@ -170,7 +171,7 @@ each new offer** on this platform rather than read from here when photos are gen
 uploaded keeps getting the same label.
 
 Each template is the same **template builder**: a field, its token chips, and a live preview
-underneath. You write the template with **tokens** in curly braces mixed with any literal text you
+beside it. You write the template with **tokens** in curly braces mixed with any literal text you
 like, for example `{catalog} {name} {year} {condition}`. Click a token chip to drop it in at the
 cursor. The preview renders in the platform's **listing language**, so you see the text as its
 listings will read — any word for which you have not entered text in that
