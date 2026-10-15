@@ -554,12 +554,24 @@ export function CollectionSidebar({
           {/* Card scans used to hang under Inventory (#725, #762). It was retired onto opening
               balances (#1326): a card of stamps already owned is scanned on its opening balance,
               under Intake, like any other document's. */}
-          <NavItem
-            href={`${base}/inventory`}
+          {/* Replacements (#1936) sit under Inventory: what they list are copies, pairs of them,
+              and the route says the same thing — the rule Variant prices sits under Stamps by. */}
+          <NavGroup
             icon={<Icon name="inventory" />}
             label="Inventory"
-            active={isActive(`${base}/inventory`, false, [`${base}/inventory/structure`])}
-          />
+            href={`${base}/inventory`}
+            active={isActive(`${base}/inventory`, false, [
+              `${base}/inventory/structure`,
+              `${base}/inventory/replacements`,
+            ])}
+          >
+            <NavItem
+              href={`${base}/inventory/replacements`}
+              label="Replacements"
+              active={isActive(`${base}/inventory/replacements`)}
+              nested
+            />
+          </NavGroup>
           {/* Locations and Albums follow Inventory, being where the paper physically sits. */}
           <NavItem
             href={`${base}/locations`}

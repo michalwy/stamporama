@@ -90,6 +90,7 @@ export function LocationRefField({
    *  is chosen, since until then the hint is *pick the location first* and nothing else applies. */
   extraHint,
   usage,
+  nextRefLabel = "Next ref",
 }: {
   id: string;
   /** Blank means no location is chosen yet, and the box is inert: a ref addresses a place *inside*
@@ -105,6 +106,9 @@ export function LocationRefField({
   /** The caller's own {@link useLocationRefUsage} — it needs the same reading for its action label
    *  and its submit, and two hooks over one key would be one cache entry read twice. */
   usage: ReturnType<typeof useLocationRefUsage>;
+  /** What the start-a-new-card button says — *Next card* on Replacements (#1936), where the card is
+   *  the unit the collector works in. */
+  nextRefLabel?: string;
 }) {
   /** The card being packed — the default (#629). */
   const highest = usage.data?.highest ?? null;
@@ -142,7 +146,7 @@ export function LocationRefField({
               onClick={() => onTypedRefChange(suggestion)}
               style={{ whiteSpace: "nowrap" }}
             >
-              Next ref
+              {nextRefLabel}
             </DialogSecondaryButton>
           </Tooltip>
         )}
@@ -155,7 +159,7 @@ export function LocationRefField({
             : highest == null
               ? "Nothing has been ref’d in this location yet — leave it blank for an album, where the location is the address."
               : `${highest} is the card this location is up to — keep filling it${
-                  suggestion ? `, or start ${suggestion} with Next ref` : ""
+                  suggestion ? `, or start ${suggestion} with ${nextRefLabel}` : ""
                 }.`}{" "}
         {locationId && extraHint}
         {locationId && printCardsHref && (

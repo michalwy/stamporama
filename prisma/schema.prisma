@@ -185,6 +185,8 @@ model Collection {
   packingSupplies PackingSupply[]
   // Packing supplies taken out of stock without a sale (#1900).
   supplyOwnUses   SupplyOwnUse[]
+  // A new copy replacing an old one (#1936, ADR-0070), settled on the Replacements screen.
+  itemReplacements ItemReplacement[]
   auctionSales    AuctionSale[]
   priceObservations PriceObservation[]
   trades          Trade[]
@@ -3624,6 +3626,10 @@ model Item {
   /** What is wrong with this piece (#1557) — a thinned gum, a missing tooth, a crease. See
    *  {@link ItemFault}. */
   faults ItemFault[]
+  /** The replacement pairs this copy is the **new** copy of — *Replaces #M* (#1936, ADR-0070). */
+  replaces   ItemReplacement[] @relation("ItemReplacementNew")
+  /** The replacement pairs this copy is the **old** copy of — *Replaced by #N*. */
+  replacedBy ItemReplacement[] @relation("ItemReplacementOld")
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -7660,4 +7666,48 @@ model MailMessage {
   @@index([status, nextAttemptAt])
   @@index([collectionId, status])
   @@map("mail_message")
+}
+
+// A replacement pair (#1936, ADR-0070): a **new** copy that replaces an **old** one in the
+// collection. Recording it moves nothing — the new copy stays where identification filed it, and the
+// old one stays where it lies until the pair is settled on the Replacements screen.
+//
+// `status` is the lifecycle: `open` → `done` (the old copy was put on the current sale card, taken
+// out of the collection and marked for sale), `cancelled` (the collector withdrew it), or `moot`
+// (either copy left the collection's hands first — sold, traded away, disposed of or deleted — and
+// the pair had nothing left to settle). Only an open pair is ever written again; the other three are
+// history on both copies (*Replaced by #N* / *Replaces #M*).
+//
+// A copy is in **at most one open pair on each side** — partial unique indexes in the migration,
+// which Prisma cannot express. It may be the new copy of one pair and the old copy of another.
+//
+// Both copy references are `SET NULL` rather than cascades: a deleted copy closes the pair as moot,
+// and the other copy keeps the history. `newItemNo`/`oldItemNo` are the copies' numbers written when
+// the pair was recorded, so that history still names a copy that no longer exists — a copy number is
+// never reused (#268).
+model ItemReplacement {
+  id           String    @id @default(cuid())
+  collectionId String
+  newItemId    String?
+  oldItemId    String?
+  newItemNo    Int
+  oldItemNo    Int
+  /** `open` | `done` | `cancelled` | `moot` (`replacement-rules.ts`). */
+  status       String    @default("open")
+  /** Why a moot pair closed: `sold` | `traded` | `disposed` | `deleted`; null otherwise. */
+  mootReason   String?
+  /** Which copy's departure made it moot: `new` | `old`; null unless moot. */
+  mootSide     String?
+  createdAt    DateTime  @default(now())
+  /** When the pair left `open`; null while open (CHECK). */
+  closedAt     DateTime?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  newItem    Item?      @relation("ItemReplacementNew", fields: [newItemId], references: [id], onDelete: SetNull)
+  oldItem    Item?      @relation("ItemReplacementOld", fields: [oldItemId], references: [id], onDelete: SetNull)
+
+  @@index([collectionId, status])
+  @@index([newItemId])
+  @@index([oldItemId])
+  @@map("item_replacement")
 }

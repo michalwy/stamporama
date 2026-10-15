@@ -104,6 +104,7 @@ import { IssueGroupList } from "./issue-group-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { useToast } from "@/app/toast-provider";
 import { DisposeCopyDialog } from "./dispose-copy-dialog";
+import { RecordReplacementDialog } from "./replacements/record-replacement-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
@@ -144,6 +145,8 @@ type DialogState =
   // it is one fact with nothing to fill in, so it is a confirmation.
   | { kind: "dispose"; item: ItemListItem }
   | { kind: "restore"; item: ItemListItem }
+  // A replacement pair from the row (#1936): `side` is the side this copy takes.
+  | { kind: "replacement"; item: ItemListItem; side: "new" | "old" }
   | { kind: "quickPrice"; item: ItemListItem }
   // Location and disposition over the whole selection (#682) — the bulk bar's own dialog, and the
   // only one here that acts on copies rather than on a copy.
@@ -1164,6 +1167,7 @@ export function InventoryListPanel({
         it.purchase ? `/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}` : null,
       onDispose: (it) => setDialog({ kind: "dispose", item: it }),
       onRestore: (it) => setDialog({ kind: "restore", item: it }),
+      onRecordReplacement: (it, side) => setDialog({ kind: "replacement", item: it, side }),
       exclusionPlatform: scopedPlatform,
       onSetPlatformExclusion: (it, platformId, excluded) =>
         applyPlatformExclusion([it], platformId, excluded, false),
@@ -2265,6 +2269,18 @@ export function InventoryListPanel({
               } else if (result.status === "error") setActionError(result.message);
             });
           }}
+        />
+      )}
+
+      {/* Replaces… / Replaced by… (#1936): the dialog records the pair itself and re-reads the
+          inventory, so the panel has nothing to do but close it. */}
+      {dialog.kind === "replacement" && (
+        <RecordReplacementDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          item={dialog.item}
+          side={dialog.side}
+          onClose={closeDialog}
         />
       )}
 

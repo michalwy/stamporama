@@ -32,6 +32,7 @@ import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
+import { CopyReplacementsCard } from "@/app/c/[collectionSlug]/inventory/replacements/copy-replacements-card";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
@@ -456,6 +457,14 @@ export function CopyDetailPanel({
             {!item.multiStamp && (
               <RelatedWantsCard collectionId={collectionId} stampId={item.stampId} />
             )}
+
+            {/* The copy's replacement pairs (#1936): what it replaces or is replaced by, and where
+                each pair stands. Omitted for a copy in none. */}
+            <CopyReplacementsCard
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              itemId={item.id}
+            />
 
             <DetailCard title="Purchase" empty={!item.purchase}>
               {item.purchase && (
