@@ -4,7 +4,8 @@
 
 Accepted. Decided with the collector on 2026-10-14 and built by #1909. Amends the shipping-method
 model of #468 (which had no ADR of its own), [ADR-0068](0068-packing-supplies.md) §7 and §8, and the
-buyer message's `{shippingOptions}` (#1815). #1910 gives the agent API the same model.
+buyer message's `{shippingOptions}` (#1815). #1910 gives the agent API the same model. §3 and §4
+amended by #1923 (2026-10-15): a sale records the service it was actually *sent as*.
 
 ## Context
 
@@ -46,12 +47,25 @@ Choosing a platform's option on a sale records the option (link + name snapshot,
 leaves the postage to be entered. The sale's default carrier — the fallback for its tracking link
 (#491) — is the linked service's carrier.
 
+> **Amended by #1923 (2026-10-15):** what the buyer chose and how the parcel went are two facts. A
+> sale records **Sent as** (`Sale.sentAsServiceId`, `Restrict`) — any service of the rate list, of
+> any carrier — beside its option. Null means *as the option*: the option's linked service, read
+> through its link, which is how every sale recorded before reads, so nothing was backfilled; a
+> write naming the option's own service stores null. **The postage, the default supplies and the
+> tracking carrier's default follow Sent as**, not the option; the option keeps its name and buyer
+> price. A carrier the sale recorded moves with Sent as when it was the old service's carrier — the
+> supplies' rule — and stays when it was chosen by hand. A platform change that drops the option
+> pins Sent as to the service the parcel went by. A service a sale was sent as cannot be deleted.
+
 ### 4. Default packing supplies belong to the carrier service
 
 What goes into a registered letter does not depend on where it sold, so the default supply list of
 ADR-0068 §8 moves from the method to the service (`CarrierServiceSupply`). The swap rule is
 unchanged; it is applied with the lists of the services the old and the new option are linked to,
 **read through each option's link as it stands now** — a sale stores no service of its own.
+*(Amended by #1923: the swap is between the services the sale is **sent as** before and after the
+write — its own `sentAsServiceId`, else its option's — so a change of Sent as swaps by the same rule
+and a change of option under an explicit Sent as swaps nothing.)*
 
 ### 5. `{shippingOptions}` lists buyer prices
 

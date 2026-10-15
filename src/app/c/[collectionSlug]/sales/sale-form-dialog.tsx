@@ -8,6 +8,9 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
 import { getShippingOptionsAction } from "@/app/actions/shipping-options";
+import { getCarriersAction } from "@/app/actions/carriers";
+import type { CarrierData } from "@/lib/carriers";
+import { SentAsSelect, findCarrierService } from "./sent-as-select";
 import type { ShippingOptionData } from "@/lib/shipping-options";
 import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -48,6 +51,8 @@ export interface SaleFormDialogInitial {
   shippingOptionId: string;
   /** The one-off's name; ignored for a listed option, whose name is read from the row. */
   shippingOptionName: string;
+  /** The carrier service the parcel was actually sent with (#1923), or "" for *as the option*. */
+  sentAsServiceId?: string;
   shippingCost: string;
   shippingCurrency: string;
 }
@@ -140,6 +145,10 @@ export function SaleFormDialog({
   });
   const [shippingOptionId, setShippingOptionId] = useState(initial?.shippingOptionId ?? "");
   const [shippingOptionName, setShippingOptionName] = useState(initial?.shippingOptionName ?? "");
+  // What the parcel was actually sent as (#1923) — blank follows the option's linked service. Any
+  // service of the rate list, so the whole list is loaded once with the form.
+  const [sentAs, setSentAs] = useState(initial?.sentAsServiceId ?? "");
+  const [carriers, setCarriers] = useState<CarrierData[]>([]);
   const [shippingCost, setShippingCost] = useState(initial?.shippingCost ?? "");
   // Blank until an option's service or the platform answers it; resolved against the sale currency on submit,
   // since shipping is usually paid in a currency of its own (#206).
@@ -160,6 +169,18 @@ export function SaleFormDialog({
       cancelled = true;
     };
   }, [platformId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCarriersAction(collectionId)
+      .then((rows) => {
+        if (!cancelled) setCarriers(rows);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionId]);
 
   const optionsLoaded = loadedOptions.platformId === platformId;
   const shippingOptions = optionsLoaded ? loadedOptions.rows : [];
@@ -183,15 +204,29 @@ export function SaleFormDialog({
       ? (initial?.shippingOptionName ?? "…")
       : null;
 
+  /** The service the chosen option is linked to — what *Sent as* blank stands for. */
+  const optionService = shippingOptions.find((o) => o.id === effectiveShippingOptionId)?.service ?? null;
+
   /** Picking an option fills in what its carrier service normally costs (#468, #1909) — the figure
    * is a default, not a reading, so it stays editable for the parcel that cost something else. An
-   * option linked to no service leaves the postage to be entered. */
+   * option linked to no service leaves the postage to be entered. A parcel *sent as* another service
+   * (#1923) keeps that service's postage: the postage follows how it went, not what the buyer chose. */
   function pickShippingOption(next: string) {
     setShippingOptionId(next);
     const option = shippingOptions.find((o) => o.id === next);
-    if (!option) return;
+    if (!option || sentAs) return;
     setShippingCost(option.service?.cost ?? "");
     if (option.service) setShippingCurrency(option.service.currency);
+  }
+
+  /** Changing *Sent as* fills in what the service picked costs (#1923) — back to blank, the option's.
+   * A blank whose option links to no service leaves the postage as typed. */
+  function pickSentAs(next: string) {
+    setSentAs(next);
+    const service = next ? findCarrierService(carriers, next) : optionService;
+    if (!service) return;
+    setShippingCost(service.cost);
+    setShippingCurrency(service.currency);
   }
 
   // Who the buyer typed by their Facebook profile is (#1777), re-read a moment after typing stops: the
@@ -305,6 +340,7 @@ export function SaleFormDialog({
         // Shipping is entered in its own currency (#206); the sale's is the sensible default when
         // neither a service nor the collector has said otherwise.
         currency: shippingCurrency || resolvedCurrency,
+        sentAsServiceId: sentAs,
       },
     });
   }
@@ -612,6 +648,23 @@ export function SaleFormDialog({
                 />
               </div>
             )}
+          </div>
+
+          {/* How the parcel actually went (#1923), when not as the buyer chose: the postage, the
+              usual supplies and the tracking carrier follow it; the option stays what was bought. */}
+          <div style={{ marginTop: "1rem" }}>
+            <LabelWithError htmlFor="sale-sent-as">Sent as</LabelWithError>
+            <SentAsSelect
+              id="sale-sent-as"
+              carriers={carriers}
+              value={sentAs}
+              optionService={
+                optionService && { id: optionService.id, name: optionService.name, carrierName: optionService.carrierName }
+              }
+              disabled={isPending}
+              style={INPUT_STYLE}
+              onChange={pickSentAs}
+            />
           </div>
 
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>

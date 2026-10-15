@@ -1258,7 +1258,8 @@ sale's **default** carrier — each sale records the carrier that actually took 
 mark it sent, and shows its [tracking number as a link](sales.md#tracking-the-shipment) from there.
 
 A carrier with services, or one a sale names, can't be deleted; nor can a service a platform's
-option is linked to — unlink it there first.
+option is linked to — unlink it there first — or one a sale was [sent as](sales.md#sent-as), which
+is a record of how that parcel went: rename it instead.
 
 The shipping methods kept per platform before this were moved over on their own: each became that
 platform's shipping option, at the same amount as its buyer price, and each distinct method became a

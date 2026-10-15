@@ -29,13 +29,14 @@ interface ShipmentDialogProps {
   /** `sent` is the prompt on the way to Sent — it saves and advances in one step, and offers Skip.
    * `edit` is the same dialog reopened from the header to correct what was recorded. */
   mode: "sent" | "edit";
-  /** How the parcel is going, as recorded on the sale — the option's snapshot name, so the prompt
-   * says which service this is about. Null when the sale names no option. */
-  shippingOptionName: string | null;
+  /** How the parcel is going, as recorded on the sale — the service it was *sent as* when that is not
+   * the option's (#1923), else the option's snapshot name — so the prompt says which service this is
+   * about. Null when the sale names neither. */
+  goingBy: string | null;
   /** The collection's carriers, to pick from. Maintained under Settings → Carriers. */
   carriers: CarrierData[];
   /** The carrier in force: the sale's own answer, else the **default** — the carrier of the service
-   * its shipping option is linked to (#1909).
+   * it is sent as (#1909, #1923).
    * Pre-selected, because the usual case is that the default is right. */
   carrierId: string | null;
   trackingCode: string | null;
@@ -67,7 +68,7 @@ interface ShipmentDialogProps {
  */
 export function ShipmentDialog({
   mode,
-  shippingOptionName,
+  goingBy,
   carriers,
   carrierId: initialCarrierId,
   trackingCode: initialTrackingCode,
@@ -117,8 +118,8 @@ export function ShipmentDialog({
             ))}
           </select>
           <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0.375rem 0 1rem" }}>
-            {shippingOptionName
-              ? `Going by ${shippingOptionName}, which suggests the carrier above — change it if the parcel went another way.`
+            {goingBy
+              ? `Going by ${goingBy}, which suggests the carrier above — change it if the parcel went another way.`
               : "No shipping option is recorded on this sale, so there is no carrier to suggest."}
           </p>
 

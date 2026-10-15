@@ -133,7 +133,7 @@ taken from stock FIFO** at their batches' unit costs.
 > now belongs to the **carrier service** (`CarrierServiceSupply`), and a sale reaches it through its
 > shipping option's link to the service; read *method* below as *the option's service*. The rule is
 > unchanged — now `changeServiceSupplies` in `src/lib/service-supplies.ts`, applied by
-> `applyOptionSupplies`.
+> `applyServiceSupplies` to the service the sale is *sent as* (#1923: its own, else its option's).
 
 Most parcels of one kind take the same supplies — a registered letter goes in a C6 envelope with two
 transport cards — so a platform's shipping method can list them, with quantities

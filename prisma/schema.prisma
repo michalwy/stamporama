@@ -5846,6 +5846,13 @@ model Sale {
   // the rate list are live lists the collector re-prices and renames as the carriers do, and a sale
   // must keep saying which service was actually bought. Null when no option was recorded.
   shippingOptionName String?
+  // The carrier service the parcel was **actually sent with** (#1923), which is not always the one
+  // the buyer's option is linked to: a parcel that turns out too big or too heavy goes by another of
+  // the carrier's services, or another carrier's. Null means *as the option* — the option's linked
+  // service, read through its link — which is how every sale recorded before #1923 reads; a write
+  // that names the option's own service stores null. The postage, the default packing supplies and
+  // the tracking carrier's default follow this, not the option. `onDelete: Restrict`.
+  sentAsServiceId String?
   // My actual shipping/postage cost, in `shippingCurrency` (subtracts from proceeds, −). Entered in
   // any currency (#206) — converted straight to the base currency for profit, not to the sale's
   // transaction currency. Pre-filled from the cost of the carrier service the chosen option is
@@ -5889,6 +5896,7 @@ model Sale {
   platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
   shippingOption ShippingOption?  @relation(fields: [shippingOptionId], references: [id], onDelete: Restrict)
+  sentAs        CarrierService?   @relation("SaleSentAs", fields: [sentAsServiceId], references: [id], onDelete: Restrict)
   carrier       Carrier?          @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   lines         SaleLine[]
   // Packing supplies the parcel used (#1898): with the postage, what *my shipping* is.
@@ -5903,6 +5911,7 @@ model Sale {
   @@index([platformId])
   @@index([buyerId])
   @@index([shippingOptionId])
+  @@index([sentAsServiceId])
   @@index([carrierId])
   @@map("sale")
 }
@@ -6001,6 +6010,8 @@ model CarrierService {
   // A carrier with services cannot be deleted — its services go first, each one no option links to.
   carrier    Carrier    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
   options    ShippingOption[]
+  // Sales whose parcel was sent this way rather than by their option's service (#1923).
+  sentSales  Sale[]           @relation("SaleSentAs")
   // The packing supplies a parcel sent this way usually takes (#1899).
   supplies   CarrierServiceSupply[]
 

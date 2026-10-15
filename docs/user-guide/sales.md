@@ -65,6 +65,9 @@ the field shows is what is saved. An empty field stays empty.
   detail screen — the real postage often turns up later than the order. The service's carrier is a
   default for the [shipment](#tracking-the-shipment), overridable on each sale.
 
+- **Sent as** — the carrier service the parcel actually goes by, when it is not the one the buyer's
+  option is linked to. See [Sent as](#sent-as).
+
 **Continue** creates the sale and opens its detail screen.
 
 ### Step 2 — add the sold sets
@@ -124,13 +127,37 @@ equivalent (**≈ 200 PLN**) beside it — gross, buyer handling/total, commissi
 price — converted at the sale's **frozen** rate. The net proceeds are already shown in the base
 currency, and the sale list shows each sale's net in base too.
 
-**The shipping row carries the method too.** Click it and the first control is the method the
-parcel went by — the platform's list, plus **Custom…** for a one-off you name here. Picking a
-listed method re-fills the cost with its usual price, still editable. Clearing the amount leaves
-the method standing: knowing a parcel went registered is worth recording before the postage
-receipt turns up. Renaming or re-pricing a method later never rewrites a sale already recorded —
-each sale keeps the name it was sent under — and a method a sale points at can't be deleted;
-rename it instead.
+**The shipping row carries the option too.** Click it and the first control is the shipping option
+the buyer chose — the platform's list, plus **Custom…** for a one-off you name here — followed by
+**Sent as** ([below](#sent-as)). Picking a listed option re-fills the cost with its service's usual
+price, still editable. Clearing the amount leaves the option standing: knowing a parcel went
+registered is worth recording before the postage receipt turns up. Renaming or re-pricing an option
+later never rewrites a sale already recorded — each sale keeps the name it was sent under — and an
+option a sale points at can't be deleted; rename it instead.
+
+### Sent as
+
+What the buyer chose and how the parcel actually went are two different facts. A parcel that turns
+out bigger or heavier than the buyer's option allows goes by another service — the carrier's next
+size up, or another carrier altogether. **Sent as** records that service, from the whole of your
+rate list under [Settings → Carriers](collections.md#carriers), of any carrier.
+
+- **It starts as the option.** Its first entry, *As the option*, names the service the buyer's
+  option is linked to, and a sale that never says otherwise — every sale recorded before Sent as
+  existed among them — goes by that service.
+- **The postage follows it.** Picking a service fills in what it costs you, still editable;
+  back to *As the option*, the option's service's cost. While a sale is sent as another service,
+  changing the option no longer touches the postage. Postage you type is what is saved — the last
+  word, as before — and a sale with neither a linked service nor Sent as has typed postage only.
+- **So do the packing supplies**, by the [same rule](#packing-supplies) as a change of option: lines
+  still exactly the old service's become the new one's, lines you changed stay.
+- **And the carrier**: the [Mark as sent](#fulfillment-status) prompt pre-selects Sent as's carrier.
+  A carrier already recorded follows too when it was the old service's; one you picked by hand stays.
+- **The buyer's option stays as recorded**, with what the buyer paid for it — the buyer message, the
+  packing list and the option's own name still say what was bought.
+
+The **Postage** row names Sent as — *sent as InPost: Locker* — only when it differs from the
+option's service, so the common case stays quiet. Change it on that row or in **Edit header**.
 
 **My shipping can be in any currency.** Postage is often paid in your own currency, not the
 marketplace's, so the shipping row has its own currency selector (defaulting to the sale currency).
@@ -168,8 +195,8 @@ net and the profit use that total.
   platform's [shipping option](contacts.md#shipping-options) is linked to lists its usual supplies,
   choosing the option — when you record the sale, on the **Postage** row or in **Edit header** —
   adds those lines, taken from stock like any other; adjust them for this parcel as you need.
-  **Changing the option** swaps the lines that are still exactly the old service's for the new
-  one's, and keeps any line you changed or added yourself (a line you raised to *5 cards* stays, and
+  **Changing the option** — or [Sent as](#sent-as) — swaps the lines that are still exactly the old
+  service's for the new one's, and keeps any line you changed or added yourself (a line you raised to *5 cards* stays, and
   the new service's cards are not added beside it). Saving the same option again brings back nothing
   you removed.
 - **A sale recorded before supplies existed keeps its typed amount** as its whole shipping, and its
@@ -357,8 +384,8 @@ sale back to Packed from Sent is a correction, not a packing decision.
 
 **Moving to Sent asks about the parcel.** The moment it goes is the moment you know which courier
 took it and hold the receipt with the number on it, so a **Mark as sent** prompt asks for both. The
-carrier arrives **pre-selected** from the sale's shipping option — change it when the parcel went
-another way — and the prompt says what the choice means: whether that carrier will turn the number
+carrier arrives **pre-selected** from the service the sale is [sent as](#sent-as) — change it when
+the parcel went another way — and the prompt says what the choice means: whether that carrier will turn the number
 into a link, or whether it has no tracking page recorded. **Skip** moves the sale to Sent without a
 number, which is the right answer for postage that carries no tracking at all. As with the paid
 prompt, a sale that already has a tracking number isn't asked again.
@@ -371,11 +398,11 @@ exactly as the carrier gave it to you. Both live in one **Shipment** dialog: it 
 number** when there is none, or the **✎** beside the 📦 chip to correct what was recorded. Like the
 transaction link, either can be set or changed whatever the sale's status is.
 
-**The carrier of a shipping option is only a default.** It is the carrier of the service the
-option is linked to. On a marketplace you offer a *service* — "Courier" — and which courier actually
-takes the parcel is settled at the counter, so the option's carrier is a suggestion the Shipment
-dialog pre-selects and you override per sale. A sale that never says anything of its own keeps
-following its option's carrier.
+**The carrier of a shipping option is only a default.** It is the carrier of the service the sale
+is [sent as](#sent-as) — the one the option is linked to, unless you named another. On a marketplace
+you offer a *service* — "Courier" — and which courier actually takes the parcel is settled at the
+counter, so that carrier is a suggestion the Shipment dialog pre-selects and you override per sale.
+A sale that never says anything of its own keeps following that service's carrier.
 
 Whether the number becomes a **link** depends on that carrier:
 

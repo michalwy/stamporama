@@ -119,6 +119,14 @@ function carrierInUseMessage(e: CarrierInUseError): string {
   return `This carrier is recorded on ${plural(e.saleCount, "sale", "sales")} and cannot be deleted. Rename it instead.`;
 }
 
+function serviceInUseMessage(e: CarrierServiceInUseError): string {
+  if (e.optionCount > 0) {
+    return `This service is linked from ${plural(e.optionCount, "shipping option", "shipping options")} and cannot be deleted. Unlink it there first.`;
+  }
+  // A sale's *Sent as* (#1923) is a record of how its parcel went, not a link to undo.
+  return `${plural(e.saleCount, "sale was", "sales were")} sent as this service, so it cannot be deleted. Rename it instead.`;
+}
+
 // ── Services ─────────────────────────────────────────────────────────────────────────────────
 
 /** A service's cost is required — a rate list whose row has no price is the free-entry amount it
@@ -207,10 +215,7 @@ export async function deleteCarrierServiceAction(serviceId: string): Promise<Car
     return { status: "success" };
   } catch (e) {
     if (e instanceof CarrierServiceInUseError) {
-      return {
-        status: "error",
-        message: `This service is linked from ${plural(e.optionCount, "shipping option", "shipping options")} and cannot be deleted. Unlink it there first.`,
-      };
+      return { status: "error", message: serviceInUseMessage(e) };
     }
     return { status: "error", message: "Failed to delete the service. Please try again." };
   }

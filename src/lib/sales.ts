@@ -34,14 +34,14 @@ import {
 import { attributeLineToPurchase } from "./purchase-return";
 import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
-import { assertCarrierInCollection } from "./carriers";
+import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
 import { readShareAddress, type ShareAddress } from "./share-address";
 import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard-sales-rules";
 import { settleSupplies } from "./supply-settlement";
 import {
   SALE_SUPPLY_COST_SELECT,
-  applyOptionSupplies,
+  applyServiceSupplies,
   saleSupplyLineCostOf,
   saleSuppliesCostOf,
   type SaleSupplyCostRow,
@@ -388,6 +388,11 @@ export interface SaleShippingInput {
   cost: string | null;
   /** Currency the postage was paid in (#206) — independent of the sale's transaction currency. */
   currency: string;
+  /** The carrier service the parcel was actually sent with (#1923) — any service of the rate list,
+   * of any carrier — or null for *as the option*. Left out, the sale keeps what it had: a caller
+   * that never asked (an order import) does not undo the collector's answer. The option's own
+   * service is stored as null, so the sale goes on following its option. */
+  sentAsServiceId?: string | null;
 }
 
 export interface SaleLineDraft {
@@ -421,7 +426,7 @@ async function freezeFxRate(
   }
 }
 
-/** The four shipping columns a write sets together (#468/#206). */
+/** The shipping columns a write sets together (#468/#206). */
 interface SaleShippingData {
   shippingOptionId: string | null;
   shippingOptionName: string | null;
@@ -446,34 +451,114 @@ async function resolveSaleShipping(
   platformId: string,
   baseCurrency: string,
   input: SaleShippingInput
-): Promise<SaleShippingData> {
+): Promise<ResolvedSaleShipping> {
   let optionId: string | null = null;
   let optionName: string | null = null;
+  let optionServiceId: string | null = null;
   if (input.optionId) {
     const option = await resolveShippingOptionForPlatform(platformId, input.optionId);
     optionId = option.id;
     optionName = option.name;
+    optionServiceId = option.serviceId;
   } else if (input.optionName?.trim()) {
     optionName = input.optionName.trim();
   }
+  // The rate list is the collection's, so any of its services will do — whichever carrier it is.
+  if (input.sentAsServiceId) await assertCarrierServiceInCollection(collectionId, input.sentAsServiceId);
+  const sentAs = { named: input.sentAsServiceId, optionServiceId };
 
   if (input.cost == null) {
     return {
-      shippingOptionId: optionId,
-      shippingOptionName: optionName,
-      shippingCost: null,
-      shippingCurrency: null,
-      shippingFxRateToBase: null,
+      columns: {
+        shippingOptionId: optionId,
+        shippingOptionName: optionName,
+        shippingCost: null,
+        shippingCurrency: null,
+        shippingFxRateToBase: null,
+      },
+      sentAs,
     };
   }
   const currency = input.currency.trim() || baseCurrency;
   return {
-    shippingOptionId: optionId,
-    shippingOptionName: optionName,
-    shippingCost: input.cost,
-    shippingCurrency: currency,
-    shippingFxRateToBase: await freezeFxRate(collectionId, currency, baseCurrency),
+    columns: {
+      shippingOptionId: optionId,
+      shippingOptionName: optionName,
+      shippingCost: input.cost,
+      shippingCurrency: currency,
+      shippingFxRateToBase: await freezeFxRate(collectionId, currency, baseCurrency),
+    },
+    sentAs,
   };
+}
+
+/** A shipping write resolved: the columns to set, and what it says about *Sent as* (#1923). */
+interface ResolvedSaleShipping {
+  columns: SaleShippingData;
+  sentAs: {
+    /** The service the write named, null for *as the option*, undefined when it did not say. */
+    named: string | null | undefined;
+    /** The service the chosen option is linked to, or null (no option, a one-off, or no link). */
+    optionServiceId: string | null;
+  };
+}
+
+/** The `sentAsServiceId` a write leaves on a sale (#1923): what it named — or, naming nothing, what
+ * the sale had — stored as null when that is the option's own service, so the common case stays
+ * quiet and goes on following the option. */
+function storedSentAs(sentAs: ResolvedSaleShipping["sentAs"], had: string | null): string | null {
+  const next = sentAs.named === undefined ? had : sentAs.named;
+  return next === sentAs.optionServiceId ? null : next;
+}
+
+/** How a sale's parcel goes before a shipping write (#1923): the service it is sent as — its own, else
+ * its option's — and the carrier it recorded, which may only be that service's default. */
+interface SentAsBefore {
+  sentAsServiceId: string | null;
+  service: string | null;
+  carrierId: string | null;
+}
+
+async function readSentAs(tx: DbTransaction, saleId: string): Promise<SentAsBefore> {
+  const row = await tx.sale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: { sentAsServiceId: true, carrierId: true, shippingOption: { select: { serviceId: true } } },
+  });
+  return {
+    sentAsServiceId: row.sentAsServiceId,
+    service: row.sentAsServiceId ?? row.shippingOption?.serviceId ?? null,
+    carrierId: row.carrierId,
+  };
+}
+
+/**
+ * What follows a change of the service a sale's parcel goes by (#1923, #1899): the default packing
+ * supplies swap (`applyServiceSupplies`), and the tracking carrier moves to the new service's carrier
+ * when it is still the old one's — the supplies' rule, applied to the carrier: what is still the old
+ * default follows, what was chosen by hand stays. A carrier the sale never recorded needs nothing; it
+ * is read through the service. The postage is the form's to fill in, since it stays editable before
+ * it is saved.
+ *
+ * Runs inside the caller's transaction, after the sale's own write.
+ */
+async function followSentAs(
+  tx: DbTransaction,
+  saleId: string,
+  before: SentAsBefore,
+  after: string | null
+): Promise<void> {
+  if (before.service === after) return;
+  await applyServiceSupplies(tx, saleId, before.service, after);
+  if (!before.carrierId || !before.service || !after) return;
+  const services = await tx.carrierService.findMany({
+    where: { id: { in: [before.service, after] } },
+    select: { id: true, carrierId: true },
+  });
+  const was = services.find((s) => s.id === before.service)?.carrierId;
+  const now = services.find((s) => s.id === after)?.carrierId;
+  if (was === before.carrierId && now && now !== was) {
+    await tx.sale.update({ where: { id: saleId }, data: { carrierId: now } });
+  }
 }
 
 /** Whether every set of an offer has now sold **through this offer** — read inside the sale
@@ -551,9 +636,12 @@ export async function createSale(
   const shipping = input.shipping
     ? await resolveSaleShipping(collectionId, input.platformId, baseCurrency, input.shipping)
     : null;
+  // What the parcel is sent as (#1923): the service the form named, or the option's.
+  const sentAsServiceId = shipping ? storedSentAs(shipping.sentAs, null) : null;
+  const sentAs = sentAsServiceId ?? shipping?.sentAs.optionServiceId ?? null;
   // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
-  // row it belongs to stand or fall together — and so do the usual packing supplies of the option's
-  // carrier service (#1899, #1909), filled in as the sale's supply lines.
+  // row it belongs to stand or fall together — and so do the usual packing supplies of the carrier
+  // service it is sent as (#1899, #1909, #1923), filled in as the sale's supply lines.
   const sale = await prisma.$transaction(async (tx) => {
     const created = await tx.sale.create({
       data: {
@@ -569,14 +657,15 @@ export async function createSale(
         buyerHandling: input.buyerHandling,
         buyerPaidTotal: input.buyerPaidTotal,
         commission: input.commission,
-        ...shipping,
+        ...shipping?.columns,
+        sentAsServiceId,
         // Seed the transition log with the initial `ordered` event (#191), so every sale has a
         // non-empty status timeline from the moment it is recorded.
         statusEvents: { create: { status: "ordered" } },
       },
       select: { id: true },
     });
-    await applyOptionSupplies(tx, created.id, null, shipping?.shippingOptionId ?? null);
+    await applyServiceSupplies(tx, created.id, null, sentAs);
     return created;
   });
   return sale.id;
@@ -685,10 +774,8 @@ export async function updateSaleHeader(
     ? await resolveSaleShipping(ref.collectionId, input.platformId, ref.baseCurrency, input.shipping)
     : null;
   await prisma.$transaction(async (tx) => {
-    const before = await tx.sale.findUniqueOrThrow({
-      where: { id: saleId },
-      select: { shippingOptionId: true },
-    });
+    const before = await readSentAs(tx, saleId);
+    const sentAsServiceId = shipping ? storedSentAs(shipping.sentAs, before.sentAsServiceId) : null;
     await tx.sale.update({
       where: { id: saleId },
       data: {
@@ -701,20 +788,21 @@ export async function updateSaleHeader(
         buyerHandling: input.buyerHandling,
         buyerPaidTotal: input.buyerPaidTotal,
         commission: input.commission,
-        ...(shipping ?? {}),
+        ...(shipping ? { ...shipping.columns, sentAsServiceId } : {}),
         // An option belongs to a platform's list, so moving the sale to another platform drops
         // it — the *name* stays, because that is a snapshot of how the parcel actually went and no
-        // change of platform makes it untrue. Only when the form did not submit shipping itself; when
-        // it did, the resolver above already validated the option against the new platform.
+        // change of platform makes it untrue, and so does the service it was sent as (#1923), now
+        // the sale's own. Only when the form did not submit shipping itself; when it did, the
+        // resolver above already validated the option against the new platform.
         ...(shipping == null && input.platformId !== ref.platformId
-          ? { shippingOptionId: null }
+          ? { shippingOptionId: null, sentAsServiceId: before.service }
           : {}),
       },
     });
-    // Only an option the form chose swaps the supply lines (#1899). The one dropped above with a change
-    // of platform was not chosen away: the parcel went as it went, and its supplies with it.
+    // Only shipping the form chose swaps the supply lines (#1899). The option dropped above with a
+    // change of platform was not chosen away: the parcel went as it went, and its supplies with it.
     if (shipping) {
-      await applyOptionSupplies(tx, saleId, before.shippingOptionId, shipping.shippingOptionId);
+      await followSentAs(tx, saleId, before, sentAsServiceId ?? shipping.sentAs.optionServiceId);
     }
   });
 }
@@ -793,15 +881,14 @@ export async function updateSaleShipping(
   input: SaleShippingInput
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
-  const data = await resolveSaleShipping(ref.collectionId, ref.platformId, ref.baseCurrency, input);
+  const shipping = await resolveSaleShipping(ref.collectionId, ref.platformId, ref.baseCurrency, input);
   await prisma.$transaction(async (tx) => {
-    const before = await tx.sale.findUniqueOrThrow({
-      where: { id: saleId },
-      select: { shippingOptionId: true },
-    });
-    await tx.sale.update({ where: { id: saleId }, data });
-    // An option chosen here fills in its service's usual supplies, swapping the old one's (#1899).
-    await applyOptionSupplies(tx, saleId, before.shippingOptionId, data.shippingOptionId);
+    const before = await readSentAs(tx, saleId);
+    const sentAsServiceId = storedSentAs(shipping.sentAs, before.sentAsServiceId);
+    await tx.sale.update({ where: { id: saleId }, data: { ...shipping.columns, sentAsServiceId } });
+    // A service the parcel now goes by fills in its usual supplies, swapping the old one's (#1899),
+    // whether an option or *Sent as* (#1923) changed it.
+    await followSentAs(tx, saleId, before, sentAsServiceId ?? shipping.sentAs.optionServiceId);
   });
 }
 
@@ -1851,6 +1938,15 @@ export interface SaleDetail {
   /** What the option was called at sale time — the snapshot, so a renamed or deleted option never
    * rewrites what this sale says. Null when no option was recorded. */
   shippingOptionName: string | null;
+  /** The service the sale itself says its parcel was sent with (#1923), or null for *as the option*.
+   * What the editors start from. */
+  sentAsServiceId: string | null;
+  /** The service in force — {@link sentAsServiceId}'s, else the one the option is linked to — with
+   * its carrier's name, or null when neither says. */
+  sentAs: { serviceId: string; serviceName: string; carrierName: string } | null;
+  /** Whether {@link sentAs} is not the option's own service: the only case the screen names it, so a
+   * parcel sent as the buyer chose stays quiet. */
+  sentAsDiffers: boolean;
   /** My shipping cost as originally entered, in `shippingCurrency` (#206). */
   shippingCost: string | null;
   /** Currency the shipping cost was paid in; defaults to the sale currency for new entries. Null
@@ -1870,7 +1966,7 @@ export interface SaleDetail {
   /** The shipment's tracking number (#491), or null. Editable in place in any status. */
   trackingCode: string | null;
   /** The carrier in force for this parcel: the one the sale recorded, else the **default** — the
-   * carrier of the service its shipping option is linked to (#1909). Null when neither says. The
+   * carrier of the service it is sent as (#1909, #1923). Null when neither says. The
    * distinction is deliberate — the buyer picks a service, the courier is chosen at the counter — but
    * everything downstream wants the effective answer, so the fallback is resolved here rather than
    * in three screens. */
@@ -1914,6 +2010,13 @@ export interface SaleDetail {
   createdAt: Date;
 }
 
+/** A carrier service as the sale's detail reads what its parcel is sent as (#1923). */
+const SENT_AS_SERVICE_SELECT = {
+  id: true,
+  name: true,
+  carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
+} as const;
+
 /** Full sale read model for the detail view (ADR-0013). Runs the pure allocation engine
  * (`distributeSaleShared`, #163) to resolve each line's net proceeds. */
 export async function getSaleDetail(ownerId: string, saleId: string): Promise<SaleDetail | null> {
@@ -1947,17 +2050,14 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
         },
       },
       trackingCode: true,
-      // The sale's own carrier, and its option's service's as the fallback default (#491, #1909). Only the *link* is
-      // derived from either — it is a way of looking the parcel up, not a fact the sale freezes, so
-      // a carrier that moves its tracking site is corrected once and every sale it carried follows.
+      // The sale's own carrier, and the carrier of the service it is sent as for the fallback default
+      // (#491, #1909, #1923). Only the *link* is derived from either — it is a way of looking the
+      // parcel up, not a fact the sale freezes, so a carrier that moves its tracking site is
+      // corrected once and every sale it carried follows.
       carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
-      shippingOption: {
-        select: {
-          service: {
-            select: { carrier: { select: { id: true, name: true, trackingUrlTemplate: true } } },
-          },
-        },
-      },
+      sentAsServiceId: true,
+      sentAs: { select: SENT_AS_SERVICE_SELECT },
+      shippingOption: { select: { serviceId: true, service: { select: SENT_AS_SERVICE_SELECT } } },
       commission: true,
       status: true,
       createdAt: true,
@@ -2055,8 +2155,10 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const buyerNetTx = gross + shared.buyerHandling - shared.commission;
   const net = buyerNetTx * rate - shippingBase;
 
-  // What the sale said, else the carrier of its option's service (#491, #1909).
-  const carrier = sale.carrier ?? sale.shippingOption?.service?.carrier ?? null;
+  // The service the parcel went by (#1923): the sale's own answer, else its option's.
+  const sentAs = sale.sentAs ?? sale.shippingOption?.service ?? null;
+  // What the sale said, else the carrier of the service it is sent as (#491, #1909, #1923).
+  const carrier = sale.carrier ?? sentAs?.carrier ?? null;
 
   // "All packed" hint (#192): true only when the sale has copies and every one is packed. Never
   // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
@@ -2084,6 +2186,9 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     totalBelowGross,
     shippingOptionId: sale.shippingOptionId,
     shippingOptionName: sale.shippingOptionName,
+    sentAsServiceId: sale.sentAsServiceId,
+    sentAs: sentAs && { serviceId: sentAs.id, serviceName: sentAs.name, carrierName: sentAs.carrier.name },
+    sentAsDiffers: sale.sentAsServiceId != null && sale.sentAsServiceId !== sale.shippingOption?.serviceId,
     shippingCost: money(sale.shippingCost),
     shippingCurrency: sale.shippingCurrency,
     shippingBase: sale.shippingCost == null ? null : resolved.postageBase.toFixed(2),
