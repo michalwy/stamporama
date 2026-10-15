@@ -5,6 +5,9 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  DIALOG_FORM_SPAN_COLUMNS,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import type { ItemListItem } from "@/lib/items";
@@ -25,9 +28,10 @@ import { CandidateStampsPicker, pickedSetLabel } from "./candidate-stamps-picker
 import type { PickedStamp } from "./stamp-picker-shared";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 
-/** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
- * which is as large as a front and a back can be drawn here without the dialog growing. */
-const PICTURE_SIZE = "15rem";
+/** Edge of each picture in the dialog (#1003). Two of them side by side fill the left column's
+ * width (#1931), which is as large as a front and a back can be drawn there without the strip
+ * scrolling sideways. */
+const PICTURE_SIZE = "14rem";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -136,139 +140,146 @@ export function IdentifyVariantDialog({
 
   return (
     <>
-    <DialogShell title="Identify variant" onClose={onClose} minHeight="26rem" maxWidth="34rem">
+    <DialogShell title="Identify variant" onClose={onClose} minHeight="26rem" maxWidth={FORM_DIALOG_COLUMNS_WIDTH}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
       >
         <DialogBody>
-          <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", marginTop: 0, marginBottom: "1rem" }}>
-            Pick the specific variant this copy actually is. The copy is re-pointed and the
-            change is recorded in its refinement history.
-          </p>
+          <DialogFormColumns>
+            <p style={{ ...DIALOG_FORM_SPAN_COLUMNS, fontSize: "0.875rem", color: "var(--color-text-secondary)", marginTop: 0, marginBottom: "1rem" }}>
+              Pick the specific variant this copy actually is. The copy is re-pointed and the
+              change is recorded in its refinement history.
+            </p>
 
-          {/* The copy's picture — front and back */}
-          <div style={{ marginBottom: "1.25rem" }}>
-            <div style={SECTION_LABEL}>Picture</div>
-            {pictures.length === 0 ? (
-              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
-                This copy has no front or back photo. Use <strong>Edit</strong> to add one.
-              </p>
-            ) : (
-              <PhotoStrip collectionId={collectionId} photos={pictures} size={PICTURE_SIZE} />
-            )}
-          </div>
-
-          {/* The stamps it might be (#1651): settling is choosing one of them, so they come first. */}
-          {hasCandidates && !pendingSet && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <div style={SECTION_LABEL}>It is one of</div>
-              <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                {candidates.map((c) => (
-                  <label key={c.stampId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
-                    <input
-                      type="radio"
-                      name="candidate"
-                      checked={selectedId === c.stampId}
-                      onChange={() => setSelectedId(c.stampId)}
-                      disabled={isPending}
-                    />
-                    {[c.catalogLabels[0], c.name].filter(Boolean).join(" · ") || "(unnamed stamp)"}
-                  </label>
-                ))}
+            {/* The copy on the left (#1931); on the right, what it is identified as and why. */}
+            <div>
+              {/* The copy's picture — front and back */}
+              <div style={{ marginBottom: "1.25rem" }}>
+                <div style={SECTION_LABEL}>Picture</div>
+                {pictures.length === 0 ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
+                    This copy has no front or back photo. Use <strong>Edit</strong> to add one.
+                  </p>
+                ) : (
+                  <PhotoStrip collectionId={collectionId} photos={pictures} size={PICTURE_SIZE} />
+                )}
               </div>
             </div>
-          )}
 
-          {/* A set picked in the popup, saved instead of one stamp (#1651). */}
-          {pendingSet && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <div style={SECTION_LABEL}>Possible variants</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
-                <span style={{ flex: 1 }}>{pickedSetLabel(pendingSet)}</span>
-                <button type="button" onClick={() => setPendingSet(null)} style={LINK_BUTTON}>
-                  <Icon name="clear" size="sm" /> Discard
-                </button>
-              </div>
-              <input type="hidden" name="candidateStampIds" value={JSON.stringify(pendingSet.map((s) => s.stampId))} />
-            </div>
-          )}
+            <div>
+              {/* The stamps it might be (#1651): settling is choosing one of them, so they come first. */}
+              {hasCandidates && !pendingSet && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={SECTION_LABEL}>It is one of</div>
+                  <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    {candidates.map((c) => (
+                      <label key={c.stampId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
+                        <input
+                          type="radio"
+                          name="candidate"
+                          checked={selectedId === c.stampId}
+                          onChange={() => setSelectedId(c.stampId)}
+                          disabled={isPending}
+                        />
+                        {[c.catalogLabels[0], c.name].filter(Boolean).join(" · ") || "(unnamed stamp)"}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {/* Variant picker — descendants of the current stamp only */}
-          {!pendingSet && (
-          <div style={{ marginBottom: "1.25rem" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
-              <div style={SECTION_LABEL}>{hasCandidates ? "" : "Variant"}</div>
-              {canCompare && !hasCandidates && (
+              {/* A set picked in the popup, saved instead of one stamp (#1651). */}
+              {pendingSet && (
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={SECTION_LABEL}>Possible variants</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
+                    <span style={{ flex: 1 }}>{pickedSetLabel(pendingSet)}</span>
+                    <button type="button" onClick={() => setPendingSet(null)} style={LINK_BUTTON}>
+                      <Icon name="clear" size="sm" /> Discard
+                    </button>
+                  </div>
+                  <input type="hidden" name="candidateStampIds" value={JSON.stringify(pendingSet.map((s) => s.stampId))} />
+                </div>
+              )}
+
+              {/* Variant picker — descendants of the current stamp only */}
+              {!pendingSet && (
+              <div style={{ marginBottom: "1.25rem" }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
+                  <div style={SECTION_LABEL}>{hasCandidates ? "" : "Variant"}</div>
+                  {canCompare && !hasCandidates && (
+                    <button
+                      type="button"
+                      onClick={() => setComparing(true)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        fontSize: "0.8125rem",
+                        color: "var(--color-action-primary)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {/* Opens on the variant picked, when one is, so the doubt about a row is one
+                          press from its references. */}
+                      <Icon name="compare" size="sm" /> Compare with references…
+                    </button>
+                  )}
+                </div>
+                {hasCandidates ? null : item.issueId == null ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                    This copy&apos;s stamp is not part of an issue, so its variants can&apos;t be
+                    listed here. Use <strong>Edit</strong> to re-point it.
+                  </p>
+                ) : membersLoading ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                    Loading variants…
+                  </p>
+                ) : !hasVariants ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                    This stamp has no variants to resolve to.
+                  </p>
+                ) : (
+                  <SelectableStampTree
+                    nodes={descendantTree}
+                    selectedId={selectedId}
+                    onSelect={setSelectedId}
+                  />
+                )}
+                <input type="hidden" name="stampId" value={selectedId} />
+                {/* The stamp cannot be told, but it can be narrowed to a few (#1651). */}
                 <button
                   type="button"
-                  onClick={() => setComparing(true)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    fontSize: "0.8125rem",
-                    color: "var(--color-action-primary)",
-                    cursor: "pointer",
-                  }}
+                  onClick={() => setPickingSet(true)}
+                  disabled={isPending}
+                  style={{ ...LINK_BUTTON, marginTop: "0.5rem" }}
                 >
-                  {/* Opens on the variant picked, when one is, so the doubt about a row is one
-                      press from its references. */}
-                  <Icon name="compare" size="sm" /> Compare with references…
+                  {hasCandidates ? "Narrow the possible variants…" : "Several possible variants…"}
                 </button>
+              </div>
               )}
+
+              {/* Optional reason */}
+              <div style={{ marginBottom: "1.25rem" }}>
+                <LabelWithError htmlFor="identify-note">Reason (optional)</LabelWithError>
+                <TextArea
+                  id="identify-note"
+                  name="variantChangeNote"
+                  rows={2}
+                  placeholder="e.g. watermark confirmed under UV"
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
+                />
+              </div>
+
+              {/* Refinement history */}
+              <div>
+                <div style={SECTION_LABEL}>Refinement history</div>
+                <VariantHistoryList entries={history} isLoading={historyLoading} />
+              </div>
             </div>
-            {hasCandidates ? null : item.issueId == null ? (
-              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                This copy&apos;s stamp is not part of an issue, so its variants can&apos;t be
-                listed here. Use <strong>Edit</strong> to re-point it.
-              </p>
-            ) : membersLoading ? (
-              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                Loading variants…
-              </p>
-            ) : !hasVariants ? (
-              <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                This stamp has no variants to resolve to.
-              </p>
-            ) : (
-              <SelectableStampTree
-                nodes={descendantTree}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            )}
-            <input type="hidden" name="stampId" value={selectedId} />
-            {/* The stamp cannot be told, but it can be narrowed to a few (#1651). */}
-            <button
-              type="button"
-              onClick={() => setPickingSet(true)}
-              disabled={isPending}
-              style={{ ...LINK_BUTTON, marginTop: "0.5rem" }}
-            >
-              {hasCandidates ? "Narrow the possible variants…" : "Several possible variants…"}
-            </button>
-          </div>
-          )}
-
-          {/* Optional reason */}
-          <div style={{ marginBottom: "1.25rem" }}>
-            <LabelWithError htmlFor="identify-note">Reason (optional)</LabelWithError>
-            <TextArea
-              id="identify-note"
-              name="variantChangeNote"
-              rows={2}
-              placeholder="e.g. watermark confirmed under UV"
-              disabled={isPending}
-              style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
-            />
-          </div>
-
-          {/* Refinement history */}
-          <div>
-            <div style={SECTION_LABEL}>Refinement history</div>
-            <VariantHistoryList entries={history} isLoading={historyLoading} />
-          </div>
+          </DialogFormColumns>
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

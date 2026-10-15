@@ -6,6 +6,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
   type DialogAsideProps,
 } from "@/app/dialog-shell";
@@ -245,6 +247,15 @@ interface IssueFormProps {
   /** Duplicate-catalog warning icon shown inside a vendor's First field when its
    * auto-generated range collides with existing stamps (#85). */
   catalogWarningFor?: (vendorId: string) => React.ReactNode;
+  /** Lay the form out in two columns (#1931): the issue itself on the left, its catalogue numbers
+   * on the right. Off beside a piece, where the picture takes the width and the form is one column. */
+  columns?: boolean;
+  /** Drawn first, above *Details* — the area, when creating. */
+  before?: React.ReactNode;
+  /** Drawn last in the issue's own group — its tags. */
+  after?: React.ReactNode;
+  /** Drawn straight under the catalog-numbers card — the declared-range suggestions, when editing. */
+  catalogAfter?: React.ReactNode;
 }
 
 function IssueForm({
@@ -269,6 +280,10 @@ function IssueForm({
   defaultTranslations,
   onNestedDialogOpenChange,
   catalogWarningFor,
+  columns,
+  before,
+  after,
+  catalogAfter,
 }: IssueFormProps) {
   const sortedVendors = useMemo(() => {
     if (!primaryVendorId) return vendors;
@@ -290,7 +305,10 @@ function IssueForm({
     fillTranslationValues(titleLanguages, NAME_TRANSLATION_FIELDS, defaultTranslations)
   );
 
-  return (
+  // The issue itself — area, name, year, tags — and its catalogue numbers are the dialog's two
+  // groups (#1931): side by side in a wide dialog, one under the other beside a piece (`aside`),
+  // where the picture takes the width.
+  const details = (
     <>
       <div style={SECTION_HEADER_STYLE}>Details</div>
       <div style={{ marginBottom: "1rem" }}>
@@ -359,226 +377,250 @@ function IssueForm({
           style={INPUT_STYLE}
         />
       </div>
-      {sortedVendors.length > 0 && (
-        <div
-          style={{
-            marginTop: "1.25rem",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          }}
-        >
-          <div style={SECTION_HEADER_STYLE}>Catalog numbers</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {sortedVendors.map((v) => {
-              const isPrimary = v.catalogVendorId === primaryVendorId;
-              const existing = defaultCatalogNumbers.find(
-                (cn) => cn.catalogVendorId === v.catalogVendorId
-              );
-              const prefixOverride = defaultCatalogPrefixes.find(
-                (p) => p.catalogVendorId === v.catalogVendorId
-              );
-              return (
-                <div key={v.catalogVendorId}>
+    </>
+  );
+  const catalogNumbers = sortedVendors.length > 0 && (
+    <div
+      style={{
+        marginTop: columns ? 0 : "1.25rem",
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+        padding: "1rem",
+      }}
+    >
+      <div style={SECTION_HEADER_STYLE}>Catalog numbers</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {sortedVendors.map((v) => {
+          const isPrimary = v.catalogVendorId === primaryVendorId;
+          const existing = defaultCatalogNumbers.find(
+            (cn) => cn.catalogVendorId === v.catalogVendorId
+          );
+          const prefixOverride = defaultCatalogPrefixes.find(
+            (p) => p.catalogVendorId === v.catalogVendorId
+          );
+          return (
+            <div key={v.catalogVendorId}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-muted)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {v.vendorName} ({v.vendorAbbreviation})
+                  {v.prefix ? ` · ${v.prefix}` : ""}
+                </span>
+                {isPrimary && (
                   <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.375rem",
-                      marginBottom: "0.25rem",
+                      fontSize: "0.6875rem",
+                      color: "var(--color-accent)",
+                      border: "1px solid var(--color-accent)",
+                      borderRadius: "0.2rem",
+                      padding: "0.05rem 0.3rem",
+                      fontWeight: 600,
+                      lineHeight: 1.5,
                     }}
                   >
+                    Primary
+                  </span>
+                )}
+              </span>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                {/* Per-issue prefix override (#377). It sits *in front of* the numbers because
+                    that is exactly where it renders — `Mi·SP 200`. Blank inherits the area's
+                    prefix, which is what the placeholder shows.
+
+                    Out of the tab order (#445): an override is the rare case, and one stop per
+                    vendor stands between the collector and the numbers they came here to type. */}
+                <Tooltip
+                  content={
+                    v.prefix
+                      ? `Catalog prefix for this issue's stamps. Leave blank to use the area's prefix (${v.prefix}).`
+                      : "Catalog prefix for this issue's stamps. Leave blank to use the area's prefix, which is unset here."
+                  }
+                  placement="top"
+                  align="start"
+                  style={{ flexShrink: 0 }}
+                >
+                  <TextInput
+                    name={`issueCatalogPrefix_${v.catalogVendorId}`}
+                    defaultValue={prefixOverride?.areaPrefix ?? ""}
+                    disabled={isPending}
+                    placeholder={v.prefix ?? "Prefix"}
+                    aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
+                    tabIndex={-1}
+                    {...NO_AUTOFILL}
+                    style={{ ...INPUT_STYLE, width: "5.5rem" }}
+                  />
+                </Tooltip>
+                {(() => {
+                  const warning = catalogWarningFor?.(v.catalogVendorId);
+                  const warningIcon = warning && (
                     <span
                       style={{
-                        fontSize: "0.8125rem",
-                        color: "var(--color-text-muted)",
-                        fontWeight: 600,
+                        position: "absolute",
+                        right: "0.5rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        display: "inline-flex",
                       }}
                     >
-                      {v.vendorName} ({v.vendorAbbreviation})
-                      {v.prefix ? ` · ${v.prefix}` : ""}
+                      {warning}
                     </span>
-                    {isPrimary && (
+                  );
+                  // One spec field when the dialog generates stamps (#452), the stored
+                  // First/Last pair when it edits the declared range instead.
+                  if (specMode) {
+                    return (
+                      <div
+                        style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
+                      >
+                        <TextInput
+                          name={`issueCatalogNumbers_${v.catalogVendorId}`}
+                          disabled={isPending}
+                          placeholder="e.g. 2820-2822, 2823a"
+                          aria-label={`${v.vendorAbbreviation} catalog numbers`}
+                          {...NO_AUTOFILL}
+                          onBlur={
+                            isPrimary
+                              ? undefined
+                              : (e) => {
+                                  const form = e.currentTarget.form;
+                                  if (!form) return;
+                                  autoFillSecondarySpan(
+                                    form,
+                                    v.catalogVendorId,
+                                    primaryVendorId ?? null
+                                  );
+                                  onRangeAutoFilled?.();
+                                }
+                          }
+                          style={{
+                            ...INPUT_STYLE,
+                            flex: 1,
+                            paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
+                          }}
+                        />
+                        {warningIcon}
+                      </div>
+                    );
+                  }
+                  return (
+                    <>
+                      <div
+                        style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
+                      >
+                        <TextInput
+                          name={`issueCatalogFirst_${v.catalogVendorId}`}
+                          defaultValue={existing?.firstNumber ?? ""}
+                          disabled={isPending}
+                          placeholder="First"
+                          {...NO_AUTOFILL}
+                          onKeyDown={(e) =>
+                            advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
+                          }
+                          style={{
+                            ...INPUT_STYLE,
+                            flex: 1,
+                            paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
+                          }}
+                        />
+                        {warningIcon}
+                      </div>
                       <span
                         style={{
-                          fontSize: "0.6875rem",
-                          color: "var(--color-accent)",
-                          border: "1px solid var(--color-accent)",
-                          borderRadius: "0.2rem",
-                          padding: "0.05rem 0.3rem",
-                          fontWeight: 600,
-                          lineHeight: 1.5,
+                          color: "var(--color-text-muted)",
+                          fontSize: "0.875rem",
+                          flexShrink: 0,
                         }}
                       >
-                        Primary
+                        –
                       </span>
-                    )}
-                  </span>
-                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                    {/* Per-issue prefix override (#377). It sits *in front of* the numbers because
-                        that is exactly where it renders — `Mi·SP 200`. Blank inherits the area's
-                        prefix, which is what the placeholder shows.
-
-                        Out of the tab order (#445): an override is the rare case, and one stop per
-                        vendor stands between the collector and the numbers they came here to type. */}
-                    <Tooltip
-                      content={
-                        v.prefix
-                          ? `Catalog prefix for this issue's stamps. Leave blank to use the area's prefix (${v.prefix}).`
-                          : "Catalog prefix for this issue's stamps. Leave blank to use the area's prefix, which is unset here."
-                      }
-                      placement="top"
-                      align="start"
-                      style={{ flexShrink: 0 }}
-                    >
                       <TextInput
-                        name={`issueCatalogPrefix_${v.catalogVendorId}`}
-                        defaultValue={prefixOverride?.areaPrefix ?? ""}
+                        name={`issueCatalogLast_${v.catalogVendorId}`}
+                        defaultValue={existing?.lastNumber ?? ""}
                         disabled={isPending}
-                        placeholder={v.prefix ?? "Prefix"}
-                        aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
-                        tabIndex={-1}
+                        placeholder="Last (optional)"
                         {...NO_AUTOFILL}
-                        style={{ ...INPUT_STYLE, width: "5.5rem" }}
+                        style={{ ...INPUT_STYLE, flex: 1 }}
                       />
-                    </Tooltip>
-                    {(() => {
-                      const warning = catalogWarningFor?.(v.catalogVendorId);
-                      const warningIcon = warning && (
-                        <span
-                          style={{
-                            position: "absolute",
-                            right: "0.5rem",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            display: "inline-flex",
-                          }}
-                        >
-                          {warning}
-                        </span>
-                      );
-                      // One spec field when the dialog generates stamps (#452), the stored
-                      // First/Last pair when it edits the declared range instead.
-                      if (specMode) {
-                        return (
-                          <div
-                            style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
-                          >
-                            <TextInput
-                              name={`issueCatalogNumbers_${v.catalogVendorId}`}
-                              disabled={isPending}
-                              placeholder="e.g. 2820-2822, 2823a"
-                              aria-label={`${v.vendorAbbreviation} catalog numbers`}
-                              {...NO_AUTOFILL}
-                              onBlur={
-                                isPrimary
-                                  ? undefined
-                                  : (e) => {
-                                      const form = e.currentTarget.form;
-                                      if (!form) return;
-                                      autoFillSecondarySpan(
-                                        form,
-                                        v.catalogVendorId,
-                                        primaryVendorId ?? null
-                                      );
-                                      onRangeAutoFilled?.();
-                                    }
-                              }
-                              style={{
-                                ...INPUT_STYLE,
-                                flex: 1,
-                                paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
-                              }}
-                            />
-                            {warningIcon}
-                          </div>
-                        );
-                      }
-                      return (
-                        <>
-                          <div
-                            style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
-                          >
-                            <TextInput
-                              name={`issueCatalogFirst_${v.catalogVendorId}`}
-                              defaultValue={existing?.firstNumber ?? ""}
-                              disabled={isPending}
-                              placeholder="First"
-                              {...NO_AUTOFILL}
-                              onKeyDown={(e) =>
-                                advanceToLastOnSeparator(e, `issueCatalogLast_${v.catalogVendorId}`)
-                              }
-                              style={{
-                                ...INPUT_STYLE,
-                                flex: 1,
-                                paddingRight: warning ? "2rem" : INPUT_STYLE.padding,
-                              }}
-                            />
-                            {warningIcon}
-                          </div>
-                          <span
-                            style={{
-                              color: "var(--color-text-muted)",
-                              fontSize: "0.875rem",
-                              flexShrink: 0,
-                            }}
-                          >
-                            –
-                          </span>
-                          <TextInput
-                            name={`issueCatalogLast_${v.catalogVendorId}`}
-                            defaultValue={existing?.lastNumber ?? ""}
-                            disabled={isPending}
-                            placeholder="Last (optional)"
-                            {...NO_AUTOFILL}
-                            style={{ ...INPUT_STYLE, flex: 1 }}
-                          />
-                        </>
-                      );
-                    })()}
-                  </div>
-                  {/* What the spec resolves to, or why it does not (#452). Only drawn once
-                      something is typed, so the card does not carry a blank line per catalog. */}
-                  {specMode && specNoteFor?.(v.catalogVendorId)}
-                  {/* The auto-create decision itself (#451): a ticked catalog generates stamps
-                      from its range on save. It ticks itself as the range is typed, so the box is
-                      normally read rather than clicked — but it stays in the tab order, since it
-                      is the only place that decision can be overruled. */}
-                  {showAutoCreate && (
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.375rem",
-                        marginTop: "0.25rem",
-                        fontSize: "0.75rem",
-                        color: "var(--color-text-muted)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        name={
-                          vendorSelection?.[v.catalogVendorId]
-                            ? `autoCreateVendor_${v.catalogVendorId}`
-                            : undefined
-                        }
-                        checked={vendorSelection?.[v.catalogVendorId] ?? false}
-                        onChange={(e) =>
-                          onVendorToggle?.(v.catalogVendorId, e.target.checked)
-                        }
-                        disabled={isPending}
-                      />
-                      Assign to stamps
-                    </label>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </>
+                    </>
+                  );
+                })()}
+              </div>
+              {/* What the spec resolves to, or why it does not (#452). Only drawn once
+                  something is typed, so the card does not carry a blank line per catalog. */}
+              {specMode && specNoteFor?.(v.catalogVendorId)}
+              {/* The auto-create decision itself (#451): a ticked catalog generates stamps
+                  from its range on save. It ticks itself as the range is typed, so the box is
+                  normally read rather than clicked — but it stays in the tab order, since it
+                  is the only place that decision can be overruled. */}
+              {showAutoCreate && (
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    marginTop: "0.25rem",
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    name={
+                      vendorSelection?.[v.catalogVendorId]
+                        ? `autoCreateVendor_${v.catalogVendorId}`
+                        : undefined
+                    }
+                    checked={vendorSelection?.[v.catalogVendorId] ?? false}
+                    onChange={(e) =>
+                      onVendorToggle?.(v.catalogVendorId, e.target.checked)
+                    }
+                    disabled={isPending}
+                  />
+                  Assign to stamps
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+  if (!columns) {
+    return (
+      <>
+        {before}
+        {details}
+        {catalogNumbers}
+        {catalogAfter}
+        {after}
+      </>
+    );
+  }
+  return (
+    <DialogFormColumns>
+      <div>
+        {before}
+        {details}
+        {after}
+      </div>
+      <div>
+        {catalogNumbers}
+        {catalogAfter}
+      </div>
+    </DialogFormColumns>
   );
 }
 
@@ -892,6 +934,53 @@ export function IssueDialog(props: IssueDialogProps) {
     }
   }
 
+  const inColumns = !aside && vendors.length > 0;
+
+  const areaField = isCreate && (
+    <div style={{ marginBottom: "1.25rem" }}>
+      <LabelWithError htmlFor="issueAreaId-button">Area</LabelWithError>
+      <AreaTreeSelect
+        areas={areas}
+        areaTree={areaTree}
+        name="issueAreaId"
+        selectedId={selectedAreaId}
+        onSelectedIdChange={(id) => {
+          setSelectedAreaId(id);
+          setVendorSelection({});
+          setPinnedVendors({});
+        }}
+        disabled={isPending}
+        onlyAssignableSelectable
+        noneOptionLabel={
+          areas.length === 0 ? "— No areas yet —" : "— Select an area"
+        }
+      />
+    </div>
+  );
+
+  const rangeWarning = !isCreate && (
+    <IssueRangeWarning
+      suggestions={rangeSuggestions}
+      onApply={handleApplyRange}
+      disabled={isPending}
+    />
+  );
+
+  // The collector's own labels on the issue (#1192), saved with the rest of it. The issue's own:
+  // they say nothing about its stamps.
+  const tagsField = (
+    <div style={{ marginTop: "1.25rem" }}>
+      <LabelWithError htmlFor="f-issue-tags">Tags (optional)</LabelWithError>
+      <TagEntryField
+        collectionId={collectionId}
+        name="issueTags"
+        inputId="f-issue-tags"
+        initialTags={isCreate ? [] : props.issue.tags}
+        disabled={isPending}
+      />
+    </div>
+  );
+
   return (
     <DialogShell
       title={isCreate ? "Add issue" : "Edit issue"}
@@ -902,7 +991,11 @@ export function IssueDialog(props: IssueDialogProps) {
       // for it (#592). Absent for every other opener, which is what the optional slot is for.
       aside={aside}
       asideWidth={asideWidth}
-      maxWidth={aside ? "min(96vw, 64rem)" : undefined}
+      // Two columns while there are catalogue numbers to show (#1931) — with four catalogs the form
+      // ran past a 1080px window in one; without any it is a short form and stays one compact
+      // column rather than leaving the right half empty. Beside a piece it stays one column too, and
+      // the picture takes the width.
+      maxWidth={aside ? "min(96vw, 64rem)" : inColumns ? FORM_DIALOG_COLUMNS_WIDTH : undefined}
       height={aside ? "min(90vh, 52rem)" : undefined}
     >
       <form
@@ -912,28 +1005,9 @@ export function IssueDialog(props: IssueDialogProps) {
         onChange={() => setFormVersion((v) => v + 1)}
       >
         <DialogBody>
-          {isCreate && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <LabelWithError htmlFor="issueAreaId-button">Area</LabelWithError>
-              <AreaTreeSelect
-                areas={areas}
-                areaTree={areaTree}
-                name="issueAreaId"
-                selectedId={selectedAreaId}
-                onSelectedIdChange={(id) => {
-                  setSelectedAreaId(id);
-                  setVendorSelection({});
-                  setPinnedVendors({});
-                }}
-                disabled={isPending}
-                onlyAssignableSelectable
-                noneOptionLabel={
-                  areas.length === 0 ? "— No areas yet —" : "— Select an area"
-                }
-              />
-            </div>
-          )}
           <IssueForm
+            columns={inColumns}
+            before={areaField}
             vendors={vendors}
             primaryVendorId={primaryVendorId}
             defaultName={isCreate ? undefined : (props.issue.name ?? "")}
@@ -969,26 +1043,9 @@ export function IssueDialog(props: IssueDialogProps) {
                   }
                 : undefined
             }
+            catalogAfter={rangeWarning}
+            after={tagsField}
           />
-          {!isCreate && (
-            <IssueRangeWarning
-              suggestions={rangeSuggestions}
-              onApply={handleApplyRange}
-              disabled={isPending}
-            />
-          )}
-          {/* The collector's own labels on the issue (#1192), saved with the rest of it. The
-              issue's own: they say nothing about its stamps. */}
-          <div style={{ marginTop: "1.25rem" }}>
-            <LabelWithError htmlFor="f-issue-tags">Tags (optional)</LabelWithError>
-            <TagEntryField
-              collectionId={collectionId}
-              name="issueTags"
-              inputId="f-issue-tags"
-              initialTags={isCreate ? [] : props.issue.tags}
-              disabled={isPending}
-            />
-          </div>
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}

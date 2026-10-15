@@ -6,6 +6,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
@@ -84,8 +86,10 @@ function LimitField({
   defaultValue: number | null | undefined;
   isPending: boolean;
 }) {
+  // A column with the input at its foot, so a row of limits keeps its inputs level when one label
+  // wraps onto a second line in a narrow column (#1931) and its neighbours do not.
   return (
-    <div style={{ flex: 1 }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
       <LabelWithError htmlFor={id}>{label}</LabelWithError>
       <input
         id={id}
@@ -122,8 +126,11 @@ const TAB_STYLE: React.CSSProperties = {
 };
 
 /** Floor for the tab area. The Contact tab is the shortest of the three, and letting it alone set
- * the height would squeeze the Platform tab into a scroll box a few fields tall. */
-const TAB_PANEL_MIN_HEIGHT = "26rem";
+ * the height would squeeze the Platform tab into a scroll box a few fields tall. Since the tabs went
+ * into two columns (#1931) the Contact tab is shorter still, so the floor is about the Platform
+ * tab's own height — still within a 1080-pixel window, and no taller than the one-column Contact
+ * tab used to make the dialog. */
+const TAB_PANEL_MIN_HEIGHT = "40rem";
 
 /** A tab that overlays the in-flow Contact panel. `display: none` keeps it **mounted**, so its
  * fields still submit while another tab is open, and out of the tab order while hidden. */
@@ -275,7 +282,7 @@ export function ContactFormDialog({
       title={title}
       onClose={onClose}
       minHeight="20rem"
-      maxWidth="42rem"
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
       dismissable={!templatesOpen && !shippingOpen}
     >
       {showTabs && (
@@ -321,158 +328,166 @@ export function ContactFormDialog({
               learns to clear the settings the role carried. */}
           <div style={{ position: "relative", ...(showTabs ? { minHeight: TAB_PANEL_MIN_HEIGHT } : null) }}>
             <div style={showTabs ? { visibility: activeTab === "contact" ? "visible" : "hidden" } : undefined}>
-              <div style={FIELD_GAP}>
-                <LabelWithError htmlFor="contact-name">Name</LabelWithError>
-                <TextInput
-                  id="contact-name"
-                  name="name"
-                  defaultValue={contact?.name ?? ""}
-                  placeholder="e.g. Jan Kowalski, Allegro, Cherrystone…"
-                  disabled={isPending}
-                  required
-                  // A `required` field on a hidden tab is not focusable, so the browser refuses the
-                  // submit without saying where the problem is. Come back to the tab that holds it.
-                  onInvalid={() => setRequestedTab("contact")}
-                  style={INPUT_STYLE}
-                />
-              </div>
+              {/* Two columns (#1931): who the contact is and how to reach them on the left, what they
+                  are to the collection on the right. */}
+              <DialogFormColumns>
+                <div>
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-name">Name</LabelWithError>
+                    <TextInput
+                      id="contact-name"
+                      name="name"
+                      defaultValue={contact?.name ?? ""}
+                      placeholder="e.g. Jan Kowalski, Allegro, Cherrystone…"
+                      disabled={isPending}
+                      required
+                      // A `required` field on a hidden tab is not focusable, so the browser refuses the
+                      // submit without saying where the problem is. Come back to the tab that holds it.
+                      onInvalid={() => setRequestedTab("contact")}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
 
-              {/* The name on the paperwork, where it is not the name above (#463). A marketplace
-                  buyer is filed under their login — that is who they are here — while the parcel
-                  has to carry the name their order states. Blank on nearly every contact. */}
-              <div style={FIELD_GAP}>
-                <LabelWithError htmlFor="contact-full-name">Full name (optional)</LabelWithError>
-                <TextInput
-                  id="contact-full-name"
-                  name="fullName"
-                  defaultValue={contact?.fullName ?? ""}
-                  placeholder="The name on the parcel, if it differs from above"
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-              </div>
+                  {/* The name on the paperwork, where it is not the name above (#463). A marketplace
+                      buyer is filed under their login — that is who they are here — while the parcel
+                      has to carry the name their order states. Blank on nearly every contact. */}
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-full-name">Full name (optional)</LabelWithError>
+                    <TextInput
+                      id="contact-full-name"
+                      name="fullName"
+                      defaultValue={contact?.fullName ?? ""}
+                      placeholder="The name on the parcel, if it differs from above"
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
 
-              <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-                <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="contact-email">Email</LabelWithError>
-                  <TextInput
-                    id="contact-email"
-                    name="email"
-                    type="email"
-                    defaultValue={contact?.email ?? ""}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  />
+                  <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="contact-email">Email</LabelWithError>
+                      <TextInput
+                        id="contact-email"
+                        name="email"
+                        type="email"
+                        defaultValue={contact?.email ?? ""}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="contact-phone">Phone</LabelWithError>
+                      <TextInput
+                        id="contact-phone"
+                        name="phone"
+                        type="tel"
+                        defaultValue={contact?.phone ?? ""}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      />
+                    </div>
+                  </div>
+
+                  {/* What a Facebook auction's winner is recognised by (#1545): names repeat there. */}
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-facebook-profile">Facebook profile</LabelWithError>
+                    <TextInput
+                      id="contact-facebook-profile"
+                      name="facebookProfileUrl"
+                      type="url"
+                      defaultValue={contact?.facebookProfileUrl ?? ""}
+                      placeholder="https://www.facebook.com/…"
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="contact-phone">Phone</LabelWithError>
-                  <TextInput
-                    id="contact-phone"
-                    name="phone"
-                    type="tel"
-                    defaultValue={contact?.phone ?? ""}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-              </div>
 
-              {/* What a Facebook auction's winner is recognised by (#1545): names repeat there. */}
-              <div style={FIELD_GAP}>
-                <LabelWithError htmlFor="contact-facebook-profile">Facebook profile</LabelWithError>
-                <TextInput
-                  id="contact-facebook-profile"
-                  name="facebookProfileUrl"
-                  type="url"
-                  defaultValue={contact?.facebookProfileUrl ?? ""}
-                  placeholder="https://www.facebook.com/…"
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-              </div>
-
-              <div style={FIELD_GAP}>
-                <LabelWithError>Roles</LabelWithError>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: "0.375rem 1rem",
-                  }}
-                >
-                  {CONTACT_ROLES.map(({ key, label }) => (
-                    <label
-                      key={key}
+                <div>
+                  <div style={FIELD_GAP}>
+                    <LabelWithError>Roles</LabelWithError>
+                    <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        fontSize: "0.875rem",
-                        color: "var(--color-text-secondary)",
-                        cursor: isPending ? "not-allowed" : "pointer",
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gap: "0.375rem 1rem",
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        name={key}
-                        value="true"
-                        defaultChecked={contact?.[key] ?? false}
+                      {CONTACT_ROLES.map(({ key, label }) => (
+                        <label
+                          key={key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            fontSize: "0.875rem",
+                            color: "var(--color-text-secondary)",
+                            cursor: isPending ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            name={key}
+                            value="true"
+                            defaultChecked={contact?.[key] ?? false}
+                            disabled={isPending}
+                            onChange={
+                              key === "platform"
+                                ? (e) => setIsPlatform(e.target.checked)
+                                : key === "seller"
+                                  ? (e) => setIsSeller(e.target.checked)
+                                  : key === "auctionHouse"
+                                    ? (e) => setIsAuctionHouse(e.target.checked)
+                                    : undefined
+                            }
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Where this contact's auction results count (#1634): only a contact that sells has
+                      a market, so the field follows the roles. */}
+                  {(isPlatform || isAuctionSide) && (
+                    <div style={FIELD_GAP}>
+                      <LabelWithError htmlFor="contact-market">Market</LabelWithError>
+                      <select
+                        id="contact-market"
+                        name="market"
+                        defaultValue={contact?.market ?? ""}
                         disabled={isPending}
-                        onChange={
-                          key === "platform"
-                            ? (e) => setIsPlatform(e.target.checked)
-                            : key === "seller"
-                              ? (e) => setIsSeller(e.target.checked)
-                              : key === "auctionHouse"
-                                ? (e) => setIsAuctionHouse(e.target.checked)
-                                : undefined
-                        }
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
+                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                      >
+                        <option value="">— not known (home market) —</option>
+                        {contact?.market && !COMMON_MARKETS.some((m) => m.code === contact.market) && (
+                          <option value={contact.market}>{contact.market}</option>
+                        )}
+                        {COMMON_MARKETS.map((m) => (
+                          <option key={m.code} value={m.code}>
+                            {m.label} ({m.code})
+                          </option>
+                        ))}
+                      </select>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        The country it sells in. Its auction results count only for areas this market anchors.
+                      </p>
+                    </div>
+                  )}
 
-              {/* Where this contact's auction results count (#1634): only a contact that sells has
-                  a market, so the field follows the roles. */}
-              {(isPlatform || isAuctionSide) && (
-                <div style={FIELD_GAP}>
-                  <LabelWithError htmlFor="contact-market">Market</LabelWithError>
-                  <select
-                    id="contact-market"
-                    name="market"
-                    defaultValue={contact?.market ?? ""}
-                    disabled={isPending}
-                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                  >
-                    <option value="">— not known (home market) —</option>
-                    {contact?.market && !COMMON_MARKETS.some((m) => m.code === contact.market) && (
-                      <option value={contact.market}>{contact.market}</option>
-                    )}
-                    {COMMON_MARKETS.map((m) => (
-                      <option key={m.code} value={m.code}>
-                        {m.label} ({m.code})
-                      </option>
-                    ))}
-                  </select>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    The country it sells in. Its auction results count only for areas this market anchors.
-                  </p>
+                  <div>
+                    <LabelWithError htmlFor="contact-notes">Notes</LabelWithError>
+                    <TextArea
+                      id="contact-notes"
+                      name="notes"
+                      rows={3}
+                      defaultValue={contact?.notes ?? ""}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "4rem" }}
+                    />
+                  </div>
                 </div>
-              )}
-
-              <div>
-                <LabelWithError htmlFor="contact-notes">Notes</LabelWithError>
-                <TextArea
-                  id="contact-notes"
-                  name="notes"
-                  rows={3}
-                  defaultValue={contact?.notes ?? ""}
-                  disabled={isPending}
-                  style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "4rem" }}
-                />
-              </div>
+              </DialogFormColumns>
             </div>
 
             {isAuctionSide && (
@@ -485,584 +500,570 @@ export function ContactFormDialog({
                     houses listing in EUR, CHF and GBP alike (#196 cannot answer it).
 
                     No group heading of its own: the tab is the heading, and this is all it holds. */}
-                <div style={FIELD_GAP}>
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-default-currency">Currency</LabelWithError>
-                      <select
-                        id="contact-default-currency"
-                        name="defaultCurrency"
-                        defaultValue={contact?.defaultCurrency ?? ""}
-                        disabled={isPending}
-                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                      >
-                        <option value="">— not set —</option>
-                        {COMMON_CURRENCIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
+                {/* One column of the shared grid (#1931), so the four short fields keep the width a
+                    single-column form gives them rather than stretching across the wide dialog. */}
+                <DialogFormColumns>
+                  <div style={FIELD_GAP}>
+                    <div style={{ display: "flex", gap: "0.75rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-default-currency">Currency</LabelWithError>
+                        <select
+                          id="contact-default-currency"
+                          name="defaultCurrency"
+                          defaultValue={contact?.defaultCurrency ?? ""}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                        >
+                          <option value="">— not set —</option>
+                          {COMMON_CURRENCIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-default-shipping">Shipping</LabelWithError>
+                        <NumericInput
+                          kind="amount"
+                          id="contact-default-shipping"
+                          name="defaultShippingCost"
+                          defaultValue={contact?.defaultShippingCost ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-premium-percent">Premium %</LabelWithError>
+                        <NumericInput
+                          kind="number"
+                          id="contact-premium-percent"
+                          name="buyerPremiumPercent"
+                          defaultValue={contact?.buyerPremiumPercent ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-premium-fixed">Premium fixed</LabelWithError>
+                        <NumericInput
+                          kind="amount"
+                          id="contact-premium-fixed"
+                          name="buyerPremiumFixed"
+                          defaultValue={contact?.buyerPremiumFixed ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-default-shipping">Shipping</LabelWithError>
-                      <NumericInput
-                        kind="amount"
-                        id="contact-default-shipping"
-                        name="defaultShippingCost"
-                        defaultValue={contact?.defaultShippingCost ?? ""}
-                        placeholder="—"
-                        disabled={isPending}
-                        style={INPUT_STYLE}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-premium-percent">Premium %</LabelWithError>
-                      <NumericInput
-                        kind="number"
-                        id="contact-premium-percent"
-                        name="buyerPremiumPercent"
-                        defaultValue={contact?.buyerPremiumPercent ?? ""}
-                        placeholder="—"
-                        disabled={isPending}
-                        style={INPUT_STYLE}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-premium-fixed">Premium fixed</LabelWithError>
-                      <NumericInput
-                        kind="amount"
-                        id="contact-premium-fixed"
-                        name="buyerPremiumFixed"
-                        defaultValue={contact?.buyerPremiumFixed ?? ""}
-                        placeholder="—"
-                        disabled={isPending}
-                        style={INPUT_STYLE}
-                      />
-                    </div>
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      Copied onto every new auction sale with this seller. Both premium parts apply — a
+                      house charging 20% plus a lot fee sets both. Changing them here leaves sales already
+                      tracked untouched.
+                    </p>
                   </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    Copied onto every new auction sale with this seller. Both premium parts apply — a
-                    house charging 20% plus a lot fee sets both. Changing them here leaves sales already
-                    tracked untouched.
-                  </p>
-                </div>
+                </DialogFormColumns>
               </TabPanel>
             )}
 
             {isPlatform && (
               <TabPanel show={activeTab === "platform"}>
-                {/* Platform currency (#196) and listing language (#293), side by side — both are
-                    platform-only, both are one small select. The currency is inherited and locked by every
-                    offer and sale routed to the platform, and required before the first of them (prompted
-                    inline there when still unset). The language decides which text this platform's
-                    generated titles use, and which per-language inputs the entity forms offer. */}
-                <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="contact-platform-currency">Platform currency</LabelWithError>
-                    <select
-                      id="contact-platform-currency"
-                      name="platformCurrency"
-                      value={platformCurrency}
-                      onChange={(e) => setPlatformCurrency(e.target.value)}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                    >
-                      <option value="">— not set yet —</option>
-                      {COMMON_CURRENCIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                      Every offer and sale on this platform uses it. Changing it later leaves existing
-                      offers and sales untouched.
-                    </p>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="contact-title-language">Listing language</LabelWithError>
-                    <select
-                      id="contact-title-language"
-                      name="titleLanguage"
-                      value={titleLanguage}
-                      onChange={(e) => setTitleLanguage(e.target.value)}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                    >
-                      <option value="">— default language —</option>
-                      {COMMON_LANGUAGES.map((l) => (
-                        <option key={l.code} value={l.code}>
-                          {l.label} ({l.code})
-                        </option>
-                      ))}
-                    </select>
-                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                      Generated text for this platform uses this language, falling back to the default text
-                      where no translation is set.
-                    </p>
-                  </div>
-                </div>
+                {/* Two columns (#1931): what an offer and a sale on this platform are on the left —
+                    currency, how it is sold, its price floor, the buyer's message and shipping; what is
+                    produced for its listings on the right — the texts and the photos. */}
+                <DialogFormColumns>
+                  <div>
+                    {/* Platform currency (#196) and listing language (#293), side by side — both are
+                        platform-only, both are one small select. The currency is inherited and locked by every
+                        offer and sale routed to the platform, and required before the first of them (prompted
+                        inline there when still unset). The language decides which text this platform's
+                        generated titles use, and which per-language inputs the entity forms offer. */}
+                    <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-platform-currency">Platform currency</LabelWithError>
+                        <select
+                          id="contact-platform-currency"
+                          name="platformCurrency"
+                          value={platformCurrency}
+                          onChange={(e) => setPlatformCurrency(e.target.value)}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                        >
+                          <option value="">— not set yet —</option>
+                          {COMMON_CURRENCIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                          Every offer and sale on this platform uses it. Changing it later leaves existing
+                          offers and sales untouched.
+                        </p>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-title-language">Listing language</LabelWithError>
+                        <select
+                          id="contact-title-language"
+                          name="titleLanguage"
+                          value={titleLanguage}
+                          onChange={(e) => setTitleLanguage(e.target.value)}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                        >
+                          <option value="">— default language —</option>
+                          {COMMON_LANGUAGES.map((l) => (
+                            <option key={l.code} value={l.code}>
+                              {l.label} ({l.code})
+                            </option>
+                          ))}
+                        </select>
+                        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                          Generated text for this platform uses this language, falling back to the default text
+                          where no translation is set.
+                        </p>
+                      </div>
+                    </div>
 
-                {/* What a new offer on this platform starts as (#449): how it is sold, and — only
-                    for an auction platform — the figure it opens at. Both are read at creation only,
-                    so an offer already created keeps what it was given, and both describe *this
-                    platform's* habits rather than any one listing.
+                    {/* What a new offer on this platform starts as (#449): how it is sold, and — only
+                        for an auction platform — the figure it opens at. Both are read at creation only,
+                        so an offer already created keeps what it was given, and both describe *this
+                        platform's* habits rather than any one listing.
 
-                    The order is deliberate: the format decides whether the price field means
-                    anything at all, so it is asked first and the price appears beside it. A quick
-                    buy's price follows from the goods — the lot's suggested price and the copies'
-                    catalog value already answer it — so there is nothing here to default. */}
-                <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-                  {/* Blank is "no preference", not "quick buy": the two behave identically today, so
-                      a platform nobody has answered for needs nothing written to it. */}
-                  {/* Not on the Facebook platform either: there a new offer is sold as its group
-                      says, and Facebook's own listing type is on Settings → Facebook (#1671). */}
-                  {contact?.platformModule === FACEBOOK_PLATFORM_MODULE ? (
-                    <p style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
-                      Whether a new offer here is an auction or a quick buy is set in Settings → Facebook.
-                    </p>
-                  ) : (
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="contact-default-listing-type">
-                      Default listing type (optional)
-                    </LabelWithError>
-                    <select
-                      id="contact-default-listing-type"
-                      name="defaultListingType"
-                      value={defaultListingType}
-                      onChange={(e) => setDefaultListingType(e.target.value)}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                    >
-                      <option value="">— no preference —</option>
-                      {OFFER_LISTING_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {OFFER_LISTING_TYPE_LABEL[t]}
-                        </option>
-                      ))}
-                    </select>
-                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                      Pre-selects how a new offer here is sold, for a platform you only ever auction
-                      on (or never do). Changeable per offer.
-                    </p>
-                  </div>
-                  )}
-                  {/* Not on the Facebook platform: there the opening figure is Facebook's own
-                      setting, an amount or a share of catalogue value, on Settings → Facebook
-                      (#1661) — stated once, where its groups follow it. */}
-                  {defaultListingType === "auction" && contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-default-starting-price">
-                        Default starting price (optional)
+                        The order is deliberate: the format decides whether the price field means
+                        anything at all, so it is asked first and the price appears beside it. A quick
+                        buy's price follows from the goods — the lot's suggested price and the copies'
+                        catalog value already answer it — so there is nothing here to default. */}
+                    <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                      {/* Blank is "no preference", not "quick buy": the two behave identically today, so
+                          a platform nobody has answered for needs nothing written to it. */}
+                      {/* Not on the Facebook platform either: there a new offer is sold as its group
+                          says, and Facebook's own listing type is on Settings → Facebook (#1671). */}
+                      {contact?.platformModule === FACEBOOK_PLATFORM_MODULE ? (
+                        <p style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
+                          Whether a new offer here is an auction or a quick buy is set in Settings → Facebook.
+                        </p>
+                      ) : (
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-default-listing-type">
+                          Default listing type (optional)
+                        </LabelWithError>
+                        <select
+                          id="contact-default-listing-type"
+                          name="defaultListingType"
+                          value={defaultListingType}
+                          onChange={(e) => setDefaultListingType(e.target.value)}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                        >
+                          <option value="">— no preference —</option>
+                          {OFFER_LISTING_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {OFFER_LISTING_TYPE_LABEL[t]}
+                            </option>
+                          ))}
+                        </select>
+                        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                          Pre-selects how a new offer here is sold, for a platform you only ever auction
+                          on (or never do). Changeable per offer.
+                        </p>
+                      </div>
+                      )}
+                      {/* Not on the Facebook platform: there the opening figure is Facebook's own
+                          setting, an amount or a share of catalogue value, on Settings → Facebook
+                          (#1661) — stated once, where its groups follow it. */}
+                      {defaultListingType === "auction" && contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
+                        <div style={{ flex: 1 }}>
+                          <LabelWithError htmlFor="contact-default-starting-price">
+                            Default starting price (optional)
+                          </LabelWithError>
+                          <NumericInput
+                            kind="amount"
+                            id="contact-default-starting-price"
+                            name="defaultStartingPrice"
+                            defaultValue={contact?.defaultStartingPrice ?? ""}
+                            placeholder="—"
+                            disabled={isPending}
+                            style={INPUT_STYLE}
+                          />
+                          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                            In the platform&apos;s currency, for a house you always open at the same
+                            figure. Pre-fills a new auction only when neither the lot nor the copies&apos;
+                            catalog value suggests a price — always editable afterwards.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* The floor this platform lists at (#731) — a row of its own, below the pair above,
+                        because it answers a different question. Those two describe how a *new* offer
+                        starts and are read once at creation; this one is a standing fact about the
+                        platform, asked back by hand every time a price is set, on an offer of any age.
+                        It is therefore not gated on the listing type the way the starting price is: a
+                        floor is a floor on whatever figure the seller states. */}
+                    <div style={FIELD_GAP}>
+                      <LabelWithError htmlFor="contact-minimum-price">
+                        Minimum price (optional)
                       </LabelWithError>
                       <NumericInput
                         kind="amount"
-                        id="contact-default-starting-price"
-                        name="defaultStartingPrice"
-                        defaultValue={contact?.defaultStartingPrice ?? ""}
+                        id="contact-minimum-price"
+                        name="minimumPrice"
+                        defaultValue={contact?.minimumPrice ?? ""}
                         placeholder="—"
                         disabled={isPending}
                         style={INPUT_STYLE}
                       />
                       <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                        In the platform&apos;s currency, for a house you always open at the same
-                        figure. Pre-fills a new auction only when neither the lot nor the copies&apos;
-                        catalog value suggests a price — always editable afterwards.
+                        In the platform&apos;s currency — the lowest figure worth listing here once its
+                        fees are paid. It fills nothing on its own: click <strong>min</strong> beside an
+                        offer&apos;s price to apply it when you want it.
                       </p>
                     </div>
-                  )}
-                </div>
 
-                {/* The floor this platform lists at (#731) — a row of its own, below the pair above,
-                    because it answers a different question. Those two describe how a *new* offer
-                    starts and are read once at creation; this one is a standing fact about the
-                    platform, asked back by hand every time a price is set, on an offer of any age.
-                    It is therefore not gated on the listing type the way the starting price is: a
-                    floor is a floor on whatever figure the seller states. */}
-                <div style={FIELD_GAP}>
-                  <LabelWithError htmlFor="contact-minimum-price">
-                    Minimum price (optional)
-                  </LabelWithError>
-                  <NumericInput
-                    kind="amount"
-                    id="contact-minimum-price"
-                    name="minimumPrice"
-                    defaultValue={contact?.minimumPrice ?? ""}
-                    placeholder="—"
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  />
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    In the platform&apos;s currency — the lowest figure worth listing here once its
-                    fees are paid. It fills nothing on its own: click <strong>min</strong> beside an
-                    offer&apos;s price to apply it when you want it.
-                  </p>
-                </div>
+                    {/* When a quick buy here needs posting again (#1718) — a Delcampe listing sinks, an
+                        Allegro one does not. Not on the Facebook platform: there it is Facebook's own
+                        setting, which its groups follow, on Settings → Facebook (#1661). */}
+                    {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
+                      <div style={FIELD_GAP}>
+                        <LabelWithError htmlFor="contact-refresh-quick-buys">
+                          Refresh quick buys after (days, optional)
+                        </LabelWithError>
+                        <input
+                          id="contact-refresh-quick-buys"
+                          name="refreshQuickBuysAfterDays"
+                          type="number"
+                          step={1}
+                          min={1}
+                          max={REFRESH_QUICK_BUYS_DAYS_MAX}
+                          defaultValue={contact?.refreshQuickBuysAfterDays ?? ""}
+                          placeholder="never"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                          Marks an active quick buy up this long since it was posted, to post it again.
+                        </p>
+                      </div>
+                    )}
 
-                {/* When a quick buy here needs posting again (#1718) — a Delcampe listing sinks, an
-                    Allegro one does not. Not on the Facebook platform: there it is Facebook's own
-                    setting, which its groups follow, on Settings → Facebook (#1661). */}
-                {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
-                  <div style={FIELD_GAP}>
-                    <LabelWithError htmlFor="contact-refresh-quick-buys">
-                      Refresh quick buys after (days, optional)
-                    </LabelWithError>
-                    <input
-                      id="contact-refresh-quick-buys"
-                      name="refreshQuickBuysAfterDays"
-                      type="number"
-                      step={1}
-                      min={1}
-                      max={REFRESH_QUICK_BUYS_DAYS_MAX}
-                      defaultValue={contact?.refreshQuickBuysAfterDays ?? ""}
-                      placeholder="never"
-                      disabled={isPending}
-                      style={INPUT_STYLE}
-                    />
-                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                      Marks an active quick buy up this long since it was posted, to post it again.
-                    </p>
-                  </div>
-                )}
+                    {/* The message to a buyer after a sale here (#1815). Not on the Facebook platform:
+                        there it is Facebook's own setting, which its groups follow, on Settings →
+                        Facebook (#1661). */}
+                    {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
+                      <div style={FIELD_GAP}>
+                        <LabelWithError htmlFor="contact-buyer-message">
+                          Message to buyer (optional)
+                        </LabelWithError>
+                        <BuyerMessageTemplateField
+                          id="contact-buyer-message"
+                          defaultValue={contact?.buyerMessageTemplate ?? ""}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
+                        />
+                      </div>
+                    )}
 
-                {/* The message to a buyer after a sale here (#1815). Not on the Facebook platform:
-                    there it is Facebook's own setting, which its groups follow, on Settings →
-                    Facebook (#1661). */}
-                {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
-                  <div style={FIELD_GAP}>
-                    <LabelWithError htmlFor="contact-buyer-message">
-                      Message to buyer (optional)
-                    </LabelWithError>
-                    <BuyerMessageTemplateField
-                      id="contact-buyer-message"
-                      defaultValue={contact?.buyerMessageTemplate ?? ""}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
-                    />
-                  </div>
-                )}
-
-                {/* Listing templates (#210, #266, #267): what this platform's offer title, description
-                    and private note are generated from. Kept in a dedicated dialog so the contact form
-                    stays a contact form; carried on submit via hidden fields. */}
-                <div style={FIELD_GAP}>
-                  <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
-                  <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
-                  <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
-                  <input type="hidden" name="descriptionFormat" value={descriptionFormat} />
-                  <input
-                    type="hidden"
-                    name="tileLabelLeftTemplate"
-                    value={templates.tileLabelLeftTemplate}
-                  />
-                  <input
-                    type="hidden"
-                    name="tileLabelRightTemplate"
-                    value={templates.tileLabelRightTemplate}
-                  />
-                  <LabelWithError>Listing templates</LabelWithError>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <div
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        ...INPUT_STYLE,
-                        color: configuredTemplates
-                          ? "var(--color-text-primary)"
-                          : "var(--color-text-muted)",
-                      }}
-                    >
-                      {configuredTemplates
-                        ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
-                        : "None — listings use the catalog/copy label"}
+                    {/* Shipping options (#468, #1909): what buyers here can choose from, at the price they
+                        pay. Kept in its own dialog for the same reason the templates are — a list is not
+                        a field — but unlike the templates it saves itself: the rows are records of their
+                        own, so there is nothing for this form's Save to carry. That is also why it needs
+                        a platform that already exists. */}
+                    <div style={FIELD_GAP}>
+                      <LabelWithError>Shipping options</LabelWithError>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            ...INPUT_STYLE,
+                            color: shippingOptionCount
+                              ? "var(--color-text-primary)"
+                              : "var(--color-text-muted)",
+                          }}
+                        >
+                          {contact
+                            ? shippingOptionCount == null
+                              ? "…"
+                              : shippingOptionCount === 0
+                                ? "None — a sale here names its own shipping"
+                                : `${shippingOptionCount} option${shippingOptionCount === 1 ? "" : "s"}`
+                            : "Available once the contact is saved"}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShippingOpen(true)}
+                          disabled={isPending || !contact}
+                          style={{
+                            ...INPUT_STYLE,
+                            width: "auto",
+                            fontWeight: 600,
+                            cursor: contact ? "pointer" : "not-allowed",
+                            whiteSpace: "nowrap",
+                            color: contact ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                          }}
+                        >
+                          Options…
+                        </button>
+                      </div>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+                        The shipping buyers on this platform choose from, at what they pay for it, each
+                        linked to a carrier service. Picking one on a sale fills in the postage from that
+                        service — still editable there, and a sale can always name a one-off instead.
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setTemplatesOpen(true)}
-                      disabled={isPending}
-                      style={{
-                        ...INPUT_STYLE,
-                        width: "auto",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      Templates…
-                    </button>
-                  </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-                    Title, description, private note and photo tile label for this platform&apos;s
-                    listings, each generated from a {"{token}"} template with a live preview — and what
-                    this platform&apos;s description field accepts: plain text, HTML or Markdown.
-                  </p>
-                </div>
-
-                {/* Shipping options (#468, #1909): what buyers here can choose from, at the price they
-                    pay. Kept in its own dialog for the same reason the templates are — a list is not
-                    a field — but unlike the templates it saves itself: the rows are records of their
-                    own, so there is nothing for this form's Save to carry. That is also why it needs
-                    a platform that already exists. */}
-                <div style={FIELD_GAP}>
-                  <LabelWithError>Shipping options</LabelWithError>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <div
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        ...INPUT_STYLE,
-                        color: shippingOptionCount
-                          ? "var(--color-text-primary)"
-                          : "var(--color-text-muted)",
-                      }}
-                    >
-                      {contact
-                        ? shippingOptionCount == null
-                          ? "…"
-                          : shippingOptionCount === 0
-                            ? "None — a sale here names its own shipping"
-                            : `${shippingOptionCount} option${shippingOptionCount === 1 ? "" : "s"}`
-                        : "Available once the contact is saved"}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShippingOpen(true)}
-                      disabled={isPending || !contact}
-                      style={{
-                        ...INPUT_STYLE,
-                        width: "auto",
-                        fontWeight: 600,
-                        cursor: contact ? "pointer" : "not-allowed",
-                        whiteSpace: "nowrap",
-                        color: contact ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                      }}
-                    >
-                      Options…
-                    </button>
-                  </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-                    The shipping buyers on this platform choose from, at what they pay for it, each
-                    linked to a carrier service. Picking one on a sale fills in the postage from that
-                    service — still editable there, and a sale can always name a one-off instead.
-                  </p>
-                </div>
-
-                {/* Listing text limits (#403): what this platform's own form physically accepts, sitting
-                    directly under the templates that generate the texts they cap. Read live — tightening
-                    one shows up on every listing at once, prepared ones included — and never seeded onto
-                    an offer, exactly like the photo limits below. Nothing is truncated against them. */}
-                <div style={FIELD_GAP}>
-                  <LabelWithError>Listing text limits</LabelWithError>
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
-                    <LimitField
-                      id="contact-max-title-length"
-                      name="maxTitleLength"
-                      label="Max title (characters)"
-                      max={MAX_LISTING_TEXT_LENGTH_LIMIT}
-                      defaultValue={contact?.maxTitleLength}
-                      isPending={isPending}
-                    />
-                    <LimitField
-                      id="contact-max-description-length"
-                      name="maxDescriptionLength"
-                      label="Max description (characters)"
-                      max={MAX_LISTING_TEXT_LENGTH_LIMIT}
-                      defaultValue={contact?.maxDescriptionLength}
-                      isPending={isPending}
-                    />
-                    <LimitField
-                      id="contact-max-private-note-length"
-                      name="maxPrivateNoteLength"
-                      label="Max private note (characters)"
-                      max={MAX_LISTING_TEXT_LENGTH_LIMIT}
-                      defaultValue={contact?.maxPrivateNoteLength}
-                      isPending={isPending}
-                    />
-                  </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    How long this platform lets each text be — a character counter appears wherever the
-                    offer&apos;s title, description and private note are written or copied. Leave a
-                    field blank when the platform states no limit. Delcampe refuses an Easy Uploader
-                    row whose title is over its cap (#610), so the export refuses it first.
-                  </p>
-                </div>
-
-                {/* Offer photos (#308), platform-only and on two levels. The limits are what the platform
-                    physically accepts — read live when photos are generated, so tightening one applies at
-                    once. The two defaults below are *seeded* onto every new offer on this platform and
-                    never reach back into offers already prepared. */}
-                <div style={FIELD_GAP}>
-                  <LabelWithError>Offer photos</LabelWithError>
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
-                    <LimitField
-                      id="contact-max-photos"
-                      name="maxPhotos"
-                      label="Max photos"
-                      max={MAX_PHOTO_COUNT_LIMIT}
-                      defaultValue={contact?.maxPhotos}
-                      isPending={isPending}
-                    />
-                    <LimitField
-                      id="contact-max-photo-edge"
-                      name="maxPhotoEdge"
-                      label="Max longest edge (px)"
-                      max={MAX_PHOTO_EDGE_LIMIT}
-                      defaultValue={contact?.maxPhotoEdge}
-                      isPending={isPending}
-                    />
-                    <LimitField
-                      id="contact-max-photo-size"
-                      name="maxPhotoFileSizeMib"
-                      label="Max file size (MiB)"
-                      max={MAX_PHOTO_FILE_SIZE_MIB_LIMIT}
-                      defaultValue={contact?.maxPhotoFileSizeMib}
-                      isPending={isPending}
-                    />
-                  </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0.75rem" }}>
-                    What this platform accepts. Leave a field blank when it states no limit.
-                  </p>
-
-                  {/* Covering symbols (#1665): a rule of the platform's, read live like the limits
-                      above, so turning it on reaches every offer still following it. */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0 0 0.75rem" }}>
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.4375rem",
-                        fontSize: "0.8125rem",
-                        color: "var(--color-text-secondary)",
-                        cursor: isPending ? "default" : "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        name="coverSymbols"
-                        value="true"
-                        defaultChecked={contact?.coverSymbols ?? false}
-                        disabled={isPending}
-                        style={{ cursor: isPending ? "default" : "pointer" }}
-                      />
-                      Cover symbols on offer photos
-                    </label>
-                    <label
-                      htmlFor="contact-cover-style"
-                      style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginLeft: "auto" }}
-                    >
-                      New covers start as
-                    </label>
-                    <select
-                      id="contact-cover-style"
-                      name="coverStyle"
-                      defaultValue={contact?.coverStyle ?? DEFAULT_PHOTO_COVER_STYLE}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, width: "auto", cursor: "pointer" }}
-                    >
-                      {PHOTO_COVER_STYLES.map((style) => (
-                        <option key={style} value={style}>
-                          {PHOTO_COVER_STYLE_LABELS[style]}
-                        </option>
-                      ))}
-                    </select>
-                    <Tooltip content="The colour of the first solid bar drawn. After that a new bar starts in the colour last used on this browser.">
-                      <label
-                        htmlFor="contact-cover-color"
-                        style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
-                      >
-                        Bars in
-                      </label>
-                    </Tooltip>
-                    <CoverColorPicker
-                      id="contact-cover-color"
-                      value={coverColor}
-                      disabled={isPending}
-                      onChange={setCoverColor}
-                    />
-                    <input type="hidden" name="coverColor" value={coverColor} />
                   </div>
 
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-photo-sides">Sides to photograph</LabelWithError>
-                      <select
-                        id="contact-photo-sides"
-                        name="photoSides"
-                        defaultValue={contact?.photoSides ?? DEFAULT_PHOTO_SIDES}
-                        disabled={isPending}
-                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                      >
-                        {PHOTO_SIDES.map((side) => (
-                          <option key={side} value={side}>
-                            {PHOTO_SIDES_LABELS[side]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="contact-default-collage">Collage template</LabelWithError>
-                      {/* Controlled, because the options arrive from the server after the first render:
-                          an uncontrolled select would have already fallen back to "— none —" by then and
-                          would save the platform's template away. */}
-                      {/* The value travels in a hidden field: the select is disabled until the templates
-                          load, and a disabled control submits nothing — which would clear the setting. */}
+                  <div>
+                    {/* Listing templates (#210, #266, #267): what this platform's offer title, description
+                        and private note are generated from. Kept in a dedicated dialog so the contact form
+                        stays a contact form; carried on submit via hidden fields. */}
+                    <div style={FIELD_GAP}>
+                      <input type="hidden" name="titleTemplate" value={templates.titleTemplate} />
+                      <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
+                      <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+                      <input type="hidden" name="descriptionFormat" value={descriptionFormat} />
                       <input
                         type="hidden"
-                        name="defaultCollageTemplateId"
-                        value={defaultCollageTemplateId}
+                        name="tileLabelLeftTemplate"
+                        value={templates.tileLabelLeftTemplate}
                       />
-                      <select
-                        id="contact-default-collage"
-                        value={defaultCollageTemplateId}
-                        onChange={(e) => setDefaultCollageTemplateId(e.target.value)}
-                        disabled={isPending || collageTemplates.length === 0}
-                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                      >
-                        <option value="">
-                          {collageTemplates.length === 0 ? "— none defined yet —" : "— none —"}
-                        </option>
-                        {collageTemplates.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} (
-                            {normalizeCollageGridMode(t.gridMode) === "auto"
-                              ? `auto, up to ${t.rows} × ${t.columns}`
-                              : `${t.rows} × ${t.columns}`}
-                            )
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="hidden"
+                        name="tileLabelRightTemplate"
+                        value={templates.tileLabelRightTemplate}
+                      />
+                      <LabelWithError>Listing templates</LabelWithError>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            ...INPUT_STYLE,
+                            color: configuredTemplates
+                              ? "var(--color-text-primary)"
+                              : "var(--color-text-muted)",
+                          }}
+                        >
+                          {configuredTemplates
+                            ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
+                            : "None — listings use the catalog/copy label"}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setTemplatesOpen(true)}
+                          disabled={isPending}
+                          style={{
+                            ...INPUT_STYLE,
+                            width: "auto",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                            color: "var(--color-text-primary)",
+                          }}
+                        >
+                          Templates…
+                        </button>
+                      </div>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+                        Title, description, private note and photo tile label for this platform&apos;s
+                        listings, each generated from a {"{token}"} template with a live preview — and what
+                        this platform&apos;s description field accepts: plain text, HTML or Markdown.
+                      </p>
                     </div>
-                  </div>
-                  {/* Whether a new offer here photographs its single-stamp sets one per photo while
-                      the limit above has room, collaging only the tail (#521). Seeded like every
-                      other default in this block, and editable on the offer itself. */}
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.4375rem",
-                      fontSize: "0.8125rem",
-                      color: "var(--color-text-secondary)",
-                      cursor: isPending ? "default" : "pointer",
-                      margin: "0.75rem 0 0",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      name="photoPreferSingles"
-                      value="true"
-                      defaultChecked={contact?.photoPreferSingles ?? true}
-                      disabled={isPending}
-                      style={{ cursor: isPending ? "default" : "pointer" }}
-                    />
-                    Single photos while the photo limit allows
-                  </label>
-                  {/* #1673: a set's series on photos of their own, seeded onto new offers like the
-                      rest of this block; the template beside it lays the series photos out. */}
-                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", margin: "0.5rem 0 0" }}>
-                    <Tooltip content="Every series a set holds two or more stamps of gets photos of its own, in the series' order, laid out with the template beside; with none, the collage template above.">
+
+                    {/* Listing text limits (#403): what this platform's own form physically accepts, sitting
+                        directly under the templates that generate the texts they cap. Read live — tightening
+                        one shows up on every listing at once, prepared ones included — and never seeded onto
+                        an offer, exactly like the photo limits below. Nothing is truncated against them. */}
+                    <div style={FIELD_GAP}>
+                      <LabelWithError>Listing text limits</LabelWithError>
+                      <div style={{ display: "flex", gap: "0.75rem" }}>
+                        <LimitField
+                          id="contact-max-title-length"
+                          name="maxTitleLength"
+                          label="Max title (characters)"
+                          max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                          defaultValue={contact?.maxTitleLength}
+                          isPending={isPending}
+                        />
+                        <LimitField
+                          id="contact-max-description-length"
+                          name="maxDescriptionLength"
+                          label="Max description (characters)"
+                          max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                          defaultValue={contact?.maxDescriptionLength}
+                          isPending={isPending}
+                        />
+                        <LimitField
+                          id="contact-max-private-note-length"
+                          name="maxPrivateNoteLength"
+                          label="Max private note (characters)"
+                          max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                          defaultValue={contact?.maxPrivateNoteLength}
+                          isPending={isPending}
+                        />
+                      </div>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        How long this platform lets each text be — a character counter appears wherever the
+                        offer&apos;s title, description and private note are written or copied. Leave a
+                        field blank when the platform states no limit. Delcampe refuses an Easy Uploader
+                        row whose title is over its cap (#610), so the export refuses it first.
+                      </p>
+                    </div>
+
+                    {/* Offer photos (#308), platform-only and on two levels. The limits are what the platform
+                        physically accepts — read live when photos are generated, so tightening one applies at
+                        once. The two defaults below are *seeded* onto every new offer on this platform and
+                        never reach back into offers already prepared. */}
+                    <div style={FIELD_GAP}>
+                      <LabelWithError>Offer photos</LabelWithError>
+                      <div style={{ display: "flex", gap: "0.75rem" }}>
+                        <LimitField
+                          id="contact-max-photos"
+                          name="maxPhotos"
+                          label="Max photos"
+                          max={MAX_PHOTO_COUNT_LIMIT}
+                          defaultValue={contact?.maxPhotos}
+                          isPending={isPending}
+                        />
+                        <LimitField
+                          id="contact-max-photo-edge"
+                          name="maxPhotoEdge"
+                          label="Max longest edge (px)"
+                          max={MAX_PHOTO_EDGE_LIMIT}
+                          defaultValue={contact?.maxPhotoEdge}
+                          isPending={isPending}
+                        />
+                        <LimitField
+                          id="contact-max-photo-size"
+                          name="maxPhotoFileSizeMib"
+                          label="Max file size (MiB)"
+                          max={MAX_PHOTO_FILE_SIZE_MIB_LIMIT}
+                          defaultValue={contact?.maxPhotoFileSizeMib}
+                          isPending={isPending}
+                        />
+                      </div>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0.75rem" }}>
+                        What this platform accepts. Leave a field blank when it states no limit.
+                      </p>
+
+                      {/* Covering symbols (#1665): a rule of the platform's, read live like the limits
+                          above, so turning it on reaches every offer still following it. */}
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem 0.75rem", margin: "0 0 0.75rem" }}>
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.4375rem",
+                            fontSize: "0.8125rem",
+                            color: "var(--color-text-secondary)",
+                            cursor: isPending ? "default" : "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            name="coverSymbols"
+                            value="true"
+                            defaultChecked={contact?.coverSymbols ?? false}
+                            disabled={isPending}
+                            style={{ cursor: isPending ? "default" : "pointer" }}
+                          />
+                          Cover symbols on offer photos
+                        </label>
+                        <label
+                          htmlFor="contact-cover-style"
+                          style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginLeft: "auto" }}
+                        >
+                          New covers start as
+                        </label>
+                        <select
+                          id="contact-cover-style"
+                          name="coverStyle"
+                          defaultValue={contact?.coverStyle ?? DEFAULT_PHOTO_COVER_STYLE}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, width: "auto", cursor: "pointer" }}
+                        >
+                          {PHOTO_COVER_STYLES.map((style) => (
+                            <option key={style} value={style}>
+                              {PHOTO_COVER_STYLE_LABELS[style]}
+                            </option>
+                          ))}
+                        </select>
+                        <Tooltip content="The colour of the first solid bar drawn. After that a new bar starts in the colour last used on this browser.">
+                          <label
+                            htmlFor="contact-cover-color"
+                            style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
+                          >
+                            Bars in
+                          </label>
+                        </Tooltip>
+                        <CoverColorPicker
+                          id="contact-cover-color"
+                          value={coverColor}
+                          disabled={isPending}
+                          onChange={setCoverColor}
+                        />
+                        <input type="hidden" name="coverColor" value={coverColor} />
+                      </div>
+
+                      <div style={{ display: "flex", gap: "0.75rem" }}>
+                        <div style={{ flex: 1 }}>
+                          <LabelWithError htmlFor="contact-photo-sides">Sides to photograph</LabelWithError>
+                          <select
+                            id="contact-photo-sides"
+                            name="photoSides"
+                            defaultValue={contact?.photoSides ?? DEFAULT_PHOTO_SIDES}
+                            disabled={isPending}
+                            style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                          >
+                            {PHOTO_SIDES.map((side) => (
+                              <option key={side} value={side}>
+                                {PHOTO_SIDES_LABELS[side]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <LabelWithError htmlFor="contact-default-collage">Collage template</LabelWithError>
+                          {/* Controlled, because the options arrive from the server after the first render:
+                              an uncontrolled select would have already fallen back to "— none —" by then and
+                              would save the platform's template away. */}
+                          {/* The value travels in a hidden field: the select is disabled until the templates
+                              load, and a disabled control submits nothing — which would clear the setting. */}
+                          <input
+                            type="hidden"
+                            name="defaultCollageTemplateId"
+                            value={defaultCollageTemplateId}
+                          />
+                          <select
+                            id="contact-default-collage"
+                            value={defaultCollageTemplateId}
+                            onChange={(e) => setDefaultCollageTemplateId(e.target.value)}
+                            disabled={isPending || collageTemplates.length === 0}
+                            style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                          >
+                            <option value="">
+                              {collageTemplates.length === 0 ? "— none defined yet —" : "— none —"}
+                            </option>
+                            {collageTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} (
+                                {normalizeCollageGridMode(t.gridMode) === "auto"
+                                  ? `auto, up to ${t.rows} × ${t.columns}`
+                                  : `${t.rows} × ${t.columns}`}
+                                )
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      {/* Whether a new offer here photographs its single-stamp sets one per photo while
+                          the limit above has room, collaging only the tail (#521). Seeded like every
+                          other default in this block, and editable on the offer itself. */}
                       <label
                         style={{
                           display: "flex",
@@ -1071,51 +1072,78 @@ export function ContactFormDialog({
                           fontSize: "0.8125rem",
                           color: "var(--color-text-secondary)",
                           cursor: isPending ? "default" : "pointer",
-                          flex: 1,
+                          margin: "0.75rem 0 0",
                         }}
                       >
                         <input
                           type="checkbox"
-                          name="photoGroupByChecklist"
+                          name="photoPreferSingles"
                           value="true"
-                          defaultChecked={contact?.photoGroupByChecklist ?? false}
+                          defaultChecked={contact?.photoPreferSingles ?? true}
                           disabled={isPending}
                           style={{ cursor: isPending ? "default" : "pointer" }}
                         />
-                        Group series on their own photos
+                        Single photos while the photo limit allows
                       </label>
-                    </Tooltip>
-                    <div style={{ flex: 1 }}>
-                      <input
-                        type="hidden"
-                        name="defaultGroupCollageTemplateId"
-                        value={defaultGroupCollageTemplateId}
-                      />
-                      <select
-                        aria-label="Series template"
-                        value={defaultGroupCollageTemplateId}
-                        onChange={(e) => setDefaultGroupCollageTemplateId(e.target.value)}
-                        disabled={isPending || collageTemplates.length === 0}
-                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                      >
-                        <option value="">Series: same as the collage template</option>
-                        {collageTemplates.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            Series: {t.name} (
-                            {normalizeCollageGridMode(t.gridMode) === "auto"
-                              ? `auto, up to ${t.rows} × ${t.columns}`
-                              : `${t.rows} × ${t.columns}`}
-                            )
-                          </option>
-                        ))}
-                      </select>
+                      {/* #1673: a set's series on photos of their own, seeded onto new offers like the
+                          rest of this block; the template beside it lays the series photos out. */}
+                      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", margin: "0.5rem 0 0" }}>
+                        <Tooltip content="Every series a set holds two or more stamps of gets photos of its own, in the series' order, laid out with the template beside; with none, the collage template above.">
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.4375rem",
+                              fontSize: "0.8125rem",
+                              color: "var(--color-text-secondary)",
+                              cursor: isPending ? "default" : "pointer",
+                              flex: 1,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              name="photoGroupByChecklist"
+                              value="true"
+                              defaultChecked={contact?.photoGroupByChecklist ?? false}
+                              disabled={isPending}
+                              style={{ cursor: isPending ? "default" : "pointer" }}
+                            />
+                            Group series on their own photos
+                          </label>
+                        </Tooltip>
+                        <div style={{ flex: 1 }}>
+                          <input
+                            type="hidden"
+                            name="defaultGroupCollageTemplateId"
+                            value={defaultGroupCollageTemplateId}
+                          />
+                          <select
+                            aria-label="Series template"
+                            value={defaultGroupCollageTemplateId}
+                            onChange={(e) => setDefaultGroupCollageTemplateId(e.target.value)}
+                            disabled={isPending || collageTemplates.length === 0}
+                            style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                          >
+                            <option value="">Series: same as the collage template</option>
+                            {collageTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                Series: {t.name} (
+                                {normalizeCollageGridMode(t.gridMode) === "auto"
+                                  ? `auto, up to ${t.rows} × ${t.columns}`
+                                  : `${t.rows} × ${t.columns}`}
+                                )
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        Copied onto every new offer on this platform, along with the photo tile label from
+                        the templates above. Changing them here leaves prepared offers untouched.
+                      </p>
                     </div>
                   </div>
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    Copied onto every new offer on this platform, along with the photo tile label from
-                    the templates above. Changing them here leaves prepared offers untouched.
-                  </p>
-                </div>
+                </DialogFormColumns>
               </TabPanel>
             )}
           </div>

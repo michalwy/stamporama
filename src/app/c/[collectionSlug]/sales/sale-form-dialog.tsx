@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
+  LabelWithError,
+} from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -346,129 +353,356 @@ export function SaleFormDialog({
   }
 
   return (
-    <DialogShell title={title} onClose={onClose} minHeight="22rem" maxWidth="34rem">
+    <DialogShell title={title} onClose={onClose} minHeight="22rem" maxWidth={FORM_DIALOG_COLUMNS_WIDTH}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
       >
         <DialogBody>
-          {/* Platform + buyer */}
-          <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-platform">Platform</LabelWithError>
-              <PurchaseContactSelect
-                collectionId={collectionId}
-                idFieldName="platformId"
-                nameFieldName="platformName"
-                role="platform"
-                initialContactId={initial?.platformId ?? initialPlatform?.id}
-                initialContactName={initial?.platformName ?? initialPlatform?.name}
-                inputId="sale-platform"
-                placeholder="e.g. Delcampe, Allegro…"
-                disabled={isPending || platformLocked}
-                onSelectionChange={(id, name, platform) => {
-                  setPlatformId(id);
-                  setPlatformName(name);
-                  // A picked platform carries its fixed currency (null when unset); a typed name is
-                  // an unknown/new platform, so its currency is prompted below (#196). Editing keeps
-                  // the sale's snapshot, so the platform's currency is not tracked then.
-                  if (mode !== "edit") {
-                    setPlatformCurrency(id ? platform?.platformCurrency : undefined);
-                  }
-                }}
-              />
-              {platformLocked && (
-                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                  Remove the sold units first to change the platform.
-                </p>
+          {/* Two columns (#1931): who the sale is with, when, and where it is recorded on the left;
+              the money and the parcel on the right. In one column the form ran past a 1080-pixel
+              window — a Facebook sale's buyer profile pushed it further. */}
+          <DialogFormColumns>
+            <div>
+              {/* Platform + buyer */}
+              <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-platform">Platform</LabelWithError>
+                  <PurchaseContactSelect
+                    collectionId={collectionId}
+                    idFieldName="platformId"
+                    nameFieldName="platformName"
+                    role="platform"
+                    initialContactId={initial?.platformId ?? initialPlatform?.id}
+                    initialContactName={initial?.platformName ?? initialPlatform?.name}
+                    inputId="sale-platform"
+                    placeholder="e.g. Delcampe, Allegro…"
+                    disabled={isPending || platformLocked}
+                    onSelectionChange={(id, name, platform) => {
+                      setPlatformId(id);
+                      setPlatformName(name);
+                      // A picked platform carries its fixed currency (null when unset); a typed name is
+                      // an unknown/new platform, so its currency is prompted below (#196). Editing keeps
+                      // the sale's snapshot, so the platform's currency is not tracked then.
+                      if (mode !== "edit") {
+                        setPlatformCurrency(id ? platform?.platformCurrency : undefined);
+                      }
+                    }}
+                  />
+                  {platformLocked && (
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      Remove the sold units first to change the platform.
+                    </p>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-buyer">Buyer</LabelWithError>
+                  {buyerByFacebookProfile ? (
+                    <TextInput
+                      id="sale-buyer"
+                      value={buyerName}
+                      onChange={(e) => setBuyerName(e.target.value)}
+                      placeholder="Their name as the profile shows it"
+                      disabled={isPending}
+                      {...NO_AUTOFILL}
+                      style={INPUT_STYLE}
+                    />
+                  ) : (
+                    <PurchaseContactSelect
+                      collectionId={collectionId}
+                      idFieldName="buyerId"
+                      nameFieldName="buyerName"
+                      role="buyer"
+                      initialContactId={initial?.buyerId ?? undefined}
+                      initialContactName={initial?.buyerName ?? undefined}
+                      inputId="sale-buyer"
+                      placeholder="Search or add a buyer…"
+                      disabled={isPending}
+                      onSelectionChange={(id, name) => {
+                        setBuyerId(id);
+                        setBuyerName(name);
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* The buyer's Facebook profile (#1777): the identity a repeat buyer is recognised by, since
+                  names repeat on Facebook, and kept on the contact. */}
+              {buyerByFacebookProfile && (
+                <div style={FIELD_GAP}>
+                  <LabelWithError htmlFor="sale-buyer-profile">Buyer&apos;s Facebook profile (optional)</LabelWithError>
+                  <TextInput
+                    id="sale-buyer-profile"
+                    type="url"
+                    inputMode="url"
+                    value={buyerProfileUrl}
+                    onChange={(e) => setBuyerProfileUrl(e.target.value)}
+                    placeholder="https://www.facebook.com/…"
+                    disabled={isPending}
+                    {...NO_AUTOFILL}
+                    style={INPUT_STYLE}
+                  />
+                  {buyerConflict ? (
+                    <p role="alert" style={{ ...HINT, color: "var(--color-error)" }}>
+                      {buyerConflict}
+                    </p>
+                  ) : (
+                    buyerWho && <p style={HINT}>{buyerWho}</p>
+                  )}
+                </div>
               )}
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-buyer">Buyer</LabelWithError>
-              {buyerByFacebookProfile ? (
+
+              {/* Date + currency */}
+              <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-date">Sale date</LabelWithError>
+                  <input
+                    id="sale-date"
+                    type="date"
+                    value={soldAt}
+                    max={today}
+                    onChange={(e) => setSoldAt(e.target.value)}
+                    disabled={isPending}
+                    required
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-currency">Currency</LabelWithError>
+                  {lockedCurrency ? (
+                    // Inherited from the platform and locked (#196).
+                    <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
+                      {lockedCurrency} · from platform
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        id="sale-currency"
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value)}
+                        disabled={isPending}
+                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                      >
+                        {COMMON_CURRENCIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        Sets this platform&apos;s currency — all its offers and sales will use it.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* External transaction / order number */}
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="sale-external-ref">Order number (optional)</LabelWithError>
                 <TextInput
-                  id="sale-buyer"
-                  value={buyerName}
-                  onChange={(e) => setBuyerName(e.target.value)}
-                  placeholder="Their name as the profile shows it"
+                  id="sale-external-ref"
+                  value={externalRef}
+                  onChange={(e) => setExternalRef(e.target.value)}
+                  placeholder="Transaction / order no. in the marketplace"
                   disabled={isPending}
                   {...NO_AUTOFILL}
                   style={INPUT_STYLE}
                 />
-              ) : (
-                <PurchaseContactSelect
-                  collectionId={collectionId}
-                  idFieldName="buyerId"
-                  nameFieldName="buyerName"
-                  role="buyer"
-                  initialContactId={initial?.buyerId ?? undefined}
-                  initialContactName={initial?.buyerName ?? undefined}
-                  inputId="sale-buyer"
-                  placeholder="Search or add a buyer…"
+              </div>
+
+              {/* Link to the transaction on the marketplace (#292) — the sale-side counterpart of the
+                  offer's listing URL. Also editable in place on the detail screen, in any status. */}
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="sale-transaction-url">Transaction link (optional)</LabelWithError>
+                <TextInput
+                  id="sale-transaction-url"
+                  type="url"
+                  inputMode="url"
+                  value={transactionUrl}
+                  onChange={(e) => setTransactionUrl(e.target.value)}
+                  placeholder="https://…"
                   disabled={isPending}
-                  onSelectionChange={(id, name) => {
-                    setBuyerId(id);
-                    setBuyerName(name);
-                  }}
+                  style={INPUT_STYLE}
                 />
-              )}
+              </div>
             </div>
-          </div>
 
-          {/* The buyer's Facebook profile (#1777): the identity a repeat buyer is recognised by, since
-              names repeat on Facebook, and kept on the contact. */}
-          {buyerByFacebookProfile && (
-            <div style={FIELD_GAP}>
-              <LabelWithError htmlFor="sale-buyer-profile">Buyer&apos;s Facebook profile (optional)</LabelWithError>
-              <TextInput
-                id="sale-buyer-profile"
-                type="url"
-                inputMode="url"
-                value={buyerProfileUrl}
-                onChange={(e) => setBuyerProfileUrl(e.target.value)}
-                placeholder="https://www.facebook.com/…"
-                disabled={isPending}
-                {...NO_AUTOFILL}
-                style={INPUT_STYLE}
-              />
-              {buyerConflict ? (
-                <p role="alert" style={{ ...HINT, color: "var(--color-error)" }}>
-                  {buyerConflict}
-                </p>
-              ) : (
-                buyerWho && <p style={HINT}>{buyerWho}</p>
-              )}
-            </div>
-          )}
-
-          {/* Date + currency */}
-          <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-date">Sale date</LabelWithError>
-              <input
-                id="sale-date"
-                type="date"
-                value={soldAt}
-                max={today}
-                onChange={(e) => setSoldAt(e.target.value)}
-                disabled={isPending}
-                required
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-currency">Currency</LabelWithError>
-              {lockedCurrency ? (
-                // Inherited from the platform and locked (#196).
-                <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
-                  {lockedCurrency} · from platform
+            <div>
+              {/* Sale-time shared amounts */}
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
+                    <LabelWithError htmlFor={handlingMode === "direct" ? "sale-handling" : "sale-total-paid"}>
+                      {handlingMode === "direct" ? "Buyer handling" : "Total paid by buyer"}
+                    </LabelWithError>
+                    <button
+                      type="button"
+                      onClick={() => switchHandlingMode(handlingMode === "direct" ? "total" : "direct")}
+                      disabled={isPending}
+                      style={{
+                        border: "none",
+                        background: "none",
+                        padding: 0,
+                        cursor: isPending ? "default" : "pointer",
+                        fontSize: "0.6875rem",
+                        color: "var(--color-action-primary)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {handlingMode === "direct" ? "Enter total paid" : "Enter handling"}
+                    </button>
+                  </div>
+                  {handlingMode === "direct" ? (
+                    <>
+                      <NumericInput
+                        kind="amount"
+                        id="sale-handling"
+                        placeholder="0.00"
+                        value={buyerHandling}
+                        onChange={(e) => setBuyerHandling(e.target.value)}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      />
+                      <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                        + paid by buyer
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <NumericInput
+                        kind="amount"
+                        id="sale-total-paid"
+                        placeholder="0.00"
+                        value={totalPaid}
+                        onChange={(e) => setTotalPaid(e.target.value)}
+                        disabled={isPending}
+                        aria-invalid={totalTooLow}
+                        style={{
+                          ...INPUT_STYLE,
+                          ...(totalTooLow ? { borderColor: "var(--color-error)" } : {}),
+                        }}
+                      />
+                      <p
+                        style={{
+                          fontSize: "0.6875rem",
+                          margin: "0.25rem 0 0",
+                          color: totalTooLow ? "var(--color-error)" : "var(--color-text-muted)",
+                        }}
+                      >
+                        {totalTooLow
+                          ? `Total must be at least ${grossNum.toFixed(2)} ${resolvedCurrency} (the offer prices).`
+                          : hasGross
+                            ? `− ${grossNum.toFixed(2)} offers = ${
+                                derivedHandling != null ? derivedHandling.toFixed(2) : "0.00"
+                              } ${resolvedCurrency} handling`
+                            : "No sold units yet — handling equals the total until you add them."}
+                      </p>
+                    </>
+                  )}
                 </div>
-              ) : (
-                <>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-commission">Commission</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="sale-commission"
+                    placeholder="0.00"
+                    value={commission}
+                    onChange={(e) => setCommission(e.target.value)}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    − platform fee
+                  </p>
+                </div>
+              </div>
+
+              {/* Shipping (#468/#206/#1909). The option comes from the platform's own list — the buyer
+                  picked it when they ordered, so it is known before the parcel exists — and choosing one
+                  fills in what its carrier service normally costs. The cost stays editable here and on
+                  the detail screen: a service's price is what it usually costs, not what this parcel
+                  cost. */}
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-shipping-option">Shipping option</LabelWithError>
                   <select
-                    id="sale-currency"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
+                    id="sale-shipping-option"
+                    value={effectiveShippingOptionId}
+                    onChange={(e) => pickShippingOption(e.target.value)}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    <option value="">
+                      {optionsLoaded && shippingOptions.length === 0
+                        ? "— none defined for this platform —"
+                        : "— none —"}
+                    </option>
+                    {pendingOptionLabel && <option value={shippingOptionId}>{pendingOptionLabel}</option>}
+                    {shippingOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} — {o.price} {o.currency}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_SHIPPING_OPTION}>Custom…</option>
+                  </select>
+                </div>
+                {effectiveShippingOptionId === CUSTOM_SHIPPING_OPTION && (
+                  <div style={{ flex: 1 }}>
+                    <LabelWithError htmlFor="sale-shipping-option-name">Option name</LabelWithError>
+                    <TextInput
+                      id="sale-shipping-option-name"
+                      value={shippingOptionName}
+                      onChange={(e) => setShippingOptionName(e.target.value)}
+                      placeholder="e.g. Courier, one-off"
+                      disabled={isPending}
+                      {...NO_AUTOFILL}
+                      style={INPUT_STYLE}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* How the parcel actually went (#1923), when not as the buyer chose: the postage, the
+                  usual supplies and the tracking carrier follow it; the option stays what was bought. */}
+              <div style={{ marginTop: "1rem" }}>
+                <LabelWithError htmlFor="sale-sent-as">Sent as</LabelWithError>
+                <SentAsSelect
+                  id="sale-sent-as"
+                  carriers={carriers}
+                  value={sentAs}
+                  optionService={
+                    optionService && { id: optionService.id, name: optionService.name, carrierName: optionService.carrierName }
+                  }
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                  onChange={pickSentAs}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-shipping-cost">Postage</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="sale-shipping-cost"
+                    placeholder="0.00"
+                    value={shippingCost}
+                    onChange={(e) => setShippingCost(e.target.value)}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    − what posting it costs me; packing supplies are added on the sale
+                  </p>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="sale-shipping-currency">Shipping currency</LabelWithError>
+                  <select
+                    id="sale-shipping-currency"
+                    value={shippingCurrency || resolvedCurrency}
+                    onChange={(e) => setShippingCurrency(e.target.value)}
                     disabled={isPending}
                     style={{ ...INPUT_STYLE, cursor: "pointer" }}
                   >
@@ -479,230 +713,12 @@ export function SaleFormDialog({
                     ))}
                   </select>
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    Sets this platform&apos;s currency — all its offers and sales will use it.
+                    Postage is often paid in your own currency, not the platform&apos;s.
                   </p>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* External transaction / order number */}
-          <div style={FIELD_GAP}>
-            <LabelWithError htmlFor="sale-external-ref">Order number (optional)</LabelWithError>
-            <TextInput
-              id="sale-external-ref"
-              value={externalRef}
-              onChange={(e) => setExternalRef(e.target.value)}
-              placeholder="Transaction / order no. in the marketplace"
-              disabled={isPending}
-              {...NO_AUTOFILL}
-              style={INPUT_STYLE}
-            />
-          </div>
-
-          {/* Link to the transaction on the marketplace (#292) — the sale-side counterpart of the
-              offer's listing URL. Also editable in place on the detail screen, in any status. */}
-          <div style={FIELD_GAP}>
-            <LabelWithError htmlFor="sale-transaction-url">Transaction link (optional)</LabelWithError>
-            <TextInput
-              id="sale-transaction-url"
-              type="url"
-              inputMode="url"
-              value={transactionUrl}
-              onChange={(e) => setTransactionUrl(e.target.value)}
-              placeholder="https://…"
-              disabled={isPending}
-              style={INPUT_STYLE}
-            />
-          </div>
-
-          {/* Sale-time shared amounts */}
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
-                <LabelWithError htmlFor={handlingMode === "direct" ? "sale-handling" : "sale-total-paid"}>
-                  {handlingMode === "direct" ? "Buyer handling" : "Total paid by buyer"}
-                </LabelWithError>
-                <button
-                  type="button"
-                  onClick={() => switchHandlingMode(handlingMode === "direct" ? "total" : "direct")}
-                  disabled={isPending}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    padding: 0,
-                    cursor: isPending ? "default" : "pointer",
-                    fontSize: "0.6875rem",
-                    color: "var(--color-action-primary)",
-                    fontWeight: 500,
-                  }}
-                >
-                  {handlingMode === "direct" ? "Enter total paid" : "Enter handling"}
-                </button>
+                </div>
               </div>
-              {handlingMode === "direct" ? (
-                <>
-                  <NumericInput
-                    kind="amount"
-                    id="sale-handling"
-                    placeholder="0.00"
-                    value={buyerHandling}
-                    onChange={(e) => setBuyerHandling(e.target.value)}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  />
-                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    + paid by buyer
-                  </p>
-                </>
-              ) : (
-                <>
-                  <NumericInput
-                    kind="amount"
-                    id="sale-total-paid"
-                    placeholder="0.00"
-                    value={totalPaid}
-                    onChange={(e) => setTotalPaid(e.target.value)}
-                    disabled={isPending}
-                    aria-invalid={totalTooLow}
-                    style={{
-                      ...INPUT_STYLE,
-                      ...(totalTooLow ? { borderColor: "var(--color-error)" } : {}),
-                    }}
-                  />
-                  <p
-                    style={{
-                      fontSize: "0.6875rem",
-                      margin: "0.25rem 0 0",
-                      color: totalTooLow ? "var(--color-error)" : "var(--color-text-muted)",
-                    }}
-                  >
-                    {totalTooLow
-                      ? `Total must be at least ${grossNum.toFixed(2)} ${resolvedCurrency} (the offer prices).`
-                      : hasGross
-                        ? `− ${grossNum.toFixed(2)} offers = ${
-                            derivedHandling != null ? derivedHandling.toFixed(2) : "0.00"
-                          } ${resolvedCurrency} handling`
-                        : "No sold units yet — handling equals the total until you add them."}
-                  </p>
-                </>
-              )}
             </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-commission">Commission</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="sale-commission"
-                placeholder="0.00"
-                value={commission}
-                onChange={(e) => setCommission(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                − platform fee
-              </p>
-            </div>
-          </div>
-
-          {/* Shipping (#468/#206/#1909). The option comes from the platform's own list — the buyer
-              picked it when they ordered, so it is known before the parcel exists — and choosing one
-              fills in what its carrier service normally costs. The cost stays editable here and on
-              the detail screen: a service's price is what it usually costs, not what this parcel
-              cost. */}
-          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-shipping-option">Shipping option</LabelWithError>
-              <select
-                id="sale-shipping-option"
-                value={effectiveShippingOptionId}
-                onChange={(e) => pickShippingOption(e.target.value)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                <option value="">
-                  {optionsLoaded && shippingOptions.length === 0
-                    ? "— none defined for this platform —"
-                    : "— none —"}
-                </option>
-                {pendingOptionLabel && <option value={shippingOptionId}>{pendingOptionLabel}</option>}
-                {shippingOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name} — {o.price} {o.currency}
-                  </option>
-                ))}
-                <option value={CUSTOM_SHIPPING_OPTION}>Custom…</option>
-              </select>
-            </div>
-            {effectiveShippingOptionId === CUSTOM_SHIPPING_OPTION && (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="sale-shipping-option-name">Option name</LabelWithError>
-                <TextInput
-                  id="sale-shipping-option-name"
-                  value={shippingOptionName}
-                  onChange={(e) => setShippingOptionName(e.target.value)}
-                  placeholder="e.g. Courier, one-off"
-                  disabled={isPending}
-                  {...NO_AUTOFILL}
-                  style={INPUT_STYLE}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* How the parcel actually went (#1923), when not as the buyer chose: the postage, the
-              usual supplies and the tracking carrier follow it; the option stays what was bought. */}
-          <div style={{ marginTop: "1rem" }}>
-            <LabelWithError htmlFor="sale-sent-as">Sent as</LabelWithError>
-            <SentAsSelect
-              id="sale-sent-as"
-              carriers={carriers}
-              value={sentAs}
-              optionService={
-                optionService && { id: optionService.id, name: optionService.name, carrierName: optionService.carrierName }
-              }
-              disabled={isPending}
-              style={INPUT_STYLE}
-              onChange={pickSentAs}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-shipping-cost">Postage</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="sale-shipping-cost"
-                placeholder="0.00"
-                value={shippingCost}
-                onChange={(e) => setShippingCost(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                − what posting it costs me; packing supplies are added on the sale
-              </p>
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-shipping-currency">Shipping currency</LabelWithError>
-              <select
-                id="sale-shipping-currency"
-                value={shippingCurrency || resolvedCurrency}
-                onChange={(e) => setShippingCurrency(e.target.value)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {COMMON_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                Postage is often paid in your own currency, not the platform&apos;s.
-              </p>
-            </div>
-          </div>
+          </DialogFormColumns>
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

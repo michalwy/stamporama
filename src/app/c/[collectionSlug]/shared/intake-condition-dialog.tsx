@@ -1,7 +1,7 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
-import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -9,6 +9,8 @@ import {
   DialogActions,
   DIALOG_MAX_HEIGHT,
   DIALOG_MAX_WIDTH,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -254,6 +256,33 @@ export function SeedOriginNote({ origin }: { origin: SeedOrigin | null }) {
     >
       {SEED_ORIGIN_LABEL[origin]}
     </span>
+  );
+}
+
+/** The form's two groups (#1931) side by side, or one under the other beside a piece, where the
+ * picture takes the width. */
+function ConditionFormLayout({
+  columns,
+  left,
+  right,
+}: {
+  columns: boolean;
+  left: ReactNode;
+  right: ReactNode;
+}) {
+  if (!columns) {
+    return (
+      <>
+        {left}
+        {right}
+      </>
+    );
+  }
+  return (
+    <DialogFormColumns>
+      <div>{left}</div>
+      <div>{right}</div>
+    </DialogFormColumns>
   );
 }
 
@@ -779,13 +808,14 @@ function IntakeConditionDialog({
           : "Add copy"));
 
   // The picture beside the form rather than above it (#592): a thumbnail over a form this long
-  // pushes the fields it exists to serve off the screen. The form column keeps the width it was
-  // designed at, so the dialog reads identically with and without a piece — the picture is added
-  // beside it, and nothing about the questions moves.
+  // pushes the fields it exists to serve off the screen. Beside a piece the form is one column of
+  // a fixed width — the picture is added beside it, and nothing about the questions moves. Without
+  // one the form is two columns (#1931): in one it ran past a 1080px window.
   const pieceAside =
     pieces && pieces.some((p) => p.sides.length > 0) ? (
       <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanning={scanning} />
     ) : undefined;
+  const columns = !pieceAside;
 
   return (
     <DialogShell
@@ -797,426 +827,439 @@ function IntakeConditionDialog({
       // had, so faults and tags fit side by side (#1640) — and the viewer takes the rest, so *Fit*
       // fills the added room; on a small window the viewer gives way first, down to a floor under
       // which the form starts to give way too.
-      maxWidth={pieceAside ? DIALOG_MAX_WIDTH : "36rem"}
+      maxWidth={pieceAside ? DIALOG_MAX_WIDTH : FORM_DIALOG_COLUMNS_WIDTH}
       height={pieceAside ? DIALOG_MAX_HEIGHT : undefined}
       aside={pieceAside}
       asideWidth="max(16rem, 100% - 50rem)"
     >
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
-          <div
-            style={{
-              marginBottom: "1rem",
-              padding: "0.625rem 0.75rem",
-              borderRadius: "0.5rem",
-              background: "var(--color-bg-page)",
-              border: "1px solid var(--color-border)",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            {summary}
-            {/* The stamps on the piece (#750), when it carries more than the one picked. The chip
-                and its sentence are the Copies list's own (#748): a piece carrying several stamps
-                is a copy of none of them, and this is the last place to see that before it is. */}
-            {carriedStamps && carriedStamps.length > 0 && (
-              <div style={{ marginTop: "0.375rem" }}>
-                <div style={{ color: "var(--color-text-primary)" }}>
-                  <strong>Several stamps on this piece</strong> — one copy, counted towards none of
-                  them:
-                </div>
-                <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-                  {carriedStamps.map((line, i) => (
-                    <li key={i} style={{ marginTop: "0.125rem" }}>
-                      <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {onEditStamps && selection.kind === "stamp" && (
-              <div style={{ marginTop: "0.375rem" }}>
-                <button
-                  type="button"
-                  onClick={onEditStamps}
-                  disabled={isPending}
+          {/* Two columns without a piece (#1931): the copy itself on the left — what it is, its
+              condition and what it is worth — and where it goes and what comes with it on the
+              right. Beside a piece, one column, as the picture takes the width. */}
+          <ConditionFormLayout
+            columns={columns}
+            left={
+              <>
+                <div
                   style={{
-                    padding: 0,
-                    border: "none",
-                    background: "none",
-                    font: "inherit",
-                    color: "var(--color-accent)",
-                    cursor: isPending ? "not-allowed" : "pointer",
+                    marginBottom: "1rem",
+                    padding: "0.625rem 0.75rem",
+                    borderRadius: "0.5rem",
+                    background: "var(--color-bg-page)",
+                    border: "1px solid var(--color-border)",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-secondary)",
                   }}
                 >
-                  {carriedStamps && carriedStamps.length > 0
-                    ? "Change the stamps on this piece…"
-                    : "Another stamp on this piece…"}
-                </button>
-              </div>
-            )}
-            {/* What is about to exist, before anything is created (#596). It sits inside the box
-                that names the pick because it is a fact about *this* answer — one stamp, one
-                condition, one certificate, one format, one lot, and this many pieces of paper.
-                Silent for the ordinary single tile, which needs no count to read as one copy. */}
-            {copyCount != null && copyCount > 1 && (
-              <div style={{ marginTop: "0.25rem", color: "var(--color-text-primary)" }}>
-                <strong>{copyCount} copies</strong> will be created — one per tile, each keeping its
-                own pictures.
-                {/* The tiles marked before identifying keep their marks (#1550); the answers below
-                    apply to the rest. Said before anything is created, as the count is. */}
-                {keepersSaid.length > 0 && (
-                  <>
-                    {" "}
-                    <strong>{keepersSaid.join(", ")}</strong>; the answers below apply to the rest.
-                  </>
-                )}
-                {tagKeepers > 0 && (
-                  <>
-                    {" "}
-                    <strong>
-                      {tagKeepers} {tagKeepers === 1 ? "tile keeps the tags" : "tiles keep the tags"}{" "}
-                      marked on {tagKeepers === 1 ? "it" : "them"}
-                    </strong>{" "}
-                    besides the tags below.
-                  </>
-                )}
-              </div>
-            )}
-            {/* What the collection already holds of this stamp, and what it is still after (#562)
-                — inside the box that already names the pick, so the line reads as a fact about it
-                rather than as a second heading. Single-stamp intake only: a whole-checklist intake
-                fans out across many stamps and has no one stamp to report on, exactly as photos
-                below are single-stamp only (#148). */}
-            {/* Not for a piece carrying several (#750): it will count towards none of them, so what
-                the collection holds of the first is not a fact about this intake. */}
-            {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
-              <IntakeHoldingsLine
-                collectionId={collectionId}
-                stampId={selection.stampId}
-                conditions={conditions}
-                conditionId={conditionId}
-                certificateStatusId={certId}
-                formatId={formatId}
-                onCompare={() => setComparing(null)}
-              />
-            )}
-            {/* The in-collection copies themselves (#1621), and those being sorted (#1728), since
-                whether the piece should take one of their places is judged by looking. Under the
-                line, on the line's own terms. */}
-            {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
-              <HeldCopyThumbs
-                collectionId={collectionId}
-                stampId={selection.stampId}
-                conditions={conditions}
-                certificateStatuses={certificateStatuses}
-                excludeItemId={correctedCopyId ?? null}
-                onOpen={setComparing}
-              />
-            )}
-          </div>
-
-          {/* Which lot the copy belongs to (#586) — drawn only when the order has more than one
-              open, and **above** the condition because it is the question about *this* order that
-              the rest of the form is answered under. It is not a `name`d field: the submit writes
-              it explicitly alongside remembering it, so the two cannot fall out of step. */}
-          {asksForLot && (
-            <div style={{ marginBottom: "0.75rem" }}>
-              <LabelWithError htmlFor="intake-lot">Lot</LabelWithError>
-              <select
-                id="intake-lot"
-                value={lotId}
-                onChange={(e) => setLotId(e.target.value)}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                {lotOptions.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-              <p
-                style={{
-                  margin: "0.25rem 0 0",
-                  fontSize: "0.75rem",
-                  color: "var(--color-text-muted)",
-                }}
-              >
-                One card can hold pieces from several lots, so this is asked per copy — and the last
-                answer leads, since a card is usually worked through before the next is started.
-              </p>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-condition">
-                Condition
-                <SeedOriginNote origin={conditionOrigin} />
-              </LabelWithError>
-              <select
-                id="intake-condition"
-                name="conditionId"
-                value={conditionId}
-                onChange={(e) => {
-                  setConditionId(e.target.value);
-                  setConditionOrigin(null);
-                }}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                <option value="">— Select —</option>
-                {conditions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.abbreviation})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-cert">
-                Certificate
-                <SeedOriginNote origin={certOrigin} />
-              </LabelWithError>
-              <select
-                id="intake-cert"
-                name="certificateStatusId"
-                value={certId}
-                onChange={(e) => {
-                  setCertId(e.target.value);
-                  setCertOrigin(null);
-                }}
-                disabled={isPending}
-                style={INPUT_STYLE}
-              >
-                <option value="">— None —</option>
-                {certificateStatuses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.abbreviation})
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Format (#573): the piece in the tweezers is a pair or a block as often as it is a
-                single, and this is the moment that is known — afterwards it is one copy edit per
-                piece, from memory, after the sorting pass. Single-stamp intake only, the rule
-                photos follow and for a stronger reason: a whole-checklist intake fans out across
-                many stamps and "block of four" could not be true of all of them. Absent entirely
-                until the collection defines formats, as the inventory list's own format controls
-                are — most collections never define any. */}
-            {singleStamp && formats.length > 0 && (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="intake-format">Format</LabelWithError>
-                <select
-                  id="intake-format"
-                  name="formatId"
-                  value={formatId}
-                  onChange={(e) => setFormatId(e.target.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  {/* No "single" row exists in the dictionary — a copy with no format *is* the
-                      single, exactly as no certificate means none. */}
-                  <option value="">— Single —</option>
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.abbreviation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* The copy's faults (#1558) and tags (#1599), with the piece in hand: straight after
-              condition, certificate and format, because they describe the piece and are worked out
-              with it, while the catalogue value below is looked up afterwards (#1593). Side by side,
-              each half the row (#1640): both are short lists of chips, and one above the other ran
-              the step long enough to scroll for *Location* and the buttons. Each grows downwards as
-              chips are added, its hint under it. Faults open on the faults marked on the tiles, or
-              empty — never the last tile's, since a fault belongs to one piece; tags on the tags
-              marked on the tiles, or empty — never the last used. *To check*, *for expertising* are
-              often known while identifying, and a new name becomes a tag when the step is saved, as
-              on a copy. */}
-          {(askFaults || askTags) && (
-            <div
-              style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", marginTop: "0.75rem" }}
-            >
-              {askFaults && (
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <LabelWithError htmlFor="intake-faults">
-                    Faults (optional)
-                    <SeedOriginNote origin={faultsOrigin} />
-                  </LabelWithError>
-                  {faultDictionary ? (
-                    <FaultEntryField
+                  {summary}
+                  {/* The stamps on the piece (#750), when it carries more than the one picked. The chip
+                      and its sentence are the Copies list's own (#748): a piece carrying several stamps
+                      is a copy of none of them, and this is the last place to see that before it is. */}
+                  {carriedStamps && carriedStamps.length > 0 && (
+                    <div style={{ marginTop: "0.375rem" }}>
+                      <div style={{ color: "var(--color-text-primary)" }}>
+                        <strong>Several stamps on this piece</strong> — one copy, counted towards none of
+                        them:
+                      </div>
+                      <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                        {carriedStamps.map((line, i) => (
+                          <li key={i} style={{ marginTop: "0.125rem" }}>
+                            <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {onEditStamps && selection.kind === "stamp" && (
+                    <div style={{ marginTop: "0.375rem" }}>
+                      <button
+                        type="button"
+                        onClick={onEditStamps}
+                        disabled={isPending}
+                        style={{
+                          padding: 0,
+                          border: "none",
+                          background: "none",
+                          font: "inherit",
+                          color: "var(--color-accent)",
+                          cursor: isPending ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {carriedStamps && carriedStamps.length > 0
+                          ? "Change the stamps on this piece…"
+                          : "Another stamp on this piece…"}
+                      </button>
+                    </div>
+                  )}
+                  {/* What is about to exist, before anything is created (#596). It sits inside the box
+                      that names the pick because it is a fact about *this* answer — one stamp, one
+                      condition, one certificate, one format, one lot, and this many pieces of paper.
+                      Silent for the ordinary single tile, which needs no count to read as one copy. */}
+                  {copyCount != null && copyCount > 1 && (
+                    <div style={{ marginTop: "0.25rem", color: "var(--color-text-primary)" }}>
+                      <strong>{copyCount} copies</strong> will be created — one per tile, each keeping its
+                      own pictures.
+                      {/* The tiles marked before identifying keep their marks (#1550); the answers below
+                          apply to the rest. Said before anything is created, as the count is. */}
+                      {keepersSaid.length > 0 && (
+                        <>
+                          {" "}
+                          <strong>{keepersSaid.join(", ")}</strong>; the answers below apply to the rest.
+                        </>
+                      )}
+                      {tagKeepers > 0 && (
+                        <>
+                          {" "}
+                          <strong>
+                            {tagKeepers} {tagKeepers === 1 ? "tile keeps the tags" : "tiles keep the tags"}{" "}
+                            marked on {tagKeepers === 1 ? "it" : "them"}
+                          </strong>{" "}
+                          besides the tags below.
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {/* What the collection already holds of this stamp, and what it is still after (#562)
+                      — inside the box that already names the pick, so the line reads as a fact about it
+                      rather than as a second heading. Single-stamp intake only: a whole-checklist intake
+                      fans out across many stamps and has no one stamp to report on, exactly as photos
+                      below are single-stamp only (#148). */}
+                  {/* Not for a piece carrying several (#750): it will count towards none of them, so what
+                      the collection holds of the first is not a fact about this intake. */}
+                  {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
+                    <IntakeHoldingsLine
                       collectionId={collectionId}
-                      inputId="intake-faults"
-                      initialFaults={seededFaults}
-                      disabled={isPending}
-                      onChange={(entries) => {
-                        const ids = entries.map((e) => e.id ?? `new:${e.name}`);
-                        if (!sameFaults(ids, seeds.faults.faultIds)) setFaultsOrigin(null);
-                      }}
+                      stampId={selection.stampId}
+                      conditions={conditions}
+                      conditionId={conditionId}
+                      certificateStatusId={certId}
+                      formatId={formatId}
+                      onCompare={() => setComparing(null)}
                     />
-                  ) : (
-                    <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                  )}
+                  {/* The in-collection copies themselves (#1621), and those being sorted (#1728), since
+                      whether the piece should take one of their places is judged by looking. Under the
+                      line, on the line's own terms. */}
+                  {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
+                    <HeldCopyThumbs
+                      collectionId={collectionId}
+                      stampId={selection.stampId}
+                      conditions={conditions}
+                      certificateStatuses={certificateStatuses}
+                      excludeItemId={correctedCopyId ?? null}
+                      onOpen={setComparing}
+                    />
                   )}
                 </div>
-              )}
-              {askTags && (
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <LabelWithError htmlFor="intake-tags">
-                    Tags (optional)
-                    <SeedOriginNote origin={tagsOrigin} />
-                  </LabelWithError>
-                  {tagDictionary ? (
-                    <TagEntryField
-                      collectionId={collectionId}
-                      name="copyTags"
-                      inputId="intake-tags"
-                      initialTags={seededTags}
+
+                {/* Which lot the copy belongs to (#586) — drawn only when the order has more than one
+                    open, and **above** the condition because it is the question about *this* order that
+                    the rest of the form is answered under. It is not a `name`d field: the submit writes
+                    it explicitly alongside remembering it, so the two cannot fall out of step. */}
+                {asksForLot && (
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <LabelWithError htmlFor="intake-lot">Lot</LabelWithError>
+                    <select
+                      id="intake-lot"
+                      value={lotId}
+                      onChange={(e) => setLotId(e.target.value)}
                       disabled={isPending}
-                      onChange={(entries) => {
-                        if (!sameFaults(entries.map(tagEntryKey), seeds.tags.tagIds)) setTagsOrigin(null);
+                      style={INPUT_STYLE}
+                    >
+                      {lotOptions.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p
+                      style={{
+                        margin: "0.25rem 0 0",
+                        fontSize: "0.75rem",
+                        color: "var(--color-text-muted)",
                       }}
-                    />
-                  ) : (
-                    <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                    >
+                      One card can hold pieces from several lots, so this is asked per copy — and the last
+                      answer leads, since a card is usually worked through before the next is started.
+                    </p>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: "0.75rem" }}>
+                  <div style={{ flex: 1 }}>
+                    <LabelWithError htmlFor="intake-condition">
+                      Condition
+                      <SeedOriginNote origin={conditionOrigin} />
+                    </LabelWithError>
+                    <select
+                      id="intake-condition"
+                      name="conditionId"
+                      value={conditionId}
+                      onChange={(e) => {
+                        setConditionId(e.target.value);
+                        setConditionOrigin(null);
+                      }}
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    >
+                      <option value="">— Select —</option>
+                      {conditions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.abbreviation})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <LabelWithError htmlFor="intake-cert">
+                      Certificate
+                      <SeedOriginNote origin={certOrigin} />
+                    </LabelWithError>
+                    <select
+                      id="intake-cert"
+                      name="certificateStatusId"
+                      value={certId}
+                      onChange={(e) => {
+                        setCertId(e.target.value);
+                        setCertOrigin(null);
+                      }}
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    >
+                      <option value="">— None —</option>
+                      {certificateStatuses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.abbreviation})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Format (#573): the piece in the tweezers is a pair or a block as often as it is a
+                      single, and this is the moment that is known — afterwards it is one copy edit per
+                      piece, from memory, after the sorting pass. Single-stamp intake only, the rule
+                      photos follow and for a stronger reason: a whole-checklist intake fans out across
+                      many stamps and "block of four" could not be true of all of them. Absent entirely
+                      until the collection defines formats, as the inventory list's own format controls
+                      are — most collections never define any. */}
+                  {singleStamp && formats.length > 0 && (
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="intake-format">Format</LabelWithError>
+                      <select
+                        id="intake-format"
+                        name="formatId"
+                        value={formatId}
+                        onChange={(e) => setFormatId(e.target.value)}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      >
+                        {/* No "single" row exists in the dictionary — a copy with no format *is* the
+                            single, exactly as no certificate means none. */}
+                        <option value="">— Single —</option>
+                        {formats.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} ({f.abbreviation})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
-              Under the row it is keyed on, with only the faults and tags between (#1593, #1640) — a
-              catalogue price belongs to a condition × certificate, and its input keeps that row's
-              columns so it still lines up under the Condition control it follows. The format picked
-              beside it is *not* one of those answers: the figure always lands on the single, with a
-              multiple's value derived from it.
-              One field, the primary catalogue only: the full quick-price dialog stays for the
-              multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
-              intake only, the rule photos and the format field follow — one figure cannot be the
-              catalogue value of a whole set's stamps. */}
-          {selection.kind === "stamp" && (
-            <IntakeCatalogValueField
-              stampId={selection.stampId}
-              conditionId={conditionId}
-              certificateStatusId={certId}
-              subject={subjectChips}
-              // The condition row above is two controls, or three once the collection defines
-              // formats — the same count the row itself is built from, so the two cannot drift.
-              columns={singleStamp && formats.length > 0 ? 3 : 2}
-              disabled={isPending || savingPrice}
-              onChange={handleCatalogValueChange}
-              variantGrid={
-                priceVariantsInGrid
-                  ? {
-                      formatId,
-                      subjectLabel: variantGridLabel,
-                      subject: variantGridSubject,
-                      collectionId,
+                {/* The copy's faults (#1558) and tags (#1599), with the piece in hand: straight after
+                    condition, certificate and format, because they describe the piece and are worked out
+                    with it, while the catalogue value below is looked up afterwards (#1593). Side by side,
+                    each half the row (#1640): both are short lists of chips, and one above the other ran
+                    the step long enough to scroll for *Location* and the buttons. Each grows downwards as
+                    chips are added, its hint under it. Faults open on the faults marked on the tiles, or
+                    empty — never the last tile's, since a fault belongs to one piece; tags on the tags
+                    marked on the tiles, or empty — never the last used. *To check*, *for expertising* are
+                    often known while identifying, and a new name becomes a tag when the step is saved, as
+                    on a copy. */}
+                {(askFaults || askTags) && (
+                  <div
+                    style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", marginTop: "0.75rem" }}
+                  >
+                    {askFaults && (
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <LabelWithError htmlFor="intake-faults">
+                          Faults (optional)
+                          <SeedOriginNote origin={faultsOrigin} />
+                        </LabelWithError>
+                        {faultDictionary ? (
+                          <FaultEntryField
+                            collectionId={collectionId}
+                            inputId="intake-faults"
+                            initialFaults={seededFaults}
+                            disabled={isPending}
+                            onChange={(entries) => {
+                              const ids = entries.map((e) => e.id ?? `new:${e.name}`);
+                              if (!sameFaults(ids, seeds.faults.faultIds)) setFaultsOrigin(null);
+                            }}
+                          />
+                        ) : (
+                          <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                        )}
+                      </div>
+                    )}
+                    {askTags && (
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <LabelWithError htmlFor="intake-tags">
+                          Tags (optional)
+                          <SeedOriginNote origin={tagsOrigin} />
+                        </LabelWithError>
+                        {tagDictionary ? (
+                          <TagEntryField
+                            collectionId={collectionId}
+                            name="copyTags"
+                            inputId="intake-tags"
+                            initialTags={seededTags}
+                            disabled={isPending}
+                            onChange={(entries) => {
+                              if (!sameFaults(entries.map(tagEntryKey), seeds.tags.tagIds)) setTagsOrigin(null);
+                            }}
+                          />
+                        ) : (
+                          <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
+                    Under the row it is keyed on, with only the faults and tags between (#1593, #1640) — a
+                    catalogue price belongs to a condition × certificate, and its input keeps that row's
+                    columns so it still lines up under the Condition control it follows. The format picked
+                    beside it is *not* one of those answers: the figure always lands on the single, with a
+                    multiple's value derived from it.
+                    One field, the primary catalogue only: the full quick-price dialog stays for the
+                    multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
+                    intake only, the rule photos and the format field follow — one figure cannot be the
+                    catalogue value of a whole set's stamps. */}
+                {selection.kind === "stamp" && (
+                  <IntakeCatalogValueField
+                    stampId={selection.stampId}
+                    conditionId={conditionId}
+                    certificateStatusId={certId}
+                    subject={subjectChips}
+                    // The condition row above is two controls, or three once the collection defines
+                    // formats — the same count the row itself is built from, so the two cannot drift.
+                    columns={singleStamp && formats.length > 0 ? 3 : 2}
+                    disabled={isPending || savingPrice}
+                    onChange={handleCatalogValueChange}
+                    variantGrid={
+                      priceVariantsInGrid
+                        ? {
+                            formatId,
+                            subjectLabel: variantGridLabel,
+                            subject: variantGridSubject,
+                            collectionId,
+                          }
+                        : undefined
                     }
-                  : undefined
-              }
-            />
-          )}
+                  />
+                )}
+              </>
+            }
+            right={
+              <>
+                {/* Storage location (#56/#121): optional at intake, shared by every created copy.
+                    An in-location ref (#148) sits beside it, disabled until a location is chosen. */}
+                <div style={{ marginTop: columns ? 0 : "0.75rem" }}>
+                  <LabelWithError htmlFor="intake-locationId-button">Location (optional)</LabelWithError>
+                  {locations.length === 0 ? (
+                    <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      No locations defined yet. Add some on the Locations screen to file copies away.
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                      <div style={{ flex: 3 }}>
+                        <LocationTreeSelect
+                          locations={locations}
+                          locationTree={locationTree}
+                          name="locationId"
+                          selectedId={locationId}
+                          onSelectedIdChange={setLocationId}
+                          onlyAssignableSelectable
+                          disabled={isPending}
+                          noneOptionLabel="— None"
+                          buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <TextInput
+                          id="intake-locationRef"
+                          name="locationRef"
+                          placeholder="Ref, e.g. A234"
+                          // The one field here that is never remembered between intakes, and is filled by
+                          // a repeat all the same (#595): two duplicates worked through in a run go into
+                          // the same place in the same box, and the collector asked for the same again.
+                          // Uncontrolled, so this is the value the field opens with and nothing more.
+                          defaultValue={prefill?.locationRef}
+                          disabled={isPending || !locationId}
+                          {...NO_AUTOFILL}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-          {/* Storage location (#56/#121): optional at intake, shared by every created copy.
-              An in-location ref (#148) sits beside it, disabled until a location is chosen. */}
-          <div style={{ marginTop: "0.75rem" }}>
-            <LabelWithError htmlFor="intake-locationId-button">Location (optional)</LabelWithError>
-            {locations.length === 0 ? (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                No locations defined yet. Add some on the Locations screen to file copies away.
-              </p>
-            ) : (
-              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                <div style={{ flex: 3 }}>
-                  <LocationTreeSelect
-                    locations={locations}
-                    locationTree={locationTree}
-                    name="locationId"
-                    selectedId={locationId}
-                    onSelectedIdChange={setLocationId}
-                    onlyAssignableSelectable
+                {/* Disposition (#160): preset where the copies land once sorted. Instant-toggle chips
+                    — no separate save; the choice rides along on the intake submit. */}
+                <div style={{ marginTop: "0.75rem" }}>
+                  <LabelWithError htmlFor="">Disposition (optional)</LabelWithError>
+                  <div style={{ marginTop: "0.25rem" }}>
+                    <DispositionChips
+                      values={disposition}
+                      disabled={isPending}
+                      onToggle={(flag, value) => setDisposition((d) => ({ ...d, [flag]: value }))}
+                    />
+                  </div>
+                </div>
+
+                {/* The stamp's photo (#1340): beside the disposition because it is one more thing this
+                    identification does, and after the copy's own answers because it is about the stamp
+                    rather than the copy. */}
+                {photoStampId && stampPhoto && pieces && (
+                  <TileStampPhotoField
+                    collectionId={collectionId}
+                    pieces={pieces}
+                    stampPhotos={stampPhotos}
+                    offered={stampPhotoOffered}
+                    on={stampPhoto.on}
+                    tileId={stampPhoto.tileId}
                     disabled={isPending}
-                    noneOptionLabel="— None"
-                    buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
+                    onChange={(next) => setStampPhotoChoice({ stampId: photoStampId, ...next })}
                   />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <TextInput
-                    id="intake-locationRef"
-                    name="locationRef"
-                    placeholder="Ref, e.g. A234"
-                    // The one field here that is never remembered between intakes, and is filled by
-                    // a repeat all the same (#595): two duplicates worked through in a run go into
-                    // the same place in the same box, and the collector asked for the same again.
-                    // Uncontrolled, so this is the value the field opens with and nothing more.
-                    defaultValue={prefill?.locationRef}
-                    disabled={isPending || !locationId}
-                    {...NO_AUTOFILL}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+                )}
 
-          {/* Disposition (#160): preset where the copies land once sorted. Instant-toggle chips
-              — no separate save; the choice rides along on the intake submit. */}
-          <div style={{ marginTop: "0.75rem" }}>
-            <LabelWithError htmlFor="">Disposition (optional)</LabelWithError>
-            <div style={{ marginTop: "0.25rem" }}>
-              <DispositionChips
-                values={disposition}
-                disabled={isPending}
-                onToggle={(flag, value) => setDisposition((d) => ({ ...d, [flag]: value }))}
-              />
-            </div>
-          </div>
+                {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
+                    distinct copies, so shared photos would be ambiguous. Eager staged uploads; the
+                    pending change-set applies to the created copy on submit. Absent entirely when the
+                    copy is being identified from a scan tile (#567), whose crops it already gets. */}
+                {photos && (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <LabelWithError htmlFor="">Photos (optional)</LabelWithError>
+                    <PhotoEditor
+                      collectionId={collectionId}
+                      initialPhotos={[]}
+                      disabled={isPending}
+                      onChange={handlePhotoChange}
+                      onPreviewsChange={setPhotoPreviews}
+                    />
+                  </div>
+                )}
 
-          {/* The stamp's photo (#1340): beside the disposition because it is one more thing this
-              identification does, and after the copy's own answers because it is about the stamp
-              rather than the copy. */}
-          {photoStampId && stampPhoto && pieces && (
-            <TileStampPhotoField
-              collectionId={collectionId}
-              pieces={pieces}
-              stampPhotos={stampPhotos}
-              offered={stampPhotoOffered}
-              on={stampPhoto.on}
-              tileId={stampPhoto.tileId}
-              disabled={isPending}
-              onChange={(next) => setStampPhotoChoice({ stampId: photoStampId, ...next })}
-            />
-          )}
-
-          {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
-              distinct copies, so shared photos would be ambiguous. Eager staged uploads; the
-              pending change-set applies to the created copy on submit. Absent entirely when the
-              copy is being identified from a scan tile (#567), whose crops it already gets. */}
-          {photos && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <LabelWithError htmlFor="">Photos (optional)</LabelWithError>
-              <PhotoEditor
-                collectionId={collectionId}
-                initialPhotos={[]}
-                disabled={isPending}
-                onChange={handlePhotoChange}
-                onPreviewsChange={setPhotoPreviews}
-              />
-            </div>
-          )}
-
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-            Copies are added <strong>not yet in your collection</strong> (
-            <strong>to sort</strong> once the order has arrived, otherwise <strong>ordered</strong>).
-            Cost-basis stays pending until the lot is closed.
-          </p>
+                <p style={{ margin: "0.75rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                  Copies are added <strong>not yet in your collection</strong> (
+                  <strong>to sort</strong> once the order has arrived, otherwise <strong>ordered</strong>).
+                  Cost-basis stays pending until the lot is closed.
+                </p>
+              </>
+            }
+          />
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

@@ -7,6 +7,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
   type DialogAsideProps,
 } from "@/app/dialog-shell";
@@ -115,6 +117,14 @@ const BLANK_ATTRIBUTES: StampAttributeValues = {
   watermarkId: null,
   paperId: null,
   printingId: null,
+};
+
+/** The rule and spacing above a Details section set under another one — the photos in one column,
+ *  the checklists under the photos in two (#1931). A section that opens a column has none. */
+const DETAILS_SECTION_RULE: React.CSSProperties = {
+  marginTop: "1.25rem",
+  paddingTop: "1.25rem",
+  borderTop: "1px solid var(--color-border)",
 };
 
 const CHECKLIST_OPTION_STYLE: React.CSSProperties = {
@@ -744,6 +754,96 @@ export function StampFormDialog(props: StampFormDialogProps) {
     (props.mode === "add" && !autoCreateIssue && !selectedIssueId) ||
     (hasRangeExtension && rangeChoice === null);
 
+  // The Details tab in two columns (#1931): too tall for a 1080-pixel window in one, so what the
+  // stamp *is* — its issue, parent, numbers, name and date, subtype and tags — runs down the left,
+  // and its photos with the checklists it counts towards sit on the right. Not beside the tile's
+  // picture (#592): there the picture takes the width, and the form stays the one column it was.
+  const detailsInColumns = !aside;
+
+  // Checklists (#531). One box per checklist of the issue — a stamp counts towards as many sets as
+  // claim it. An issue with none yet keeps the old single box, which starts the issue's own set:
+  // that is what "required for completeness" always meant, and the dialog is often the very thing
+  // creating the issue. In columns it sits under the photos; in one column, under the numbers.
+  const countsTowardsSection = (addProps || editedMembership) && (
+    <div style={detailsInColumns ? DETAILS_SECTION_RULE : { marginBottom: "0.875rem" }}>
+      <div
+        style={{
+          fontSize: "0.75rem",
+          fontWeight: 600,
+          letterSpacing: "0.02em",
+          textTransform: "uppercase",
+          color: "var(--color-text-muted)",
+          marginBottom: "0.35rem",
+        }}
+      >
+        Counts towards
+      </div>
+      {offeredChecklists.length === 0 ? (
+        <label style={CHECKLIST_OPTION_STYLE}>
+          <input
+            type="checkbox"
+            checked={checklistIds.has(DEFAULT_CHECKLIST)}
+            onChange={() => toggleChecklist(DEFAULT_CHECKLIST)}
+            disabled={isPending}
+          />
+          Required for completeness
+        </label>
+      ) : (
+        offeredChecklists.map((c) => (
+          <label key={c.id} style={CHECKLIST_OPTION_STYLE}>
+            <input
+              type="checkbox"
+              checked={checklistIds.has(c.id)}
+              onChange={() => toggleChecklist(c.id)}
+              disabled={isPending}
+            />
+            {c.name}
+            {c.kind && <SpecialisedMark kind={c.kind} />}
+          </label>
+        ))
+      )}
+      <p
+        style={{
+          fontSize: "0.6875rem",
+          color: "var(--color-text-muted)",
+          margin: "0.35rem 0 0",
+        }}
+      >
+        Leave every box clear for an extra the issue holds but no set counts — a block, a
+        variety.
+      </p>
+    </div>
+  );
+
+  // Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted only once the
+  // stamp's existing photos have loaded (edit mode); PhotoEditor seeds its state from initialPhotos
+  // once on mount, so it must not mount before they arrive. In columns they open the right-hand one.
+  const photosSection = (
+    <div style={detailsInColumns ? undefined : DETAILS_SECTION_RULE}>
+      {!photosLoaded ? (
+        // Reserve roughly the editor's height so the dialog doesn't jump on load.
+        <div
+          style={{
+            minHeight: "12rem",
+            color: "var(--color-text-muted)",
+            fontSize: "0.875rem",
+          }}
+        >
+          Loading photos…
+        </div>
+      ) : (
+        <PhotoEditor
+          collectionId={collectionId}
+          initialPhotos={initialPhotos}
+          disabled={isPending}
+          roleMode="main"
+          recordSource
+          onChange={handlePhotoChange}
+        />
+      )}
+    </div>
+  );
+
   // Portalled to the document, the way every dialog that can be opened **from inside another
   // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
   // against that panel — the shell centres itself with a transform, which makes it the containing
@@ -768,7 +868,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
       // other opener of this dialog.
       aside={aside}
       asideWidth={asideWidth}
-      maxWidth={aside ? "min(96vw, 78rem)" : "52rem"}
+      maxWidth={aside ? "min(96vw, 78rem)" : FORM_DIALOG_COLUMNS_WIDTH}
       height={aside ? "min(90vh, 52rem)" : undefined}
     >
       {/* Details and Attributes are always there; Prices joins them only when the area has catalogs
@@ -805,6 +905,15 @@ export function StampFormDialog(props: StampFormDialogProps) {
           <div style={{ position: "relative" }}>
           {/* ── Details tab ── */}
           <div style={{ visibility: shownTab === "details" ? "visible" : "hidden" }}>
+            <DetailsColumns
+              columns={detailsInColumns}
+              side={
+                <>
+                  {photosSection}
+                  {countsTowardsSection}
+                </>
+              }
+            >
             {/* Issue selection (add only) */}
             {showIssueStep && addProps && (
               <div style={{ marginBottom: "1.25rem", paddingBottom: "1.25rem", borderBottom: "1px solid var(--color-border)" }}>
@@ -904,10 +1013,12 @@ export function StampFormDialog(props: StampFormDialogProps) {
             {(vendors.length > 0 || showColnect) && (
               <div style={{ marginBottom: "0.875rem" }}>
                 <LabelWithError>Catalog numbers</LabelWithError>
+                {/* Three to a row in the one-column form; two in a column of the two (#1931), where
+                    three would leave each box too narrow for its number. */}
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gridTemplateColumns: `repeat(${detailsInColumns ? 2 : 3}, minmax(0, 1fr))`,
                     gap: "0.375rem 0.75rem",
                   }}
                 >
@@ -984,60 +1095,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
               </div>
             )}
 
-            {/* Checklists (#531). One box per checklist of the issue — a stamp counts towards as
-                many sets as claim it. An issue with none yet keeps the old single box, which
-                starts the issue's own set: that is what "required for completeness" always meant,
-                and the dialog is often the very thing creating the issue. */}
-            {(addProps || editedMembership) && (
-              <div style={{ marginBottom: "0.875rem" }}>
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                    textTransform: "uppercase",
-                    color: "var(--color-text-muted)",
-                    marginBottom: "0.35rem",
-                  }}
-                >
-                  Counts towards
-                </div>
-                {offeredChecklists.length === 0 ? (
-                  <label style={CHECKLIST_OPTION_STYLE}>
-                    <input
-                      type="checkbox"
-                      checked={checklistIds.has(DEFAULT_CHECKLIST)}
-                      onChange={() => toggleChecklist(DEFAULT_CHECKLIST)}
-                      disabled={isPending}
-                    />
-                    Required for completeness
-                  </label>
-                ) : (
-                  offeredChecklists.map((c) => (
-                    <label key={c.id} style={CHECKLIST_OPTION_STYLE}>
-                      <input
-                        type="checkbox"
-                        checked={checklistIds.has(c.id)}
-                        onChange={() => toggleChecklist(c.id)}
-                        disabled={isPending}
-                      />
-                      {c.name}
-                      {c.kind && <SpecialisedMark kind={c.kind} />}
-                    </label>
-                  ))
-                )}
-                <p
-                  style={{
-                    fontSize: "0.6875rem",
-                    color: "var(--color-text-muted)",
-                    margin: "0.35rem 0 0",
-                  }}
-                >
-                  Leave every box clear for an extra the issue holds but no set counts — a block, a
-                  variety.
-                </p>
-              </div>
-            )}
+            {!detailsInColumns && countsTowardsSection}
 
             {/* Declared-range extension prompt: forces an explicit widen/keep choice
                 before a required stamp that overruns the issue's range can be saved. */}
@@ -1250,38 +1308,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
               />
             </div>
 
-            {/* Photos (#137) — inline on the Details tab, exactly like the copy dialog. Mounted
-                only once the stamp's existing photos have loaded (edit mode); PhotoEditor seeds
-                its state from initialPhotos once on mount, so it must not mount before they arrive. */}
-            <div
-              style={{
-                marginTop: "1.25rem",
-                paddingTop: "1.25rem",
-                borderTop: "1px solid var(--color-border)",
-              }}
-            >
-              {!photosLoaded ? (
-                // Reserve roughly the editor's height so the dialog doesn't jump on load.
-                <div
-                  style={{
-                    minHeight: "12rem",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.875rem",
-                  }}
-                >
-                  Loading photos…
-                </div>
-              ) : (
-                <PhotoEditor
-                  collectionId={collectionId}
-                  initialPhotos={initialPhotos}
-                  disabled={isPending}
-                  roleMode="main"
-                  recordSource
-                  onChange={handlePhotoChange}
-                />
-              )}
-            </div>
+            {!detailsInColumns && photosSection}
+            </DetailsColumns>
           </div>
 
           <StampAttributesTab
@@ -1342,6 +1370,28 @@ export function StampFormDialog(props: StampFormDialogProps) {
   );
 }
 
+
+/**
+ * The Details tab's layout (#1931): in two columns, the sections written inline down the left and
+ * `side` down the right; otherwise the inline sections alone, as the one column they always were.
+ */
+function DetailsColumns({
+  columns,
+  side,
+  children,
+}: {
+  columns: boolean;
+  side: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  if (!columns) return <>{children}</>;
+  return (
+    <DialogFormColumns>
+      <div>{children}</div>
+      <div>{side}</div>
+    </DialogFormColumns>
+  );
+}
 
 /**
  * The Attributes tab (#761/#736) — what the catalogue states about this stamp beyond its number.

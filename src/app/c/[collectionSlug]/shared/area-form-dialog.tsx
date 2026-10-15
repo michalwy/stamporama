@@ -5,6 +5,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import {
@@ -74,11 +76,6 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
   margin: "0.375rem 0 0",
 };
-
-/** The area dialog's width (#1747): wide enough for two columns, the area on the left and its
- *  catalogue settings on the right, so the whole form fits the window without scrolling. Exported
- *  for the areas panel's *Edit area* dialog, which wraps the same form. */
-export const AREA_DIALOG_MAX_WIDTH = "64rem";
 
 /** The dialog form's own layout — a column that owns the dialog's height so the body scrolls
  *  inside it rather than the page. Exported for the areas panel's *Edit area* dialog, which
@@ -393,7 +390,7 @@ export function CollectionAreaForm({
   return (
     // Two columns (#1747): the area itself on the left, its catalogue settings on the right, so the
     // whole form is in view at once rather than a column the collector scrolls to reach numbering.
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "2rem" }}>
+    <DialogFormColumns>
       <div>
         {/* Name with the area's symbol (#1740) beside it. The symbol is optional, the same in every
             language — so no translations — and never taken from a parent, so each area that should
@@ -864,7 +861,7 @@ export function CollectionAreaForm({
       <input type="hidden" name="primaryCatalogVendorId" value={primaryVendorId} />
       <input type="hidden" name="catalogNameIds" value={JSON.stringify(bookIds)} />
       <input type="hidden" name="areaVendors" value={JSON.stringify(submittedVendors)} />
-    </div>
+    </DialogFormColumns>
   );
 }
 
@@ -937,7 +934,7 @@ export function AddAreaDialog({
       title="Add area"
       onClose={handleClose}
       dismissable={!nestedDialogOpen}
-      maxWidth={AREA_DIALOG_MAX_WIDTH}
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
     >
       <form style={AREA_FORM_STYLE} onSubmit={handleSubmit}>
         <DialogBody>
