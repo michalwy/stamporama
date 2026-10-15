@@ -548,6 +548,14 @@ is the first moment you can.
 
 You can also give a card a **name** — see below.
 
+**How large the tiles are** is yours to choose: the **Tiles** switch on the section's header line —
+**Small · Medium · Large** — sets it for every card on the screen, and this browser remembers it for
+every order after. **Medium** is the default and is large enough to read a face value and tell two
+close designs apart without hovering; **Small** shows a card of sixty pieces whole, and **Large** is
+for small print. At every size the tiles wrap across the window — nothing scrolls sideways — each
+picture shows the whole stamp, and resting the pointer on a tile still shows it enlarged. The
+unpaired backs below a card follow the same size.
+
 #### Two kinds of card
 
 A scan is one of two things, and the app finds the stamps a different way on each:

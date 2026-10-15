@@ -7,6 +7,14 @@ import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { usePurchaseScansUi } from "./purchase-ui-state";
+import { Segmented } from "./segmented";
+import { useScanTileSize } from "./use-scan-tile-size";
+import {
+  SCAN_TILE_SIZES,
+  SCAN_TILE_SIZE_LABEL,
+  SCAN_TILE_WIDTH_REM,
+  type ScanTileSize,
+} from "@/lib/scan-tile-size";
 import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import {
   commitCutAction,
@@ -242,6 +250,7 @@ export function ScansCard({
   /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
    * cards, so the section rests as one line naming what is inside. */
   const open = scansUi.open;
+  const [tileSize, setTileSize] = useScanTileSize();
   const setOpen = (next: boolean) => patchScansUi({ open: next });
   /**
    * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #853
@@ -1032,6 +1041,19 @@ export function ScansCard({
           >
             <Icon name="excluded" size="sm" /> {discardedTileCount} discarded
           </FilterChip>
+        )}
+        {/* **How large the tiles are** (#1922) — beside the chips that narrow them, on the one line
+            every card's strip hangs from, and only while there is a strip to see. One choice for
+            every card of the parcel and every order after it: it is about reading a face value off
+            the square, which does not change from card to card. */}
+        {open && scanSheetCount > 0 && (
+          <Segmented<ScanTileSize>
+            inline
+            label="Tiles"
+            value={tileSize}
+            onChange={setTileSize}
+            options={SCAN_TILE_SIZES.map((size) => ({ value: size, label: SCAN_TILE_SIZE_LABEL[size] }))}
+          />
         )}
         <span style={{ flex: 1 }} />
         {/* A name for the card being added (#587), optional and never in the way: leave it blank
@@ -1968,6 +1990,10 @@ function BatchSection({
   const [chosenTurnover, setChosenTurnover] = useState<BackTurnover | null>(null);
   const newBackTurnover = chosenTurnover ?? lastBackTurnover;
   const open = pinnedOpen || expanded;
+  // Read here rather than handed down: the header's switch and every batch read the one stored
+  // size, and the hook keeps them in step.
+  const [tileSize] = useScanTileSize();
+  const tileWidth = `${SCAN_TILE_WIDTH_REM[tileSize]}rem`;
   /** Whether the name is being typed. Off by default: the name is read far more often than it is
    * written, and a text box standing where a name should be reads as a form rather than as a card
    * that is called something. */
@@ -2250,7 +2276,9 @@ function BatchSection({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(5.5rem, 1fr))",
+            // The size is each column's minimum (#1922): the strip wraps across the window at every
+            // size, and nothing on it scrolls sideways.
+            gridTemplateColumns: `repeat(auto-fill, minmax(${tileWidth}, 1fr))`,
             gap: "0.5rem",
           }}
         >
@@ -2304,6 +2332,7 @@ function BatchSection({
                 key={tile.id}
                 tile={tile}
                 collectionId={collectionId}
+                width={tileWidth}
                 onDragStart={() => setDragging(tile.id)}
                 onDragEnd={() => setDragging(null)}
                 onMark={(patch) => onMark([tile.id], patch)}
@@ -2801,7 +2830,7 @@ function TileCell({
       {/* **The shortlist, on the strip** (#607) — because that is what makes a return sitting
           plannable: five pieces narrowed to the same pair is one comparison at the colour key, not
           five, and reading that off the strip is what says so. Short labels, one catalogue number
-          each: a square is 5.5 rem wide and the full identity is a hover and a click away. */}
+          each: a square can be as narrow as 5.5 rem (#1922) and the full identity is a hover and a click away. */}
       {parked && tile.candidates.length > 0 && (
         <div
           style={{
@@ -3280,6 +3309,7 @@ function tileTitle(tile: ScanTileData): string {
 function BackOnlyTile({
   tile,
   collectionId,
+  width,
   onDragStart,
   onDragEnd,
   onMark,
@@ -3287,6 +3317,8 @@ function BackOnlyTile({
 }: {
   tile: ScanTileData;
   collectionId: string;
+  /** The strip's tile size (#1922), so a back reads at the size of the fronts it is matched to. */
+  width: string;
   onDragStart: () => void;
   onDragEnd: () => void;
   /** An unpaired back can be marked too (#1550): the back is often where the condition shows, and
@@ -3304,7 +3336,7 @@ function BackOnlyTile({
       }}
       onDragEnd={onDragEnd}
       style={{
-        width: "5.5rem",
+        width,
         border: "2px solid var(--color-warning-border)",
         borderRadius: "0.375rem",
         overflow: "hidden",

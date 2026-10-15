@@ -14,6 +14,7 @@ export function Segmented<T extends string>({
   onChange,
   options,
   disabled = false,
+  inline = false,
 }: {
   label: string;
   value: T;
@@ -21,10 +22,18 @@ export function Segmented<T extends string>({
   /** `label` may be an icon (#459) — a two-way answer reads better as ✓/✕ than as words. */
   options: { value: T; label: React.ReactNode; title?: string }[];
   disabled?: boolean;
+  /** The label beside the buttons rather than above them, for a control on a header line (#1922). */
+  inline?: boolean;
 }) {
   const RADIUS = "0.375rem";
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+    <div
+      style={
+        inline
+          ? { display: "flex", alignItems: "center", gap: "0.5rem" }
+          : { display: "flex", flexDirection: "column", gap: "0.3rem" }
+      }
+    >
       <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>{label}</span>
       <div
         style={{
@@ -45,7 +54,7 @@ export function Segmented<T extends string>({
               aria-label={o.title}
               aria-pressed={active}
               style={{
-                padding: "0.35rem 0.75rem",
+                padding: inline ? "0.2rem 0.6rem" : "0.35rem 0.75rem",
                 border: "none",
                 borderRadius: `${isFirst ? RADIUS : "0"} ${isLast ? RADIUS : "0"} ${isLast ? RADIUS : "0"} ${isFirst ? RADIUS : "0"}`,
                 cursor: disabled ? "default" : "pointer",
