@@ -12,6 +12,7 @@ import {
 } from "./items";
 import { estimateCopiesByGroup } from "./copy-estimates";
 import { estimateSets, offerPriceFigures, type EstimateSource } from "./offer-price-table";
+import { offerConditionCounts, type OfferConditionCount } from "./offer-condition-counts";
 import type { HoldingsSummary } from "./valuation";
 import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-basis";
 import { loadCostEstimates } from "./cost-estimates";
@@ -3974,6 +3975,15 @@ export interface PrepareOffer {
   readyBlockers: ReadyBlocker[];
   readyAfterPhotos: boolean;
   readyAfterPhotosRefusal: string | null;
+  /** Every copy the offer holds, set by set in the offer's own order — the order the row's expanded
+   *  copies are drawn in (#1941). */
+  itemIds: string[];
+  /** The conditions those copies are in, each with its count, in dictionary order (#1941). */
+  conditions: OfferConditionCount[];
+  /** The entity translations missing behind the title, in the platform's listing language — only
+   *  while the title follows its template ({@link offersPrintedTextGaps}); a hand-written title
+   *  holds none of the template's names (#1941). */
+  titleTranslations: { language: string | null; gaps: TitleFallback[] };
 }
 
 export interface PrepareOfferFilters {
@@ -4012,6 +4022,8 @@ const PREPARE_SETS_SELECT = {
           deliveryState: true,
           // The row's pictures until the offer has generated images of its own.
           photos: { select: { id: true, role: true, sortOrder: true } },
+          // The row's condition chips (#1941), in the dictionary's order.
+          condition: { select: { name: true, abbreviation: true, sortOrder: true } },
           // A copy that is one of several candidates (#1651) is labelled by them.
           candidates: { select: { stampId: true, stamp: STAMP_LABEL_SELECT.stamp } },
         },
@@ -4107,7 +4119,7 @@ export async function listPreparingOffers(
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
   return {
-    items: await buildPrepareOffers(collectionId, baseCurrency, page),
+    items: await buildPrepareOffers(ownerId, collectionId, baseCurrency, page),
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
 }
@@ -4115,7 +4127,11 @@ export async function listPreparingOffers(
 /** The given offers as Prepare rows, in the order asked — only those still `preparing` in the
  *  collection. What the bulk *Use estimated price* re-reads, so it writes the figure the server
  *  computes now rather than one a screen was holding. */
-async function readPrepareOffers(collectionId: string, offerIds: readonly string[]): Promise<PrepareOffer[]> {
+async function readPrepareOffers(
+  ownerId: string,
+  collectionId: string,
+  offerIds: readonly string[]
+): Promise<PrepareOffer[]> {
   if (offerIds.length === 0) return [];
   const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
     where: { id: collectionId },
@@ -4127,7 +4143,7 @@ async function readPrepareOffers(collectionId: string, offerIds: readonly string
   });
   const order = new Map(offerIds.map((id, i) => [id, i]));
   rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  return buildPrepareOffers(collectionId, baseCurrency, rows);
+  return buildPrepareOffers(ownerId, collectionId, baseCurrency, rows);
 }
 
 /**
@@ -4140,6 +4156,7 @@ async function readPrepareOffers(collectionId: string, offerIds: readonly string
  * so a row cannot say something the offer's screen would not.
  */
 async function buildPrepareOffers(
+  ownerId: string,
   collectionId: string,
   baseCurrency: string,
   rows: PrepareOfferRow[]
@@ -4162,7 +4179,7 @@ async function buildPrepareOffers(
   );
   const setGroups = allSets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }));
   const anyConditions = rows.some((row) => usesPlatformConditions(row.platform.platformModule));
-  const [labeller, holdingsBySet, costEstimates, estimatesBySet, conditionMap, soldRows] = await Promise.all([
+  const [labeller, holdingsBySet, costEstimates, estimatesBySet, conditionMap, soldRows, titleGaps] = await Promise.all([
     makeOfferLabeller(collectionId),
     getHoldingsValuationByGroup(collectionId, setGroups),
     loadCostEstimates(collectionId, pendingCopies),
@@ -4175,6 +4192,9 @@ async function buildPrepareOffers(
           select: { itemId: true, saleLine: { select: { offerSetId: true } } },
         })
       : Promise.resolve([]),
+    // The translations the title is missing (#1941), the question a Facebook post asks of its lots
+    // (#1889) — once for the page, one copy read per listing language.
+    offersPrintedTextGaps(ownerId, collectionId, new Map(rows.map((row) => [row.id, ["name"] as const]))),
   ]);
   const pendingIds = new Set(pendingCopies.map((c) => c.id));
   const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
@@ -4298,6 +4318,9 @@ async function buildPrepareOffers(
       ],
       readyAfterPhotos: row.readyAfterPhotosAt !== null,
       readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
+      itemIds: sets.flatMap((s) => s.items.map((li) => li.itemId)),
+      conditions: offerConditionCounts(sets.flatMap((s) => s.items.map((li) => li.item))),
+      titleTranslations: titleGaps.get(row.id) ?? { language: null, gaps: [] },
     };
   });
 }
@@ -4317,7 +4340,7 @@ export async function applyEstimatedPrices(
   offerIds: readonly string[]
 ): Promise<{ succeeded: string[]; skipped: { offerId: string; message: string }[] }> {
   await assertCollectionOwner(ownerId, collectionId);
-  const offers = await readPrepareOffers(collectionId, offerIds);
+  const offers = await readPrepareOffers(ownerId, collectionId, offerIds);
   const found = new Map(offers.map((o) => [o.id, o]));
   const succeeded: string[] = [];
   const skipped: { offerId: string; message: string }[] = [];
