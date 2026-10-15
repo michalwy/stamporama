@@ -1808,8 +1808,8 @@ variant, the copy is flagged **unknown variant**. Once you work out which varian
 actually is, resolve it:
 
 1. On an unknown-variant row, open the **⋮** menu and choose **Identify variant**. The
-   dialog shows the copy's **front** and **back** photos at the top, so you can look at the
-   piece while you choose; click either one to open it full size. A copy with neither photo
+   dialog shows the copy's **front** and **back** photos on the left, beside the variants, so
+   you can look at the piece while you choose; click either one to open it full size. A copy with neither photo
    says so — add one with **Edit** first if you need to see it.
 2. Pick the specific variant from the list — only the variants of that copy's own stamp
    are offered, so you can only refine to a *more specific* variant, never re-point the

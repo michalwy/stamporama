@@ -124,6 +124,10 @@ there before working against one.
   (`src/app/screen.tsx`), full width by default; a cap is a `SCREEN_CAPS` key with a stated reason —
   "it was narrow before" is not one — and is listed in `ui-shell.md`. Width goes to columns, grids and
   panes: no single field or line of text runs across the window.
+- **A form dialog uses columns, not a tall narrow list.** One that would not fit a 1080-pixel-tall
+  window in one column is `FORM_DIALOG_COLUMNS_WIDTH` wide with its sections in `DialogFormColumns`
+  (`dialog-shell.tsx`), related sections together; a short form stays one compact column. No single
+  field stretches across the dialog. Pickers and picture dialogs keep their own sizes.
 - Dialogs are built from `src/app/dialog-shell.tsx` — never re-implement the header, close, viewport
   constraint or height behavior. Buttons are one shape: `baseBtn`, imported from
   `src/app/button-style.ts`, never redeclared. There is **no** shared input style (#792), but a form

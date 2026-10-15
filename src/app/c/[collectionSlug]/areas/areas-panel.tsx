@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogActions,
   DialogSecondaryButton,
+  FORM_DIALOG_COLUMNS_WIDTH,
 } from "@/app/dialog-shell";
 import {
   updateCollectionAreaAction,
@@ -20,7 +21,6 @@ import { effectivePrimaryVendorId, effectiveVendorsForArea } from "@/lib/area-ve
 import { resolveEffectiveCatalogPrefix } from "@/lib/area-inheritance";
 import {
   AddAreaDialog,
-  AREA_DIALOG_MAX_WIDTH,
   AREA_FORM_STYLE,
   CollectionAreaForm,
   type AreaFormVendor,
@@ -696,7 +696,7 @@ export function AreasPanel({
           title="Edit area"
           onClose={closeDialog}
           dismissable={!nestedDialogOpen}
-          maxWidth={AREA_DIALOG_MAX_WIDTH}
+          maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
         >
           <form
             style={AREA_FORM_STYLE}

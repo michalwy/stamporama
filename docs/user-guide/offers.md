@@ -574,7 +574,8 @@ button row — beside **Generate**, where its effect is.
 The dialog opens with a one-line reminder of what the platform accepts (how many photos, longest
 edge, file size). Those are the platform's limits, not the offer's — change them on the
 [platform contact](contacts.md#offer-photos). Below that sit the settings that belong to this
-listing:
+listing, in two columns — what is photographed and how each stamp is labelled on the left, how the
+photos are gathered into collages on the right:
 
 - **Sides to photograph** — *Front only*, *Back only*, *Front and back*, or *Front and back,
   paired*. The last two photograph the same scans and arrange them differently; see

@@ -5,6 +5,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import type { StampConditionData } from "@/lib/conditions";
@@ -89,6 +91,13 @@ const ROW: React.CSSProperties = {
   display: "grid",
   gap: "0.875rem",
   alignItems: "start",
+};
+
+/** One of the dialog's two columns (#1931): its sections stacked, each whole. */
+const FORM_COLUMN: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "1.25rem",
 };
 
 /** A uniform group heading for a field cell — a `<label>` when it targets a control, so all
@@ -438,418 +447,428 @@ export function InventoryItemFormDialog({
 
   return (
     <>
-    <DialogShell title={title} onClose={onClose} maxWidth="52rem" dismissable={!pickerOpen && !pickingSet}>
+    <DialogShell title={title} onClose={onClose} maxWidth={FORM_DIALOG_COLUMNS_WIDTH} dismissable={!pickerOpen && !pickingSet}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
       >
         <DialogBody>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Row 1: the stamp, or the stamps. Full width — the picker is taller than a plain
-                select, so it gets its own row instead of leaving a ragged gap beside short controls.
+          <DialogFormColumns>
+            {/* What the copy is (#1931): its stamp, how it is described, what is wrong with it, where
+                it stands and where it is never listed. */}
+            <div style={FORM_COLUMN}>
+              {/* Row 1: the stamp, or the stamps. The column's full width — the picker is taller than a
+                  plain select, so it gets its own row instead of leaving a ragged gap beside short controls.
 
-                In **edit** mode it is the list of stamps the piece carries (#746): one row on an
-                ordinary copy, several on a cover, in the collector's own order. Add mode keeps the
-                single picker, because a copy is not born a carrier (ADR-0044). */}
-            <div>
-              <GroupLabel>
-                {stampRows && stampRows.length > 1
-                  ? "Stamps on this piece"
-                  : candidateSet
-                    ? "Possible variants"
-                    : "Stamp"}
-              </GroupLabel>
-              {candidateSet ? (
-                // One of several stamps (#1651): named as the set, changed or dropped here.
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem" }}>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    One of <strong>{pickedSetLabel(candidateSet)}</strong>
-                  </span>
-                  <button type="button" disabled={isPending} onClick={() => setPickingSet(true)} style={SET_LINK}>
-                    Change…
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => {
-                      setCandidateSet(null);
-                      setSetTouched(true);
-                    }}
-                    style={SET_LINK}
-                  >
-                    One stamp instead
-                  </button>
-                </div>
-              ) : mode === "edit" ? (
-                stampRows ? (
-                  <ItemStampsField
+                  In **edit** mode it is the list of stamps the piece carries (#746): one row on an
+                  ordinary copy, several on a cover, in the collector's own order. Add mode keeps the
+                  single picker, because a copy is not born a carrier (ADR-0044). */}
+              <div>
+                <GroupLabel>
+                  {stampRows && stampRows.length > 1
+                    ? "Stamps on this piece"
+                    : candidateSet
+                      ? "Possible variants"
+                      : "Stamp"}
+                </GroupLabel>
+                {candidateSet ? (
+                  // One of several stamps (#1651): named as the set, changed or dropped here.
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem" }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      One of <strong>{pickedSetLabel(candidateSet)}</strong>
+                    </span>
+                    <button type="button" disabled={isPending} onClick={() => setPickingSet(true)} style={SET_LINK}>
+                      Change…
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        setCandidateSet(null);
+                        setSetTouched(true);
+                      }}
+                      style={SET_LINK}
+                    >
+                      One stamp instead
+                    </button>
+                  </div>
+                ) : mode === "edit" ? (
+                  stampRows ? (
+                    <ItemStampsField
+                      collectionId={collectionId}
+                      areas={areas}
+                      formats={formats}
+                      rows={stampRows}
+                      onRowsChange={setStampRows}
+                      disabled={isPending}
+                      onPickerOpenChange={setPickerOpen}
+                    />
+                  ) : (
+                    // Until they arrive the field submits nothing for them, which the domain reads as
+                    // *leave the entries alone* — so a save made in this moment still saves every
+                    // other field and touches no stamp.
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text-muted)",
+                      }}
+                    >
+                      Loading the stamps on this copy…
+                    </p>
+                  )
+                ) : (
+                  <StampSelect
                     collectionId={collectionId}
                     areas={areas}
-                    formats={formats}
-                    rows={stampRows}
-                    onRowsChange={setStampRows}
+                    selectedStampId={stampId}
+                    onSelectedStampIdChange={setStampId}
+                    initial={pickerInitial}
+                    scopeIssue={scopeIssue}
                     disabled={isPending}
                     onPickerOpenChange={setPickerOpen}
                   />
-                ) : (
-                  // Until they arrive the field submits nothing for them, which the domain reads as
-                  // *leave the entries alone* — so a save made in this moment still saves every
-                  // other field and touches no stamp.
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.8125rem",
-                      color: "var(--color-text-muted)",
-                    }}
+                )}
+                {!candidateSet && offersSet && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setPickingSet(true)}
+                    style={{ ...SET_LINK, marginTop: "0.375rem" }}
                   >
-                    Loading the stamps on this copy…
-                  </p>
-                )
-              ) : (
-                <StampSelect
-                  collectionId={collectionId}
-                  areas={areas}
-                  selectedStampId={stampId}
-                  onSelectedStampIdChange={setStampId}
-                  initial={pickerInitial}
-                  scopeIssue={scopeIssue}
-                  disabled={isPending}
-                  onPickerOpenChange={setPickerOpen}
-                />
-              )}
-              {!candidateSet && offersSet && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => setPickingSet(true)}
-                  style={{ ...SET_LINK, marginTop: "0.375rem" }}
-                >
-                  Several possible variants…
-                </button>
-              )}
-              {/* The set, when there is one or it was dropped here (#1651). Add mode files the copy
-                  under its first candidate until the set re-points it, in the same save. */}
-              {candidateSet && mode === "add" && (
-                <input type="hidden" name="stampId" value={candidateSet[0].stampId} />
-              )}
-              {(candidateSet || setTouched) && (
-                <input
-                  type="hidden"
-                  name="candidateStampIds"
-                  value={JSON.stringify(candidateSet ? candidateSet.map((c) => c.stampId) : [])}
-                />
-              )}
-              {/* In edit mode `StampSelect` is not there to carry these, and both are read by the
-                  save: `stampId` is the copy's denormalised pointer — the first entry, which is what
-                  re-points the copy and records a refinement when it names a stamp the piece was not
-                  carrying — and `itemStamps` is the whole list. Absent while the list is still
-                  loading, which is what leaves the entries alone. */}
-              {mode === "edit" && stampRows && stampRows.length > 0 && (
-                <>
-                  <input type="hidden" name="stampId" value={stampRows[0].stampId} />
+                    Several possible variants…
+                  </button>
+                )}
+                {/* The set, when there is one or it was dropped here (#1651). Add mode files the copy
+                    under its first candidate until the set re-points it, in the same save. */}
+                {candidateSet && mode === "add" && (
+                  <input type="hidden" name="stampId" value={candidateSet[0].stampId} />
+                )}
+                {(candidateSet || setTouched) && (
                   <input
                     type="hidden"
-                    name="itemStamps"
-                    value={JSON.stringify(
-                      stampRows.map((row) => ({
-                        stampId: row.stampId,
-                        quantity: row.quantity,
-                        formatId: row.formatId || null,
-                      }))
-                    )}
+                    name="candidateStampIds"
+                    value={JSON.stringify(candidateSet ? candidateSet.map((c) => c.stampId) : [])}
                   />
-                </>
-              )}
-              {mode === "edit" && !stampRows && item && (
-                <input type="hidden" name="stampId" value={item.stampId} />
-              )}
-            </div>
-
-            {/* Row 2: condition · certificate · format — the three axes a copy is described by,
-                and the same three a catalog price is recorded against. */}
-            <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr 1fr" }}>
-              <div>
-                <GroupLabel htmlFor="copy-condition">Condition</GroupLabel>
-                <select
-                  id="copy-condition"
-                  name="conditionId"
-                  defaultValue={item?.conditionId ?? addDefaults?.conditionId ?? ""}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  <option value="">— Select —</option>
-                  {conditions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.abbreviation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <GroupLabel htmlFor="copy-cert">Certificate</GroupLabel>
-                <select
-                  id="copy-cert"
-                  name="certificateStatusId"
-                  defaultValue={item?.certificateStatusId ?? ""}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  <option value="">— None —</option>
-                  {certificateStatuses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.abbreviation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <GroupLabel htmlFor="copy-format">Format</GroupLabel>
-                <select
-                  id="copy-format"
-                  name="formatId"
-                  defaultValue={item?.formatId ?? ""}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  {/* No "single" row exists in the dictionary — a copy with no format *is* the
-                      single, exactly as no certificate means none. */}
-                  <option value="">— Single —</option>
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.abbreviation})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* What is wrong with this piece (#1557), right under the condition it qualifies — chosen
-                from the collection's fault list, saved with the rest of the copy — and beside it how
-                much that takes off the copy's value (#1560), typed here rather than per fault. */}
-            <div style={{ ...ROW, gridTemplateColumns: "1fr 8.5rem" }}>
-              <div>
-                <GroupLabel htmlFor="copy-faults">Faults</GroupLabel>
-                <FaultEntryField
-                  collectionId={collectionId}
-                  inputId="copy-faults"
-                  initialFaults={item?.faults ?? []}
-                  disabled={isPending}
-                />
-              </div>
-              <div>
-                {/* The label is a block; the tooltip's default `inline-flex` wrapper would sit it on a
-                    line box of its own and drop it, and the field under it, below Faults (#1752). */}
-                <Tooltip content={FAULT_REDUCTION_HINT} style={{ display: "flex", width: "fit-content" }}>
-                  <GroupLabel htmlFor="copy-fault-reduction">Value reduction</GroupLabel>
-                </Tooltip>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <NumericInput
-                    kind="number"
-                    inputMode="numeric"
-                    id="copy-fault-reduction"
-                    name="faultReductionPercent"
-                    placeholder="None"
-                    defaultValue={item?.faultReductionPercent ?? ""}
-                    disabled={isPending}
-                    {...NO_AUTOFILL}
-                    style={{ ...INPUT_STYLE, textAlign: "right" }}
-                  />
-                  <span style={{ color: "var(--color-text-muted)" }}>%</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Row 3: delivery · disposition — a wide select (its labels are long) beside the
-                joined disposition multi-toggle, both single-height controls. */}
-            <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr" }}>
-              {/* Delivery status (ADR-0009 §5, #121): physical arrival/sort state of the copy. */}
-              <div>
-                <GroupLabel htmlFor="copy-delivery">Delivery</GroupLabel>
-                <select
-                  id="copy-delivery"
-                  name="deliveryState"
-                  value={deliveryState}
-                  onChange={(e) => setDeliveryState(e.target.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                >
-                  {DELIVERY_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                {/* Disposal (#394/#395) sits *beside* the delivery state, never instead of it:
-                    the two axes are independent — how the copy arrived, and that it has since
-                    gone — and both stay legible. Read-only here, because marking and reversing a
-                    disposal is its own action with its own guards, not a field on this form. */}
-                {disposalSummary && (
-                  <p
-                    style={{
-                      margin: "0.375rem 0 0",
-                      fontSize: "0.8125rem",
-                      color: "var(--color-error)",
-                    }}
-                  >
-                    <Icon name="disposed" size="sm" /> {disposalSummary}
-                  </p>
+                )}
+                {/* In edit mode `StampSelect` is not there to carry these, and both are read by the
+                    save: `stampId` is the copy's denormalised pointer — the first entry, which is what
+                    re-points the copy and records a refinement when it names a stamp the piece was not
+                    carrying — and `itemStamps` is the whole list. Absent while the list is still
+                    loading, which is what leaves the entries alone. */}
+                {mode === "edit" && stampRows && stampRows.length > 0 && (
+                  <>
+                    <input type="hidden" name="stampId" value={stampRows[0].stampId} />
+                    <input
+                      type="hidden"
+                      name="itemStamps"
+                      value={JSON.stringify(
+                        stampRows.map((row) => ({
+                          stampId: row.stampId,
+                          quantity: row.quantity,
+                          formatId: row.formatId || null,
+                        }))
+                      )}
+                    />
+                  </>
+                )}
+                {mode === "edit" && !stampRows && item && (
+                  <input type="hidden" name="stampId" value={item.stampId} />
                 )}
               </div>
 
-              <DispositionField
-                disposition={disposition}
-                onToggle={(key) =>
-                  setDisposition((d) => ({ ...d, [key]: !d[key] }))
-                }
-                disabled={isPending}
-              />
-            </div>
+              {/* Row 2: condition · certificate · format — the three axes a copy is described by,
+                  and the same three a catalog price is recorded against. Three across while the column
+                  holds them at 9rem each; on a narrower window they wrap rather than squeeze. */}
+              <div style={{ ...ROW, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 9rem), 1fr))" }}>
+                <div>
+                  <GroupLabel htmlFor="copy-condition">Condition</GroupLabel>
+                  <select
+                    id="copy-condition"
+                    name="conditionId"
+                    defaultValue={item?.conditionId ?? addDefaults?.conditionId ?? ""}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  >
+                    <option value="">— Select —</option>
+                    {conditions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.abbreviation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <GroupLabel htmlFor="copy-cert">Certificate</GroupLabel>
+                  <select
+                    id="copy-cert"
+                    name="certificateStatusId"
+                    defaultValue={item?.certificateStatusId ?? ""}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  >
+                    <option value="">— None —</option>
+                    {certificateStatuses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.abbreviation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <GroupLabel htmlFor="copy-format">Format</GroupLabel>
+                  <select
+                    id="copy-format"
+                    name="formatId"
+                    defaultValue={item?.formatId ?? ""}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  >
+                    {/* No "single" row exists in the dictionary — a copy with no format *is* the
+                        single, exactly as no certificate means none. */}
+                    <option value="">— Single —</option>
+                    {formats.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.abbreviation})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-            {/* Row 3b: platforms this copy is never listed on (#506). The whole set is edited
-                here, unlike the list's row and bulk entries, which turn one platform on or off —
-                this is the only surface that asks the question without a platform already in
-                scope. Absent until the collection has a platform contact to name. */}
-            {platforms.length > 0 && (
-              <div>
-                <GroupLabel>Never list on</GroupLabel>
-                <PlatformExclusionField
-                  platforms={platforms}
-                  excluded={excludedPlatformIds}
-                  onToggle={(id) =>
-                    setExcludedPlatformIds((ids) =>
-                      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
-                    )
+              {/* What is wrong with this piece (#1557), right under the condition it qualifies — chosen
+                  from the collection's fault list, saved with the rest of the copy — and beside it how
+                  much that takes off the copy's value (#1560), typed here rather than per fault. */}
+              <div style={{ ...ROW, gridTemplateColumns: "1fr 8.5rem" }}>
+                <div>
+                  <GroupLabel htmlFor="copy-faults">Faults</GroupLabel>
+                  <FaultEntryField
+                    collectionId={collectionId}
+                    inputId="copy-faults"
+                    initialFaults={item?.faults ?? []}
+                    disabled={isPending}
+                  />
+                </div>
+                <div>
+                  {/* The label is a block; the tooltip's default `inline-flex` wrapper would sit it on a
+                      line box of its own and drop it, and the field under it, below Faults (#1752). */}
+                  <Tooltip content={FAULT_REDUCTION_HINT} style={{ display: "flex", width: "fit-content" }}>
+                    <GroupLabel htmlFor="copy-fault-reduction">Value reduction</GroupLabel>
+                  </Tooltip>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <NumericInput
+                      kind="number"
+                      inputMode="numeric"
+                      id="copy-fault-reduction"
+                      name="faultReductionPercent"
+                      placeholder="None"
+                      defaultValue={item?.faultReductionPercent ?? ""}
+                      disabled={isPending}
+                      {...NO_AUTOFILL}
+                      style={{ ...INPUT_STYLE, textAlign: "right" }}
+                    />
+                    <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: delivery · disposition — a wide select (its labels are long) and the joined
+                  disposition multi-toggle, both single-height controls. Side by side only where each
+                  gets 15rem; in the dialog's ~30rem column the toggle would not fit half of it, so
+                  the two stack. */}
+              <div style={{ ...ROW, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 15rem), 1fr))" }}>
+                {/* Delivery status (ADR-0009 §5, #121): physical arrival/sort state of the copy. */}
+                <div>
+                  <GroupLabel htmlFor="copy-delivery">Delivery</GroupLabel>
+                  <select
+                    id="copy-delivery"
+                    name="deliveryState"
+                    value={deliveryState}
+                    onChange={(e) => setDeliveryState(e.target.value)}
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  >
+                    {DELIVERY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Disposal (#394/#395) sits *beside* the delivery state, never instead of it:
+                      the two axes are independent — how the copy arrived, and that it has since
+                      gone — and both stay legible. Read-only here, because marking and reversing a
+                      disposal is its own action with its own guards, not a field on this form. */}
+                  {disposalSummary && (
+                    <p
+                      style={{
+                        margin: "0.375rem 0 0",
+                        fontSize: "0.8125rem",
+                        color: "var(--color-error)",
+                      }}
+                    >
+                      <Icon name="disposed" size="sm" /> {disposalSummary}
+                    </p>
+                  )}
+                </div>
+
+                <DispositionField
+                  disposition={disposition}
+                  onToggle={(key) =>
+                    setDisposition((d) => ({ ...d, [key]: !d[key] }))
                   }
                   disabled={isPending}
                 />
               </div>
-            )}
 
-            {/* Row 4: storage (#56) — full width so the location tree-select breathes; the
-                in-location ref sits beside it. */}
-            <div>
-              <GroupLabel>Storage</GroupLabel>
-              {locations.length === 0 ? (
-                <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                  No locations defined yet. Add some on the Locations screen to file copies away.
-                </p>
-              ) : (
-                <div style={{ display: "flex", gap: "0.75rem" }}>
-                  <div style={{ flex: 3 }}>
-                    <LabelWithError htmlFor="copy-location-button">Location</LabelWithError>
-                    <LocationTreeSelect
-                      locations={locations}
-                      locationTree={locationTree}
-                      name="locationId"
-                      selectedId={locationId}
-                      onSelectedIdChange={(id) => {
-                        // Selecting a concrete location moves focus to the Ref field (#222);
-                        // clearing to "None" leaves focus alone.
-                        if (id) focusRefOnEnable.current = true;
-                        setLocationId(id);
-                      }}
-                      onlyAssignableSelectable
-                      disabled={isPending}
-                      noneOptionLabel="— None"
-                      // Taller trigger so it matches the sibling text/select inputs
-                      // in this dialog (INPUT_STYLE), not the compact toolbar default.
-                      buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="copy-location-ref">Ref</LabelWithError>
-                    <TextInput
-                      ref={locationRefInputRef}
-                      id="copy-location-ref"
-                      name="locationRef"
-                      placeholder="e.g. A234"
-                      defaultValue={item?.locationRef ?? ""}
-                      disabled={isPending || !locationId}
-                      {...NO_AUTOFILL}
-                      style={INPUT_STYLE}
-                    />
-                  </div>
+              {/* Row 3b: platforms this copy is never listed on (#506). The whole set is edited
+                  here, unlike the list's row and bulk entries, which turn one platform on or off —
+                  this is the only surface that asks the question without a platform already in
+                  scope. Absent until the collection has a platform contact to name. */}
+              {platforms.length > 0 && (
+                <div>
+                  <GroupLabel>Never list on</GroupLabel>
+                  <PlatformExclusionField
+                    platforms={platforms}
+                    excluded={excludedPlatformIds}
+                    onToggle={(id) =>
+                      setExcludedPlatformIds((ids) =>
+                        ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
+                      )
+                    }
+                    disabled={isPending}
+                  />
                 </div>
               )}
             </div>
 
-            {/* Row 5: notes */}
-            <div>
-              <GroupLabel htmlFor="copy-notes">Notes</GroupLabel>
-              <TextArea
-                id="copy-notes"
-                name="notes"
-                rows={2}
-                placeholder="Per-copy detail (e.g. postmark type)"
-                defaultValue={item?.notes ?? ""}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
-              />
-            </div>
+            {/* What is kept with it: where it is filed, notes, tags and photos. */}
+            <div style={FORM_COLUMN}>
+              {/* Row 4: storage (#56) — the column's full width so the location tree-select breathes;
+                  the in-location ref sits beside it. */}
+              <div>
+                <GroupLabel>Storage</GroupLabel>
+                {locations.length === 0 ? (
+                  <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                    No locations defined yet. Add some on the Locations screen to file copies away.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <div style={{ flex: 3 }}>
+                      <LabelWithError htmlFor="copy-location-button">Location</LabelWithError>
+                      <LocationTreeSelect
+                        locations={locations}
+                        locationTree={locationTree}
+                        name="locationId"
+                        selectedId={locationId}
+                        onSelectedIdChange={(id) => {
+                          // Selecting a concrete location moves focus to the Ref field (#222);
+                          // clearing to "None" leaves focus alone.
+                          if (id) focusRefOnEnable.current = true;
+                          setLocationId(id);
+                        }}
+                        onlyAssignableSelectable
+                        disabled={isPending}
+                        noneOptionLabel="— None"
+                        // Taller trigger so it matches the sibling text/select inputs
+                        // in this dialog (INPUT_STYLE), not the compact toolbar default.
+                        buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="copy-location-ref">Ref</LabelWithError>
+                      <TextInput
+                        ref={locationRefInputRef}
+                        id="copy-location-ref"
+                        name="locationRef"
+                        placeholder="e.g. A234"
+                        defaultValue={item?.locationRef ?? ""}
+                        disabled={isPending || !locationId}
+                        {...NO_AUTOFILL}
+                        style={INPUT_STYLE}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
-            {/* The collector's own labels on this copy (#1192), saved with the rest of it. The
-                copy's own: nothing comes from the stamp it is linked to. */}
-            <div>
-              <GroupLabel htmlFor="copy-tags">Tags</GroupLabel>
-              <TagEntryField
+              {/* Row 5: notes */}
+              <div>
+                <GroupLabel htmlFor="copy-notes">Notes</GroupLabel>
+                <TextArea
+                  id="copy-notes"
+                  name="notes"
+                  rows={2}
+                  placeholder="Per-copy detail (e.g. postmark type)"
+                  defaultValue={item?.notes ?? ""}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
+                />
+              </div>
+
+              {/* The collector's own labels on this copy (#1192), saved with the rest of it. The
+                  copy's own: nothing comes from the stamp it is linked to. */}
+              <div>
+                <GroupLabel htmlFor="copy-tags">Tags</GroupLabel>
+                <TagEntryField
+                  collectionId={collectionId}
+                  name="copyTags"
+                  inputId="copy-tags"
+                  initialTags={item?.tags ?? []}
+                  disabled={isPending}
+                />
+              </div>
+
+              {/* Row 6: photos (#112) — front/back slots + reorderable titled extras. Eager
+                  staged uploads; the pending change-set applies on Save with the copy fields.
+                  In edit mode each committed photo can be promoted to this copy's stamp (#137):
+                  an independent duplicated stamp photo; the copy's own photo is untouched. Held
+                  for the Save while the copy's stamp change is unsaved (#1878).
+                  Offered on every copy regardless of physical format — only the *automatic*
+                  seeding is restricted to singles (#346). */}
+              <PhotoEditor
                 collectionId={collectionId}
-                name="copyTags"
-                inputId="copy-tags"
-                initialTags={item?.tags ?? []}
+                initialPhotos={item?.photos ?? []}
                 disabled={isPending}
+                onChange={handlePhotoChange}
+                onPromotePhoto={
+                  mode === "edit"
+                    ? async (photoId, target) => {
+                        if (stampChangePending) {
+                          setHeldPromotions((held) => new Map(held).set(photoId, target));
+                          return { ok: true };
+                        }
+                        const { promoteCopyPhotoAction } = await import(
+                          "@/app/actions/stamps"
+                        );
+                        const result = await promoteCopyPhotoAction(
+                          photoId,
+                          target.role,
+                          target.title
+                        );
+                        return result.status === "success"
+                          ? { ok: true }
+                          : {
+                              ok: false,
+                              error:
+                                result.status === "error"
+                                  ? result.message
+                                  : undefined,
+                            };
+                      }
+                    : undefined
+                }
+                promoteTarget={mode === "edit" ? promoteTarget : undefined}
+                heldPromotions={heldPromotionIds}
+                onDropPromotion={(photoId) =>
+                  setHeldPromotions((held) => {
+                    const next = new Map(held);
+                    next.delete(photoId);
+                    return next;
+                  })
+                }
               />
             </div>
-
-            {/* Row 6: photos (#112) — front/back slots + reorderable titled extras. Eager
-                staged uploads; the pending change-set applies on Save with the copy fields.
-                In edit mode each committed photo can be promoted to this copy's stamp (#137):
-                an independent duplicated stamp photo; the copy's own photo is untouched. Held
-                for the Save while the copy's stamp change is unsaved (#1878).
-                Offered on every copy regardless of physical format — only the *automatic*
-                seeding is restricted to singles (#346). */}
-            <PhotoEditor
-              collectionId={collectionId}
-              initialPhotos={item?.photos ?? []}
-              disabled={isPending}
-              onChange={handlePhotoChange}
-              onPromotePhoto={
-                mode === "edit"
-                  ? async (photoId, target) => {
-                      if (stampChangePending) {
-                        setHeldPromotions((held) => new Map(held).set(photoId, target));
-                        return { ok: true };
-                      }
-                      const { promoteCopyPhotoAction } = await import(
-                        "@/app/actions/stamps"
-                      );
-                      const result = await promoteCopyPhotoAction(
-                        photoId,
-                        target.role,
-                        target.title
-                      );
-                      return result.status === "success"
-                        ? { ok: true }
-                        : {
-                            ok: false,
-                            error:
-                              result.status === "error"
-                                ? result.message
-                                : undefined,
-                          };
-                    }
-                  : undefined
-              }
-              promoteTarget={mode === "edit" ? promoteTarget : undefined}
-              heldPromotions={heldPromotionIds}
-              onDropPromotion={(photoId) =>
-                setHeldPromotions((held) => {
-                  const next = new Map(held);
-                  next.delete(photoId);
-                  return next;
-                })
-              }
-            />
-          </div>
+          </DialogFormColumns>
         </DialogBody>
         <DialogActions
           actionLabel={actionLabel}

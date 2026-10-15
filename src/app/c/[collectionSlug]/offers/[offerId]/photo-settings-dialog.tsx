@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
+  LabelWithError,
+} from "@/app/dialog-shell";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { getCollageTemplatesAction } from "@/app/actions/collage-templates";
 import type { CollageTemplateData } from "@/lib/collage-templates";
@@ -50,6 +57,15 @@ const HINT: React.CSSProperties = {
   marginTop: "0.25rem",
   fontSize: "0.6875rem",
   color: "var(--color-text-muted)",
+};
+
+/** Two fields to a row (#1931): three or four side by side would leave each too narrow in one
+ *  column of the two-column dialog, so they wrap instead of widening anything. */
+const GRID_PAIRS: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  columnGap: "0.75rem",
+  rowGap: "1rem",
 };
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -279,384 +295,398 @@ export function PhotoSettingsDialog({
   }
 
   return (
-    <DialogShell title="Photo settings" onClose={onClose} maxWidth="40rem" minHeight="20rem">
+    <DialogShell
+      title="Photo settings"
+      onClose={onClose}
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
+      minHeight="20rem"
+    >
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
       >
         <DialogBody>
-          {/* The platform's own limits, stated not editable here: they describe what the platform
-              accepts, are read when photos are generated, and are changed on the platform itself. */}
-          <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0 0 1.25rem" }}>
-            {platformName} accepts {limitText(limits.maxPhotos, "")} photo
-            {limits.maxPhotos === 1 ? "" : "s"}, longest edge{" "}
-            {limitText(limits.maxPhotoEdge, " px")}, up to{" "}
-            {limitText(limits.maxPhotoFileSizeMib, " MiB")} each. Change those on the platform.
-          </p>
+          {/* Two columns (#1931): what is photographed and how each tile is labelled on the left,
+              how the tiles are gathered into collages on the right. */}
+          <DialogFormColumns>
+            <div>
+              {/* The platform's own limits, stated not editable here: they describe what the platform
+                  accepts, are read when photos are generated, and are changed on the platform itself. */}
+              <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0 0 1.25rem" }}>
+                {platformName} accepts {limitText(limits.maxPhotos, "")} photo
+                {limits.maxPhotos === 1 ? "" : "s"}, longest edge{" "}
+                {limitText(limits.maxPhotoEdge, " px")}, up to{" "}
+                {limitText(limits.maxPhotoFileSizeMib, " MiB")} each. Change those on the platform.
+              </p>
 
-          {/* Covering symbols (#1665): the platform's rule unless this listing says otherwise. Read
-              live, so *follow* keeps tracking the platform. */}
-          <div style={{ marginBottom: "1.25rem" }}>
-            <LabelWithError htmlFor="offer-cover-symbols">Cover symbols</LabelWithError>
-            <select
-              id="offer-cover-symbols"
-              name="coverSymbols"
-              defaultValue={config.coverSymbols == null ? "" : config.coverSymbols ? "on" : "off"}
-              disabled={isPending}
-              style={{ ...INPUT_STYLE, cursor: "pointer", maxWidth: "20rem" }}
-            >
-              <option value="">
-                As {platformName} ({platformCoverSymbols ? "covered" : "not covered"})
-              </option>
-              <option value="on">Covered on this offer</option>
-              <option value="off">Not covered on this offer</option>
-            </select>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-photo-sides">Sides to photograph</LabelWithError>
-              <select
-                id="offer-photo-sides"
-                name="photoSides"
-                value={photoSides}
-                onChange={(e) => setPhotoSides(e.target.value as typeof photoSides)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {PHOTO_SIDES.map((side) => (
-                  <option key={side} value={side}>
-                    {PHOTO_SIDES_LABELS[side]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Two annotations on one strip (#312): an identifier on the left, something
-                descriptive on the right, drawn at one shared size. */}
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-photo-label-left">Tile label (left)</LabelWithError>
-              <TextInput
-                id="offer-photo-label-left"
-                name="photoLabelLeftTemplate"
-                value={labelLeft}
-                onChange={(e) => setLabelLeft(e.target.value)}
-                placeholder="{ref}"
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-photo-label-right">Tile label (right)</LabelWithError>
-              <TextInput
-                id="offer-photo-label-right"
-                name="photoLabelRightTemplate"
-                value={labelRight}
-                onChange={(e) => setLabelRight(e.target.value)}
-                placeholder="{catalog}"
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-            </div>
-          </div>
-          <span
-            style={{
-              ...HINT,
-              display: "block",
-              margin: photoSides === "paired" ? "-0.75rem 0 0.375rem" : "-0.75rem 0 1.25rem",
-            }}
-          >
-            Written under each stamp, one flush left and one flush right at the same size. A single
-            one is centred; both blank leaves the tiles unlabelled.
-          </span>
-          {/* Said here rather than in the option's name (#694): what pairing changes is the picture,
-              and the one thing worth knowing before generating is that a half-scanned copy still
-              appears — it is not the all-or-nothing rule the other modes follow. */}
-          {photoSides === "paired" && (
-            <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
-              Paired puts each stamp&rsquo;s two scans side by side in one cell under one label, so a
-              group is a single image instead of a page of fronts and a page of backs. A copy scanned
-              on one side only takes a narrower cell in the same collage.
-            </span>
-          )}
-
-          <p style={SECTION_LABEL}>Collage</p>
-
-          {/* When a collage is made at all (#521). A collage is how more stamps fit than the
-              platform has slots for, so with slots to spare the stamps go up one per photo and only
-              the tail is grouped — and the first photo, the listing's thumbnail, is a single stamp
-              whenever this offer has one to show. Sets of several stamps are one collage either
-              way: a set is one thing being sold. */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.4375rem",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary)",
-              cursor: isPending ? "default" : "pointer",
-              marginBottom: "0.25rem",
-            }}
-          >
-            <input
-              type="checkbox"
-              name="preferSingles"
-              checked={preferSingles}
-              onChange={(e) => setPreferSingles(e.target.checked)}
-              disabled={isPending}
-              style={{ cursor: isPending ? "default" : "pointer" }}
-            />
-            Single photos while {platformName}&rsquo;s limit allows
-          </label>
-          <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
-            {limits.maxPhotos == null
-              ? `${platformName} states no photo limit, so every single-stamp set gets its own photo.`
-              : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
-          </span>
-
-          {/* Series on photos of their own (#1673): a set's copies grouped by checklist, each group
-              on its own images in the checklist's order, the rest after them. The rules — two
-              copies make a group, a copy on several checklists joins the largest — are in the user
-              guide; the tooltip says the one thing worth knowing before ticking it. */}
-          <Tooltip content="Every series this offer's set holds two or more stamps of gets photos of its own, in the series' order; the other stamps follow on photos of their own.">
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.4375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-secondary)",
-                cursor: isPending ? "default" : "pointer",
-                marginBottom: "0.25rem",
-                width: "fit-content",
-              }}
-            >
-              <input
-                type="checkbox"
-                name="groupByChecklist"
-                checked={groupByChecklist}
-                onChange={(e) => setGroupByChecklist(e.target.checked)}
-                disabled={isPending}
-                style={{ cursor: isPending ? "default" : "pointer" }}
-              />
-              Group series on their own photos
-            </label>
-          </Tooltip>
-          {/* The group template's numbers travel in hidden fields whether or not the box is
-              ticked, so turning grouping off and on again keeps the template. */}
-          <input type="hidden" name="groupCollageGridMode" value={groupCollage.collageGridMode} />
-          <input type="hidden" name="groupCollageGridShape" value={groupCollage.collageGridShape} />
-          <input type="hidden" name="groupCollageRows" value={groupCollage.collageRows} />
-          <input type="hidden" name="groupCollageColumns" value={groupCollage.collageColumns} />
-          <input type="hidden" name="groupCollageGapPercent" value={groupCollage.collageGapPercent} />
-          <input type="hidden" name="groupCollageBackground" value={groupCollage.collageBackground} />
-          <input
-            type="hidden"
-            name="groupCollageLabelPercent"
-            value={groupCollage.collageLabelPercent}
-          />
-          {groupByChecklist ? (
-            <div style={{ margin: "0.5rem 0 1.25rem" }}>
-              <LabelWithError htmlFor="offer-group-collage-template">Series template</LabelWithError>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {/* One-shot, like the picker below: it copies the numbers and falls back. */}
+              {/* Covering symbols (#1665): the platform's rule unless this listing says otherwise. Read
+                  live, so *follow* keeps tracking the platform. */}
+              <div style={{ marginBottom: "1.25rem" }}>
+                <LabelWithError htmlFor="offer-cover-symbols">Cover symbols</LabelWithError>
                 <select
-                  id="offer-group-collage-template"
-                  value=""
-                  onChange={(e) => applyGroupTemplate(e.target.value)}
-                  disabled={isPending || templates.length === 0}
-                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  id="offer-cover-symbols"
+                  name="coverSymbols"
+                  defaultValue={config.coverSymbols == null ? "" : config.coverSymbols ? "on" : "off"}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer", maxWidth: "20rem" }}
                 >
                   <option value="">
-                    {hasGroupCollage
-                      ? `${gridText(
-                          groupCollage.collageGridMode,
-                          groupCollage.collageGridShape,
-                          groupCollage.collageRows,
-                          groupCollage.collageColumns
-                        )} — pick another template`
-                      : "Same as the collage below — pick a template"}
+                    As {platformName} ({platformCoverSymbols ? "covered" : "not covered"})
                   </option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
-                    </option>
-                  ))}
+                  <option value="on">Covered on this offer</option>
+                  <option value="off">Not covered on this offer</option>
                 </select>
-                <button
-                  type="button"
-                  onClick={() => setGroupCollage(EMPTY_COLLAGE)}
-                  disabled={isPending || !hasGroupCollage}
-                  style={{
-                    ...INPUT_STYLE,
-                    width: "auto",
-                    whiteSpace: "nowrap",
-                    cursor: hasGroupCollage ? "pointer" : "not-allowed",
-                    color: hasGroupCollage
-                      ? "var(--color-text-primary)"
-                      : "var(--color-text-muted)",
-                  }}
-                >
-                  Clear
-                </button>
               </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: "1.25rem" }} />
-          )}
 
-          <div style={{ marginBottom: "1rem" }}>
-            <LabelWithError htmlFor="offer-collage-template">Copy from template</LabelWithError>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              {/* A one-shot picker, not a stored reference: choosing a template copies its numbers
-                  into the fields below and the select falls back to its placeholder. */}
-              <select
-                id="offer-collage-template"
-                value=""
-                onChange={(e) => applyTemplate(e.target.value)}
-                disabled={isPending || templates.length === 0}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                <option value="">
-                  {templates.length === 0 ? "— no templates defined yet —" : "— pick a template —"}
-                </option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setCollage(EMPTY_COLLAGE)}
-                disabled={isPending || !hasCollage}
+              <div style={{ ...GRID_PAIRS, marginBottom: "1.25rem" }}>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="offer-photo-sides">Sides to photograph</LabelWithError>
+                  <select
+                    id="offer-photo-sides"
+                    name="photoSides"
+                    value={photoSides}
+                    onChange={(e) => setPhotoSides(e.target.value as typeof photoSides)}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {PHOTO_SIDES.map((side) => (
+                      <option key={side} value={side}>
+                        {PHOTO_SIDES_LABELS[side]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Two annotations on one strip (#312): an identifier on the left, something
+                    descriptive on the right, drawn at one shared size — a row of their own, so
+                    the pair sits side by side. */}
+                <div style={{ minWidth: 0, gridColumn: 1 }}>
+                  <LabelWithError htmlFor="offer-photo-label-left">Tile label (left)</LabelWithError>
+                  <TextInput
+                    id="offer-photo-label-left"
+                    name="photoLabelLeftTemplate"
+                    value={labelLeft}
+                    onChange={(e) => setLabelLeft(e.target.value)}
+                    placeholder="{ref}"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="offer-photo-label-right">Tile label (right)</LabelWithError>
+                  <TextInput
+                    id="offer-photo-label-right"
+                    name="photoLabelRightTemplate"
+                    value={labelRight}
+                    onChange={(e) => setLabelRight(e.target.value)}
+                    placeholder="{catalog}"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+              <span
                 style={{
-                  ...INPUT_STYLE,
-                  width: "auto",
-                  whiteSpace: "nowrap",
-                  cursor: hasCollage ? "pointer" : "not-allowed",
-                  color: hasCollage ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                  ...HINT,
+                  display: "block",
+                  margin: photoSides === "paired" ? "-0.75rem 0 0.375rem" : "-0.75rem 0 1.25rem",
                 }}
               >
-                Clear
-              </button>
+                Written under each stamp, one flush left and one flush right at the same size. A single
+                one is centred; both blank leaves the tiles unlabelled.
+              </span>
+              {/* Said here rather than in the option's name (#694): what pairing changes is the picture,
+                  and the one thing worth knowing before generating is that a half-scanned copy still
+                  appears — it is not the all-or-nothing rule the other modes follow. */}
+              {photoSides === "paired" && (
+                <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
+                  Paired puts each stamp&rsquo;s two scans side by side in one cell under one label, so a
+                  group is a single image instead of a page of fronts and a page of backs. A copy scanned
+                  on one side only takes a narrower cell in the same collage.
+                </span>
+              )}
             </div>
-            <span style={HINT}>
-              Copies the template&apos;s numbers into the fields below, where you can adjust them for
-              this listing. Editing the template later leaves this offer alone.
-            </span>
-          </div>
 
-          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-collage-grid-mode">Grid</LabelWithError>
-              <select
-                id="offer-collage-grid-mode"
-                name="collageGridMode"
-                value={collage.collageGridMode}
-                onChange={(e) => set("collageGridMode", normalizeCollageGridMode(e.target.value))}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+            <div>
+              <p style={SECTION_LABEL}>Collage</p>
+
+              {/* When a collage is made at all (#521). A collage is how more stamps fit than the
+                  platform has slots for, so with slots to spare the stamps go up one per photo and only
+                  the tail is grouped — and the first photo, the listing's thumbnail, is a single stamp
+                  whenever this offer has one to show. Sets of several stamps are one collage either
+                  way: a set is one thing being sold. */}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4375rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-secondary)",
+                  cursor: isPending ? "default" : "pointer",
+                  marginBottom: "0.25rem",
+                }}
               >
-                {COLLAGE_GRID_MODES.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {COLLAGE_GRID_MODE_LABELS[mode]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* The shape is read only by the automatic grid (#1699), so it is shown only there; a
-                fixed grid keeps it in a hidden field, so switching the grid back restores it. */}
-            {collage.collageGridMode === "auto" ? (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="offer-collage-grid-shape">Shape</LabelWithError>
-                <select
-                  id="offer-collage-grid-shape"
-                  name="collageGridShape"
-                  value={collage.collageGridShape}
-                  onChange={(e) => set("collageGridShape", normalizeCollageGridShape(e.target.value))}
+                <input
+                  type="checkbox"
+                  name="preferSingles"
+                  checked={preferSingles}
+                  onChange={(e) => setPreferSingles(e.target.checked)}
                   disabled={isPending}
-                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  style={{ cursor: isPending ? "default" : "pointer" }}
+                />
+                Single photos while {platformName}&rsquo;s limit allows
+              </label>
+              <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
+                {limits.maxPhotos == null
+                  ? `${platformName} states no photo limit, so every single-stamp set gets its own photo.`
+                  : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
+              </span>
+
+              {/* Series on photos of their own (#1673): a set's copies grouped by checklist, each group
+                  on its own images in the checklist's order, the rest after them. The rules — two
+                  copies make a group, a copy on several checklists joins the largest — are in the user
+                  guide; the tooltip says the one thing worth knowing before ticking it. */}
+              <Tooltip content="Every series this offer's set holds two or more stamps of gets photos of its own, in the series' order; the other stamps follow on photos of their own.">
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.4375rem",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-secondary)",
+                    cursor: isPending ? "default" : "pointer",
+                    marginBottom: "0.25rem",
+                    width: "fit-content",
+                  }}
                 >
-                  {COLLAGE_GRID_SHAPES.map((shape) => (
-                    <option key={shape} value={shape}>
-                      {COLLAGE_GRID_SHAPE_LABELS[shape]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <input type="hidden" name="collageGridShape" value={collage.collageGridShape} />
-            )}
-            <NumberField
-              id="offer-collage-rows"
-              name="collageRows"
-              label={axisLabels.rows}
-              value={collage.collageRows}
-              min={MIN_COLLAGE_AXIS}
-              max={MAX_COLLAGE_AXIS}
-              isPending={isPending}
-              onChange={(v) => set("collageRows", v)}
-            />
-            <NumberField
-              id="offer-collage-columns"
-              name="collageColumns"
-              label={axisLabels.columns}
-              value={collage.collageColumns}
-              min={MIN_COLLAGE_AXIS}
-              max={MAX_COLLAGE_AXIS}
-              isPending={isPending}
-              onChange={(v) => set("collageColumns", v)}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-            <NumberField
-              id="offer-collage-gap"
-              name="collageGapPercent"
-              label="Gap (%)"
-              value={collage.collageGapPercent}
-              min={MIN_COLLAGE_PERCENT}
-              max={MAX_COLLAGE_PERCENT}
-              hint="Of the stamp."
-              isPending={isPending}
-              onChange={(v) => set("collageGapPercent", v)}
-            />
-            <NumberField
-              id="offer-collage-strip"
-              name="collageLabelPercent"
-              label="Label strip (%)"
-              value={collage.collageLabelPercent}
-              min={MIN_COLLAGE_LABEL_PERCENT}
-              max={MAX_COLLAGE_LABEL_PERCENT}
-              step={COLLAGE_LABEL_STEP}
-              hint="Of the image, and the label size. Tenths allowed; 0 for none."
-              isPending={isPending}
-              onChange={(v) => set("collageLabelPercent", v)}
-            />
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="offer-collage-background">Background</LabelWithError>
-              {/* The colour travels in a hidden field so an untouched picker stays *blank*: a colour
-                  input always reports a value, which would make "no collage yet" impossible to save. */}
-              <input type="hidden" name="collageBackground" value={collage.collageBackground} />
+                  <input
+                    type="checkbox"
+                    name="groupByChecklist"
+                    checked={groupByChecklist}
+                    onChange={(e) => setGroupByChecklist(e.target.checked)}
+                    disabled={isPending}
+                    style={{ cursor: isPending ? "default" : "pointer" }}
+                  />
+                  Group series on their own photos
+                </label>
+              </Tooltip>
+              {/* The group template's numbers travel in hidden fields whether or not the box is
+                  ticked, so turning grouping off and on again keeps the template. */}
+              <input type="hidden" name="groupCollageGridMode" value={groupCollage.collageGridMode} />
+              <input type="hidden" name="groupCollageGridShape" value={groupCollage.collageGridShape} />
+              <input type="hidden" name="groupCollageRows" value={groupCollage.collageRows} />
+              <input type="hidden" name="groupCollageColumns" value={groupCollage.collageColumns} />
+              <input type="hidden" name="groupCollageGapPercent" value={groupCollage.collageGapPercent} />
+              <input type="hidden" name="groupCollageBackground" value={groupCollage.collageBackground} />
               <input
-                id="offer-collage-background"
-                type="color"
-                value={collage.collageBackground || DEFAULT_COLLAGE_BACKGROUND}
-                onChange={(e) => set("collageBackground", e.target.value)}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, width: "5rem", padding: "0.25rem" }}
+                type="hidden"
+                name="groupCollageLabelPercent"
+                value={groupCollage.collageLabelPercent}
               />
-            </div>
-          </div>
+              {groupByChecklist ? (
+                <div style={{ margin: "0.5rem 0 1.25rem" }}>
+                  <LabelWithError htmlFor="offer-group-collage-template">Series template</LabelWithError>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    {/* One-shot, like the picker below: it copies the numbers and falls back. */}
+                    <select
+                      id="offer-group-collage-template"
+                      value=""
+                      onChange={(e) => applyGroupTemplate(e.target.value)}
+                      disabled={isPending || templates.length === 0}
+                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                    >
+                      <option value="">
+                        {hasGroupCollage
+                          ? `${gridText(
+                              groupCollage.collageGridMode,
+                              groupCollage.collageGridShape,
+                              groupCollage.collageRows,
+                              groupCollage.collageColumns
+                            )} — pick another template`
+                          : "Same as the collage below — pick a template"}
+                      </option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setGroupCollage(EMPTY_COLLAGE)}
+                      disabled={isPending || !hasGroupCollage}
+                      style={{
+                        ...INPUT_STYLE,
+                        width: "auto",
+                        whiteSpace: "nowrap",
+                        cursor: hasGroupCollage ? "pointer" : "not-allowed",
+                        color: hasGroupCollage
+                          ? "var(--color-text-primary)"
+                          : "var(--color-text-muted)",
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: "1.25rem" }} />
+              )}
 
-          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.75rem 0 0" }}>
-            {collage.collageGridMode === "auto"
-              ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
-              : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
-            Their product is how many stamps go on one image either way, and it is a maximum rather
-            than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
-            on this offer yet.
-          </p>
+              <div style={{ marginBottom: "1rem" }}>
+                <LabelWithError htmlFor="offer-collage-template">Copy from template</LabelWithError>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {/* A one-shot picker, not a stored reference: choosing a template copies its numbers
+                      into the fields below and the select falls back to its placeholder. */}
+                  <select
+                    id="offer-collage-template"
+                    value=""
+                    onChange={(e) => applyTemplate(e.target.value)}
+                    disabled={isPending || templates.length === 0}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    <option value="">
+                      {templates.length === 0 ? "— no templates defined yet —" : "— pick a template —"}
+                    </option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setCollage(EMPTY_COLLAGE)}
+                    disabled={isPending || !hasCollage}
+                    style={{
+                      ...INPUT_STYLE,
+                      width: "auto",
+                      whiteSpace: "nowrap",
+                      cursor: hasCollage ? "pointer" : "not-allowed",
+                      color: hasCollage ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <span style={HINT}>
+                  Copies the template&apos;s numbers into the fields below, where you can adjust them for
+                  this listing. Editing the template later leaves this offer alone.
+                </span>
+              </div>
+
+              <div style={{ ...GRID_PAIRS, marginBottom: "1rem" }}>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="offer-collage-grid-mode">Grid</LabelWithError>
+                  <select
+                    id="offer-collage-grid-mode"
+                    name="collageGridMode"
+                    value={collage.collageGridMode}
+                    onChange={(e) => set("collageGridMode", normalizeCollageGridMode(e.target.value))}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {COLLAGE_GRID_MODES.map((mode) => (
+                      <option key={mode} value={mode}>
+                        {COLLAGE_GRID_MODE_LABELS[mode]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* The shape is read only by the automatic grid (#1699), so it is shown only there; a
+                    fixed grid keeps it in a hidden field, so switching the grid back restores it. */}
+                {collage.collageGridMode === "auto" ? (
+                  <div style={{ minWidth: 0 }}>
+                    <LabelWithError htmlFor="offer-collage-grid-shape">Shape</LabelWithError>
+                    <select
+                      id="offer-collage-grid-shape"
+                      name="collageGridShape"
+                      value={collage.collageGridShape}
+                      onChange={(e) => set("collageGridShape", normalizeCollageGridShape(e.target.value))}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                    >
+                      {COLLAGE_GRID_SHAPES.map((shape) => (
+                        <option key={shape} value={shape}>
+                          {COLLAGE_GRID_SHAPE_LABELS[shape]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <input type="hidden" name="collageGridShape" value={collage.collageGridShape} />
+                )}
+                <NumberField
+                  id="offer-collage-rows"
+                  name="collageRows"
+                  label={axisLabels.rows}
+                  value={collage.collageRows}
+                  min={MIN_COLLAGE_AXIS}
+                  max={MAX_COLLAGE_AXIS}
+                  isPending={isPending}
+                  onChange={(v) => set("collageRows", v)}
+                />
+                <NumberField
+                  id="offer-collage-columns"
+                  name="collageColumns"
+                  label={axisLabels.columns}
+                  value={collage.collageColumns}
+                  min={MIN_COLLAGE_AXIS}
+                  max={MAX_COLLAGE_AXIS}
+                  isPending={isPending}
+                  onChange={(v) => set("collageColumns", v)}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                <NumberField
+                  id="offer-collage-gap"
+                  name="collageGapPercent"
+                  label="Gap (%)"
+                  value={collage.collageGapPercent}
+                  min={MIN_COLLAGE_PERCENT}
+                  max={MAX_COLLAGE_PERCENT}
+                  hint="Of the stamp."
+                  isPending={isPending}
+                  onChange={(v) => set("collageGapPercent", v)}
+                />
+                <NumberField
+                  id="offer-collage-strip"
+                  name="collageLabelPercent"
+                  label="Label strip (%)"
+                  value={collage.collageLabelPercent}
+                  min={MIN_COLLAGE_LABEL_PERCENT}
+                  max={MAX_COLLAGE_LABEL_PERCENT}
+                  step={COLLAGE_LABEL_STEP}
+                  hint="Of the image, and the label size. Tenths allowed; 0 for none."
+                  isPending={isPending}
+                  onChange={(v) => set("collageLabelPercent", v)}
+                />
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="offer-collage-background">Background</LabelWithError>
+                  {/* The colour travels in a hidden field so an untouched picker stays *blank*: a colour
+                      input always reports a value, which would make "no collage yet" impossible to save. */}
+                  <input type="hidden" name="collageBackground" value={collage.collageBackground} />
+                  <input
+                    id="offer-collage-background"
+                    type="color"
+                    value={collage.collageBackground || DEFAULT_COLLAGE_BACKGROUND}
+                    onChange={(e) => set("collageBackground", e.target.value)}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, width: "5rem", padding: "0.25rem" }}
+                  />
+                </div>
+              </div>
+
+              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.75rem 0 0" }}>
+                {collage.collageGridMode === "auto"
+                  ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
+                  : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
+                Their product is how many stamps go on one image either way, and it is a maximum rather
+                than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
+                on this offer yet.
+              </p>
+            </div>
+          </DialogFormColumns>
         </DialogBody>
 
         {/* Saving these settings puts the stored images out of date (#311), so the regeneration is

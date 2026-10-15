@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  DialogFormColumns,
+  FORM_DIALOG_COLUMNS_WIDTH,
+  LabelWithError,
+} from "@/app/dialog-shell";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -50,10 +57,12 @@ const INPUT_STYLE: React.CSSProperties = {
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
 
 /** The two-column template the dialog's paired fields share, so a short field always sits above a
- * short one and a long one above a long one. */
+ * short one and a long one above a long one. The short side never drops below 12rem: a
+ * `datetime-local` field is the widest control in the app, and a third of the dialog's left column
+ * (#1931) is narrower than that. */
 const GRID_TWO: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 2fr",
+  gridTemplateColumns: "minmax(12rem, 1fr) 2fr",
   columnGap: "0.75rem",
 };
 
@@ -312,10 +321,15 @@ export function AuctionLotFormDialog({
     });
   }
 
-  // Wider than the default cap: the closing time and three amounts share one row, and a
-  // `datetime-local` field is the widest control in the app.
+  // Two columns (#1931): the sale and the lot itself — who it is bought from, when it closes, what
+  // it is called and what it costs — on the left; what it holds, its tags and notes on the right.
+  // In one column the form ran past the height of a common window.
   return (
-    <DialogShell title={mode === "add" ? "Add auction lot" : "Edit lot"} onClose={onClose} maxWidth="40rem">
+    <DialogShell
+      title={mode === "add" ? "Add auction lot" : "Edit lot"}
+      onClose={onClose}
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
+    >
       {/* A real form, so Enter in any field saves the lot — the pattern every other dialog here
           follows. The action button is the form's submit; a textarea keeps Enter for itself. */}
       <form
@@ -323,491 +337,499 @@ export function AuctionLotFormDialog({
         onSubmit={submit}
       >
         <DialogBody>
-          {fixedSale ? (
-            /* Nothing to decide: the sale is the screen this was opened from. Stated rather than
-               silently assumed, because every other way of adding a lot shows which parcel it lands
-               in. */
-            <p
-              style={{
-                ...NOTE,
-                margin: "0 0 1rem",
-                color: "var(--color-text-primary)",
-                fontSize: "0.8125rem",
-              }}
-            >
-              Adding to <strong>{fixedSale.name}</strong>
-              {fixedSale.currency ? ` · ${fixedSale.currency}` : ""}.
-            </p>
-          ) : mode === "add" ? (
-            <>
-              {/* The pair that decides the settlement, side by side: they are one question — who is
-                  this being bought from, and through what — and the proposal below answers it. */}
-              <div style={{ display: "flex", gap: "0.75rem" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <LabelWithError htmlFor="auction-seller">Seller</LabelWithError>
-                  <PurchaseContactSelect
-                    collectionId={collectionId}
-                    idFieldName="sellerId"
-                    nameFieldName="sellerName"
-                    initialContactId={sellerId}
-                    initialContactName={sellerName}
-                    inputId="auction-seller"
-                    placeholder="Auction house or seller"
-                    role="seller"
-                    onSelectionChange={(id, name) => {
-                      setSellerId(id);
-                      setSellerName(name);
-                      // A different pair is a different question; a refusal of the old proposal must
-                      // not carry over to the new one.
-                      setStartNewSale(false);
+          <DialogFormColumns>
+            <div>
+              {fixedSale ? (
+                /* Nothing to decide: the sale is the screen this was opened from. Stated rather than
+                   silently assumed, because every other way of adding a lot shows which parcel it lands
+                   in. */
+                <p
+                  style={{
+                    ...NOTE,
+                    margin: "0 0 1rem",
+                    color: "var(--color-text-primary)",
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  Adding to <strong>{fixedSale.name}</strong>
+                  {fixedSale.currency ? ` · ${fixedSale.currency}` : ""}.
+                </p>
+              ) : mode === "add" ? (
+                <>
+                  {/* The pair that decides the settlement, side by side: they are one question — who is
+                      this being bought from, and through what — and the proposal below answers it. */}
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <LabelWithError htmlFor="auction-seller">Seller</LabelWithError>
+                      <PurchaseContactSelect
+                        collectionId={collectionId}
+                        idFieldName="sellerId"
+                        nameFieldName="sellerName"
+                        initialContactId={sellerId}
+                        initialContactName={sellerName}
+                        inputId="auction-seller"
+                        placeholder="Auction house or seller"
+                        role="seller"
+                        onSelectionChange={(id, name) => {
+                          setSellerId(id);
+                          setSellerName(name);
+                          // A different pair is a different question; a refusal of the old proposal must
+                          // not carry over to the new one.
+                          setStartNewSale(false);
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <LabelWithError htmlFor="auction-platform">Platform</LabelWithError>
+                      <PurchaseContactSelect
+                        // Remounted when a remembered platform is poured in: the picker seeds its own
+                        // state from these props once, on mount.
+                        key={platformSeed}
+                        collectionId={collectionId}
+                        idFieldName="platformId"
+                        nameFieldName="platformName"
+                        initialContactId={platformId}
+                        initialContactName={platformName}
+                        inputId="auction-platform"
+                        placeholder="Where it is listed"
+                        role="platform"
+                        onSelectionChange={(id, name) => {
+                          setPlatformId(id);
+                          setPlatformName(name);
+                          setPlatformTouched(true);
+                          setStartNewSale(false);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p style={{ ...NOTE, marginBottom: "1rem" }}>
+                    A house selling directly is both. A house listing through an aggregator is the seller;
+                    the aggregator is the platform.
+                  </p>
+
+                  {/* The proposal. Shown as soon as both parties are **named** — a seller typed in for
+                      the first time has no contact behind them yet, and the answer for them is the same
+                      one they get after being created: a new sale, in a currency stated here. */}
+                  <div
+                    style={{
+                      ...FIELD_GAP,
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "0.5rem",
+                      padding: "0.75rem",
+                      background: "var(--color-bg-page)",
                     }}
+                  >
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+                      Settlement
+                    </div>
+                    {!hasSeller || !hasPlatform ? (
+                      <p style={NOTE}>
+                        Name a seller and a platform and the parcel this lot settles into follows from
+                        them — you never have to go and find it.
+                      </p>
+                    ) : sellerId && platformId && matching && !match ? (
+                      <p style={NOTE}>Looking for an open sale…</p>
+                    ) : attachingTo ? (
+                      <>
+                        <p style={{ ...NOTE, color: "var(--color-text-primary)" }}>
+                          Adding to <strong>{attachingTo.name}</strong> — {attachingTo.lotCount} lot
+                          {attachingTo.lotCount === 1 ? "" : "s"}, {attachingTo.currency}
+                          {attachingTo.endsAt ? `, closes ${formatDay(attachingTo.endsAt)}` : ""}.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setStartNewSale(true)}
+                          style={{
+                            marginTop: "0.5rem",
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: "pointer",
+                            fontSize: "0.75rem",
+                            color: "var(--color-accent)",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          Start a new sale instead
+                        </button>
+                        <p style={NOTE}>
+                          Do that when the previous parcel has already shipped — it settles separately, so
+                          its shipping is distributed separately.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ ...NOTE, color: "var(--color-text-primary)" }}>
+                          Starting a new sale: <strong>{derivedSaleName}</strong>
+                          {sellerDefaults?.buyerPremiumPercent
+                            ? ` · ${sellerDefaults.buyerPremiumPercent}% premium`
+                            : ""}
+                          {sellerDefaults?.defaultShippingCost
+                            ? ` · ${sellerDefaults.defaultShippingCost} shipping`
+                            : ""}
+                        </p>
+                        {/* The currency is the one seeded field worth deciding **here**: every amount
+                            on this lot is entered in it, so finding it wrong afterwards means the
+                            figures were typed against the wrong sale. The rest of the terms are read
+                            off the seller and corrected on the sale itself. */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            marginTop: "0.5rem",
+                          }}
+                        >
+                          <label
+                            htmlFor="auction-new-sale-currency"
+                            style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}
+                          >
+                            Currency
+                          </label>
+                          <select
+                            id="auction-new-sale-currency"
+                            value={newSaleCurrency}
+                            onChange={(e) => {
+                              setCurrencyTouched(true);
+                              setNewSaleCurrency(e.target.value);
+                            }}
+                            style={{
+                              ...INPUT_STYLE,
+                              width: "auto",
+                              padding: "0.25rem 0.5rem",
+                              fontSize: "0.8125rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {/* Whatever was seeded stays selectable even if it is outside the offered
+                                list — a collection's base currency is the collector's own choice. */}
+                            {(COMMON_CURRENCIES as readonly string[]).includes(newSaleCurrency) ||
+                            !newSaleCurrency ? null : (
+                              <option value={newSaleCurrency}>{newSaleCurrency}</option>
+                            )}
+                            {COMMON_CURRENCIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <p style={NOTE}>
+                          The seller&apos;s own currency, then the platform&apos;s, then your
+                          collection&apos;s base — change it here if this parcel trades in another. The
+                          premium and shipping come from the seller&apos;s defaults; all of it stays
+                          editable on the sale itself, and changing the seller later never re-prices a
+                          parcel already tracked.
+                        </p>
+                        {proposal && startNewSale && (
+                          <button
+                            type="button"
+                            onClick={() => setStartNewSale(false)}
+                            style={{
+                              marginTop: "0.5rem",
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              cursor: "pointer",
+                              fontSize: "0.75rem",
+                              color: "var(--color-accent)",
+                              textDecoration: "underline",
+                            }}
+                          >
+                            Use {proposal.name} after all
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={FIELD_GAP}>
+                  <LabelWithError htmlFor="auction-sale">Sale</LabelWithError>
+                  <select
+                    id="auction-sale"
+                    value={saleId}
+                    onChange={(e) => setSaleId(e.target.value)}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    {sales.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} · {s.currency}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={NOTE}>
+                    Move the lot into another parcel when the one it landed in turned out to be the wrong
+                    one. Amounts are in the sale&apos;s currency.
+                  </p>
+                </div>
+              )}
+
+              {/* The link comes first: it is what the collector has in hand — pasted straight off the
+                  listing they are looking at — and the lot number and title are read out of it. */}
+
+
+              {/* Three groups, each one question. **When and where** the lot is, then **what** it is,
+                  then every amount together — the prices are read and typed as one pass off the
+                  listing, and scattering them made the dialog look like five unrelated groups. The
+                  first two lines share a template, so the short fields stack in one column and the
+                  long ones in the other. */}
+              <div style={GRID_TWO}>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-ends-at">Closes</LabelWithError>
+                  <input
+                    id="auction-ends-at"
+                    type="datetime-local"
+                    value={endsAt}
+                    onChange={(e) => {
+                      setEndsAtTouched(true);
+                      setEndsAt(e.target.value);
+                    }}
+                    style={INPUT_STYLE}
                   />
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <LabelWithError htmlFor="auction-platform">Platform</LabelWithError>
-                  <PurchaseContactSelect
-                    // Remounted when a remembered platform is poured in: the picker seeds its own
-                    // state from these props once, on mount.
-                    key={platformSeed}
-                    collectionId={collectionId}
-                    idFieldName="platformId"
-                    nameFieldName="platformName"
-                    initialContactId={platformId}
-                    initialContactName={platformName}
-                    inputId="auction-platform"
-                    placeholder="Where it is listed"
-                    role="platform"
-                    onSelectionChange={(id, name) => {
-                      setPlatformId(id);
-                      setPlatformName(name);
-                      setPlatformTouched(true);
-                      setStartNewSale(false);
-                    }}
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-url">Listing URL</LabelWithError>
+                  <TextInput
+                    id="auction-url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://…"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+
+              <p style={{ ...NOTE, marginBottom: "1rem" }}>
+                The closing time is in your own time zone. The watchlist is ordered by it, and it is what
+                a bid&apos;s age is measured against.
+              </p>
+
+              <div style={{ ...GRID_TWO, marginBottom: "1rem" }}>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-lot-no">Lot number</LabelWithError>
+                  <TextInput
+                    id="auction-lot-no"
+                    value={lotNo}
+                    onChange={(e) => setLotNo(e.target.value)}
+                    placeholder="385"
+                    {...NO_AUTOFILL}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-title">Title</LabelWithError>
+                  <TextInput
+                    id="auction-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    // Blank is not nameless: the lot is called after what it holds (#353), and the
+                    // placeholder shows the very string the lists will use.
+                    placeholder={lot?.derivedTitle ?? "What the listing calls it"}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+
+              {/* Every amount in one block: the auction's two, then yours — two to a row, since four
+                  side by side are too narrow in a column of the two-column dialog (#1931). */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  columnGap: "0.75rem",
+                  rowGap: "1rem",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-start">Starting price</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="auction-start"
+                    value={startingPrice}
+                    onChange={(e) => setStartingPrice(e.target.value)}
+                    placeholder="—"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-bid">Current bid</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="auction-bid"
+                    value={currentBid}
+                    onChange={(e) => setCurrentBid(e.target.value)}
+                    placeholder="—"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-my-bid">My bid</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="auction-my-bid"
+                    value={myBid}
+                    onChange={(e) => setMyBid(e.target.value)}
+                    placeholder="—"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <LabelWithError htmlFor="auction-max">Separate ceiling</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="auction-max"
+                    value={maxBid}
+                    onChange={(e) => setMaxBid(e.target.value)}
+                    placeholder="follows bid"
+                    style={INPUT_STYLE}
                   />
                 </div>
               </div>
               <p style={{ ...NOTE, marginBottom: "1rem" }}>
-                A house selling directly is both. A house listing through an aggregator is the seller;
-                the aggregator is the platform.
-              </p>
-
-              {/* The proposal. Shown as soon as both parties are **named** — a seller typed in for
-                  the first time has no contact behind them yet, and the answer for them is the same
-                  one they get after being created: a new sale, in a currency stated here. */}
-              <div
-                style={{
-                  ...FIELD_GAP,
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "0.5rem",
-                  padding: "0.75rem",
-                  background: "var(--color-bg-page)",
-                }}
-              >
-                <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-                  Settlement
-                </div>
-                {!hasSeller || !hasPlatform ? (
-                  <p style={NOTE}>
-                    Name a seller and a platform and the parcel this lot settles into follows from
-                    them — you never have to go and find it.
-                  </p>
-                ) : sellerId && platformId && matching && !match ? (
-                  <p style={NOTE}>Looking for an open sale…</p>
-                ) : attachingTo ? (
-                  <>
-                    <p style={{ ...NOTE, color: "var(--color-text-primary)" }}>
-                      Adding to <strong>{attachingTo.name}</strong> — {attachingTo.lotCount} lot
-                      {attachingTo.lotCount === 1 ? "" : "s"}, {attachingTo.currency}
-                      {attachingTo.endsAt ? `, closes ${formatDay(attachingTo.endsAt)}` : ""}.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setStartNewSale(true)}
-                      style={{
-                        marginTop: "0.5rem",
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        cursor: "pointer",
-                        fontSize: "0.75rem",
-                        color: "var(--color-accent)",
-                        textDecoration: "underline",
-                      }}
-                    >
-                      Start a new sale instead
-                    </button>
-                    <p style={NOTE}>
-                      Do that when the previous parcel has already shipped — it settles separately, so
-                      its shipping is distributed separately.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ ...NOTE, color: "var(--color-text-primary)" }}>
-                      Starting a new sale: <strong>{derivedSaleName}</strong>
-                      {sellerDefaults?.buyerPremiumPercent
-                        ? ` · ${sellerDefaults.buyerPremiumPercent}% premium`
-                        : ""}
-                      {sellerDefaults?.defaultShippingCost
-                        ? ` · ${sellerDefaults.defaultShippingCost} shipping`
-                        : ""}
-                    </p>
-                    {/* The currency is the one seeded field worth deciding **here**: every amount
-                        on this lot is entered in it, so finding it wrong afterwards means the
-                        figures were typed against the wrong sale. The rest of the terms are read
-                        off the seller and corrected on the sale itself. */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        marginTop: "0.5rem",
-                      }}
-                    >
-                      <label
-                        htmlFor="auction-new-sale-currency"
-                        style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}
-                      >
-                        Currency
-                      </label>
-                      <select
-                        id="auction-new-sale-currency"
-                        value={newSaleCurrency}
-                        onChange={(e) => {
-                          setCurrencyTouched(true);
-                          setNewSaleCurrency(e.target.value);
-                        }}
-                        style={{
-                          ...INPUT_STYLE,
-                          width: "auto",
-                          padding: "0.25rem 0.5rem",
-                          fontSize: "0.8125rem",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {/* Whatever was seeded stays selectable even if it is outside the offered
-                            list — a collection's base currency is the collector's own choice. */}
-                        {(COMMON_CURRENCIES as readonly string[]).includes(newSaleCurrency) ||
-                        !newSaleCurrency ? null : (
-                          <option value={newSaleCurrency}>{newSaleCurrency}</option>
-                        )}
-                        {COMMON_CURRENCIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <p style={NOTE}>
-                      The seller&apos;s own currency, then the platform&apos;s, then your
-                      collection&apos;s base — change it here if this parcel trades in another. The
-                      premium and shipping come from the seller&apos;s defaults; all of it stays
-                      editable on the sale itself, and changing the seller later never re-prices a
-                      parcel already tracked.
-                    </p>
-                    {proposal && startNewSale && (
-                      <button
-                        type="button"
-                        onClick={() => setStartNewSale(false)}
-                        style={{
-                          marginTop: "0.5rem",
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          cursor: "pointer",
-                          fontSize: "0.75rem",
-                          color: "var(--color-accent)",
-                          textDecoration: "underline",
-                        }}
-                      >
-                        Use {proposal.name} after all
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <div style={FIELD_GAP}>
-              <LabelWithError htmlFor="auction-sale">Sale</LabelWithError>
-              <select
-                id="auction-sale"
-                value={saleId}
-                onChange={(e) => setSaleId(e.target.value)}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {sales.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} · {s.currency}
-                  </option>
-                ))}
-              </select>
-              <p style={NOTE}>
-                Move the lot into another parcel when the one it landed in turned out to be the wrong
-                one. Amounts are in the sale&apos;s currency.
+                Amounts are in {currency || "the sale's currency"}: the current bid is what the lot
+                stands at, <em>my bid</em> is what you have placed at the platform, and the ceiling is
+                what the lot is worth to you all-in, premium included. Left empty, the ceiling follows
+                your bid; one entered here stays put when the bid changes.
               </p>
             </div>
-          )}
 
-          {/* The link comes first: it is what the collector has in hand — pasted straight off the
-              listing they are looking at — and the lot number and title are read out of it. */}
-
-
-          {/* Three lines, each one question. **When and where** the lot is, then **what** it is,
-              then every amount side by side — the prices are read and typed as one pass off the
-              listing, and splitting them across lines made the dialog look like five unrelated
-              groups. The first two lines share a template, so the short fields stack in one column
-              and the long ones in the other. */}
-          <div style={GRID_TWO}>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-ends-at">Closes</LabelWithError>
-              <input
-                id="auction-ends-at"
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => {
-                  setEndsAtTouched(true);
-                  setEndsAt(e.target.value);
-                }}
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-url">Listing URL</LabelWithError>
-              <TextInput
-                id="auction-url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://…"
-                style={INPUT_STYLE}
-              />
-            </div>
-          </div>
-
-          <p style={{ ...NOTE, marginBottom: "1rem" }}>
-            The closing time is in your own time zone. The watchlist is ordered by it, and it is what
-            a bid&apos;s age is measured against.
-          </p>
-
-          <div style={{ ...GRID_TWO, marginBottom: "1rem" }}>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-lot-no">Lot number</LabelWithError>
-              <TextInput
-                id="auction-lot-no"
-                value={lotNo}
-                onChange={(e) => setLotNo(e.target.value)}
-                placeholder="385"
-                {...NO_AUTOFILL}
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-title">Title</LabelWithError>
-              <TextInput
-                id="auction-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                // Blank is not nameless: the lot is called after what it holds (#353), and the
-                // placeholder shows the very string the lists will use.
-                placeholder={lot?.derivedTitle ?? "What the listing calls it"}
-                style={INPUT_STYLE}
-              />
-            </div>
-          </div>
-
-          {/* Every amount on one line: the auction's two, then yours. */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              columnGap: "0.75rem",
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-start">Starting price</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="auction-start"
-                value={startingPrice}
-                onChange={(e) => setStartingPrice(e.target.value)}
-                placeholder="—"
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-bid">Current bid</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="auction-bid"
-                value={currentBid}
-                onChange={(e) => setCurrentBid(e.target.value)}
-                placeholder="—"
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-my-bid">My bid</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="auction-my-bid"
-                value={myBid}
-                onChange={(e) => setMyBid(e.target.value)}
-                placeholder="—"
-                style={INPUT_STYLE}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-max">Separate ceiling</LabelWithError>
-              <NumericInput
-                kind="amount"
-                id="auction-max"
-                value={maxBid}
-                onChange={(e) => setMaxBid(e.target.value)}
-                placeholder="follows bid"
-                style={INPUT_STYLE}
-              />
-            </div>
-          </div>
-          <p style={{ ...NOTE, marginBottom: "1rem" }}>
-            Amounts are in {currency || "the sale's currency"}: the current bid is what the lot
-            stands at, <em>my bid</em> is what you have placed at the platform, and the ceiling is
-            what the lot is worth to you all-in, premium included. Left empty, the ceiling follows
-            your bid; one entered here stays put when the bid changes.
-          </p>
-
-          {composing && (
-            <div style={FIELD_GAP}>
-              <LabelWithError>Contents</LabelWithError>
-              <AuctionDuplicateWarning lines={composedLines} atRisk={atRisk} />
-              {lines.length > 0 && (
-                <div
-                  style={{
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "0.5rem",
-                    overflow: "clip",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  {lines.map((entry, idx) => (
+            <div>
+              {composing && (
+                <div style={FIELD_GAP}>
+                  <LabelWithError>Contents</LabelWithError>
+                  <AuctionDuplicateWarning lines={composedLines} atRisk={atRisk} />
+                  {lines.length > 0 && (
                     <div
-                      key={entry.key}
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        padding: "0.5rem 0.75rem",
-                        borderBottom:
-                          idx === lines.length - 1 ? undefined : "1px solid var(--color-border)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "0.5rem",
+                        overflow: "clip",
+                        marginBottom: "0.5rem",
                       }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      {lines.map((entry, idx) => (
                         <div
+                          key={entry.key}
                           style={{
                             display: "flex",
-                            flexWrap: "wrap",
                             alignItems: "center",
-                            gap: "0.3rem",
+                            gap: "0.5rem",
+                            padding: "0.5rem 0.75rem",
+                            borderBottom:
+                              idx === lines.length - 1 ? undefined : "1px solid var(--color-border)",
                           }}
                         >
-                          {entry.summary.catalogLabels.map((label) => (
-                            <CatalogNumberChip
-                              key={label}
-                              label={label}
-                              style={STAMP_SECONDARY_CHIP}
-                            />
-                          ))}
-                          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
-                            {entry.summary.label}
-                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                gap: "0.3rem",
+                              }}
+                            >
+                              {entry.summary.catalogLabels.map((label) => (
+                                <CatalogNumberChip
+                                  key={label}
+                                  label={label}
+                                  style={STAMP_SECONDARY_CHIP}
+                                />
+                              ))}
+                              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+                                {entry.summary.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                              {[
+                                entry.raw.conditionId
+                                  ? nameById(conditions, entry.raw.conditionId)
+                                  : lineConditionLabel(
+                                      {
+                                        conditionId: null,
+                                        possibleConditionIds: entry.raw.possibleConditionIds ?? [],
+                                      },
+                                      conditions
+                                    ).long,
+                                entry.raw.certificateStatusId
+                                  ? nameById(certificateStatuses, entry.raw.certificateStatusId)
+                                  : null,
+                                entry.raw.formatId ? nameById(formats, entry.raw.formatId) : null,
+                                Number(entry.raw.quantity || "1") > 1 ? `×${entry.raw.quantity}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Remove this line"
+                            onClick={() => setLines(lines.filter((l) => l.key !== entry.key))}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "var(--color-text-muted)",
+                              fontSize: "0.875rem",
+                              lineHeight: 1,
+                            }}
+                          >
+                            <Icon name="close" size="sm" />
+                          </button>
                         </div>
-                        <div style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                          {[
-                            entry.raw.conditionId
-                              ? nameById(conditions, entry.raw.conditionId)
-                              : lineConditionLabel(
-                                  {
-                                    conditionId: null,
-                                    possibleConditionIds: entry.raw.possibleConditionIds ?? [],
-                                  },
-                                  conditions
-                                ).long,
-                            entry.raw.certificateStatusId
-                              ? nameById(certificateStatuses, entry.raw.certificateStatusId)
-                              : null,
-                            entry.raw.formatId ? nameById(formats, entry.raw.formatId) : null,
-                            Number(entry.raw.quantity || "1") > 1 ? `×${entry.raw.quantity}` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        aria-label="Remove this line"
-                        onClick={() => setLines(lines.filter((l) => l.key !== entry.key))}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "var(--color-text-muted)",
-                          fontSize: "0.875rem",
-                          lineHeight: 1,
-                        }}
-                      >
-                        <Icon name="close" size="sm" />
-                      </button>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setAddingLine(true)}
+                    style={{
+                      padding: "0.375rem 0.75rem",
+                      border: "1px dashed var(--color-border-strong)",
+                      borderRadius: "0.375rem",
+                      background: "none",
+                      cursor: "pointer",
+                      fontSize: "0.8125rem",
+                      fontWeight: 500,
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    + Add line
+                  </button>
+                  <p style={NOTE}>
+                    What the lot holds, saved together with it. Optional — a lot can always be described
+                    later from the sale&apos;s screen. Its catalogue value follows from these lines —
+                    and so does its name, when you leave the title blank.
+                  </p>
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => setAddingLine(true)}
-                style={{
-                  padding: "0.375rem 0.75rem",
-                  border: "1px dashed var(--color-border-strong)",
-                  borderRadius: "0.375rem",
-                  background: "none",
-                  cursor: "pointer",
-                  fontSize: "0.8125rem",
-                  fontWeight: 500,
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                + Add line
-              </button>
-              <p style={NOTE}>
-                What the lot holds, saved together with it. Optional — a lot can always be described
-                later from the sale&apos;s screen. Its catalogue value follows from these lines —
-                and so does its name, when you leave the title blank.
-              </p>
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="auction-lot-tags">Tags</LabelWithError>
+                <TagEntryField
+                  collectionId={collectionId}
+                  name={null}
+                  inputId="auction-lot-tags"
+                  initialTags={initialTags}
+                  disabled={isPending}
+                  onChange={setTags}
+                />
+              </div>
+
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="auction-notes">Notes</LabelWithError>
+                <TextArea
+                  id="auction-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Condition doubts, what to check before bidding…"
+                  style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
+                />
+              </div>
             </div>
-          )}
-
-          <div style={FIELD_GAP}>
-            <LabelWithError htmlFor="auction-lot-tags">Tags</LabelWithError>
-            <TagEntryField
-              collectionId={collectionId}
-              name={null}
-              inputId="auction-lot-tags"
-              initialTags={initialTags}
-              disabled={isPending}
-              onChange={setTags}
-            />
-          </div>
-
-          <div style={FIELD_GAP}>
-            <LabelWithError htmlFor="auction-notes">Notes</LabelWithError>
-            <TextArea
-              id="auction-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Condition doubts, what to check before bidding…"
-              style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
-            />
-          </div>
+          </DialogFormColumns>
         </DialogBody>
 
         <DialogActions

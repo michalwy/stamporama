@@ -61,6 +61,21 @@ export const DIALOG_MAX_WIDTH = "calc(100vw - 4rem)";
  */
 export const PICKER_DIALOG_HEIGHT = "min(100vh - 4rem, 70rem)";
 
+// ── Form columns ────────────────────────────────────────────────────────────
+
+/**
+ * The width of **a form dialog laid out in columns** (#1931) — `DialogFormColumns` inside a panel
+ * this wide.
+ *
+ * A form dialog that would not fit a 1080-pixel-tall window in one column is widened to this and its
+ * sections set side by side, related ones together, rather than left as a narrow list the collector
+ * scrolls through with most of the window empty beside it. A short form stays a single column at the
+ * shell's default width. 64rem is the area dialog's figure (#1747), the first form to be laid out
+ * this way: two columns of about 30rem each, so a field in either is as wide as a single-column form
+ * gives it — width goes to a second column, never to longer inputs (#1465).
+ */
+export const FORM_DIALOG_COLUMNS_WIDTH = "64rem";
+
 // ── Shell ────────────────────────────────────────────────────────────────────
 
 /**
@@ -280,6 +295,34 @@ export function DialogBody({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/**
+ * A form's sections side by side (#1931): each child is one column, two of equal width with a 2rem
+ * gutter, and a child that should span both (an intro line, a table that needs the width) spreads
+ * `DIALOG_FORM_SPAN_COLUMNS`. Goes inside `DialogBody`, in a panel `FORM_DIALOG_COLUMNS_WIDTH` wide.
+ *
+ * The columns are `minmax(0, 1fr)` so a long word or a wide control in one cannot push the other
+ * narrower, and they start at the top: a short column ends early rather than stretching its last
+ * section down to the other's height. A section stays whole within its column — it is grouping a
+ * dialog decides, so the form reads as two groups of related things rather than one list cut in half.
+ */
+export function DialogFormColumns({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+        columnGap: "2rem",
+        alignItems: "start",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** A child of `DialogFormColumns` that spans both columns. */
+export const DIALOG_FORM_SPAN_COLUMNS: React.CSSProperties = { gridColumn: "1 / -1" };
 
 /**
  * The dialog's footer: its buttons, and — above them — why the last action failed (#1293).
