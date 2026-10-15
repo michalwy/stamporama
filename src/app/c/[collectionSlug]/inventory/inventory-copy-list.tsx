@@ -82,6 +82,9 @@ export interface CopyRowActions {
    * hand, *Mark as held again* on one already disposed of. */
   onDispose?: (item: ItemListItem) => void;
   onRestore?: (item: ItemListItem) => void;
+  /** When provided, each held copy gains *Replaces…* and *Replaced by…* (#1936): recording that a
+   * new copy replaces an old one. `side` is the side this row's copy takes. */
+  onRecordReplacement?: (item: ItemListItem, side: "new" | "old") => void;
   /** The platform the list is working through (#506), and the writer behind each row's one-click
    * *Never list on X*. Absent on every surface that is not the Copies list — the decision belongs
    * to the worklist it exists for. */
@@ -276,6 +279,7 @@ export function InventoryCopyList({
   purchaseHref,
   onDispose,
   onRestore,
+  onRecordReplacement,
   exclusionPlatform,
   onSetPlatformExclusion,
   onSetCatalogPrice,
@@ -321,6 +325,7 @@ export function InventoryCopyList({
             purchaseHref={purchaseHref}
             onDispose={onDispose}
             onRestore={onRestore}
+            onRecordReplacement={onRecordReplacement}
             exclusionPlatform={exclusionPlatform}
             onSetPlatformExclusion={onSetPlatformExclusion}
             onSetCatalogPrice={onSetCatalogPrice ? () => onSetCatalogPrice(item) : undefined}

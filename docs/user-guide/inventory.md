@@ -537,6 +537,64 @@ number is never handed to another copy. What changes is that the copy:
 The **Edit copy** dialog shows the disposal beside the delivery state rather than instead of it:
 the two are independent, and both stay readable.
 
+## Replacing a copy with a better one
+
+When a better copy of a stamp comes in, the one it replaces usually goes to the sale stock. Record
+that once as a **replacement** — *this new copy replaces that old one* — and settle it later, on a
+round through your storage, from **Inventory → Replacements**.
+
+### Recording a replacement
+
+Open a copy's **⋮** menu on the Copies list and choose:
+
+- **Replaces…** on the new copy, to pick the copy it takes the place of, or
+- **Replaced by…** on the old copy, to pick the copy that takes its place.
+
+The choice is among your other copies of the same stamp that you still hold, the ones in the
+collection first, each with its picture, condition and where it lies. Recording moves nothing: the
+new copy stays where you filed it, and the old one stays where it is until you settle the pair.
+
+A copy can be replaced by only one copy at a time, and can replace only one at a time — a copy
+already in an open replacement on that side is listed but cannot be chosen, and says which pair it
+is in. The entries are not offered on a copy you no longer hold, have sold or traded away, or on a
+piece carrying several stamps.
+
+### Settling replacements
+
+**Inventory → Replacements** lists the open replacements, each with both copies' pictures side by
+side. The old copy is on the left with **where it lies** — its location and ref — and the list is in
+that order, so it is the round to take them out in.
+
+1. Choose the **current card** at the top: the sale location and its ref. The ref is offered as
+   *Store* offers it — the card that location is up to — and **Next card** starts the next blank
+   one. The figures under it say how many copies are on that card now, how many the ticked pairs
+   add, and how many it will hold after.
+2. Take the old copy out, put it on the card, and press **Done** on its row — or tick several and
+   press **Done** above the list.
+3. When the physical card is full, press **Next card**. There is no fixed number per card; you
+   decide when it is full.
+
+**Done** puts the old copy on the current card, takes it out of the collection and marks it **For
+sale**. Nothing else about it changes — condition, photos and number stay — and the new copy is
+not touched. The current card is not remembered when you leave the screen; choose it again on your
+next round.
+
+A replacement can be withdrawn with **Cancel replacement** in its row's **⋮**; neither copy
+changes.
+
+### When a replacement closes on its own
+
+If either copy is sold, traded away, marked as no longer held, or deleted before you press
+**Done**, there is nothing left to swap, and the replacement closes by itself. It moves to
+**Recently closed** at the bottom of the screen, saying why — *Closed — #00123 was sold*.
+
+### A copy's replacement history
+
+A copy's own page shows a **Replacements** card listing every replacement it is in — *Replaces
+#00045* or *Replaced by #00123* — and how each stands: open (with a link to the Replacements
+screen), done, cancelled, or closed and why. It stays there after the replacement is settled, so
+both copies keep the record.
+
 ## Copies you never list on a platform
 
 Some copies you keep for sale but never intend to list on one particular

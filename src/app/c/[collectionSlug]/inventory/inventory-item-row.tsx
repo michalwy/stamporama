@@ -583,6 +583,8 @@ interface InventoryItemRowProps {
    * axis — the row is always in exactly one of the two states. */
   onDispose?: (item: ItemListItem) => void;
   onRestore?: (item: ItemListItem) => void;
+  /** When provided, adds *Replaces…* and *Replaced by…* (#1936) on a held copy of one stamp. */
+  onRecordReplacement?: (item: ItemListItem, side: "new" | "old") => void;
   /** The platform the list is currently working through (#506) — the one named by the *Not offered
    * on X* / *Excluded from X* filter. It is what makes a one-click row entry possible at all: a
    * decision is always about one platform, and with none in scope the copy form is where the whole
@@ -626,6 +628,7 @@ export function InventoryItemRow({
   purchaseHref,
   onDispose,
   onRestore,
+  onRecordReplacement,
   exclusionPlatform,
   onSetPlatformExclusion,
 }: InventoryItemRowProps) {
@@ -780,6 +783,27 @@ export function InventoryItemRow({
           icon: "restore",
           onSelect: () => onRestore(item),
         } as RowAction]
+      : []),
+    // Replacement pairs (#1936): a new copy replacing an old one, settled later on Replacements.
+    // Only on a copy still held, and of one stamp — a pair is between copies of the same stamp, and
+    // a carrier of several is a copy of none of them (ADR-0044 §3).
+    ...(onRecordReplacement && !disposed && !item.sold && !item.tradedAway && !item.multiStamp
+      ? [
+          {
+            key: "replaces",
+            label: "Replaces…",
+            icon: "replace",
+            hint: "Record the copy this one takes the place of.",
+            onSelect: () => onRecordReplacement(item, "new"),
+          } as RowAction,
+          {
+            key: "replaced-by",
+            label: "Replaced by…",
+            icon: "replace",
+            hint: "Record the copy that takes this one's place.",
+            onSelect: () => onRecordReplacement(item, "old"),
+          } as RowAction,
+        ]
       : []),
     // Kept off a platform for good (#506) — the one-click answer to the worklist's own question,
     // so it is only offered while a platform is in scope, and it toggles: the row is either set
