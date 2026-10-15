@@ -68,18 +68,46 @@ describe("readingOrder", () => {
     assert.deepEqual(readingOrder(boxes), [0, 1, 2]);
   });
 
-  it("takes the row tolerance from the median height, not the maximum", () => {
-    // A block of four (400 tall) beside small definitives (100 tall), in two rows 150 apart. Half
-    // the *tallest* box is 200, which would swallow both rows of definitives into one and reorder
-    // the whole card; half the *median* is 50, which does not.
+  it("numbers a tall stamp in its place in the strip, not before it (#1925)", () => {
+    // A stockbook strip: pieces sit level at the bottom (y + h = 300), and the tall one's top
+    // reaches 120 px above its neighbours'. Grouped by top edge it came out as a row of its own.
     const boxes = [
-      box(600, 10, 300, 400), // 0 — the block, row 0
-      box(10, 10, 80, 100), // 1 — row 0
-      box(120, 10, 80, 100), // 2 — row 0
-      box(10, 160, 80, 100), // 3 — row 1
-      box(120, 160, 80, 100), // 4 — row 1
+      box(10, 200, 80, 100), // 0 — strip 1
+      box(120, 80, 90, 220), // 1 — strip 1, the tall one
+      box(240, 200, 80, 100), // 2 — strip 1
+      box(10, 400, 80, 100), // 3 — strip 2
+      box(120, 400, 80, 100), // 4 — strip 2
     ];
-    assert.deepEqual(readingOrder(boxes), [1, 2, 0, 3, 4]);
+    assert.deepEqual(readingOrder(boxes), [0, 1, 2, 3, 4]);
+  });
+
+  it("keeps two strips of short stamps two rows, even laid a little crooked", () => {
+    // The strips touch, and the second strip's first piece rides up 35 px into the first strip's
+    // band: less than half a stamp's height, so it is still the second strip's.
+    const boxes = [
+      box(120, 10, 80, 100), // 0 — strip 1
+      box(10, 75, 80, 100), // 1 — strip 2
+      box(10, 10, 80, 100), // 2 — strip 1
+      box(120, 110, 80, 100), // 3 — strip 2
+    ];
+    assert.deepEqual(readingOrder(boxes), [2, 0, 1, 3]);
+  });
+
+  it("puts a block across two strips in the one holding most of it, ties to the upper", () => {
+    // A block of four (400 tall) beside small definitives (100 tall) in two strips 150 apart. It
+    // covers both strips whole, so the tie goes up.
+    const tie = [
+      box(600, 10, 300, 400), // 0 — the block
+      box(10, 10, 80, 100), // 1 — strip 1
+      box(120, 10, 80, 100), // 2 — strip 1
+      box(10, 160, 80, 100), // 3 — strip 2
+      box(120, 160, 80, 100), // 4 — strip 2
+    ];
+    assert.deepEqual(readingOrder(tie), [1, 2, 0, 3, 4]);
+
+    // Lowered by 40 px it holds 60 px of the first strip and all 100 of the second.
+    const lower = [box(600, 50, 300, 400), ...tie.slice(1)];
+    assert.deepEqual(readingOrder(lower), [1, 2, 3, 4, 0]);
   });
 
   it("is stable when two boxes share a top edge", () => {

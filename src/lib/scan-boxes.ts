@@ -95,12 +95,21 @@ export function boxContains(outer: Box, inner: Box): boolean {
 // ── Reading order ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Reading order: rows grouped by top edge within a tolerance, each row left to right.
+ * Reading order: the strips of the card top to bottom, each strip left to right (#1925).
  *
- * The tolerance comes from the **median** box height, not the maximum. A card can carry a block of
- * four beside small definitives, and half the tallest box there is deep enough to swallow two rows
- * of the small ones into one — which reorders a whole card silently. The median is the height of a
- * typical piece on the card, which is what a "row" is actually spaced by.
+ * A row is a **band of the card**, and a box belongs to the band it shares — it overlaps the band
+ * vertically by at least half the shorter of the two — not to the one whose top edge happens to be
+ * close. Stamps in a stockbook strip sit level at the bottom, so a tall one's top reaches well
+ * above its neighbours'; grouped by top edge it came out as a row of its own, numbered before the
+ * whole strip it stands in, and the numbers stopped following the card.
+ *
+ * Bands are founded by the **shortest** boxes first. A short stamp says plainly where a strip is;
+ * a tall stamp or a block is then placed in the band it shares, and when it reaches into two it
+ * goes to the one holding most of it, ties to the upper. Two strips of short stamps share less
+ * than half a stamp's height and stay two rows.
+ *
+ * A band is measured by its **founding** box, never by everything it has gathered: a row of gently
+ * descending stamps would otherwise grow a whole row's height and absorb the next one.
  *
  * Returns the indices of `boxes` in reading order, so a caller can carry whatever it has hanging
  * off each box along with it.
@@ -108,40 +117,51 @@ export function boxContains(outer: Box, inner: Box): boolean {
 export function readingOrder(boxes: readonly Box[]): number[] {
   if (boxes.length === 0) return [];
 
-  const tolerance = ROW_TOLERANCE_FACTOR * medianOf(boxes.map((b) => b.h));
-
-  // Ties on `y` resolve by `x`, then by index: two boxes with the same top edge must not come out
-  // in an order that depends on how the array happened to be built.
-  const byTop = boxes
+  // Every tie resolves by position, then by index: two boxes alike in everything that is compared
+  // must not come out in an order that depends on how the array happened to be built.
+  const shortestFirst = boxes
     .map((b, i) => ({ b, i }))
-    .sort((p, q) => p.b.y - q.b.y || p.b.x - q.b.x || p.i - q.i);
+    .sort((p, q) => p.b.h - q.b.h || p.b.y - q.b.y || p.b.x - q.b.x || p.i - q.i);
 
-  const rows: { b: Box; i: number }[][] = [];
-  let anchorY = Number.NEGATIVE_INFINITY;
-  for (const entry of byTop) {
-    // Compared against the row's **first** box rather than its running mean: a row of gently
-    // descending tops would otherwise drift a whole row's height and absorb the next row.
-    if (rows.length === 0 || entry.b.y - anchorY > tolerance) {
-      rows.push([entry]);
-      anchorY = entry.b.y;
-    } else {
-      rows[rows.length - 1].push(entry);
+  const bands: { founder: Box; members: { b: Box; i: number }[] }[] = [];
+  for (const entry of shortestFirst) {
+    let home: (typeof bands)[number] | null = null;
+    let homeOverlap = 0;
+    for (const band of bands) {
+      const overlap = verticalOverlap(entry.b, band.founder);
+      if (overlap < SHARED_BAND_FACTOR * Math.min(entry.b.h, band.founder.h)) continue;
+      // Most of it wins; on a tie the upper band.
+      if (
+        home === null ||
+        overlap > homeOverlap ||
+        (overlap === homeOverlap && band.founder.y < home.founder.y)
+      ) {
+        home = band;
+        homeOverlap = overlap;
+      }
     }
+    if (home) home.members.push(entry);
+    else bands.push({ founder: entry.b, members: [entry] });
   }
 
-  return rows.flatMap((row) =>
-    row.sort((p, q) => p.b.x - q.b.x || p.i - q.i).map((e) => e.i)
-  );
+  return bands
+    .sort(
+      (p, q) =>
+        p.founder.y - q.founder.y ||
+        p.founder.y + p.founder.h - (q.founder.y + q.founder.h) ||
+        p.founder.x - q.founder.x
+    )
+    .flatMap((band) =>
+      band.members.sort((p, q) => p.b.x - q.b.x || p.b.y - q.b.y || p.i - q.i).map((e) => e.i)
+    );
 }
 
-/** Half a typical piece's height. Wide enough that a row laid slightly crooked stays one row,
- * narrow enough that two rows of definitives do not merge. */
-const ROW_TOLERANCE_FACTOR = 0.5;
+/** Half the shorter piece's height. Wide enough that a row laid slightly crooked stays one row,
+ * narrow enough that two strips of definitives do not merge. */
+const SHARED_BAND_FACTOR = 0.5;
 
-function medianOf(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+function verticalOverlap(a: Box, b: Box): number {
+  return Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
 }
 
 // ── The two edits that change the count ───────────────────────────────────────────────────────
