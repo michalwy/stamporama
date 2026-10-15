@@ -16,7 +16,7 @@ import {
   type CopySelection,
 } from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
-import type { InventoryItemFilters } from "./use-inventory-query";
+import { withHeldScope, type InventoryItemFilters } from "./use-inventory-query";
 
 /** The in-location ref, in the monospace the copy rows already show it in — it is an identifier
  * read off a shelf, not a name. */
@@ -188,10 +188,15 @@ export function locationGroupMemberFilters(
   by: LocationGroupBy,
   baseFilters: InventoryItemFilters
 ): InventoryItemFilters {
-  return {
-    ...baseFilters,
-    locationId: group.locationId ?? NO_LOCATION,
-    locationExact: true,
-    ...(by === "ref" ? { locationRef: group.locationRef ?? NO_LOCATION_REF } : {}),
-  };
+  // *Held* (#1932) counts a stamp's stack over the list's copies: one held here and once in
+  // another location is held twice, and is kept by *More than once* in both groups.
+  return withHeldScope(
+    {
+      ...baseFilters,
+      locationId: group.locationId ?? NO_LOCATION,
+      locationExact: true,
+      ...(by === "ref" ? { locationRef: group.locationRef ?? NO_LOCATION_REF } : {}),
+    },
+    baseFilters
+  );
 }

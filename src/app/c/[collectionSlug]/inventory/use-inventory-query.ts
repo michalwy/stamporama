@@ -28,6 +28,7 @@ import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 import { appendFaultFilterParams, type FaultFilterOpts } from "@/lib/fault-filter";
 import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
 import type { CompletenessFilter } from "@/lib/completeness-filter";
+import { heldSplitParam, type HeldFilter } from "@/lib/held-filter";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -125,6 +126,14 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   multiStamp?: MultiStampFilter;
   /** The issue's completeness (#1884): `any`, `one` or `incomplete`; absent is *All*. */
   complete?: CompletenessFilter;
+  /** How many times a stamp is held (#1932): `once` or `several`; absent is *Any*. */
+  held?: HeldFilter;
+  /** The *Split by …* switches {@link held} counts a stack under — set only while the list is
+   *  grouped by duplicates, the one grouping they apply to. */
+  heldAxes?: CopyGroupAxes;
+  /** A group's member read: the list's own filters, which {@link held} counts its stacks over in
+   *  place of the narrower set the read pins — see {@link withHeldScope}. */
+  heldWithin?: InventoryItemFilters;
   /** The copies that might be this stamp — candidates across variant trees (#1651). */
   possibleStampId?: string;
   /** The copies with a candidate in this issue, across variant trees (#1651). */
@@ -169,6 +178,9 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   multiStamp?: MultiStampFilter;
   /** The *Complete* filter (#1884). */
   complete?: CompletenessFilter;
+  /** The *Held* filter (#1932), and the switches it counts under. */
+  held?: HeldFilter;
+  heldAxes?: CopyGroupAxes;
 }
 
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
@@ -249,9 +261,37 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.includeDisposed) params.set("includeDisposed", "true");
   if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
   if (filters.complete) params.set("complete", filters.complete);
+  appendHeldFilterParams(params, filters);
   appendTagFilterParams(params, filters);
   appendFaultFilterParams(params, filters);
   return params;
+}
+
+/** The *Held* filter's half of a query string (#1932) — nothing while it is off, so its switches
+ *  never re-key a query that does not read them. */
+function appendHeldFilterParams(
+  params: URLSearchParams,
+  filters: Pick<InventoryItemFilters, "held" | "heldAxes" | "heldWithin">
+) {
+  if (!filters.held) return;
+  params.set("held", filters.held);
+  const split = filters.heldAxes ? heldSplitParam(filters.heldAxes) : "";
+  if (split) params.set("heldSplit", split);
+  if (filters.heldWithin) params.set("heldWithin", itemFilterParams(filters.heldWithin).toString());
+}
+
+/**
+ * A group's member filters, made to keep what the list kept (#1932): the *Held* filter counts a
+ * stamp's stack over the copies the **list** shows, and a member read is narrower — one stamp, one
+ * issue, one location — so a stamp held once here and once elsewhere would be judged held once.
+ * Carrying the list's own filters lets the server count over those instead. Nothing while the
+ * filter is off.
+ */
+export function withHeldScope(
+  members: InventoryItemFilters,
+  list: InventoryItemFilters
+): InventoryItemFilters {
+  return list.held ? { ...members, heldWithin: list } : members;
 }
 
 /** How many copies the current filter holds (#845) — the whole set, which the infinite list itself
@@ -453,6 +493,8 @@ export function useHoldingsValuation(
       faultIds: filters.faultIds,
       multiStamp: filters.multiStamp,
       complete: filters.complete,
+      held: filters.held,
+      heldAxes: filters.held ? filters.heldAxes : undefined,
     }] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -488,6 +530,7 @@ export function useHoldingsValuation(
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       if (filters.complete) params.set("complete", filters.complete);
+      appendHeldFilterParams(params, filters);
       appendTagFilterParams(params, filters);
       appendFaultFilterParams(params, filters);
       const res = await fetch(
@@ -543,6 +586,7 @@ export function useItemYears(
       if (filters.includeDisposed) params.set("includeDisposed", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       if (filters.complete) params.set("complete", filters.complete);
+      appendHeldFilterParams(params, filters);
       appendTagFilterParams(params, filters);
       appendFaultFilterParams(params, filters);
       const res = await fetch(

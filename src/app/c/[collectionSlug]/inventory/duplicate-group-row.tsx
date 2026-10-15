@@ -33,7 +33,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import { CopyValue } from "./inventory-item-row";
-import type { InventoryItemFilters } from "./use-inventory-query";
+import { withHeldScope, type InventoryItemFilters } from "./use-inventory-query";
 
 /** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
 const CHIP = ROW_CHIP;
@@ -435,7 +435,9 @@ export function groupMemberFilters(
   axes: CopyGroupAxes,
   baseFilters: InventoryItemFilters
 ): InventoryItemFilters {
-  return {
+  // *Held* (#1932) counts the stack over the list's copies, as the `×N` it agrees with was counted:
+  // the pinned stamp leaves out a copy whose candidates span trees, which the stack still holds.
+  return withHeldScope({
     ...baseFilters,
     stampId: group.stampId,
     // A duplicate group never holds a carrier (#748): the count left the multi-stamp copies out, so
@@ -454,5 +456,5 @@ export function groupMemberFilters(
     ...(axes.certificate
       ? { certificateStatusIds: [group.certificateStatusId ?? "none"] }
       : {}),
-  };
+  }, baseFilters);
 }

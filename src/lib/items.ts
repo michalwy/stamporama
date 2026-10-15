@@ -138,6 +138,7 @@ import {
 } from "./checklist-completeness-rules";
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 import { issueMatchesCompleteness, type CompletenessFilter } from "./completeness-filter";
+import { heldStackKeys, inHeldStack, type HeldFilter } from "./held-filter";
 import { buildLocationPath } from "./location-path";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
@@ -1256,6 +1257,21 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   /** Whether specialised checklists count toward {@link complete} (#1617) — the screens' switch,
    *  which the route reads and the domain never does. Read by nothing else. */
   completeIncludesSpecialised?: boolean;
+  /** How many times a copy's stamp is held (#1932): `once` keeps the copies of the stacks of one,
+   *  `several` those of two or more. Absent is *Any*. A stack is what duplicate grouping counts —
+   *  `copyGroupKey` under {@link heldAxes}, carriers of several stamps in none — over the copies
+   *  **every other filter** lets through, so it agrees with the `×N` on screen. See
+   *  `held-filter.ts` and {@link withHeldFilter}. */
+  held?: HeldFilter;
+  /** The *Split by …* switches {@link held} counts a stack under — sent only while the list is
+   *  grouped by duplicates, the one grouping they apply to. Absent is one stack per stamp. */
+  heldAxes?: CopyGroupAxes;
+  /** Where a read is narrower than the list it belongs to, **the list's own filters**, which
+   *  {@link held} counts its stacks over instead of this read's. A group's member read pins one
+   *  stamp, issue or location, and a stamp held once there and once elsewhere is still held twice;
+   *  the holdings total reads the disposed copies too, which the stacks on screen do not count.
+   *  Read by nothing else. */
+  heldScope?: ItemListFiltersPaginated;
   /** The copies whose **variant is to settle** (#1651): `true` those with a candidate set or on an
    *  unknown-variant umbrella, `false` the rest. Absent is both. See `candidate-set-predicates.ts`. */
   variantToSettle?: boolean;
@@ -1609,12 +1625,16 @@ function valuationInBand(
 }
 
 /** Wrap a base `where` with every filter that is **derived** rather than a column — the catalog
- * valuation (#229, #711), then the issue's completeness (#1884). Returns the base `where` untouched
- * when none is set. Kept as one helper, and called by every read, so the list, its counts, the
- * holdings total, the facets and the groups narrow identically.
+ * valuation (#229, #711), then how many times a stamp is held (#1932), then the issue's
+ * completeness (#1884). Returns the base `where` untouched when none is set. Kept as one helper,
+ * and called by every read, so the list, its counts, the holdings total, the facets and the groups
+ * narrow identically.
  *
  * Completeness comes **last** because it is judged over the copies every other filter lets
- * through, the valuation band included — exactly the set the issue group header counts. */
+ * through, the valuation band included — exactly the set the issue group header counts. *Held*
+ * comes before it, so *Complete* and *More than once* together are the series held whole in
+ * duplicate; and since a copy belongs to its stamp's issue, completeness keeps or drops a stack
+ * whole and never changes the count *Held* judged. */
 async function withDerivedFilters(
   collectionId: string,
   filters: ItemListFiltersPaginated,
@@ -1625,8 +1645,59 @@ async function withDerivedFilters(
   return withCompletenessFilter(
     collectionId,
     filters,
-    await withValuationFilter(collectionId, filters, baseWhere)
+    await withHeldFilter(
+      collectionId,
+      filters,
+      await withValuationFilter(collectionId, filters, baseWhere)
+    )
   );
+}
+
+/**
+ * The *Held* filter's narrowing (#1932): of the copies `where` already lets through, those in a
+ * stack of one (`once`) or of several (`several`). Returns `where` untouched when the filter is off.
+ *
+ * A stack is **what duplicate grouping counts**: the copies `where` lets through less the carriers
+ * of several stamps (#748), keyed by `copyGroupKey` under the *Split by …* switches the list is
+ * grouped with — so it keeps exactly the rows whose `×N` says so, and a carrier, in no stack, is
+ * kept by neither value. Two adjustments keep that true where a read is not the list itself:
+ * `heldScope` counts over the list's own filters when this read is narrower (a filing group's
+ * members, the holdings total), and with the *Complete* filter on — which leaves out the copies
+ * whose candidates span variant trees, filed under their first candidate's stack — the stacks are
+ * counted without them too, or a stack would be judged at a size it is not shown at.
+ */
+async function withHeldFilter(
+  collectionId: string,
+  filters: ItemListFiltersPaginated,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  where: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  const filter = filters.held;
+  if (!filter) return where;
+  const axes = filters.heldAxes ?? DEFAULT_GROUP_AXES;
+  const scope = filters.heldScope;
+  const stackSelect = { id: true, stampId: true, conditionId: true, formatId: true, certificateStatusId: true };
+
+  const countedWhere = scope
+    ? await withValuationFilter(
+        collectionId,
+        scope,
+        buildItemWhere(collectionId, scope, await resolveLocationScope(collectionId, scope))
+      )
+    : where;
+  const counted = await prisma.item.findMany({
+    where: {
+      AND: [countedWhere, NOT_MULTI_STAMP, ...((scope ?? filters).complete ? [NOT_ACROSS_TREES] : [])],
+    },
+    select: stackSelect,
+  });
+  const kept = heldStackKeys(counted, axes, filter);
+  const rows = scope
+    ? await prisma.item.findMany({ where: { AND: [where, NOT_MULTI_STAMP] }, select: stackSelect })
+    : counted;
+  const ids = rows.flatMap((row) => (inHeldStack(row, axes, kept) ? [row.id] : []));
+  return { AND: [where, { id: { in: ids } }] };
 }
 
 /** Wrap a base `where` so it also matches only copies whose **derived** catalog valuation answers
@@ -3162,7 +3233,10 @@ export async function listIssueGroupCompleteness(
   // **from** them, so counting under it would let it narrow its own evidence — a checklist stamp
   // whose copies sit under another issue's group would drop out, and the chip would contradict the
   // filter that kept it.
-  const counted = { ...filters };
+  //
+  // *Held* (#1932) still narrows them, its stacks counted over the list as it stands, *Complete*
+  // included — which leaves the copies whose candidates span trees out of them.
+  const counted = { ...filters, heldScope: filters.heldScope ?? filters };
   delete counted.complete;
   delete counted.completeIncludesSpecialised;
   const locationIds = await resolveLocationScope(collectionId, counted);
@@ -4263,9 +4337,16 @@ export async function getHoldingsValuation(
   // case it exists for. The bar still sums one scope — it just partitions it into held and gone,
   // which is what the write-off line makes legible. Everything else, `excludeGone` included, is
   // taken as the list left it: a realised sale is not a write-off (#168 is where it belongs).
+  //
+  // *Held* (#1932) counts its stacks over the list's own scope even so: a disposed copy is not one
+  // the `×N` on screen counts, and is kept or not with the stack of its stamp.
   const where = await withDerivedFilters(
     collectionId,
-    { ...filters, includeDisposed: true },
+    {
+      ...filters,
+      includeDisposed: true,
+      heldScope: filters.heldScope ?? filters,
+    },
     buildItemWhere(collectionId, { ...filters, includeDisposed: true }, locationIds)
   );
   const rows = await prisma.item.findMany({
