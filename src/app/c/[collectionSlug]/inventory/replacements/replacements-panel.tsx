@@ -27,8 +27,11 @@ import {
   useCollectionLocations,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { StampConditionData } from "@/lib/conditions";
 import { ReplacementCopy } from "./replacement-copy";
 import { replacementKeys } from "./record-replacement-dialog";
+import { DuplicateReview } from "./duplicate-review";
 
 const CARD: CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -67,13 +70,24 @@ const PAIR_ROW: CSSProperties = {
  * **The open pairs** are listed in the order the old copies lie in storage, so the list is the round
  * to take them out in. *Done* on a pair — or on the ticked pairs — puts each old copy on the current
  * card, out of the collection and for sale.
+ *
+ * **The duplicate review** (#1938) is the second way in: the stamps held in the collection more than
+ * once, where picking the copy to keep records the rest as pairs in the list above.
  */
 export function ReplacementsPanel({
   collectionId,
   collectionSlug,
+  areas,
+  conditions,
+  hasFormats,
+  hasCertificates,
 }: {
   collectionId: string;
   collectionSlug: string;
+  areas: CollectionAreaData[];
+  conditions: StampConditionData[];
+  hasFormats: boolean;
+  hasCertificates: boolean;
 }) {
   const queryClient = useQueryClient();
   const { invalidateList } = useInvalidateInventory();
@@ -274,7 +288,8 @@ export function ReplacementsPanel({
             <Link href={`/c/${collectionSlug}/inventory`} style={{ color: "var(--color-accent)" }}>
               Copies list
             </Link>{" "}
-            — <em>Replaces…</em> or <em>Replaced by…</em>.
+            — <em>Replaces…</em> or <em>Replaced by…</em> — or pick the copy to keep under{" "}
+            <em>Review duplicates</em> below.
           </p>
         ) : (
           open.map((pair) => (
@@ -345,6 +360,15 @@ export function ReplacementsPanel({
           ))
         )}
       </section>
+
+      <DuplicateReview
+        collectionId={collectionId}
+        collectionSlug={collectionSlug}
+        areas={areas}
+        conditions={conditions}
+        hasFormats={hasFormats}
+        hasCertificates={hasCertificates}
+      />
 
       {/* The recently closed pairs — so a pair that closed on its own can be seen to have closed. */}
       {closed.length > 0 && (

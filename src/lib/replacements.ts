@@ -6,7 +6,10 @@ import { DEFAULT_ITEM_NO_PAD, formatItemNo } from "./item-number";
 import { buildLocationPath } from "./location-path";
 import type { PhotoSummary, PhotoRole } from "./photos";
 import { TRADED_AWAY_LINE } from "./trade-exit";
-import { heldCopiesWhere } from "./copy-counts";
+import { anyHeldCopiesWhere, heldCopiesWhere } from "./copy-counts";
+import { DEFAULT_GROUP_AXES, type CopyGroupAxes } from "./copy-groups";
+import { NO_AREA } from "./list-area-year-filter";
+import { duplicateReviewStacks, type DuplicateReviewCopy } from "./duplicate-review-rules";
 import {
   compareReplacementPlace,
   copyMootReason,
@@ -289,15 +292,16 @@ export async function listCopyReplacements(
 
 /** A copy that could be the other half of a pair, with why it cannot when it cannot. */
 export interface ReplacementCandidateData extends ReplacementCopyData {
-  /** Why this copy cannot be chosen — already in an open pair on that side — or null. */
+  /** Why this copy cannot be chosen — already being replaced, when it would be the old copy — or
+   *  null. */
   unavailable: string | null;
 }
 
 /**
  * The copies that could pair with `itemId` on the other side: the collection's other held copies of
  * the same stamp. `side` is the side **`itemId`** takes — `new` asks *which copy does this one
- * replace*, `old` asks *which copy replaces this one*. A copy already in an open pair on the side it
- * would take is listed but unavailable, so the collector sees why it cannot be chosen.
+ * replace*, `old` asks *which copy replaces this one*. A copy already being replaced, offered as the
+ * old copy, is listed but unavailable, so the collector sees why it cannot be chosen.
  */
 export async function listReplacementCandidates(
   ownerId: string,
@@ -352,7 +356,6 @@ async function candidateCopies(
       },
       select: {
         ...COPY_SELECT,
-        replaces: { where: { status: "open" }, select: { oldItemNo: true } },
         replacedBy: { where: { status: "open" }, select: { newItemNo: true } },
       },
       orderBy: { itemNo: "asc" },
@@ -363,13 +366,11 @@ async function candidateCopies(
   const label = (n: number) => formatItemNo(n, pad);
   return rows.map((row) => {
     // The candidate takes the other side: the old copy when the copy asking is new, and vice versa.
+    // Only the old side is limited — a new copy may replace several (#1938).
     const takenAsOld = side === "new" ? row.replacedBy[0] : undefined;
-    const takenAsNew = side === "old" ? row.replaces[0] : undefined;
     const unavailable = takenAsOld
       ? `Already being replaced by ${label(takenAsOld.newItemNo)}`
-      : takenAsNew
-        ? `Already replaces ${label(takenAsNew.oldItemNo)}`
-        : null;
+      : null;
     return { ...toCopy(row, locations)!, unavailable };
   });
 }
@@ -391,12 +392,12 @@ export async function recordReplacement(
   });
 }
 
-/** What recording a pair reads of each copy: its number, whether it is gone, and its open pairs. */
+/** What recording a pair reads of each copy: its number, whether it is gone, and whether it is
+ *  already being replaced — the one side a copy is limited on (#1938). */
 const RECORD_SELECT = {
   id: true,
   itemNo: true,
   ...COPY_STATE_SELECT,
-  replaces: { where: { status: "open" as const }, select: { id: true } },
   replacedBy: { where: { status: "open" as const }, select: { id: true } },
 } satisfies Prisma.ItemSelect;
 
@@ -416,7 +417,6 @@ async function recordPair(
     newCopy: {
       itemNo: newRow.itemNo,
       gone: copyMootReason(copyState(newRow)),
-      openAsNew: newRow.replaces.length > 0,
     },
     oldCopy: {
       itemNo: oldRow.itemNo,
@@ -562,4 +562,247 @@ export async function settleReplacements(
     }
     return { done: pairs.length, skipped: ids.length - pairs.length };
   });
+}
+
+// ── Duplicate review (#1938) ─────────────────────────────────────────────────
+
+/** What narrows the review: the area rail and the condition filter, and the *Split by …* switches
+ *  that decide what counts as the same stamp. */
+export interface DuplicateReviewFilters {
+  /** Areas the stamp is filed in; `NO_AREA` alone is the stamps filed nowhere. Absent is every area. */
+  areaIds?: string[];
+  conditionIds?: string[];
+  axes?: CopyGroupAxes;
+}
+
+/** One copy of a reviewed stack, drawn as a pair's copy is, with what the review knows of it. */
+export interface DuplicateReviewCopyData extends ReplacementCopyData {
+  /** The copy replacing this one in an open pair — it is shown with it and not offered again. */
+  replacedByItemNo: number | null;
+  /** The copies this one already replaces in open pairs. */
+  replacesItemNos: number[];
+}
+
+export interface DuplicateReviewStackData {
+  key: string;
+  stampLabel: string;
+  copies: DuplicateReviewCopyData[];
+}
+
+export interface DuplicateReviewPage {
+  stacks: DuplicateReviewStackData[];
+  /** How many stacks the review holds under these filters, all pages together. */
+  total: number;
+  /** The offset of the next page, or null on the last. */
+  nextOffset: number | null;
+}
+
+export const DUPLICATE_REVIEW_PAGE_SIZE = 20;
+
+/** The copies the review is taken over: held and *In collection*, narrowed by the filters. */
+function duplicateReviewWhere(collectionId: string, filters: DuplicateReviewFilters) {
+  const areaIds = filters.areaIds ?? [];
+  return {
+    ...anyHeldCopiesWhere(collectionId),
+    inCollection: true,
+    ...(filters.conditionIds && filters.conditionIds.length > 0
+      ? { conditionId: { in: filters.conditionIds } }
+      : {}),
+    ...(areaIds.length > 0
+      ? {
+          stamp: {
+            stampAreaLinks: areaIds.includes(NO_AREA)
+              ? { none: {} }
+              : { some: { collectionAreaId: { in: areaIds } } },
+          },
+        }
+      : {}),
+  } satisfies Prisma.ItemWhereInput;
+}
+
+/** Every copy the review is taken over, read lean — the stacks are computed over all of them. */
+async function loadDuplicateReviewCopies(
+  db: Db,
+  collectionId: string,
+  filters: DuplicateReviewFilters
+): Promise<DuplicateReviewCopy[]> {
+  const rows = await db.item.findMany({
+    where: duplicateReviewWhere(collectionId, filters),
+    select: {
+      id: true,
+      itemNo: true,
+      stampId: true,
+      conditionId: true,
+      formatId: true,
+      certificateStatusId: true,
+      stamp: { select: { name: true, catalogNumbers: { select: { number: true } } } },
+      duplicateKeepAll: { select: { itemId: true } },
+      replacedBy: { where: { status: "open" }, select: { newItemNo: true } },
+    },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    itemNo: row.itemNo,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    formatId: row.formatId,
+    certificateStatusId: row.certificateStatusId,
+    stampLabel: stampLabel(row.stamp),
+    keptAll: row.duplicateKeepAll != null,
+    replacedByItemNo: row.replacedBy[0]?.newItemNo ?? null,
+  }));
+}
+
+/**
+ * A page of the duplicate review: the stamps held *In collection* more than once, each with its
+ * copies drawn as the Replacements screen draws a pair's copies. Which stacks are offered, and in
+ * what order, is `duplicateReviewStacks`.
+ */
+export async function listDuplicateReview(
+  ownerId: string,
+  collectionId: string,
+  filters: DuplicateReviewFilters,
+  page: { offset?: number; pageSize?: number } = {}
+): Promise<DuplicateReviewPage> {
+  await assertCollectionOwner(ownerId, collectionId);
+  await closeMootReplacements(prisma, collectionId);
+  const offset = Math.max(0, page.offset ?? 0);
+  const pageSize = page.pageSize ?? DUPLICATE_REVIEW_PAGE_SIZE;
+  const stacks = duplicateReviewStacks(
+    await loadDuplicateReviewCopies(prisma, collectionId, filters),
+    filters.axes ?? DEFAULT_GROUP_AXES
+  );
+  const slice = stacks.slice(offset, offset + pageSize);
+  const ids = slice.flatMap((s) => s.copies.map((c) => c.id));
+  const [rows, locations] = await Promise.all([
+    prisma.item.findMany({
+      where: { id: { in: ids }, collectionId },
+      select: {
+        ...COPY_SELECT,
+        replaces: { where: { status: "open" }, select: { oldItemNo: true } },
+      },
+    }),
+    loadLocations(prisma, collectionId),
+  ]);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return {
+    stacks: slice.map((stack) => ({
+      key: stack.key,
+      stampLabel: stack.stampLabel,
+      copies: stack.copies.flatMap((c) => {
+        const row = byId.get(c.id);
+        if (!row) return [];
+        return [
+          {
+            ...toCopy(row, locations)!,
+            replacedByItemNo: c.replacedByItemNo,
+            replacesItemNos: row.replaces.map((p) => p.oldItemNo).sort((a, b) => a - b),
+          },
+        ];
+      }),
+    })),
+    total: stacks.length,
+    nextOffset: offset + pageSize < stacks.length ? offset + pageSize : null,
+  };
+}
+
+/**
+ * **Keep this** in the duplicate review: `keeperId` replaces each of `otherIds` — the other copies
+ * the collector was shown beside it. One pair per copy, recorded together or not at all; nothing
+ * moves until the pairs are settled. A copy already being replaced is refused, as on the ⋮.
+ */
+export async function keepDuplicate(
+  ownerId: string,
+  collectionId: string,
+  input: { keeperId: string; otherIds: string[] }
+): Promise<{ recorded: number }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const otherIds = [...new Set(input.otherIds)].filter((id) => id !== input.keeperId);
+  if (otherIds.length === 0) throw new ReplacementError("There is no other copy to replace.");
+  return prisma.$transaction(async (tx) => {
+    await closeMootReplacements(tx, collectionId);
+    const [rows, pad] = await Promise.all([
+      tx.item.findMany({
+        where: { id: { in: [input.keeperId, ...otherIds] }, collectionId },
+        select: {
+          id: true,
+          itemNo: true,
+          ...COPY_STATE_SELECT,
+          replacedBy: { where: { status: "open" as const }, select: { newItemNo: true } },
+        },
+      }),
+      itemNoPad(tx, collectionId),
+    ]);
+    if (rows.length !== otherIds.length + 1) throw new ReplacementError("Copy not found.");
+    const keeper = rows.find((r) => r.id === input.keeperId)!;
+    const label = (n: number) => formatItemNo(n, pad);
+    for (const other of rows) {
+      if (other.id === keeper.id) continue;
+      const conflict = replacementConflict({
+        newCopy: { itemNo: keeper.itemNo, gone: copyMootReason(copyState(keeper)) },
+        oldCopy: {
+          itemNo: other.itemNo,
+          gone: copyMootReason(copyState(other)),
+          openAsOld: other.replacedBy.length > 0,
+        },
+        copyLabel: label,
+      });
+      if (conflict) throw new ReplacementError(conflict);
+    }
+    if (keeper.replacedBy.length > 0) {
+      throw new ReplacementError(
+        `${label(keeper.itemNo)} is already being replaced by ${label(
+          keeper.replacedBy[0].newItemNo
+        )} — cancel that pair first.`
+      );
+    }
+    const others = rows.filter((r) => r.id !== keeper.id);
+    await tx.itemReplacement.createMany({
+      data: others.map((other) => ({
+        collectionId,
+        newItemId: keeper.id,
+        oldItemId: other.id,
+        newItemNo: keeper.itemNo,
+        oldItemNo: other.itemNo,
+      })),
+    });
+    return { recorded: others.length };
+  });
+}
+
+/**
+ * **Keep all** in the duplicate review: mark each copy kept, so the stack leaves the review until a
+ * copy without a mark joins it. Returns the copies newly marked — what an undo takes back, leaving a
+ * mark that was already there.
+ */
+export async function keepAllDuplicates(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[]
+): Promise<{ marked: string[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const ids = [...new Set(itemIds)];
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.item.findMany({
+      where: { id: { in: ids }, collectionId },
+      select: { id: true, duplicateKeepAll: { select: { itemId: true } } },
+    });
+    if (rows.length !== ids.length) throw new ReplacementError("Copy not found.");
+    const marked = rows.filter((r) => r.duplicateKeepAll == null).map((r) => r.id);
+    await tx.duplicateKeepAll.createMany({
+      data: marked.map((itemId) => ({ itemId, collectionId })),
+      skipDuplicates: true,
+    });
+    return { marked };
+  });
+}
+
+/** Undo a *Keep all*: drop the marks it added, bringing the stack back into the review. */
+export async function unkeepAllDuplicates(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[]
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.duplicateKeepAll.deleteMany({ where: { collectionId, itemId: { in: itemIds } } });
 }

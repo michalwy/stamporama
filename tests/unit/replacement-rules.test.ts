@@ -89,7 +89,7 @@ describe("compareReplacementPlace", () => {
 
 describe("replacementConflict", () => {
   const ok = {
-    newCopy: { itemNo: 2, gone: null, openAsNew: false },
+    newCopy: { itemNo: 2, gone: null },
     oldCopy: { itemNo: 1, gone: null, openAsOld: false },
     copyLabel: label,
   };
@@ -112,15 +112,13 @@ describe("replacementConflict", () => {
     );
   });
 
-  it("refuses a second open pair on the same side", () => {
-    assert.match(
-      replacementConflict({ ...ok, newCopy: { ...ok.newCopy, openAsNew: true } }) ?? "",
-      /#2 already replaces another copy/
-    );
+  it("refuses a copy already being replaced, but lets a copy replace several (#1938)", () => {
     assert.match(
       replacementConflict({ ...ok, oldCopy: { ...ok.oldCopy, openAsOld: true } }) ?? "",
       /#1 is already being replaced/
     );
+    // Nothing on the new copy says it already replaces another: the input has no such field.
+    assert.equal(replacementConflict(ok), null);
   });
 });
 
