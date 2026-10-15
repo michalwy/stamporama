@@ -31,6 +31,8 @@ export function replacementKeys(collectionId: string) {
     candidates: (itemId: string, side: ReplacementSide) =>
       ["inventory", collectionId, "replacements", "candidates", itemId, side] as const,
     copy: (itemId: string) => ["inventory", collectionId, "replacements", "copy", itemId] as const,
+    replaceable: (stampId: string, excludeItemId: string | null) =>
+      ["inventory", collectionId, "replacements", "replaceable", stampId, excludeItemId] as const,
   };
 }
 

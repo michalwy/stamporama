@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
-import { freePhotoSlotsWhere, getPurchaseIntakePage } from "../../src/lib/items";
+import { createItem, freePhotoSlotsWhere, getPurchaseIntakePage } from "../../src/lib/items";
+import { listReplaceableCopies, listReplacements, recordReplacement } from "../../src/lib/replacements";
 import {
   canTakeTileRoles,
   photoRolesPresent,
@@ -1755,6 +1756,111 @@ describe("identifying scan tiles into copies (#567)", () => {
           stamps: [{ stampId: describedStampId }, { stampId: variantAId }],
         }),
       ScanValidationError
+    );
+  });
+
+  // ── Replaces… while identifying (#1937) ──────────────────────────────────────────────────────
+
+  /** A copy of `stamp` already held in the collection — what a piece in hand can replace. */
+  async function heldCopy(stamp: string, inCollection = true): Promise<string> {
+    return (
+      await createItem(userId, collectionId, { stampId: stamp, conditionId, inCollection, forSale: false })
+    ).id;
+  }
+
+  /** The open pairs naming `oldItemId` as the copy replaced, as Replacements lists them. */
+  async function openPairsReplacing(oldItemId: string) {
+    const { open } = await listReplacements(userId, collectionId);
+    return open
+      .filter((p) => p.oldCopy?.id === oldItemId)
+      .map((p) => ({ newItemId: p.newCopy?.id, oldItemId: p.oldCopy?.id }));
+  }
+
+  it("records the pair as the tile is identified, and Replacements lists it at once (#1937)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const stamp = (await prisma.stamp.create({ data: { collectionId, name: "Replaced stamp" } })).id;
+    const old = await heldCopy(stamp);
+    // Offered among the stamp's copies in the collection, and only those.
+    await heldCopy(stamp, false);
+    assert.deepEqual(
+      (await listReplaceableCopies(userId, collectionId, stamp, null)).map((c) => c.id),
+      [old]
+    );
+
+    const outcome = await identifyTileAsNewCopy(userId, tileIds[0], {
+      stampId: stamp,
+      conditionId,
+      inCollection: true,
+      replacesItemId: old,
+    });
+    assert.deepEqual(await openPairsReplacing(old), [{ newItemId: outcome.itemId, oldItemId: old }]);
+    // Nothing else about identifying changed: the old copy lies where it lay, still in the collection.
+    const oldCopy = await prisma.item.findUniqueOrThrow({
+      where: { id: old },
+      select: { inCollection: true, forSale: true },
+    });
+    assert.deepEqual(oldCopy, { inCollection: true, forSale: false });
+    // …and it is now offered as already being replaced.
+    const [offered] = await listReplaceableCopies(userId, collectionId, stamp, null);
+    assert.match(offered.unavailable ?? "", /Already being replaced by/);
+  });
+
+  it("refuses a copy that cannot be replaced, or several tiles at once, before anything exists (#1937)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const stamp = (await prisma.stamp.create({ data: { collectionId, name: "Taken stamp" } })).id;
+    const old = await heldCopy(stamp);
+    const other = await heldCopy(stamp);
+    await recordReplacement(userId, collectionId, { newItemId: other, oldItemId: old });
+    const copiesBefore = await prisma.item.count({ where: { collectionId } });
+
+    await assert.rejects(
+      () =>
+        identifyTileAsNewCopy(userId, tileIds[0], { stampId: stamp, conditionId, replacesItemId: old }),
+      (e: unknown) => e instanceof ScanValidationError && /already being replaced/.test(e.message)
+    );
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, tileIds, { stampId: stamp, conditionId, replacesItemId: other }),
+      (e: unknown) => e instanceof ScanValidationError && /identify the tile on its own/.test(e.message)
+    );
+    assert.equal(await prisma.item.count({ where: { collectionId } }), copiesBefore);
+    const tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.equal(tile.state, "unidentified");
+  });
+
+  it("records each run row's own pair, and refuses two rows replacing one copy (#1937)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const { checklistId, stampIds } = await issueWithStamps(["Upgrade 1", "Upgrade 2"]);
+    const old = await heldCopy(stampIds[1]);
+    const copiesBefore = await prisma.item.count({ where: { collectionId } });
+
+    await assert.rejects(
+      () =>
+        identifyTilesAsChecklistStamps(userId, {
+          checklistId,
+          shared: runShared(),
+          tiles: [
+            { tileId: tileIds[0], stampId: stampIds[1], replacesItemId: old },
+            { tileId: tileIds[1], stampId: stampIds[1], replacesItemId: old },
+          ],
+        }),
+      (e: unknown) => e instanceof ScanValidationError && /Two tiles cannot both replace/.test(e.message)
+    );
+    assert.equal(await prisma.item.count({ where: { collectionId } }), copiesBefore);
+
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId,
+      shared: runShared(),
+      tiles: [
+        { tileId: tileIds[0], stampId: stampIds[0] },
+        { tileId: tileIds[1], stampId: stampIds[1], replacesItemId: old },
+      ],
+    });
+    assert.deepEqual(await openPairsReplacing(old), [{ newItemId: outcomes[1].itemId, oldItemId: old }]);
+    assert.equal(
+      await prisma.itemReplacement.count({ where: { newItemId: outcomes[0].itemId } }),
+      0,
+      "a row replacing nothing records nothing"
     );
   });
 });

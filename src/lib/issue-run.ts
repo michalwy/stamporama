@@ -506,6 +506,8 @@ export interface IssueRunTile {
    * becomes a tag.
    */
   tags?: readonly TagEntry[] | null;
+  /** A copy already held that this tile's copy replaces (#1937) — each row its own; absent is none. */
+  replacesItemId?: string | null;
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   compareReplacementPlace,
   copyMootReason,
   pairMootReason,
+  replacedCopiesConflict,
   replacementConflict,
   type MootReason,
   type ReplacementCopyState,
@@ -311,9 +312,44 @@ export async function listReplacementCandidates(
     select: { stampId: true },
   });
   if (!item) throw new Error("Copy not found.");
+  return (
+    (await candidateCopies(collectionId, item.stampId, itemId, side))
+      // The copies in the collection first: they are what a new copy replaces.
+      .sort((a, b) => Number(b.inCollection) - Number(a.inCollection) || a.itemNo - b.itemNo)
+  );
+}
+
+/**
+ * The copies a tile being identified as `stampId` can replace (#1937): the stamp's held copies **in
+ * the collection**, in copy-number order. A copy already being replaced is listed but unavailable, as
+ * on *Replaces…*. `excludeItemId` is a re-identified tile's own copy, never its own old copy.
+ */
+export async function listReplaceableCopies(
+  ownerId: string,
+  collectionId: string,
+  stampId: string,
+  excludeItemId: string | null
+): Promise<ReplacementCandidateData[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  await closeMootReplacements(prisma, collectionId);
+  return (await candidateCopies(collectionId, stampId, excludeItemId, "new")).filter(
+    (c) => c.inCollection
+  );
+}
+
+/** The held copies of `stampId` that could take the other side of a pair whose copy takes `side`. */
+async function candidateCopies(
+  collectionId: string,
+  stampId: string,
+  excludeItemId: string | null,
+  side: ReplacementSide
+): Promise<ReplacementCandidateData[]> {
   const [rows, locations, pad] = await Promise.all([
     prisma.item.findMany({
-      where: { ...heldCopiesWhere(collectionId, [item.stampId]), id: { not: itemId } },
+      where: {
+        ...heldCopiesWhere(collectionId, [stampId]),
+        ...(excludeItemId ? { id: { not: excludeItemId } } : {}),
+      },
       select: {
         ...COPY_SELECT,
         replaces: { where: { status: "open" }, select: { oldItemNo: true } },
@@ -325,22 +361,17 @@ export async function listReplacementCandidates(
     itemNoPad(prisma, collectionId),
   ]);
   const label = (n: number) => formatItemNo(n, pad);
-  return (
-    rows
-      .map((row) => {
-        // The candidate takes the other side: the old copy when `itemId` is new, and vice versa.
-        const takenAsOld = side === "new" ? row.replacedBy[0] : undefined;
-        const takenAsNew = side === "old" ? row.replaces[0] : undefined;
-        const unavailable = takenAsOld
-          ? `Already being replaced by ${label(takenAsOld.newItemNo)}`
-          : takenAsNew
-            ? `Already replaces ${label(takenAsNew.oldItemNo)}`
-            : null;
-        return { ...toCopy(row, locations)!, unavailable };
-      })
-      // The copies in the collection first: they are what a new copy replaces.
-      .sort((a, b) => Number(b.inCollection) - Number(a.inCollection) || a.itemNo - b.itemNo)
-  );
+  return rows.map((row) => {
+    // The candidate takes the other side: the old copy when the copy asking is new, and vice versa.
+    const takenAsOld = side === "new" ? row.replacedBy[0] : undefined;
+    const takenAsNew = side === "old" ? row.replaces[0] : undefined;
+    const unavailable = takenAsOld
+      ? `Already being replaced by ${label(takenAsOld.newItemNo)}`
+      : takenAsNew
+        ? `Already replaces ${label(takenAsNew.oldItemNo)}`
+        : null;
+    return { ...toCopy(row, locations)!, unavailable };
+  });
 }
 
 // ── Writing ──────────────────────────────────────────────────────────────────
@@ -356,43 +387,104 @@ export async function recordReplacement(
   await assertCollectionOwner(ownerId, collectionId);
   return prisma.$transaction(async (tx) => {
     await closeMootReplacements(tx, collectionId);
-    const select = {
-      id: true,
-      itemNo: true,
-      ...COPY_STATE_SELECT,
-      replaces: { where: { status: "open" as const }, select: { id: true } },
-      replacedBy: { where: { status: "open" as const }, select: { id: true } },
-    } satisfies Prisma.ItemSelect;
-    const [newRow, oldRow, pad] = await Promise.all([
-      tx.item.findFirst({ where: { id: input.newItemId, collectionId }, select }),
-      tx.item.findFirst({ where: { id: input.oldItemId, collectionId }, select }),
-      itemNoPad(tx, collectionId),
-    ]);
-    if (!newRow || !oldRow) throw new ReplacementError("Copy not found.");
-    const conflict = replacementConflict({
-      newCopy: {
-        itemNo: newRow.itemNo,
-        gone: copyMootReason(copyState(newRow)),
-        openAsNew: newRow.replaces.length > 0,
-      },
-      oldCopy: {
-        itemNo: oldRow.itemNo,
-        gone: copyMootReason(copyState(oldRow)),
-        openAsOld: oldRow.replacedBy.length > 0,
-      },
-      copyLabel: (n) => formatItemNo(n, pad),
-    });
-    if (conflict) throw new ReplacementError(conflict);
-    return tx.itemReplacement.create({
-      data: {
-        collectionId,
-        newItemId: newRow.id,
-        oldItemId: oldRow.id,
-        newItemNo: newRow.itemNo,
-        oldItemNo: oldRow.itemNo,
-      },
-      select: { id: true },
-    });
+    return recordPair(tx, collectionId, input);
+  });
+}
+
+/** What recording a pair reads of each copy: its number, whether it is gone, and its open pairs. */
+const RECORD_SELECT = {
+  id: true,
+  itemNo: true,
+  ...COPY_STATE_SELECT,
+  replaces: { where: { status: "open" as const }, select: { id: true } },
+  replacedBy: { where: { status: "open" as const }, select: { id: true } },
+} satisfies Prisma.ItemSelect;
+
+/** One pair, checked and written inside the caller's transaction, moot pairs already closed. */
+async function recordPair(
+  tx: DbTransaction,
+  collectionId: string,
+  input: { newItemId: string; oldItemId: string }
+): Promise<{ id: string }> {
+  const [newRow, oldRow, pad] = await Promise.all([
+    tx.item.findFirst({ where: { id: input.newItemId, collectionId }, select: RECORD_SELECT }),
+    tx.item.findFirst({ where: { id: input.oldItemId, collectionId }, select: RECORD_SELECT }),
+    itemNoPad(tx, collectionId),
+  ]);
+  if (!newRow || !oldRow) throw new ReplacementError("Copy not found.");
+  const conflict = replacementConflict({
+    newCopy: {
+      itemNo: newRow.itemNo,
+      gone: copyMootReason(copyState(newRow)),
+      openAsNew: newRow.replaces.length > 0,
+    },
+    oldCopy: {
+      itemNo: oldRow.itemNo,
+      gone: copyMootReason(copyState(oldRow)),
+      openAsOld: oldRow.replacedBy.length > 0,
+    },
+    copyLabel: (n) => formatItemNo(n, pad),
+  });
+  if (conflict) throw new ReplacementError(conflict);
+  return tx.itemReplacement.create({
+    data: {
+      collectionId,
+      newItemId: newRow.id,
+      oldItemId: oldRow.id,
+      newItemNo: newRow.itemNo,
+      oldItemNo: oldRow.itemNo,
+    },
+    select: { id: true },
+  });
+}
+
+/**
+ * Refuse, **before identification creates anything** (#1937), copies that cannot be replaced: not in
+ * this collection, gone, already being replaced, or named by two tiles. Identification's rule that a
+ * pass is refused whole or runs (#596) — a pair refused after the copy exists would leave the tile
+ * identified and the pair missing, with nothing on screen to say so. The caller has authorised the
+ * collection; the owner is the tiles'.
+ */
+export async function assertReplaceableCopies(
+  collectionId: string,
+  oldItemIds: readonly string[]
+): Promise<void> {
+  if (oldItemIds.length === 0) return;
+  await closeMootReplacements(prisma, collectionId);
+  const [rows, pad] = await Promise.all([
+    prisma.item.findMany({
+      where: { id: { in: [...new Set(oldItemIds)] }, collectionId },
+      select: RECORD_SELECT,
+    }),
+    itemNoPad(prisma, collectionId),
+  ]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const copies = oldItemIds.map((id) => {
+    const row = byId.get(id);
+    if (!row) throw new ReplacementError("The copy to replace was not found.");
+    return {
+      itemNo: row.itemNo,
+      gone: copyMootReason(copyState(row)),
+      openAsOld: row.replacedBy.length > 0,
+    };
+  });
+  const conflict = replacedCopiesConflict(copies, (n) => formatItemNo(n, pad));
+  if (conflict) throw new ReplacementError(conflict);
+}
+
+/**
+ * Record the pairs identification asked for (#1937), once the new copies exist — all of them or none,
+ * each by {@link recordReplacement}'s own rule. {@link assertReplaceableCopies} has already said yes
+ * before anything was created; this is the write, and the re-check against a race in between.
+ */
+export async function recordReplacements(
+  collectionId: string,
+  pairs: readonly { newItemId: string; oldItemId: string }[]
+): Promise<void> {
+  if (pairs.length === 0) return;
+  await prisma.$transaction(async (tx) => {
+    await closeMootReplacements(tx, collectionId);
+    for (const pair of pairs) await recordPair(tx, collectionId, pair);
   });
 }
 

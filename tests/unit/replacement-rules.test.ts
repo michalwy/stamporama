@@ -5,6 +5,7 @@ import {
   copyMootReason,
   describeReplacementStatus,
   pairMootReason,
+  replacedCopiesConflict,
   replacementConflict,
 } from "../../src/lib/replacement-rules";
 
@@ -120,5 +121,29 @@ describe("replacementConflict", () => {
       replacementConflict({ ...ok, oldCopy: { ...ok.oldCopy, openAsOld: true } }) ?? "",
       /#1 is already being replaced/
     );
+  });
+});
+
+describe("replacedCopiesConflict (#1937)", () => {
+  const held = { itemNo: 1, gone: null, openAsOld: false };
+
+  it("allows held copies in no open pair, and no copies at all", () => {
+    assert.equal(replacedCopiesConflict([held, { ...held, itemNo: 2 }], label), null);
+    assert.equal(replacedCopiesConflict([], label), null);
+  });
+
+  it("refuses a copy that has gone", () => {
+    assert.equal(replacedCopiesConflict([{ ...held, gone: "traded" }], label), "#1 was traded away.");
+  });
+
+  it("refuses a copy already being replaced", () => {
+    assert.match(
+      replacedCopiesConflict([{ ...held, openAsOld: true }], label) ?? "",
+      /#1 is already being replaced/
+    );
+  });
+
+  it("refuses two tiles replacing the same copy", () => {
+    assert.equal(replacedCopiesConflict([held, held], label), "Two tiles cannot both replace #1.");
   });
 });

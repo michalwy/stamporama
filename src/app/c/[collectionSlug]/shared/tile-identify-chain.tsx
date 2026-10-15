@@ -2,6 +2,8 @@
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { replacementKeys } from "@/app/c/[collectionSlug]/inventory/replacements/record-replacement-dialog";
 import {
   CandidateStampsPicker,
   pickedSetLabel,
@@ -487,6 +489,10 @@ export function TileIdentifyChainDialogs({
   // the condition step's own format field already go through.
   const maps = useAreaVendorMaps(areas, collectionId);
   const { data: formats = [] } = useCollectionFormats(collectionId);
+  // A pair recorded with the copy (#1937) is on Replacements at once, whenever that screen was last read.
+  const queryClient = useQueryClient();
+  const replacementsChanged = () =>
+    void queryClient.invalidateQueries({ queryKey: replacementKeys(collectionId).all });
   /** Whether the stamp editor (#750) is open over the condition step. Over it rather than instead of
    * it, so the answers already given there — a condition read off the piece, a location — are still
    * there when the stamps are settled. */
@@ -710,6 +716,11 @@ export function TileIdentifyChainDialogs({
           // A better picture of the stamp than the one it has is found here, with the piece in hand
           // (#1340) — on a correction too, which is the same dialog and the same moment.
           offerStampPhoto
+          // *Replaces…* (#1937): the piece in hand taking a held copy's place, decided here where the
+          // held copies are compared. One tile as one stamp only — a copy is replaced by one copy, and
+          // a piece that is one of several variants is not yet a copy of any one of them. Not on a
+          // correction, which re-answers what a copy is rather than identifying one.
+          offerReplaces={!tileCorrection && tileIntake.length === 1 && !candidates}
           // The tiles' marks (#1550) — given with the card in hand before identifying — seed the
           // condition and certificate, each labelled with where it came from. Not on a correction,
           // which opens on what the copy already is.
@@ -795,7 +806,10 @@ export function TileIdentifyChainDialogs({
                 // copy. (`shared/scans-card.tsx` states the rule the other outcomes follow.) A
                 // correction touches both for the same reason: the copy changed, and the tile's
                 // square is what says what it became.
-                else void onIdentified();
+                else {
+                  void onIdentified();
+                  if (fd.get("replacesItemId")) replacementsChanged();
+                }
                 return {
                   ...r,
                   refresh: identifiedScope(
@@ -883,7 +897,10 @@ export function TileIdentifyChainDialogs({
                 if (r.status === "error") setError(r.message);
                 // Both namespaces, for `identifyTilesAction`'s reason: copies were created and
                 // tiles consumed.
-                else void onIdentified();
+                else {
+                  void onIdentified();
+                  if (input.tiles.some((t) => t.replacesItemId)) replacementsChanged();
+                }
                 const made = r.status === "success" ? r.outcomes : [];
                 return {
                   ...r,

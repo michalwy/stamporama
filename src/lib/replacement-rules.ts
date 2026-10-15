@@ -140,3 +140,27 @@ export function replacementConflict(input: {
   }
   return null;
 }
+
+/**
+ * Why copies cannot be the **old** copies of pairs recorded while identifying (#1937), checked before
+ * the new copies exist; null when they can. The new side needs no check there — a copy created a
+ * moment ago is in no pair and has gone nowhere — so what is left is {@link replacementConflict}'s old
+ * side, and that two tiles of one run cannot both replace the same copy.
+ */
+export function replacedCopiesConflict(
+  oldCopies: readonly { itemNo: number; gone: MootReason | null; openAsOld: boolean }[],
+  copyLabel: (itemNo: number) => string
+): string | null {
+  const seen = new Set<number>();
+  for (const copy of oldCopies) {
+    if (seen.has(copy.itemNo)) {
+      return `Two tiles cannot both replace ${copyLabel(copy.itemNo)}.`;
+    }
+    seen.add(copy.itemNo);
+    if (copy.gone) return `${copyLabel(copy.itemNo)} ${MOOT_VERBS[copy.gone]}.`;
+    if (copy.openAsOld) {
+      return `${copyLabel(copy.itemNo)} is already being replaced — cancel that pair first.`;
+    }
+  }
+  return null;
+}

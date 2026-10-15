@@ -73,6 +73,7 @@ import {
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
+import { ReplacesField } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
 import { markFaultIds, markTagIds, sameFaults } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
@@ -353,6 +354,17 @@ export function IssueRunDialog({
    * what it opens on; set once the collector changes them.
    */
   const [faults, setFaults] = useState<ReadonlyMap<string, FaultEntry[]>>(new Map());
+  /**
+   * The copy each row replaces (#1937), held against the stamp it was chosen for: a row re-pointed at
+   * another stamp no longer replaces anything, rather than carrying a copy of the old stamp over.
+   */
+  const [replaces, setReplaces] = useState<
+    ReadonlyMap<string, { stampId: string; itemId: string }>
+  >(new Map());
+  const replacesOf = (tileId: string, stampId: string | null) => {
+    const chosen = replaces.get(tileId);
+    return chosen && chosen.stampId === stampId ? chosen.itemId : null;
+  };
   const { data: faultDictionary } = useCollectionFaults(collectionId);
   /** The faults a tile's copy is created with: the collector's, or the ones marked on the tile. */
   const faultsOf = (piece: IdentifiedPiece): FaultEntry[] =>
@@ -747,6 +759,7 @@ export function IssueRunDialog({
         overrides: overrides.get(a.tileId) ?? null,
         faults: faultsOf(inRun[i]),
         tags: tagsOf(inRun[i]),
+        replacesItemId: replacesOf(a.tileId, a.stampId),
       })),
     });
   }
@@ -1459,6 +1472,29 @@ export function IssueRunDialog({
                             formatId={d.formatId}
                             onCompare={() => setComparingId(a.tileId)}
                             inRun
+                          />
+                          {/* Each row its own *Replaces…* (#1937), under what it is decided by.
+                              Choosing a copy makes *In collection* the row's own, ticked. */}
+                          <ReplacesField
+                            marginTop="0.25rem"
+                            collectionId={collectionId}
+                            stampId={a.stampId}
+                            conditions={conditions}
+                            value={replacesOf(a.tileId, a.stampId)}
+                            disabled={isPending}
+                            tabIndex={-1}
+                            onChange={(itemId) => {
+                              const stampId = a.stampId as string;
+                              setReplaces((prev) => {
+                                const next = new Map(prev);
+                                if (itemId) next.set(a.tileId, { stampId, itemId });
+                                else next.delete(a.tileId);
+                                return next;
+                              });
+                              if (itemId && !d.disposition.inCollection) {
+                                setOwn(a.tileId, "disposition", { ...d.disposition, inCollection: true });
+                              }
+                            }}
                           />
                         </div>
                         <span style={{ marginLeft: "auto" }}>
