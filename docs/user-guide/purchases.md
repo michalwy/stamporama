@@ -749,7 +749,10 @@ Every edit below works the same whether the box was proposed or drawn by hand:
 - **Pick** boxes a stamp you point at. Press it, then click anywhere inside a stamp the proposal
   missed, and the box works outwards to that stamp's own edges — see below.
 
-Each box carries the number it will be created with — rows top to bottom, each row left to right.
+Each box carries the number it will be created with — the card's strips top to bottom, each strip
+left to right. A tall stamp standing in a strip is numbered in its place in that strip, whatever its
+height, and a block reaching across two strips counts with the one holding most of it. A card already
+cut keeps its numbers; a re-cut numbers it afresh.
 **Nothing is created until you press Cut**, so the whole review is free to be wrong. Cancel and
 the scan is still stored, waiting to be cut.
 

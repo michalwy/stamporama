@@ -719,3 +719,26 @@ photographs rather than identification.
 order's screen, where the lot question and the auction assign path live; the purchase-less ones get
 their own screen under Inventory. One combined list would have had to explain, per row, which of two
 identification flows a tile is about.
+
+## What #1925 changed: a row is a band of the card, not a run of close top edges
+
+The side effect recorded under *After #1195* was the symptom, and the collector met it once tile
+numbers reached the copies (#1924): on a stockbook card a tall stamp standing in a strip was
+numbered before the whole strip, as a row of its own, because stamps in a strip sit level at the
+bottom and a tall one's top lies far above its neighbours'. Decided on 2026-10-15: **tiles are
+numbered in the order they lie on the card — strip by strip, top to bottom, and left to right within
+a strip — whatever their heights.**
+
+`readingOrder` therefore no longer groups by top edge. A box belongs to the **band it shares**: it
+overlaps the band vertically by at least half the shorter of the two. Bands are founded by the
+shortest boxes first, since a short stamp says plainly where a strip is; a tall stamp or a block
+then joins the band it shares, and one reaching into two goes to the band holding most of it, ties
+to the upper. A band is measured by its founding box only — the anti-drift reason the old rule
+compared against a row's first box carries over unchanged. Two strips of short stamps share less
+than half a stamp's height and stay two rows, so the median-height argument above is answered by the
+overlap rather than by a tolerance. Backs follow the same order, since they pair with fronts by
+position (#1555).
+
+**Cards already cut keep their numbers.** A tile's position is written when it is cut, and a copy
+made from it now shows that number; renumbering an old cut would point those numbers at the wrong
+stamps. Only a *Re-cut* takes the new order.
