@@ -23,6 +23,7 @@ import type { FaultEntry } from "./fault-entry";
 import { giveNewCopiesFaults } from "./faults";
 import type { TagEntry } from "./tag-entry";
 import { giveNewCopiesTags } from "./tags";
+import { assertReplaceableCopies, recordReplacements, ReplacementError } from "./replacements";
 import {
   resolveRunCopyDetails,
   type IssueRunIdentification,
@@ -174,6 +175,12 @@ export interface TileIdentification {
    * (`tileAnswers`) takes those as well. Absent is none: tags are never carried over from anywhere.
    */
   tags?: readonly TagEntry[] | null;
+  /**
+   * A copy already held that the new copy **replaces** (#1937) — *Replaces #1234*, a replacement pair
+   * (ADR-0070) recorded as the copy is created. One tile only: a copy is replaced by one copy, so a
+   * pass over several tiles has no single answer. Absent is no pair.
+   */
+  replacesItemId?: string | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -238,6 +245,13 @@ export async function identifyTilesAsNewCopies(
   const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, input.formatId);
   const target = { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) };
   const own = await tileOwnAnswers(tiles, input.tileAnswers ?? []);
+  // The copy it replaces (#1937), refused here or recorded at the end — never a copy without its pair.
+  if (input.replacesItemId) {
+    if (tiles.length !== 1) {
+      throw new ScanValidationError("A copy replaces one copy: identify the tile on its own.");
+    }
+    await assertReplaceable(tiles[0].collectionId, [input.replacesItemId]);
+  }
 
   const shared = {
     stampId: input.stampId,
@@ -310,7 +324,22 @@ export async function identifyTilesAsNewCopies(
   // The collector's own answer (#1340), once every copy exists: the chosen tile's front — the same
   // row, now on its copy — becomes the stamp's picture.
   if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);
+  if (input.replacesItemId) {
+    await recordReplacements(tiles[0].collectionId, [
+      { newItemId: copies[0].itemId, oldItemId: input.replacesItemId },
+    ]);
+  }
   return copies;
+}
+
+/** {@link assertReplaceableCopies}, its refusal said as identification's own (#1937). */
+async function assertReplaceable(collectionId: string, oldItemIds: readonly string[]) {
+  try {
+    await assertReplaceableCopies(collectionId, oldItemIds);
+  } catch (e) {
+    if (e instanceof ReplacementError) throw new ScanValidationError(e.message);
+    throw e;
+  }
 }
 
 /** A tile's own faults (#1558) as the chips the write gives a copy — undefined where it keeps none,
@@ -477,6 +506,11 @@ export async function identifyTilesAsChecklistStamps(
     }
   }
   await assertRunAnswersExist(collectionId, answers);
+  // The copies the rows replace (#1937), each row its own — refused before the first copy exists.
+  await assertReplaceable(
+    collectionId,
+    input.tiles.flatMap((t) => (t.replacesItemId ? [t.replacesItemId] : []))
+  );
   // Which lot each copy goes onto — resolved per distinct answer before anything exists, so a lot
   // closed in another tab or one missing on an order with several is a sentence and not a run cut
   // off halfway.
@@ -525,6 +559,12 @@ export async function identifyTilesAsChecklistStamps(
     await seedStampImage(ownerId, copy.itemId);
     outcomes.push(copy);
   }
+  await recordReplacements(
+    collectionId,
+    input.tiles.flatMap((t, i) =>
+      t.replacesItemId ? [{ newItemId: outcomes[i].itemId, oldItemId: t.replacesItemId }] : []
+    )
+  );
   return outcomes;
 }
 

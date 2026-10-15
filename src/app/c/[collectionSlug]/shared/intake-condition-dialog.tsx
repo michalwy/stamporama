@@ -33,6 +33,7 @@ import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[pur
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
+import { ReplacesField } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
@@ -423,6 +424,12 @@ export interface IntakeConditionDialogProps {
    * `stampPhotoTileId` (`tile-stamp-photo.ts`).
    */
   offerStampPhoto?: boolean;
+  /**
+   * Offer *Replaces…* over the stamp's copies in the collection (#1937) — the scan-tile chain, when
+   * one tile is identified as one stamp. Choosing a copy ticks *In collection* and sends
+   * `replacesItemId`, recorded as a replacement pair with the new copy.
+   */
+  offerReplaces?: boolean;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -451,6 +458,7 @@ function IntakeConditionDialog({
   correctedCopyId,
   priceVariantsInGrid,
   offerStampPhoto,
+  offerReplaces,
   seedFromMarks,
   askFaults,
   askTags,
@@ -586,10 +594,14 @@ function IntakeConditionDialog({
   // collector pressed a button naming the format, which is a format that was chosen. The reset below
   // still holds — a different pick clears it, including the pick that follows a repeat.
   const [formatId, setFormatId] = useState(prefill?.formatId ?? "");
+  // The copy the piece replaces (#1937), held against the pick for the same reason: a copy of the
+  // previous stamp is never an answer about this one.
+  const [replacesItemId, setReplacesItemId] = useState<string | null>(null);
   const [formatSelection, setFormatSelection] = useState(selection);
   if (formatSelection !== selection) {
     setFormatSelection(selection);
     setFormatId("");
+    setReplacesItemId(null);
   }
   // Fetched here rather than threaded through the purchase screen, the reason the copy dialog
   // fetches it: it is one more dictionary and the screens that need it are not the ones that have it.
@@ -653,6 +665,9 @@ function IntakeConditionDialog({
   // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
   // onto the FormData on submit; Save waits while any staged upload is still in flight.
   const singleStamp = selection.kind === "stamp";
+  // *Replaces…* (#1937): one stamp on the piece, so there is one stamp whose copies it can replace.
+  const replacing =
+    offerReplaces === true && singleStamp && !(carriedStamps && carriedStamps.length > 0);
   // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
   const photos = singleStamp && !hidePhotos;
   const photoValueRef = useRef<PhotoEditorValue>({
@@ -743,6 +758,7 @@ function IntakeConditionDialog({
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
     fd.set("forTrade", String(disposition.forTrade));
+    if (replacing && replacesItemId) fd.set("replacesItemId", replacesItemId);
     if (photos) {
       fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
     }
@@ -949,6 +965,24 @@ function IntakeConditionDialog({
                       certificateStatuses={certificateStatuses}
                       excludeItemId={correctedCopyId ?? null}
                       onOpen={setComparing}
+                    />
+                  )}
+                  {/* Which of those copies the piece takes the place of (#1937), under the pictures it
+                      is decided by. Choosing one ticks *In collection*: a copy replacing one there is
+                      going there itself. */}
+                  {replacing && selection.kind === "stamp" && (
+                    <ReplacesField
+                      marginTop="0.375rem"
+                      collectionId={collectionId}
+                      stampId={selection.stampId}
+                      excludeItemId={correctedCopyId ?? null}
+                      conditions={conditions}
+                      value={replacesItemId}
+                      disabled={isPending}
+                      onChange={(itemId) => {
+                        setReplacesItemId(itemId);
+                        if (itemId) setDisposition((d) => ({ ...d, inCollection: true }));
+                      }}
                     />
                   )}
                 </div>

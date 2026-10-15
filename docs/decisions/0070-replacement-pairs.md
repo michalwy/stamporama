@@ -87,6 +87,10 @@ it — a copy number is never reused (#268). The collection cascades.
 - A copy's **⋮** on the Copies list: *Replaces…* and *Replaced by…*, on a copy still held that
   carries one stamp. The copy's own screen has no menu; it shows the copy's pairs in a read-only
   *Replacements* card (*Replaces #M* / *Replaced by #N*, with the status).
+- **Identifying a scan tile** (#1937): *Replaces* in the identification step, over the stamp's copies
+  in the collection, when one tile is identified as one stamp; and per row of a run. Choosing a copy
+  ticks *In collection* on the new copy. The copy to replace is checked before the copy is created
+  (identification's whole-or-nothing rule, #596) and the pair is written once it exists.
 - **Inventory → Replacements**: the open pairs with both copies' pictures and the old copy's place,
   the recently closed ones, *Done* and *Cancel*.
 

@@ -8,6 +8,7 @@ import {
   cancelReplacement,
   listCopyReplacements,
   listReplacementCandidates,
+  listReplaceableCopies,
   listReplacements,
   recordReplacement,
   settleReplacements,
@@ -55,6 +56,15 @@ export async function listReplacementCandidatesAction(
 ): Promise<ReplacementCandidateData[]> {
   const session = await getSession();
   return listReplacementCandidates(session.user.id, collectionId, itemId, side);
+}
+
+export async function listReplaceableCopiesAction(
+  collectionId: string,
+  stampId: string,
+  excludeItemId: string | null
+): Promise<ReplacementCandidateData[]> {
+  const session = await getSession();
+  return listReplaceableCopies(session.user.id, collectionId, stampId, excludeItemId);
 }
 
 export async function recordReplacementAction(

@@ -550,6 +550,10 @@ Open a copy's **⋮** menu on the Copies list and choose:
 - **Replaces…** on the new copy, to pick the copy it takes the place of, or
 - **Replaced by…** on the old copy, to pick the copy that takes its place.
 
+A replacement can also be recorded while you identify a scan tile, with
+[**Replaces**](purchases.md#identifying-stamps-intake) in the identification step — usually the
+moment you decide it.
+
 The choice is among your other copies of the same stamp that you still hold, the ones in the
 collection first, each with its picture, condition and where it lies. Recording moves nothing: the
 new copy stays where you filed it, and the old one stays where it is until you settle the pair.

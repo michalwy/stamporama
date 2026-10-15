@@ -397,6 +397,8 @@ export async function identifyTilesAction(
       faults: parseFaultEntries(formData.get("copyFaults")) ?? [],
       // The copies' tags (#1599) — the copy dialog's own field and reading. Absent is none.
       tags: parseTagEntries(formData.get("copyTags")) ?? [],
+      // The copy held that the new one replaces (#1937) — a replacement pair, recorded with it.
+      replacesItemId: str("replacesItemId"),
     });
     return { status: "success", outcomes: copies };
   } catch (e) {
