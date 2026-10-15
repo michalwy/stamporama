@@ -8,6 +8,7 @@ import {
   createOffer,
   getOfferDetail,
   listPreparingOffers,
+  patchOffer,
   type PrepareOffer,
 } from "../../src/lib/offers";
 
@@ -32,6 +33,7 @@ describe("the Prepare screen (#1894)", () => {
   /** Germany, no catalogue value. */
   let unpricedCopy: string;
   let photoId: string;
+  let conditionId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -66,7 +68,7 @@ describe("the Prepare screen (#1894)", () => {
     franceId = (
       await prisma.collectionArea.create({ data: { collectionId, name: "France", primaryCatalogNameId: catalogName.id } })
     ).id;
-    const conditionId = (
+    conditionId = (
       await prisma.stampCondition.create({
         data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
       })
@@ -220,6 +222,43 @@ describe("the Prepare screen (#1894)", () => {
       row.pictures.map((p) => p.photoId),
       [generated.id]
     );
+  });
+
+  it("carries the offer's copies set by set, and their conditions with counts in dictionary order (#1941)", async () => {
+    const hinged = await prisma.stampCondition.create({
+      data: { collectionId, name: "Mint Hinged", abbreviation: "MH", sortOrder: 1 },
+    });
+    const stamp = await prisma.stamp.create({
+      data: { collectionId, name: "Hinged", stampAreaLinks: { create: [{ collectionAreaId: germanyId, isPrimary: true }] } },
+    });
+    const hingedCopy = (await createItem(userId, collectionId, { stampId: stamp.id, conditionId: hinged.id, forSale: true })).id;
+    const offerId = await offer([[hingedCopy], [german, german2]]);
+    const row = (await rows()).find((r) => r.id === offerId)!;
+    assert.equal(row.itemIds[0], hingedCopy);
+    assert.deepEqual([...row.itemIds.slice(1)].sort(), [german, german2].sort());
+    assert.deepEqual(row.conditions, [
+      { id: conditionId, abbreviation: "MNH", name: "Mint Never Hinged", count: 2 },
+      { id: hinged.id, abbreviation: "MH", name: "Mint Hinged", count: 1 },
+    ]);
+  });
+
+  it("names the translations a title following its template is missing, and none once it is written by hand (#1941)", async () => {
+    const polish = await prisma.contact.create({
+      data: { collectionId, name: "Allegro PL", platform: true, titleTemplate: "{name}", titleLanguage: "pl" },
+    });
+    const offerId = await offer([[german]], { platform: polish.id });
+    let row = (await rows()).find((r) => r.id === offerId)!;
+    assert.equal(row.titleTranslations.language, "pl");
+    assert.deepEqual(
+      row.titleTranslations.gaps.map((g) => `${g.entityType}:${g.entityField}:${g.defaultValue}`),
+      ["stamp:name:German"]
+    );
+    await patchOffer(userId, offerId, { name: "Niemcy, znaczek" });
+    row = (await rows()).find((r) => r.id === offerId)!;
+    assert.deepEqual(row.titleTranslations.gaps, []);
+    // An offer on a platform listing in the collection's own language has nothing to translate.
+    const plain = (await rows()).find((r) => r.platformId === platformId)!;
+    assert.deepEqual(plain.titleTranslations, { language: null, gaps: [] });
   });
 
   it("pages through the list", async () => {

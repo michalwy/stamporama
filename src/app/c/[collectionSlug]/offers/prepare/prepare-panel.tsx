@@ -461,11 +461,13 @@ export function PreparePanel({
                   }}
                   collectionId={collectionId}
                   collectionSlug={collectionSlug}
+                  areas={areas}
                   offer={offer}
                   selected={selection.has(offer.id)}
                   onToggle={toggleSelected}
                   onEnter={() => focusAfter(offer.id)}
                   onSaved={(field, value) => void settlePreparePrice(collectionId, offer.id, field, value)}
+                  onChanged={() => void invalidateAll(collectionId)}
                 />
               ))}
               <InfiniteScrollSentinel

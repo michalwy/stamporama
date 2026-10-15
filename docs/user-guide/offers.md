@@ -1888,8 +1888,10 @@ Each row shows:
 
 - **Pictures of the stamps** — the offer's generated listing photos once it has any, and until then
   each copy's own photo. Rest the pointer on one to see it larger; click it to open them all full size.
-- **What the offer is** — its number and title (a link to the offer), the platform and Facebook group,
-  and how many sets and copies it holds.
+- **What the offer is** — its number (a link to the offer), its title, the platform and Facebook group,
+  how many sets and copies it holds, and the **conditions** of those copies, each with how many are in
+  it (*MNH ×3*, *MH ×1*), coloured as condition chips are everywhere. Clicking anywhere else on the
+  row opens the offer.
 - **What still stops it from being marked ready** — a missing price, and the same reasons the offer's
   own **Mark ready** button gives (an unmatched stamp, a text over the platform's limit, photos not yet
   checked for symbols, a set sold elsewhere). Hover a reason for what to do about it. Missing or
@@ -1900,6 +1902,25 @@ Each row shows:
   suggestion, in colour), **Market** and **Cost**, each per set with the profit it would make over the
   cost underneath. Hover a name for what the figure is. A figure that does not exist shows **—**.
 - **Your price** — the field at the end of the row. On an auction it is the **starting price**.
+
+### Correcting a title
+
+Click a row's title to edit it, as on the offer's own screen: **Enter** or a click elsewhere saves it,
+**Escape** puts back what was there, and clearing it goes back to the offer's derived name. A title
+over the platform's limit shows among the reasons the offer cannot be marked ready.
+
+When the platform lists in another language and the title still follows its template, any name the
+title prints untranslated is flagged under it (*No Polish translation — the title prints the default
+text for Netherlands → Polish*). Click a name to enter its translation right there; the title is
+generated again with it. A title you wrote by hand is never flagged — it holds your words, not the
+template's names.
+
+### Looking at the copies
+
+**Show copies** on a row opens the offer's copies beneath it, set by set, as full copy rows — photo,
+catalogue numbers, condition, faults, certificate, location and catalogue value — so you can see what
+exactly you are pricing without leaving the screen. **Hide copies** folds them away again. Click a
+copy to open its own page.
 
 ### Setting the prices
 
