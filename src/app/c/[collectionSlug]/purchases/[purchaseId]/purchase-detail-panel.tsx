@@ -37,6 +37,7 @@ import {
 import type {
   CopyDispositionFilter,
   ItemListItem,
+  ItemScanOrigin,
   LotCopyFilter,
   LotCopySort,
   LotStateFilter,
@@ -167,7 +168,8 @@ import {
   usePurchaseLotStateFilter,
 } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
-import { scanBatchName } from "@/lib/scan-batch-label";
+import { scanBatchName, scanTileNumber } from "@/lib/scan-batch-label";
+import { TILE_ARRIVAL_PARAM } from "@/app/c/[collectionSlug]/shared/tile-arrival";
 import {
   INTAKE_GROUP_AXES,
   NO_GROUP_KEY,
@@ -4831,31 +4833,58 @@ function LotCopyChips({
           **Absent, not blank, for a copy that came from anywhere else**: an empty space is the
           honest statement, and this list has always mixed the two kinds of row, so a dash would
           only invite the question of which scan it meant. */}
-      {item.scan && (
-        <Tooltip content="Identified from this card scan">
-          <span
-            style={{
-              ...CHIP,
-              color: "var(--color-text-muted)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.25rem",
-              // A card's name is up to 60 characters (#587) and this is one chip on a crowded
-              // row: it gives way rather than pushing the figures off the end. The full name is
-              // in the tooltip's place only if it has to be — `title` is forbidden here, so the
-              // ellipsis is the honest end of it.
-              maxWidth: "10rem",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <Icon name="scan" size="xs" />
-            {scanBatchName(item.scan.batchNo, item.scan.label)}
-          </span>
-        </Tooltip>
-      )}
+      {item.scan && <ScanOriginChip scan={item.scan} />}
     </>
+  );
+}
+
+/**
+ * Which card **and which tile of it** a copy was identified off (#1188, #1924) — *Klaser Polska 1 ·
+ * tile 26*. The card says which sheet to pull from the pile; on a card of forty only the tile's
+ * number says where on it to look, and it is the number the strip, the cut editor and the
+ * identification dialogs give the same square.
+ *
+ * **Pressing it opens the card on the scans section** with the tile scrolled to and flashed
+ * (`tile-arrival.ts`). On this order it keeps every other parameter the screen is carrying; a copy
+ * attached here from another order's lot links to that order, where its tile is.
+ */
+function ScanOriginChip({ scan }: { scan: ItemScanOrigin }) {
+  const { collectionSlug, purchaseId } = useParams<{
+    collectionSlug: string;
+    purchaseId: string;
+  }>();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const here = scan.tilePurchaseId === purchaseId;
+  const params = new URLSearchParams(here ? searchParams.toString() : "");
+  params.set(TILE_ARRIVAL_PARAM, scan.tileId);
+  const href = `${here ? pathname : `/c/${collectionSlug}/purchases/${scan.tilePurchaseId}`}?${params}`;
+  return (
+    <Tooltip content="Identified from this card scan — open it on this tile">
+      <Link
+        href={href}
+        scroll={false}
+        style={{
+          ...CHIP,
+          color: "var(--color-text-muted)",
+          textDecoration: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.25rem",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Icon name="scan" size="xs" />
+        {/* A card's name is up to 60 characters (#587) and this is one chip on a crowded row: the
+            **name** gives way rather than pushing the figures off the end, and the tile number
+            never does — it is the half of the chip that finds the stamp. `title` is forbidden here,
+            so the ellipsis is the honest end of a long name. */}
+        <span style={{ maxWidth: "10rem", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {scanBatchName(scan.batchNo, scan.label)}
+        </span>
+        <span>· tile {scanTileNumber(scan.tilePosition)}</span>
+      </Link>
+    </Tooltip>
   );
 }
 

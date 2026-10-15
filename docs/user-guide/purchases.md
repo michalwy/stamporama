@@ -2167,6 +2167,14 @@ new name next time you read the list. A copy that came from anywhere else — ty
 attached to the lot from elsewhere — shows **nothing** in its place, because there is no scan to
 name.
 
+Beside the card's name is the **tile's number** — *Klaser Polska 1 · tile 26* — the same number the
+cut editor, the tile strip and the identification dialogs give that piece, so on a card holding
+dozens of stamps you know where on it to look. Click the chip and the order's **Card scans** section
+opens on that card with the tile scrolled into view and flashed once; a filter chip, a set-aside
+batch or a folded batch that would hide it is opened up the way you would have done it by hand. A
+card you have deleted takes the chip with it, so a row never shows a number that no longer points
+anywhere.
+
 **Large lots.** A lot's copies **stream in as you scroll** — the list loads more rows when you
 reach the bottom, and the header counts (*to sort*, *unpriced*, *no photos*, the copy total) and the live
 estimate are figured over the whole lot on the server. There is no cap: a "stockbook" lot with

@@ -174,7 +174,18 @@ describe("deleting a worked-through card scan (#1218)", () => {
     await discardTile(userId, tileIds[1], "torn");
 
     const before = await getItemListItem(userId, itemId);
-    assert.deepEqual(before.scan, { batchNo, label: "Klaser Polska 1" }, "names its card first");
+    const { position } = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileIds[0] } });
+    assert.deepEqual(
+      before.scan,
+      {
+        batchNo,
+        label: "Klaser Polska 1",
+        tileId: tileIds[0],
+        tilePurchaseId: purchaseId,
+        tilePosition: position,
+      },
+      "names its card and its tile first"
+    );
     const copyPhotos = await prisma.photo.findMany({
       where: { itemId },
       select: { id: true, storageBackend: true, storageKey: true, mime: true },
