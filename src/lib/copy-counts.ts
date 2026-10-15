@@ -51,9 +51,13 @@ export interface StampCopyCounts {
  * counted and not a second opinion about which those are.
  */
 export function heldCopiesWhere(collectionId: string, stampIds: string[]) {
+  return { ...anyHeldCopiesWhere(collectionId), stampId: { in: stampIds } };
+}
+
+/** {@link heldCopiesWhere} over every stamp — the duplicate review's starting set (#1938). */
+export function anyHeldCopiesWhere(collectionId: string) {
   return {
     collectionId,
-    stampId: { in: stampIds },
     saleLineItems: { none: {} },
     // …and given to a partner, which is the third way (#644).
     ...NOT_TRADED_AWAY,

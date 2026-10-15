@@ -6,12 +6,18 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   cancelReplacement,
+  keepAllDuplicates,
+  keepDuplicate,
+  listDuplicateReview,
+  unkeepAllDuplicates,
   listCopyReplacements,
   listReplacementCandidates,
   listReplaceableCopies,
   listReplacements,
   recordReplacement,
   settleReplacements,
+  type DuplicateReviewFilters,
+  type DuplicateReviewPage,
   type ReplacementCandidateData,
   type ReplacementPairData,
   type ReplacementsData,
@@ -104,5 +110,55 @@ export async function settleReplacementsAction(
     return { status: "success", result };
   } catch (e) {
     return failure(e, "The replacements could not be settled.");
+  }
+}
+
+// ── Duplicate review (#1938) ─────────────────────────────────────────────────
+
+export async function listDuplicateReviewAction(
+  collectionId: string,
+  filters: DuplicateReviewFilters,
+  offset: number
+): Promise<DuplicateReviewPage> {
+  const session = await getSession();
+  return listDuplicateReview(session.user.id, collectionId, filters, { offset });
+}
+
+export async function keepDuplicateAction(
+  collectionId: string,
+  input: { keeperId: string; otherIds: string[] }
+): Promise<{ status: "success"; recorded: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const { recorded } = await keepDuplicate(session.user.id, collectionId, input);
+    return { status: "success", recorded };
+  } catch (e) {
+    return failure(e, "The replacements could not be recorded.");
+  }
+}
+
+export async function keepAllDuplicatesAction(
+  collectionId: string,
+  itemIds: string[]
+): Promise<{ status: "success"; marked: string[] } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const { marked } = await keepAllDuplicates(session.user.id, collectionId, itemIds);
+    return { status: "success", marked };
+  } catch (e) {
+    return failure(e, "The copies could not be kept.");
+  }
+}
+
+export async function unkeepAllDuplicatesAction(
+  collectionId: string,
+  itemIds: string[]
+): Promise<ReplacementActionState> {
+  const session = await getSession();
+  try {
+    await unkeepAllDuplicates(session.user.id, collectionId, itemIds);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "The copies could not be brought back.");
   }
 }

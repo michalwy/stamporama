@@ -122,9 +122,11 @@ export function compareReplacementPlace(a: ReplacementPlace, b: ReplacementPlace
 }
 
 /** Why a pair cannot be recorded, as the collector reads it; null when it can. Each copy is described
- * by its number, whether it is still held, and the open pairs it is already in on each side. */
+ * by its number and whether it is still held, and the old copy by whether it is already being
+ * replaced. A new copy may replace several (#1938): the copy kept in the duplicate review replaces
+ * every other. */
 export function replacementConflict(input: {
-  newCopy: { itemNo: number; gone: MootReason | null; openAsNew: boolean };
+  newCopy: { itemNo: number; gone: MootReason | null };
   oldCopy: { itemNo: number; gone: MootReason | null; openAsOld: boolean };
   copyLabel: (itemNo: number) => string;
 }): string | null {
@@ -132,9 +134,6 @@ export function replacementConflict(input: {
   if (newCopy.itemNo === oldCopy.itemNo) return "A copy cannot replace itself.";
   if (newCopy.gone) return `${copyLabel(newCopy.itemNo)} ${MOOT_VERBS[newCopy.gone]}.`;
   if (oldCopy.gone) return `${copyLabel(oldCopy.itemNo)} ${MOOT_VERBS[oldCopy.gone]}.`;
-  if (newCopy.openAsNew) {
-    return `${copyLabel(newCopy.itemNo)} already replaces another copy — cancel that pair first.`;
-  }
   if (oldCopy.openAsOld) {
     return `${copyLabel(oldCopy.itemNo)} is already being replaced — cancel that pair first.`;
   }

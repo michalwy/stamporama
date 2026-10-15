@@ -121,26 +121,28 @@ describe("replacement pairs (#1936)", () => {
     await cancelReplacement(f.userId, f.collectionId, id);
   });
 
-  it("allows one open pair per copy on each side", async () => {
+  it("allows one open pair per old copy, and a new copy to replace several (#1938)", async () => {
     const a = await addCopy();
     const b = await addCopy();
     const c = await addCopy();
+    const d = await addCopy();
     const { id } = await recordReplacement(f.userId, f.collectionId, { newItemId: b.id, oldItemId: a.id });
     await assert.rejects(
       () => recordReplacement(f.userId, f.collectionId, { newItemId: c.id, oldItemId: a.id }),
       /already being replaced/
     );
-    await assert.rejects(
-      () => recordReplacement(f.userId, f.collectionId, { newItemId: b.id, oldItemId: c.id }),
-      /already replaces another copy/
-    );
-    // …but a copy may be new in one pair and old in another.
-    await recordReplacement(f.userId, f.collectionId, { newItemId: c.id, oldItemId: b.id });
+    // The copy kept in the duplicate review replaces every other — two open pairs as the new copy.
+    await recordReplacement(f.userId, f.collectionId, { newItemId: b.id, oldItemId: c.id });
+    // …and a copy may be new in one pair and old in another.
+    await recordReplacement(f.userId, f.collectionId, { newItemId: d.id, oldItemId: b.id });
 
     // The candidate list shows the taken copy as unavailable, with the reason.
-    const candidates = await listReplacementCandidates(f.userId, f.collectionId, c.id, "new");
+    const candidates = await listReplacementCandidates(f.userId, f.collectionId, d.id, "new");
     const forA = candidates.find((x) => x.id === a.id);
     assert.match(forA?.unavailable ?? "", /Already being replaced/);
+    // Offered as the new copy, a copy that already replaces another is available.
+    const asNew = await listReplacementCandidates(f.userId, f.collectionId, a.id, "old");
+    assert.equal(asNew.find((x) => x.id === b.id)?.unavailable, null);
 
     // Cancelling frees the side again, and touches neither copy.
     await cancelReplacement(f.userId, f.collectionId, id);

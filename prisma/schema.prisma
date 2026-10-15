@@ -187,6 +187,8 @@ model Collection {
   supplyOwnUses   SupplyOwnUse[]
   // A new copy replacing an old one (#1936, ADR-0070), settled on the Replacements screen.
   itemReplacements ItemReplacement[]
+  // The copies kept, every one, when their stamp came up in the duplicate review (#1938).
+  duplicateKeepAlls DuplicateKeepAll[]
   auctionSales    AuctionSale[]
   priceObservations PriceObservation[]
   trades          Trade[]
@@ -3630,6 +3632,9 @@ model Item {
   replaces   ItemReplacement[] @relation("ItemReplacementNew")
   /** The replacement pairs this copy is the **old** copy of — *Replaced by #N*. */
   replacedBy ItemReplacement[] @relation("ItemReplacementOld")
+  /** Kept with every other copy of its stamp in the duplicate review (#1938) — see
+   *  {@link DuplicateKeepAll}. */
+  duplicateKeepAll DuplicateKeepAll?
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])
@@ -7678,8 +7683,9 @@ model MailMessage {
 // the pair had nothing left to settle). Only an open pair is ever written again; the other three are
 // history on both copies (*Replaced by #N* / *Replaces #M*).
 //
-// A copy is in **at most one open pair on each side** — partial unique indexes in the migration,
-// which Prisma cannot express. It may be the new copy of one pair and the old copy of another.
+// A copy is the **old copy of at most one open pair** — a partial unique index in the migration,
+// which Prisma cannot express. It may be the new copy of several (#1938: the copy kept in the
+// duplicate review replaces every other), and the new copy of one pair and the old copy of another.
 //
 // Both copy references are `SET NULL` rather than cascades: a deleted copy closes the pair as moot,
 // and the other copy keeps the history. `newItemNo`/`oldItemNo` are the copies' numbers written when
@@ -7710,4 +7716,21 @@ model ItemReplacement {
   @@index([newItemId])
   @@index([oldItemId])
   @@map("item_replacement")
+}
+
+// A copy kept, with every other copy of its stamp, when the stamp came up in the Replacements
+// screen's duplicate review (#1938, ADR-0070). A stamp stays out of the review while **every** copy
+// it is reviewed over carries a row here, so a copy joining the collection later — which has none —
+// brings it back. One row per copy rather than per stamp: the review groups under the *Split by …*
+// switches (#1932), and a mark per copy holds under any of them.
+model DuplicateKeepAll {
+  itemId       String   @id
+  collectionId String
+  createdAt    DateTime @default(now())
+
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@map("duplicate_keep_all")
 }

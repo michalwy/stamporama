@@ -33,14 +33,16 @@ export function replacementKeys(collectionId: string) {
     copy: (itemId: string) => ["inventory", collectionId, "replacements", "copy", itemId] as const,
     replaceable: (stampId: string, excludeItemId: string | null) =>
       ["inventory", collectionId, "replacements", "replaceable", stampId, excludeItemId] as const,
+    review: (filters: unknown) =>
+      ["inventory", collectionId, "replacements", "review", filters] as const,
   };
 }
 
 /**
  * Record a replacement pair from a copy's `⋮` (#1936): *Replaces…* asks which held copy this one
  * replaces, *Replaced by…* which copy replaces this one. The choice is among the collection's other
- * held copies of the same stamp, the ones in the collection first; a copy already in an open pair on
- * that side is listed but cannot be chosen, and says why. Recording moves nothing.
+ * held copies of the same stamp, the ones in the collection first; a copy already being replaced is
+ * listed but cannot be chosen as the old copy, and says why. Recording moves nothing.
  */
 export function RecordReplacementDialog({
   collectionId,

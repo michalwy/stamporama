@@ -46,11 +46,16 @@ is the collector's statement, and nothing downstream reads the stamp off it.
 `closedAt` is set exactly when the pair leaves `open` (a CHECK says so). Only an open pair is ever
 written again.
 
-### 3. One open pair on each side, enforced by the database
+### 3. One open pair per old copy, enforced by the database
 
-A copy is the old copy of at most one open pair, and the new copy of at most one open pair — two
-partial unique indexes on `status = 'open'`. A copy may be new in one pair and old in another (a chain
-of upgrades). Closed pairs are history and a copy may collect any number of them.
+A copy is the old copy of at most one open pair — a partial unique index on `status = 'open'`. A
+copy may be new in one pair and old in another (a chain of upgrades). Closed pairs are history and a
+copy may collect any number of them.
+
+*Amended by #1938:* as first built, a copy was also the new copy of at most one open pair. The
+duplicate review breaks that by design — the copy kept out of three replaces the other two — so the
+new side's index was dropped (`20261015220000_duplicate_review`). Nothing read the rule: a pair is
+settled by its old copy alone.
 
 ### 4. Settling uses a current card
 
@@ -93,9 +98,15 @@ it — a copy number is never reused (#268). The collection cascades.
   (identification's whole-or-nothing rule, #596) and the pair is written once it exists.
 - **Inventory → Replacements**: the open pairs with both copies' pictures and the old copy's place,
   the recently closed ones, *Done* and *Cancel*.
+- **Review duplicates** on the same screen (#1938): the stamps held *In collection* more than once,
+  counted as duplicate grouping counts them (#1932, *Split by …* switches included), with the area
+  and condition filters. *Keep this* records each other copy as a pair replaced by the kept one;
+  *Keep all* marks every copy (`DuplicateKeepAll`, one row per copy) and the stamp stays out of the
+  review until an unmarked copy joins. A copy already the old copy of an open pair is shown with its
+  stack and not offered again.
 
 ## Consequences
 
 - Upgrading becomes two acts — record once, settle on a round — instead of a search repeated later.
-- #1937 and #1938 add ways to record pairs and change nothing here.
+- #1937 and #1938 add ways to record pairs; #1938 relaxed §3 on the new side and nothing else.
 - A pair is not an agent API operation; none was asked for.

@@ -558,10 +558,32 @@ The choice is among your other copies of the same stamp that you still hold, the
 collection first, each with its picture, condition and where it lies. Recording moves nothing: the
 new copy stays where you filed it, and the old one stays where it is until you settle the pair.
 
-A copy can be replaced by only one copy at a time, and can replace only one at a time — a copy
-already in an open replacement on that side is listed but cannot be chosen, and says which pair it
-is in. The entries are not offered on a copy you no longer hold, have sold or traded away, or on a
-piece carrying several stamps.
+A copy can be replaced by only one copy at a time — a copy already being replaced is listed but
+cannot be chosen as the old copy, and says which copy replaces it. A copy can replace several: the
+one you keep out of three replaces the other two. The entries are not offered on a copy you no
+longer hold, have sold or traded away, or on a piece carrying several stamps.
+
+### Reviewing your duplicates
+
+Not every upgrade is decided when the new copy comes in. **Review duplicates**, on the
+Replacements screen under the open replacements, lists the stamps you hold **in the collection**
+more than once, each with its copies' pictures side by side — condition, where each lies, and its
+number.
+
+- **Keep this** on the copy you want to keep: every other copy of that stamp shown beside it becomes
+  a replacement — *replaced by the one you kept* — and joins the open replacements above, to be
+  settled on your next round like any other. Nothing moves yet.
+- **Keep all** when you mean to keep every copy. The stamp leaves the review, and comes back only
+  when another copy of it joins the collection. The confirmation offers **Undo**.
+
+A copy that is already being replaced is shown with its stamp, saying by which copy, and is not
+offered again. A stamp whose duplicates are all already in open replacements is not listed.
+
+"The same stamp" is counted as the Copies list counts duplicates. Use **One stack per stamp** to
+**Split by condition** (and by format or certificate, where your collection has them), so that a
+mint and a used copy you keep on purpose are not offered as duplicates. The area tree on the left
+and the condition filter narrow the review the way they narrow the Copies list; the area is the one
+every list shares. The biggest stacks come first.
 
 ### Settling replacements
 
