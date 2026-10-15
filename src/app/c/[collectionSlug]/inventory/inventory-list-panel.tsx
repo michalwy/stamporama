@@ -44,6 +44,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { asMultiStampFilter, MULTI_STAMP_GROUP_KEY } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
+import { asHeldFilter } from "@/lib/held-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import {
@@ -421,6 +422,9 @@ export function InventoryListPanel({
   // The issue's completeness (#1884) — the issue group header's chips as a filter. Absent is *All*;
   // an unrecognised value reads as absent, as above.
   const complete = asCompletenessFilter(readFilterParam("complete"));
+  // How many times a stamp is held (#1932) — the `×N` duplicate grouping draws, as a filter. Absent
+  // is *Any*; an unrecognised value reads as absent, as above.
+  const held = asHeldFilter(readFilterParam("held"));
   // How the rows are grouped (#372, #421, #424). A client preference rather than URL state — it
   // changes *what the rows are*, not what is being looked at, and it is a way of working the
   // collector keeps. The modes answer different questions: what stock do I have in duplicate (#372),
@@ -473,6 +477,10 @@ export function InventoryListPanel({
     () => ({ condition: groupByCondition, format: groupByFormat, certificate: groupByCertificate }),
     [groupByCondition, groupByFormat, groupByCertificate]
   );
+  // The stacks *Held* counts (#1932) are the rows on screen: split by the switches while the list
+  // is grouped by duplicates, and one per stamp otherwise — the switches apply to that grouping
+  // alone, and say so. Absent while the filter is off, so the switches never re-key a query.
+  const heldAxes = held && groupDuplicates ? axes : undefined;
   // Names the offers popup for a copy whose stamp is unnamed (#276) — the internal copy number,
   // padded to the collection's chosen width.
   const itemNoPad = useCollectionItemNoPad(collectionId);
@@ -556,10 +564,12 @@ export function InventoryListPanel({
       includeDisposed: includeDisposed || undefined,
       multiStamp,
       complete,
+      held,
+      heldAxes,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -591,8 +601,10 @@ export function InventoryListPanel({
       includeDisposed: includeDisposed || undefined,
       multiStamp,
       complete,
+      held,
+      heldAxes,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1190,6 +1202,7 @@ export function InventoryListPanel({
     includeDisposed ||
     !!multiStamp ||
     !!complete ||
+    !!held ||
     activeDispositions.size > 0;
 
   // The empty state asks a wider question — "is anything narrowing this list" — and the year is
@@ -1631,6 +1644,7 @@ export function InventoryListPanel({
                 subtypeIds={subtypeIds}
                 multiStamp={multiStamp}
                 complete={complete}
+                held={held}
                 tagIds={tagIds}
                 tagMode={tagMode}
                 faultIds={faultIds}

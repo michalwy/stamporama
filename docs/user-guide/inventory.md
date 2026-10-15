@@ -66,7 +66,7 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 
 Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
 the way you left it — condition, format, certificate, delivery state, location, the disposition
-filter, the several-stamps filter, the **Complete** filter and all four **More filters** switches, alongside the grouping mode and sort that were
+filter, the several-stamps filter, the **Complete** and **Held** filters and all four **More filters** switches, alongside the grouping mode and sort that were
 already remembered. Switching a filter off is remembered too, so
 clearing one clears it for next time. A link that names a filter still wins over what is remembered,
 so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
@@ -220,6 +220,20 @@ right, from *which copies* to *how they are shown*.
   klaser*, and what it keeps always agrees with the chips on screen. It works whether or not the
   list is [grouped by issue](#grouping-by-issue); ungrouped, you get the copies those groups would
   hold. Specialised checklists count only while they are switched on, as they do for the chips.
+- **Held** — *Held any number of times* (the default), *Held once* or *Held more than once*: show
+  only the copies of stamps you hold a single copy of, or of those you hold several of, so the
+  stacks are not found by scrolling past every `×1`. It counts exactly as
+  [Group duplicates](#grouping-duplicates) does: while the list is grouped that way, *More than
+  once* keeps precisely the rows whose count is `×2` or more, and the **Split by …** switches you
+  have on decide what one stack is — split by condition, two MNH copies and one MH copy of a stamp
+  are a stack of two and a single. Under any other grouping, or none, the switches do not apply and
+  a stack is every copy of one stamp; ungrouped, *More than once* keeps each of those copies. The
+  count is made over **the copies the other filters let through** — narrowed to MH, a stamp held
+  twice in MNH and once in MH is held once — but a group you open keeps exactly what the list
+  kept: a stamp held once in this klaser and once in another is held twice in both klasers' groups.
+  A piece carrying several stamps is in no stack, so only the default shows it. Together with
+  **Complete**, it answers *which series do I hold whole in duplicate?*: the completeness is judged
+  over the copies *Held* kept.
 - **Tags** — show only copies carrying the [tags](tags.md) you tick. Inside its panel is a **Must
   carry every ticked tag** switch: off (the default) the list shows copies carrying *any* of the
   ticked tags, on it shows only the copies carrying *all* of them, and the closed control says which
@@ -1543,6 +1557,10 @@ Three switches, inside the grouping dropdown, each add an axis to that rule:
 They stay visible under every grouping and are greyed unless duplicate grouping is the one in
 effect. A switch you left on keeps showing as on while it is greyed: it is waiting for the next time
 you group duplicates, not silently applying to the grouping you are looking at.
+
+To see only the stacks — or only the singles — use the **Held** filter on the toolbar
+([Filters and sorting](#filters-and-sorting)): *Held more than once* keeps the rows counted `×2` or
+more, under whichever switches are on.
 
 Leave them all off and you get the plain rule: one row per stamp. Turn all three on and each group
 has one unambiguous per-copy **catalog value**, because the key is then exactly what a catalog price

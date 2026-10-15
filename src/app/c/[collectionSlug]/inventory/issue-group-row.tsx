@@ -22,7 +22,7 @@ import {
 } from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import { PossibleCopiesList } from "./possible-copies-list";
-import type { InventoryItemFilters } from "./use-inventory-query";
+import { withHeldScope, type InventoryItemFilters } from "./use-inventory-query";
 import { markedChecklistName } from "@/lib/checklist-kind";
 
 const MUTED: React.CSSProperties = {
@@ -391,5 +391,6 @@ export function issueGroupMemberFilters(
   // it, and judging it again over this one issue's copies would judge it over a different set.
   const members: InventoryItemFilters = { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" };
   delete members.complete;
-  return members;
+  // *Held* (#1932) counts a stamp's stack over the list's copies, not this issue's alone.
+  return withHeldScope(members, baseFilters);
 }

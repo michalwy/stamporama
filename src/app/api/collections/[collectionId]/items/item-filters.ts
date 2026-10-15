@@ -4,6 +4,7 @@ import { tagFilterFromParams } from "@/lib/tag-filter";
 import { faultFilterFromParams } from "@/lib/fault-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
+import { asHeldFilter, readHeldSplit } from "@/lib/held-filter";
 import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
 
@@ -100,6 +101,25 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // The issue's completeness (#1884). It needs the specialised-checklist switch beside it, which is
     // a cookie and so is the route's to read — `withCompletenessSwitch` — not this parser's.
     complete: asCompletenessFilter(sp.get("complete")),
+    // How many times a stamp is held (#1932), and the stacks it counts: the *Split by …* switches
+    // when the list is grouped by duplicates, and — for a group's members — the list's own filters,
+    // so a stamp held in two places is still held twice when one place's copies are read.
+    ...readHeldFilter(sp),
+  };
+}
+
+/** {@link readItemFilters}' *Held* half (#1932) — nothing at all while the filter is off. */
+function readHeldFilter(
+  sp: URLSearchParams
+): Pick<ItemListFiltersPaginated, "held" | "heldAxes" | "heldScope"> {
+  const held = asHeldFilter(sp.get("held"));
+  if (!held) return {};
+  return {
+    held,
+    heldAxes: readHeldSplit(sp.get("heldSplit")),
+    ...(sp.has("heldWithin")
+      ? { heldScope: readItemFilters(new URLSearchParams(sp.get("heldWithin") ?? "")) }
+      : {}),
   };
 }
 

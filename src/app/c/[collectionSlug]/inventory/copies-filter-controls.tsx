@@ -9,6 +9,7 @@ import type { LocationData } from "@/lib/locations";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import type { MultiStampFilter } from "@/lib/multi-stamp";
 import type { CompletenessFilter } from "@/lib/completeness-filter";
+import type { HeldFilter } from "@/lib/held-filter";
 import type { TagFilterMode } from "@/lib/tag-filter";
 import { NO_LOCATION } from "@/lib/location-groups";
 import { LocationTreeSelect, type LocationTreeItem } from "@/app/location-tree-select";
@@ -107,6 +108,8 @@ export const FILTER_WIDTH = {
   multiStamp: "12.5rem",
   /** Sized for `Complete — one condition`, the longest of its four options, for the same reason. */
   complete: "12.5rem",
+  /** Sized for `Held any number of times`, the longest of its three options, likewise. */
+  held: "12.5rem",
 } as const;
 
 /** What a `Tooltip` around a bar control needs to stop being the loose link: it renders an
@@ -131,6 +134,8 @@ export interface CopiesFilterControlsProps {
   multiStamp: MultiStampFilter | undefined;
   /** The issue's completeness (#1884); absent is *All*. */
   complete: CompletenessFilter | undefined;
+  /** How many times a stamp is held (#1932); absent is *Any*. */
+  held: HeldFilter | undefined;
   tagIds: string[];
   tagMode: TagFilterMode;
   /** The ticked faults (#1557), `none` among them for the copies with no fault. */
@@ -160,6 +165,7 @@ export function CopiesFilterControls({
   subtypeIds,
   multiStamp,
   complete,
+  held,
   tagIds,
   tagMode,
   faultIds,
@@ -368,6 +374,37 @@ export function CopiesFilterControls({
           <option value="any">Complete — any condition</option>
           <option value="one">Complete — one condition</option>
           <option value="incomplete">Incomplete</option>
+        </select>
+      </Tooltip>
+
+      {/* How many times a stamp is held (#1932) — the `×N` duplicate grouping draws, turned into a
+          narrowing, so what is held several times is not found by scrolling past every single. A
+          stack is a duplicate group: split by the switches while the list is grouped that way, one
+          per stamp otherwise, and counted over the copies the other filters let through. A piece
+          carrying several stamps is in no stack, so only *Any* keeps it. */}
+      <Tooltip
+        style={NO_SHRINK}
+        content="Only the copies of stamps you hold once, or more than once — counted as the duplicate groups count them, over the copies the other filters show."
+      >
+        <select
+          value={held ?? ""}
+          onChange={(e) => updateParams({ held: e.target.value })}
+          style={{
+            ...FILTER_CONTROL_STYLE,
+            width: FILTER_WIDTH.held,
+            ...(held
+              ? {
+                  color: "var(--color-accent)",
+                  border: "1px solid var(--color-accent)",
+                  background: "var(--color-accent-soft)",
+                }
+              : null),
+          }}
+          aria-label="Filter by how many times the stamp is held"
+        >
+          <option value="">Held any number of times</option>
+          <option value="once">Held once</option>
+          <option value="several">Held more than once</option>
         </select>
       </Tooltip>
 
