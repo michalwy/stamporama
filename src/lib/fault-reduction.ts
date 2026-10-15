@@ -58,3 +58,15 @@ export function parseFaultReductionInput(
   if (n > 100) return { ok: false, message: "The value reduction cannot exceed 100 %." };
   return { ok: true, value: n === 0 ? null : n };
 }
+
+/**
+ * The bulk edit's line under *Value reduction* (#1930): how many of the picked copies carry a
+ * reduction **today**, worded for one copy and for many — *It has no reduction yet.*,
+ * *2 of 5 have a reduction.*
+ */
+export function describeFaultReductionState(reduced: number, count: number): string {
+  if (count === 1) return reduced === 0 ? "It has no reduction yet." : "It already has a reduction.";
+  if (reduced === 0) return "None has a reduction yet.";
+  if (reduced === count) return `All ${count} have a reduction.`;
+  return `${reduced} of ${count} ${reduced === 1 ? "has" : "have"} a reduction.`;
+}

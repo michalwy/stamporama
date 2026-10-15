@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  describeFaultReductionState,
   faultReducedTotalHint,
   faultReductionHint,
   faultReductionNote,
@@ -53,5 +54,21 @@ describe("the words on a reduced figure", () => {
 
   it("says nothing about a total no copy lowered", () => {
     assert.equal(faultReducedTotalHint(0, "100.00", "0.00", "PLN"), null);
+  });
+});
+
+// The bulk edit's line under *Value reduction* (#1930): it read "It has a reduction yet." for one
+// copy without one — the opposite of what it meant.
+describe("describeFaultReductionState", () => {
+  it("states one copy's reduction truthfully, with and without one", () => {
+    assert.equal(describeFaultReductionState(0, 1), "It has no reduction yet.");
+    assert.equal(describeFaultReductionState(1, 1), "It already has a reduction.");
+  });
+
+  it("counts a selection of many", () => {
+    assert.equal(describeFaultReductionState(0, 5), "None has a reduction yet.");
+    assert.equal(describeFaultReductionState(1, 5), "1 of 5 has a reduction.");
+    assert.equal(describeFaultReductionState(2, 5), "2 of 5 have a reduction.");
+    assert.equal(describeFaultReductionState(5, 5), "All 5 have a reduction.");
   });
 });
