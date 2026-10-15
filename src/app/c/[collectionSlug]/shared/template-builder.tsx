@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LabelWithError } from "@/app/dialog-shell";
+import { DIALOG_FORM_SPAN_COLUMNS, DialogFormColumns, LabelWithError } from "@/app/dialog-shell";
 import {
   renderTitleTemplateSegments,
   renderListingTemplateSegments,
@@ -291,10 +291,33 @@ export function TemplateSamplePicker({ samples }: { samples: TemplateSamples }) 
   );
 }
 
-/** The shared token syntax legend, shown once above the templates rather than under each. */
-export function TemplateSyntaxLegend() {
+/**
+ * The shared token syntax legend, behind one hover hint rather than under each template. It used to
+ * be a paragraph above the templates; at seven lines it was most of what kept a description from
+ * fitting the window beside its preview (#1933), and a long explanation is a tooltip's job anyway.
+ */
+export function TemplateSyntaxHint() {
   return (
-    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0 0 1rem", lineHeight: 1.6 }}>
+    <Tooltip content={<TemplateSyntaxText />} maxWidth="32rem" align="end" placement="bottom">
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.25rem",
+          fontSize: "0.75rem",
+          color: "var(--color-text-muted)",
+          cursor: "help",
+        }}
+      >
+        <Icon name="info" size="sm" /> Template syntax
+      </span>
+    </Tooltip>
+  );
+}
+
+function TemplateSyntaxText() {
+  return (
+    <span style={{ lineHeight: 1.6 }}>
       Click a token chip to insert it at the cursor. Literal text — spaces, <code>-</code>,{" "}
       <code>/</code>, <code>:</code> — is kept as-is, and only disappears when it was gluing on a
       token that came out empty. Use <code>{"{a|b|c}"}</code> to show the first non-empty of several
@@ -306,16 +329,22 @@ export function TemplateSyntaxLegend() {
       under their tokens: a block chip wraps your selection and repeats it once per set, per copy or
       per distinct condition the offer uses — hover one for what it repeats over and an example. The
       tokens beside a block only mean something inside it.
-    </p>
+    </span>
   );
 }
 
 export interface TemplateBuilderProps {
   /** Heading for this template's section, e.g. "Listing title". */
   label: string;
-  /** Whether the section is expanded. Collapsed, it is one row: heading + the template on one line. */
-  open: boolean;
-  onToggle: () => void;
+  /** Whether the section is expanded. Collapsed, it is one row: heading + the template on one line.
+   *  Ignored when `split`. */
+  open?: boolean;
+  onToggle?: () => void;
+  /** The field beside its preview, the chips underneath both, and no collapsible heading (#1933) —
+   *  for a dialog that shows one template at a time, in tabs, so the tab is the heading and the
+   *  field is labelled with `label`. Laid out in `DialogFormColumns`, so it wants a dialog
+   *  `FORM_DIALOG_COLUMNS_WIDTH` wide. Stacked (the default) suits a dialog with several open at once. */
+  split?: boolean;
   /** The template being edited. */
   value: string;
   onChange: (value: string) => void;
@@ -353,14 +382,16 @@ export interface TemplateBuilderProps {
 /**
  * One template's editor: the field, its click-to-insert token (and block) chips, and the live
  * preview rendered against the shared sample copies — with the runs that fell back to the default
- * language marked (#298). Several of these stack in one dialog, under a single
- * {@link TemplateSamplePicker} that decides what they all preview on, and each **collapses** to a
- * one-line summary so the one being worked on has the room.
+ * language marked (#298). Several of these share one dialog, under a single
+ * {@link TemplateSamplePicker} that decides what they all preview on: stacked, each **collapses** to a
+ * one-line summary so the one being worked on has the room; `split`, the dialog shows them one at a
+ * time in tabs, each with its preview beside it (#1933).
  */
 export function TemplateBuilder({
   label,
-  open,
+  open = true,
   onToggle,
+  split = false,
   value,
   onChange,
   tokens,
@@ -444,6 +475,189 @@ export function TemplateBuilder({
     style: INPUT_STYLE,
   };
 
+  // The editor's parts, assembled below either as one stacked, collapsible section or — `split` —
+  // as the field beside its preview with the chips underneath both.
+  const explanation = (
+    <>
+      {description && (
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0 0 0.5rem" }}>
+          {description}
+        </p>
+      )}
+      {extra}
+
+      {/* Split, there is no heading above the field to say which template it is, so the label does. */}
+      <LabelWithError htmlFor={fieldId}>{split ? label : "Template"}</LabelWithError>
+      {multiline ? (
+        <TextArea
+          id={fieldId}
+          rows={rows}
+          {...fieldProps}
+          style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: `${rows * 1.4}rem`, whiteSpace: "pre" }}
+        />
+      ) : (
+        <TextInput id={fieldId} {...fieldProps} />
+      )}
+    </>
+  );
+
+  // Click-to-insert token (and block) chips. They are a shortcut into the field above — the syntax
+  // can always be typed — so they stay out of the tab order (#446); a dozen chips per template
+  // otherwise stand between one template's field and the next.
+  const tokenChips = (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", margin: "0.5rem 0 0.75rem" }}>
+      {tokens.map((t) => (
+        <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}`}>
+          <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
+            {t.token}
+          </button>
+        </Tooltip>
+      ))}
+    </div>
+  );
+
+  // The blocks (#266, #1268), each grouped with the tokens that only mean something inside it, so
+  // `{setTitle}` reads as part of `{#set}` rather than as a token that works anywhere.
+  const blockChips = multiline && (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.375rem", margin: "-0.25rem 0 0.75rem" }}>
+      <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
+        Blocks
+      </span>
+      {AVAILABLE_LISTING_BLOCKS.map((b) => (
+        <span key={b.open} style={BLOCK_GROUP}>
+          <Tooltip content={`${b.label}. E.g. ${b.example} — wraps the selection`}>
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => insert(b.open, b.close)}
+              style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
+            >
+              {b.open}…{b.close}
+            </button>
+          </Tooltip>
+          {b.tokens.map((t) => (
+            <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}. Only inside ${b.open}…${b.close}`}>
+              <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
+                {t.token}
+              </button>
+            </Tooltip>
+          ))}
+        </span>
+      ))}
+    </div>
+  );
+
+  // Live preview against the shared sample copies.
+  const previewBox = (style?: React.CSSProperties) => (
+    <div
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+        background: "var(--color-bg-page)",
+        padding: "0.75rem 0.875rem",
+        ...style,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
+          Preview
+        </span>
+        {formatted && (
+          <>
+            <span style={{ flex: 1 }} />
+            <Tooltip
+              content={
+                showRendered
+                  ? "Show the text as written, with untranslated runs marked"
+                  : "Show it the way the platform will"
+              }
+              align="end"
+            >
+              <button
+                type="button"
+                onClick={() => setShowRendered((v) => !v)}
+                style={{ ...SMALL_BTN, fontSize: "0.6875rem", padding: "0.125rem 0.5rem" }}
+              >
+                {showRendered ? "Source" : "Rendered"}
+              </button>
+            </Tooltip>
+          </>
+        )}
+      </div>
+      <div
+        style={{
+          marginTop: "0.375rem",
+          fontSize: multiline ? "0.8125rem" : "1rem",
+          fontWeight: multiline ? 400 : 600,
+          color: "var(--color-text-primary)",
+          minHeight: multiline ? "4.5rem" : "1.5rem",
+          wordBreak: "break-word",
+          // Rendered markup brings its own block spacing; only the source view needs the breaks kept.
+          whiteSpace: multiline && !(formatted && showRendered) ? "pre-wrap" : "normal",
+        }}
+      >
+        {samples.loading ? (
+          <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
+            Loading a sample copy…
+          </span>
+        ) : samples.waiting ? (
+          <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
+            {samples.waiting}
+          </span>
+        ) : preview ? (
+          formatted && showRendered ? (
+            // The rendered mode drops the per-segment language marks — it is markup now, not
+            // segments — so the note below keeps reporting them either way.
+            <RenderedDescription text={preview} format={formatted} style={{ margin: 0 }} />
+          ) : (
+            <TitlePreviewText segments={segments} />
+          )
+        ) : (
+          <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
+            {emptyPreview}
+          </span>
+        )}
+      </div>
+
+      {/* Tokens that are not really translated in this language (#298). */}
+      {!quiet && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
+      {!quiet && emptySymbols.length > 0 && (
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
+          {"{conditionSymbol}"} is empty for {emptySymbols.join(", ")} — no symbol set in Settings →
+          Conditions.
+        </p>
+      )}
+      {!quiet && emptyAreaSymbols.length > 0 && (
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
+          {"{areaSymbol}"} is empty for {emptyAreaSymbols.join(", ")} — no symbol set on the area in
+          Catalog → Areas.
+        </p>
+      )}
+    </div>
+  );
+
+  if (split) {
+    // No margin of its own: the dialog spaces the one or two it shows on a tab.
+    return (
+      <section>
+        <DialogFormColumns>
+          <div>{explanation}</div>
+          {/* The preview takes the field's height and scrolls inside it: a long description's
+              preview would otherwise set the row's height and push the chips below the window.
+              Out of flow, it adds nothing to the row; the floor keeps a one-line title's preview
+              from being squeezed to a sliver beside a short field. */}
+          <div style={{ alignSelf: "stretch", position: "relative", minHeight: "6rem" }}>
+            {previewBox({ position: "absolute", inset: 0, overflowY: "auto" })}
+          </div>
+          <div style={DIALOG_FORM_SPAN_COLUMNS}>
+            {tokenChips}
+            {blockChips}
+          </div>
+        </DialogFormColumns>
+      </section>
+    );
+  }
+
   return (
     <section
       style={{
@@ -500,154 +714,10 @@ export function TemplateBuilder({
 
       {!open ? null : (
         <div style={{ marginTop: "0.625rem" }}>
-      {description && (
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0 0 0.5rem" }}>
-          {description}
-        </p>
-      )}
-      {extra}
-
-      <LabelWithError htmlFor={fieldId}>Template</LabelWithError>
-      {multiline ? (
-        <TextArea
-          id={fieldId}
-          rows={rows}
-          {...fieldProps}
-          style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: `${rows * 1.4}rem`, whiteSpace: "pre" }}
-        />
-      ) : (
-        <TextInput id={fieldId} {...fieldProps} />
-      )}
-
-      {/* Click-to-insert token (and block) chips. They are a shortcut into the field above — the
-          syntax can always be typed — so they stay out of the tab order (#446); a dozen chips per
-          template otherwise stand between one template's field and the next. */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", margin: "0.5rem 0 0.75rem" }}>
-        {tokens.map((t) => (
-          <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}`}>
-            <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
-              {t.token}
-            </button>
-          </Tooltip>
-        ))}
-      </div>
-
-      {/* The blocks (#266, #1268), each grouped with the tokens that only mean something inside it,
-          so `{setTitle}` reads as part of `{#set}` rather than as a token that works anywhere. */}
-      {multiline && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.375rem", margin: "-0.25rem 0 0.75rem" }}>
-          <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
-            Blocks
-          </span>
-          {AVAILABLE_LISTING_BLOCKS.map((b) => (
-            <span key={b.open} style={BLOCK_GROUP}>
-              <Tooltip content={`${b.label}. E.g. ${b.example} — wraps the selection`}>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => insert(b.open, b.close)}
-                  style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
-                >
-                  {b.open}…{b.close}
-                </button>
-              </Tooltip>
-              {b.tokens.map((t) => (
-                <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}. Only inside ${b.open}…${b.close}`}>
-                  <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
-                    {t.token}
-                  </button>
-                </Tooltip>
-              ))}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Live preview against the shared sample copies. */}
-      <div
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.5rem",
-          background: "var(--color-bg-page)",
-          padding: "0.75rem 0.875rem",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
-            Preview
-          </span>
-          {formatted && (
-            <>
-              <span style={{ flex: 1 }} />
-              <Tooltip
-                content={
-                  showRendered
-                    ? "Show the text as written, with untranslated runs marked"
-                    : "Show it the way the platform will"
-                }
-                align="end"
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowRendered((v) => !v)}
-                  style={{ ...SMALL_BTN, fontSize: "0.6875rem", padding: "0.125rem 0.5rem" }}
-                >
-                  {showRendered ? "Source" : "Rendered"}
-                </button>
-              </Tooltip>
-            </>
-          )}
-        </div>
-        <div
-          style={{
-            marginTop: "0.375rem",
-            fontSize: multiline ? "0.8125rem" : "1rem",
-            fontWeight: multiline ? 400 : 600,
-            color: "var(--color-text-primary)",
-            minHeight: multiline ? "4.5rem" : "1.5rem",
-            wordBreak: "break-word",
-            // Rendered markup brings its own block spacing; only the source view needs the breaks kept.
-            whiteSpace: multiline && !(formatted && showRendered) ? "pre-wrap" : "normal",
-          }}
-        >
-          {samples.loading ? (
-            <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
-              Loading a sample copy…
-            </span>
-          ) : samples.waiting ? (
-            <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
-              {samples.waiting}
-            </span>
-          ) : preview ? (
-            formatted && showRendered ? (
-              // The rendered mode drops the per-segment language marks — it is markup now, not
-              // segments — so the note below keeps reporting them either way.
-              <RenderedDescription text={preview} format={formatted} style={{ margin: 0 }} />
-            ) : (
-              <TitlePreviewText segments={segments} />
-            )
-          ) : (
-            <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
-              {emptyPreview}
-            </span>
-          )}
-        </div>
-
-        {/* Tokens that are not really translated in this language (#298). */}
-        {!quiet && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
-        {!quiet && emptySymbols.length > 0 && (
-          <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
-            {"{conditionSymbol}"} is empty for {emptySymbols.join(", ")} — no symbol set in Settings →
-            Conditions.
-          </p>
-        )}
-        {!quiet && emptyAreaSymbols.length > 0 && (
-          <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
-            {"{areaSymbol}"} is empty for {emptyAreaSymbols.join(", ")} — no symbol set on the area in
-            Catalog → Areas.
-          </p>
-        )}
-      </div>
+          {explanation}
+          {tokenChips}
+          {blockChips}
+          {previewBox()}
         </div>
       )}
     </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
+import { DialogShell, DialogBody, DialogActions, FORM_DIALOG_COLUMNS_WIDTH } from "@/app/dialog-shell";
 import {
   AVAILABLE_TITLE_TOKENS,
   AVAILABLE_LISTING_TOKENS,
@@ -11,7 +11,7 @@ import {
 import {
   TemplateBuilder,
   TemplateSamplePicker,
-  TemplateSyntaxLegend,
+  TemplateSyntaxHint,
   useTemplateSamples,
 } from "@/app/c/[collectionSlug]/shared/template-builder";
 import {
@@ -111,6 +111,33 @@ const TEMPLATE_FIELDS: readonly {
   },
 ];
 
+/**
+ * The dialog's tabs (#1933): one template each, except the two photo tile labels, which write the
+ * two ends of one strip and so are edited together.
+ */
+const TABS: readonly { label: string; keys: readonly TemplateKey[] }[] = [
+  { label: "Title", keys: ["titleTemplate"] },
+  { label: "Description", keys: ["descriptionTemplate"] },
+  { label: "Private note", keys: ["privateNoteTemplate"] },
+  { label: "Photo tile labels", keys: ["tileLabelLeftTemplate", "tileLabelRightTemplate"] },
+];
+
+const TAB_STYLE: React.CSSProperties = {
+  padding: "0.625rem 1rem",
+  fontSize: "0.875rem",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  marginBottom: "-1px",
+};
+
+/**
+ * The panel's fixed height, so switching tabs never resizes it: as tall as a 1080-pixel window allows
+ * (the shell's own `DIALOG_MAX_HEIGHT` there), which is what the description's tab needs — its field,
+ * its chips and its blocks — and no taller on a larger screen.
+ */
+const DIALOG_HEIGHT = "min(100vh - 4rem, 56rem)";
+
 export interface ListingTemplatesDialogProps {
   /** Collection the platform belongs to — the previews run on its copies. */
   collectionId: string;
@@ -127,10 +154,11 @@ export interface ListingTemplatesDialogProps {
 
 /**
  * Every listing template a platform configures, in **one** dialog off the contact form (#266/#267,
- * #308): the sample copies the previews run on are chosen once at the top, then the templates stack
- * below — each its own field, token chips and live preview, and each collapsible to a one-line row.
- * The panel is a fixed size with the templates scrolling inside it, so typing (or a long preview)
- * never resizes the dialog.
+ * #308): the sample copies the previews run on are chosen once at the top, then **one template at a
+ * time, in tabs**, its field beside its live preview and its token chips underneath (#1933). They
+ * used to stack, every configured one open, and a platform with all five set up ran to several
+ * window-heights; a tab is one window. The panel is a fixed size, so typing, a long preview or a
+ * switch of tab never resizes the dialog.
  */
 export function ListingTemplatesDialog({
   collectionId,
@@ -142,15 +170,7 @@ export function ListingTemplatesDialog({
 }: ListingTemplatesDialogProps) {
   const [draft, setDraft] = useState<ListingTemplates>(templates);
   const [format, setFormat] = useState<DescriptionFormat>(normalizeDescriptionFormat(descriptionFormat));
-  // Which sections are expanded. A template that is already configured opens, so an existing
-  // platform shows what it has; a fresh one opens on the title and leaves the rest as one-line rows.
-  const [open, setOpen] = useState<Record<TemplateKey, boolean>>({
-    titleTemplate: true,
-    descriptionTemplate: !!templates.descriptionTemplate.trim(),
-    privateNoteTemplate: !!templates.privateNoteTemplate.trim(),
-    tileLabelLeftTemplate: !!templates.tileLabelLeftTemplate.trim(),
-    tileLabelRightTemplate: !!templates.tileLabelRightTemplate.trim(),
-  });
+  const [tab, setTab] = useState(0);
   // Two samples so a `{#set}` block in a multi-line template visibly repeats; the title previews on
   // the first. Loaded once for the whole dialog — every preview describes the same stamps.
   const samples = useTemplateSamples(collectionId, language, 2);
@@ -159,39 +179,71 @@ export function ListingTemplatesDialog({
     <DialogShell
       title="Listing templates"
       onClose={onCancel}
-      maxWidth="60rem"
-      height="min(88vh, 56rem)"
+      maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
+      height={DIALOG_HEIGHT}
       zIndexBase={200}
     >
       <TemplateSamplePicker samples={samples} />
 
-      <DialogBody>
-        <TemplateSyntaxLegend />
-        {TEMPLATE_FIELDS.map((f) => (
-          <TemplateBuilder
-            key={f.key}
-            // The description is the one text with a format (#319): it is what gets pasted into the
-            // platform's own field, and the platforms disagree about what that field takes.
-            extra={
-              f.key === "descriptionTemplate" ? (
-                <DescriptionFormatField value={format} onChange={setFormat} />
-              ) : undefined
-            }
-            previewFormat={f.key === "descriptionTemplate" ? format : undefined}
-            label={f.label}
-            open={open[f.key]}
-            onToggle={() => setOpen((o) => ({ ...o, [f.key]: !o[f.key] }))}
-            value={draft[f.key]}
-            onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
-            tokens={f.tokens}
-            multiline={f.multiline}
-            rows={f.rows}
-            placeholder={f.placeholder}
-            description={f.description}
-            samples={samples}
-            emptyPreview={f.emptyPreview}
-          />
+      <div
+        role="tablist"
+        aria-label="Listing templates"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          borderBottom: "1px solid var(--color-border)",
+          flexShrink: 0,
+          padding: "0 1.5rem",
+        }}
+      >
+        {TABS.map((t, i) => (
+          <button
+            key={t.label}
+            type="button"
+            role="tab"
+            aria-selected={tab === i}
+            onClick={() => setTab(i)}
+            style={{
+              ...TAB_STYLE,
+              fontWeight: tab === i ? 600 : 400,
+              color: tab === i ? "var(--color-accent)" : "var(--color-text-secondary)",
+              borderBottom: tab === i ? "2px solid var(--color-accent)" : "2px solid transparent",
+            }}
+          >
+            {t.label}
+          </button>
         ))}
+        <span style={{ flex: 1 }} />
+        <TemplateSyntaxHint />
+      </div>
+
+      <DialogBody>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          {TEMPLATE_FIELDS.filter((f) => TABS[tab].keys.includes(f.key)).map((f) => (
+            <TemplateBuilder
+              key={f.key}
+              split
+              // The description is the one text with a format (#319): it is what gets pasted into the
+              // platform's own field, and the platforms disagree about what that field takes.
+              extra={
+                f.key === "descriptionTemplate" ? (
+                  <DescriptionFormatField value={format} onChange={setFormat} />
+                ) : undefined
+              }
+              previewFormat={f.key === "descriptionTemplate" ? format : undefined}
+              label={f.label}
+              value={draft[f.key]}
+              onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+              tokens={f.tokens}
+              multiline={f.multiline}
+              rows={f.rows}
+              placeholder={f.placeholder}
+              description={f.description}
+              samples={samples}
+              emptyPreview={f.emptyPreview}
+            />
+          ))}
+        </div>
       </DialogBody>
 
       <DialogActions
