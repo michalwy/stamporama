@@ -643,10 +643,10 @@ There are three ways to set it, for the three situations it comes up in:
   a thousand is cleared. A selection that is *already* set aside offers the reverse instead. Like
   the row entry, it appears only while a platform is picked in the filter, since the decision names
   one.
-- **From the Edit copy dialog** — the **Never list on** control lists your platforms and ticks any
-  number of them, so you can answer for all platforms at once without filtering the list first. What
-  you leave unticked is *allowed*, so this is also where an exclusion is cleared away from the
-  worklist.
+- **From the Edit copy dialog** — the **Never list on** control opens a list of your platforms to
+  tick any number of them, so you can answer for all platforms at once without filtering the list
+  first; closed, it names the ones picked (*Never on Allegro, Facebook*). What you leave unticked is
+  *allowed*, so this is also where an exclusion is cleared away from the worklist.
 
 A copy that is set aside anywhere carries a muted **⊗ not on ⟨platform⟩** chip on its row, naming
 every platform it is kept off.
@@ -730,6 +730,11 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
 [Where your Card scans went](purchases.md#where-your-card-scans-went).
 
 ## Adding a copy
+
+The dialog has the **stamp** across the top and two columns under it: on the left what the copy
+*is* — condition, certificate and format, faults and value reduction, tags, notes — and on the right
+what is *done* with it — storage, delivery, disposition, **Never list on**, photos. **Edit copy** is
+laid out the same way.
 
 1. Click **Add copy**.
 2. **Choose the stamp or variant** in one of two ways:
