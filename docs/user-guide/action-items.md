@@ -127,6 +127,14 @@ section, where **Try again** prepares it once more from what was already uploade
 throws it away. Left alone, it is cleaned up after a while like any upload that never finished
 ([how scans are prepared](purchases.md#while-the-scan-is-uploading)).
 
+**Sales recorded by an agent, to review** — blue. A sale your [AI assistant](agent-api.md) recorded,
+or added a line to, that you have not confirmed yet. Nothing is at risk — the sale counts and moves
+through its statuses like any other — but an assistant can match the wrong buyer or read a price
+wrong, and nothing else points at what it wrote. The row names the buyer, the sale's number and the
+last thing the assistant did; it stays until you press **Confirm** on the sale — editing the sale
+does not take it off. Clicking through lands on the Sales list narrowed to exactly these
+([What the assistant recorded](sales.md#what-the-assistant-recorded--to-review--api)).
+
 A card scan that has been prepared and is **ready to cut** does not appear here. Scans go up many at
 a time, and the order's **Card scans** section already shows each one waiting with **Review the
 front cut** (or the back).

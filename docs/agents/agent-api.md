@@ -1419,6 +1419,12 @@ hold for every auction write this surface will ever make:
   that mark (*Keeping the auction register*) — and this map is unchanged. An operation able to clear the marker could hide its own work from the review it is
   waiting for, which is `markOfferListingSynced`'s shape in `FORBIDDEN`.
 
+**A sale carries the same marker** (#1948, `offers.md`), laid before the sale writes of #1949 exist
+and bound by the same two rules: every sale write marks the sale through `markSaleWrittenByApi`, in
+its own transaction, naming what it did (`saleLineAddedAction` words a line — *added offer #2680 at
+15 PLN*); and nothing reachable from an agent clears it — `confirmSaleReview` and
+`CONFIRMED_SALE_API_REVIEW` are on `REVIEW_CLEARERS` beside the auctions' three.
+
 ### One watchlist, and it is the screen's default
 
 The list and the exposure both read the lots screen **with nothing narrowed**: open lots, soonest

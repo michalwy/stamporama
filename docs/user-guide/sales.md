@@ -614,6 +614,25 @@ packing list can't set for you — the screen reminds you of it above the list.
 Click **🖨 Print** for your browser's print dialog (or print/save as PDF from the browser menu).
 The sheet always prints in light colours, even if you use the dark [theme](appearance.md).
 
+## What the assistant recorded — *To review · API*
+
+When an [AI assistant](agent-api.md) records a sale for you, or adds a sold offer to one you already
+have, the sale is marked **To review · API** — on its row in the Sales list and on its own screen —
+and it stays marked until you say you have looked. An assistant reading a marketplace thread can
+match the wrong buyer or a wrong price, and this is how you find what it wrote. Hover the chip to see
+what it did — *added offer #2680 at 15 PLN*, one entry per thing — and when it last wrote. Several
+writes before you confirm add up, so a sale it recorded and then added a second offer to names both.
+
+- **The assistant cannot remove the mark.** Nothing it can ask for clears it.
+- **Editing the sale does not remove it either.** Correcting a price or moving the sale to *Paid* is
+  not the same as having checked the whole sale, so the mark stays until you press **Confirm**.
+- **Confirm** beside the chip on the sale's screen, or **Confirm review** in the row's **⋮** menu,
+  clears it. Both appear only while the sale is marked.
+- **To review** in the toolbar narrows the list to the marked sales, and the
+  [Action items](action-items.md) bell lists them under *Sales recorded by an agent, to review*.
+- **Nothing else changes.** A marked sale counts in your figures, retires its copies and moves
+  through its statuses exactly like any other.
+
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
@@ -631,7 +650,11 @@ The Sales toolbar has a **search** box, a **platform** filter and a row of **sta
 Search matches the buyer name, the platform name, the order number, and the **name or catalog
 number of any copy** sold on the sale — so you can find a sale by what was in it, not just who
 bought it. The platform dropdown narrows the list to a single marketplace, and the status chips to
-particular [fulfillment steps](#fulfillment-status). All three combine.
+particular [fulfillment steps](#fulfillment-status). All three combine. After the status chips,
+**Set not chosen** narrows to the sales still waiting on [which set left](#choosing-which-set-left),
+and **To review** to the sales an assistant recorded and you have not
+[confirmed](#what-the-assistant-recorded--to-review--api); each combines with whichever status is
+chosen, and neither is remembered.
 
 A [contact's page](contacts.md#a-contacts-page) opens this list narrowed to **one buyer**. The buyer
 shows as a lit **Buyer:** chip at the front of the toolbar; click it to go back to every buyer. The

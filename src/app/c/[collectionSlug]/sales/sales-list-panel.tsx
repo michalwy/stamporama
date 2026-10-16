@@ -106,9 +106,14 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   // with today, and a remembered one would silently hide every settled sale on the next visit.
   const setChoicePending = searchParams.get("setChoice") === "1";
 
+  // "Only the sales the agent API recorded and nobody has confirmed" (#1948) — the same kind of
+  // filter as `setChoicePending` and for the same reasons: a sale waits on it in any status, so it
+  // combines with the status chips, and it is URL-only, where the bell's group links to it.
+  const toReview = searchParams.get("toReview") === "1";
+
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, buyerId, statuses, search: search || undefined, setChoicePending }),
-    [platformId, buyerId, statuses, search, setChoicePending]
+    () => ({ platformId, buyerId, statuses, search: search || undefined, setChoicePending, toReview }),
+    [platformId, buyerId, statuses, search, setChoicePending, toReview]
   );
 
   // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
@@ -148,6 +153,21 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     filters
   );
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+
+  /** *Confirm* from a row's ⋮ menu (#1948): the collector has reviewed what the agent API recorded.
+   *  No dialog — it only removes a marker, and pressing it again on an unmarked sale does nothing. */
+  function confirmReview(sale: SaleListItem) {
+    startTransition(async () => {
+      const { confirmSaleReviewAction } = await import("@/app/actions/sales");
+      const result = await confirmSaleReviewAction(sale.id);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        toast({ message: `Sale s${sale.saleNo} confirmed` });
+      } else {
+        toast({ message: result.message, tone: "error" });
+      }
+    });
+  }
 
   function closeDialog() {
     if (!isPending) {
@@ -234,6 +254,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           active={setChoicePending}
           onClick={() => updateParams({ setChoice: setChoicePending ? "" : "1" })}
         />
+        <FilterChip
+          label="To review"
+          active={toReview}
+          onClick={() => updateParams({ toReview: toReview ? "" : "1" })}
+        />
 
         <button
           type="button"
@@ -278,6 +303,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
               ? "No sales to this buyer match these filters."
               : setChoicePending
               ? "Every sale has had its sets chosen — nothing is waiting on that decision."
+              : toReview
+              ? "Nothing the agent API recorded is waiting for you to confirm it."
               : statuses.length > 0
                 ? `No ${statuses
                     .map((s) => SALE_STATUS_META[s].label.toLowerCase())
@@ -297,6 +324,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
                 collectionSlug={collectionSlug}
                 isLast={idx === rows.length - 1 && !hasNextPage}
                 onDelete={(row) => setDialog({ kind: "delete", sale: row })}
+                onConfirmReview={confirmReview}
               />
             ))}
             <InfiniteScrollSentinel

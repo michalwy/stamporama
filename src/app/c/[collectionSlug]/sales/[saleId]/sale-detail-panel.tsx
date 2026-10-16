@@ -33,6 +33,8 @@ import { SentAsSelect, findCarrierService } from "../sent-as-select";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
+import { SaleApiReviewChip } from "../sale-review-chip";
+import { useToast } from "@/app/toast-provider";
 import { ChooseSetDialog } from "./choose-set-dialog";
 import { SaleShareDialog } from "./sale-share-dialog";
 import { BuyerMessageDialog } from "./buyer-message-dialog";
@@ -147,6 +149,7 @@ export function SaleDetailPanel({
   const router = useRouter();
   const params = useParams<{ collectionSlug: string }>();
   const { invalidateAll } = useInvalidateSales();
+  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
@@ -354,6 +357,30 @@ export function SaleDetailPanel({
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
           <span style={CHIP}>{soldDate}</span>
           <span style={CHIP}>{sale.currency}</span>
+          {/* Recorded through the agent API, not yet confirmed (#1948) — the list row's chip, off
+              the same columns. *Confirm* beside it is the only thing that takes it off: editing
+              anything on this screen leaves it standing. */}
+          <SaleApiReviewChip mark={sale.apiReview} chipStyle={CHIP} />
+          {sale.apiReview && (
+            <Tooltip content="You have reviewed what the agent API recorded — remove the To review mark from this sale.">
+              <button
+                type="button"
+                onClick={() =>
+                  run(
+                    async () => {
+                      const { confirmSaleReviewAction } = await import("@/app/actions/sales");
+                      return confirmSaleReviewAction(sale.id);
+                    },
+                    () => toast({ message: `Sale s${sale.saleNo} confirmed` })
+                  )
+                }
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                <Icon name="check" size="sm" /> Confirm
+              </button>
+            </Tooltip>
+          )}
           {sale.externalRef && (
             <Tooltip content="Order number in the marketplace">
               <span style={CHIP}># {sale.externalRef}</span>

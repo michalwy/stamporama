@@ -6,7 +6,8 @@ import { isSaleStatus } from "@/lib/sale-status";
 import { readSearchParam } from "@/lib/text-input";
 
 // Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, buyer (#1708),
-// fulfillment status (#392), free text, and whether a set is still to be chosen (#697).
+// fulfillment status (#392), free text, whether a set is still to be chosen (#697), and whether the
+// sale waits for the collector to confirm what the agent API recorded (#1948).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -32,6 +33,8 @@ export async function GET(
   // "Only the sales still waiting on which set went" (#697). Present-and-`1` rather than any truthy
   // value, so a link carrying `setChoice=0` reads as off rather than as on.
   const setChoicePending = sp.get("setChoice") === "1";
+  // "Only the sales the agent API recorded and nobody has confirmed" (#1948), read the same way.
+  const toReview = sp.get("toReview") === "1";
 
   try {
     const result = await listSalesPaginated(session.user.id, collectionId, {
@@ -41,6 +44,7 @@ export async function GET(
       statuses,
       search,
       setChoicePending,
+      toReview,
       pageSize: 50,
     });
     return NextResponse.json(result);
