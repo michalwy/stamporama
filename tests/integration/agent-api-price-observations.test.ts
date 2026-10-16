@@ -148,8 +148,8 @@ describe("price observations through the agent API (#1635)", () => {
       data: { stampId: stampIds["5"], catalogEditionId: editionId, conditionId: mnh.id, price: "200.00", currency: "EUR" },
     });
 
-    await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } });
-    await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } });
+    await prisma.platform.create({ data: { collectionId, name: "Philasearch" } });
+    await prisma.platform.create({ data: { collectionId, name: "Allegro" } });
     await prisma.contact.create({
       data: {
         collectionId,

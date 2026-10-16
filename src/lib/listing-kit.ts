@@ -43,7 +43,7 @@ import type { DescriptionFormat } from "./description-format";
 // platform's form is laid out. Which field each value goes in belongs to the platform module in the
 // extension (#408/#410).
 //
-// Which module a platform belongs to is `Contact.platformModule` (#406); a platform naming none is
+// Which module a platform belongs to is `Platform.platformModule` (#406); a platform naming none is
 // refused outright, because there is nobody to fill its form from here. **What a module asks for is
 // its own** (#493, `listingModuleRules`): the two platform-side values below are Colnect's — its
 // item-ID (#247) and its grade vocabulary (#404, per collection rather than per platform because

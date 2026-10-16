@@ -166,8 +166,8 @@ describe("compose a series offer out of single offers (#1211)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
   });

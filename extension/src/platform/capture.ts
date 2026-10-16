@@ -13,8 +13,8 @@
 //
 // Like the other halves, it is **pure DOM → data**: no profiles, no instance calls, no `chrome.*`.
 // Where the captured lot goes — which platform, which seller, which parcel — is the instance's
-// decision (`captureAuctionLot`), because every part of that answer is a `Contact` of a collection
-// the marketplace knows nothing about.
+// decision (`captureAuctionLot`), because every part of that answer — a `Platform`, a `Contact` — is
+// a record of a collection the marketplace knows nothing about.
 
 /** One auction listing, as a marketplace page states it. Deliberately the shape of the instance's
  *  own capture endpoint (#355), mirrored by hand exactly as `core/decisions.ts` mirrors the matcher

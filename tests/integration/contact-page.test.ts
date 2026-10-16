@@ -84,7 +84,7 @@ describe("contact page (#1708)", () => {
       .id;
     const otherId = (await prisma.contact.create({ data: { collectionId, name: "Someone else" } })).id;
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
 
     // This year, arrived: 10 EUR + 2 EUR shipping over two copies at 2 EUR each, closed — 12 against 4.

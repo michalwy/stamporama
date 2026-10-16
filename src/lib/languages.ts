@@ -1,5 +1,5 @@
 // Languages used for per-language entity text (#265, #293). A language is a free ISO 639-1 code
-// stored on `Contact.titleLanguage`; the list below only drives the picker, so a code outside it
+// stored on `Platform.titleLanguage`; the list below only drives the picker, so a code outside it
 // still renders (shown as the bare code). Pure — no Prisma, no React.
 
 /** ISO 639-1 codes offered in the platform language picker, with English display names. */

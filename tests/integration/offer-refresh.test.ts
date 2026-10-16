@@ -62,11 +62,11 @@ describe("quick-buy refresh (#1718)", () => {
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, refreshQuickBuysAfterDays: 3 },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", refreshQuickBuysAfterDays: 3 },
       })
     ).id;
-    allegroId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    allegroId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
   });
 
   after(async () => {
@@ -200,11 +200,10 @@ describe("quick-buy refresh (#1718)", () => {
       // The contact's own column is set and must not be read for Facebook: its threshold is the
       // defaults row's, which its groups follow.
       facebookId = (
-        await prisma.contact.create({
+        await prisma.platform.create({
           data: {
             collectionId,
             name: "Facebook",
-            platform: true,
             platformModule: FACEBOOK_PLATFORM_MODULE,
             refreshQuickBuysAfterDays: 1,
           },

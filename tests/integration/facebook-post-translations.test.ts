@@ -4,7 +4,6 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, patchOffer, setOfferState } from "../../src/lib/offers";
 import { saveEntityTranslation } from "../../src/lib/entity-translations";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { getFacebookOfferKit } from "../../src/lib/facebook-auctions";
@@ -50,11 +49,10 @@ describe("a Facebook post's untranslated names (#1889)", () => {
     // The title prints the stamp's name, the description the area's: two different names, so which
     // of the two texts a template prints decides which names the post holds.
     facebookId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Facebook",
-          platform: true,
           platformCurrency: "PLN",
           titleTemplate: "{name}",
           descriptionTemplate: "From {area}",
@@ -62,7 +60,7 @@ describe("a Facebook post's untranslated names (#1889)", () => {
         },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     conditionId = (
       await prisma.stampCondition.create({ data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 } })
     ).id;

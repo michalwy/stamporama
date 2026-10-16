@@ -71,7 +71,7 @@ describe("auction tracking (#351/#352)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Köhler", seller: true } })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
   });
 
@@ -113,7 +113,7 @@ describe("auction tracking (#351/#352)", () => {
   // currency (#196) answers it before the collection's base does — a lot on a zloty-only
   // marketplace was landing in a EUR sale.
   it("falls back to the platform's currency, then the collection's base, for a seller with none", async () => {
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: platformId },
       data: { platformCurrency: "PLN" },
     });
@@ -146,7 +146,7 @@ describe("auction tracking (#351/#352)", () => {
     assert.equal((await getAuctionSaleDetail(userId, sellerWins)).currency, "PLN");
 
     // Neither side says anything: the collection's base, rather than a hard-coded currency.
-    await prisma.contact.update({ where: { id: platformId }, data: { platformCurrency: null } });
+    await prisma.platform.update({ where: { id: platformId }, data: { platformCurrency: null } });
     const neither = await createAuctionSale(userId, collectionId, {
       sellerId: otherSellerId,
       platformId,
@@ -574,8 +574,8 @@ describe("auction tracking (#351/#352)", () => {
 
     // The next lot on another platform moves the memory with it.
     const otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "philasearch", platform: true },
+      await prisma.platform.create({
+        data: { collectionId, name: "philasearch" },
       })
     ).id;
     const otherSaleId = await createAuctionSale(userId, collectionId, {

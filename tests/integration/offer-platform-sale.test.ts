@@ -56,12 +56,12 @@ describe("offers sold on a platform without a recorded sale (#499)", () => {
       })
     ).id;
     allegroId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformModule: "allegro" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformModule: "allegro" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp A" } })).id;
     conditionId = (
@@ -311,8 +311,8 @@ describe("a listing sold on its platform counts as sold (#501)", () => {
       })
     ).id;
     allegroId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformModule: "allegro" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformModule: "allegro" },
       })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp S" } })).id;

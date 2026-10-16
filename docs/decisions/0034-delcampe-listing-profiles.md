@@ -4,6 +4,8 @@
 
 Accepted
 
+The profiles hang off the Delcampe module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a platform contact.
+
 ## Context
 
 Delcampe is a selling platform for this collection (#608, part of #154). Preparing a listing for it

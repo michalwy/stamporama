@@ -467,7 +467,7 @@ export interface DelcampeBidWrite {
  *    half of that rule and not a relaxation of it: an offer recorded as fixed-price is left alone,
  *    and correcting a mis-recorded listing type stays a different claim than this makes.
  *  • **The file states no currency.** It is an account-level setting on Delcampe, so the caller
- *    passes the platform contact's own (#196), and a figure is written only where that matches the
+ *    passes the platform's own (#196), and a figure is written only where that matches the
  *    offer's — a number in the wrong currency is not a cheaper listing, it is a wrong one.
  *
  * Everything else is #481 verbatim, deliberately: a bid sets `inActiveBidding` and **nothing ever

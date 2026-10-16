@@ -94,11 +94,10 @@ describe("offer description + private note (#266, #267)", () => {
     venusId = await mkStamp("Venus", "13", 1851);
 
     fullPlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           platformCurrency: "EUR",
           titleTemplate: "{catalog} {name}",
           descriptionTemplate: DESCRIPTION_TEMPLATE,
@@ -108,19 +107,18 @@ describe("offer description + private note (#266, #267)", () => {
       })
     ).id;
     titleOnlyPlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Delcampe",
-          platform: true,
           platformCurrency: "EUR",
           titleTemplate: "{catalog} {name}",
         },
       })
     ).id;
     noTemplatePlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Flea market", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Flea market", platformCurrency: "EUR" },
       })
     ).id;
   });
@@ -153,7 +151,7 @@ describe("offer description + private note (#266, #267)", () => {
     const offerId = await offerOn(fullPlatformId, [mercuryId]);
     assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "markdown");
 
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: fullPlatformId },
       data: { descriptionFormat: "html" },
     });
@@ -165,7 +163,7 @@ describe("offer description + private note (#266, #267)", () => {
     await patchOffer(userId, offerId, { descriptionFormat: "rtf" });
     assert.equal((await getOfferDetail(userId, offerId))?.descriptionFormat, "plain");
 
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: fullPlatformId },
       data: { descriptionFormat: "markdown" },
     });
@@ -480,11 +478,10 @@ describe("offer description + private note (#266, #267)", () => {
 
     it("saves a cleared title empty, even where the creation re-renders for {offerUrl}", async () => {
       const linkedPlatformId = (
-        await prisma.contact.create({
+        await prisma.platform.create({
           data: {
             collectionId,
             name: "Linked",
-            platform: true,
             platformCurrency: "EUR",
             titleTemplate: "{catalog} {name}",
             descriptionTemplate: "{name} — {offerUrl}",

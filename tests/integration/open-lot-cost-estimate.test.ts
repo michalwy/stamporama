@@ -224,7 +224,7 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
 
   it("is counted into an offer's COST, marked, while its holdings keep it pending (#1736)", async () => {
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     const offerId = await createOffer(userId, collectionId, {
       platformId,
@@ -266,7 +266,7 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
     // A platform of its own, so the offer above does not keep these copies out of the pool; and the
     // pool takes only copies for sale and in hand, so every arrived copy is made both.
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     await prisma.item.updateMany({
       where: { collectionId, id: { not: lostId } },

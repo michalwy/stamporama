@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
-import { setModulePlatform } from "../../src/lib/module-platform";
 import { ALLEGRO_PLATFORM_MODULE, PHILASEARCH_PLATFORM_MODULE } from "../../src/lib/platform-modules";
 import {
   confirmAuctionLotReviews,
@@ -113,13 +112,13 @@ describe("auction writes through the agent API (#1627)", () => {
     ).id;
 
     allegroId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true, platformCurrency: "EUR" } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro", platformCurrency: "EUR" } })
     ).id;
-    await setModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE, allegroId);
+    await prisma.platform.update({ where: { id: allegroId }, data: { platformModule: ALLEGRO_PLATFORM_MODULE } });
     philasearchId = (
-      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })
     ).id;
-    await setModulePlatform(collectionId, PHILASEARCH_PLATFORM_MODULE, philasearchId);
+    await prisma.platform.update({ where: { id: philasearchId }, data: { platformModule: PHILASEARCH_PLATFORM_MODULE } });
     await prisma.contact.create({
       data: {
         collectionId,

@@ -64,13 +64,13 @@ describe("umbrella collisions by listed variant (#1347)", () => {
       await prisma.stampCondition.create({ data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 } })
     ).id;
     colnectId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Colnect", platform: true, platformModule: "colnect", platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Colnect", platformModule: "colnect", platformCurrency: "EUR" },
       })
     ).id;
     allegroId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformModule: "allegro", platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformModule: "allegro", platformCurrency: "PLN" },
       })
     ).id;
     vendorId = (await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } })).id;

@@ -49,7 +49,7 @@ describe("sale profit and loss (#168)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
 
     const vendor = await prisma.catalogVendor.create({

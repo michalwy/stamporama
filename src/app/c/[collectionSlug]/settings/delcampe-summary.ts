@@ -11,11 +11,13 @@
 
 import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
 import type { DelcampeLearnedCategoryList } from "@/lib/delcampe-categories";
+import { platformTileWords, type PlatformTileFacts } from "./platform-summary";
 
 /** The Delcampe page's tabs, in their order; the first is the default. */
 export const DELCAMPE_SETTINGS_PARTS = [
   { key: "profiles", label: "Listing profiles" },
   { key: "categories", label: "Categories" },
+  { key: "platform", label: "Platform" },
 ] as const;
 
 export type DelcampeSettingsPart = (typeof DELCAMPE_SETTINGS_PARTS)[number]["key"];
@@ -52,7 +54,8 @@ export function delcampeCatalogWords(
 export function delcampeSummary(
   profiles: DelcampeListingProfileList,
   categories: DelcampeLearnedCategoryList,
-  formatDate: (iso: string) => string
+  formatDate: (iso: string) => string,
+  platform: PlatformTileFacts
 ): DelcampeSummaryTile[] {
   const defaultProfile = profiles.profiles.find((p) => p.isDefault) ?? null;
   const profileTile: DelcampeSummaryTile = {
@@ -81,5 +84,5 @@ export function delcampeSummary(
     detail: delcampeCatalogWords(categories.catalog, formatDate),
   };
 
-  return [profileTile, categoryTile];
+  return [profileTile, categoryTile, { part: "platform", ...platformTileWords(platform) }];
 }

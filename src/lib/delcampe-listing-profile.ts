@@ -12,7 +12,7 @@ import {
 // flags, and the bid-step rule.
 //
 // The shape this module exists to guarantee is the one #486 established for Allegro: a profile is a
-// **named set of settings owned by the platform contact**, one of which the platform uploads with by
+// **named set of settings owned by the platform**, one of which the platform uploads with by
 // default, and any of which an offer may name instead. Nothing here builds a file — #610 is the
 // consumer, and the only thing it asks of this module is
 // {@link resolveDelcampeListingProfileForOffer}.
@@ -77,8 +77,8 @@ async function assertProfileOwner(
 async function delcampePlatformOf(
   collectionId: string
 ): Promise<{ id: string; name: string; defaultDelcampeListingProfileId: string | null } | null> {
-  const platform = await prisma.contact.findFirst({
-    where: { collectionId, platform: true, platformModule: DELCAMPE_PLATFORM_MODULE },
+  const platform = await prisma.platform.findFirst({
+    where: { collectionId, platformModule: DELCAMPE_PLATFORM_MODULE },
     select: { id: true, name: true, defaultDelcampeListingProfileId: true },
     orderBy: { name: "asc" },
   });
@@ -196,7 +196,7 @@ export async function createDelcampeListingProfile(
         select: { id: true },
       });
       if (!platform.defaultDelcampeListingProfileId) {
-        await tx.contact.update({
+        await tx.platform.update({
           where: { id: platform.id },
           data: { defaultDelcampeListingProfileId: created.id },
         });
@@ -233,7 +233,7 @@ export async function setDefaultDelcampeListingProfile(
   profileId: string
 ): Promise<void> {
   const { platformId } = await assertProfileOwner(ownerId, profileId);
-  await prisma.contact.update({
+  await prisma.platform.update({
     where: { id: platformId },
     data: { defaultDelcampeListingProfileId: profileId },
   });

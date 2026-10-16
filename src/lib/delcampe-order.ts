@@ -170,7 +170,7 @@ export async function importDelcampeOrder(
   const platform = await getModulePlatform(collectionId, DELCAMPE_PLATFORM_MODULE);
   if (!platform) {
     throw new DelcampeOrderError(
-      "No platform is marked as Delcampe yet, so there is nothing to record this order against. Settings → Delcampe."
+      "The Delcampe platform is switched off, so there is nothing to record this order against. Switch it on under Settings → Delcampe."
     );
   }
 
@@ -195,7 +195,7 @@ export async function importDelcampeOrder(
     };
   }
 
-  const contact = await prisma.contact.findFirst({
+  const contact = await prisma.platform.findFirst({
     where: { id: platform.id, collectionId },
     select: { platformCurrency: true },
   });

@@ -83,27 +83,25 @@ describe("marking an offer ready (#418)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Colnect",
-          platform: true,
           platformModule: "colnect",
           platformCurrency: "EUR",
         },
       })
     ).id;
     handListedId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     allegroId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           platformModule: "allegro",
           platformCurrency: "EUR",
         },
@@ -165,7 +163,7 @@ describe("marking an offer ready (#418)", () => {
       where: { id: offerId },
       data: { name: "x".repeat(92) },
     });
-    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
+    await prisma.platform.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
 
     const detail = await getOfferDetail(userId, offerId);
     assert.deepEqual(
@@ -188,7 +186,7 @@ describe("marking an offer ready (#418)", () => {
     await setOfferState(userId, offerId, "ready");
     assert.equal(await stateOf(offerId), "ready");
 
-    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
+    await prisma.platform.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
   });
 
   it("reports an offer that was already ready when the cap was tightened (#636)", async () => {
@@ -201,7 +199,7 @@ describe("marking an offer ready (#418)", () => {
     await prisma.offer.update({ where: { id: offerId }, data: { name: "x".repeat(90) } });
     await setOfferState(userId, offerId, "ready");
 
-    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
+    await prisma.platform.update({ where: { id: handListedId }, data: { maxTitleLength: 80 } });
     const detail = await getOfferDetail(userId, offerId);
     assert.equal(await stateOf(offerId), "ready", "the offer is not moved back by a settings change");
     assert.deepEqual(
@@ -209,7 +207,7 @@ describe("marking an offer ready (#418)", () => {
       ["title-too-long"]
     );
 
-    await prisma.contact.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
+    await prisma.platform.update({ where: { id: handListedId }, data: { maxTitleLength: null } });
   });
 
   it("refuses a stamp with no Colnect item-ID, and leaves the offer preparing", async () => {
@@ -366,11 +364,10 @@ describe("marking an offer ready with listing photos (#311)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Delcampe ${ts}`,
-          platform: true,
           maxPhotos: 6,
           // A modest edge keeps the render fast; the gate never looks at the bytes.
           maxPhotoEdge: 600,

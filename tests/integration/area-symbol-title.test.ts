@@ -60,8 +60,8 @@ describe("{areaSymbol} in generated titles (#1740)", () => {
     secondRepublicCopy = await copyOf(await stampIn("Chopin", secondRepublic.id));
     austriaCopy = await copyOf(await stampIn("Mozart", austria.id));
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, titleTemplate: "{areaSymbol} {name} {area}" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", titleTemplate: "{areaSymbol} {name} {area}" },
       })
     ).id;
   });

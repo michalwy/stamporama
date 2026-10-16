@@ -1,8 +1,9 @@
 import "server-only";
 import type { DbTransaction } from "@/lib/db";
 import { createLeadingEntriesTx } from "../item-stamps";
+import { ALLEGRO_PLATFORM_MODULE, DELCAMPE_PLATFORM_MODULE } from "../platform-modules";
 
-// Inventory demo data: owned copies (`Item`), contacts (`Contact` address book),
+// Inventory demo data: owned copies (`Item`), contacts (`Contact` address book), platforms,
 // certificate statuses, and refinement history (`ItemVariantHistory`). Seeded on
 // top of the catalog data (stamps/issues/areas) so the Inventory screen — list,
 // filters, holdings valuation — is populated in the demo. Acquisition/cost now live
@@ -50,7 +51,6 @@ interface DemoContact {
   seller?: boolean;
   exchangePartner?: boolean;
   auctionHouse?: boolean;
-  platform?: boolean;
   other?: boolean;
 }
 
@@ -59,9 +59,6 @@ const DEMO_CONTACTS: ReadonlyArray<DemoContact> = [
   { name: "Warsaw Philatelic Auctions", auctionHouse: true },
   { name: "Deutsche Briefmarken GmbH", seller: true },
   { name: "Berlin Auktionshaus", auctionHouse: true },
-  { name: "Delcampe", platform: true },
-  { name: "Allegro", platform: true },
-  { name: "eBay", platform: true },
   { name: "Jan Kowalski", exchangePartner: true },
   { name: "Piotr Nowak", buyer: true, exchangePartner: true },
   { name: "Estate Collection Lot", other: true },
@@ -142,11 +139,18 @@ export async function seedInventory(
         seller: c.seller ?? false,
         exchangePartner: c.exchangePartner ?? false,
         auctionHouse: c.auctionHouse ?? false,
-        platform: c.platform ?? false,
         other: c.other ?? false,
       },
     });
   }
+
+  // Platforms (#1955): two of the module platforms the collection was created with, switched on,
+  // and one generic platform of the collector's own.
+  await tx.platform.updateMany({
+    where: { collectionId, platformModule: { in: [DELCAMPE_PLATFORM_MODULE, ALLEGRO_PLATFORM_MODULE] } },
+    data: { enabled: true },
+  });
+  await tx.platform.create({ data: { collectionId, name: "eBay" } });
 
   const conditions = await tx.stampCondition.findMany({
     where: { collectionId },

@@ -213,11 +213,10 @@ describe("the offer operations (#711)", () => {
     // **named** — which is the *titled* half of #711's own criterion, and the one thing nothing
     // else here would prove.
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Colnect",
-          platform: true,
           platformCurrency: "EUR",
           titleTemplate: "{catalog} {name}",
           descriptionTemplate: "{#set}{catalog}{/set}",
@@ -227,11 +226,10 @@ describe("the offer operations (#711)", () => {
     ).id;
     // A house that always opens an auction at the same figure (#553), so the format's own price
     // rule has somewhere to be exercised.
-    await prisma.contact.create({
+    await prisma.platform.create({
         data: {
           collectionId,
           name: "Kramer",
-          platform: true,
           platformCurrency: "EUR",
           defaultListingType: "auction",
           defaultStartingPrice: "5.00",
@@ -700,11 +698,10 @@ describe("the offer operations (#711)", () => {
         otherCollectionId,
         {
           platformId: (
-            await prisma.contact.create({
+            await prisma.platform.create({
               data: {
                 collectionId: otherCollectionId,
                 name: "Elsewhere",
-                platform: true,
                 platformCurrency: "EUR",
               },
             })

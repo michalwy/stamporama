@@ -237,13 +237,13 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
     commitAreaId = await area("Committing", rootAreaId, catalogName.id);
 
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Colnect", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Colnect", platformCurrency: "EUR" },
       })
     ).id;
     partnerId = (
@@ -608,11 +608,10 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       await prisma.stampTranslation.create({ data: { stampId, language: "pl", name: "Orzeł" } });
       await copy(stampId);
       const polishPlatformId = (
-        await prisma.contact.create({
+        await prisma.platform.create({
           data: {
             collectionId,
             name: "Allegro",
-            platform: true,
             platformCurrency: "PLN",
             titleLanguage: "pl",
           },

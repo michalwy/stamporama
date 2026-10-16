@@ -36,7 +36,7 @@ import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
+import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import {
   readAddCopyDefaults,
   writeAddCopyDefaults,
@@ -233,10 +233,15 @@ export function InventoryItemFormDialog({
   // Platforms this copy is deliberately never listed on (#506), fetched here for the same reason
   // the formats are: this dialog is opened from four screens. Add mode starts with none — a copy
   // being added is normally being added *to* sell, and the exception is one tick away.
-  const { data: contacts = [] } = useContacts(collectionId);
-  const platforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
+  const { data: allPlatforms = [] } = usePlatforms(collectionId);
   const [excludedPlatformIds, setExcludedPlatformIds] = useState<string[]>(
     item?.excludedPlatformIds ?? []
+  );
+  // The switched-on platforms (#1955), and any switched off that this copy is already kept off.
+  const platforms = useMemo(
+    () =>
+      allPlatforms.filter((p) => p.enabled || (item?.excludedPlatformIds ?? []).includes(p.id)),
+    [allPlatforms, item?.excludedPlatformIds]
   );
   const [disposition, setDisposition] = useState<Record<DispositionKey, boolean>>(
     item
@@ -723,7 +728,7 @@ export function InventoryItemFormDialog({
               {/* Row 3b: platforms this copy is never listed on (#506). The whole set is edited
                   here, unlike the list's row and bulk entries, which turn one platform on or off —
                   this is the only surface that asks the question without a platform already in
-                  scope. Absent until the collection has a platform contact to name. */}
+                  scope. Absent until the collection has a platform to name. */}
               {platforms.length > 0 && (
                 <div>
                   <GroupLabel>Never list on</GroupLabel>

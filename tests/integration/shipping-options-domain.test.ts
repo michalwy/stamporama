@@ -48,13 +48,13 @@ describe("shipping options list", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
   });
@@ -93,7 +93,7 @@ describe("shipping options list", () => {
     assert.deepEqual(others.map((m) => m.name), ["Priority"]);
   });
 
-  it("refuses a contact that is not a platform", async () => {
+  it("refuses a contact — a platform is no contact (#1955)", async () => {
     const buyer = await prisma.contact.create({
       data: { collectionId, name: "A buyer", buyer: true },
     });
@@ -105,7 +105,7 @@ describe("shipping options list", () => {
           currency: "EUR",
           serviceId: null,
         }),
-      /not a platform/i
+      /Platform not found/i
     );
   });
 
@@ -174,13 +174,13 @@ describe("a sale's shipping option", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "PLN" },
       })
     ).id;
     await createShippingOption(userId, collectionId, platformId, {
@@ -335,8 +335,8 @@ describe("carrier services and the options linked to them", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
     await createCarrier(userId, collectionId, { name: "Poczta Polska", trackingUrlTemplate: null });

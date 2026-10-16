@@ -91,8 +91,8 @@ describe("action items notification centre (#367)", () => {
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
-    delcampeId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
-    allegroId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    delcampeId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
+    allegroId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
     sellerId = (await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } })).id;
 
     const mk = async () =>
@@ -197,7 +197,7 @@ describe("action items notification centre (#367)", () => {
     // own `deadCount` deliberately answer differently.
     const stamp = await prisma.stamp.findFirstOrThrow({ where: { collectionId } });
     const condition = await prisma.stampCondition.findFirstOrThrow({ where: { collectionId } });
-    const ebayId = (await prisma.contact.create({ data: { collectionId, name: "eBay", platform: true } })).id;
+    const ebayId = (await prisma.platform.create({ data: { collectionId, name: "eBay" } })).id;
     const both = (
       await createItem(userId, collectionId, {
         stampId: stamp.id,

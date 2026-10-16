@@ -80,11 +80,10 @@ describe("{catalog} on a multi-stamp copy (#749)", () => {
     danzigId = await area("Danzig", "DR");
 
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Delcampe",
-          platform: true,
           platformCurrency: "EUR",
           titleTemplate: TITLE_TEMPLATE,
           descriptionTemplate: DESCRIPTION_TEMPLATE,

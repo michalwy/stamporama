@@ -7,6 +7,8 @@ ADR-0022** §2 (what a datapoint is) and ADR-0029 §2 (what the ratio is learned
 they did for the collector's own lots. Markets and the anchoring set per area are #1634 (§8 below);
 the agent API that records observations in batches is #1635, which also added §9.
 
+An observation's platform is a `Platform` since [ADR-0071](0071-platform-entity.md) (#1955); its auction house stays a contact.
+
 ## Context
 
 Market value (ADR-0022) is built only from the collector's own closed lots. Every lot is a fact of

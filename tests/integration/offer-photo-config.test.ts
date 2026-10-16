@@ -7,7 +7,7 @@ import {
   getOfferDetail,
   updateOfferPhotoConfig,
 } from "../../src/lib/offers";
-import { updateContact } from "../../src/lib/contacts";
+import { updatePlatform } from "../../src/lib/platforms";
 
 // Offer photo configuration on two levels (#308): the platform holds what it accepts (limits, read
 // live) plus the defaults a new offer is seeded from, and the offer holds its own copy of sides,
@@ -66,11 +66,10 @@ describe("offer photo configuration (#308)", () => {
     ).id;
 
     configuredPlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           platformCurrency: "EUR",
           maxPhotos: 8,
           maxPhotoEdge: 1600,
@@ -82,8 +81,8 @@ describe("offer photo configuration (#308)", () => {
       })
     ).id;
     barePlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
   });
@@ -128,7 +127,7 @@ describe("offer photo configuration (#308)", () => {
 
       // A one-sided platform has nothing to arrange, so the same template leaves it alone rather
       // than quietly adding the other side.
-      await prisma.contact.update({
+      await prisma.platform.update({
         where: { id: configuredPlatformId },
         data: { photoSides: "front" },
       });
@@ -136,7 +135,7 @@ describe("offer photo configuration (#308)", () => {
       assert.equal(front?.photoConfig.photoSides, "front");
     } finally {
       await prisma.collageTemplate.update({ where: { id: templateId }, data: { pairSides: false } });
-      await prisma.contact.update({
+      await prisma.platform.update({
         where: { id: configuredPlatformId },
         data: { photoSides: "both" },
       });
@@ -148,7 +147,7 @@ describe("offer photo configuration (#308)", () => {
     // false and `barePlatformId` has no template at all — neither has said anything about the
     // arrangement, and reading that silence as "do not pair" is what turned a platform set to
     // *Front and back, paired* into offers on plain *Front and back*.
-    await prisma.contact.updateMany({
+    await prisma.platform.updateMany({
       where: { id: { in: [configuredPlatformId, barePlatformId] } },
       data: { photoSides: "paired" },
     });
@@ -170,13 +169,13 @@ describe("offer photo configuration (#308)", () => {
       });
       assert.equal((await getOfferDetail(userId, id))?.photoConfig.photoSides, "paired");
     } finally {
-      await prisma.contact.update({
+      await prisma.platform.update({
         where: { id: configuredPlatformId },
         data: { photoSides: "both" },
       });
       // Back to the column default it was created with — a later case asserts a bare platform
       // seeds `front`.
-      await prisma.contact.update({
+      await prisma.platform.update({
         where: { id: barePlatformId },
         data: { photoSides: "front" },
       });
@@ -191,9 +190,9 @@ describe("offer photo configuration (#308)", () => {
       maxPhotoFileSizeMib: 10,
     });
 
-    await prisma.contact.update({ where: { id: configuredPlatformId }, data: { maxPhotos: 4 } });
+    await prisma.platform.update({ where: { id: configuredPlatformId }, data: { maxPhotos: 4 } });
     assert.equal((await getOfferDetail(userId, offerId))?.platformPhotoLimits.maxPhotos, 4);
-    await prisma.contact.update({ where: { id: configuredPlatformId }, data: { maxPhotos: 8 } });
+    await prisma.platform.update({ where: { id: configuredPlatformId }, data: { maxPhotos: 8 } });
   });
 
   it("leaves the collage numbers unset when the platform has no default template", async () => {
@@ -206,7 +205,7 @@ describe("offer photo configuration (#308)", () => {
 
   it("does not touch a prepared offer when the platform's defaults change", async () => {
     const offerId = await offerOn(configuredPlatformId);
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: configuredPlatformId },
       data: { photoSides: "front", tileLabelLeftTemplate: "{name}" },
     });
@@ -218,7 +217,7 @@ describe("offer photo configuration (#308)", () => {
     assert.equal(detail?.photoConfig.collage?.collageRows, 5);
 
     // Restore, so the ordering of the remaining cases doesn't depend on this one.
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: configuredPlatformId },
       data: { photoSides: "both", tileLabelLeftTemplate: "{catalog}" },
     });
@@ -279,12 +278,12 @@ describe("offer photo configuration (#308)", () => {
     const doomed = await prisma.collageTemplate.create({
       data: { collectionId, name: "Doomed", rows: 2, columns: 2, gapPercent: 8, labelPercent: 0 },
     });
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: barePlatformId },
       data: { defaultCollageTemplateId: doomed.id },
     });
     await prisma.collageTemplate.delete({ where: { id: doomed.id } });
-    const platform = await prisma.contact.findUniqueOrThrow({ where: { id: barePlatformId } });
+    const platform = await prisma.platform.findUniqueOrThrow({ where: { id: barePlatformId } });
     assert.equal(platform.defaultCollageTemplateId, null);
   });
 
@@ -301,9 +300,8 @@ describe("offer photo configuration (#308)", () => {
     const foreign = await prisma.collageTemplate.create({
       data: { collectionId: other.id, name: "Foreign", rows: 2, columns: 2, gapPercent: 8, labelPercent: 0 },
     });
-    const saved = await updateContact(userId, barePlatformId, {
-      name: "Delcampe",
-      platform: true,
+    const saved = await updatePlatform(userId, barePlatformId, {
+      name: "Bare",
       defaultCollageTemplateId: foreign.id,
     });
     assert.equal(saved.defaultCollageTemplateId, null);

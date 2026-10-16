@@ -47,8 +47,8 @@ async function seedFixtures(suffix: string) {
   const shelf = await prisma.location.create({
     data: { collectionId: collection.id, name: "Shelf", assignable: false },
   });
-  const platform = await prisma.contact.create({
-    data: { collectionId: collection.id, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+  const platform = await prisma.platform.create({
+    data: { collectionId: collection.id, name: "Delcampe", platformCurrency: "EUR" },
   });
   return {
     userId: user.id,

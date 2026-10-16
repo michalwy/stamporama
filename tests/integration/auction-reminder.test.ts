@@ -50,7 +50,7 @@ describe("the morning auction reminder (#1373)", () => {
     collectionId = col.id;
     const sellerId = (await prisma.contact.create({ data: { collectionId, name: "Köhler", seller: true } })).id;
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })
     ).id;
     saleId = (
       await prisma.auctionSale.create({

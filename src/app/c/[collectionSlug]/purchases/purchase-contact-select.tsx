@@ -31,8 +31,8 @@ interface PurchaseContactSelectProps {
   inputId?: string;
   placeholder: string;
   /** Narrows suggestions to contacts carrying this role, and (server-side) tags a newly
-   * created contact with it: `seller` for suppliers, `platform` for platforms. Omitted, every
-   * contact is suggested — a price observation's auction house (#1633) may be filed under `seller`
+   * created contact with it: `seller` for suppliers. `platform` suggests the switched-on platforms
+   * instead, and a new name becomes a generic platform (#1955). Omitted, every contact is suggested — a price observation's auction house (#1633) may be filed under `seller`
    * from the collector's own bidding, and the role it gets on creation is the server's to set. */
   role?: "platform" | "seller" | "buyer";
   disabled?: boolean;
@@ -124,9 +124,9 @@ export function PurchaseContactSelect({
           pick({
             id: c.id,
             name: c.name,
-            platformCurrency: c.platformCurrency,
-            defaultStartingPrice: c.defaultStartingPrice,
-            defaultListingType: c.defaultListingType,
+            platformCurrency: c.platformCurrency ?? null,
+            defaultStartingPrice: c.defaultStartingPrice ?? null,
+            defaultListingType: c.defaultListingType ?? null,
           })
         }
         placeholder={placeholder}

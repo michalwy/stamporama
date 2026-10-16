@@ -51,12 +51,14 @@ describe("Intake documents list — platform and supplier filters (#1392)", () =
         },
       })
     ).id;
-    const contact = async (name: string, role: "platform" | "seller") =>
-      (await prisma.contact.create({ data: { collectionId, name, [role]: true } })).id;
-    allegro = await contact("Allegro", "platform");
-    ebay = await contact("eBay", "platform");
-    janek = await contact("Janek", "seller");
-    unused = await contact("Never bought from", "seller");
+    const platform = async (name: string) =>
+      (await prisma.platform.create({ data: { collectionId, name } })).id;
+    const seller = async (name: string) =>
+      (await prisma.contact.create({ data: { collectionId, name, seller: true } })).id;
+    allegro = await platform("Allegro");
+    ebay = await platform("eBay");
+    janek = await seller("Janek");
+    unused = await seller("Never bought from");
 
     const purchase = async (data: {
       platformId?: string;

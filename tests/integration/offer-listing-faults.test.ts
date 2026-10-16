@@ -70,11 +70,10 @@ describe("faults in offer texts (#1559)", () => {
     ).id;
 
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           titleTemplate: "{name} {faults}",
           titleLanguage: "pl",
           descriptionTemplate: "{name}\n{#faultyCopy}Wady {name}: {faults}\n{/faultyCopy}",

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer } from "../../src/lib/offers";
-import { setDelcampePlatform } from "../../src/lib/delcampe";
 import {
   DelcampeOrderError,
   findSalesForDelcampeOrders,
@@ -120,17 +119,16 @@ describe("Delcampe order import (#612)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Delcampe",
-          platform: true,
           platformCurrency: "USD",
           maxPhotos: 6,
         },
       })
     ).id;
-    await setDelcampePlatform(userId, collectionId, platformId);
+    await prisma.platform.update({ where: { id: platformId }, data: { platformModule: "delcampe" } });
   });
 
   after(async () => {

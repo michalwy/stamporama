@@ -35,6 +35,7 @@ import {
   type AuctionSettlementInput,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
+import { resolvePlatform } from "@/lib/platforms";
 import { normalizeLineCondition } from "@/lib/auction-line-condition";
 import {
   applyAuctionLotTagChanges,
@@ -114,10 +115,9 @@ async function resolveSale(collectionId: string, raw: AuctionSaleRaw) {
   });
   if (!sellerId) return { ok: false as const, message: "Name the seller this parcel comes from." };
 
-  const platformId = await resolvePurchaseContact(collectionId, {
+  const platformId = await resolvePlatform(collectionId, {
     id: raw.platformId,
     name: raw.platformName,
-    role: "platform",
   });
   if (!platformId) {
     return { ok: false as const, message: "Name the platform this sale is running on." };

@@ -189,13 +189,13 @@ describe("series from singles (#1210)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Colnect", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Colnect", platformCurrency: "EUR" },
       })
     ).id;
     partnerId = (

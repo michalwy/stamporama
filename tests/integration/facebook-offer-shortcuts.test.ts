@@ -11,7 +11,6 @@ import {
 } from "../../src/lib/offers";
 import { commitLotProposal } from "../../src/lib/lot-builder";
 import type { LotBuilderRequest } from "../../src/lib/lot-builder-criteria";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
 import { createAssistantToken } from "../../src/lib/api-tokens";
@@ -82,11 +81,11 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "EUR" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     const vendor = await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } });
     catalogNameId = (
       await prisma.catalogName.create({

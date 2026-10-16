@@ -8,8 +8,6 @@ import {
   findOpenAuctionSale,
   listAuctionLots,
 } from "../../src/lib/auctions";
-import { setAllegroPlatform } from "../../src/lib/allegro";
-import { setPhilasearchPlatform } from "../../src/lib/philasearch";
 
 // Capturing a lot from a marketplace page (#355; ADR-0021 §8). What is worth a real database here is
 // everything the extension deliberately does **not** decide: which platform the page belongs to,
@@ -67,13 +65,13 @@ describe("auction lot capture (#355)", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
   });
 
-  it("refuses while no platform is marked as Allegro", async () => {
+  it("refuses while the collection has no switched-on Allegro platform", async () => {
     await assert.rejects(
       () => captureAuctionLot(userId, collectionId, listing(), { dryRun: false }),
       (e: unknown) =>
@@ -82,7 +80,7 @@ describe("auction lot capture (#355)", () => {
   });
 
   it("previews without creating the seller or the sale", async () => {
-    await setAllegroPlatform(userId, collectionId, platformId);
+    await prisma.platform.update({ where: { id: platformId }, data: { platformModule: "allegro" } });
 
     const preview = await captureAuctionLot(userId, collectionId, listing(), { dryRun: true });
     assert.equal(preview.outcome, "created");
@@ -247,14 +245,15 @@ describe("auction lot capture (#355)", () => {
     // `lotNo` is one field over two vocabularies: `Lot 42` in a printed catalogue and an Allegro
     // offer number. The match is scoped to sales on the platform being captured from, so a lot
     // numbered 42 in a house sale is not the Allegro auction whose offer id happens to be 42.
-    const house = await prisma.contact.create({
-      data: { collectionId, name: `Köhler-${Date.now()}`, seller: true, platform: true },
-    });
+    // A house selling directly is both the seller and the platform — two records since #1955.
+    const houseName = `Köhler-${Date.now()}`;
+    const house = await prisma.contact.create({ data: { collectionId, name: houseName, seller: true } });
+    const housePlatform = await prisma.platform.create({ data: { collectionId, name: houseName } });
     const houseSale = await prisma.auctionSale.create({
       data: {
         collectionId,
         sellerId: house.id,
-        platformId: house.id,
+        platformId: housePlatform.id,
         name: "Köhler 385",
         currency: "EUR",
       },
@@ -377,11 +376,11 @@ describe("auction lot capture from Philasearch (#742)", () => {
 
   before(async () => {
     philasearchId = (
-      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })
     ).id;
   });
 
-  it("refuses while no platform is marked as Philasearch, naming where to set it", async () => {
+  it("refuses while the collection has no switched-on Philasearch platform, naming where to switch it on", async () => {
     await assert.rejects(
       () => captureAuctionLot(userId, collectionId, houseLot(), { dryRun: true }),
       (e: unknown) =>
@@ -399,7 +398,7 @@ describe("auction lot capture from Philasearch (#742)", () => {
   });
 
   it("previews a new sale named after the house's own", async () => {
-    await setPhilasearchPlatform(userId, collectionId, philasearchId);
+    await prisma.platform.update({ where: { id: philasearchId }, data: { platformModule: "philasearch" } });
 
     const preview = await captureAuctionLot(userId, collectionId, houseLot(), { dryRun: true });
     assert.equal(preview.outcome, "created");

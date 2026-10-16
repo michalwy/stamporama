@@ -90,7 +90,7 @@ describe("evaluateAllegroPublishBlockers", () => {
     assert.match(only.message, /Regular Account/);
   });
 
-  it("refuses a platform that is not the one marked as Allegro", () => {
+  it("refuses a platform that is not the Allegro platform", () => {
     assert.deepEqual(codes(readiness({ isAllegroPlatform: false })), ["not-allegro-platform"]);
   });
 

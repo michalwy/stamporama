@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
-import { setDelcampePlatform } from "@/lib/delcampe";
 import type { DelcampeListingProfileValues } from "@/lib/delcampe-listing-profile-rules";
 import {
   createDelcampeListingProfile,
@@ -31,11 +30,10 @@ import {
   updatePlatformCategoryLesson,
 } from "@/lib/platform-category";
 
-// Settings → Delcampe (#608, #609): which platform contact is Delcampe, the listing profiles its
-// uploads are built from, and what the collection has learned about Delcampe's categories. One file,
-// unlike Allegro's two, because there is no connection half — Delcampe is listed to by uploading a
-// file (#610), so a tab that names the platform and configures what its rows carry is the whole of
-// it.
+// Settings → Delcampe (#608, #609): the listing profiles its uploads are built from, and what the
+// collection has learned about Delcampe's categories. One file, unlike Allegro's two, because there
+// is no connection half — Delcampe is listed to by uploading a file (#610). The Delcampe platform's
+// own settings are `platforms.ts`' (#1955).
 //
 // Every action reports a message rather than throwing: they are all driven from one settings panel
 // (and one card on the offer screen), where a refusal is an ordinary thing to state and not a
@@ -52,22 +50,6 @@ async function getSession() {
 
 function failure(err: unknown, fallback: string): { status: "error"; message: string } {
   return { status: "error", message: err instanceof Error ? err.message : fallback };
-}
-
-/** Point the Delcampe settings at one platform contact, or clear it with an empty id. One write per
- *  change — the select *is* the control — and exclusive, so the collection always has exactly one
- *  answer to "which platform is Delcampe". */
-export async function setDelcampePlatformAction(
-  collectionId: string,
-  contactId: string
-): Promise<DelcampeActionState> {
-  const session = await getSession();
-  try {
-    await setDelcampePlatform(session.user.id, collectionId, contactId || null);
-    return { status: "success" };
-  } catch (err) {
-    return failure(err, "The Delcampe platform could not be set.");
-  }
 }
 
 export async function createDelcampeListingProfileAction(

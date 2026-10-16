@@ -55,7 +55,7 @@ describe("auction list search (#484)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Köhler", seller: true } })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
 
     saleId = await createAuctionSale(userId, collectionId, {

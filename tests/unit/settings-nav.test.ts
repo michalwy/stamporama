@@ -45,6 +45,7 @@ describe("settings navigation (#1469)", () => {
           "Collage templates",
           "Carriers",
           "Packing supplies",
+          "Platforms",
           "Allegro",
           "Delcampe",
           "Facebook",
@@ -82,9 +83,10 @@ describe("settings navigation (#1469)", () => {
     assert.deepEqual(withParts, [
       ["formats", ["Formats", "Multipliers"]],
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
-      ["allegro", ["Account", "Listing profiles", "Categories"]],
-      ["delcampe", ["Listing profiles", "Categories"]],
-      ["colnect", ["Catalogs", "Conditions", "Attributes", "List sync"]],
+      ["allegro", ["Account", "Listing profiles", "Categories", "Platform"]],
+      ["delcampe", ["Listing profiles", "Categories", "Platform"]],
+      ["facebook", ["Groups", "Platform"]],
+      ["colnect", ["Catalogs", "Conditions", "Attributes", "List sync", "Platform"]],
     ]);
   });
 

@@ -74,8 +74,8 @@ async function seed(): Promise<Fixtures> {
   });
   // Listed by hand, so advancing an offer asks nothing of the goods: the only gate in play here is
   // the collision this file is about.
-  const platform = await prisma.contact.create({
-    data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+  const platform = await prisma.platform.create({
+    data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
   });
   const condition = await prisma.stampCondition.create({
     data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },

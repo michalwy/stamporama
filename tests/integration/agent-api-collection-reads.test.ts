@@ -264,7 +264,7 @@ describe("the collection reads (#710)", () => {
     // well past the collection's own keep them from colliding with an allocated one.
     soldCopyId = await copy(baseStampId, mnhId, { forSale: true });
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
     const offer = await prisma.offer.create({
       data: {

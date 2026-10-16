@@ -89,7 +89,7 @@ export async function resolveFacebookBuyer(
   platformId: string,
   input: { name: string; profileUrl: string }
 ): Promise<{ ok: true; buyerId: string | null } | { ok: false; message: string }> {
-  const platform = await prisma.contact.findFirst({
+  const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
     select: { platformModule: true },
   });

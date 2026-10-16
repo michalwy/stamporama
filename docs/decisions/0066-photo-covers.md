@@ -5,6 +5,8 @@
 Accepted. Decided with the collector on 2026-10-07 and built by #1665. §4–5 amended by #1891
 (2026-10-13): only areas whose stamps may carry forbidden symbols are asked about.
 
+The Facebook platform starts needing covers when it is made, since [ADR-0071](0071-platform-entity.md) (#1955) — there is no longer a contact to be *newly named* as Facebook.
+
 ## Context
 
 Listing German Reich material on Facebook risks warnings: a photo showing Adolf Hitler or a swastika

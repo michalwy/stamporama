@@ -42,7 +42,7 @@ describe("per-set catalogue value + cost (#378)", () => {
       },
     });
     collectionId = col.id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
 
     const vendor = await prisma.catalogVendor.create({
       data: { collectionId, name: "Michel", abbreviation: "Mi" },

@@ -16,6 +16,8 @@ by #1800: a published offer's post text is frozen as it was posted. §2 is amend
 several lots can carry each lot's text in its photo's caption. §2 is amended by #1842: a post of
 several lots has a number and a screen of its own.
 
+Facebook is the Facebook module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact named as Facebook; its groups and settings are unchanged.
+
 ## Context
 
 The collector wants to sell by auction in Facebook groups. That works differently from Allegro or

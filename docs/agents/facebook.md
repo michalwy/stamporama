@@ -87,16 +87,17 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   text on `text/plain`. `renderFacebookPostText` is the source, unchanged. Whether Facebook keeps
   the formatting on paste was the collector's to check — no session drives a browser.
 
-- **One platform, groups under it** (#1543; ADR-0061 §1). Facebook is the `Contact` carrying
-  `platformModule = "facebook"` (`FACEBOOK_PLATFORM_MODULE`), set on Settings → Facebook through the
-  shared exclusive `setModulePlatform` (`src/lib/facebook.ts`, Delcampe's thin-file shape). A group is a
-  `FacebookGroup` row owned by that contact (`platformId`, cascading with it), unique by name per
+- **One platform, groups under it** (#1543; ADR-0061 §1). Facebook is the `Platform` carrying
+  `platformModule = "facebook"` (`FACEBOOK_PLATFORM_MODULE`) — since #1955 (ADR-0071) the collection's
+  one Facebook module platform, configured and switched on on the Platform tab of Settings → Facebook
+  (`src/lib/facebook.ts`, Delcampe's thin-file shape). A group is a
+  `FacebookGroup` row owned by that platform (`platformId`, cascading with it), unique by name per
   platform, archived ones included — an archived group comes back under the name it had. The marker is
   in **neither** rule table of `platform-modules.ts`: no listing half, no capture, no close, so it
   inherits nobody's rules by existing (`tests/unit/platform-modules.test.ts` pins that).
 
 - **A group's settings follow the platform's unless set custom** (#1661, amending ADR-0061 §6). The
-  platform's own are a `FacebookDefaults` row keyed by the platform contact (`readFacebookDefaults`,
+  platform's own are a `FacebookDefaults` row keyed by the platform (`readFacebookDefaults`,
   no row = `FACEBOOK_BLANK_SETTINGS`), with the group's columns bar the currency — that is
   `platformCurrency`, which a group naming none already used. A group lists its own settings in
   `customSettings` (`FACEBOOK_GROUP_SETTINGS`; `startingPrice` is mode and value together), and a
@@ -109,7 +110,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   then frozen with it (#1800, above). The
   migration made a setting custom exactly where it differed from the platform's, and moved the
   Facebook contact's `defaultStartingPrice` (never read by a Facebook auction) into the defaults row
-  as an `amount`; the contact dialog no longer offers that field for the Facebook platform. The post
+  as an `amount`; the platform's settings no longer offer that field for the Facebook platform. The post
   template is **not** the contact's `descriptionTemplate` (decided with the collector, 2026-10-06):
   that one writes the offer's description, which `{description}` puts into the post.
 
@@ -136,7 +137,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `updateOffer`: on the Facebook platform a group **of that platform** is required, a new auction may
   name only one in use (an edit may keep its archived one), and everything Facebook is null off it —
   so moving an offer away clears it. The listing type was forced to `auction` here until #1671 (top of
-  this file), and the group's `amount` stands in for `Contact.defaultStartingPrice` as the
+  this file), and the group's `amount` stands in for `Platform.defaultStartingPrice` as the
   blank-submission fallback (`facebookPricingDefaults`); `catalogPercent` was the **form's** job
   alone, over the catalogue suggestion it already holds (#230), until #1663 gave the server the same
   figure over the seed (below) — the form's stated figure still outranks it. `Offer.bidIncrement` is seeded from the group on create only.

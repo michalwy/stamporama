@@ -157,7 +157,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {hasActiveFilters
               ? "No contacts match these filters."
-              : "No contacts yet. Add the people, auction houses, and platforms you deal with."}
+              : "No contacts yet. Add the people and auction houses you deal with."}
           </div>
         )}
 
@@ -178,7 +178,6 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
       {(dialog.kind === "add" || dialog.kind === "edit") && (
         <ContactFormDialog
           mode={dialog.kind}
-          collectionId={collectionId}
           contact={dialog.kind === "edit" ? dialog.contact : undefined}
           isPending={isPending}
           error={actionError}

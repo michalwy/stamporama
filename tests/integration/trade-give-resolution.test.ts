@@ -63,8 +63,8 @@ async function seed(): Promise<Fixtures> {
   const partner = await prisma.contact.create({
     data: { collectionId, name: "Karel", exchangePartner: true },
   });
-  const platform = await prisma.contact.create({
-    data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+  const platform = await prisma.platform.create({
+    data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
   });
   const condition = await prisma.stampCondition.create({
     data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },

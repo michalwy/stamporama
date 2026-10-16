@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
-import { setFacebookPlatform } from "@/lib/facebook";
 import type {
   FacebookGroupValues,
   FacebookMultiLotLayout,
@@ -33,7 +32,8 @@ import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sa
 import { patchOffer } from "@/lib/offers";
 import { assertCollectionOwner } from "@/lib/platform-category";
 
-// Settings → Facebook (#1543; ADR-0061): which platform contact is Facebook, and the groups under it.
+// Settings → Facebook (#1543; ADR-0061): the groups under the Facebook platform. The platform's own
+// settings are `platforms.ts`' (#1955).
 //
 // Every action reports a message rather than throwing, the Delcampe actions' rule: they are driven
 // from one settings page, where a refusal — a duplicate name, a group with offers that cannot be
@@ -49,20 +49,6 @@ async function getSession() {
 
 function failure(err: unknown, fallback: string): { status: "error"; message: string } {
   return { status: "error", message: err instanceof Error ? err.message : fallback };
-}
-
-/** Point the Facebook page at one platform contact, or clear it with an empty id. */
-export async function setFacebookPlatformAction(
-  collectionId: string,
-  contactId: string
-): Promise<FacebookActionState> {
-  const session = await getSession();
-  try {
-    await setFacebookPlatform(session.user.id, collectionId, contactId || null);
-    return { status: "success" };
-  } catch (err) {
-    return failure(err, "The Facebook platform could not be set.");
-  }
 }
 
 /** State the platform's own settings, which every group follows unless it holds its own (#1661). */

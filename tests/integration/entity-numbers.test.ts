@@ -75,18 +75,17 @@ describe("entity short numbers + quick jump (#431/#432)", () => {
     ).id;
 
     areaId = (await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } })).id;
+    // A house selling directly: the seller and the platform, two records since #1955.
     platformId = (
-      await prisma.contact.create({
-        data: {
-          collectionId,
-          name: `EntityNoMarket-${ts}`,
-          platform: true,
-          platformCurrency: "EUR",
-          seller: true,
-        },
+      await prisma.platform.create({
+        data: { collectionId, name: `EntityNoMarket-${ts}`, platformCurrency: "EUR" },
       })
     ).id;
-    sellerId = platformId;
+    sellerId = (
+      await prisma.contact.create({
+        data: { collectionId, name: `EntityNoMarket-${ts}`, seller: true },
+      })
+    ).id;
 
     auctionSaleId = await createAuctionSale(userId, collectionId, {
       sellerId,

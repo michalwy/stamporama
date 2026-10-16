@@ -509,7 +509,7 @@ describe("collection structure values (#1402)", () => {
 
     // What copies like the first fetched at auction: one closed lot at 50.00.
     const sellerId = (await prisma.contact.create({ data: { collectionId, name: "Seller", seller: true } })).id;
-    const platformId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    const platformId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
     const sale = await prisma.auctionSale.create({
       data: { collectionId, sellerId, platformId, name: "Sale", currency: "PLN" },
     });

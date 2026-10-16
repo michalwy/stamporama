@@ -54,7 +54,7 @@ describe("adding sold sets to a sent sale (#1950)", () => {
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
 
     offerId = await createOffer(userId, collectionId, {
       platformId,

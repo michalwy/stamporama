@@ -88,13 +88,13 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
     });
 
     plPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, titleTemplate: TEMPLATE, titleLanguage: "pl" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", titleTemplate: TEMPLATE, titleLanguage: "pl" },
       })
     ).id;
     enPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, titleTemplate: TEMPLATE, titleLanguage: "en" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", titleTemplate: TEMPLATE, titleLanguage: "en" },
       })
     ).id;
 
@@ -153,7 +153,7 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
     assert.equal(await regenerateOfferText(userId, offerId, "name"), "Mercury Used Poland");
     assert.equal(await regenerateOfferText(userId, offerId, "name", "pl"), "Merkury Kasowane Polska");
     // Nothing about the choice is stored — the platform still lists in English.
-    const platform = await prisma.contact.findUniqueOrThrow({ where: { id: enPlatformId } });
+    const platform = await prisma.platform.findUniqueOrThrow({ where: { id: enPlatformId } });
     assert.equal(platform.titleLanguage, "en");
     assert.equal((await getOfferDetail(userId, offerId))?.name, "Merkury Kasowane Polska");
   });
@@ -187,8 +187,8 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
   });
 
   it("previews nothing when the platform has no title template", async () => {
-    const bare = await prisma.contact.create({
-      data: { collectionId, name: "Flea market", platform: true },
+    const bare = await prisma.platform.create({
+      data: { collectionId, name: "Flea market" },
     });
     const offerId = await offerOn(bare.id);
     assert.equal(await previewOfferTitle(userId, offerId, [copyId]), null);

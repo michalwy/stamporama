@@ -169,6 +169,9 @@ model Collection {
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
+  // The marketplaces it sells and buys on (#1955; ADR-0071) — the five module platforms and the
+  // collector's own generic ones.
+  platforms       Platform[]
   locations       Location[]
   purchases       Purchase[]
   // Card scans and the tiles cut from them (#566/#586). Every one belongs to an intake document
@@ -615,7 +618,7 @@ model StampPrintingTranslation {
 //    templates a new offer on that platform seeds from — and both are `onDelete: SetNull`, so a
 //    template stays freely deletable.
 //
-// Templates carry no platform limits (max photos / edge / file size); those live on `Contact` and
+// Templates carry no platform limits (max photos / edge / file size); those live on `Platform` and
 // are read live at render time (#308, #310).
 model CollageTemplate {
   id           String @id @default(cuid())
@@ -663,9 +666,9 @@ model CollageTemplate {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
   // template deleted while a platform points at it simply leaves the platform without a default.
-  defaultForPlatforms Contact[] @relation("PlatformDefaultCollage")
+  defaultForPlatforms Platform[] @relation("PlatformDefaultCollage")
   // Platforms whose checklist-group photos (#1673) seed from this template, on the same terms.
-  defaultGroupForPlatforms Contact[] @relation("PlatformDefaultGroupCollage")
+  defaultGroupForPlatforms Platform[] @relation("PlatformDefaultGroupCollage")
 
   @@index([collectionId])
   @@map("collage_template")
@@ -1343,7 +1346,7 @@ model Album {
   // stops fitting — so the page plan itself depends on this column, and a language chosen at render
   // time would make a page's catalog-range identity not a property of the album at all.
   //
-  // A free ISO 639-1 code, as `Contact.titleLanguage` is, and **not nullable**: the collection's
+  // A free ISO 639-1 code, as `Platform.titleLanguage` is, and **not nullable**: the collection's
   // default is a real code and is what a new album starts at, so a null would be a second way of
   // saying what `Collection.defaultLanguage` already says. #777 unions these into the collection's
   // language set, so an album in a language nothing is sold in still gets an input in every entity
@@ -2194,7 +2197,7 @@ model ColnectListDoneMark {
 // public REST API (#476; ADR-0023). It is the foundation the sold-listing worklist (#467) and the
 // order → Sale flow (#463) read through; on its own it reads no business data.
 //
-// **Per collection**, matching the Allegro platform contact (#355) it attaches to and every other
+// **Per collection**, matching the Allegro platform (#355) it attaches to and every other
 // platform setting here — an Allegro account belongs to a seller rather than to a collection, but
 // this app has one authorization model (`collectionId` + owner check) and an instance-level secret
 // would sit outside it. One row per collection, hence the unique.
@@ -2489,7 +2492,7 @@ model AllegroListing {
 
 // The seller-side settings every published Allegro listing needs and no offer has any notion of
 // (#486; ADR-0025) — delivery, after-sales services and where the parcel is sent from — held as a
-// **named profile** on the Allegro platform contact.
+// **named profile** on the Allegro platform.
 //
 // `POST /sale/product-offers` demands all of it beyond what an offer holds, and every field of it is
 // the collector's *account configuration* rather than anything about a stamp: it is identical for a
@@ -2511,7 +2514,7 @@ model AllegroListing {
 model AllegroListingProfile {
   id           String @id @default(cuid())
   collectionId String
-  // The platform (a `Contact` carrying the `platform` role, and the one this collection calls
+  // The platform (the one this collection calls
   // Allegro) whose listings are published with this. Owned by it, exactly as the shipping options
   // are (#468).
   platformId   String
@@ -2578,10 +2581,10 @@ model AllegroListingProfile {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // A profile belongs to its platform: deleting the platform takes its profiles with it, exactly as
   // it takes its shipping options.
-  platform   Contact    @relation("PlatformAllegroListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Platform   @relation("PlatformAllegroListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
   // The back-references of the two `SetNull` pointers at this row: the platform that publishes with
   // it by default, and the offers that named it in place of that default.
-  defaultForPlatforms Contact[] @relation("PlatformDefaultAllegroListingProfile")
+  defaultForPlatforms Platform[] @relation("PlatformDefaultAllegroListingProfile")
   offers              Offer[]   @relation("OfferAllegroListingProfile")
 
   // The names *are* the pick-list, so they are unique per platform — the shipping-option rule, for
@@ -2610,7 +2613,7 @@ model AllegroListingProfile {
 model DelcampeListingProfile {
   id           String @id @default(cuid())
   collectionId String
-  // The platform (the `Contact` this collection calls Delcampe) whose uploads use this. Owned by it,
+  // The platform (the one this collection calls Delcampe) whose uploads use this. Owned by it,
   // as the Allegro profiles and the shipping options are.
   platformId   String
   // What the collector calls it — "Standard letter", "Heavy lot, tracked". The pick list, so unique
@@ -2687,8 +2690,8 @@ model DelcampeListingProfile {
   updatedAt DateTime @default(now()) @updatedAt
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact    @relation("PlatformDelcampeListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
-  defaultForPlatforms Contact[] @relation("PlatformDefaultDelcampeListingProfile")
+  platform   Platform   @relation("PlatformDelcampeListingProfile", fields: [platformId], references: [id], onDelete: Cascade)
+  defaultForPlatforms Platform[] @relation("PlatformDefaultDelcampeListingProfile")
   offers              Offer[]   @relation("OfferDelcampeListingProfile")
 
   @@unique([platformId, name])
@@ -2737,7 +2740,7 @@ model DelcampeListing {
   // column**; null where the file stated neither or the pair could not be read.
   endsAt DateTime?
 
-  // What the listing is at right now, its currency taken from the Delcampe platform contact
+  // What the listing is at right now, its currency taken from the Delcampe platform
   // (#196) — the file states none, and a figure without a currency is not a price. `bidsCount` is
   // `bids_number` (`0` is "up, nobody has bid", which is not the same as unknown) and `bestBidder`
   // is the login the file names, held because it is what the row *said*; nothing is derived from it.
@@ -2839,8 +2842,8 @@ model DelcampeCategory {
 
 // A Facebook group the collector sells in — by auction, or as quick buys (#1671) (#1543; ADR-0061).
 //
-// Facebook is **one platform** — one `Contact`, named as Facebook on its own Settings page through the
-// same `platformModule` marker Delcampe and Allegro use — and the groups sit under it. A group is not a
+// Facebook is **one platform** — the Facebook module platform (#1955), configured on its own Settings
+// page — and the groups sit under it. A group is not a
 // platform of its own: that was rejected when the track was designed, because sales reports want
 // Facebook as a whole first and per group second, and the platform's currency, templates and photo
 // limits are one answer for every group.
@@ -2916,7 +2919,7 @@ model FacebookGroup {
   auctionDays        Int?
   closingTime        String?
   // The currency figures in this group are stated in, or null for the platform's own
-  // (`Contact.platformCurrency`, #196) — which is what nearly every group wants.
+  // (`Platform.platformCurrency`, #196) — which is what nearly every group wants.
   currency           String?
 
   // ── When a quick buy here needs posting again ──────────────────────────────────────────────────
@@ -2928,7 +2931,7 @@ model FacebookGroup {
   updatedAt DateTime @default(now()) @updatedAt
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact    @relation("PlatformFacebookGroup", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Platform   @relation("PlatformFacebookGroup", fields: [platformId], references: [id], onDelete: Cascade)
   offers     Offer[]    @relation("OfferFacebookGroup")
   posts      FacebookPost[]
 
@@ -2941,8 +2944,8 @@ model FacebookGroup {
 // The Facebook platform's own posting settings (#1661): what every group follows unless it marks a
 // setting custom (`FacebookGroup.customSettings`). The same fields as a group's, under the same
 // rules (`facebook-group-rules.ts`), except the currency — that is the platform's own
-// `Contact.platformCurrency` (#196), which a group following the platform already used. One row per
-// platform contact, written the first time Settings → Facebook saves one; no row reads as every
+// `Platform.platformCurrency` (#196), which a group following the platform already used. One row per
+// platform, written the first time Settings → Facebook saves one; no row reads as every
 // setting blank. Read live by the groups that follow it, and — like a group's — read when an auction
 // is created and then owned by the offer, so changing it never reaches an auction already made.
 model FacebookDefaults {
@@ -2973,7 +2976,7 @@ model FacebookDefaults {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  platform Contact @relation("PlatformFacebookDefaults", fields: [platformId], references: [id], onDelete: Cascade)
+  platform Platform @relation("PlatformFacebookDefaults", fields: [platformId], references: [id], onDelete: Cascade)
 
   @@map("facebook_defaults")
 }
@@ -3036,7 +3039,7 @@ model FacebookPost {
 model PlatformCategoryLesson {
   id           String @id @default(cuid())
   collectionId String
-  // The platform contact this row is about, which owns what is known about that marketplace's
+  // The platform this row is about, which owns what is known about that marketplace's
   // taxonomy — the `AllegroListingProfile` ownership, for the same reason (ADR-0026 §5). It is also
   // what keeps one table honest: a category id means nothing without the marketplace it belongs to,
   // and every read is filtered by it.
@@ -3069,7 +3072,7 @@ model PlatformCategoryLesson {
   createdAt  DateTime @default(now())
 
   collection Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact         @relation("PlatformCategoryLesson", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Platform        @relation("PlatformCategoryLesson", fields: [platformId], references: [id], onDelete: Cascade)
   // All three key references cascade: a learned association is derived knowledge about data that has
   // gone, not something the collector would want left behind pointing at an id that no longer names
   // anything.
@@ -3123,7 +3126,7 @@ model AllegroCategoryParameterMemory {
   createdAt  DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact    @relation("PlatformAllegroCategoryParameterMemory", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Platform   @relation("PlatformAllegroCategoryParameterMemory", fields: [platformId], references: [id], onDelete: Cascade)
 
   @@unique([platformId, categoryId, parameterId])
   @@index([collectionId])
@@ -3284,7 +3287,7 @@ model CollectionArea {
 // Per-language text for an area (#265, #293). The parent's own `titleName` column stays the
 // **default-language** value; a row here overrides it for one language. `language` is a free
 // ISO 639-1 code, and the set of languages a collection uses is the union of its platforms'
-// listing languages (`Contact.titleLanguage`) and its albums' printed languages (`Album.language`,
+// listing languages (`Platform.titleLanguage`) and its albums' printed languages (`Album.language`,
 // #767/#777) — derived **from use** either way, never configured: there is no language-configuration
 // screen, and adding one stays the thing not to do. Cascade-deleted with the area. First of the
 // per-entity translation tables; condition/certificate (#294), issue (#295) and stamp (#296)
@@ -3752,17 +3755,17 @@ model ItemCandidate {
 // what makes the bulk write idempotent.
 //
 // Both FKs **cascade**. Unlike a purchase or a sale, an exclusion records nothing that happened:
-// deleting the copy takes its exclusions with it, and deleting the platform contact must not be
+// deleting the copy takes its exclusions with it, and deleting the platform must not be
 // blocked by a preference that stops meaning anything the moment the platform is gone.
 model ItemPlatformExclusion {
   id         String   @id @default(cuid())
   itemId     String
-  // A `Contact` carrying the `platform` role — the same reference `Offer.platformId` is.
+  // A `Platform` — the same reference `Offer.platformId` is.
   platformId String
   createdAt  DateTime @default(now())
 
   item     Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  platform Contact @relation("PlatformItemExclusion", fields: [platformId], references: [id], onDelete: Cascade)
+  platform Platform @relation("PlatformItemExclusion", fields: [platformId], references: [id], onDelete: Cascade)
 
   // One decision per copy per platform; the unique is what lets the write be an upsert-by-absence.
   @@unique([itemId, platformId])
@@ -3948,8 +3951,8 @@ model Purchase {
   // ADR-0009).
   contactId    String?
   // Optional platform — the marketplace/intermediary a purchase went through (e.g. Allegro,
-  // eBay), distinct from the supplier (ADR-0009 §1). A `Contact` carrying the `platform`
-  // role; same `onDelete: Restrict` guard.
+  // eBay), distinct from the supplier (ADR-0009 §1). A `Platform` (#1955); same
+  // `onDelete: Restrict` guard.
   platformId   String?
   // The moment money was spent; the FX rate is frozen as of this date.
   purchasedAt  DateTime @db.Date
@@ -3995,7 +3998,7 @@ model Purchase {
 
   collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   contact    Contact?          @relation("PurchaseSupplier", fields: [contactId], references: [id], onDelete: Restrict)
-  platform   Contact?          @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  platform   Platform?         @relation("PurchasePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   lots       PurchaseLot[]
   expenses   PurchaseExpense[]
   // Packing supplies bought on this order, or brought in by this opening balance (#1897) — each a
@@ -4711,7 +4714,7 @@ model AuctionSale {
   // Transaction currency for every amount on this sale and its lots. Seeded from the seller's
   // `defaultCurrency` at creation and freely editable here. Currency belongs to the **seller**,
   // not the platform: philasearch aggregates houses listing in EUR, CHF and GBP, so the platform's
-  // fixed `Contact.platformCurrency` (#196) does not apply.
+  // fixed `Platform.platformCurrency` (#196) does not apply.
   currency     String
   // The seller's fees, seeded from the contact's defaults at creation and editable here (#308/#319
   // seeding pattern): changing a seller's settings must never re-price a sale already tracked.
@@ -4740,7 +4743,7 @@ model AuctionSale {
 
   collection Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   seller     Contact      @relation("AuctionSaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)
-  platform   Contact      @relation("AuctionSalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  platform   Platform     @relation("AuctionSalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   purchase   Purchase?    @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   lots       AuctionLot[]
   createdAt  DateTime     @default(now())
@@ -4967,7 +4970,7 @@ model PriceObservation {
   condition         StampCondition?    @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   format            StampFormat?       @relation(fields: [formatId], references: [id], onDelete: Restrict)
-  platform          Contact            @relation("PriceObservationPlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  platform          Platform           @relation("PriceObservationPlatform", fields: [platformId], references: [id], onDelete: Restrict)
   auctionHouse      Contact?           @relation("PriceObservationHouse", fields: [auctionHouseId], references: [id], onDelete: Restrict)
 
   @@index([collectionId])
@@ -4982,7 +4985,7 @@ model PriceObservation {
 
 // A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its
 // composition** directly (mirroring `Purchase ⊃ PurchaseLot ⊃ Item`): it holds N `OfferSet`s,
-// each an atomic sellable unit. `platformId` is a `Contact` carrying the `platform` role. Price +
+// each an atomic sellable unit. `platformId` is a `Platform` (#1955). Price +
 // currency are per-offer (platforms price independently). Lifecycle `state`: preparing | ready |
 // active | paused | sold | withdrawn — a new offer starts `preparing` (composed but not yet
 // published), is marked `ready` once assembled, then activated by hand (#188, #246). Nothing is
@@ -5241,7 +5244,7 @@ model Offer {
   // the platform's photo limit, so hiding one can let a truncated image back in.
   photoPlanUnpublished String[] @default([])
   // Whether this listing's photos must have symbols covered (#1665) — **an override of the
-  // platform's `Contact.coverSymbols`, read live**, not a seeded copy: null follows the platform,
+  // platform's `Platform.coverSymbols`, read live**, not a seeded copy: null follows the platform,
   // true and false override it either way. A platform's rules are a fact about the platform (#310),
   // so turning the flag on reaches every listing still following it at once. The covers themselves
   // live on the copy's photo (`PhotoCover`), never on the offer.
@@ -5403,7 +5406,7 @@ model Offer {
   colnectSaleId        String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  platform   Platform   @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
   allegroListingProfile AllegroListingProfile? @relation("OfferAllegroListingProfile", fields: [allegroListingProfileId], references: [id], onDelete: SetNull)
   delcampeListingProfile DelcampeListingProfile? @relation("OfferDelcampeListingProfile", fields: [delcampeListingProfileId], references: [id], onDelete: SetNull)
   facebookGroup FacebookGroup? @relation("OfferFacebookGroup", fields: [facebookGroupId], references: [id], onDelete: Restrict)
@@ -5917,7 +5920,7 @@ model Sale {
   createdAt     DateTime @default(now())
 
   collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  platform      Contact           @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  platform      Platform          @relation("SalePlatform", fields: [platformId], references: [id], onDelete: Restrict)
   buyer         Contact?          @relation("SaleBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
   shippingOption ShippingOption?  @relation(fields: [shippingOptionId], references: [id], onDelete: Restrict)
   sentAs        CarrierService?   @relation("SaleSentAs", fields: [sentAsServiceId], references: [id], onDelete: Restrict)
@@ -5953,7 +5956,7 @@ model Sale {
 model ShippingOption {
   id           String   @id @default(cuid())
   collectionId String
-  // The platform (a `Contact` carrying the `platform` role) this option is offered on.
+  // The platform this option is offered on.
   platformId   String
   // The carrier service a parcel sent this way goes by, or null where it was never said — then a
   // sale choosing the option has its postage entered by hand and no supplies filled in. `onDelete:
@@ -5969,7 +5972,7 @@ model ShippingOption {
   collection Collection      @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   // An option belongs to its platform: deleting the platform takes its options with it. (In
   // practice a platform with sales cannot be deleted at all — `Sale.platformId` is `Restrict`.)
-  platform   Contact         @relation("PlatformShippingOption", fields: [platformId], references: [id], onDelete: Cascade)
+  platform   Platform        @relation("PlatformShippingOption", fields: [platformId], references: [id], onDelete: Cascade)
   service    CarrierService? @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   sales      Sale[]
 
@@ -6787,19 +6790,101 @@ model Contact {
   // Optional, and stored normalised (`normalizeFacebookProfileUrl`) so the comparison is an equality.
   facebookProfileUrl String?
   // The market this contact sells on — a country, as its ISO 3166-1 alpha-2 code (#1634; ADR-0064).
-  // It is where a result's market comes from: an observation's from its house or else its platform,
-  // one of the collector's own lots from its sale's seller or else the sale's platform. Never copied
-  // onto a result, so a market set here reaches every result already recorded. Null is *not known*,
-  // and a result whose contacts say nothing counts as the collection's `homeMarket`.
+  // An observation's market comes from its house, else from its platform (`Platform.market`); one
+  // of the collector's own lots from its sale's seller, else the sale's platform. Never copied onto
+  // a result, so a market set here reaches every result already recorded. Null is *not known*, and
+  // a result whose contacts and platform say nothing counts as the collection's `homeMarket`.
   market           String?
   // Roles are independent, combinable boolean flags (a contact can be several at
-  // once), mirroring the disposition flags on `Item` (ADR-0007 §4, ADR-0008).
+  // once), mirroring the disposition flags on `Item` (ADR-0007 §4, ADR-0008). A marketplace is not
+  // one of them any more: it is a `Platform` of its own (#1955; ADR-0071).
   buyer            Boolean  @default(false)
   seller           Boolean  @default(false)
   exchangePartner  Boolean  @default(false)
   auctionHouse     Boolean  @default(false)
-  platform         Boolean  @default(false)
   other            Boolean  @default(false)
+  // ── Seller defaults for auction sales (#350; ADR-0021) ─────────────────────────────────────
+  // The currency and fees this seller normally trades on, all optional. **Seeded** onto an
+  // `AuctionSale` at creation and freely editable there — the same rule as the listing templates
+  // and photo defaults above: changing a seller's settings must never re-price a sale already
+  // being tracked or already settled. Only meaningful for contacts carrying the `seller` (or
+  // `auctionHouse`) role. Currency lives here rather than on the platform because philasearch
+  // aggregates houses listing in EUR, CHF and GBP, so `platformCurrency` (#196) cannot answer it.
+  defaultCurrency     String?
+  defaultShippingCost Decimal? @db.Decimal(10, 2)
+  buyerPremiumPercent Decimal? @db.Decimal(5, 2)
+  buyerPremiumFixed   Decimal? @db.Decimal(10, 2)
+  // The platform this seller was **last tracked on** (#351/#352). Written by the domain layer
+  // whenever a lot or a sale is created, and read back to pre-fill the platform once the seller is
+  // named — where you bid follows from who you buy from: one house always comes through an
+  // aggregator, another sells directly.
+  //
+  // Deliberately **not** shared with the platform an offer is listed on: where you bid and where
+  // you list are different marketplaces, so one field could only be right for one of them. It is a
+  // remembered value rather than a setting, so nothing in the contact form edits it, and
+  // `onDelete: SetNull` — deleting the platform must forget the memory, never block the delete.
+  defaultAuctionPlatformId String?
+  createdAt        DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
+  // (from `Purchase`) means a referenced contact cannot be deleted without first
+  // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
+  purchases         Purchase[] @relation("PurchaseSupplier")
+  // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
+  // via the `Sale.buyerId` FK (`onDelete: Restrict`).
+  salesBuyer        Sale[]     @relation("SaleBuyer")
+  // Auction settlements this contact is the seller of (ADR-0021). `onDelete: Restrict`, like
+  // purchases and sales.
+  auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
+  // Realised prices recorded from this contact as the auction house (#1633).
+  priceObservationsHouse    PriceObservation[] @relation("PriceObservationHouse")
+  // Exchanges with this contact as the partner (#646; ADR-0039). `onDelete: Restrict` from
+  // `Trade.partnerId`, the same detach-before-delete guard purchases and sales carry — a trade is a
+  // record of something that happened *with a person*, and a nameless one records half of it.
+  trades               Trade[]       @relation("TradePartner")
+  defaultAuctionPlatform    Platform? @relation("ContactAuctionPlatform", fields: [defaultAuctionPlatformId], references: [id], onDelete: SetNull)
+
+  // `name` is unique per collection (see migration).
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@index([collectionId, facebookProfileUrl])
+  @@index([defaultAuctionPlatformId])
+  @@map("contact")
+}
+
+// A marketplace the collection sells or buys on (#1955; ADR-0071) — Allegro, a forum, an auction
+// aggregator. It was a `Contact` carrying a Platform role until #1955, and its id is still the id
+// that contact had, so every reference moved across without a value changing. Two kinds: the five
+// **module platforms** (`platformModule` set — Allegro, Delcampe, Facebook, Colnect, Philasearch),
+// exactly one of each per collection, named after their module and configured on that module's own
+// Settings page; and any number of **generic platforms** the collector adds under Settings →
+// Platforms. The address book holds only people and firms: the seller, buyer or auction house of a
+// record is a `Contact`, and this is where the record happened.
+//
+// The settings columns kept their contact-era names (`platformCurrency`, `platformModule`), so the
+// reads that followed an offer's or a sale's `platform` relation needed no change.
+model Platform {
+  id               String   @id @default(cuid())
+  collectionId     String
+  // Unique within the collection, the module platforms' fixed names included — so no generic
+  // platform can be called Allegro. A module platform's name is its module's and is never renamed.
+  name             String
+  notes            String?
+  // Which module this platform is (#1955): `allegro` | `delcampe` | `facebook` | `colnect` |
+  // `philasearch` (`src/lib/platform-modules.ts`), or null for a generic platform. Unique per
+  // collection, so "which platform is Colnect" has exactly one answer. What the marker switches on
+  // is each module's own business: the listing preconditions for Colnect (#406), the platform a
+  // captured lot lands on for Allegro and Philasearch (#355, #742), the groups for Facebook (#1543).
+  platformModule   String?
+  // Whether the platform is offered in the platform pickers for a **new** record (#1955). Off keeps
+  // every record that already names it as it is — it only leaves the pickers. A module platform
+  // starts off unless the move found a contact for it; a generic one starts on.
+  enabled          Boolean  @default(true)
+  // The market this platform sells on — a country, as its ISO 3166-1 alpha-2 code (#1634;
+  // ADR-0064). A result's market is its auction house's, else its platform's (this). Null is *not
+  // known*, which counts as the collection's `homeMarket`.
+  market           String?
   // Fixed transaction currency for a platform (#196). Every offer and sale routed to this
   // platform inherits and locks this currency, guaranteeing offer↔sale consistency. Nullable —
   // only platforms carry it, and it is required (domain-enforced, not a DB constraint) before the
@@ -6894,14 +6979,6 @@ model Contact {
   maxTitleLength       Int?
   maxDescriptionLength Int?
   maxPrivateNoteLength Int?
-  // Which Assistant **platform module** can post to this platform (#406, part of #155) — the
-  // extension's `PlatformModule` id (`"colnect"`), or null for a platform the Assistant knows
-  // nothing about. It is what makes the listing preconditions answerable: they are that module's
-  // rules — a Colnect item-ID on every stamp, a Colnect grade for every condition — and applying
-  // them to a Delcampe listing would be noise about a form nobody is going to fill from here.
-  // Nullable and unset by default, so a collection that has never used the Assistant sees none of
-  // it; validated against the modules the app knows (`src/lib/platform-modules.ts`).
-  platformModule   String?
   // Defaults **seeded** onto every offer created on this platform, exactly as the listing-text
   // templates seed the offer's texts: which scan sides to include (`front` | `back` | `both` |
   // `paired`, #694 — the default collage template's pairing upgrades `both` to `paired`) and
@@ -6934,27 +7011,6 @@ model Contact {
   // above. Off by default, so nothing changes until the collector turns it on.
   photoGroupByChecklist Boolean @default(false)
   defaultGroupCollageTemplateId String?
-  // ── Seller defaults for auction sales (#350; ADR-0021) ─────────────────────────────────────
-  // The currency and fees this seller normally trades on, all optional. **Seeded** onto an
-  // `AuctionSale` at creation and freely editable there — the same rule as the listing templates
-  // and photo defaults above: changing a seller's settings must never re-price a sale already
-  // being tracked or already settled. Only meaningful for contacts carrying the `seller` (or
-  // `auctionHouse`) role. Currency lives here rather than on the platform because philasearch
-  // aggregates houses listing in EUR, CHF and GBP, so `platformCurrency` (#196) cannot answer it.
-  defaultCurrency     String?
-  defaultShippingCost Decimal? @db.Decimal(10, 2)
-  buyerPremiumPercent Decimal? @db.Decimal(5, 2)
-  buyerPremiumFixed   Decimal? @db.Decimal(10, 2)
-  // The platform this seller was **last tracked on** (#351/#352), pointing at another `Contact`
-  // carrying the `platform` role. Written by the domain layer whenever a lot or a sale is created,
-  // and read back to pre-fill the platform once the seller is named — where you bid follows from
-  // who you buy from: one house always comes through an aggregator, another sells directly.
-  //
-  // Deliberately **not** shared with the platform an offer is listed on: where you bid and where
-  // you list are different marketplaces, so one field could only be right for one of them. It is a
-  // remembered value rather than a setting, so nothing in the contact form edits it, and
-  // `onDelete: SetNull` — deleting the platform must forget the memory, never block the delete.
-  defaultAuctionPlatformId String?
   // The Allegro listing profile (#486) every listing on this platform is published with unless the
   // offer names another. Null on a platform that is not Allegro — which is most of them — and on an
   // Allegro platform whose profiles have not been set up yet, which is what #477 refuses to publish
@@ -6978,16 +7034,11 @@ model Contact {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   defaultCollageTemplate CollageTemplate? @relation("PlatformDefaultCollage", fields: [defaultCollageTemplateId], references: [id], onDelete: SetNull)
   defaultGroupCollageTemplate CollageTemplate? @relation("PlatformDefaultGroupCollage", fields: [defaultGroupCollageTemplateId], references: [id], onDelete: SetNull)
-  // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
-  // (from `Purchase`) means a referenced contact cannot be deleted without first
-  // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
-  purchases         Purchase[] @relation("PurchaseSupplier")
-  // Purchases routed through this contact as their platform (e.g. Allegro). Same
-  // `onDelete: Restrict` guard from the `Purchase.platformId` FK.
+  // Purchases routed through this platform (e.g. Allegro). `onDelete: Restrict` from
+  // `Purchase.platformId`: a platform something names cannot be deleted (ADR-0008 §4, ADR-0009).
   platformPurchases Purchase[] @relation("PurchasePlatform")
-  // Sales module (ADR-0012): offers listed on this contact's platform, and sales
-  // transacted through it. Both FKs are `onDelete: Restrict` (same detach-before-delete
-  // guard as purchases).
+  // Sales module (ADR-0012): offers listed on this platform, and sales transacted through it. Both
+  // FKs are `onDelete: Restrict` (the same detach-before-delete guard as purchases).
   offers            Offer[]    @relation("OfferPlatform")
   salesPlatform     Sale[]     @relation("SalePlatform")
   // The shipping options this platform's buyers can choose from (#468, #1909), at their buyer
@@ -7007,37 +7058,24 @@ model Contact {
   // The groups this platform auctions in, when it is Facebook (#1543; ADR-0061). They go with it.
   facebookGroups FacebookGroup[] @relation("PlatformFacebookGroup")
   facebookDefaults FacebookDefaults? @relation("PlatformFacebookDefaults")
-  // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
-  // via the `Sale.buyerId` FK (`onDelete: Restrict`).
-  salesBuyer        Sale[]     @relation("SaleBuyer")
-  // Auction settlements this contact is the seller of, and those routed through it as the
-  // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
-  auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
+  // Auction settlements routed through this platform (ADR-0021), `onDelete: Restrict`.
   auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
-  // Realised prices recorded from this contact as the platform, or as the auction house (#1633).
+  // Realised prices recorded on this platform (#1633).
   priceObservationsPlatform PriceObservation[] @relation("PriceObservationPlatform")
-  priceObservationsHouse    PriceObservation[] @relation("PriceObservationHouse")
-  // Exchanges with this contact as the partner (#646; ADR-0039). `onDelete: Restrict` from
-  // `Trade.partnerId`, the same detach-before-delete guard purchases and sales carry — a trade is a
-  // record of something that happened *with a person*, and a nameless one records half of it.
-  trades               Trade[]       @relation("TradePartner")
   // Copies deliberately never listed on this platform (#506). Cascades on delete — a preference
   // about a platform that no longer exists is not a record worth keeping.
   itemExclusions       ItemPlatformExclusion[] @relation("PlatformItemExclusion")
-  // Self-relation for the remembered auction platform above: a seller points at a platform, and a
-  // platform knows which sellers were last tracked on it.
-  defaultAuctionPlatform    Contact?  @relation("ContactAuctionPlatform", fields: [defaultAuctionPlatformId], references: [id], onDelete: SetNull)
+  // The sellers last tracked on this platform (`Contact.defaultAuctionPlatformId`).
   defaultAuctionPlatformFor Contact[] @relation("ContactAuctionPlatform")
 
-  // `name` is unique per collection (see migration).
   @@unique([collectionId, name])
+  @@unique([collectionId, platformModule])
   @@index([collectionId])
-  @@index([collectionId, facebookProfileUrl])
   @@index([defaultCollageTemplateId])
   @@index([defaultGroupCollageTemplateId])
-  @@index([defaultAuctionPlatformId])
   @@index([defaultAllegroListingProfileId])
-  @@map("contact")
+  @@index([defaultDelcampeListingProfileId])
+  @@map("platform")
 }
 
 model Location {

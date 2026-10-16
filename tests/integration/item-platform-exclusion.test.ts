@@ -51,10 +51,10 @@ describe("per-platform copy exclusions", () => {
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
     colnectId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
     delcampeId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
 
     const forSale = { stampId: stamp.id, conditionId: condition.id, forSale: true };
@@ -150,11 +150,11 @@ describe("per-platform copy exclusions", () => {
   });
 
   it("forgets the exclusions of a deleted platform rather than blocking the delete", async () => {
-    const gone = await prisma.contact.create({
-      data: { collectionId, name: "Ephemera", platform: true },
+    const gone = await prisma.platform.create({
+      data: { collectionId, name: "Ephemera" },
     });
     await setItemPlatformExclusion(userId, collectionId, [kept], gone.id, true);
-    await prisma.contact.delete({ where: { id: gone.id } });
+    await prisma.platform.delete({ where: { id: gone.id } });
     assert.equal(
       await prisma.itemPlatformExclusion.count({ where: { platformId: gone.id } }),
       0,

@@ -94,11 +94,11 @@ describe("shipping and packing data through the agent API (#1910)", () => {
       })
     ).id;
     allegroId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
-    await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" } });
+    await prisma.platform.create({ data: { collectionId, name: "Delcampe", platformCurrency: "EUR" } });
     partnerId = (await prisma.contact.create({ data: { collectionId, name: "Anna Nováková" } })).id;
 
     token = (await createAssistantToken(userId, collectionId, { label: "shipping agent", scope: "read_write", kind: "agent" })).token;

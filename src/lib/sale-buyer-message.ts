@@ -11,7 +11,7 @@ import { renderBuyerMessage, type BuyerMessageSale } from "./buyer-message-rules
 
 // The message to a buyer after a sale (#1815): the platform's template, rendered for one sale.
 //
-// **Which template.** Off Facebook it is the platform contact's own. On Facebook it is a setting like
+// **Which template.** Off Facebook it is the platform's own. On Facebook it is a setting like
 // the post templates (#1661): Facebook's defaults, and a group's own where it holds one. A sale has no
 // group — its offers do — so a sale whose offers are all from **one** group takes that group's (its
 // own or the default it follows), and any other sale — offers from several groups, or none naming one

@@ -7,7 +7,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getStampConditions } from "@/lib/conditions";
 import { getStampFormats } from "@/lib/stamp-formats";
-import { listContacts } from "@/lib/contacts";
+import { listPlatforms } from "@/lib/platforms";
 import { LotBuilderPanel } from "./lot-builder-panel";
 import { Screen } from "@/app/screen";
 
@@ -36,18 +36,18 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
 
   // Locations join the dictionaries for the same reason the rest of them are here: the proposal
   // draws each picked copy with the app's own copy row, which names where the copy is filed.
-  const [areas, locations, conditions, formats, contacts] = await Promise.all([
+  const [areas, locations, conditions, formats, allPlatforms] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
-    listContacts(session.user.id, collection.id),
+    listPlatforms(session.user.id, collection.id),
   ]);
 
-  // Every platform, not only the ones already carrying an offer (which is what
+  // Every switched-on platform (#1955), not only the ones already carrying an offer (which is what
   // `offers/platforms` answers): a lot is a plausible *first* listing on a marketplace.
-  const platforms = contacts
-    .filter((c) => c.platform)
+  const platforms = allPlatforms
+    .filter((c) => c.enabled)
     .map((c) => ({
       id: c.id,
       name: c.name,

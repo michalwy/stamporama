@@ -135,7 +135,7 @@ describe("auction lot line condition ranges (#1623)", () => {
 
     sellerId = (await prisma.contact.create({ data: { collectionId, name: "House", seller: true } })).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })
     ).id;
   });
 

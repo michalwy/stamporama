@@ -118,7 +118,7 @@ describe("the catalogue writes (#1438)", () => {
       })
     ).id;
     // A marketplace listing in German is what makes German a translation language (#293).
-    await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, titleLanguage: "de" } });
+    await prisma.platform.create({ data: { collectionId, name: "Delcampe", titleLanguage: "de" } });
     await prisma.stampSubtype.create({ data: { collectionId, name: "Color", actsAsVariant: true, isDefault: true, sortOrder: 0 } });
     perforationSubtypeId = (
       await prisma.stampSubtype.create({ data: { collectionId, name: "Perforation", actsAsVariant: true, sortOrder: 1 } })

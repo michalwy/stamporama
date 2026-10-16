@@ -33,7 +33,7 @@ export interface PlatformTextLimits {
 
 export type TextLimitParseResult<T> = { ok: true; value: T } | { ok: false; message: string };
 
-/** No platform states a limit — the shape a non-platform contact and an unconfigured one share. */
+/** No platform states a limit — the shape a contact and an unconfigured one share. */
 export const NO_TEXT_LIMITS: PlatformTextLimits = {
   maxTitleLength: null,
   maxDescriptionLength: null,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ContactData } from "@/lib/contacts";
+import type { PlatformData } from "@/lib/platforms";
 import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { LIST_BANNER_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -45,8 +45,8 @@ export function QuickOfferBar({
   generateScope,
   onExit,
 }: {
-  /** The collection's platform contacts — the same list the create dialog offers. */
-  platforms: ContactData[];
+  /** The collection's platforms — the same list the create dialog offers. */
+  platforms: PlatformData[];
   platformId: string;
   onPlatformIdChange: (id: string) => void;
   /** On Facebook, the group every offer of the pass is an auction in (#1663). */

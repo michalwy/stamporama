@@ -108,11 +108,10 @@ describe("closed-offer photo cleanup (#512)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Delcampe ${ts}`,
-          platform: true,
           maxPhotos: 6,
           maxPhotoEdge: 900,
         },

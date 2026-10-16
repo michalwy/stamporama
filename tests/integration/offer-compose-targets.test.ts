@@ -78,7 +78,7 @@ describe("Add-to-offer picker targets (#867)", () => {
       })
     ).id;
 
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Colnect" } })).id;
     conditionId = (
       await prisma.stampCondition.create({
         data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0 },
@@ -132,8 +132,8 @@ describe("Add-to-offer picker targets (#867)", () => {
     offerSetId = await addOfferSet(userId, offerId, [listed]);
 
     // A set in a collection this user does not own, for the lazy read's scoping.
-    const foreignPlatform = await prisma.contact.create({
-      data: { collectionId: otherCollectionId, name: "Colnect", platform: true },
+    const foreignPlatform = await prisma.platform.create({
+      data: { collectionId: otherCollectionId, name: "Colnect" },
     });
     const foreignCondition = await prisma.stampCondition.create({
       data: { collectionId: otherCollectionId, name: "Used", abbreviation: "U", sortOrder: 0 },

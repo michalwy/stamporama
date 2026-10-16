@@ -53,7 +53,7 @@ describe("ready / active offers require a price (#336)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
   });
 
@@ -142,7 +142,7 @@ describe("ready / active offers require a price (#336)", () => {
   it("blocks duplicating an offer straight into an unpriced active listing", async () => {
     const sourceId = await preparedOffer("5.00");
     const other = (
-      await prisma.contact.create({ data: { collectionId, name: `Ebay-${Date.now()}`, platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: `Ebay-${Date.now()}` } })
     ).id;
     await assert.rejects(
       () =>

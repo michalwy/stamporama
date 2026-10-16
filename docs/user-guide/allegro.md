@@ -2,9 +2,9 @@
 
 Stamporama talks to Allegro in two independent ways, both set up under **Settings → Allegro**.
 
-- **Which platform is Allegro** — the setting the Assistant's lot capture rides on. Naming one of
-  your platforms lets the browser extension record an auction you are watching straight from its
-  page. See [Auctions](auctions.md) and the [Assistant guide](assistant.md).
+- **The Allegro platform** — every collection has one, and switched on it lets the browser extension
+  record an auction you are watching straight from its page. See [Auctions](auctions.md) and the
+  [Assistant guide](assistant.md).
 - **Your Allegro account** — this instance's own access to Allegro's API, so your *own* offers and
   orders can be read here directly instead of off a page. That is what this page is about.
 
@@ -13,8 +13,7 @@ the account you sell from.
 
 ## The Allegro page
 
-**Settings → Allegro** has the platform choice at the top right, beside the page title, and three
-tabs under a strip of figures:
+**Settings → Allegro** has four tabs under a strip of figures:
 
 - **Account** — the application you registered and the connection made with it. This is the tab the
   page opens on, and the one Allegro sends you back to after signing in.
@@ -22,6 +21,9 @@ tabs under a strip of figures:
   profiles](#listing-profiles).
 - **Categories** — what publishing has taught Stamporama; see [Learned
   categories](#learned-categories).
+- **Platform** — the Allegro [platform](platforms.md)'s own settings: whether it is **switched on**,
+  its currency, templates, limits and photos. It starts switched off; switch it on when you start
+  buying or selling on Allegro.
 
 The strip above the tabs says where each stands — the connection, how many profiles you have and
 which is the default, and how many categories have been learned — and clicking a figure opens its

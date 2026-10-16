@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { getCollectionBaseCurrency } from "./pricing";
 import { fetchEcbRateOn } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
+import { resolvePlatform } from "./platforms";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import {
   normalizeAuctionText,
@@ -632,10 +633,9 @@ async function parseObservation(
   }
   if (formatId && !format) throw new PriceObservationError("That format no longer exists.");
 
-  const platformId = await resolvePurchaseContact(collectionId, {
+  const platformId = await resolvePlatform(collectionId, {
     id: raw.platformId,
     name: raw.platformName,
-    role: "platform",
   });
   if (!platformId) throw new PriceObservationError("Name the platform it was sold on.");
   const auctionHouseId = await resolvePurchaseContact(collectionId, {

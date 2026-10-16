@@ -116,7 +116,7 @@ export interface AllegroWorklist {
   connected: boolean;
   needsReconnect: boolean;
   connectionError: string | null;
-  /** The platform contact marked as Allegro, or null — with none, every line is unmatched, and the
+  /** The platform marked as Allegro, or null — with none, every line is unmatched, and the
    *  screen says so rather than quietly showing a page of unmatched rows. */
   platform: { id: string; name: string } | null;
   sync: {

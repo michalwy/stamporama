@@ -62,11 +62,11 @@ describe("dashboard: offers to handle (#1811)", () => {
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, refreshQuickBuysAfterDays: 3 },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", refreshQuickBuysAfterDays: 3 },
       })
     ).id;
-    allegroId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    allegroId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
 
     const copy = async () =>
       (await createItem(userId, collectionId, { stampId, conditionId, forSale: true })).id;

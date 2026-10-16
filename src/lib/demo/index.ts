@@ -37,6 +37,8 @@ export async function wipeDemoData(
   // deleteMany over the collection is safe.
   await tx.location.deleteMany({ where: { collectionId } });
   await tx.contact.deleteMany({ where: { collectionId } });
+  // The generic platforms the seed added; the module platforms are the collection's own (#1955).
+  await tx.platform.deleteMany({ where: { collectionId, platformModule: null } });
   await tx.certificateStatus.deleteMany({ where: { collectionId } });
   await tx.exchangeRate.deleteMany({ where: { collectionId } });
 

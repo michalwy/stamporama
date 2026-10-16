@@ -15,6 +15,7 @@ import type { ColnectConditionMappingData, ColnectMappingData } from "@/lib/coln
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { StampAttributeData, StampAttributeLists } from "@/lib/stamp-attributes";
 import { STAMP_ATTRIBUTE_KINDS, type StampAttributeKind } from "@/lib/stamp-attribute-kinds";
+import { platformTileWords, type PlatformTileFacts } from "./platform-summary";
 
 /** The Colnect page's tabs, in the order the setup happens in; the first is the default. */
 export const COLNECT_SETTINGS_PARTS = [
@@ -22,6 +23,7 @@ export const COLNECT_SETTINGS_PARTS = [
   { key: "conditions", label: "Conditions" },
   { key: "attributes", label: "Attributes" },
   { key: "lists", label: "List sync" },
+  { key: "platform", label: "Platform" },
 ] as const;
 
 export type ColnectSettingsPart = (typeof COLNECT_SETTINGS_PARTS)[number]["key"];
@@ -110,7 +112,8 @@ export function colnectSummary(
   catalogs: readonly ColnectMappingData[],
   conditions: readonly ColnectConditionMappingData[],
   attributes: StampAttributeLists,
-  lists: readonly ColnectListMappingData[]
+  lists: readonly ColnectListMappingData[],
+  platform: PlatformTileFacts
 ): ColnectSummaryTile[] {
   // A catalog whose abbreviation is Colnect's own needs no row, so the figure is the exceptions and
   // the line under it says the rest already match.
@@ -162,5 +165,11 @@ export function colnectSummary(
     detail: synced.length > 0 ? names(synced.map((l) => l.label)) : null,
   };
 
-  return [catalogTile, conditionTile, attributeTile, listTile];
+  return [
+    catalogTile,
+    conditionTile,
+    attributeTile,
+    listTile,
+    { part: "platform", ...platformTileWords(platform) },
+  ];
 }

@@ -1,18 +1,19 @@
 "use client";
 
-import { setDelcampePlatformAction } from "@/app/actions/delcampe";
 import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
 import type { DelcampeLearnedCategoryList } from "@/lib/delcampe-categories";
-import { MarketplacePlatformSelect } from "./marketplace-platform-select";
+import type { PlatformListItem } from "@/lib/platforms";
+import { ModulePlatformTab } from "./module-platform-tab";
 import { SettingsSummaryStrip, SettingsSummaryTile } from "./settings-summary-strip";
 import { delcampeSummary, type DelcampeSettingsPart } from "./delcampe-summary";
 import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
 import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
 
 /*
- * Settings → Delcampe (#1479): one entry with tabs inside — **Listing profiles**, **Categories** —
- * under a summary strip, with the platform choice in the page header. Designed in #1465 beside the
- * Allegro page (#1475), whose pieces it takes.
+ * Settings → Delcampe (#1479): one entry with tabs inside — **Listing profiles**, **Categories**,
+ * **Platform** — under a summary strip. Designed in #1465 beside the Allegro page (#1475), whose
+ * pieces it takes. The Platform tab (#1955) is the Delcampe platform's own settings and its on/off
+ * switch; it replaced the choice of which contact was Delcampe.
  *
  * Profiles first, for the Allegro page's reason: a profile is what the collector *configures*, and
  * the categories are what the app has *learned*. Delcampe has no account tab to lead with — listings
@@ -22,6 +23,8 @@ import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
 interface DelcampeData {
   profiles: DelcampeListingProfileList;
   categories: DelcampeLearnedCategoryList;
+  /** The Delcampe platform (#1955) — the Platform tab's, and the strip's last tile. */
+  platform: PlatformListItem;
 }
 
 /** The strip: each tile says where one tab stands and opens it. */
@@ -32,8 +35,11 @@ export function DelcampeSummary({
 }: DelcampeData & { active: string | null; onOpen: (part: DelcampeSettingsPart) => void }) {
   return (
     <SettingsSummaryStrip label="Delcampe at a glance">
-      {delcampeSummary(data.profiles, data.categories, (iso) =>
-        new Date(iso).toLocaleDateString()
+      {delcampeSummary(
+        data.profiles,
+        data.categories,
+        (iso) => new Date(iso).toLocaleDateString(),
+        data.platform
       ).map((tile) => (
         <SettingsSummaryTile
           key={tile.part}
@@ -51,54 +57,29 @@ export function DelcampeSummary({
 export function DelcampeSettingsBody({
   part,
   collectionId,
-  platforms,
-  platformId,
+  platform,
   profiles,
   categories,
 }: DelcampeData & {
   part: string | null;
   collectionId: string;
-  platforms: { id: string; name: string }[];
-  platformId: string | null;
 }) {
-  const noPlatform = <NoPlatform hasPlatforms={platforms.length > 0} />;
-  return (
-    <>
-      <MarketplacePlatformSelect
-        id="delcampe-platform"
-        ariaLabel="Delcampe platform"
-        platforms={platforms}
-        selectedId={platformId}
-        save={(contactId) => setDelcampePlatformAction(collectionId, contactId)}
-      />
-      {part === "categories" ? (
-        <DelcampeCategoriesPanel list={categories} noPlatform={noPlatform} />
-      ) : (
-        <DelcampeProfilesPanel
-          collectionId={collectionId}
-          list={profiles}
-          noPlatform={noPlatform}
-        />
-      )}
-    </>
+  const noPlatform = <NoPlatform />;
+  return part === "platform" ? (
+    <ModulePlatformTab collectionId={collectionId} platform={platform} />
+  ) : part === "categories" ? (
+    <DelcampeCategoriesPanel list={categories} noPlatform={noPlatform} />
+  ) : (
+    <DelcampeProfilesPanel collectionId={collectionId} list={profiles} noPlatform={noPlatform} />
   );
 }
 
-/** What the platform's tabs say before a platform is Delcampe — and, with none, how to get one. */
-function NoPlatform({ hasPlatforms }: { hasPlatforms: boolean }) {
+/** What a tab hanging off the platform says while the collection has no Delcampe platform yet — a
+ *  state the settings page's own loader closes by making it (#1955), so it is seldom seen. */
+function NoPlatform() {
   return (
     <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-      {hasPlatforms ? (
-        <>
-          Choose which of your platforms is Delcampe at the top of this page. Listing profiles and
-          learned categories belong to that platform.
-        </>
-      ) : (
-        <>
-          This collection has no platforms yet. Add a contact with the <strong>Platform</strong> role
-          under <strong>Contacts</strong>, then choose it as Delcampe at the top of this page.
-        </>
-      )}
+      The Delcampe platform is not set up yet. Reload the page to create it.
     </p>
   );
 }

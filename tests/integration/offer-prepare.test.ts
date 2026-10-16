@@ -53,9 +53,9 @@ describe("the Prepare screen (#1894)", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, minimumPrice: "2.00" } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe", minimumPrice: "2.00" } })
     ).id;
-    otherPlatformId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    otherPlatformId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
 
     const vendor = await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } });
     const catalogName = await prisma.catalogName.create({
@@ -243,8 +243,8 @@ describe("the Prepare screen (#1894)", () => {
   });
 
   it("names the translations a title following its template is missing, and none once it is written by hand (#1941)", async () => {
-    const polish = await prisma.contact.create({
-      data: { collectionId, name: "Allegro PL", platform: true, titleTemplate: "{name}", titleLanguage: "pl" },
+    const polish = await prisma.platform.create({
+      data: { collectionId, name: "Allegro PL", titleTemplate: "{name}", titleLanguage: "pl" },
     });
     const offerId = await offer([[german]], { platform: polish.id });
     let row = (await rows()).find((r) => r.id === offerId)!;

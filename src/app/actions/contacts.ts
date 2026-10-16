@@ -16,8 +16,6 @@ import {
   type ContactData,
   type CollectionTranslationContext,
 } from "@/lib/contacts";
-import { parsePlatformPhotoLimits } from "@/lib/offer-photo-config";
-import { NO_TEXT_LIMITS, parsePlatformTextLimits } from "@/lib/listing-text-limits";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
 
 export type ContactActionState =
@@ -53,37 +51,13 @@ function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
 }
 
-/** Raised when one of the platform's hard limits — photos (#308) or listing-text lengths (#403) —
- * doesn't parse, so the caller can surface the rule's own message instead of a generic failure. */
-class PhotoLimitsError extends Error {}
-
 /** Read the contact fields from a form. `name` is validated by the caller so a friendly
- * message can be returned; roles are optional checkboxes/hidden inputs. */
+ * message can be returned; roles are optional checkboxes/hidden inputs. A marketplace is a platform
+ * now, configured in Settings (#1955), so nothing here is a platform's. */
 function parseContactFields(formData: FormData, name: string): ContactCreateInput {
-  // Photo configuration (#308) is platform-only, like the currency and the templates: dropped
-  // entirely when the role is not set. Blank limits mean "no limit stated".
-  const isPlatform = bool(formData, "platform");
   // Auction-sale defaults (#350) hang off the buying-from side of the address book, which is either
   // role: an auction house is a seller that happens to run sales.
   const isSeller = bool(formData, "seller") || bool(formData, "auctionHouse");
-  const limits = isPlatform
-    ? parsePlatformPhotoLimits({
-        maxPhotos: str(formData, "maxPhotos"),
-        maxPhotoEdge: str(formData, "maxPhotoEdge"),
-        maxPhotoFileSizeMib: str(formData, "maxPhotoFileSizeMib"),
-      })
-    : ({ ok: true, value: { maxPhotos: null, maxPhotoEdge: null, maxPhotoFileSizeMib: null } } as const);
-  if (!limits.ok) throw new PhotoLimitsError(limits.message);
-  // The platform's listing-text caps (#403), read the same way and for the same reason: blank means
-  // no limit stated, and a non-platform contact carries none at all.
-  const textLimits = isPlatform
-    ? parsePlatformTextLimits({
-        maxTitleLength: str(formData, "maxTitleLength"),
-        maxDescriptionLength: str(formData, "maxDescriptionLength"),
-        maxPrivateNoteLength: str(formData, "maxPrivateNoteLength"),
-      })
-    : ({ ok: true, value: NO_TEXT_LIMITS } as const);
-  if (!textLimits.ok) throw new PhotoLimitsError(textLimits.message);
 
   return {
     name,
@@ -95,97 +69,17 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     phone: str(formData, "phone") || null,
     // The Facebook profile link (#1545), normalised — or refused — by the domain on write.
     facebookProfileUrl: str(formData, "facebookProfileUrl") || null,
-    // The market (#1634) means something only for a contact that sells — a seller, a house or a
-    // platform — so a contact that is none of those keeps none.
-    market:
-      bool(formData, "seller") || bool(formData, "auctionHouse") || bool(formData, "platform")
-        ? str(formData, "market") || null
-        : null,
+    // The market (#1634) means something only for a contact that sells — a seller or a house — so
+    // a contact that is neither keeps none.
+    market: isSeller ? str(formData, "market") || null : null,
     buyer: bool(formData, "buyer"),
     seller: bool(formData, "seller"),
     exchangePartner: bool(formData, "exchangePartner"),
     auctionHouse: bool(formData, "auctionHouse"),
-    platform: bool(formData, "platform"),
     other: bool(formData, "other"),
-    // The platform's fixed currency (#196). Only meaningful with the `platform` role, so it is
-    // dropped when the role is not set; blank normalises to null (unset).
-    platformCurrency: bool(formData, "platform")
-      ? str(formData, "platformCurrency") || null
-      : null,
-    // The platform's title template (#210). Like the currency, it is only meaningful for the
-    // `platform` role, so it is dropped when the role is not set; blank normalises to null (falls
-    // back to the built-in default template).
-    titleTemplate: bool(formData, "platform")
-      ? str(formData, "titleTemplate") || null
-      : null,
-    // The platform's description (#266) / private-note (#267) templates, same platform-only
-    // handling. Blank normalises to null, which here means "generate nothing for that field" —
-    // there is no built-in default, and it is also how a platform without private notes is left.
-    descriptionTemplate: bool(formData, "platform")
-      ? str(formData, "descriptionTemplate") || null
-      : null,
-    privateNoteTemplate: bool(formData, "platform")
-      ? str(formData, "privateNoteTemplate") || null
-      : null,
-    // What the platform's description field accepts (#319), configured next to the description
-    // template it applies to. Same platform-only handling; an unset or unknown value normalises to
-    // plain text in the domain layer.
-    descriptionFormat: isPlatform ? str(formData, "descriptionFormat") : null,
-    // The platform's listing language (#293), same platform-only handling. Blank normalises to
-    // null, meaning entity text stays in its default language.
-    titleLanguage: bool(formData, "platform")
-      ? str(formData, "titleLanguage") || null
-      : null,
-    // The platform's fallback **starting price** for a new auction (#362, narrowed in #449), in its
-    // own currency. Same platform-only handling; blank normalises to null — no default rather than a
-    // free one — and the domain drops it entirely unless the platform's default type is `auction`,
-    // the field being hidden there.
-    defaultStartingPrice: isPlatform ? str(formData, "defaultStartingPrice") || null : null,
-    // The platform's floor (#731), in its own currency. Same platform-only handling; blank
-    // normalises to null — no floor rather than a zero one — and unlike the figure above it is kept
-    // whatever the default listing type says, since it applies to any price the offer asks. Accepts
-    // either decimal separator (#233), like every other amount typed into this form.
-    minimumPrice: isPlatform ? normalizeDecimalInput(str(formData, "minimumPrice")) || null : null,
-    // How a new offer on this platform is sold by default (#449) — which is also what decides whether
-    // the figure above means anything. Blank is "no preference", which is not the same claim as
-    // "quick buy" even though both behave that way.
-    defaultListingType: isPlatform ? str(formData, "defaultListingType") || null : null,
-    // When a quick buy here needs posting again (#1718), in days. Blank is never; the domain holds
-    // a stated figure to its range.
-    refreshQuickBuysAfterDays:
-      isPlatform && str(formData, "refreshQuickBuysAfterDays").trim() !== ""
-        ? Number(str(formData, "refreshQuickBuysAfterDays"))
-        : null,
-    // The message to a buyer after a sale here (#1815). Same platform-only handling; blank is none.
-    buyerMessageTemplate: isPlatform ? str(formData, "buyerMessageTemplate") || null : null,
-    // The platform's photo limits, and the defaults new offers on this platform are seeded from
-    // (#308). `photoSides` normalises to the default side; the collage template is verified against
-    // the collection server-side.
-    ...limits.value,
-    // The platform's listing-text caps (#403), read live wherever those texts are written.
-    ...textLimits.value,
-    photoSides: isPlatform ? str(formData, "photoSides") : null,
-    // #521's grouping default. A checkbox, so an unticked box posts nothing and reads false; a
-    // non-platform contact leaves it null and the domain's own default (on) stands.
-    photoPreferSingles: isPlatform ? bool(formData, "photoPreferSingles") : null,
-    // #1665: whether offers here need symbols covered, and what a new cover starts as; #1702: the
-    // colour the first bar starts in.
-    coverSymbols: isPlatform ? bool(formData, "coverSymbols") : null,
-    coverStyle: isPlatform ? str(formData, "coverStyle") || null : null,
-    coverColor: isPlatform ? str(formData, "coverColor") || null : null,
-    tileLabelLeftTemplate: isPlatform ? str(formData, "tileLabelLeftTemplate") || null : null,
-    tileLabelRightTemplate: isPlatform ? str(formData, "tileLabelRightTemplate") || null : null,
-    defaultCollageTemplateId: isPlatform
-      ? str(formData, "defaultCollageTemplateId") || null
-      : null,
-    // #1673: group a set's copies by checklist on new offers, and the template the groups copy.
-    photoGroupByChecklist: isPlatform ? bool(formData, "photoGroupByChecklist") : null,
-    defaultGroupCollageTemplateId: isPlatform
-      ? str(formData, "defaultGroupCollageTemplateId") || null
-      : null,
-    // The seller's defaults for auction sales (#350). Role-gated exactly like the platform fields
-    // above — an `auctionHouse` counts as a seller here, since a house is who one buys from — and
-    // the amounts accept either decimal separator (#233).
+    // The seller's defaults for auction sales (#350). Role-gated — an `auctionHouse` counts as a
+    // seller here, since a house is who one buys from — and the amounts accept either decimal
+    // separator (#233).
     ...(isSeller
       ? {
           defaultCurrency: str(formData, "defaultCurrency") || null,
@@ -220,7 +114,7 @@ export async function createContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError || err instanceof PhotoLimitsError) {
+    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to add contact. Please try again." };
@@ -243,7 +137,7 @@ export async function updateContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError || err instanceof PhotoLimitsError) {
+    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save contact. Please try again." };

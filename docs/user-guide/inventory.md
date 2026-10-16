@@ -665,7 +665,7 @@ While it stands, that copy cannot go live on a marketplace — activating an off
 refused, naming the trade. Everything else about the copy is unaffected: it stays in your collection,
 keeps its location and its dispositions, and can still be prepared into a draft offer.
 
-If you later delete a platform contact, the markings that named it simply go with it.
+If you later delete a platform, the markings that named it simply go with it.
 
 ## Viewing copies from the catalog
 
@@ -840,7 +840,7 @@ your choice, under **Settings → Collection → Copy number width**: pick `2` a
 `#42`, pick `8` and it reads `#00000042`. That is a display setting only — nothing is renumbered,
 and a number wider than the setting simply renders in full. Listing templates can override it per
 token with `{itemNo:3}`, and can use the number at all through the
-[`{itemNo}` token](contacts.md#adding-and-editing).
+[`{itemNo}` token](platforms.md#listing-templates).
 
 Two things to expect:
 
@@ -907,7 +907,7 @@ any catalog price cannot be deleted.
 default, the format's pane grows an **Abbreviation** and a **Name** box per language, exactly as
 [conditions](collections.md#conditions-in-other-languages) do — and they fall back independently, so
 you can translate *Block of 4* as *Viererblock* while leaving `Blk4` alone. These feed the
-`{format}` and `{formatAbbr}` tokens in [listing texts](contacts.md#adding-and-editing).
+`{format}` and `{formatAbbr}` tokens in [listing texts](platforms.md#listing-templates).
 
 ### What a multiple is worth
 
@@ -1005,7 +1005,7 @@ piece — searchable, listed, printed in listing texts — never a claim that yo
 Everything else about a copy is untouched. It keeps its internal number, its storage location, its
 cost basis and its photos; it can be offered, sold, traded and disposed of exactly like any other
 copy, and it stays on the Copies list. When you offer it, the `{catalog}` token in the listing's title
-and description names **every** stamp on it — see [Catalog numbers](contacts.md#catalog-numbers).
+and description names **every** stamp on it — see [Catalog numbers](platforms.md#catalog-numbers).
 
 ### Finding them on the Copies list
 
@@ -1398,8 +1398,8 @@ exists. If you want the price filled in from the copy's Estimated value, use the
 What the offers *do* carry is whatever the platform itself says about listings on it: its **default
 listing type** and, on an auction platform, its **default starting price**. Quick mode never asks
 those two questions, so the platform's own answers stand — exactly as they would if you had opened
-the create form and left both fields alone. Both are set on the platform's contact, under
-[Platform](contacts.md).
+the create form and left both fields alone. Both are set on the
+[platform](platforms.md#offers-and-sales).
 
 Press **Done** (or the button at the top again) to leave. Two things to know:
 

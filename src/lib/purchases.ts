@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
+import { resolvePlatform } from "./platforms";
 import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
 import { loadCostEstimates } from "./cost-estimates";
@@ -613,10 +614,9 @@ async function resolveHeader(
     name: data.contactName,
     role: "seller",
   });
-  const platformId = await resolvePurchaseContact(collectionId, {
+  const platformId = await resolvePlatform(collectionId, {
     id: data.platformId,
     name: data.platformName,
-    role: "platform",
   });
   return {
     title: null,

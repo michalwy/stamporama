@@ -49,7 +49,6 @@ describe("createContact", () => {
     assert.equal(contact.seller, false);
     assert.equal(contact.exchangePartner, false);
     assert.equal(contact.auctionHouse, false);
-    assert.equal(contact.platform, false);
     assert.equal(contact.other, false);
     assert.equal(contact.notes, null);
     assert.equal(contact.email, null);
@@ -105,7 +104,7 @@ describe("listContacts and searchContacts", () => {
     userId = (await createTestUser(`ls-${ts}`)).id;
     collectionId = (await createTestCollection(userId, `ls-${ts}`)).id;
     await createContact(userId, collectionId, { name: "Berlin Auktionen", auctionHouse: true });
-    await createContact(userId, collectionId, { name: "Delcampe", platform: true });
+    await createContact(userId, collectionId, { name: "Delcampe Buyer", buyer: true });
     await createContact(userId, collectionId, { name: "Hans Meyer", seller: true });
   });
 
@@ -116,7 +115,7 @@ describe("listContacts and searchContacts", () => {
 
   it("lists all contacts name-ordered", async () => {
     const contacts = await listContacts(userId, collectionId);
-    assert.deepEqual(contacts.map((c) => c.name), ["Berlin Auktionen", "Delcampe", "Hans Meyer"]);
+    assert.deepEqual(contacts.map((c) => c.name), ["Berlin Auktionen", "Delcampe Buyer", "Hans Meyer"]);
   });
 
   it("searches case-insensitively by name substring", async () => {

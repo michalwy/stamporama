@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
+import { ensureModulePlatforms } from "../../src/lib/platforms";
 import { createItem } from "../../src/lib/items";
 import {
   addOfferSet,
@@ -25,7 +26,6 @@ import {
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import { listItemPhotoCovers, PhotoCoverValidationError, savePhotoCovers } from "../../src/lib/photo-covers";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { getStorage, variantKey } from "../../src/lib/storage";
 import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
@@ -78,13 +78,13 @@ describe("covering symbols on offer photos (#1665)", () => {
       })
     ).id;
     coveredPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: `Covered ${ts}`, platform: true, maxPhotoEdge: 600, coverSymbols: true },
+      await prisma.platform.create({
+        data: { collectionId, name: `Covered ${ts}`, maxPhotoEdge: 600, coverSymbols: true },
       })
     ).id;
     plainPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: `Plain ${ts}`, platform: true, maxPhotoEdge: 600 },
+      await prisma.platform.create({
+        data: { collectionId, name: `Plain ${ts}`, maxPhotoEdge: 600 },
       })
     ).id;
     const area = async (name: string, parentId: string | null, coverSymbols: boolean | null) =>
@@ -246,7 +246,7 @@ describe("covering symbols on offer photos (#1665)", () => {
   });
 
   it("draws a bar in its own colour, and a new colour puts the images out of date (#1702)", async () => {
-    await prisma.contact.update({ where: { id: coveredPlatformId }, data: { coverColor: "#f3ead3" } });
+    await prisma.platform.update({ where: { id: coveredPlatformId }, data: { coverColor: "#f3ead3" } });
     const copy = await scannedCopy();
     const offerId = await preparingOffer(coveredPlatformId, [copy.itemId]);
     // The walk starts the first bar in the platform's colour.
@@ -279,7 +279,7 @@ describe("covering symbols on offer photos (#1665)", () => {
         ["pixelate", undefined],
       ]
     );
-    await prisma.contact.update({ where: { id: coveredPlatformId }, data: { coverColor: "#000000" } });
+    await prisma.platform.update({ where: { id: coveredPlatformId }, data: { coverColor: "#000000" } });
   });
 
   it("the database holds a bar to one colour and anything else to none (#1702)", async () => {
@@ -426,17 +426,23 @@ describe("covering symbols on offer photos (#1665)", () => {
     assert.equal((await readOfferCoverWalk(userId, later)).photos[0].covers.length, 1);
   });
 
-  it("a platform newly named as Facebook starts needing covers, and naming it again keeps the collector's choice", async () => {
-    const fb = (
-      await prisma.contact.create({ data: { collectionId, name: `Facebook ${seq}`, platform: true } })
-    ).id;
-    await setFacebookPlatform(userId, collectionId, fb);
-    assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: fb } })).coverSymbols, true);
+  it("the Facebook platform starts needing covers, and the collector's choice then stands (#1955)", async () => {
+    // A collection of its own, so its five module platforms are made fresh.
+    const fresh = await prisma.collection.create({
+      data: { slug: `col-covers-fb-${seq}`, name: "Covers FB", baseCurrency: "EUR", ownerId: userId },
+    });
+    await ensureModulePlatforms(fresh.id);
+    const fb = await prisma.platform.findFirstOrThrow({
+      where: { collectionId: fresh.id, platformModule: "facebook" },
+    });
+    assert.equal(fb.coverSymbols, true);
 
-    await prisma.contact.update({ where: { id: fb }, data: { coverSymbols: false } });
-    await setFacebookPlatform(userId, collectionId, fb);
-    assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: fb } })).coverSymbols, false);
+    await prisma.platform.update({ where: { id: fb.id }, data: { coverSymbols: false } });
+    await ensureModulePlatforms(fresh.id);
+    assert.equal((await prisma.platform.findUniqueOrThrow({ where: { id: fb.id } })).coverSymbols, false);
+    await prisma.collection.delete({ where: { id: fresh.id } });
   });
+
   // Only copies whose stamp is in an area that may carry forbidden symbols are asked about (#1891).
   describe("an area says whether its stamps may carry forbidden symbols (#1891)", () => {
     it("lets an offer whose copies are all from areas carrying none go Ready without checking a photo", async () => {

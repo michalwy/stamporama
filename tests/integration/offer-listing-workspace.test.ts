@@ -58,12 +58,12 @@ describe("bulk listing workspace read model (#322)", () => {
     // The batch's platform names the Colnect Assistant module (#406) — without one the listing
     // preconditions are not asked at all, which is what `otherPlatformId` below covers.
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformModule: "colnect" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformModule: "colnect" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     plId = (
       await prisma.collectionArea.create({ data: { collectionId, name: "Poland", sortOrder: 0 } })

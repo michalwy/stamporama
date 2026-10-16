@@ -59,7 +59,7 @@ A copy with no faults shows nothing at all.
 
 A platform's description template can name a copy's faults, so a buyer is told what is wrong with
 the piece without you typing it into each listing — in the platform's language, from each fault's
-**Translations**. See [Telling a buyer about faults](contacts.md#telling-a-buyer-about-faults).
+**Translations**. See [Telling a buyer about faults](platforms.md#telling-a-buyer-about-faults).
 
 ## What faults take off the value
 

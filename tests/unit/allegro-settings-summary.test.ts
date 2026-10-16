@@ -80,39 +80,55 @@ function categories(lessons: number, parameters: number, platformId: string | nu
   } as unknown as AllegroLearnedCategoryList;
 }
 
+/** The module platform as most tests need it: switched on, selling in its currency (#1955). */
+const ON = { enabled: true, platformCurrency: "EUR" };
+
 function tiles(...args: Parameters<typeof allegroSummary>) {
   return allegroSummary(...args).map((t) => [t.part, t.figure, t.detail, t.flagged]);
 }
 
 describe("Allegro summary strip (#1475)", () => {
   it("has one tile per tab, in the tabs' order", () => {
-    const parts = allegroSummary(connection(), profiles([]), categories(0, 0)).map((t) => t.part);
-    assert.deepEqual(parts, ["account", "profiles", "categories"]);
+    const parts = allegroSummary(connection(), profiles([]), categories(0, 0), ON).map((t) => t.part);
+    assert.deepEqual(parts, ["account", "profiles", "categories", "platform"]);
+  });
+
+  it("says whether the Allegro platform is switched on, and never flags it off (#1955)", () => {
+    assert.deepEqual(tiles(connection(), profiles([]), categories(0, 0), ON)[3], [
+      "platform",
+      "Switched on",
+      "Sells in EUR",
+      false,
+    ]);
+    assert.deepEqual(
+      tiles(connection(), profiles([]), categories(0, 0), { enabled: false, platformCurrency: null })[3],
+      ["platform", "Switched off", "No currency yet", false]
+    );
   });
 
   it("says who the connection is and does not flag a working one", () => {
-    assert.deepEqual(tiles(connection(), profiles([]), categories(0, 0))[0], [
+    assert.deepEqual(tiles(connection(), profiles([]), categories(0, 0), ON)[0], [
       "account",
       "Connected",
       "as filatelista",
       false,
     ]);
     assert.deepEqual(
-      tiles(connection({ accountLogin: null, sandbox: true }), profiles([]), categories(0, 0))[0],
+      tiles(connection({ accountLogin: null, sandbox: true }), profiles([]), categories(0, 0), ON)[0],
       ["account", "Connected", "sandbox", false]
     );
   });
 
   it("flags a connection that is missing or has to be redone", () => {
     const none = connection({ connected: false, accountLogin: null });
-    assert.deepEqual(tiles(none, profiles([]), categories(0, 0))[0], [
+    assert.deepEqual(tiles(none, profiles([]), categories(0, 0), ON)[0], [
       "account",
       "Not connected yet",
       null,
       true,
     ]);
     const unsaved = connection({ configured: false, connected: false });
-    assert.deepEqual(tiles(unsaved, profiles([]), categories(0, 0))[0], [
+    assert.deepEqual(tiles(unsaved, profiles([]), categories(0, 0), ON)[0], [
       "account",
       "Not connected yet",
       "No application saved",
@@ -121,7 +137,7 @@ describe("Allegro summary strip (#1475)", () => {
     // A stored grant Allegro refused to renew is not a working connection.
     const expired = connection({ needsReconnect: true });
     assert.equal(allegroConnectionState(expired), "needs-reconnect");
-    assert.deepEqual(tiles(expired, profiles([]), categories(0, 0))[0], [
+    assert.deepEqual(tiles(expired, profiles([]), categories(0, 0), ON)[0], [
       "account",
       "Needs reconnecting",
       null,
@@ -132,23 +148,23 @@ describe("Allegro summary strip (#1475)", () => {
   it("uses the Account tab's words for every state", () => {
     const states = [connection(), connection({ connected: false }), connection({ needsReconnect: true })];
     for (const c of states) {
-      const [tile] = allegroSummary(c, profiles([]), categories(0, 0));
+      const [tile] = allegroSummary(c, profiles([]), categories(0, 0), ON);
       assert.equal(tile.figure, ALLEGRO_CONNECTION_WORDS[allegroConnectionState(c)]);
     }
   });
 
   it("counts the profiles and names the default", () => {
     assert.deepEqual(
-      tiles(connection(), profiles([profile("Home", true), profile("Away")]), categories(0, 0))[1],
+      tiles(connection(), profiles([profile("Home", true), profile("Away")]), categories(0, 0), ON)[1],
       ["profiles", "2 profiles", "Default: Home", false]
     );
-    assert.deepEqual(tiles(connection(), profiles([profile("Home")]), categories(0, 0))[1], [
+    assert.deepEqual(tiles(connection(), profiles([profile("Home")]), categories(0, 0), ON)[1], [
       "profiles",
       "1 profile",
       "No default",
       false,
     ]);
-    assert.deepEqual(tiles(connection(), profiles([]), categories(0, 0))[1], [
+    assert.deepEqual(tiles(connection(), profiles([]), categories(0, 0), ON)[1], [
       "profiles",
       "0 profiles",
       null,
@@ -157,7 +173,7 @@ describe("Allegro summary strip (#1475)", () => {
   });
 
   it("counts what publishing has taught", () => {
-    assert.deepEqual(tiles(connection(), profiles([]), categories(1, 3))[2], [
+    assert.deepEqual(tiles(connection(), profiles([]), categories(1, 3), ON)[2], [
       "categories",
       "1 category learned",
       "3 parameter answers",
@@ -166,7 +182,7 @@ describe("Allegro summary strip (#1475)", () => {
   });
 
   it("says so on the platform's tiles while no platform is Allegro", () => {
-    const [, p, c] = tiles(connection(), profiles([], null), categories(0, 0, null));
+    const [, p, c] = tiles(connection(), profiles([], null), categories(0, 0, null), ON);
     assert.deepEqual(p, ["profiles", NO_ALLEGRO_PLATFORM, null, false]);
     assert.deepEqual(c, ["categories", NO_ALLEGRO_PLATFORM, null, false]);
   });

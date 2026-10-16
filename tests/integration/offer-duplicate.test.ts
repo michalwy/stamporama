@@ -46,9 +46,9 @@ describe("duplicate offer (list on another platform)", () => {
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
-    delcampeId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    delcampeId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
     // Allegro already has a locked currency (#196) — the clone must inherit PLN, ignoring any fallback.
-    allegroId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" } })).id;
+    allegroId = (await prisma.platform.create({ data: { collectionId, name: "Allegro", platformCurrency: "PLN" } })).id;
 
     const mk = async () =>
       (await createItem(userId, collectionId, { stampId: stamp.id, conditionId: condition.id, forSale: true })).id;

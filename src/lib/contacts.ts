@@ -2,19 +2,14 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
-import { normalizePhotoSides } from "./offer-photo-config";
-import { normalizePhotoCoverStyle, normalizePlatformCoverColor } from "./photo-cover-rules";
-import { normalizeDescriptionFormat } from "./description-format";
-import { isOfferListingType } from "./offer-rules";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { normalizeMarketCode } from "./market-anchoring";
-import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
-// #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
-// partners, auction houses, platforms. Roles are independent, combinable boolean
-// flags (a contact can be several at once), mirroring the `Item` disposition flags
-// (ADR-0007 §4). `createContact` may be called with no roles set: create-on-type
+// #107). A Contact is a person or firm the collector deals with — sellers, buyers, exchange
+// partners, auction houses. A marketplace is not one: it is a `Platform` (#1955; ADR-0071,
+// `platforms.ts`). Roles are independent, combinable boolean flags (a contact can be several at
+// once), mirroring the `Item` disposition flags (ADR-0007 §4). `createContact` may be called with no roles set: create-on-type
 // from the acquisition-source autocomplete (#103b) produces a role-less contact and
 // the roles are filled in separately. `name` is unique per collection.
 //
@@ -68,15 +63,6 @@ export class ContactFieldError extends Error {
   }
 }
 
-/** The quick-buy refresh threshold (#1718), held to its shape — the rule's own message on a bad one. */
-function refreshDays(value: number | null | undefined): number | null {
-  try {
-    return cleanRefreshQuickBuysAfterDays(value);
-  } catch (err) {
-    throw new ContactFieldError((err as Error).message);
-  }
-}
-
 /** The profile link as stored: normalised, so a winner's lookup is an equality (#1545). Undefined
  * stays undefined — an update that never showed the field leaves it alone. */
 function profileUrlData(raw: string | null | undefined): string | null | undefined {
@@ -97,7 +83,7 @@ function marketData(raw: string | null | undefined): string | null | undefined {
 }
 
 /** Raised when a delete is blocked because the contact is still referenced by one or
- * more purchases (as supplier or platform). The `Purchase` FKs are `onDelete: Restrict`
+ * more purchases as their supplier. The `Purchase` FK is `onDelete: Restrict`
  * (ADR-0008/0009), so the contact must be detached from those purchases first. */
 export class ContactInUseError extends Error {
   constructor(public readonly referenceCount: number) {
@@ -115,7 +101,6 @@ export interface ContactRoles {
   seller: boolean;
   exchangePartner: boolean;
   auctionHouse: boolean;
-  platform: boolean;
   other: boolean;
 }
 
@@ -134,91 +119,9 @@ export interface ContactData extends ContactRoles {
    * recognised by. Null on nearly every contact. */
   facebookProfileUrl: string | null;
   /** The country this contact sells in (#1634; ADR-0064), ISO 3166-1 alpha-2 — where its auction
-   * results count. Null is *not known*, which counts as the collection's home market. */
+   * results count. Null is *not known*: the platform's market then answers, and failing that the
+   * collection's home market. */
   market: string | null;
-  /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
-   * contacts carrying the `platform` role. */
-  platformCurrency: string | null;
-  /** Free-text title template for this platform's listings (#210), or null (falls back to the
-   * built-in default). Only meaningful for the `platform` role. */
-  titleTemplate: string | null;
-  /** Templates for the platform's longer listing texts — the public description (#266) and the
-   * seller-only private note (#267) — or null, which means the field is simply not generated (there
-   * is no built-in default). Only meaningful for the `platform` role. */
-  descriptionTemplate: string | null;
-  privateNoteTemplate: string | null;
-  /** What this platform's description field accepts (#319) — plain text, HTML or Markdown. Seeded
-   * onto every offer created here, which is where rendering and copying read it (ADR-0019). Only
-   * meaningful for the `platform` role. Normalised on write (like `photoSides`), so a reader can
-   * take it at face value. */
-  descriptionFormat: string;
-  /** ISO 639-1 language the platform's generated listing text is written in (#293), or null when
-   * unset. Only meaningful for the `platform` role; drives which entity translations the title
-   * tokens resolve. */
-  titleLanguage: string | null;
-  /** Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), a 2-dp
-   * string in the platform's own currency, or null. It outranks the suggestions read off the goods
-   * (#553) — a lot is opened below its worth to attract bids — and seeds an offer at creation only;
-   * afterwards it is merely offered back, on an auction still carrying no starting price of its own
-   * (#1283). Kept only while {@link defaultListingType} is
-   * `auction`; a quick buy has no such figure. Only meaningful for the `platform` role. */
-  defaultStartingPrice: string | null;
-  /** The floor this platform lists at (#731), a 2-dp string in the platform's own currency, or null
-   * when it states none — the normal case. **Advisory only**: nothing seeds it onto an offer, nothing
-   * clamps a price to it, and no gate refuses a price under it. It is offered back beside the price
-   * on the offer's screen, one button away. Unlike
-   * {@link defaultStartingPrice} it is kept whatever {@link defaultListingType} says — a floor is a
-   * floor on whatever figure the seller states. Only meaningful for the `platform` role. */
-  minimumPrice: string | null;
-  /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when
-   * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
-   * {@link defaultStartingPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
-  defaultListingType: string | null;
-  /** After how many days an active quick buy here needs posting again (#1718), or null for never.
-   * Not read for the Facebook platform, whose threshold is on Settings → Facebook (#1661). Only
-   * meaningful for the `platform` role. */
-  refreshQuickBuysAfterDays: number | null;
-  /** The message a buyer is sent after a sale here (#1815), or null for none. Not read for the
-   * Facebook platform, whose message is on Settings → Facebook (#1661). Only meaningful for the
-   * `platform` role. */
-  buyerMessageTemplate: string | null;
-  /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
-   * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
-  maxPhotos: number | null;
-  maxPhotoEdge: number | null;
-  maxPhotoFileSizeMib: number | null;
-  /** The platform's listing-text caps (#403, the title one #610), each null when it states none —
-   * the same kind of hard technical limit as the photo ones above, and read live for the same
-   * reason. Only meaningful for the `platform` role. */
-  maxTitleLength: number | null;
-  maxDescriptionLength: number | null;
-  maxPrivateNoteLength: number | null;
-  /** Which Assistant platform module can post to this platform (#406), or null when the Assistant
-   * knows nothing about it — the normal case. It is what makes the listing preconditions
-   * answerable, since they are that module's own rules. **Read-only here**: it is set in
-   * Settings → Colnect by picking the platform (`setColnectPlatform`), because which platform is
-   * Colnect is one fact per collection rather than a property each contact form re-asks. */
-  platformModule: string | null;
-  /** Photo defaults seeded onto every offer created on this platform (#308): which scan sides to
-   * include, the per-tile label template (#312), and which collage template (#307) supplies the
-   * render numbers. Changing them never touches an offer already prepared. */
-  photoSides: string;
-  /** #521's grouping, seeded onto new offers: single-copy sets photographed on their own while this
-   * platform's photo limit has room. */
-  photoPreferSingles: boolean;
-  /** Whether offers here need symbols covered on their photos (#1665), and the style a new cover
-   * starts as. Read live, unlike the seeded defaults around them. */
-  coverSymbols: boolean;
-  coverStyle: string;
-  /** The colour the first bar starts in (#1702), `#rrggbb`. */
-  coverColor: string;
-  tileLabelLeftTemplate: string | null;
-  tileLabelRightTemplate: string | null;
-  defaultCollageTemplateId: string | null;
-  /** #1673, seeded onto new offers: group a set's copies by checklist on photos of their own, laid
-   * out on this template — null leaves the groups on the template above. */
-  photoGroupByChecklist: boolean;
-  defaultGroupCollageTemplateId: string | null;
   /** Seller defaults for auction sales (#350, ADR-0021): the currency and fees this seller normally
    * trades on. **Seeded** onto an `AuctionSale` at creation and editable there, so changing them
    * here never re-prices a sale already tracked or settled. Only meaningful for the `seller` /
@@ -245,36 +148,7 @@ const CONTACT_SELECT = {
   seller: true,
   exchangePartner: true,
   auctionHouse: true,
-  platform: true,
   other: true,
-  platformCurrency: true,
-  titleTemplate: true,
-  descriptionTemplate: true,
-  privateNoteTemplate: true,
-  descriptionFormat: true,
-  titleLanguage: true,
-  defaultStartingPrice: true,
-  minimumPrice: true,
-  defaultListingType: true,
-  refreshQuickBuysAfterDays: true,
-  buyerMessageTemplate: true,
-  maxPhotos: true,
-  maxPhotoEdge: true,
-  maxPhotoFileSizeMib: true,
-  maxTitleLength: true,
-  maxDescriptionLength: true,
-  maxPrivateNoteLength: true,
-  platformModule: true,
-  photoSides: true,
-  photoPreferSingles: true,
-  coverSymbols: true,
-  coverStyle: true,
-  coverColor: true,
-  tileLabelLeftTemplate: true,
-  tileLabelRightTemplate: true,
-  defaultCollageTemplateId: true,
-  photoGroupByChecklist: true,
-  defaultGroupCollageTemplateId: true,
   defaultCurrency: true,
   defaultShippingCost: true,
   buyerPremiumPercent: true,
@@ -289,14 +163,10 @@ type ContactRow = Omit<
   | "defaultShippingCost"
   | "buyerPremiumPercent"
   | "buyerPremiumFixed"
-  | "defaultStartingPrice"
-  | "minimumPrice"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
-  defaultStartingPrice: Decimal | null;
-  minimumPrice: Decimal | null;
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
@@ -307,31 +177,6 @@ function toContactData(row: ContactRow): ContactData {
     defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
-    defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
-    minimumPrice: row.minimumPrice?.toFixed(2) ?? null,
-  };
-}
-
-/**
- * What a new offer on this platform starts as (#449): how it is sold, and — **only** for an auction
- * platform — the figure it opens at.
- *
- * The two are written together because the price is meaningless without the format. A quick-buy or
- * preference-less platform stores no starting price at all rather than keeping one nothing reads:
- * its price follows from the goods, which the lot's suggested price (#190) and the copies' catalog
- * value (#230) already answer. An unknown listing type stores null — "no preference" is exactly what
- * an unanswered question is, and it reads as `fixed` wherever it is used.
- */
-function platformListingDefaults(
-  data: ContactCreateInput
-): { defaultListingType: string | null; defaultStartingPrice: string | null } {
-  const defaultListingType = isOfferListingType(data.defaultListingType)
-    ? data.defaultListingType
-    : null;
-  return {
-    defaultListingType,
-    defaultStartingPrice:
-      defaultListingType === "auction" ? amount(data.defaultStartingPrice) : null,
   };
 }
 
@@ -374,65 +219,7 @@ export interface ContactCreateInput {
   seller?: boolean;
   exchangePartner?: boolean;
   auctionHouse?: boolean;
-  platform?: boolean;
   other?: boolean;
-  /** The platform's fixed currency (#196), or null. Set/edited on the platform's contact form. */
-  platformCurrency?: string | null;
-  /** The platform's title template (#210), or null. Set/edited on the platform's contact form. */
-  titleTemplate?: string | null;
-  /** The platform's description (#266) / private-note (#267) templates, or null (generate none).
-   * Set/edited on the platform's contact form. */
-  descriptionTemplate?: string | null;
-  privateNoteTemplate?: string | null;
-  /** What the platform's description field accepts (#319). Normalised on write, so an unknown or
-   * missing value simply stores plain text. */
-  descriptionFormat?: string | null;
-  /** The platform's listing language (#293), or null. Set/edited on the platform's contact form. */
-  titleLanguage?: string | null;
-  /** The platform's fallback starting price for a new auction (#362/#449), or null. A blank or
-   * unparseable amount stores null — a platform with no default, not a free one — and so does any
-   * value sent while `defaultListingType` is not `auction`. */
-  defaultStartingPrice?: string | null;
-  /** The floor this platform lists at (#731), or null when it states none. A blank or unparseable
-   * amount stores null. Unlike {@link defaultStartingPrice} it survives whatever
-   * `defaultListingType` says: it is a floor on any figure the seller states, not an opening one. */
-  minimumPrice?: string | null;
-  /** How a new offer on this platform is sold by default (#449), or null for "no preference". An
-   * unknown value stores null rather than being coerced: a preference nobody stated is exactly what
-   * null means, and it reads as `fixed` wherever it is used. */
-  defaultListingType?: string | null;
-  /** The quick-buy refresh threshold (#1718) in days, or null for never. Out of range is refused. */
-  refreshQuickBuysAfterDays?: number | null;
-  /** The message to a buyer after a sale here (#1815), or null for none. Blank stores null. */
-  buyerMessageTemplate?: string | null;
-  /** The platform's photo limits (#308) — null each means "no limit stated". */
-  maxPhotos?: number | null;
-  maxPhotoEdge?: number | null;
-  maxPhotoFileSizeMib?: number | null;
-  /** The platform's listing-text caps (#403, #610) — null each means "no limit stated". */
-  maxTitleLength?: number | null;
-  maxDescriptionLength?: number | null;
-  maxPrivateNoteLength?: number | null;
-  /** The photo defaults new offers on this platform are seeded from (#308). `photoSides` is
-   * normalised; an unknown value falls back to the default side. */
-  photoSides?: string | null;
-  /** #521's grouping default. Absent leaves it on, which is what a platform stating a photo limit
-   * wants: the limit is the fact the rule reads. */
-  photoPreferSingles?: boolean | null;
-  /** #1665: whether offers here need symbols covered (absent is off), and the style new covers
-   * start as (normalised; unknown is pixelate). */
-  coverSymbols?: boolean | null;
-  coverStyle?: string | null;
-  /** #1702: the colour the first bar starts in (normalised; unusable is black). */
-  coverColor?: string | null;
-  tileLabelLeftTemplate?: string | null;
-  tileLabelRightTemplate?: string | null;
-  /** The collage template (#307) new offers copy their render numbers from, or null for none. A
-   * template id from another collection is rejected. */
-  defaultCollageTemplateId?: string | null;
-  /** #1673's grouping default (absent is off), and the group template — verified like the one above. */
-  photoGroupByChecklist?: boolean | null;
-  defaultGroupCollageTemplateId?: string | null;
   /** The seller's defaults for auction sales (#350) — currency and fees, each null when the seller
    * states none. Only meaningful for the `seller` / `auctionHouse` roles; amounts arrive as
    * decimal strings from the form. */
@@ -443,7 +230,7 @@ export interface ContactCreateInput {
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
- * reference it (as supplier or platform). A non-zero `referenceCount` means delete is
+ * reference it as their supplier. A non-zero `referenceCount` means delete is
  * blocked (see {@link deleteContact}). */
 export interface ContactListItem extends ContactData {
   referenceCount: number;
@@ -460,13 +247,13 @@ export async function listContacts(
     where: { collectionId },
     select: {
       ...CONTACT_SELECT,
-      _count: { select: { purchases: true, platformPurchases: true } },
+      _count: { select: { purchases: true } },
     },
     orderBy: { name: "asc" },
   });
   return rows.map(({ _count, ...contact }) => ({
     ...toContactData(contact),
-    referenceCount: _count.purchases + _count.platformPurchases,
+    referenceCount: _count.purchases,
   }));
 }
 
@@ -481,7 +268,7 @@ export async function getContactListItem(
     select: {
       ...CONTACT_SELECT,
       collection: { select: { ownerId: true } },
-      _count: { select: { purchases: true, platformPurchases: true } },
+      _count: { select: { purchases: true } },
     },
   });
   if (!row) return null;
@@ -489,7 +276,7 @@ export async function getContactListItem(
   if (collection.ownerId !== ownerId) return null;
   return {
     ...toContactData(contact),
-    referenceCount: _count.purchases + _count.platformPurchases,
+    referenceCount: _count.purchases,
   };
 }
 
@@ -497,8 +284,9 @@ export async function getContactListItem(
  * acquisition-source autocomplete (#103b). Both, because a marketplace buyer is filed under their
  * login and looked for by the name you remember — typing "Bronisław" has to find `bronek_1980`, or
  * the full name is a field that only ever gets written. An empty query returns the first 20 contacts
- * by name. An optional `role` narrows to contacts carrying that role flag (e.g. `platform` for the
- * purchase platform picker, #120), so people don't show up where only platforms belong. */
+ * by name. An optional `role` narrows to contacts carrying that role flag (e.g. `seller` for the
+ * purchase supplier picker, #120). A platform is not a contact: its pickers search
+ * `searchPlatforms` (#1955). */
 export async function searchContacts(
   ownerId: string,
   collectionId: string,
@@ -522,16 +310,17 @@ export async function searchContacts(
   return rows.map(toContactData);
 }
 
-/** Resolve a purchase contact field (supplier / platform) to a contact id, creating the
- * contact on the fly when the user typed a new name without picking a suggestion (#120).
+/** Resolve a party field (a supplier, an auction house) to a contact id, creating the
+ * contact on the fly when the user typed a new name without picking a suggestion (#120). A
+ * platform field resolves through `resolvePlatform` instead (#1955).
  *
  * Resolution order:
  *  1. An explicit `id` is honoured only if it belongs to `collectionId` (guards against a
  *     tampered/cross-collection id); otherwise it is ignored and we fall through to name.
  *  2. A `name` is matched case-insensitively against existing contacts and reused, so the
  *     same supplier is never duplicated.
- *  3. Failing both, a new contact is created carrying `role` (a supplier gets `seller`, a
- *     platform gets `platform`). Returns `null` when neither id nor name is given.
+ *  3. Failing both, a new contact is created carrying `role` (a supplier gets `seller`).
+ *     Returns `null` when neither id nor name is given.
  *
  * The caller must already have asserted ownership of `collectionId`. */
 export async function resolvePurchaseContact(
@@ -575,56 +364,6 @@ export async function resolvePurchaseContact(
   }
 }
 
-/** The photo columns (#308) as Prisma writes them, with the collage-template reference verified to
- * belong to the same collection — a tampered id from another collection is simply dropped. */
-async function photoData(
-  collectionId: string,
-  data: ContactCreateInput
-): Promise<{
-  maxPhotos: number | null;
-  maxPhotoEdge: number | null;
-  maxPhotoFileSizeMib: number | null;
-  photoSides: string;
-  photoPreferSingles: boolean;
-  /** Whether offers here need symbols covered on their photos (#1665), and the style a new cover
-   * starts as. Read live, unlike the seeded defaults around them. */
-  coverSymbols: boolean;
-  coverStyle: string;
-  /** The colour the first bar starts in (#1702), `#rrggbb`. */
-  coverColor: string;
-  tileLabelLeftTemplate: string | null;
-  tileLabelRightTemplate: string | null;
-  defaultCollageTemplateId: string | null;
-  photoGroupByChecklist: boolean;
-  defaultGroupCollageTemplateId: string | null;
-}> {
-  const ownTemplate = async (raw: string | null | undefined) => {
-    const id = raw?.trim() || null;
-    return id
-      ? prisma.collageTemplate.findFirst({ where: { id, collectionId }, select: { id: true } })
-      : null;
-  };
-  const [template, groupTemplate] = await Promise.all([
-    ownTemplate(data.defaultCollageTemplateId),
-    ownTemplate(data.defaultGroupCollageTemplateId),
-  ]);
-  return {
-    maxPhotos: data.maxPhotos ?? null,
-    maxPhotoEdge: data.maxPhotoEdge ?? null,
-    maxPhotoFileSizeMib: data.maxPhotoFileSizeMib ?? null,
-    photoSides: normalizePhotoSides(data.photoSides),
-    photoPreferSingles: data.photoPreferSingles ?? true,
-    coverSymbols: data.coverSymbols ?? false,
-    coverStyle: normalizePhotoCoverStyle(data.coverStyle),
-    coverColor: normalizePlatformCoverColor(data.coverColor),
-    tileLabelLeftTemplate: data.tileLabelLeftTemplate ?? null,
-    tileLabelRightTemplate: data.tileLabelRightTemplate ?? null,
-    defaultCollageTemplateId: template?.id ?? null,
-    photoGroupByChecklist: data.photoGroupByChecklist ?? false,
-    defaultGroupCollageTemplateId: groupTemplate?.id ?? null,
-  };
-}
-
 /** Create a contact. `name` is required; roles are optional and independent, so a
  * contact may be created with no roles at all (create-on-type, #103b). Throws
  * {@link ContactNameTakenError} when the name already exists in the collection. */
@@ -636,13 +375,11 @@ export async function createContact(
   await assertCollectionOwner(ownerId, collectionId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
-  const photos = await photoData(collectionId, data);
   try {
     return toContactData(await prisma.contact.create({
       data: {
         collectionId,
         name,
-        ...photos,
         ...sellerDefaults(data),
         notes: data.notes ?? null,
         fullName: data.fullName ?? null,
@@ -654,25 +391,7 @@ export async function createContact(
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,
         auctionHouse: data.auctionHouse ?? false,
-        platform: data.platform ?? false,
         other: data.other ?? false,
-        platformCurrency: data.platformCurrency ?? null,
-        titleTemplate: data.titleTemplate ?? null,
-        descriptionTemplate: data.descriptionTemplate ?? null,
-        privateNoteTemplate: data.privateNoteTemplate ?? null,
-        descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
-        titleLanguage: normalizeLanguage(data.titleLanguage),
-        ...platformListingDefaults(data),
-        // The platform's floor (#731). Written on its own rather than through the helper above,
-        // because it is the one per-listing figure that does not depend on the listing type.
-        minimumPrice: amount(data.minimumPrice),
-        refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
-        buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
-        // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
-        // columns: nothing has to be verified against the collection, so they need no helper.
-        maxTitleLength: data.maxTitleLength ?? null,
-        maxDescriptionLength: data.maxDescriptionLength ?? null,
-        maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },
       select: CONTACT_SELECT,
     }));
@@ -693,16 +412,14 @@ export async function updateContact(
   contactId: string,
   data: ContactUpdateInput
 ): Promise<ContactData> {
-  const { collectionId } = await assertContactOwner(ownerId, contactId);
+  await assertContactOwner(ownerId, contactId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
-  const photos = await photoData(collectionId, data);
   try {
     return toContactData(await prisma.contact.update({
       where: { id: contactId },
       data: {
         name,
-        ...photos,
         ...sellerDefaults(data),
         notes: data.notes ?? null,
         fullName: data.fullName ?? null,
@@ -714,25 +431,7 @@ export async function updateContact(
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,
         auctionHouse: data.auctionHouse ?? false,
-        platform: data.platform ?? false,
         other: data.other ?? false,
-        platformCurrency: data.platformCurrency ?? null,
-        titleTemplate: data.titleTemplate ?? null,
-        descriptionTemplate: data.descriptionTemplate ?? null,
-        privateNoteTemplate: data.privateNoteTemplate ?? null,
-        descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
-        titleLanguage: normalizeLanguage(data.titleLanguage),
-        ...platformListingDefaults(data),
-        // The platform's floor (#731). Written on its own rather than through the helper above,
-        // because it is the one per-listing figure that does not depend on the listing type.
-        minimumPrice: amount(data.minimumPrice),
-        refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
-        buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
-        // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
-        // columns: nothing has to be verified against the collection, so they need no helper.
-        maxTitleLength: data.maxTitleLength ?? null,
-        maxDescriptionLength: data.maxDescriptionLength ?? null,
-        maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
       },
       select: CONTACT_SELECT,
     }));
@@ -744,7 +443,7 @@ export async function updateContact(
 
 /**
  * The languages a collection actually needs **translations** for (#293, widened by #777): the
- * distinct languages it puts to use — its platforms' listing languages (`Contact.titleLanguage`)
+ * distinct languages it puts to use — its platforms' listing languages (`Platform.titleLanguage`)
  * and its albums' printed languages (`Album.language`, #767) — minus the collection's own
  * `defaultLanguage`, since text in that language already lives in the entity's default column and a
  * translation row would duplicate it.
@@ -786,8 +485,8 @@ export async function getCollectionTranslationContext(
       where: { id: collectionId },
       select: { defaultLanguage: true },
     }),
-    prisma.contact.findMany({
-      where: { collectionId, platform: true, titleLanguage: { not: null } },
+    prisma.platform.findMany({
+      where: { collectionId, titleLanguage: { not: null } },
       select: { titleLanguage: true },
       distinct: ["titleLanguage"],
     }),
@@ -816,7 +515,7 @@ export async function getCollectionTranslationContext(
 }
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still
- * references it as supplier or platform (`onDelete: Restrict`, ADR-0008/0009) — the
+ * references it as its supplier (`onDelete: Restrict`, ADR-0008/0009) — the
  * caller must detach it from those purchases first. */
 export async function deleteContact(
   ownerId: string,
@@ -824,7 +523,7 @@ export async function deleteContact(
 ): Promise<void> {
   await assertContactOwner(ownerId, contactId);
   const referenceCount = await prisma.purchase.count({
-    where: { OR: [{ contactId }, { platformId: contactId }] },
+    where: { contactId },
   });
   if (referenceCount > 0) throw new ContactInUseError(referenceCount);
   await prisma.contact.delete({ where: { id: contactId } });

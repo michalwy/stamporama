@@ -36,7 +36,7 @@ export interface ListingTask {
    *  this offer; a module that has both prefers this and falls back to reading the URL, which is
    *  where the same string has always been. */
   listingId?: string | null;
-  /** The platform, and the module id that knows its sale form — `Contact.platformModule` (#406),
+  /** The platform, and the module id that knows its sale form — `Platform.platformModule` (#406),
    *  matched against `PlatformModule.id`. Null when the platform names none, which the endpoint
    *  refuses; the shell refuses it too rather than guessing a module. */
   platform: { id: string; name: string; module: string | null };

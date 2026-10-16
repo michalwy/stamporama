@@ -132,8 +132,8 @@ describe("the purchase operations (#1390)", () => {
     // cannot tell apart.
     await prisma.contact.create({ data: { collectionId, name: "Jan Nowak", seller: true } });
     await prisma.contact.create({ data: { collectionId, name: "jan nowak", buyer: true } });
-    await prisma.contact.create({
-      data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+    await prisma.platform.create({
+      data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
     });
 
     conditionId = (
@@ -177,7 +177,8 @@ describe("the purchase operations (#1390)", () => {
       });
       assert.equal(status, 400);
       assert.match(error.message, /create_seller/);
-      assert.equal(await prisma.contact.count({ where: { collectionId } }), 5, "nothing was created");
+      // Four contacts — the platform the purchase names is a platform, not a contact (#1955).
+      assert.equal(await prisma.contact.count({ where: { collectionId } }), 4, "nothing was created");
     });
 
     it("creates the seller, filed under their login with the name beside it", async () => {

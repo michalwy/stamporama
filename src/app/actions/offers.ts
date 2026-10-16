@@ -69,7 +69,7 @@ import {
   createOfferSpecificationShareToken,
   revokeOfferSpecificationShareToken,
 } from "@/lib/offer-specification-share";
-import { resolvePurchaseContact } from "@/lib/contacts";
+import { resolvePlatform } from "@/lib/platforms";
 import {
   NO_FACEBOOK_CHOICE,
   parseBidIncrement,
@@ -151,7 +151,7 @@ function fail(e: unknown, fallback: string): { status: "error"; message: string 
 
 /** Resolve the shared offer form fields (platform picker + url + price + currency), returning
  * a domain `OfferInput` or a validation error. `collectionId` is needed to find-or-create the
- * platform contact from the typed name (mirrors the purchase platform picker, #120). */
+ * platform from the typed name (mirrors the purchase platform picker, #120). */
 async function readOfferInput(
   collectionId: string,
   formData: FormData
@@ -200,10 +200,9 @@ async function readOfferInput(
   const rawState = str(formData, "state");
   const state: OfferState = isCreatableOfferState(rawState) ? rawState : "preparing";
 
-  const platformId = await resolvePurchaseContact(collectionId, {
+  const platformId = await resolvePlatform(collectionId, {
     id: str(formData, "platformId") || null,
     name: str(formData, "platformName") || null,
-    role: "platform",
   });
   if (!platformId) return { ok: false, message: "Choose a platform to list on." };
 

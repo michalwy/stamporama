@@ -7,7 +7,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createContact } from "../../src/lib/contacts";
+import { createPlatform } from "../../src/lib/platforms";
 import { createOffer, addOfferSet, getOfferDetail, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import {
@@ -113,18 +113,16 @@ describe("offer photos grouped by checklist (#1673)", () => {
       data: { collectionId: foreign.id, name: "Elsewhere", rows: 3, columns: 3, gapPercent: 5 },
     });
 
-    // Through the contact domain, so the platform form's write path is what is exercised: a group
+    // Through the platform domain, so the platform form's write path is what is exercised: a group
     // template from another collection is dropped, one from this collection is kept.
-    const dropped = await createContact(userId, collectionId, {
+    const dropped = await createPlatform(userId, collectionId, {
       name: `Elsewhere ${ts}`,
-      platform: true,
       photoGroupByChecklist: true,
       defaultGroupCollageTemplateId: foreignTemplate.id,
     });
     assert.equal(dropped.defaultGroupCollageTemplateId, null);
-    const platform = await createContact(userId, collectionId, {
-      name: `Facebook ${ts}`,
-      platform: true,
+    const platform = await createPlatform(userId, collectionId, {
+      name: `Facebook group ${ts}`,
       maxPhotoEdge: 800,
       defaultCollageTemplateId: singles.id,
       photoGroupByChecklist: true,

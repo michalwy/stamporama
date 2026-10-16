@@ -129,7 +129,7 @@ describe("duplicate groups", () => {
     });
 
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
     const offer = await prisma.offer.create({
       // Written straight to the table, so it bypasses `allocateOfferNumber` (#416) — a number well
@@ -300,7 +300,7 @@ describe("duplicate groups", () => {
     });
     assert.equal(items.length, 4);
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     const offerId = await createOffer(
       userId,

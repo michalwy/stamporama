@@ -1,7 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { setDelcampePlatform } from "../../src/lib/delcampe";
 import { createItem } from "../../src/lib/items";
 import { createOffer, setOfferState } from "../../src/lib/offers";
 import {
@@ -53,11 +52,11 @@ describe("Delcampe learned categories (#609)", () => {
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
-    await setDelcampePlatform(userId, collectionId, delcampeId);
+    await prisma.platform.update({ where: { id: delcampeId }, data: { platformModule: "delcampe" } });
 
     polandId = (await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } })).id;
     usedId = (
@@ -209,7 +208,7 @@ describe("Delcampe learned categories (#609)", () => {
 
   it("is not offered on an offer that is not on the Delcampe platform", async () => {
     const other = (
-      await prisma.contact.create({ data: { collectionId, name: "Somewhere else", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Somewhere else" } })
     ).id;
     const offerId = await createOffer(userId, collectionId, {
       platformId: other,

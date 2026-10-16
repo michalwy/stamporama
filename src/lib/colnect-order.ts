@@ -157,7 +157,7 @@ export async function importColnectOrder(
   const platform = await getModulePlatform(collectionId, COLNECT_PLATFORM_MODULE);
   if (!platform) {
     throw new ColnectOrderError(
-      "No platform is marked as Colnect yet, so there is nothing to record this transaction against. Settings → Colnect."
+      "The Colnect platform is switched off, so there is nothing to record this transaction against. Switch it on under Settings → Colnect."
     );
   }
 
@@ -181,7 +181,7 @@ export async function importColnectOrder(
     };
   }
 
-  const contact = await prisma.contact.findFirst({
+  const contact = await prisma.platform.findFirst({
     where: { id: platform.id, collectionId },
     select: { platformCurrency: true },
   });

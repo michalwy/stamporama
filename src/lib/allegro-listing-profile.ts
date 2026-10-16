@@ -18,7 +18,7 @@ import {
 // and no offer has any notion of: delivery, after-sales services, location, invoicing.
 //
 // The shape this module exists to guarantee: a profile is a **named set of account settings owned by
-// the Allegro platform contact**, one of which the platform publishes with by default, and any of
+// the Allegro platform**, one of which the platform publishes with by default, and any of
 // which an offer may name instead. Nothing here publishes anything — #477 is the consumer, and the
 // only thing it asks of this module is {@link resolveAllegroListingProfileForOffer}.
 //
@@ -95,8 +95,8 @@ async function assertProfileOwner(
 async function allegroPlatformOf(
   collectionId: string
 ): Promise<{ id: string; name: string; defaultAllegroListingProfileId: string | null } | null> {
-  const platform = await prisma.contact.findFirst({
-    where: { collectionId, platform: true, platformModule: ALLEGRO_PLATFORM_MODULE },
+  const platform = await prisma.platform.findFirst({
+    where: { collectionId, platformModule: ALLEGRO_PLATFORM_MODULE },
     select: { id: true, name: true, defaultAllegroListingProfileId: true },
     orderBy: { name: "asc" },
   });
@@ -339,7 +339,7 @@ export async function createAllegroListingProfile(
         select: { id: true },
       });
       if (!platform.defaultAllegroListingProfileId) {
-        await tx.contact.update({
+        await tx.platform.update({
           where: { id: platform.id },
           data: { defaultAllegroListingProfileId: created.id },
         });
@@ -380,7 +380,7 @@ export async function setDefaultAllegroListingProfile(
   profileId: string
 ): Promise<void> {
   const { platformId } = await assertProfileOwner(ownerId, profileId);
-  await prisma.contact.update({
+  await prisma.platform.update({
     where: { id: platformId },
     data: { defaultAllegroListingProfileId: profileId },
   });

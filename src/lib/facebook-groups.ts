@@ -78,8 +78,8 @@ async function assertGroupOwner(ownerId: string, groupId: string): Promise<{ nam
 async function facebookPlatformOf(
   collectionId: string
 ): Promise<{ id: string; name: string; platformCurrency: string | null } | null> {
-  return prisma.contact.findFirst({
-    where: { collectionId, platform: true, platformModule: FACEBOOK_PLATFORM_MODULE },
+  return prisma.platform.findFirst({
+    where: { collectionId, platformModule: FACEBOOK_PLATFORM_MODULE },
     select: { id: true, name: true, platformCurrency: true },
     orderBy: { name: "asc" },
   });

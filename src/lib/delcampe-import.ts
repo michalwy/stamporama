@@ -120,13 +120,13 @@ export async function importDelcampeActiveItems(
   const platform = await getModulePlatform(collectionId, DELCAMPE_PLATFORM_MODULE);
   if (!platform) {
     throw new DelcampeImportError(
-      "No platform is marked as Delcampe yet, so there are no listings here to match this file against. Settings → Delcampe."
+      "The Delcampe platform is switched off, so there are no listings here to match this file against. Switch it on under Settings → Delcampe."
     );
   }
   // The currency the file's figures are in. Delcampe states it nowhere in the export — it is an
-  // account-level setting — so it is the platform contact's own (#196), and a figure is carried onto
+  // account-level setting — so it is the platform's own (#196), and a figure is carried onto
   // an offer only where the two agree.
-  const contact = await prisma.contact.findFirst({
+  const contact = await prisma.platform.findFirst({
     where: { id: platform.id, collectionId },
     select: { platformCurrency: true },
   });
@@ -342,7 +342,7 @@ function rowData(
     status: "ACTIVE",
     endsAt: row.endsAt,
     presentPrice: row.presentPrice === null ? null : row.presentPrice.toFixed(2),
-    // The currency is the platform contact's (#196) and travels only with a figure: a currency
+    // The currency is the platform's (#196) and travels only with a figure: a currency
     // beside no price is a claim about a number that is not there.
     currency: row.presentPrice === null ? null : fileCurrency,
     quantity: row.quantity,

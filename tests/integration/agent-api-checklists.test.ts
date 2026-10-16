@@ -124,7 +124,7 @@ describe("checklists through the agent API (#1512)", () => {
       })
     ).id;
     // A marketplace listing in German is what makes German a translation language (#293).
-    await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, titleLanguage: "de" } });
+    await prisma.platform.create({ data: { collectionId, name: "Delcampe", titleLanguage: "de" } });
     token = (await createAssistantToken(userId, collectionId, { label: "checklist agent", scope: "read_write", kind: "agent" })).token;
     readOnlyToken = (
       await createAssistantToken(userId, collectionId, { label: "checklist agent, read", scope: "read", kind: "agent" })

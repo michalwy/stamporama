@@ -12,7 +12,6 @@ import {
 } from "../../src/lib/offers";
 import { addSaleLines, createSale } from "../../src/lib/sales";
 import { resolveSaleHeader, type SaleHeaderRaw } from "../../src/lib/sale-header-input";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { facebookOfferSaleCurrency, lookupFacebookBuyer } from "../../src/lib/facebook-sales";
@@ -56,16 +55,16 @@ describe("Selling a Facebook offer (#1777)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Mercury" } })).id;
     conditionId = (
       await prisma.stampCondition.create({
@@ -210,7 +209,7 @@ describe("Selling a Facebook offer (#1777)", () => {
     assert.equal(sale.currency, "EUR", "the group's currency, not the platform's PLN");
     assert.deepEqual(sale.lines.map((l) => l.price.toFixed(2)), ["5.00", "5.00"], "each set at its current price");
     assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).state, "sold");
-    const platform = await prisma.contact.findUniqueOrThrow({ where: { id: facebookId } });
+    const platform = await prisma.platform.findUniqueOrThrow({ where: { id: facebookId } });
     assert.equal(platform.platformCurrency, "PLN", "the platform's lock is left alone");
   });
 

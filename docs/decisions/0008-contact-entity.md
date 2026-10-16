@@ -4,6 +4,8 @@
 
 Accepted
 
+**The `platform` role and the platform settings on `Contact` are superseded by [ADR-0071](0071-platform-entity.md)** (#1955): a marketplace is a `Platform` of its own, and the address book holds only people and firms.
+
 ## Context
 
 Physical copies (`Item`, ADR-0007) carry a free-form `acquisitionSource` string —

@@ -1,5 +1,6 @@
 import "server-only";
 import { resolvePurchaseContact } from "./contacts";
+import { resolvePlatform } from "./platforms";
 import { resolveFacebookBuyer } from "./facebook-sales";
 import { parseAmount, parseSaleDate, CUSTOM_SHIPPING_OPTION } from "./sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
@@ -124,10 +125,9 @@ export async function resolveSaleHeader(
   const shipping = resolveSaleShipping(raw.shipping);
   if (!shipping.ok) return { ok: false, message: shipping.message };
 
-  const platformId = await resolvePurchaseContact(collectionId, {
+  const platformId = await resolvePlatform(collectionId, {
     id: raw.platformId,
     name: raw.platformName,
-    role: "platform",
   });
   if (!platformId) return { ok: false, message: "Choose a platform this sale happened on." };
 

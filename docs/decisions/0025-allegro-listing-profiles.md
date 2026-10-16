@@ -4,6 +4,8 @@
 
 Accepted
 
+The profiles hang off the Allegro module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a platform contact.
+
 ## Context
 
 ADR-0023 established the connection and ADR-0024 the reads built on it. Publishing (#477) is the
