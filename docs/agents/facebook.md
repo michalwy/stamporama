@@ -438,9 +438,14 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `*Edited`, not null) and off the template ↻ would use (`effectiveTemplate`, the offer's own first),
   so it names what is actually in the words and exactly what `syncGeneratedTexts` would rewrite; one
   copy read per language for the whole post. The answer is the names once each in lot order plus
-  `byLot` (offer id → `titleFallbackKey`s). The panel draws them above *Lots* through
-  `TranslationGapLinks` (`shared/title-preview.tsx`, split out of `TitleFallbackNote`, so one popover
-  and one save path), and each lot's row an *Untranslated* fact. **Saving re-renders, unlike the offer
+  `byLot` (offer id → `titleFallbackKey`s). **Each lot's row draws its own as the links** (#1980,
+  raised on 2026-10-16: on a post of twenty lots one paragraph of every name above *Lots* could not be
+  worked through) — `TranslationGapLinks` (`shared/title-preview.tsx`, split out of
+  `TitleFallbackNote`, so one popover and one save path) with `withLanguage={false}`, the line above
+  the lots naming the language once; that line is only a count of the rows needing one and *Next lot
+  ↓*, which steps in lot order from the row it last stepped to (so a row just translated still counts
+  as the place to step on from). `gaps` is the union of `byLot` by construction — the post text prints
+  no translatable name of its own — so nothing is listed under the post text. **Saving re-renders, unlike the offer
   screen's panel (#299)**: its `onSaved` calls `refreshFacebookPostTexts` → `syncGeneratedTexts(name,
   description)` on every lot, refused once the post is up — the issue asked for the text to change at
   once, and the `*Edited` flags already keep hand-written wording, which was #299's reason not to. The

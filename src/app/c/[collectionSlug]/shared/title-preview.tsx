@@ -139,17 +139,21 @@ export function TitleFallbackNote({ tokens, fix }: { tokens: readonly string[]; 
 }
 
 /** Each untranslated name as a link (*Netherlands → Polish*), comma-separated, opening the field
- * for that one name (#1733) — the warning line's half, and a Facebook post's list of the names it
- * prints untranslated (#1889). One save path: the popover is the compose dialog's (#300). */
+ * for that one name (#1733) — the warning line's half, and each lot's row on a Facebook post's screen
+ * (#1889, #1980). One save path: the popover is the compose dialog's (#300). */
 export function TranslationGapLinks({
   collectionId,
   language,
   gaps,
+  withLanguage = true,
   onSaved,
 }: {
   collectionId: string;
   language: string;
   gaps: readonly TitleFallback[];
+  /** False where the screen already names the language, so each name reads alone (*Netherlands*) —
+   * a post's lot rows, one under another, under a line that names it (#1980). */
+  withLanguage?: boolean;
   /** Called once a translation is stored; the caller re-reads, and the fresh `gaps` no longer carry
    * the one just filled. */
   onSaved: () => void;
@@ -174,7 +178,7 @@ export function TranslationGapLinks({
                 setOpen({ key: titleFallbackKey(gap), anchor: e.currentTarget.getBoundingClientRect() });
               }}
             >
-              {gap.defaultValue} → {languageName}
+              {withLanguage ? `${gap.defaultValue} → ${languageName}` : gap.defaultValue}
             </button>
           </Tooltip>
         </span>
