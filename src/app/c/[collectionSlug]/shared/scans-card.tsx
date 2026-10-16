@@ -3,18 +3,21 @@
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Icon } from "@/app/icons";
+import { Icon, type IconSize } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { usePurchaseScansUi } from "./purchase-ui-state";
 import { Segmented } from "./segmented";
 import { useScanTileSize } from "./use-scan-tile-size";
 import {
+  SCAN_TILE_CHROME,
   SCAN_TILE_SIZES,
   SCAN_TILE_SIZE_LABEL,
   SCAN_TILE_WIDTH_REM,
+  type ScanTileChrome,
   type ScanTileSize,
 } from "@/lib/scan-tile-size";
+import { CELL_GLYPH, CheckCell } from "./cell-target";
 import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import {
   commitCutAction,
@@ -2061,6 +2064,8 @@ function BatchSection({
   // size, and the hook keeps them in step.
   const [tileSize] = useScanTileSize();
   const tileWidth = `${SCAN_TILE_WIDTH_REM[tileSize]}rem`;
+  // What sits on each tile's frame grows with it (#1971).
+  const tileChrome = SCAN_TILE_CHROME[tileSize];
   /** Whether the name is being typed. Off by default: the name is read far more often than it is
    * written, and a text box standing where a name should be reads as a form rather than as a card
    * that is called something. */
@@ -2354,6 +2359,7 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
+              chrome={tileChrome}
               // The strip is the pull list (#853): every square on it is a discard, so the tile
               // stops drawing the state it is in and draws what finds the stamp on the card.
               worklist={reachesFinishedBatches(filter)}
@@ -2401,6 +2407,7 @@ function BatchSection({
                 tile={tile}
                 collectionId={collectionId}
                 width={tileWidth}
+                chrome={tileChrome}
                 onDragStart={() => setDragging(tile.id)}
                 onDragEnd={() => setDragging(null)}
                 onMark={(patch) => onMark([tile.id], patch)}
@@ -2742,6 +2749,7 @@ const LABEL_INPUT_STYLE: React.CSSProperties = {
 function TileCell({
   tile,
   collectionId,
+  chrome,
   worklist,
   droppable,
   arrived,
@@ -2756,6 +2764,8 @@ function TileCell({
 }: {
   tile: ScanTileData;
   collectionId: string;
+  /** The sizes of what sits on the frame, from the strip's tile size (#1971). */
+  chrome: ScanTileChrome;
   /** Drawn as one line of the **pull list** (#853) — the strip narrowed to the discards, read with
    * a stamp in the other hand. Two things change, and both are the same change: what is on the
    * square stops describing the app and starts describing the piece. The picture is at full
@@ -2842,8 +2852,9 @@ function TileCell({
 
           The band is on **every** tile, not only the ones currently wearing a mark, for the same
           reason the border is always two pixels: nothing may shift by a pixel as a tile settles.
-          Its height clears the taller of the two marks (`0.15rem` offset + `1.05rem` tick). */}
-      <div style={{ height: "1.35rem" }} />
+          Its height clears the corner marks with their inset, and grows with them as the tile does
+          (#1971) — the marks get larger by the band getting taller, never by reaching over the scan. */}
+      <div style={{ height: `${chrome.bandRem}rem` }} />
       {/* The crop is inset from the frame rather than flush with it. A tile is a scan of a stamp
           on a black card, so its own edges are often dark — and an edge drawn right up against
           them merges into the picture, which is exactly the legibility the coloured edge is here
@@ -2864,19 +2875,25 @@ function TileCell({
           emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
         />
       </div>
-      {(settled || parked) && <TileStateBadge state={tile.state} />}
+      {(settled || parked) && <TileStateBadge state={tile.state} chrome={chrome} />}
+      {/* The label row is frame too, under the picture: its number and the handled tick are read
+          across a strip at a glance, so they are set at the tile's own size (#1971), the number in
+          the secondary ink rather than the muted one. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "0.25rem",
-          padding: "0.125rem 0.25rem",
-          fontSize: "0.6875rem",
+          padding: "0.15rem 0.3rem",
+          fontSize: `${chrome.labelFontRem}rem`,
+          lineHeight: 1.3,
           color: "var(--color-text-muted)",
         }}
       >
-        <span>{tile.position + 1}</span>
+        <span style={{ fontWeight: 600, color: "var(--color-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+          {tile.position + 1}
+        </span>
         {tile.state === "consumed" ? (
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {tile.item ? formatItemNo(tile.item.itemNo) : "copy deleted"}
@@ -2895,7 +2912,7 @@ function TileCell({
         ) : (
           // A tile with no back is the ordinary case, not a fault: backs are optional and a card
           // may never be turned over at all. Marked quietly rather than warned about.
-          <Icon name={tile.backPhotoId ? "check" : "noPhoto"} size="xs" />
+          <Icon name={tile.backPhotoId ? "check" : "noPhoto"} size={chrome.icon} />
         )}
       </div>
       {/* **The shortlist, on the strip** (#607) — because that is what makes a return sitting
@@ -2991,23 +3008,53 @@ function TileCell({
         <TileMarkSlot
           collectionId={collectionId}
           mark={tile.mark}
+          chrome={chrome}
           disabled={busy}
           onMark={onMark}
-          style={{ position: "absolute", top: "0.15rem", left: "1.25rem", right: "1.4rem" }}
+          // Between the two corners, which are the band's height square — a parked tile wears the
+          // badge in the left one and the box in the right.
+          style={{
+            position: "absolute",
+            top: 0,
+            height: `${chrome.bandRem}rem`,
+            alignItems: "center",
+            left: `${chrome.boxRem + 2 * chrome.insetRem}rem`,
+            right: `${chrome.boxRem + 2 * chrome.insetRem}rem`,
+          }}
         />
       )}
       {selectable && (
-        <TickBox
-          state={selected ? "on" : "off"}
-          ordinal={selected ? ordinal : undefined}
-          label={
-            selected && ordinal != null
-              ? `Ticked ${ordinal}${ordinalSuffix(ordinal)} — untick to leave it out`
-              : `Identify tile ${tile.position + 1} together with the others`
-          }
-          onToggle={onToggleSelected}
-          style={{ position: "absolute", top: "0.15rem", right: "0.15rem" }}
-        />
+        // **The whole corner ticks it** (#1971, #1589's rule): the band's height square at the
+        // tile's top right, not the box alone — the same label cell a list row's checkbox sits in,
+        // so a near miss on the corner still lands, and never opens the tile beneath it.
+        <CheckCell
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: `${chrome.boxRem + 2 * chrome.insetRem}rem`,
+            height: `${chrome.bandRem}rem`,
+            justifyContent: "flex-end",
+            alignItems: "flex-start",
+            // The glyph box the cell hover-lights has a padding of its own; the inset is measured
+            // from the frame to the tick box, so that padding comes out of it.
+            padding: `calc(${chrome.insetRem}rem - ${CELL_GLYPH.padding})`,
+            borderTopRightRadius: "0.375rem",
+          }}
+        >
+          <TickBox
+            state={selected ? "on" : "off"}
+            ordinal={selected ? ordinal : undefined}
+            label={
+              selected && ordinal != null
+                ? `Ticked ${ordinal}${ordinalSuffix(ordinal)} — untick to leave it out`
+                : `Identify tile ${tile.position + 1} together with the others`
+            }
+            sizeRem={chrome.boxRem}
+            icon={chrome.icon}
+            onToggle={onToggleSelected}
+          />
+        </CheckCell>
       )}
     </div>
   );
@@ -3031,6 +3078,8 @@ function TickBox({
   ordinal,
   label,
   disabled,
+  sizeRem = 1.05,
+  icon = "xs",
   onToggle,
   style,
 }: {
@@ -3040,6 +3089,9 @@ function TickBox({
   ordinal?: number;
   label: string;
   disabled?: boolean;
+  /** The box's side — a tile's grows with the tile (#1971); a batch header's stays at its line's. */
+  sizeRem?: number;
+  icon?: IconSize;
   onToggle: () => void;
   style?: React.CSSProperties;
 }) {
@@ -3062,13 +3114,13 @@ function TickBox({
           onToggle();
         }}
         style={{
-          minWidth: "1.05rem",
-          height: "1.05rem",
+          minWidth: `${sizeRem}rem`,
+          height: `${sizeRem}rem`,
           flexShrink: 0,
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: ordinal != null && ordinal > 9 ? "0 0.2rem" : 0,
+          padding: ordinal != null && ordinal > 9 ? `0 ${sizeRem * 0.2}rem` : 0,
           borderRadius: "0.25rem",
           border: "none",
           background: on ? "var(--color-accent)" : "var(--color-bg-elevated)",
@@ -3081,14 +3133,14 @@ function TickBox({
         }}
       >
         {state === "on" && ordinal != null ? (
-          <span style={{ fontSize: "0.625rem", fontWeight: 700, lineHeight: 1 }}>{ordinal}</span>
+          <span style={{ fontSize: `${sizeRem * 0.6}rem`, fontWeight: 700, lineHeight: 1 }}>{ordinal}</span>
         ) : state === "on" ? (
-          <Icon name="check" size="xs" />
+          <Icon name="check" size={icon} />
         ) : state === "partial" ? (
           // The dash every level of #571's selection shows while only part of it is in.
           <span
             style={{
-              width: "0.5rem",
+              width: `${sizeRem * 0.5}rem`,
               height: "2px",
               borderRadius: "1px",
               background: "var(--color-accent)",
@@ -3303,7 +3355,7 @@ function useStuck(stickyTop: number) {
  * `aria-hidden`: the cell's `title` already names the outcome in words, and a screen reader reading
  * "became copy #00042" does not also need "check".
  */
-function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
+function TileStateBadge({ state, chrome }: { state: ScanTileData["state"]; chrome: ScanTileChrome }) {
   // The third mark (#597) is **parked**, and it is drawn like the other two rather than as a
   // variation of either: filled, so it reads as something that was decided, in the *this is waiting
   // on you* hue rather than the accent, with `pause` — the app's own glyph for something set going
@@ -3333,10 +3385,11 @@ function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
       aria-hidden="true"
       style={{
         position: "absolute",
-        top: "0.15rem",
-        left: "0.15rem",
-        width: "0.95rem",
-        height: "0.95rem",
+        // The tick box's corner, mirrored, at the tick box's size (#1971).
+        top: `${chrome.insetRem}rem`,
+        left: `${chrome.insetRem}rem`,
+        width: `${chrome.boxRem}rem`,
+        height: `${chrome.boxRem}rem`,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -3346,7 +3399,7 @@ function TileStateBadge({ state }: { state: ScanTileData["state"] }) {
         boxShadow: badge.ring,
       }}
     >
-      <Icon name={badge.icon} size="xs" />
+      <Icon name={badge.icon} size={chrome.icon} />
     </span>
   );
 }
@@ -3385,6 +3438,7 @@ function BackOnlyTile({
   tile,
   collectionId,
   width,
+  chrome,
   onDragStart,
   onDragEnd,
   onMark,
@@ -3394,6 +3448,7 @@ function BackOnlyTile({
   collectionId: string;
   /** The strip's tile size (#1922), so a back reads at the size of the fronts it is matched to. */
   width: string;
+  chrome: ScanTileChrome;
   onDragStart: () => void;
   onDragEnd: () => void;
   /** An unpaired back can be marked too (#1550): the back is often where the condition shows, and
@@ -3425,6 +3480,7 @@ function BackOnlyTile({
         <TileMarkSlot
           collectionId={collectionId}
           mark={tile.mark}
+          chrome={chrome}
           disabled={busy}
           onMark={onMark}
           style={{ marginBottom: "0.2rem" }}
@@ -3447,12 +3503,15 @@ function BackOnlyTile({
 function TileMarkSlot({
   collectionId,
   mark,
+  chrome,
   disabled,
   onMark,
   style,
 }: {
   collectionId: string;
   mark: TileMark | null;
+  /** The mark is set at the tile's size (#1971) — at *Small*, a list row's condition chip. */
+  chrome: ScanTileChrome;
   disabled: boolean;
   onMark: (patch: MarkPatch) => void;
   style?: React.CSSProperties;
@@ -3477,7 +3536,7 @@ function TileMarkSlot({
           display: "inline-flex",
           alignItems: "center",
           maxWidth: "100%",
-          height: "1.05rem",
+          height: `${chrome.boxRem}rem`,
           padding: mark ? 0 : "0 0.2rem",
           border: "none",
           borderRadius: "0.25rem",
@@ -3491,9 +3550,13 @@ function TileMarkSlot({
         onPatch={onMark}
       >
         {mark ? (
-          <TileMarkChips collectionId={collectionId} mark={mark} small />
+          <TileMarkChips
+            collectionId={collectionId}
+            mark={mark}
+            chipStyle={{ fontSize: `${chrome.markFontRem}rem`, padding: chrome.markPadding }}
+          />
         ) : (
-          <Icon name="mark" size="xs" />
+          <Icon name="mark" size={chrome.icon} />
         )}
       </TileMarkPicker>
     </span>

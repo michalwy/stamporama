@@ -554,7 +554,10 @@ every order after. **Medium** is the default and is large enough to read a face 
 close designs apart without hovering; **Small** shows a card of sixty pieces whole, and **Large** is
 for small print. At every size the tiles wrap across the window — nothing scrolls sideways — each
 picture shows the whole stamp, and resting the pointer on a tile still shows it enlarged. The
-unpaired backs below a card follow the same size.
+unpaired backs below a card follow the same size. What sits on a tile's frame grows with it — the
+condition mark, the tile number, the tick under the picture and the tick box — and stays on the frame,
+so a larger tile never covers more of the stamp. Even at **Small** the condition mark is as large as
+it is on a list row.
 
 #### Two kinds of card
 
@@ -1318,8 +1321,9 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
 
 **Duplicates you can see on the card: tick them and identify them together.** Fifteen of a
 definitive is an ordinary find in a stockbook, and walking each one through the browse popup and the
-condition step is fifteen passes over a decision you took once. Every tile still waiting has a small
-**tick box in the strip above its picture**; tick the ones that are the same stamp in the same condition and
+condition step is fifteen passes over a decision you took once. Every tile still waiting has a
+**tick box in the strip above its picture**, and a click anywhere in that top-right corner ticks it;
+tick the ones that are the same stamp in the same condition and
 a bar appears above the batches saying how many are selected. The batch header has a box of its own
 that ticks every tile still waiting on that card, showing a dash while only some of them are.
 
