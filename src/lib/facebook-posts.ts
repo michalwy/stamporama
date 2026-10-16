@@ -31,10 +31,13 @@ import { allocateEntityNumber } from "./items";
 import {
   OfferActionBlockedError,
   offersPrintedTextGaps,
+  offersTextStatus,
   publishOffer,
+  regenerateOfferTitleAndDescription,
   readSoldElsewhereRefusal,
   setOfferState,
   syncGeneratedTexts,
+  type OfferTextStatus,
 } from "./offers";
 import { titleFallbackKey, type TitleFallback } from "./offer-title-template";
 import {
@@ -292,6 +295,9 @@ export interface FacebookPostScreen {
   /** The names its text and captions print untranslated (#1889), or null once the post is up — its
    *  text is frozen then (#1800) and a translation would change nothing in it. */
   translations: FacebookPostTranslations | null;
+  /** By the lot's offer id: where its title and description stand against their templates (#1983) —
+   *  out of date, written by hand — or null once the post is up, its text frozen (#1800). */
+  lotTexts: Record<string, OfferTextStatus> | null;
 }
 
 /** The untranslated names a post not yet up prints (#1889), each once, and which lot prints each. */
@@ -355,6 +361,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     const list = (sales[line.offerId] ??= []);
     if (!list.some((s) => s.id === line.sale.id)) list.push(line.sale);
   }
+  const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   return {
     postId: post.id,
     postNo: post.postNo,
@@ -363,9 +370,16 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     kit,
     platform: post.lots[0].platform,
     sales,
-    translations: kit.lots.some((l) => isFacebookLotPosted(l.state))
+    translations: posted ? null : await facebookPostTranslations(ownerId, post.collectionId, kit),
+    lotTexts: posted
       ? null
-      : await facebookPostTranslations(ownerId, post.collectionId, kit),
+      : Object.fromEntries(
+          await offersTextStatus(
+            ownerId,
+            post.collectionId,
+            kit.lots.map((l) => l.offerId)
+          )
+        ),
   };
 }
 
@@ -425,6 +439,43 @@ export async function refreshFacebookPostTexts(ownerId: string, postId: string):
     throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
   }
   for (const lot of lots) await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
+}
+
+/**
+ * *Regenerate lot texts* on a post's screen (#1983): the given lots' titles and descriptions rendered
+ * again from their templates, in lot order — the twenty round trips of each offer's own ↻ in one.
+ * A lot in `overwrite` is regenerated as ↻ does, its hand-written text replaced (the collector ticked
+ * it); any other is brought back in step by `syncGeneratedTexts`, which keeps hand-written words. Only
+ * while no lot is up — a published post's text is frozen (#1800) — and only the post's own lots.
+ * Answers how many lots were gone through.
+ */
+export async function regenerateFacebookLotTexts(
+  ownerId: string,
+  postId: string,
+  offerIds: readonly string[],
+  overwrite: readonly string[]
+): Promise<number> {
+  await assertPostOwner(ownerId, postId);
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    select: { id: true, state: true },
+    orderBy: { facebookLotNo: "asc" },
+  });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
+  }
+  const own = new Set(lots.map((l) => l.id));
+  if (offerIds.some((id) => !own.has(id)) || overwrite.some((id) => !own.has(id))) {
+    throw new OfferActionBlockedError("facebook-group", "Only this post's own lots can be regenerated here.");
+  }
+  const asked = new Set(offerIds);
+  const replace = new Set(overwrite);
+  const chosen = lots.filter((l) => asked.has(l.id) || replace.has(l.id));
+  for (const lot of chosen) {
+    if (replace.has(lot.id)) await regenerateOfferTitleAndDescription(ownerId, lot.id);
+    else await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
+  }
+  return chosen.length;
 }
 
 /** One multi-lot post as the list of posts draws it (#1850). */

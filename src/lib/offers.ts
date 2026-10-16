@@ -1126,6 +1126,78 @@ export async function offersPrintedTextGaps(
   return out;
 }
 
+/** Where an offer's title and description stand against their templates (#1983). */
+export interface OfferTextStatus {
+  /** The title or the description was written by hand (`*Edited`), so only an explicit regenerate
+   *  replaces it. */
+  handWritten: boolean;
+  /** A text still following its template reads otherwise than the template renders now — a template
+   *  changed since, or a translation entered where nothing re-rendered it. A hand-written text is
+   *  never out of date: it was never the template's. */
+  outOfDate: boolean;
+}
+
+/**
+ * The title and description of each offer measured against what their templates would render now,
+ * writing nothing (#1983) — what a Facebook post's screen marks its lots by before *Regenerate lot
+ * texts*. A field counts as out of date exactly when {@link syncGeneratedTexts} would rewrite it:
+ * it follows its template (not `*Edited`), there is a template ({@link effectiveTemplate}), the render
+ * is not empty, and it differs from what is stored. Terminal offers are never out of date, since
+ * nothing rewrites them on its own.
+ */
+export async function offersTextStatus(
+  ownerId: string,
+  collectionId: string,
+  offerIds: readonly string[]
+): Promise<Map<string, OfferTextStatus>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const out = new Map<string, OfferTextStatus>();
+  if (offerIds.length === 0) return out;
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] }, collectionId },
+    select: {
+      id: true,
+      platformId: true,
+      state: true,
+      name: true,
+      nameEdited: true,
+      description: true,
+      descriptionEdited: true,
+      nameTemplate: true,
+      descriptionTemplate: true,
+    },
+  });
+  const platforms = new Map<string, Awaited<ReturnType<typeof assertPlatform>>>();
+  for (const platformId of new Set(offers.map((o) => o.platformId))) {
+    platforms.set(platformId, await assertPlatform(collectionId, platformId));
+  }
+  for (const offer of offers) {
+    const handWritten = offer.nameEdited || offer.descriptionEdited;
+    const platform = platforms.get(offer.platformId)!;
+    const titleTemplate = offer.nameEdited ? null : effectiveTemplate("name", offer, platform);
+    const descriptionTemplate = offer.descriptionEdited ? null : effectiveTemplate("description", offer, platform);
+    if ((isOfferState(offer.state) && isTerminalState(offer.state)) || (!titleTemplate?.trim() && !descriptionTemplate?.trim())) {
+      out.set(offer.id, { handWritten, outOfDate: false });
+      continue;
+    }
+    const texts = await generateListingTexts(
+      ownerId,
+      collectionId,
+      await offerComposition(offer.id),
+      { titleTemplate, descriptionTemplate, privateNoteTemplate: null, titleLanguage: platform.titleLanguage },
+      platform.titleLanguage,
+      offer.id,
+      platform.platformModule
+    );
+    const differs = (rendered: string | null, stored: string | null) => rendered !== null && rendered !== stored;
+    out.set(offer.id, {
+      handWritten,
+      outOfDate: differs(texts.name, offer.name) || differs(texts.description, offer.description),
+    });
+  }
+  return out;
+}
+
 // ── "Needs action" derivation (ADR-0013 §4) ──────────────────────────────────
 
 /** One flagged offer: how many of its copies are dead, and the platform it is listed on (so the
@@ -7347,6 +7419,24 @@ export async function regenerateOfferText(
     await markListingContentChanged(offerId);
   }
   return value;
+}
+
+/**
+ * ↻ Regenerate on the title and on the description at once (#1983): each field with a template to
+ * render from ({@link hasEffectiveTemplate}, the control's own enablement) is regenerated exactly as
+ * {@link regenerateOfferText} does, a hand-written one included; a field with none is left as it is
+ * rather than emptied.
+ */
+export async function regenerateOfferTitleAndDescription(ownerId: string, offerId: string): Promise<void> {
+  const ref = await assertOfferOwner(ownerId, offerId);
+  const platform = await assertPlatform(ref.collectionId, ref.platformId);
+  const own = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { nameTemplate: true, descriptionTemplate: true },
+  });
+  for (const field of ["name", "description"] as const) {
+    if (hasEffectiveTemplate(field, own, platform)) await regenerateOfferText(ownerId, offerId, field);
+  }
 }
 
 /** The `Offer` column recording that a generated text was written by hand (#380). */

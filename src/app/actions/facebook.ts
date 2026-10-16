@@ -21,6 +21,7 @@ import {
   addFacebookLots,
   createFacebookPost,
   refreshFacebookPostTexts,
+  regenerateFacebookLotTexts,
   removeFacebookLot,
   setFacebookPostLayout,
   setFacebookPostTitle,
@@ -203,6 +204,22 @@ export async function refreshFacebookPostTextsAction(postId: string): Promise<Fa
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to bring the post's text up to date.");
+  }
+}
+
+/** *Regenerate lot texts* on a post's screen (#1983): the lots' titles and descriptions from their
+ *  templates, the ticked hand-written ones replaced too. */
+export async function regenerateFacebookLotTextsAction(
+  postId: string,
+  offerIds: string[],
+  overwrite: string[]
+): Promise<{ status: "success"; count: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const count = await regenerateFacebookLotTexts(session.user.id, postId, offerIds, overwrite);
+    return { status: "success", count };
+  } catch (err) {
+    return failure(err, "Failed to regenerate the lots' texts.");
   }
 }
 

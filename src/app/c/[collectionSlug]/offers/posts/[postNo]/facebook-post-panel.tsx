@@ -11,6 +11,7 @@ import {
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
+import type { OfferTextStatus } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { isAuctionListing, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
@@ -26,6 +27,7 @@ import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
 import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { AddLotsDialog } from "./add-lots-dialog";
+import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 
 // A multi-lot Facebook post's own screen (#1842): the one place every offer in the post is seen with
 // its state, and the post is managed as one. Until it existed the post was seen from any lot's
@@ -52,6 +54,10 @@ import { AddLotsDialog } from "./add-lots-dialog";
 //   printing it. Above the lots only their count is said, stepping to the next such row (#1980): a
 //   paragraph of every name on a post of twenty lots could not be worked through. The post's own text
 //   prints no translatable name of its own — every name is some lot's — so nothing is listed under it.
+// - **Regenerate lot texts…** (#1983), beside *Add lots…* while the post is not up: every lot's title
+//   and description from its templates in one go, instead of each offer's ↻ one by one. A row whose
+//   text reads otherwise than its templates now give is marked *Out of date*, and the action then
+//   offers just those; a row written by hand is marked so, and is replaced only when ticked.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -125,6 +131,7 @@ type Dialog =
   | { kind: "withdrawLot"; lot: FacebookKitLot }
   | { kind: "takeOut"; lot: FacebookKitLot }
   | { kind: "addLots" }
+  | { kind: "regenerate"; scope: RegenerateScope }
   | { kind: "sell"; lot: FacebookKitLot };
 
 export function FacebookPostPanel({
@@ -168,7 +175,7 @@ export function FacebookPostPanel({
     );
   }
 
-  const { kit, postNo, title, translations } = screen;
+  const { kit, postNo, title, translations, lotTexts } = screen;
   const lots = kit.lots;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
@@ -224,6 +231,24 @@ export function FacebookPostPanel({
       invalidateAll(collectionId);
     });
   }
+
+  // The lots' titles and descriptions from their templates (#1983); the ticked hand-written ones too.
+  function regenerate(offerIds: string[], overwrite: string[]) {
+    setError(undefined);
+    startTransition(async () => {
+      const { regenerateFacebookLotTextsAction } = await import("@/app/actions/facebook");
+      const result = await regenerateFacebookLotTextsAction(postId, offerIds, overwrite);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      toast({ message: result.count === 1 ? "1 lot's texts regenerated" : `${result.count} lots' texts regenerated` });
+    });
+  }
+
+  const outOfDateCount = lotTexts ? lots.filter((l) => lotTexts[l.offerId]?.outOfDate).length : 0;
 
   const gapsByKey = new Map((translations?.gaps ?? []).map((g) => [gapKey(g), g]));
   const untranslatedOf = (lot: FacebookKitLot): TitleFallback[] =>
@@ -457,6 +482,23 @@ export function FacebookPostPanel({
                   </button>
                 </p>
               )}
+              {outOfDateCount > 0 && (
+                <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>
+                  {outOfDateCount === 1 ? "1 lot's text is" : `${outOfDateCount} lots' texts are`} out of date — the
+                  templates now give other words.{" "}
+                  <button
+                    type="button"
+                    style={STEP_LINK}
+                    disabled={isPending}
+                    onClick={() => {
+                      setError(undefined);
+                      setDialog({ kind: "regenerate", scope: "outOfDate" });
+                    }}
+                  >
+                    Regenerate {outOfDateCount === 1 ? "it" : "them"}…
+                  </button>
+                </p>
+              )}
               <div
                 style={{
                   display: "flex",
@@ -467,18 +509,32 @@ export function FacebookPostPanel({
                 }}
               >
                 <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
-                {moves.addLots && (
-                  <DialogSecondaryButton
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => {
-                      setError(undefined);
-                      setDialog({ kind: "addLots" });
-                    }}
-                  >
-                    Add lots…
-                  </DialogSecondaryButton>
-                )}
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {lotTexts && (
+                    <DialogSecondaryButton
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        setError(undefined);
+                        setDialog({ kind: "regenerate", scope: "all" });
+                      }}
+                    >
+                      Regenerate lot texts…
+                    </DialogSecondaryButton>
+                  )}
+                  {moves.addLots && (
+                    <DialogSecondaryButton
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        setError(undefined);
+                        setDialog({ kind: "addLots" });
+                      }}
+                    >
+                      Add lots…
+                    </DialogSecondaryButton>
+                  )}
+                </div>
               </div>
               {notAdded && (
                 <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>
@@ -504,6 +560,7 @@ export function FacebookPostPanel({
                       untranslated={translations?.language ? untranslatedOf(lot) : []}
                       language={translations?.language ?? null}
                       onTranslated={refreshTexts}
+                      text={lotTexts?.[lot.offerId] ?? null}
                       actions={lotActions(lot)}
                     />
                   );
@@ -602,6 +659,19 @@ export function FacebookPostPanel({
         />
       )}
 
+      {dialog.kind === "regenerate" && lotTexts && (
+        <RegenerateLotTextsDialog
+          postNo={postNo}
+          lots={lots}
+          lotTexts={lotTexts}
+          initialScope={dialog.scope}
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSubmit={regenerate}
+        />
+      )}
+
       {dialog.kind === "sell" && (
         <SellOfferFlowDialog
           collectionId={collectionId}
@@ -637,6 +707,7 @@ function LotRow({
   untranslated,
   language,
   onTranslated,
+  text,
   actions,
 }: {
   rowRef: (el: HTMLLIElement | null) => void;
@@ -652,9 +723,12 @@ function LotRow({
   /** The post's language, the one `untranslated` is missing. */
   language: string | null;
   onTranslated: () => void;
+  /** Where its title and description stand against their templates (#1983); null once the post is up. */
+  text: OfferTextStatus | null;
   actions: RowAction[];
 }) {
   const price = lotPrice(lot);
+  const textMarks = text ? [text.outOfDate && "Out of date", text.handWritten && "Written by hand"].filter(Boolean) : [];
   return (
     <li ref={rowRef} style={LOT_ROW}>
       {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
@@ -717,6 +791,14 @@ function LotRow({
               <span style={MUTED}>—</span>
             )}
           </dd>
+          {text && textMarks.length > 0 && (
+            <>
+              <dt style={MUTED}>Text</dt>
+              <dd style={{ margin: 0, color: text.outOfDate ? "var(--color-warning)" : "var(--color-text-secondary)" }}>
+                {textMarks.join(" · ")}
+              </dd>
+            </>
+          )}
           {language && untranslated.length > 0 && (
             <>
               <dt style={MUTED}>Untranslated</dt>
