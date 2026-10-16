@@ -452,6 +452,24 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   integration test is `tests/integration/facebook-post-translations.test.ts` (checked when written to
   fail with the edited filter, the refresh, the layout's template or the posted gate removed).
 
+- **A post's screen regenerates its lots' texts at once** (#1983, raised on 2026-10-16; the marks'
+  meaning decided with the collector that day). `FacebookPostScreen.lotTexts` — null once any lot is up
+  (#1800), like `translations` — is `offersTextStatus` (`offers.ts`, writes nothing) per lot:
+  `handWritten` is either `*Edited` flag; `outOfDate` is **exactly what `syncGeneratedTexts` would
+  rewrite** — a field following its template (not `*Edited`) whose fresh, non-empty render differs from
+  what is stored, never on a terminal offer. **A hand-written text is never out of date** (the
+  collector's pick): it was never the template's, and calling it stale would mark it forever. After a
+  translation saved on the screen the lots following their templates are already re-rendered (#1889),
+  so the mark is for what nothing re-rendered — a template changed in Settings, a translation entered
+  on the entity's own screen. `regenerateFacebookLotTexts` (`facebook-posts.ts`) takes the lots to go
+  through and the ticked hand-written ones (`overwrite`): those get `regenerateOfferTitleAndDescription`
+  (↻ on both fields, only where `hasEffectiveTemplate`, so a field with no template is not emptied),
+  the rest `syncGeneratedTexts`, which keeps hand-written words; refused once up and for an offer that
+  is not the post's lot. The dialog is `RegenerateLotTextsDialog` beside the post panel: *All lots* or
+  *Only the out-of-date*, hand-written lots of that scope listed unticked. The integration test is
+  `tests/integration/facebook-post-regenerate.test.ts` (checked when written to fail with the overwrite,
+  the posted gate, the edited filter or the own-lots check removed).
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

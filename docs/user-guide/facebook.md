@@ -437,6 +437,15 @@ keeps the title it went up with, as it keeps everything else.
   wrote by hand keeps your words, and is not rewritten. The post's own text prints no name of its own —
   every name in it belongs to a lot — so it is always some row that names it. Once the post is up its
   text stays as posted, so none of this is shown.
+- **Regenerate lot texts…** — beside the *Lots* heading until the post is up: every lot's title and
+  description written again from its templates in one go, exactly as each offer's own **Regenerate**
+  does, and the post's text and captions follow at once. A lot whose title or description you wrote by
+  hand is listed in the dialog and keeps your words unless you tick it; ticked, its text is replaced by
+  the template's. A lot whose text reads otherwise than its templates now give — a template changed
+  since, or a translation entered on the stamp's own screen — is marked **Text: Out of date** in its
+  row, a line above the lots counts them, and its **Regenerate them…** offers just those. A lot written
+  by hand is marked **Written by hand** instead: its words were never the template's. Once the post is
+  up its text stays as posted, so the action is not offered.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,
