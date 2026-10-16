@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,7 +19,6 @@ import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { TranslationGapLinks } from "@/app/c/[collectionSlug]/shared/title-preview";
 import { gapKey } from "@/app/c/[collectionSlug]/shared/translation-gaps";
-import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
@@ -47,9 +46,12 @@ import { AddLotsDialog } from "./add-lots-dialog";
 //   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up.
 // - **Add lots…** (#1870), beside the lots' heading while the post is not up: offers picked from those
 //   that could join become its next lots, and any the server turns away is named under the heading.
-// - **Untranslated names** (#1889), above the lots while the post is not up: every name its text and
-//   captions print in the default language, once each, as #1733's links — the translation is the
-//   entity's own, and saving it re-renders the lots' texts at once. Each lot's row names its own.
+// - **Untranslated names** (#1889), while the post is not up: each lot's row names those its part of
+//   the post prints in the default language, as #1733's links — the translation is entered there, is
+//   the entity's own, and saving it re-renders the lots' texts at once, so the name leaves every row
+//   printing it. Above the lots only their count is said, stepping to the next such row (#1980): a
+//   paragraph of every name on a post of twenty lots could not be worked through. The post's own text
+//   prints no translatable name of its own — every name is some lot's — so nothing is listed under it.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -95,6 +97,18 @@ const LOT_FACTS: React.CSSProperties = {
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
+// *Next lot ↓* (#1980): a link in the warning's own line, not a button beside it.
+const STEP_LINK: React.CSSProperties = {
+  padding: 0,
+  border: "none",
+  background: "none",
+  font: "inherit",
+  color: "var(--color-accent)",
+  textDecoration: "underline",
+  textUnderlineOffset: "0.15em",
+  cursor: "pointer",
+};
+
 /** What a lot is offered at, as the row reads it: an auction's recorded bid, else its starting price;
  *  a quick buy's asking price. */
 function lotPrice(lot: FacebookKitLot): { label: string; amount: string | null } {
@@ -135,6 +149,10 @@ export function FacebookPostPanel({
   const [error, setError] = useState<string | undefined>();
   // The offers the last *Add lots…* turned away, by number (#1870) — kept until the next add.
   const [notAdded, setNotAdded] = useState<string | null>(null);
+  // The rows, by offer id, and the one *Next* last stepped to (#1980) — so the next step is the row
+  // after it, even once its own names are translated and it no longer needs one.
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const [steppedTo, setSteppedTo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
@@ -196,7 +214,7 @@ export function FacebookPostPanel({
     );
   }
 
-  // A translation entered from the list is the entity's own; the lots' titles and descriptions are then
+  // A translation entered from a lot's row is the entity's own; the lots' titles and descriptions are then
   // re-rendered so the post's text and captions read it at once (#1889).
   function refreshTexts() {
     startTransition(async () => {
@@ -210,6 +228,16 @@ export function FacebookPostPanel({
   const gapsByKey = new Map((translations?.gaps ?? []).map((g) => [gapKey(g), g]));
   const untranslatedOf = (lot: FacebookKitLot): TitleFallback[] =>
     (translations?.byLot[lot.offerId] ?? []).flatMap((key) => gapsByKey.get(key) ?? []);
+  const needingTranslation = translations?.language ? lots.filter((l) => untranslatedOf(l).length > 0) : [];
+
+  // The next row needing a translation after the one last stepped to, in lot order, round to the first.
+  function stepToNext() {
+    const from = steppedTo ? lots.findIndex((l) => l.offerId === steppedTo) : -1;
+    const next = needingTranslation.find((l) => lots.indexOf(l) > from) ?? needingTranslation[0];
+    if (!next) return;
+    setSteppedTo(next.offerId);
+    rowRefs.current.get(next.offerId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   // Said where it was typed rather than in the moves' card: a refused title is the heading's (#1862).
   function rename(next: string) {
@@ -420,15 +448,13 @@ export function FacebookPostPanel({
           onChanged={() => invalidateAll(collectionId)}
           renderLots={(lotKit) => (
             <>
-              {translations?.language && translations.gaps.length > 0 && (
+              {translations?.language && needingTranslation.length > 0 && (
                 <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "1.25rem 0 0" }}>
-                  No {languageLabel(translations.language)} translation — the default text is printed for{" "}
-                  <TranslationGapLinks
-                    collectionId={collectionId}
-                    language={translations.language}
-                    gaps={translations.gaps}
-                    onSaved={refreshTexts}
-                  />
+                  {needingTranslation.length === 1 ? "1 lot has" : `${needingTranslation.length} lots have`} names with
+                  no {languageLabel(translations.language)} translation — the default text is printed.{" "}
+                  <button type="button" style={STEP_LINK} onClick={stepToNext}>
+                    Next lot ↓
+                  </button>
                 </p>
               )}
               <div
@@ -465,12 +491,19 @@ export function FacebookPostPanel({
                   return (
                     <LotRow
                       key={lot.offerId}
+                      rowRef={(el) => {
+                        if (el) rowRefs.current.set(lot.offerId, el);
+                        else rowRefs.current.delete(lot.offerId);
+                      }}
+                      collectionId={collectionId}
                       collectionSlug={collectionSlug}
                       lot={lot}
                       sales={screen.sales[lot.offerId] ?? []}
                       photos={photos}
                       caption={caption}
-                      untranslated={untranslatedOf(lot)}
+                      untranslated={translations?.language ? untranslatedOf(lot) : []}
+                      language={translations?.language ?? null}
+                      onTranslated={refreshTexts}
                       actions={lotActions(lot)}
                     />
                   );
@@ -594,26 +627,36 @@ export function FacebookPostPanel({
 
 /** One lot of the post (#1863): its photos, what it is and where it stands, its caption, its `⋮`. */
 function LotRow({
+  rowRef,
+  collectionId,
   collectionSlug,
   lot,
   sales,
   photos,
   caption,
   untranslated,
+  language,
+  onTranslated,
   actions,
 }: {
+  rowRef: (el: HTMLLIElement | null) => void;
+  collectionId: string;
   collectionSlug: string;
   lot: FacebookKitLot;
   sales: { id: string; saleNo: number }[];
   photos: React.ReactNode;
   caption: React.ReactNode | null;
-  /** The names this lot's part of the post prints untranslated (#1889); empty when none. */
+  /** The names this lot's part of the post prints untranslated (#1889), each entered from here
+   *  (#1980); empty when none. */
   untranslated: TitleFallback[];
+  /** The post's language, the one `untranslated` is missing. */
+  language: string | null;
+  onTranslated: () => void;
   actions: RowAction[];
 }) {
   const price = lotPrice(lot);
   return (
-    <li style={LOT_ROW}>
+    <li ref={rowRef} style={LOT_ROW}>
       {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
       <div style={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}>{photos}</div>
       <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
@@ -674,18 +717,17 @@ function LotRow({
               <span style={MUTED}>—</span>
             )}
           </dd>
-          {untranslated.length > 0 && (
+          {language && untranslated.length > 0 && (
             <>
               <dt style={MUTED}>Untranslated</dt>
-              <dd style={{ margin: 0 }}>
-                <Tooltip
-                  content={`Printed in this lot's ${caption ? "caption" : "text"} in the default language — translate it in the list above the lots`}
-                  style={{ display: "inline" }}
-                >
-                  <span style={{ color: "var(--color-warning)" }}>
-                    {untranslated.map((g) => g.defaultValue).join(", ")}
-                  </span>
-                </Tooltip>
+              <dd style={{ margin: 0, color: "var(--color-warning)" }}>
+                <TranslationGapLinks
+                  collectionId={collectionId}
+                  language={language}
+                  gaps={untranslated}
+                  withLanguage={false}
+                  onSaved={onTranslated}
+                />
               </dd>
             </>
           )}
