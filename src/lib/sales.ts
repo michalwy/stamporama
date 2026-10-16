@@ -47,6 +47,13 @@ import {
   type SaleSupplyCostRow,
 } from "./sale-supplies";
 import { suppliesCostIncomplete, type SuppliesCost } from "./supply-stock";
+import {
+  CONFIRMED_SALE_API_REVIEW,
+  nextSaleApiReview,
+  readSaleApiReviewMark,
+  type SaleApiReviewMark,
+  type SaleApiReviewWrite,
+} from "./sale-review";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -1394,6 +1401,10 @@ export interface SaleListItem {
    * shipping (already in base). For a single-currency collection this equals the old transaction-
    * currency net. */
   netProceeds: string;
+  /** The *to review* marker (#1948): what the agent API recorded on this sale since the collector
+   * last confirmed it, or null when nothing waits. The detail's {@link SaleDetail.apiReview} is read
+   * off the same columns — a flag shown on a list is shown on the thing's own screen too. */
+  apiReview: SaleApiReviewMark | null;
   createdAt: Date;
 }
 
@@ -1413,6 +1424,9 @@ const SALE_LIST_SELECT = {
   shippingCurrency: true,
   shippingFxRateToBase: true,
   commission: true,
+  apiReviewAt: true,
+  apiReviewCreated: true,
+  apiReviewActions: true,
   createdAt: true,
   platform: { select: { name: true } },
   buyer: { select: { name: true } },
@@ -1647,6 +1661,9 @@ function toSaleListItem(
     shippingCurrency: string | null;
     shippingFxRateToBase: Prisma.Decimal | null;
     commission: Prisma.Decimal | null;
+    apiReviewAt: Date | null;
+    apiReviewCreated: boolean;
+    apiReviewActions: string[];
     createdAt: Date;
     platform: { name: string };
     buyer: { name: string } | null;
@@ -1679,6 +1696,7 @@ function toSaleListItem(
     baseCurrency,
     grossProceeds: gross.toFixed(2),
     netProceeds: netBase.toFixed(2),
+    apiReview: readSaleApiReviewMark(row),
     createdAt: row.createdAt,
   };
 }
@@ -1700,6 +1718,10 @@ export interface SaleListFilters {
    * decision outstanding *inside* a sale, and a sale can be waiting on it in any status. Absent is
    * every sale, chosen or not — this never narrows the default view. */
   setChoicePending?: boolean;
+  /** Only sales carrying the *to review* marker (#1948) — written through the agent API and not yet
+   * confirmed. A boolean on the `setChoicePending` reasoning: a sale can be waiting on it in any
+   * status, so it combines with the status chips rather than being one of them. */
+  toReview?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -1741,6 +1763,8 @@ function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.S
     // One line is enough to put the sale on the list (#697): the collector is looking for parcels
     // that cannot be packed yet, and one undecided line stops the parcel.
     ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
+    // `apiReviewAt` is null exactly when there is no marker (#1948).
+    ...(filters.toReview ? { apiReviewAt: { not: null } } : {}),
   };
 }
 
@@ -2025,6 +2049,9 @@ export interface SaleDetail {
    *  rather than behind a second fetch, so the header can say a question is out there — and whether
    *  it has been opened — without the seller opening a dialog to find out. */
   share: SaleShareState | null;
+  /** The *to review* marker (#1948), off the columns the list's chip reads, or null when nothing
+   * waits. Cleared only by {@link confirmSaleReview}. */
+  apiReview: SaleApiReviewMark | null;
   createdAt: Date;
 }
 
@@ -2078,6 +2105,9 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       shippingOption: { select: { serviceId: true, service: { select: SENT_AS_SERVICE_SELECT } } },
       commission: true,
       status: true,
+      apiReviewAt: true,
+      apiReviewCreated: true,
+      apiReviewActions: true,
       createdAt: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: { select: { name: true } },
@@ -2251,7 +2281,104 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           lastUsedAt: sale.shareToken.lastUsedAt?.toISOString() ?? null,
         }
       : null,
+    apiReview: readSaleApiReviewMark(sale),
     createdAt: sale.createdAt,
+  };
+}
+
+// ── The *to review* marker (#1948) ──────────────────────────────────────────
+
+/**
+ * Record one agent API write on a sale: the *to review* marker is set, or added to if it already
+ * stands (`nextSaleApiReview`). **Every API write to a sale calls this** — recording one, or adding a
+ * line to one (#1949) — in the same transaction as the write itself, so a sale cannot be written
+ * through the API and come out unmarked.
+ *
+ * It only ever sets. Nothing reachable from the agent API clears the marker — that is
+ * {@link confirmSaleReview}, the collector's act, and `tests/unit/agent-api-operation-boundary.test.ts`
+ * holds the operation modules away from it. The marker changes nothing else: a marked sale counts,
+ * retires its copies and moves through its statuses like any other.
+ */
+export async function markSaleWrittenByApi(
+  tx: DbTransaction,
+  saleId: string,
+  write: SaleApiReviewWrite,
+  at: Date = new Date()
+): Promise<void> {
+  const current = await tx.sale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: { apiReviewAt: true, apiReviewCreated: true, apiReviewActions: true },
+  });
+  await tx.sale.update({ where: { id: saleId }, data: nextSaleApiReview(current, write, at) });
+}
+
+/**
+ * *Confirm*: the collector has reviewed what the agent API recorded on this sale, so the marker goes
+ * (#1948) — from the sale's own screen or its row's ⋮ menu. A sale without a marker is simply
+ * already confirmed, so it is not an error; the answer is whether a marker was actually cleared.
+ */
+export async function confirmSaleReview(ownerId: string, saleId: string): Promise<boolean> {
+  await assertSaleOwner(ownerId, saleId);
+  const { count } = await prisma.sale.updateMany({
+    where: { id: saleId, apiReviewAt: { not: null } },
+    data: CONFIRMED_SALE_API_REVIEW,
+  });
+  return count > 0;
+}
+
+/** A sale waiting for review, as the Action items bell lists it (#1948). */
+export interface SaleToReview {
+  id: string;
+  saleNo: number;
+  platformName: string;
+  buyerName: string | null;
+  apiReview: SaleApiReviewMark;
+}
+
+/**
+ * The sales carrying the *to review* marker, latest API write first, with how many there are — the
+ * Action items bell's group (#1948). The set is the Sales list's own `toReview` filter
+ * (`saleListWhere`), so the group's "see all" opens exactly the sales it counted.
+ */
+export async function salesToReview(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; sales: SaleToReview[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = saleListWhere(collectionId, { toReview: true });
+  const [total, rows] = await Promise.all([
+    prisma.sale.count({ where }),
+    prisma.sale.findMany({
+      where,
+      orderBy: [{ apiReviewAt: "desc" }, { id: "asc" }],
+      take: limit,
+      select: {
+        id: true,
+        saleNo: true,
+        apiReviewAt: true,
+        apiReviewCreated: true,
+        apiReviewActions: true,
+        platform: { select: { name: true } },
+        buyer: { select: { name: true } },
+      },
+    }),
+  ]);
+  return {
+    total,
+    sales: rows.flatMap((row) => {
+      const apiReview = readSaleApiReviewMark(row);
+      if (!apiReview) return [];
+      return [
+        {
+          id: row.id,
+          saleNo: row.saleNo,
+          platformName: row.platform.name,
+          buyerName: row.buyer?.name ?? null,
+          apiReview,
+        },
+      ];
+    }),
   };
 }
 

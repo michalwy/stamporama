@@ -19,6 +19,7 @@ import {
   setSaleStatus,
   setSaleLineItemPacked,
   markSaleCopiesPacked,
+  confirmSaleReview,
   isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
@@ -314,6 +315,23 @@ export async function setSaleStatusAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the sale status.");
+  }
+}
+
+/**
+ * *Confirm* the *to review* marker on a sale (#1948): the collector has looked at what the agent API
+ * recorded. The collector's act alone — no agent API operation reaches this, and editing the sale
+ * does not do it on the way. `confirmed` is false when there was no marker left to clear.
+ */
+export async function confirmSaleReviewAction(
+  saleId: string
+): Promise<{ status: "success"; confirmed: boolean } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const confirmed = await confirmSaleReview(session.user.id, saleId);
+    return { status: "success", confirmed };
+  } catch (e) {
+    return fail(e, "Failed to confirm the review.");
   }
 }
 

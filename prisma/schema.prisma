@@ -5901,6 +5901,15 @@ model Sale {
   // Defaults `ordered` — a freshly recorded sale is placed but not yet paid/shipped. Each change
   // also appends a `SaleStatusEvent` so the transition timeline is preserved for reporting/audit.
   status        String   @default("ordered")
+  // The *to review* marker (#1948), the sale-side twin of `AuctionSale`'s (#1626): set by every
+  // write the agent API makes to this sale, cleared only by the collector's *Confirm*.
+  // `apiReviewAt` is the latest such write and null means no marker; `apiReviewCreated` says the API
+  // recorded the sale, and `apiReviewActions` what it did, worded by the code that wrote it (*added
+  // offer #2680 at 15 PLN*) and accumulated until confirmed (`sale-review.ts`). Editing the sale in
+  // the app leaves all three alone.
+  apiReviewAt      DateTime?
+  apiReviewCreated Boolean   @default(false)
+  apiReviewActions String[]  @default([])
   createdAt     DateTime @default(now())
 
   collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -5924,6 +5933,7 @@ model Sale {
   @@index([shippingOptionId])
   @@index([sentAsServiceId])
   @@index([carrierId])
+  @@index([apiReviewAt])
   @@map("sale")
 }
 

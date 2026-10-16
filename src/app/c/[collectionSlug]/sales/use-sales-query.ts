@@ -28,6 +28,8 @@ export interface SaleFilters {
   search?: string;
   /** Only sales holding a line whose set nobody has chosen yet (#697). */
   setChoicePending?: boolean;
+  /** Only sales carrying the *to review* marker (#1948). */
+  toReview?: boolean;
 }
 
 export const saleKeys = {
@@ -47,6 +49,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
       if (filters.setChoicePending) params.set("setChoice", "1");
+      if (filters.toReview) params.set("toReview", "1");
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch sales");
       return res.json();

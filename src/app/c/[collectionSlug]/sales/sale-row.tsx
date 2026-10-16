@@ -8,6 +8,7 @@ import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
+import { SaleApiReviewChip } from "./sale-review-chip";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -31,11 +32,13 @@ interface SaleRowProps {
   collectionSlug: string;
   isLast: boolean;
   onDelete: (sale: SaleListItem) => void;
+  /** *Confirm* the sale's *to review* marker (#1948) — offered only while it stands. */
+  onConfirmReview: (sale: SaleListItem) => void;
 }
 
 /** A single sale as a stacked card row: date + platform on top, then item/line counts and the
  * net proceeds. The whole row opens the sale detail screen. */
-export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps) {
+export function SaleRow({ sale, collectionSlug, isLast, onDelete, onConfirmReview }: SaleRowProps) {
     const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/sales/${sale.id}`;
   const rowOpen = useRowOpen(detailHref);
@@ -45,7 +48,20 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
   // own click, *Open transaction* is the labelled `Transaction` chip on line 2, and *Delete* is
   // destructive. A promotion with nothing left to promote is two dimmed icons duplicating controls
   // the collector can already see, which is the sprawl the pattern exists to avoid.
+  //
+  // *Confirm* (#1948) is not promoted either: the chip on line 2 already says the sale waits, and
+  // the sale's own screen carries the button beside what is to be reviewed.
   const menuActions: RowAction[] = [
+    ...(sale.apiReview
+      ? [
+          {
+            key: "confirm-review",
+            label: "Confirm review",
+            icon: "check",
+            onSelect: () => onConfirmReview(sale),
+          } as RowAction,
+        ]
+      : []),
     ...(sale.transactionUrl
       ? [
           {
@@ -170,6 +186,8 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
               </span>
             </Tooltip>
           )}
+          {/* Recorded through the agent API, not yet confirmed (#1948). */}
+          <SaleApiReviewChip mark={sale.apiReview} chipStyle={CHIP} />
           {/* Transaction link (#292) — opens the marketplace's order page without opening the sale.
               Stops the click so the row's own navigation doesn't fire too. */}
           {sale.transactionUrl && (

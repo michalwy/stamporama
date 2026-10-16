@@ -9,6 +9,7 @@ import {
   offersWithPlatformSale,
 } from "./offers";
 import { unseenFailedMail } from "./mail/messages";
+import { salesToReview } from "./sales";
 import { failedScanPreparations } from "./scan-notices";
 
 /**
@@ -39,7 +40,9 @@ import { failedScanPreparations } from "./scan-notices";
  * - card scans that could not be prepared (#1567) — preparing a scan runs in the background, so the
  *   collector may be anywhere in the app when it fails, and nothing else would say so. A scan that
  *   is *ready to cut* is not here (#1675): scans go up many at a time, and the purchase's own cards
- *   already say which are waiting.
+ *   already say which are waiting;
+ * - sales the agent API recorded and the collector has not confirmed (#1948) — the *to review*
+ *   marker, which nothing but *Confirm* clears.
  *
  * **Providers, not sources**, is the extension point: a provider returns one *or more* groups, so
  * two groups that come out of one read (the offers pair) stay one read. Adding a source is one
@@ -82,7 +85,8 @@ export type ActionItemGroupId =
   | "offer-platform-sale-conflict"
   | "offer-listing-changed"
   | "mail-undelivered"
-  | "scan-preparation-failed";
+  | "scan-preparation-failed"
+  | "sale-api-review";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -605,6 +609,36 @@ const scanProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * Sales the agent API recorded, or added a line to, that the collector has not confirmed yet
+ * (#1948). `info`: nothing is at risk — a marked sale counts and moves through its statuses like any
+ * other — but an agent can read a buyer or a price wrong, and nothing else will point at what it
+ * wrote. It lasts until the collector presses *Confirm*; editing the sale does not take it off.
+ */
+const saleReviewProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const marked = await salesToReview(ownerId, collectionId, limit);
+    return [
+      {
+        id: "sale-api-review" as const,
+        title: "Sales recorded by an agent, to review",
+        severity: "info" as const,
+        count: marked.total,
+        items: marked.sales.map((sale) => ({
+          key: sale.id,
+          label: `${sale.buyerName ?? "Buyer unknown"} · s${sale.saleNo}`,
+          // The latest thing the agent did, which is what the collector is being asked to check.
+          detail: [sale.platformName, sale.apiReview.actions.at(-1)].filter(Boolean).join(" · "),
+          at: sale.apiReview.at,
+          href: `sales/${sale.id}`,
+        })),
+        // The Sales list's own chip, so "see all" is the same set counted here.
+        href: "sales?toReview=1",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
 const PROVIDERS: ActionItemProvider[] = [
@@ -617,6 +651,7 @@ const PROVIDERS: ActionItemProvider[] = [
   listingChangedProvider,
   mailProvider,
   scanProvider,
+  saleReviewProvider,
 ];
 
 /**

@@ -168,9 +168,12 @@ describe("the schema this rule was reasoned about", () => {
     // an auction sale's and a lot's, #1626) holds field keys the code writes, never typed text.
     // `anchorMarkets` (#1634) holds two-letter country codes, normalised by the domain on write.
     // `customSettings` (#1661) holds a Facebook group's setting keys, filtered to the known ones.
+    // `apiReviewActions` (a sale's, #1948) is the one that is prose — but prose the code words
+    // (`saleLineAddedAction`), never text typed into a field, so it has no edges to trim either.
     const found = [...schema.matchAll(/^\s+(\w+)\s+String\[\]/gm)].map((m) => m[1]).sort();
     assert.deepEqual(found, [
       "anchorMarkets",
+      "apiReviewActions",
       "apiReviewFields",
       "apiReviewFields",
       "conditionIds",
