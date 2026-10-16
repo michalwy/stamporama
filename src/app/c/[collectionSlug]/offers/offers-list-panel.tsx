@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { useMeasuredHeight, usePinnedSelectionBar } from "@/app/c/[collectionSlug]/shared/sticky-header";
 import {
   ListSearchBox,
   useDebouncedSearch,
@@ -732,6 +733,11 @@ export function OffersListPanel({
     !!post ||
     !!search;
 
+  // The selection bar pins right under the pinned toolbar (#1979), so ticking far down the list
+  // keeps its actions in reach.
+  const [toolbarRef, toolbarHeight] = useMeasuredHeight<HTMLDivElement>();
+  const { sentinelRef: selectionBarSentinelRef, style: selectionBarPinStyle } = usePinnedSelectionBar(toolbarHeight);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Aggregate figures over the filtered set (#317) */}
@@ -741,6 +747,7 @@ export function OffersListPanel({
           `ListToolbar`, this one sits on the page, so it carries the page background and a
           little padding of its own to stay opaque. */}
       <div
+        ref={toolbarRef}
         style={{
           ...STICKY_TOOLBAR_STYLE,
           display: "flex",
@@ -994,6 +1001,8 @@ export function OffersListPanel({
           background: "var(--color-bg-elevated)",
         }}
       >
+        {/* Mounted for the screen's life, so the selection bar's pin can tell when it is stuck. */}
+        <div ref={selectionBarSentinelRef} style={{ height: 0 }} aria-hidden />
         {isLoading && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             Loading offers…
@@ -1023,9 +1032,13 @@ export function OffersListPanel({
                 *anything* is ticked rather than while anything is in view — which this bar gets for
                 free, being drawn whenever the list has rows at all. With every ticked offer hidden
                 it reads `0 of 5` and keeps only *Clear*, which is the one place those five are
-                visible and the one control that can still reach them. */}
+                visible and the one control that can still reach them.
+
+                **It pins under the toolbar while the rows scroll** (#1979), so a tick far down the
+                list is acted on where it was made rather than after a scroll back up. */}
             <div
               style={{
+                ...selectionBarPinStyle,
                 display: "flex",
                 alignItems: "center",
                 gap: "0.625rem",

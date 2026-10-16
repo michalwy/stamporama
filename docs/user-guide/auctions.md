@@ -631,7 +631,7 @@ tags** filter finds them again.
   rows for every lot loaded so far — and press **Tags…** in that bar. Name the tags to add and the
   tags to remove; every other tag on each lot is left as it is.
 
-The bar counts and acts on the **ticked lots you can see**. Changing a filter unticks nothing: a
+The bar stays at the top of the window, under the pinned toolbar, as you scroll the lots. It counts and acts on the **ticked lots you can see**. Changing a filter unticks nothing: a
 ticked lot the filter hides stays ticked, the bar says how many, and it comes back when the filter
 is released. **Clear** unticks all of them, hidden ones included.
 
