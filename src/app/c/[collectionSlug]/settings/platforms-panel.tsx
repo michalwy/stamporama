@@ -22,6 +22,8 @@ import {
   useListSelection,
 } from "./list-detail";
 import { PlatformFields } from "./platform-fields";
+import { SettingsPageSummary } from "./settings-page-frame";
+import { PlatformFiguresRow } from "./platform-figures-row";
 
 // Settings → Selling → Platforms (#1955; ADR-0071): the collector's **generic** platforms — eBay, a
 // forum, a club's sales list — as a list beside the selected one's settings. The five module
@@ -31,6 +33,10 @@ import { PlatformFields } from "./platform-fields";
 // **Delete is refused while anything names the platform**, as a contact's was: an offer, a sale, a
 // purchase, an auction or a price observation recorded on it. Switching it off is the way to retire
 // one with a history — it leaves the pickers and keeps every record that names it.
+//
+// **The page's summary strip is the selected platform's figures** (#1960): this page is every
+// generic platform's page at once, so the strip follows the selection, and a platform being added has
+// none yet.
 
 function usage(p: PlatformListItem): string {
   return p.referenceCount === 0
@@ -40,9 +46,11 @@ function usage(p: PlatformListItem): string {
 
 export function PlatformsPanel({
   collectionId,
+  collectionSlug,
   initialPlatforms,
 }: {
   collectionId: string;
+  collectionSlug: string;
   initialPlatforms: PlatformListItem[];
 }) {
   const router = useRouter();
@@ -59,6 +67,16 @@ export function PlatformsPanel({
   return (
     <>
       <AddRowAction label="Add platform" onAdd={() => sel.startAdding()} />
+      {current && (
+        <SettingsPageSummary>
+          <PlatformFiguresRow
+            collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            platformId={current.id}
+            platformName={current.name}
+          />
+        </SettingsPageSummary>
+      )}
       <ListDetail
         wide
         list={

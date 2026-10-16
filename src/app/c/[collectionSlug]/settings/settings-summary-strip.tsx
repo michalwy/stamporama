@@ -1,7 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import Link from "next/link";
+import type { CSSProperties, ReactNode } from "react";
 import { Icon } from "@/app/icons";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 
 /**
  * The **summary strip** of a Settings page (#1475; ADR-0059 §4): a row of tiles between the header
@@ -56,20 +58,100 @@ export function SettingsSummaryTile({
       onClick={onOpen}
       aria-current={active ? "true" : undefined}
       style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        gap: "0.25rem",
-        minWidth: 0,
-        padding: "0.75rem 1rem",
-        border: `1px solid ${flagged ? "var(--color-warning-border)" : "var(--color-border)"}`,
-        borderRadius: "0.75rem",
-        background: flagged ? "var(--color-warning-soft)" : "var(--color-bg-elevated)",
+        ...tileStyle(flagged),
         boxShadow: active ? "inset 0 -2px 0 var(--color-accent)" : undefined,
-        textAlign: "left",
         cursor: "pointer",
       }}
     >
+      <TileContent title={title} figure={figure} detail={detail} flagged={flagged} />
+    </button>
+  );
+}
+
+/**
+ * The **figures row** under a platform page's tiles (#1960; ADR-0059 §4): how selling and buying on
+ * the platform goes, each figure opening the list it counts. A row of its own, under the tab tiles
+ * rather than among them, because its tiles leave Settings for a list where the tiles above choose a
+ * tab. Nine figures are more than a tab row ever holds, so a window too narrow for them in one row
+ * takes two rather than cutting every figure short.
+ */
+export function SettingsFigureStrip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(7.5rem, 1fr))",
+        gap: "0.5rem",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** One figure of the row: a tile that opens its list, or — with nothing to open — only states it. */
+export function SettingsFigureTile({
+  title,
+  figure,
+  detail,
+  hint,
+  href,
+}: {
+  title: string;
+  figure: ReactNode;
+  detail?: ReactNode;
+  hint?: string | null;
+  href: string | null;
+}) {
+  const style: CSSProperties = { ...tileStyle(false), padding: "0.5rem 0.75rem", height: "100%" };
+  const content = <TileContent title={title} figure={figure} detail={detail} flagged={false} />;
+  const tile = href ? (
+    <Link href={href} style={{ ...style, textDecoration: "none" }}>
+      {content}
+    </Link>
+  ) : (
+    <div style={style}>{content}</div>
+  );
+  return hint ? (
+    <Tooltip content={hint} style={{ display: "block", minWidth: 0 }}>
+      {tile}
+    </Tooltip>
+  ) : (
+    tile
+  );
+}
+
+function tileStyle(flagged: boolean): CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "0.25rem",
+    minWidth: 0,
+    padding: "0.75rem 1rem",
+    border: `1px solid ${flagged ? "var(--color-warning-border)" : "var(--color-border)"}`,
+    borderRadius: "0.75rem",
+    background: flagged ? "var(--color-warning-soft)" : "var(--color-bg-elevated)",
+    textAlign: "left",
+    boxSizing: "border-box",
+  };
+}
+
+function TileContent({
+  title,
+  figure,
+  detail,
+  flagged,
+}: {
+  title: string;
+  figure: ReactNode;
+  detail?: ReactNode;
+  flagged: boolean;
+}) {
+  return (
+    <>
       <span
         style={{
           fontSize: "0.6875rem",
@@ -111,6 +193,6 @@ export function SettingsSummaryTile({
           {detail}
         </span>
       )}
-    </button>
+    </>
   );
 }

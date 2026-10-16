@@ -68,7 +68,8 @@ it serves:
   presets and Duplicate numbers.
 - **Collection** — Scanners, Tags, Album templates, Hawid stock, Corner ornaments and Ref card
   templates.
-- **Selling** — Collage templates, Carriers, Packing supplies, Allegro, Delcampe and Philasearch.
+- **Selling** — Collage templates, Carriers, Packing supplies, Platforms, Allegro, Delcampe, Facebook
+  and Philasearch.
 - **Intake** — Acceptance profiles, Bid recommendation and Auction reminder.
 - **Partners** — Colnect.
 - **System** — Assistant & API, [Email](email.md).
@@ -88,8 +89,8 @@ row depending on how wide the window is, so no field is ever stretched across th
 setting has more to say, an **ⓘ** beside its name says it when you hover it, and this guide says the
 rest. A few things stay apart from the cards: **Reset to demo data** sits on its own at the foot of
 Collection, with its warning beside the button; the **duplicate report** runs across the page under
-the Duplicate numbers card; and Philasearch's **platform** is chosen at the top right of its page,
-beside the title.
+the Duplicate numbers card; and **Philasearch** is its [platform](platforms.md)'s settings, under a
+row of the platform's figures.
 
 Every page has an address of its own, and so does each tab — `settings?tab=formats&part=multipliers`
 — so a bookmark opens exactly what you were looking at. Addresses saved before the entries were
@@ -568,8 +569,10 @@ When a stamp has **no** item-ID yet, the same tag appears with a **magnifying-gl
 
 ## The Colnect page
 
-**Settings → Colnect** (under *Partners*) has the platform choice at the top right, beside the page
-title, and four tabs under a strip of figures:
+**Settings → Colnect** (under *Partners*) has five tabs — the four below and **Platform**, the
+Colnect [platform](platforms.md)'s own settings — under a strip of figures, and under that strip a
+row of the platform's own figures (see [The platform in
+figures](platforms.md#the-platform-in-figures)):
 
 - **Catalogs** — which of your catalogs each Colnect abbreviation means; see [Colnect catalog
   mapping](#colnect-catalog-mapping). The page opens on this tab.

@@ -264,8 +264,9 @@ function purchaseWhere(contact: ContactListItem) {
   };
 }
 
-/** One order's total exactly as its own screen states it (#852). */
-function orderSpend(
+/** One order's total exactly as its own screen states it (#852). A platform's page sums the same
+ *  totals over the purchases made through it (#1960). */
+export function orderSpend(
   p: {
     currency: string;
     lots: readonly { price: unknown }[];
@@ -386,9 +387,9 @@ async function readPurchases(
   };
 }
 
-/** The sales one `where` names over the period — the contact's as buyer, or those made through it
- *  as a platform. */
-async function readSales(
+/** The sales one `where` names over the period — the contact's as buyer, or, on a platform's own
+ *  page (#1960), those made through it. */
+export async function readSales(
   where: Prisma.SaleWhereInput,
   baseCurrency: string,
   dateWhere: { gte?: Date; lt?: Date } | undefined

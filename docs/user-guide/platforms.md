@@ -47,6 +47,34 @@ auction sale or price observation. Until then the **Delete** button is disabled 
 records name it; switch the platform off instead. What the platform owns — its shipping options,
 listing profiles and the like — goes with it. A module platform cannot be deleted.
 
+## The platform in figures
+
+Every platform's page carries a row of figures saying how selling and buying on it goes — on a
+module platform's page under the strip of tab figures (on Facebook and Philasearch, which have no
+such strip, on its own), and on **Settings → Platforms** for the platform selected in the list. The
+figures are over **all time**, except the first two, which are where your offers stand **now**:
+
+| Figure | What it counts | Clicking it opens |
+| --- | --- | --- |
+| **Offers active** | offers live on the platform now | the offers list, active ones on this platform |
+| **Offers ready** | offers ready to go up | the offers list, ready ones |
+| **Offers sold** | offers sold | the offers list, sold ones |
+| **Sales** | sales made through the platform | the sales list, this platform's |
+| **Revenue** | what the buyers of those sales paid | the sales list |
+| **Sell-through** | sold, of the offers that ended — sold or withdrawn | the offers list, sold and withdrawn ones |
+| **Time to sale** | the average days from an offer's first listing to its sale, over the sold offers with a listing date | the offers list, sold ones |
+| **Purchases** | purchases made through the platform | the purchases list, this platform's |
+| **Spent** | those purchases' order totals, shipping included | the purchases list |
+
+An offer counts as sold on the day of its sale. Sell-through and time to sale say **—** while no
+offer has ended or none of the sold ones has a listing date, and then open nothing; when some sold
+offers have no listing date, the line under the average says how many it is over.
+
+**Money** is stated in the collection's currency. Where every sale (or purchase) was in the same
+other currency, its total in that currency is the line under it. A sale or purchase in a foreign
+currency with no exchange rate recorded leaves the collection-currency total unstated rather than
+partial: the tile says how many lack a rate, and hovering it says why.
+
 ## The platform's settings
 
 A platform's page is in four sections: the **platform** itself, what an **offer and a sale** on it
