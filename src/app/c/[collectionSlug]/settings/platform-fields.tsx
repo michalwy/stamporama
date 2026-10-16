@@ -371,12 +371,14 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             </div>
           </div>
 
-          {/* What a new offer here starts as (#449). Not on Facebook: there a new offer is sold as
-              its group says, set on the Facebook page's own tab (#1671). */}
+          {/* What a new offer here starts as (#449). Not on Facebook, which offers only what it uses
+              (#1958): a new offer there is sold as its group says (#1671), and the opening figure,
+              the refresh and the buyer's message are Facebook defaults its groups follow (#1661).
+              This note is where the four went. */}
           {isFacebook ? (
             <FieldNote>
-              Whether a new offer here is an auction or a quick buy, and what it opens at, is set on
-              the Facebook settings.
+              How a new offer starts, what an auction opens at, when a quick buy is refreshed and the
+              message to a buyer are Facebook defaults, on the Groups tab.
             </FieldNote>
           ) : (
             <div style={{ display: "flex", gap: "0.75rem" }}>

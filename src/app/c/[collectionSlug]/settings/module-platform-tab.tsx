@@ -13,8 +13,11 @@ import { PlatformFields } from "./platform-fields";
  * the choice of which contact the page used: every collection holds exactly one platform per module,
  * so there is nothing left to choose, only whether it is on and what its listings carry.
  *
- * Until each page is trimmed to what its platform uses (#1956–#1959) this is the whole set, the same
- * fields a generic platform has on Settings → Platforms.
+ * Each page offers only what its platform uses, its list written in its own issue (#1956–#1959);
+ * until a page's is, it is the whole set, the same fields a generic platform has on Settings →
+ * Platforms. Facebook's (#1958) is the whole set less the four its groups decide — the listing type,
+ * the starting price, the quick-buy refresh and the buyer's message — which `PlatformFields` leaves
+ * out for the Facebook platform.
  */
 export function ModulePlatformTab({
   collectionId,

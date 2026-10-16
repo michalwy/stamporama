@@ -809,8 +809,8 @@ function UsedWhen({ children }: { children: React.ReactNode }) {
 
 /**
  * Facebook's own settings (#1661) — what every group follows unless it sets its own. The currency is
- * not one of them: it is the platform's own (#196), stated on its contact, so it is said here rather
- * than edited.
+ * not one of them: it is the platform's own (#196), set on the Platform tab (#1955), so it is said
+ * here rather than edited.
  */
 function DefaultsFields({
   defaults,
@@ -849,7 +849,7 @@ function DefaultsFields({
           <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
             {platformCurrency ?? "Not set yet"}
           </div>
-          <FieldNote>The platform&rsquo;s own, set on its contact</FieldNote>
+          <FieldNote>The platform&rsquo;s own, set on the Platform tab</FieldNote>
         </>
       }
       noteUnused={standingNoteUnused(texts)}
