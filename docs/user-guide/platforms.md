@@ -151,7 +151,8 @@ searches out a specific one. Two copies are used, each treated as its own set, s
 preview beside it, so the dialog fits the window whichever you are writing; a long preview scrolls
 inside its own box. **Template syntax**, at the end of the tab row, explains the token syntax when
 you hover it. Switching tabs keeps what you typed, and **Save templates** saves all of them at once; platforms that have no private note simply leave
-that one empty.
+that one empty. The Delcampe platform has no **Private note** tab at all, nor a **Max private note**
+limit, since Delcampe has nowhere to put one ([Delcampe](delcampe.md#the-delcampe-platform)).
 
 The two photo tile labels behave a little differently from the other three: they are **copied onto
 each new offer** on this platform rather than read from here when photos are generated (see

@@ -17,7 +17,8 @@ import { PlatformFields } from "./platform-fields";
  * until a page's is, it is the whole set, the same fields a generic platform has on Settings →
  * Platforms. Facebook's (#1958) is the whole set less the four its groups decide — the listing type,
  * the starting price, the quick-buy refresh and the buyer's message — which `PlatformFields` leaves
- * out for the Facebook platform.
+ * out for the Facebook platform. Delcampe's (#1957) is the whole set less the private note and its
+ * cap, through `platformUsesSetting`, which also has the save write them empty.
  */
 export function ModulePlatformTab({
   collectionId,

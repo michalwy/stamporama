@@ -32,7 +32,7 @@ import {
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
-import { FACEBOOK_PLATFORM_MODULE } from "@/lib/platform-modules";
+import { FACEBOOK_PLATFORM_MODULE, platformUsesSetting } from "@/lib/platform-modules";
 import {
   DEFAULT_PHOTO_COVER_COLOR,
   DEFAULT_PHOTO_COVER_STYLE,
@@ -172,13 +172,18 @@ export interface PlatformFieldsProps {
 export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) {
   const isModule = !!platform?.platformModule;
   const isFacebook = platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
+  // What this platform's module does not use is not offered (#1944): Delcampe has no private note
+  // (#1957). Nothing stored is left to show: `platforms.ts` writes such a setting empty on every save.
+  const usesPrivateNote = platformUsesSetting(platform?.platformModule, "privateNoteTemplate");
+  const usesPrivateNoteLimit = platformUsesSetting(platform?.platformModule, "maxPrivateNoteLength");
+  const templateCount = usesPrivateNote ? TEMPLATE_COUNT : TEMPLATE_COUNT - 1;
   const [coverColor, setCoverColor] = useState(platform?.coverColor ?? DEFAULT_PHOTO_COVER_COLOR);
   // The listing templates (#210, #266, #267) live in their own dialog — held here and submitted
   // through hidden fields, so the one Save carries them.
   const [templates, setTemplates] = useState<ListingTemplates>({
     titleTemplate: platform?.titleTemplate ?? "",
     descriptionTemplate: platform?.descriptionTemplate ?? "",
-    privateNoteTemplate: platform?.privateNoteTemplate ?? "",
+    privateNoteTemplate: usesPrivateNote ? (platform?.privateNoteTemplate ?? "") : "",
     tileLabelLeftTemplate: platform?.tileLabelLeftTemplate ?? "",
     tileLabelRightTemplate: platform?.tileLabelRightTemplate ?? "",
   });
@@ -510,7 +515,9 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
           <div>
             <input ref={templatesFieldRef} type="hidden" name="titleTemplate" value={templates.titleTemplate} />
             <input type="hidden" name="descriptionTemplate" value={templates.descriptionTemplate} />
-            <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+            {usesPrivateNote && (
+              <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
+            )}
             <input type="hidden" name="descriptionFormat" value={descriptionFormat} />
             <input type="hidden" name="tileLabelLeftTemplate" value={templates.tileLabelLeftTemplate} />
             <input type="hidden" name="tileLabelRightTemplate" value={templates.tileLabelRightTemplate} />
@@ -518,8 +525,8 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
               <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
                 Listing templates
                 <InfoHint>
-                  Title, description, private note and photo tile label for this platform&rsquo;s
-                  listings, each generated from a {"{token}"} template with a live preview — and what the
+                  Title, description{usesPrivateNote ? ", private note" : ""} and photo tile label for
+                  this platform&rsquo;s listings, each generated from a {"{token}"} template with a live preview — and what the
                   description field accepts: plain text, HTML or Markdown.
                 </InfoHint>
               </span>
@@ -527,7 +534,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             <SummaryRow
               summary={
                 configuredTemplates
-                  ? `${configuredTemplates} of ${TEMPLATE_COUNT} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
+                  ? `${configuredTemplates} of ${templateCount} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
                   : "None — listings use the catalog/copy label"
               }
               muted={!configuredTemplates}
@@ -563,13 +570,15 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
                 max={MAX_LISTING_TEXT_LENGTH_LIMIT}
                 defaultValue={platform?.maxDescriptionLength}
               />
-              <LimitField
-                id="platform-max-private-note-length"
-                name="maxPrivateNoteLength"
-                label="Max private note"
-                max={MAX_LISTING_TEXT_LENGTH_LIMIT}
-                defaultValue={platform?.maxPrivateNoteLength}
-              />
+              {usesPrivateNoteLimit && (
+                <LimitField
+                  id="platform-max-private-note-length"
+                  name="maxPrivateNoteLength"
+                  label="Max private note"
+                  max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                  defaultValue={platform?.maxPrivateNoteLength}
+                />
+              )}
             </div>
             <FieldNote>In characters. Blank where the platform states no limit.</FieldNote>
           </div>
@@ -762,6 +771,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             language={titleLanguage || null}
             templates={templates}
             descriptionFormat={descriptionFormat}
+            privateNote={usesPrivateNote}
             onCancel={() => setTemplatesOpen(false)}
             onSave={(next, format) => {
               setTemplates(next);

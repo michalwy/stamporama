@@ -13,6 +13,8 @@ import {
   MODULE_PLATFORMS,
   isModulePlatformName,
   modulePlatformName,
+  platformUsesSetting,
+  type DroppablePlatformSetting,
 } from "./platform-modules";
 
 // Server-side domain logic for the collection's platforms (#1955; ADR-0071) — the marketplaces it
@@ -360,8 +362,16 @@ function listingDefaults(
 }
 
 /** Every settings column as Prisma writes it, with the collage-template references verified to
- *  belong to the same collection — a tampered id from another collection is simply dropped. */
-async function settingsData(collectionId: string, data: PlatformInput) {
+ *  belong to the same collection — a tampered id from another collection is simply dropped. A setting
+ *  the platform's module does not use (#1957) is written empty whatever was sent, so it cannot come
+ *  back through a request its page never makes. */
+async function settingsData(
+  collectionId: string,
+  data: PlatformInput,
+  platformModule: string | null = null
+) {
+  const uses = (setting: DroppablePlatformSetting) =>
+    platformUsesSetting(platformModule, setting);
   const ownTemplate = async (raw: string | null | undefined) => {
     const id = raw?.trim() || null;
     return id
@@ -379,7 +389,7 @@ async function settingsData(collectionId: string, data: PlatformInput) {
     platformCurrency: data.platformCurrency?.trim() || null,
     titleTemplate: data.titleTemplate ?? null,
     descriptionTemplate: data.descriptionTemplate ?? null,
-    privateNoteTemplate: data.privateNoteTemplate ?? null,
+    privateNoteTemplate: uses("privateNoteTemplate") ? (data.privateNoteTemplate ?? null) : null,
     descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
     titleLanguage: normalizeLanguage(data.titleLanguage),
     ...listingDefaults(data),
@@ -390,7 +400,7 @@ async function settingsData(collectionId: string, data: PlatformInput) {
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
     maxTitleLength: data.maxTitleLength ?? null,
     maxDescriptionLength: data.maxDescriptionLength ?? null,
-    maxPrivateNoteLength: data.maxPrivateNoteLength ?? null,
+    maxPrivateNoteLength: uses("maxPrivateNoteLength") ? (data.maxPrivateNoteLength ?? null) : null,
     maxPhotos: data.maxPhotos ?? null,
     maxPhotoEdge: data.maxPhotoEdge ?? null,
     maxPhotoFileSizeMib: data.maxPhotoFileSizeMib ?? null,
@@ -548,7 +558,7 @@ export async function updatePlatform(
 ): Promise<PlatformData> {
   const { collectionId, platformModule } = await assertPlatformOwner(ownerId, platformId);
   const name = platformModule ? undefined : genericName(data.name);
-  const settings = await settingsData(collectionId, data);
+  const settings = await settingsData(collectionId, data, platformModule);
   try {
     return toPlatformData(
       await prisma.platform.update({

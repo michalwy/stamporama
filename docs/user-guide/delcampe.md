@@ -34,6 +34,22 @@ hangs off it. Its settings — currency, listing templates, photo limits and the
 **Platform** tab. It starts **switched off**: tick **Switched on** there when you start selling on
 Delcampe, so the offer and sale forms offer it.
 
+The tab offers what selling on Delcampe actually uses, all described on the
+[Platforms](platforms.md) page:
+
+- **Platform** — **Switched on**, **Market** and **Notes**.
+- **Offers and sales** — **Currency**, **Listing language**, **Default listing type** (and, for an
+  auction, **Default starting price**), **Minimum price**, **Refresh quick buys after**, **Message to
+  buyer** and **Shipping options**.
+- **Listing texts** — the **Title**, **Description** and **Photo tile labels** templates with the
+  description's format, and **Max title** and **Max description**.
+- **Photos** — every photo setting a generic platform has.
+
+There is **no private note** here: Delcampe's upload has nowhere to put one — its personal reference
+carries only the offer's number — so the Delcampe platform has no private-note template and no cap
+on its length. A Delcampe offer still has a **Private note** you can write by hand; nothing generates
+it.
+
 It does **not** switch the [Assistant](assistant.md) on: there is no Delcampe form for the extension to fill, so no
 ⚡ *List via Assistant* button appears on those offers, and none of the Colnect checks (a catalog
 item-ID on every stamp, a mapped grade) is asked of them.
