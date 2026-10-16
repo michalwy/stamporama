@@ -33,7 +33,8 @@ import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[pur
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
-import { ReplacesField } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
+import { ReplacesButton } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
+import { REPLACING_DISPOSITION } from "@/lib/replacement-rules";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
@@ -967,24 +968,6 @@ function IntakeConditionDialog({
                       onOpen={setComparing}
                     />
                   )}
-                  {/* Which of those copies the piece takes the place of (#1937), under the pictures it
-                      is decided by. Choosing one ticks *In collection*: a copy replacing one there is
-                      going there itself. */}
-                  {replacing && selection.kind === "stamp" && (
-                    <ReplacesField
-                      marginTop="0.375rem"
-                      collectionId={collectionId}
-                      stampId={selection.stampId}
-                      excludeItemId={correctedCopyId ?? null}
-                      conditions={conditions}
-                      value={replacesItemId}
-                      disabled={isPending}
-                      onChange={(itemId) => {
-                        setReplacesItemId(itemId);
-                        if (itemId) setDisposition((d) => ({ ...d, inCollection: true }));
-                      }}
-                    />
-                  )}
                 </div>
 
                 {/* Which lot the copy belongs to (#586) — drawn only when the order has more than one
@@ -1244,12 +1227,36 @@ function IntakeConditionDialog({
                     — no separate save; the choice rides along on the intake submit. */}
                 <div style={{ marginTop: "0.75rem" }}>
                   <LabelWithError htmlFor="">Disposition (optional)</LabelWithError>
-                  <div style={{ marginTop: "0.25rem" }}>
+                  <div
+                    style={{
+                      marginTop: "0.25rem",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                    }}
+                  >
                     <DispositionChips
                       values={disposition}
                       disabled={isPending}
                       onToggle={(flag, value) => setDisposition((d) => ({ ...d, [flag]: value }))}
                     />
+                    {/* Which held copy the piece takes the place of (#1937), beside the dispositions
+                        (#1972) because choosing one decides them: a copy replacing one in the
+                        collection is going there itself, and nowhere else. */}
+                    {replacing && selection.kind === "stamp" && (
+                      <ReplacesButton
+                        collectionId={collectionId}
+                        stampId={selection.stampId}
+                        excludeItemId={correctedCopyId ?? null}
+                        value={replacesItemId}
+                        disabled={isPending}
+                        onChange={(itemId) => {
+                          setReplacesItemId(itemId);
+                          if (itemId) setDisposition({ ...REPLACING_DISPOSITION });
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 

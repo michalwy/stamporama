@@ -112,6 +112,7 @@ export interface ReplacementCopyData {
   stampId: string;
   stampLabel: string;
   conditionId: string;
+  certificateStatusId: string | null;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -141,6 +142,7 @@ const COPY_SELECT = {
   itemNo: true,
   stampId: true,
   conditionId: true,
+  certificateStatusId: true,
   inCollection: true,
   forSale: true,
   forTrade: true,
@@ -188,6 +190,7 @@ function toCopy(
     stampId: row.stampId,
     stampLabel: stampLabel(row.stamp),
     conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,

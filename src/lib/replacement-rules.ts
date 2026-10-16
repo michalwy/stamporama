@@ -17,6 +17,10 @@ export type MootReason = (typeof MOOT_REASONS)[number];
 
 export type ReplacementSide = "new" | "old";
 
+/** The dispositions a copy takes when it is identified as replacing a held one (#1972): *In
+ * collection* and nothing else — it is going where the copy it replaces is, and only there. */
+export const REPLACING_DISPOSITION = { inCollection: true, forSale: false, forTrade: false } as const;
+
 export function isReplacementStatus(value: string): value is ReplacementStatus {
   return (REPLACEMENT_STATUSES as readonly string[]).includes(value);
 }
