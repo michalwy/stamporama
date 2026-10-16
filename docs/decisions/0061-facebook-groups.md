@@ -143,6 +143,16 @@ dissolving the post and retiring its number — and making it again.
 - **They become the next lots**, in the order ticked or picked; the auctions among them take the post's
   shared closing time.
 
+**Amended by #1986 (raised on 2026-10-16): a post's lots can be reordered.** The order they were
+ticked or added in was final short of taking lots out and adding them again.
+
+- **On the post's screen, only while it is not yet up** — a pending or live post's lots stay in the
+  order they were posted (§3, #1800), and the server refuses a new order then.
+- **By dragging a row**, with the app's shared reordering control, **or sorted whole** by catalogue
+  number or by price (either way); the result is a starting point that can still be adjusted by hand.
+- **The lot numbers are the order**: nothing else stores it, so the post's text, its captions and the
+  photo download's order and names (`lot-NN-…`) follow at once.
+
 ### 3. Posting starts as a kit to paste
 
 The app prepares the post's text from the group's template and the photos to download; the collector

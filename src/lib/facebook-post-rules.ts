@@ -26,6 +26,7 @@ import {
   type FacebookStartingPriceMode,
   type FacebookTemplateRole,
 } from "./facebook-group-rules";
+import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { isAuctionListing, offerFileSlug, type OfferListingType } from "./offer-rules";
 
 /**
@@ -932,6 +933,76 @@ export function facebookLotAddRefusal(
     const kind = isAuctionListing(offer.listingType) ? "an auction" : "a quick buy";
     const lots = post.lotTypes.every((t) => isAuctionListing(t)) ? "auctions" : "quick buys";
     return `is ${kind} and this post's lots are ${lots}`;
+  }
+  return null;
+}
+
+// ── The order of a post's lots (#1986) ──────────────────────────────────────────────────────────
+
+/** What a lot is offered at, as the post's screen reads it: an auction's recorded bid, else its
+ *  starting price; a quick buy's asking price. The *by price* sort orders by the same figure. */
+export function facebookLotPrice(lot: {
+  listingType: OfferListingType;
+  price: string;
+  startingPrice: string | null;
+}): { label: "Price" | "Bid" | "Start"; amount: string | null } {
+  if (!isAuctionListing(lot.listingType)) return { label: "Price", amount: lot.price };
+  if (lot.price !== "0.00") return { label: "Bid", amount: lot.price };
+  return { label: "Start", amount: lot.startingPrice };
+}
+
+/** The shortcuts that sort a whole post (#1986): by catalogue number, or by price either way. */
+export type FacebookLotSort = "catalog" | "priceAsc" | "priceDesc";
+
+export const FACEBOOK_LOT_SORTS: readonly FacebookLotSort[] = ["catalog", "priceAsc", "priceDesc"];
+
+export const FACEBOOK_LOT_SORT_LABEL: Record<FacebookLotSort, string> = {
+  catalog: "catalogue number",
+  priceAsc: "price, lowest first",
+  priceDesc: "price, highest first",
+};
+
+/**
+ * A post's lots in the order a sort shortcut puts them (#1986), as offer ids. By catalogue number is
+ * each lot's lowest number (`catalogSortKey`, the stored key's rule); by price is the figure the row
+ * shows (`facebookLotPrice`). A lot with no number or no price goes last either way, and lots that
+ * tie keep the order they had — the result is a starting point, still adjusted by hand.
+ */
+export function sortFacebookLots(
+  lots: readonly {
+    offerId: string;
+    catalogSortKey: string | null;
+    listingType: OfferListingType;
+    price: string;
+    startingPrice: string | null;
+  }[],
+  by: FacebookLotSort
+): string[] {
+  const priced = (lot: (typeof lots)[number]) => {
+    const amount = facebookLotPrice(lot).amount;
+    const value = amount === null ? NaN : Number(amount);
+    return Number.isFinite(value) ? value : null;
+  };
+  const compare = (a: (typeof lots)[number], b: (typeof lots)[number]): number => {
+    if (by === "catalog") return compareCatalogSortKeys(a.catalogSortKey, b.catalogSortKey);
+    const pa = priced(a);
+    const pb = priced(b);
+    if (pa === pb) return 0;
+    if (pa === null) return 1;
+    if (pb === null) return -1;
+    return by === "priceAsc" ? pa - pb : pb - pa;
+  };
+  // `Array.prototype.sort` is stable, so lots that tie keep their order.
+  return [...lots].sort(compare).map((l) => l.offerId);
+}
+
+/** Why a new order cannot be written to a post (#1986): it must name every lot of the post once and
+ *  nothing else — a lot added or taken out meanwhile makes it stale. Null when it can. */
+export function facebookLotOrderRefusal(lotIds: readonly string[], order: readonly string[]): string | null {
+  const own = new Set(lotIds);
+  const named = new Set(order);
+  if (named.size !== order.length || named.size !== own.size || order.some((id) => !own.has(id))) {
+    return "The post's lots have changed since this order was made — reload and try again.";
   }
   return null;
 }

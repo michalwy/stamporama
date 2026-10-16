@@ -18,6 +18,7 @@ import {
   describeRefusedLots,
   facebookLayoutLotTemplate,
   facebookLotAddRefusal,
+  facebookLotOrderRefusal,
   facebookLotPrintedTexts,
   facebookPostLink,
   facebookPostRefusal,
@@ -641,6 +642,46 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
   await prisma.$transaction((tx) => detachFacebookLot(tx, offerId));
   // Its lot photo goes with it, and so does the last lot's of a post it dissolved (#1861).
   await pruneFacebookLotPhotos(offer.collectionId);
+}
+
+/**
+ * Put a post's lots in a new order (#1986): `offerIds` is every lot of the post, once, in the order
+ * they are to be numbered — dragged into it on the post's screen, or sorted there by catalogue number
+ * or price. The lot numbers are the order, so the post's text, its captions and the photos' download
+ * follow at once. Only until the post is up: a published post's lots stay as they were posted
+ * (#1800). An order naming a lot the post no longer holds, or missing one, is refused as stale.
+ */
+export async function reorderFacebookLots(
+  ownerId: string,
+  postId: string,
+  offerIds: readonly string[]
+): Promise<void> {
+  await assertPostOwner(ownerId, postId);
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    select: { id: true, state: true },
+  });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      "The post is up, so its lots stay in the order they were posted."
+    );
+  }
+  const refusal = facebookLotOrderRefusal(
+    lots.map((l) => l.id),
+    offerIds
+  );
+  if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
+  // Renumbered in two passes, as `detachFacebookLot` does: the unique (post, lot) index would refuse
+  // a lot moved onto a number another has not left yet.
+  await prisma.$transaction(async (tx) => {
+    for (const [index, id] of offerIds.entries()) {
+      await tx.offer.update({ where: { id }, data: { facebookLotNo: -1 - index } });
+    }
+    for (const [index, id] of offerIds.entries()) {
+      await tx.offer.update({ where: { id }, data: { facebookLotNo: index + 1 } });
+    }
+  });
 }
 
 /**

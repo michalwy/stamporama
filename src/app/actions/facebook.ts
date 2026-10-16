@@ -23,6 +23,7 @@ import {
   refreshFacebookPostTexts,
   regenerateFacebookLotTexts,
   removeFacebookLot,
+  reorderFacebookLots,
   setFacebookPostLayout,
   setFacebookPostTitle,
   type FacebookLotsAdded,
@@ -181,6 +182,17 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** Put a post's lots in a new order (#1986): every lot's offer id, in the order to number them. */
+export async function reorderFacebookLotsAction(postId: string, offerIds: string[]): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await reorderFacebookLots(session.user.id, postId, offerIds);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to put the lots in the new order.");
   }
 }
 

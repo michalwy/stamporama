@@ -23,6 +23,7 @@ import {
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { compactCatalogNumberGroups, type CatalogNumberGroupEntry } from "./offer-title-template";
+import { catalogSortKeyOf, compareCatalogSortKeys } from "./catalog-sort-key";
 import { isAuctionListing, normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
 
 // A Facebook offer (#1544; ADR-0061 §2, §3, §5) — the half the offers domain reads.
@@ -364,6 +365,9 @@ export interface FacebookKitLot {
   /** `{catalog}`, retired (#1671) but still filled in: every copy's catalogue number, compacted as a
    *  title's `{catalog}` is. */
   catalog: string;
+  /** The lowest of its copies' catalogue numbers as a sort key (`catalogSortKeyOf`), null when none
+   *  carries one — what *Sort by catalogue number* orders a post by (#1986). */
+  catalogSortKey: string | null;
   startingPrice: string | null;
   bidIncrement: string | null;
   currency: string;
@@ -485,6 +489,8 @@ export async function readKitLots(collectionId: string, where: Prisma.OfferWhere
       title,
       description: row.description?.trim() ?? "",
       catalog: compactCatalogNumberGroups(numbers),
+      catalogSortKey:
+        numbers.map((n) => catalogSortKeyOf(n.number)).sort(compareCatalogSortKeys)[0] ?? null,
       startingPrice: row.startingPrice?.toFixed(2) ?? null,
       bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
       currency: row.currency,

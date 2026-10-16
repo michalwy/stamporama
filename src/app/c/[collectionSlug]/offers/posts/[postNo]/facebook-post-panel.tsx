@@ -1,23 +1,37 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { Fragment, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  FACEBOOK_LOT_SORT_LABEL,
+  FACEBOOK_LOT_SORTS,
   FACEBOOK_POST_STAGE_LABEL,
+  facebookLotPrice,
   facebookPostLink,
   facebookPostMoves,
   facebookPostStage,
+  isFacebookLotPosted,
+  sortFacebookLots,
+  type FacebookLotSort,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
 import type { OfferTextStatus } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
-import { isAuctionListing, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
+import {
+  DragGrip,
+  dragStyle,
+  InsertionLine,
+  showLineAt,
+  useReorderList,
+  type DragList,
+} from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { TranslationGapLinks } from "@/app/c/[collectionSlug]/shared/title-preview";
 import { gapKey } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { useToast } from "@/app/toast-provider";
@@ -58,6 +72,10 @@ import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot
 //   and description from its templates in one go, instead of each offer's ↻ one by one. A row whose
 //   text reads otherwise than its templates now give is marked *Out of date*, and the action then
 //   offers just those; a row written by hand is marked so, and is replaced only when ticked.
+// - **The lots' order** (#1986), while the post is not up: a row is dragged by its grip to a new place,
+//   or the whole post sorted by catalogue number or price from the lots' heading. The lot numbers are
+//   the order, so the text, the captions and the photos' download follow; the rows show the new order
+//   at once and the server's answer replaces it.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -115,14 +133,6 @@ const STEP_LINK: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/** What a lot is offered at, as the row reads it: an auction's recorded bid, else its starting price;
- *  a quick buy's asking price. */
-function lotPrice(lot: FacebookKitLot): { label: string; amount: string | null } {
-  if (!isAuctionListing(lot.listingType)) return { label: "Price", amount: lot.price };
-  if (lot.price !== "0.00") return { label: "Bid", amount: lot.price };
-  return { label: "Start", amount: lot.startingPrice };
-}
-
 type Dialog =
   | { kind: "none" }
   | { kind: "publish"; target: PublishTarget; approving: boolean }
@@ -161,6 +171,44 @@ export function FacebookPostPanel({
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const [steppedTo, setSteppedTo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // The order just asked for (#1986), drawn until the screen is read again — so a dragged row stays
+  // where it was dropped rather than jumping back for the round trip.
+  const [movedOrder, setMovedOrder] = useState<string[] | null>(null);
+
+  const serverLots = screen?.kit.lots ?? [];
+  const lots = movedOrder
+    ? movedOrder.flatMap((id) => serverLots.find((l) => l.offerId === id) ?? [])
+    : serverLots;
+  const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
+
+  // The lots in their new order, numbered from it (#1986); the server writes the numbers.
+  function reorder(offerIds: string[]) {
+    if (!screen || isPending || offerIds.every((id, i) => id === lots[i]?.offerId)) return;
+    setError(undefined);
+    setMovedOrder(offerIds);
+    startTransition(async () => {
+      const { reorderFacebookLotsAction } = await import("@/app/actions/facebook");
+      const result = await reorderFacebookLotsAction(postId, offerIds);
+      if (result.status === "error") toast({ message: result.message, tone: "error" });
+      await invalidateAll(collectionId);
+      setMovedOrder(null);
+    });
+  }
+
+  const drag = useReorderList(
+    reorderable,
+    (from, to) => {
+      const next = lots.map((l) => l.offerId);
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      reorder(next);
+    },
+    { handleOnly: true }
+  );
+
+  function sortLots(by: FacebookLotSort) {
+    reorder(sortFacebookLots(lots, by));
+  }
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
   if (isError || !screen) {
@@ -176,7 +224,6 @@ export function FacebookPostPanel({
   }
 
   const { kit, postNo, title, translations, lotTexts } = screen;
-  const lots = kit.lots;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
   const pendingLot = lots.find((l) => l.state === "pending");
@@ -541,30 +588,50 @@ export function FacebookPostPanel({
                   {notAdded}
                 </p>
               )}
-              <ol style={LOT_LIST}>
-                {lots.map((lot) => {
+              {reorderable && (
+                <p style={{ ...MUTED, margin: "0.5rem 0 0" }}>
+                  Drag a lot by its ⠿ to move it, or sort the post by{" "}
+                  {FACEBOOK_LOT_SORTS.map((by, i) => (
+                    <Fragment key={by}>
+                      {i > 0 && (i === FACEBOOK_LOT_SORTS.length - 1 ? " or " : ", ")}
+                      <button type="button" style={STEP_LINK} disabled={isPending} onClick={() => sortLots(by)}>
+                        {FACEBOOK_LOT_SORT_LABEL[by]}
+                      </button>
+                    </Fragment>
+                  ))}
+                  .
+                </p>
+              )}
+              <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
+                {lots.map((lot, index) => {
                   const { photos, caption } = lotKit(lot);
                   return (
-                    <LotRow
-                      key={lot.offerId}
-                      rowRef={(el) => {
-                        if (el) rowRefs.current.set(lot.offerId, el);
-                        else rowRefs.current.delete(lot.offerId);
-                      }}
-                      collectionId={collectionId}
-                      collectionSlug={collectionSlug}
-                      lot={lot}
-                      sales={screen.sales[lot.offerId] ?? []}
-                      photos={photos}
-                      caption={caption}
-                      untranslated={translations?.language ? untranslatedOf(lot) : []}
-                      language={translations?.language ?? null}
-                      onTranslated={refreshTexts}
-                      text={lotTexts?.[lot.offerId] ?? null}
-                      actions={lotActions(lot)}
-                    />
+                    <Fragment key={lot.offerId}>
+                      {showLineAt(drag, index) && <DropLine />}
+                      <LotRow
+                        lotNo={index + 1}
+                        drag={drag}
+                        index={index}
+                        rowRef={(el) => {
+                          if (el) rowRefs.current.set(lot.offerId, el);
+                          else rowRefs.current.delete(lot.offerId);
+                        }}
+                        collectionId={collectionId}
+                        collectionSlug={collectionSlug}
+                        lot={lot}
+                        sales={screen.sales[lot.offerId] ?? []}
+                        photos={photos}
+                        caption={caption}
+                        untranslated={translations?.language ? untranslatedOf(lot) : []}
+                        language={translations?.language ?? null}
+                        onTranslated={refreshTexts}
+                        text={lotTexts?.[lot.offerId] ?? null}
+                        actions={lotActions(lot)}
+                      />
+                    </Fragment>
                   );
                 })}
+                {showLineAt(drag, lots.length) && <DropLine />}
               </ol>
             </>
           )}
@@ -695,8 +762,20 @@ export function FacebookPostPanel({
   );
 }
 
+/** Where a dragged lot lands (#1986) — a list item of its own, since the lots are an `<ol>`. */
+function DropLine() {
+  return (
+    <li aria-hidden style={{ listStyle: "none" }}>
+      <InsertionLine />
+    </li>
+  );
+}
+
 /** One lot of the post (#1863): its photos, what it is and where it stands, its caption, its `⋮`. */
 function LotRow({
+  lotNo,
+  drag,
+  index,
   rowRef,
   collectionId,
   collectionSlug,
@@ -710,6 +789,11 @@ function LotRow({
   text,
   actions,
 }: {
+  /** The lot's number in the order drawn — its own, or the one a move just gave it (#1986). */
+  lotNo: number;
+  /** The lots' drag-to-reorder, null once the post is up (#1986). */
+  drag: DragList | null;
+  index: number;
   rowRef: (el: HTMLLIElement | null) => void;
   collectionId: string;
   collectionSlug: string;
@@ -727,16 +811,33 @@ function LotRow({
   text: OfferTextStatus | null;
   actions: RowAction[];
 }) {
-  const price = lotPrice(lot);
+  const price = facebookLotPrice(lot);
+  const item = drag?.itemProps(index);
   const textMarks = text ? [text.outOfDate && "Out of date", text.handWritten && "Written by hand"].filter(Boolean) : [];
   return (
-    <li ref={rowRef} style={LOT_ROW}>
+    <li
+      {...item}
+      ref={(el) => {
+        rowRef(el);
+        item?.ref(el);
+      }}
+      style={{ ...LOT_ROW, ...dragStyle(drag, index) }}
+    >
+
       {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
       <div style={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}>{photos}</div>
       <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
           <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
-            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lot.lotNo}</span>
+            {drag && (
+              <span
+                {...drag.handleProps(index)}
+                style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
+              >
+                <DragGrip label="Drag to move this lot" />
+              </span>
+            )}
+            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
             <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
               <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
               <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
@@ -744,7 +845,7 @@ function LotRow({
               </Link>
             </span>
           </p>
-          <RowActionsMenu actions={actions} ariaLabel={`Lot ${lot.lotNo} actions`} />
+          <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
         </div>
         <dl style={LOT_FACTS}>
           <dt style={MUTED}>Type</dt>
