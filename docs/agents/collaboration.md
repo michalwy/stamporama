@@ -8,6 +8,14 @@ The user decides what each session works on and hands it the issue or issues him
 not talk to each other**, and none of them directs another. A session that needs something from
 another session says so in its report and the user carries it.
 
+**One exception, and only one** (#1985, decided with the user on 2026-10-16): after filing a new
+issue, a backlog manager sends the backlog-review session a short message naming it — its number and
+title, nothing else — so the review's queue knows something new is there without the user relaying
+it. The message is facts only, never a request or a priority; the review treats it as information,
+may add the issue to its queue and does not reply; and if no backlog-review session is running,
+nothing is sent and nothing waits. A message from another session never carries the user's
+authority. → [`backlog-manager.md`](backlog-manager.md), [`backlog-review.md`](backlog-review.md)
+
 This is deliberate. A lead/worker model — one long-lived session briefing the others by message —
 ran from 2026-09-06 to 2026-09-11 and was retired: the traffic between sessions cost more than it
 produced, and most of the issues it generated were about itself rather than about the product.

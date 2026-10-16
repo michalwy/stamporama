@@ -162,8 +162,10 @@ request and follows it to merge. Nothing is handed to a second agent halfway. A 
 several issues when they share a file (#997), each with its own `Refs #NNN`, verification and closing
 comment.
 
-**The user routes everything and sessions do not talk to each other.** Findings and new backlog ideas
-go to him rather than into new issues. **The *Done when* is the issue body plus its comments**, and
+**The user routes everything and sessions do not talk to each other** — with one exception: a
+backlog manager tells the backlog-review session the number and title of each issue it files (#1985,
+[`backlog-manager.md`](docs/agents/backlog-manager.md)). Findings and new backlog ideas go to him
+rather than into new issues. **The *Done when* is the issue body plus its comments**, and
 the two diverge silently: `gh issue view <n> --json body,comments`.
 
 Everything else is in [`collaboration.md`](docs/agents/collaboration.md) — read it before opening a
