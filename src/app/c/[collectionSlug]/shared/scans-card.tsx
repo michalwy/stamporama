@@ -2803,6 +2803,12 @@ function TileCell({
 
   const style: React.CSSProperties = {
     display: "block",
+    // **The frame is the cell, never the picture** (#1976). A button sizes to its content even as a
+    // block, so without these a narrow, tall picture drew a frame only as wide as itself, and the
+    // tick box — placed against the cell — floated in the gap beside it. Filling the cell both ways
+    // makes every frame in a row the same size, the picture fitted and centred in it.
+    width: "100%",
+    flex: 1,
     padding: 0,
     textAlign: "left",
     font: "inherit",
@@ -2958,15 +2964,17 @@ function TileCell({
     // been one button since #584 and a control nested in a button is neither valid nor clickable
     // without fighting it. So the box sits over the corner and the rest of the square keeps meaning
     // exactly what it meant — click it and the tile's dialog opens, in every state.
-    <div style={{ position: "relative" }} data-tile-id={tile.id}>
+    // A column, so the square can stretch to the row's height (#1976): a tile wearing a shortlist or a
+    // discard note is taller, and its neighbours' frames grow to match rather than stopping short.
+    <div style={{ position: "relative", display: "flex", flexDirection: "column" }} data-tile-id={tile.id}>
       {/* The square's own hint — what the tile is and what became of it, and for a parked one the
-          note saying what to check. `display: block` on the wrapper because the cell is a grid
-          item: an `inline-flex` span between them would let the picture shrink to its content. */}
+          note saying what to check. The wrapper is a stretching column rather than the tooltip's
+          `inline-flex` span, which would let the square shrink to its picture (#1976). */}
       <ThumbPreview
         src={photoId ? `/api/collections/${collectionId}/photos/${photoId}/full` : null}
         thumbSrc={photoId ? `/api/collections/${collectionId}/photos/${photoId}/thumb` : null}
         label={tileTitle(tile)}
-        style={{ display: "block" }}
+        style={{ display: "flex", flexDirection: "column", flex: 1 }}
       >
         <button
           type="button"

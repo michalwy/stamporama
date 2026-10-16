@@ -552,8 +552,9 @@ You can also give a card a **name** — see below.
 **Small · Medium · Large** — sets it for every card on the screen, and this browser remembers it for
 every order after. **Medium** is the default and is large enough to read a face value and tell two
 close designs apart without hovering; **Small** shows a card of sixty pieces whole, and **Large** is
-for small print. At every size the tiles wrap across the window — nothing scrolls sideways — each
-picture shows the whole stamp, and resting the pointer on a tile still shows it enlarged. The
+for small print. At every size the tiles wrap across the window — nothing scrolls sideways — every
+frame in a row is the same size, each picture fitted whole and centred in its frame however tall or
+wide the stamp is, and resting the pointer on a tile still shows it enlarged. The
 unpaired backs below a card follow the same size. What sits on a tile's frame grows with it — the
 condition mark, the tile number, the tick under the picture and the tick box — and stays on the frame,
 so a larger tile never covers more of the stamp. Even at **Small** the condition mark is as large as
