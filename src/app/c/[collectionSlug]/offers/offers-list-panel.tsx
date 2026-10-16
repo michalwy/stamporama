@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -15,6 +15,11 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { formatEntityNo } from "@/lib/quick-jump";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
+import {
+  assistantRunSummary,
+  planAssistantRuns,
+  type AssistantRunAct,
+} from "@/lib/offer-assistant-runs";
 import type { OfferListItem } from "@/lib/offers";
 import {
   type ManualOfferTarget,
@@ -45,6 +50,10 @@ import { ActivateOfferDialog, type PublishTarget } from "./activate-offer-dialog
 import { PostTogetherDialog } from "./post-together-dialog";
 import { AddToPostDialog } from "./add-to-post-dialog";
 import { QuickOfferFlow } from "./quick-offer-flow";
+import { LISTING_ELEMENT_ID, useAssistantPresence } from "./assistant-handoff";
+import { CLOSE_ELEMENT_ID } from "./assistant-close-handoff";
+import { assistantHint } from "./assistant-listing";
+import { useAssistantRuns } from "./use-assistant-runs";
 import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
@@ -72,6 +81,8 @@ type DialogState =
   | { kind: "postTogether" }
   /** Ticked Facebook offers joining a post not yet up as its next lots (#1870). */
   | { kind: "addToPost" }
+  /** Update or close listings via the Assistant (#1969) — one row's, or the ticked ones it suits. */
+  | { kind: "assistantRun"; act: AssistantRunAct; offers: OfferListItem[]; skipped: number }
   | { kind: "quickOffer" };
 
 /** What a bulk run refused, named against the row it belongs to. Kept as a list rather than a
@@ -576,6 +587,68 @@ export function OffersListPanel({
         linkLabel: "Open post",
       });
     });
+  }
+
+  /* ── Update and close via the Assistant (#1969) ──────────────────────────────────────────────────
+   * The offer screen's two handoffs, queued and run one after another from here. The rows show each
+   * offer's progress; the list is re-read once the queue has drained rather than after every run, so
+   * a closed offer stays on screen saying *Closed* instead of vanishing from a *Needs action* list
+   * mid-run. */
+  const assistantPresent = useAssistantPresence();
+  const assistantUnavailable = assistantHint({ blockerCount: 0, present: assistantPresent, busy: false });
+  const {
+    listingNodeRef: assistantListingNodeRef,
+    listingPayload: assistantListingPayload,
+    closeNodeRef: assistantCloseNodeRef,
+    closePayload: assistantClosePayload,
+    ...assistantRuns
+  } = useAssistantRuns(collectionId);
+  const runByOffer = useMemo(
+    () => new Map(assistantRuns.runs.map((r) => [r.offerId, r])),
+    [assistantRuns.runs]
+  );
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !assistantRuns.busy) {
+      invalidateAll(collectionId);
+      const summary = assistantRunSummary(assistantRuns.runs);
+      if (summary) toast({ message: `Assistant: ${summary}` });
+    }
+    wasBusy.current = assistantRuns.busy;
+  }, [assistantRuns.busy, assistantRuns.runs, collectionId, invalidateAll, toast]);
+
+  /** One row's action: the one its *Needs action* calls for, or the other from its ⋮ — the
+   *  collector's own choice, so it is not filtered by what the offer suits. */
+  function askAssistantRun(offer: OfferListItem, act: AssistantRunAct) {
+    setActionError(undefined);
+    setDialog({ kind: "assistantRun", act, offers: [offer], skipped: 0 });
+  }
+
+  /** The ticked offers in view that `act` suits — a close where nothing is left to sell, an update
+   *  otherwise — with the rest counted, so the confirmation can say how many of each. */
+  function askAssistantRunBulk(act: AssistantRunAct) {
+    const { run, skipped } = planAssistantRuns(selectedInView, act);
+    if (run.length === 0) return;
+    setActionError(undefined);
+    setDialog({ kind: "assistantRun", act, offers: run, skipped });
+  }
+
+  function queueAssistantRuns(act: AssistantRunAct, offers: OfferListItem[]) {
+    assistantRuns.enqueue(
+      offers.map((o) => ({
+        offerId: o.id,
+        offerNo: o.offerNo,
+        label: o.name ?? o.label,
+        act,
+        saleId: o.assistant?.closeSaleId ?? null,
+        removeSetIds: act === "update" ? (o.assistant?.soldElsewhereSetIds ?? []) : [],
+      }))
+    );
+    // Queued offers leave the selection — their rows now say how they are getting on; a ticked
+    // offer the action did not suit stays ticked, untouched.
+    setSelection((prev) => keptAfterBulkRun(prev, offers.map((o) => o.id), []));
+    setBulkSkips([]);
+    setDialog({ kind: "none" });
   }
 
   function closeDialog() {
@@ -1098,6 +1171,36 @@ export function OffersListPanel({
                           </Tooltip>
                         );
                       })()}
+                      {/* Update and close via the Assistant (#1969), each offered while a ticked offer
+                          in view is a *Needs action* listing it suits, and naming how many. */}
+                      {(["close", "update"] as const).map((act) => {
+                        const n = planAssistantRuns(selectedInView, act).run.length;
+                        if (n === 0) return null;
+                        return (
+                          <Tooltip
+                            key={act}
+                            content={
+                              assistantUnavailable ??
+                              (act === "close"
+                                ? "Close the ticked listings with nothing left to sell on Colnect, one after another, and withdraw them here. You confirm first."
+                                : "Update the ticked listings that still have something to sell, one after another: sets sold elsewhere come off first, then each edit form opens on Colnect for you to save. You confirm first.")
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() => askAssistantRunBulk(act)}
+                              disabled={isPending || assistantUnavailable !== null}
+                              style={{
+                                ...BULK_BTN,
+                                ...(assistantUnavailable !== null ? { opacity: 0.55, cursor: "default" } : {}),
+                              }}
+                            >
+                              <Icon name={act === "close" ? "withdraw" : "refresh"} size="sm" />{" "}
+                              {act === "close" ? `Close ${n} via Assistant` : `Update ${n} via Assistant`}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
                       <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
                         <button
                           type="button"
@@ -1137,6 +1240,15 @@ export function OffersListPanel({
                 </span>
               )}
             </div>
+
+            {assistantRuns.runs.length > 0 && (
+              <AssistantQueueStrip
+                runs={assistantRuns}
+                onCancel={assistantRuns.cancel}
+                onStopWaiting={assistantRuns.stopWaiting}
+                onClear={assistantRuns.clearFinished}
+              />
+            )}
 
             {/* What the last run refused, one line each (#323's rule): each is fixed somewhere
                 different, so a count would be a number with no next step behind it. The offers
@@ -1178,6 +1290,9 @@ export function OffersListPanel({
                 onSetInActiveBidding={setOfferBidding}
                 onDelete={(row) => setDialog({ kind: "delete", offer: row })}
                 onNarrowToPost={post ? undefined : (postNo) => updateParams({ post: String(postNo) })}
+                onAssistantRun={askAssistantRun}
+                assistantRun={runByOffer.get(offer.id) ?? null}
+                assistantUnavailable={assistantUnavailable}
                 selection={{
                   selected: selection.has(offer.id),
                   onToggle: toggleSelected,
@@ -1398,6 +1513,30 @@ export function OffersListPanel({
         />
       )}
 
+      {dialog.kind === "assistantRun" && (
+        <AssistantRunDialog
+          act={dialog.act}
+          offers={dialog.offers}
+          skipped={dialog.skipped}
+          queueBusy={assistantRuns.busy}
+          onClose={closeDialog}
+          onConfirm={() => queueAssistantRuns(dialog.act, dialog.offers)}
+        />
+      )}
+
+      {/* The two handoffs the queue drives (#1969): machine-readable, never shown — the offer
+          screen's own nodes (#407/#729), read and answered by the Assistant. */}
+      {assistantListingPayload && (
+        <div ref={assistantListingNodeRef} id={LISTING_ELEMENT_ID} hidden>
+          {assistantListingPayload}
+        </div>
+      )}
+      {assistantClosePayload && (
+        <div ref={assistantCloseNodeRef} id={CLOSE_ELEMENT_ID} hidden>
+          {assistantClosePayload}
+        </div>
+      )}
+
       {/* End-to-end quick-offer flow (#241): stamp + copy + offer in one pass. */}
       {dialog.kind === "quickOffer" && (
         <QuickOfferFlow
@@ -1412,6 +1551,123 @@ export function OffersListPanel({
           onClose={closeDialog}
           onOfferDone={handleSuccess}
         />
+      )}
+    </div>
+  );
+}
+
+/** The confirmation before anything is queued (#1969): how many offers, what each run does, and how
+ *  many ticked offers the action leaves alone. */
+function AssistantRunDialog({
+  act,
+  offers,
+  skipped,
+  queueBusy,
+  onClose,
+  onConfirm,
+}: {
+  act: AssistantRunAct;
+  offers: OfferListItem[];
+  skipped: number;
+  queueBusy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const n = offers.length;
+  const one = n === 1;
+  const removed = act === "update" ? offers.reduce((sum, o) => sum + (o.assistant?.soldElsewhereSetIds.length ?? 0), 0) : 0;
+  const what =
+    act === "close"
+      ? `The Assistant closes ${one ? "this listing" : `these ${n} listings`} on Colnect, in your own signed-in Colnect session${one ? "" : ", one after another"}, and withdraws ${one ? "the offer" : "each offer"} here once Colnect confirms. Withdrawn is final here — to sell again, create a new offer. On Colnect a listing can be reopened from its own page. The copies are untouched.`
+      : `${removed > 0 ? `First ${removed === 1 ? "1 set" : `${removed} sets`} sold elsewhere ${removed === 1 ? "comes" : "come"} off. ` : ""}The Assistant then opens ${one ? "this listing's" : "each listing's"} edit form on Colnect${one ? "" : ", one after another"}, re-filled from the offer as it now stands, with its pictures replaced. Nothing is saved for you — check ${one ? "the form" : "each form"} and save it on Colnect${one ? "" : "; the next one opens after that"}.`;
+  const left =
+    skipped > 0
+      ? ` ${skipped === 1 ? "1 other ticked offer is" : `${skipped} other ticked offers are`} left alone: nothing about ${skipped === 1 ? "it" : "them"} calls for ${act === "close" ? "a close" : "an update"}.`
+      : "";
+  const after = queueBusy ? " They join the end of the queue already running." : "";
+  return (
+    <ConfirmDialog
+      title={
+        act === "close"
+          ? one
+            ? "Close the listing on Colnect"
+            : `Close ${n} listings on Colnect`
+          : one
+            ? "Update the listing on Colnect"
+            : `Update ${n} listings on Colnect`
+      }
+      message={`${what}${left}${after}`}
+      actionLabel={act === "close" ? (one ? "Close and withdraw" : `Close ${n} and withdraw`) : one ? "Update" : `Update ${n}`}
+      variant={act === "close" ? "destructive" : "primary"}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+/** The queue's own line (#1969): how far it has got, and the two ways to stop it — *Cancel* drops
+ *  what has not started, *Stop waiting* gives up on an update whose form was never saved. Each
+ *  offer's own progress is on its row. */
+function AssistantQueueStrip({
+  runs,
+  onCancel,
+  onStopWaiting,
+  onClear,
+}: {
+  runs: Pick<ReturnType<typeof useAssistantRuns>, "runs" | "running" | "busy" | "awaitingSave">;
+  onCancel: () => void;
+  onStopWaiting: () => void;
+  onClear: () => void;
+}) {
+  const queued = runs.runs.filter((r) => r.status === "queued").length;
+  const finished = runs.runs.filter((r) => r.status === "done" || r.status === "failed").length;
+  const summary = assistantRunSummary(runs.runs);
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        padding: "0.5rem 1.25rem 0.5rem 2.5rem",
+        borderBottom: "1px solid var(--color-border)",
+        background: "var(--color-bg-page)",
+        fontSize: "0.8125rem",
+        color: "var(--color-text-secondary)",
+      }}
+    >
+      <Icon name="assistant" size="sm" />
+      <span style={{ color: "var(--color-text-primary)" }}>
+        {runs.running
+          ? `${formatEntityNo(runs.running.offerNo)}: ${runs.running.message ?? (runs.running.act === "close" ? "Closing…" : "Updating…")}`
+          : "Assistant queue finished"}
+      </span>
+      {(queued > 0 || finished > 0) && (
+        <span>
+          {[...(queued > 0 ? [`${queued} queued`] : []), ...(summary ? [summary] : [])].join(" · ")}
+        </span>
+      )}
+      <span style={{ flex: 1 }} />
+      {runs.awaitingSave && (
+        <Tooltip content="Move on without this one. Its form stays open on Colnect; if you save it later, mark the listing up to date on its offer.">
+          <button type="button" onClick={onStopWaiting} style={LINK_BTN}>
+            Stop waiting
+          </button>
+        </Tooltip>
+      )}
+      {queued > 0 && (
+        <Tooltip content="Drop the offers not started yet — they stay as they were. The one running finishes.">
+          <button type="button" onClick={onCancel} style={LINK_BTN}>
+            Cancel queue
+          </button>
+        </Tooltip>
+      )}
+      {!runs.busy && (
+        <Tooltip content="Clear the results from the rows">
+          <button type="button" onClick={onClear} style={LINK_BTN}>
+            Dismiss
+          </button>
+        </Tooltip>
       )}
     </div>
   );

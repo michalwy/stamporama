@@ -113,6 +113,7 @@ import {
   usesPlatformCatalogue,
   usesPlatformConditions,
 } from "./platform-modules";
+import { assistantActsOn, offerAssistantFacts, type OfferAssistantFacts } from "./offer-assistant-runs";
 import {
   backfillAllegroCategory,
   getAllegroOfferListingConfig,
@@ -2476,6 +2477,10 @@ export interface OfferListItem {
   readyAfterPhotos: boolean;
   /** Why the last such wait did not end in Ready (#1893), null otherwise. */
   readyAfterPhotosRefusal: string | null;
+  /** What the Assistant can do to this **Active** listing from the list (#1969) — update it, close it,
+   *  and which of the two its *Needs action* calls for (#1804). Null for any other offer, and on a
+   *  platform whose listings the Assistant can neither update nor close. */
+  assistant: OfferAssistantFacts | null;
   createdAt: Date;
 }
 
@@ -2505,8 +2510,9 @@ const OFFER_SELECT = {
   facebookPostTemplate: true,
   readyAfterPhotosAt: true,
   readyAfterPhotosRefusal: true,
+  colnectSaleId: true,
   createdAt: true,
-  platform: { select: { name: true } },
+  platform: { select: { name: true, platformModule: true } },
   sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
 } as const;
 
@@ -2536,8 +2542,9 @@ type OfferRow = {
   facebookPostTemplate: string | null;
   readyAfterPhotosAt: Date | null;
   readyAfterPhotosRefusal: string | null;
+  colnectSaleId: string | null;
   createdAt: Date;
-  platform: { name: string };
+  platform: { name: string; platformModule: string | null };
   sets: OfferSetRow[];
 };
 
@@ -2627,8 +2634,78 @@ function toListItem(
     facebookOwnTemplate: row.facebookPostTemplate !== null,
     readyAfterPhotos: row.readyAfterPhotosAt !== null,
     readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
+    assistant: null, // filled by attachAssistantFacts (needs the page's sales and bids)
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Fill each **Active** row's `assistant` (#1969): what the Assistant can do to the listing from the
+ * list, and which of Close or Update its *Needs action* calls for (#1804).
+ *
+ * The per-set facts are the offer screen's own — a set is sold when it has a sale line, sold
+ * elsewhere when a copy left through another set's (`isSetSoldElsewhere`), and needs action when it
+ * is that or holds a copy another active offer is in bidding on — asked of this page's rows in two
+ * queries, so the button a row offers is the one the offer's screen highlights.
+ */
+async function attachAssistantFacts(rows: OfferRow[], items: OfferListItem[]): Promise<void> {
+  // Only a row the Assistant can act on at all is worth the two reads below.
+  const asked = rows.filter((r) =>
+    assistantActsOn({
+      state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+      platformModule: r.platform.platformModule,
+      url: r.url,
+      colnectSaleId: r.colnectSaleId,
+    })
+  );
+  if (asked.length === 0) return;
+
+  const itemIds = asked.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId)));
+  const [soldRows, biddingRows] =
+    itemIds.length > 0
+      ? await Promise.all([
+          prisma.saleLineItem.findMany({
+            where: { itemId: { in: itemIds } },
+            select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+          }),
+          prisma.offerSetItem.findMany({
+            where: {
+              itemId: { in: itemIds },
+              offerSet: { offer: { inActiveBidding: true, state: "active" } },
+            },
+            select: { itemId: true, offerSet: { select: { offerId: true } } },
+          }),
+        ])
+      : [[], []];
+  const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+  // Which offers bid on each copy — a copy is in bidding *elsewhere* for every offer but those.
+  const biddingOn = new Map<string, Set<string>>();
+  for (const r of biddingRows) {
+    const on = biddingOn.get(r.itemId) ?? new Set<string>();
+    on.add(r.offerSet.offerId);
+    biddingOn.set(r.itemId, on);
+  }
+  const byId = new Map(items.map((it) => [it.id, it]));
+  for (const row of asked) {
+    const item = byId.get(row.id);
+    if (!item) continue;
+    item.assistant = offerAssistantFacts({
+      state: item.state,
+      platformModule: row.platform.platformModule,
+      url: row.url,
+      colnectSaleId: row.colnectSaleId,
+      listingOutOfDate: item.listingOutOfDate !== null,
+      sets: row.sets.map((s) => {
+        const ids = s.items.map((li) => li.itemId);
+        const sold = s.saleLines.length > 0;
+        const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: ids }, soldVia);
+        const bidElsewhere = ids.some((id) =>
+          [...(biddingOn.get(id) ?? [])].some((offerId) => offerId !== row.id)
+        );
+        return { id: s.id, sold, soldElsewhere, needsAction: soldElsewhere || (!sold && bidElsewhere) };
+      }),
+    });
+  }
 }
 
 /** Fill each item's `priceBase` with its asking price converted to the base currency at the current
@@ -2700,7 +2777,10 @@ async function withNeedsAction(
       refreshThresholdFor(thresholds, r)
     )
   );
-  await attachBasePrices(collectionId, baseCurrency, items);
+  await Promise.all([
+    attachBasePrices(collectionId, baseCurrency, items),
+    attachAssistantFacts(rows, items),
+  ]);
   return items;
 }
 
