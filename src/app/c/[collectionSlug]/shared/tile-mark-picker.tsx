@@ -105,7 +105,7 @@ export function unmarkedHint(
   return `Mark ${counts.condition} unmarked ${noun(counts.condition)} with a condition, or ${counts.certificate} with a certificate, in one pick — ${many} already marked keep their mark`;
 }
 
-/** The chip shape squeezed to the strip's 5.5 rem squares and the editor's boxes. */
+/** The chip shape squeezed to the cut editor's boxes; a scan tile sizes its own over it (#1971). */
 const SMALL_CHIP: React.CSSProperties = {
   fontSize: "0.625rem",
   fontWeight: 600,
@@ -123,10 +123,14 @@ export function TileMarkChips({
   collectionId,
   mark,
   small,
+  chipStyle,
 }: {
   collectionId: string;
   mark: TileMark | null | undefined;
   small?: boolean;
+  /** The chips' type and padding where the caller sizes them itself — a scan tile's band, which
+   * scales with the tile (#1971). Outranks `small`. */
+  chipStyle?: React.CSSProperties;
 }) {
   const { conditions, certificateStatuses, faults, tags } = useMarkDictionaries(collectionId);
   const m = normalizeMark(mark);
@@ -138,7 +142,7 @@ export function TileMarkChips({
   // In the dictionary's order, the order the chips read everywhere else.
   const marked = new Set(markFaultIds(m));
   const markedFaults = faults.filter((f) => marked.has(f.id));
-  const style = small ? SMALL_CHIP : undefined;
+  const style = chipStyle ? { ...SMALL_CHIP, ...chipStyle } : small ? SMALL_CHIP : undefined;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", minWidth: 0 }}>
       {condition && (
