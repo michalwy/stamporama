@@ -24,6 +24,9 @@ default, how many kinds of stamp have a category mapped, and whether Delcampe's 
 on this instance and when — and clicking a figure opens its tab. There is no account to connect:
 Delcampe listings go up as a file you upload yourself.
 
+Under it a second row states how selling and buying on Delcampe goes, each figure opening the list
+it counts; see [The platform in figures](platforms.md#the-platform-in-figures).
+
 Hover the ⓘ beside a heading or a field for what it means; the sections below say the same at
 length.
 

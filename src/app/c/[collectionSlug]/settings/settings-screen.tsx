@@ -48,6 +48,7 @@ import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
 import { ModulePlatformTab } from "./module-platform-tab";
 import { PlatformsPanel } from "./platforms-panel";
+import { PlatformFiguresRow, PlatformSummary } from "./platform-figures-row";
 import { FacebookSettingsBody } from "./facebook-settings-page";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
@@ -342,6 +343,10 @@ function SettingsScreenBody(props: SettingsScreenProps) {
  * The summary strip over an entry's tabs (#1475; ADR-0059 §4), for the entries that have one. Built
  * here rather than portalled up by the body, as the main action is, because each tile opens a tab —
  * and choosing a tab, through the leave guard, is the screen's.
+ *
+ * A module platform's page carries the platform's figures as a second row (#1960): under the tab
+ * tiles on Allegro, Delcampe and Colnect, alone on Facebook and Philasearch, which have no tab tiles.
+ * Settings → Platforms draws its own, for the platform selected in its list.
  */
 function entrySummary(
   entryKey: SettingsEntryKey,
@@ -349,40 +354,70 @@ function entrySummary(
   choosePart: (part: string, view?: Readonly<Record<string, string>>) => void,
   props: SettingsScreenProps
 ): React.ReactNode {
+  const figures = (module: string) => {
+    const platform = props.modulePlatforms[module];
+    return (
+      <PlatformFiguresRow
+        collectionId={props.collectionId}
+        collectionSlug={props.collectionSlug}
+        platformId={platform.id}
+        platformName={platform.name}
+      />
+    );
+  };
   switch (entryKey) {
     case "allegro":
       return (
-        <AllegroSummary
-          connection={props.allegroConnection}
-          profiles={props.allegroListingProfiles}
-          categories={props.allegroLearnedCategories}
-          platform={props.modulePlatforms[ALLEGRO_PLATFORM_MODULE]}
-          active={part}
-          onOpen={choosePart}
+        <PlatformSummary
+          tabs={
+            <AllegroSummary
+              connection={props.allegroConnection}
+              profiles={props.allegroListingProfiles}
+              categories={props.allegroLearnedCategories}
+              platform={props.modulePlatforms[ALLEGRO_PLATFORM_MODULE]}
+              active={part}
+              onOpen={choosePart}
+            />
+          }
+          figures={figures(ALLEGRO_PLATFORM_MODULE)}
         />
       );
     case "delcampe":
       return (
-        <DelcampeSummary
-          profiles={props.delcampeListingProfiles}
-          categories={props.delcampeLearnedCategories}
-          platform={props.modulePlatforms[DELCAMPE_PLATFORM_MODULE]}
-          active={part}
-          onOpen={choosePart}
+        <PlatformSummary
+          tabs={
+            <DelcampeSummary
+              profiles={props.delcampeListingProfiles}
+              categories={props.delcampeLearnedCategories}
+              platform={props.modulePlatforms[DELCAMPE_PLATFORM_MODULE]}
+              active={part}
+              onOpen={choosePart}
+            />
+          }
+          figures={figures(DELCAMPE_PLATFORM_MODULE)}
         />
       );
     case "colnect":
       return (
-        <ColnectSummary
-          catalogs={props.initialColnectMappings}
-          conditions={props.initialColnectConditionMappings}
-          attributes={props.initialAttributes}
-          lists={props.initialColnectListMappings}
-          platform={props.modulePlatforms[COLNECT_PLATFORM_MODULE]}
-          active={part}
-          onOpen={choosePart}
+        <PlatformSummary
+          tabs={
+            <ColnectSummary
+              catalogs={props.initialColnectMappings}
+              conditions={props.initialColnectConditionMappings}
+              attributes={props.initialAttributes}
+              lists={props.initialColnectListMappings}
+              platform={props.modulePlatforms[COLNECT_PLATFORM_MODULE]}
+              active={part}
+              onOpen={choosePart}
+            />
+          }
+          figures={figures(COLNECT_PLATFORM_MODULE)}
         />
       );
+    case "facebook":
+      return <PlatformSummary figures={figures(FACEBOOK_PLATFORM_MODULE)} />;
+    case "philasearch":
+      return <PlatformSummary figures={figures(PHILASEARCH_PLATFORM_MODULE)} />;
     default:
       return undefined;
   }
@@ -911,7 +946,13 @@ function SettingsEntryBody({
         />
       );
     case "platforms":
-      return <PlatformsPanel collectionId={collectionId} initialPlatforms={genericPlatforms} />;
+      return (
+        <PlatformsPanel
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          initialPlatforms={genericPlatforms}
+        />
+      );
     case "allegro":
       return (
         <AllegroSettingsBody

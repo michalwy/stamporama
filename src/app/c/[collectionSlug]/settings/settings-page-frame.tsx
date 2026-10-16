@@ -34,6 +34,19 @@ export function SettingsPageAction({ children }: { children: ReactNode }) {
   return slot ? createPortal(children, slot) : null;
 }
 
+/** Where a page body's own summary strip lands (#1960). */
+const SummarySlot = createContext<HTMLElement | null>(null);
+
+/**
+ * A summary strip drawn by the **body** rather than the screen (#1960): Settings → Platforms is one
+ * page for every generic platform, and its strip states the figures of the platform selected in its
+ * list — a selection only the body holds. It lands where the screen's strip would, under the header.
+ */
+export function SettingsPageSummary({ children }: { children: ReactNode }) {
+  const slot = useContext(SummarySlot);
+  return slot ? createPortal(<div style={{ marginBottom: "1.5rem" }}>{children}</div>, slot) : null;
+}
+
 interface SettingsPageFrameProps {
   group: SettingsGroup;
   title: string;
@@ -72,6 +85,7 @@ export function SettingsPageFrame({
 }: SettingsPageFrameProps) {
   const tint = group.tint ? `var(--color-tag-${group.tint})` : "var(--color-text-muted)";
   const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
+  const [summarySlot, setSummarySlot] = useState<HTMLDivElement | null>(null);
   return (
     <div style={unshaped ? { maxWidth: UNSHAPED_PAGE_WIDTH } : undefined}>
       <header
@@ -127,6 +141,7 @@ export function SettingsPageFrame({
       </header>
 
       {summary && <div style={{ marginBottom: "1.5rem" }}>{summary}</div>}
+      <div ref={setSummarySlot} />
 
       {tabs && (
         <div
@@ -166,7 +181,9 @@ export function SettingsPageFrame({
         </div>
       )}
 
-      <ActionSlot.Provider value={actionSlot}>{children}</ActionSlot.Provider>
+      <ActionSlot.Provider value={actionSlot}>
+        <SummarySlot.Provider value={summarySlot}>{children}</SummarySlot.Provider>
+      </ActionSlot.Provider>
     </div>
   );
 }

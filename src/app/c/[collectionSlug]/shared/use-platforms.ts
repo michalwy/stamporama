@@ -2,9 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { PlatformListItem } from "@/lib/platforms";
+import type { PlatformFigures } from "@/lib/platform-figures";
 
 export const platformKeys = {
   all: (collectionId: string) => ["platforms", collectionId] as const,
+  figures: (collectionId: string, platformId: string) =>
+    ["platforms", collectionId, "figures", platformId] as const,
 };
 
 /**
@@ -20,6 +23,18 @@ export function usePlatforms(collectionId: string) {
       if (!res.ok) throw new Error("Failed to fetch platforms");
       const data = await res.json();
       return data.items;
+    },
+  });
+}
+
+/** A platform's figures (#1960) — the summary strip's second row on its Settings page. */
+export function usePlatformFigures(collectionId: string, platformId: string) {
+  return useQuery<PlatformFigures>({
+    queryKey: platformKeys.figures(collectionId, platformId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/platforms/${platformId}/figures`);
+      if (!res.ok) throw new Error("Failed to fetch the platform's figures");
+      return res.json();
     },
   });
 }

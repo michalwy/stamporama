@@ -41,6 +41,10 @@ Four settings other platforms have are **not** on it, because on Facebook they a
 buy), what an auction opens at, when a quick buy wants refreshing, and the message to a buyer after a
 sale.
 
+Above the tabs a row of figures states how selling on Facebook goes — offers active, ready and
+sold, sales and revenue, sell-through, time to sale, and any purchases made through it — each
+opening the list it counts; see [The platform in figures](platforms.md#the-platform-in-figures).
+
 It does **not** switch the [Assistant](assistant.md) on, and none of the Colnect checks is asked of
 its offers.
 

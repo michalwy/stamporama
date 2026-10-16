@@ -9,7 +9,8 @@ are built by the pages' own issues — #1471 (list beside detail), #1474 (list b
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
 dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album, Collage and Ref card templates (#1474, #1477, #1478), and the grid of fields
 carries the plain forms (#1473); what each settled is in §5. The summary strip is built and carries
-the Allegro page (#1475), the Delcampe page (#1479) and the Colnect page (#1480), §4.
+the Allegro page (#1475), the Delcampe page (#1479) and the Colnect page (#1480), §4. *Amended by
+#1960 (2026-10-16):* a platform's page carries a second row in its strip, the platform's figures.
 
 ## Context
 
@@ -88,6 +89,24 @@ dictionaries, and deliberately: a condition's grade, a value's Colnect word and 
 settings are each one answer to a fixed row with nothing to add, delete or name, so a pane with its
 own Save would add a step and hold nothing a row does not show. They are capped in width so a name
 and its answer are not read across the window.
+
+*Amended by #1960 (2026-10-16), settled with the collector:* **a platform's page carries the
+platform's figures as a second row of its strip**, under the tab tiles — Allegro, Delcampe and
+Colnect — or alone where the page has none — Facebook, Philasearch, and Settings → Platforms. They
+are the figures the contact page's Platform section carried (#1710), which left with the platform
+contacts (ADR-0071): offers active, ready and sold, sales, revenue, sell-through, time to sale,
+purchases and spent, over **all time** (Settings is no report, so there is no period switch), active
+and ready being where the offers stand today. The strip is therefore no longer only *one tile per
+tab*: the first row still is, and its tiles choose a tab; the second row's tiles **leave Settings
+for the list each figure counts**, narrowed to the platform, so it is a row of its own rather than
+more tiles among the tabs'. Nine figures are more than a tab row holds, so that row takes two lines
+on a window too narrow for one rather than cutting every figure short. The money follows the
+contact page's rules unchanged. Settings → Platforms is one page for every generic platform, so its
+strip is the **selected** platform's, drawn by the body into the frame (`SettingsPageSummary`), and
+a platform being added has none. The figures are read when the page is shown, not by the Settings
+loader, so no other page pays for counting them.
+*Rejected:* the figures as more tiles in the tab row (up to thirteen side by side); for the generic
+platforms, a row inside the detail pane above the fields.
 
 *Rejected:* a shared header only, and each page designed on its own.
 

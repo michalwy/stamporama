@@ -31,6 +31,10 @@ tab. The connection's figure turns amber, with a warning sign, when it needs you
 yet**, or **Needs reconnecting** once Allegro has stopped accepting the stored grant. The tab says
 the same words.
 
+Under it a second row states how selling and buying on Allegro goes — offers active, ready and
+sold, sales and revenue, sell-through, time to sale, purchases and what was spent — each opening the
+list it counts; see [The platform in figures](platforms.md#the-platform-in-figures).
+
 Explanations sit behind the ⓘ beside a field or a heading rather than on the page; this guide has
 the rest.
 

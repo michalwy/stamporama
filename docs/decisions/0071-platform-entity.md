@@ -104,7 +104,8 @@ an added optional key is not a new version.
 ## Consequences
 
 - The contact form, the contacts list and the contact page show nothing of a platform; the contact
-  page's Platform section is gone until #1960 puts its figures on the platform's own page.
+  page's Platform section went, and #1960 put its figures on the platform's own page, as the second
+  row of its summary strip (ADR-0059 §4).
 - Each module page gained a **Platform** tab carrying the whole set of a platform's settings; #1956,
   #1957, #1958 and #1959 trim each to what its platform uses.
 - A new collection is created with its five module platforms; a collection that somehow lacks one
