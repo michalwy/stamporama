@@ -4,7 +4,7 @@ import { forwardRef, useState, useTransition } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { PrepareOffer } from "@/lib/offers";
 import { isAuctionListing, pricingReadyFor } from "@/lib/offer-rules";
-import { isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import {
@@ -22,6 +22,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { languageLabel } from "@/lib/languages";
 import { OfferPriceStrip } from "../[offerId]/offer-price-table";
+import { OfferCoverWalk } from "../[offerId]/offer-cover-walk";
 import { NotMarkedReadyChip, ReadyWhenPhotosDoneChip } from "../offer-badges";
 import { PrepareOfferCopies } from "./prepare-offer-copies";
 
@@ -41,6 +42,13 @@ const ROW_LINK: React.CSSProperties = {
   font: "inherit",
   fontWeight: 600,
   cursor: "pointer",
+};
+
+/** *Check covers (N)* among the row's blockers (#1942): a blocker the row itself clears. */
+const COVERS_LINK: React.CSSProperties = {
+  ...ROW_LINK,
+  color: "var(--color-warning)",
+  textDecoration: "underline",
 };
 
 /** The row's price field: small, as an editor inside a list row is (`control-style.ts`). */
@@ -73,6 +81,9 @@ function statedPrice(offer: PrepareOffer): string {
  * it is missing, each enterable from the row as #1733's links are elsewhere); the **conditions** of
  * its copies, with counts; and the **copies themselves**, opened beneath the row as full copy rows.
  *
+ * Photos still to be checked for symbols are not just named but cleared from the row (#1942): *Check
+ * covers (N)* opens the offer's own cover walk in place, and the row is read again when it closes.
+ *
  * The price is a standing field rather than `InlineText`'s click-to-edit, because pricing a batch is
  * typing one figure after another down the list: **Enter** leaves the field, which saves it, and puts
  * the caret in the next row's (`onEnter`). A figure is saved when the field is left, by Enter, Tab or a
@@ -92,8 +103,8 @@ export const PrepareOfferRow = forwardRef<
     onEnter: () => void;
     /** A price was saved — the row's new stated figure, or null once cleared. */
     onSaved: (field: "price" | "startingPrice", value: string | null) => void;
-    /** Something other than the price changed — the title, or a translation behind it — so the row
-     *  is read again: the title's length is part of the ready gate (#636). */
+    /** Something other than the price changed — the title, a translation behind it, or the covers —
+     *  so the row is read again: each is part of the ready gate (#636, #1665). */
     onChanged: () => void;
   }
 >(function PrepareOfferRow(
@@ -116,6 +127,7 @@ export const PrepareOfferRow = forwardRef<
   const [copiesOpen, setCopiesOpen] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [titlePending, startTitle] = useTransition();
+  const [checkingCovers, setCheckingCovers] = useState(false);
 
   function save(raw: string) {
     const value = raw.trim();
@@ -162,9 +174,11 @@ export const PrepareOfferRow = forwardRef<
   const ownAmount = draft.trim() !== "" && Number.isFinite(typed) && typed > 0 ? typed.toFixed(2) : null;
 
   // What still stands between the offer and Ready. The photo half is not among them: *Mark ready*
-  // generates the photos itself and waits for them (#1893), so it is said as a note instead.
+  // generates the photos itself and waits for them (#1893), so it is said as a note instead. Nor are
+  // the unchecked covers, which the row offers to check instead (#1942).
   const priced = pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice);
-  const blockers = offer.readyBlockers.filter((b) => !isPhotoReadinessBlocker(b));
+  const coverBlocker = offer.readyBlockers.find(isCoverReadinessBlocker) ?? null;
+  const blockers = offer.readyBlockers.filter((b) => !isPhotoReadinessBlocker(b) && !isCoverReadinessBlocker(b));
   const photosToGenerate = offer.readyBlockers.some(isPhotoReadinessBlocker);
 
   const shown = offer.pictures.slice(0, STRIP_PICTURES);
@@ -368,6 +382,13 @@ export const PrepareOfferRow = forwardRef<
                   {auction ? "No starting price yet" : "No price yet"}
                 </span>
               )}
+              {coverBlocker && (
+                <Tooltip content={`${coverBlocker.title}. Go through them here — cover what must not show, or mark nothing to cover.`}>
+                  <button type="button" onClick={() => setCheckingCovers(true)} style={COVERS_LINK}>
+                    Check covers ({coverBlocker.count})
+                  </button>
+                </Tooltip>
+              )}
               {blockers.map((blocker, i) => (
                 <Tooltip key={`${blocker.code}-${i}`} content={blocker.message}>
                   <span style={{ color: "var(--color-warning)", fontWeight: 500 }}>
@@ -381,7 +402,7 @@ export const PrepareOfferRow = forwardRef<
                   <span style={{ color: "var(--color-text-muted)" }}>Photos generated on Mark ready</span>
                 </Tooltip>
               )}
-              {priced && blockers.length === 0 && !offer.readyAfterPhotos && (
+              {priced && blockers.length === 0 && !coverBlocker && !offer.readyAfterPhotos && (
                 <span style={{ color: "var(--color-success)", fontWeight: 500 }}>Can be marked ready</span>
               )}
             </div>
@@ -435,6 +456,18 @@ export const PrepareOfferRow = forwardRef<
           baseCurrency={offer.baseCurrency}
           offerId={offer.id}
           itemIds={offer.itemIds}
+        />
+      )}
+
+      {/* Outside the clickable row, as the lightbox is: a click inside the walk is not a click on the
+          row. */}
+      {checkingCovers && (
+        <OfferCoverWalk
+          collectionId={collectionId}
+          offerId={offer.id}
+          mode="unchecked"
+          onClose={() => setCheckingCovers(false)}
+          onChanged={onChanged}
         />
       )}
 
