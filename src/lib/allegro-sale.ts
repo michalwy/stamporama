@@ -420,8 +420,8 @@ export async function recordAllegroOrderSale(
   if (existing) {
     // Adding to the sale that already claims this order. Its header is the collector's own record
     // and is left exactly as it stands — this is the remainder of an order, not a correction of a
-    // sale.
-    await addSaleLines(ownerId, existing.id, lines);
+    // sale. Named by its order number, so a sale already sent takes the remainder too (#1950).
+    await addSaleLines(ownerId, existing.id, lines, { toSentSale: true });
     return { saleId: existing.id, saleNo: existing.saleNo, created: false, linesError: null };
   }
 

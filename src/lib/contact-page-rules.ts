@@ -122,8 +122,8 @@ export const NOT_DELIVERED_PURCHASE_STATUSES: readonly PurchaseStatus[] = PURCHA
 /** A sale not yet paid: still *Ordered*. */
 export const UNPAID_SALE_STATUSES: readonly SaleStatus[] = ["ordered"];
 
-/** A sale not yet sent: everything before *Sent*. */
-export const UNSENT_SALE_STATUSES: readonly SaleStatus[] = ["ordered", "paid", "packed"];
+/** A sale not yet sent: everything before *Sent*. One list with the *Sell* dialog's (#1950). */
+export { UNSENT_SALE_STATUSES } from "./sale-status";
 
 // ── Auctions (#1709) ────────────────────────────────────────────────────────
 

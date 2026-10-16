@@ -73,6 +73,8 @@ export type SaleBlockReason =
   | "bad-offer"
   | "bad-set"
   | "already-sold"
+  /** Adding sold sets to a sale already *Sent* or *Delivered* without saying so (#1950). */
+  | "sale-sent"
   /** Choosing which set left (#697) on a line whose offer is gone — there is nothing to choose
    *  among. */
   | "no-offer";
@@ -92,7 +94,7 @@ export class SaleActionBlockedError extends Error {
 // The token set / order / validator live in the pure `./sale-status` module (no `server-only`), so
 // client UI can share them; re-exported here for existing server-side importers.
 export { SALE_STATUS_ORDER, isSaleStatus, type SaleStatus } from "./sale-status";
-import { isSaleStatus, type SaleStatus } from "./sale-status";
+import { isSaleSent, isSaleStatus, type SaleStatus } from "./sale-status";
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
@@ -580,6 +582,7 @@ interface SaleRef {
   platformId: string;
   currency: string;
   baseCurrency: string;
+  status: string;
 }
 
 /** Verify a sale exists and is owned by `ownerId`; returns the fields the line/shared mutations
@@ -591,6 +594,7 @@ async function assertSaleOwner(ownerId: string, saleId: string): Promise<SaleRef
       collectionId: true,
       platformId: true,
       currency: true,
+      status: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
     },
   });
@@ -602,6 +606,7 @@ async function assertSaleOwner(ownerId: string, saleId: string): Promise<SaleRef
     platformId: sale.platformId,
     currency: sale.currency,
     baseCurrency: sale.collection.baseCurrency,
+    status: sale.status,
   };
 }
 
@@ -915,15 +920,28 @@ export function resolveBuyerHandling(
  * Whole-set integrity: a draft's `itemIds` must be exactly the full current copy set of its set
  * (`offerSetId`), which must belong to the draft's offer. The DB-level unique on
  * `sale_line_item.itemId` backstops the no-double-sale rule.
+ *
+ * A sale already *Sent* or *Delivered* takes more sets only when the caller says so with
+ * `toSentSale` (#1950): its parcel has gone, so a set added to it is a correction, never the
+ * ordinary sale the *Sell* dialog records. The surfaces that name the sale themselves — its own
+ * screen, an Allegro order's remainder found by its order number — pass it; the *Sell* dialog passes
+ * it only behind *Show sent sales too*.
  */
 export async function addSaleLines(
   ownerId: string,
   saleId: string,
-  drafts: SaleLineDraft[]
+  drafts: SaleLineDraft[],
+  opts: { toSentSale?: boolean } = {}
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
   if (drafts.length === 0) {
     throw new SaleActionBlockedError("empty", "Choose at least one set to add.");
+  }
+  if (isSaleSent(ref.status) && !opts.toSentSale) {
+    throw new SaleActionBlockedError(
+      "sale-sent",
+      "This sale has already been sent. Add to an open sale or start a new one."
+    );
   }
 
   const offerIds = [...new Set(drafts.map((d) => d.offerId))];

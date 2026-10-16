@@ -13,6 +13,8 @@ import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useInvalidateOffers } from "./use-offers-query";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
+import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
+import { UNSENT_SALE_STATUSES } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 
 const MUTED = "var(--color-text-muted)";
@@ -78,6 +80,11 @@ export interface SellOfferFlowDialogProps {
  * A Facebook offer is sold here too, auctions and quick buys alike (#1777): the new sale's buyer is
  * named by their Facebook profile, found or created as `facebook-sales.ts` says, and the sale is in
  * the offer's own currency, which a group may set apart from the platform's.
+ *
+ * Only sales **still open** are offered to add to (#1950) — *Ordered*, *Paid* or *Packed*, newest
+ * first. A sale already sent is never what the collector means, and the old ones buried the open
+ * ones; *Show sent sales too* brings them back for the rare correction, and is also what tells the
+ * server a sent sale is meant (`toSentSale`), so nothing adds to one by accident.
  */
 export function SellOfferFlowDialog({
   collectionId,
@@ -92,6 +99,7 @@ export function SellOfferFlowDialog({
   const [step, setStep] = useState<"pick" | "newSaleHeader">("pick");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
+  const [showSent, setShowSent] = useState(false);
   const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { invalidateAll: invalidateOffers } = useInvalidateOffers();
 
@@ -102,6 +110,8 @@ export function SellOfferFlowDialog({
   );
   const { data: salesPages, isLoading: loadingSales } = useSalesInfinite(collectionId, {
     platformId: offer.platformId,
+    // The list's own order is newest first; with the switch off it holds only unsent sales.
+    statuses: showSent ? undefined : [...UNSENT_SALE_STATUSES],
   });
   const existingSales = useMemo(
     () => (salesPages?.pages.flatMap((p) => p.items) ?? []).filter((s) => s.currency === offer.currency),
@@ -126,7 +136,9 @@ export function SellOfferFlowDialog({
   );
 
   function addLinesTo(saleId: string): Promise<{ status: "success" } | { status: "error"; message: string }> {
-    return import("@/app/actions/sales").then(({ addSaleLinesAction }) => addSaleLinesAction(saleId, lines));
+    return import("@/app/actions/sales").then(({ addSaleLinesAction }) =>
+      addSaleLinesAction(saleId, lines, { toSentSale: showSent })
+    );
   }
 
   function sellToExisting(saleId: string) {
@@ -197,7 +209,7 @@ export function SellOfferFlowDialog({
         <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
           Record a sale for{" "}
           <strong>{set ? set.label : (offer.name ?? offer.label)}</strong>
-          {set && <> from <strong>{offer.name ?? offer.label}</strong></>} — add it to an existing
+          {set && <> from <strong>{offer.name ?? offer.label}</strong></>} — add it to an open
           sale on {offer.platformName}, or start a new one.
         </p>
 
@@ -209,31 +221,58 @@ export function SellOfferFlowDialog({
           </p>
         ) : (
           <>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                margin: "0 0 0.5rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showSent}
+                disabled={isPending}
+                onChange={(e) => setShowSent(e.target.checked)}
+              />
+              Show sent sales too
+            </label>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {loadingSales ? (
                 <p style={{ fontSize: "0.8125rem", color: MUTED, margin: 0 }}>Loading sales…</p>
               ) : existingSales.length === 0 ? (
                 <p style={{ fontSize: "0.8125rem", color: MUTED, margin: 0 }}>
-                  No existing sale on {offer.platformName} in {offer.currency} yet.
+                  {showSent
+                    ? `No existing sale on ${offer.platformName} in ${offer.currency} yet.`
+                    : `No open sale on ${offer.platformName} in ${offer.currency}.`}
                 </p>
               ) : (
-                existingSales.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => sellToExisting(s.id)}
-                    style={{ ...ROW_STYLE, opacity: isPending ? 0.6 : 1 }}
-                  >
-                    <span>
-                      {s.buyerName ?? "Unknown buyer"}
-                      {s.externalRef ? ` · ${s.externalRef}` : ""}
-                    </span>
-                    <span style={{ fontSize: "0.75rem", color: MUTED, fontVariantNumeric: "tabular-nums" }}>
-                      {new Date(s.soldAt).toLocaleDateString()}
-                    </span>
-                  </button>
-                ))
+                existingSales.map((s) => {
+                  const status = saleStatusMeta(s.status);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => sellToExisting(s.id)}
+                      style={{ ...ROW_STYLE, opacity: isPending ? 0.6 : 1 }}
+                    >
+                      <span>
+                        {s.buyerName ?? "Unknown buyer"}
+                        {s.externalRef ? ` · ${s.externalRef}` : ""}
+                      </span>
+                      <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontSize: "0.75rem", color: MUTED, fontVariantNumeric: "tabular-nums" }}>
+                          {new Date(s.soldAt).toLocaleDateString()}
+                        </span>
+                        <span style={saleStatusChipStyle(status.token)}>{status.label}</span>
+                      </span>
+                    </button>
+                  );
+                })
               )}
             </div>
 

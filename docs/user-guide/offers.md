@@ -2475,7 +2475,11 @@ set — and the **same action sits in the ⋮ menu on the offer's own detail scr
 recorded from wherever you happen to be looking at the offer — a shortcut into recording a [sale](sales.md) without opening the offer's compose screen
 first. Choose where the sold sets go:
 
-- **an existing sale** already recorded on this offer's platform (in the same currency), or
+- **an open sale** already recorded on this offer's platform (in the same currency) — one still
+  *Ordered*, *Paid* or *Packed*. Each row shows the buyer, the date and the sale's status, newest
+  first. A sale already *Sent* or *Delivered* is not offered, since its parcel has gone; tick **Show
+  sent sales too** for the rare correction that belongs on one. Without that tick a sent sale refuses
+  the sets, or
 - **a new sale** — the header form opens pre-filled with the offer's platform (locked, since a
   sale is single-platform); fill in the buyer and date and continue.
 
@@ -2493,7 +2497,7 @@ link first; the sale is in the offer's own currency. See
 An offer holding several sets — a [quantity](#sets--what-an-offer-is-made-of) of the same stamp, or
 a mixed listing — is often sold a piece at a time. Each set's own **⋮** menu on the offer's detail
 screen therefore carries **Sell this set**, which opens the same dialog scoped to that one set: pick
-an existing sale on the platform or start a new one, and only that set is added, at the offer's
+an open sale on the platform or start a new one, and only that set is added, at the offer's
 current asking price. Everything else in the offer stays exactly as it was and remains for sale.
 
 The offer-level **Sell** is unchanged — it still takes *every* set the offer has left, in one go.
