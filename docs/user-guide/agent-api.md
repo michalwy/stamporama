@@ -114,7 +114,7 @@ app shows on the stamp's row (`#901`), and wherever it has to name a stamp you c
 number as `st 901` — the same thing you would type in **Jump to…** — instead of a catalog number.
 The `st` is needed: a bare `901` is read as a catalog number, because that is what it usually is.
 
-**A read-and-write token can change things, and there are ten places where that is now true.**
+**A read-and-write token can change things, and there are eleven places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -163,6 +163,27 @@ mark an order in transit or arrived, or delete a purchase, and it will not remov
 holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
 changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
+
+On **sales**, it can record what sold — say, after going through your offers on Facebook and
+finding which went and to whom. It can:
+
+- **find a sale** by marketplace, buyer, status, date or its number (*s12*), or only the ones still
+  waiting for your review, and read one with its sold sets, their prices and what the sale brought
+  in. A **read only** token can do this much, and it is how the assistant checks a sale is not
+  already recorded before recording it again;
+- **find the buyer, or add them to your Contacts.** On Facebook it goes by the buyer's profile link
+  first and their name second, exactly as **Sell** does, and it keeps the link on the contact. A name
+  you already have under a different profile is refused as somebody else, and a name close to
+  somebody you know must be confirmed as a different person before a new contact is made;
+- **sell an offer** — every set it still has — **or one set of it**, at the price the assistant
+  read (the winning bid, the price paid), into the buyer's sale you already have open or a new one on
+  the day it sold. It is refused wherever **Sell** would refuse, and it never adds to a sale that has
+  already been sent.
+
+Every sale it records or adds to is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+until you confirm it. **It cannot delete a sale or move one along** — no *Paid*, *Packed* or *Sent*,
+no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
+does not record a running auction's current bid either: the price it sells at is the one it read.
 
 On **shipping and packing**, it can set up the data you would otherwise type in yourself under
 [Settings → Carriers](collections.md#carriers), on a platform's shipping options and under

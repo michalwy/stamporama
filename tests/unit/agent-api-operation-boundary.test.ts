@@ -921,3 +921,87 @@ describe("the agent API's operation modules (#1910)", () => {
     }
   });
 });
+
+/**
+ * **The sale writes the agent may make, and the one module that may make them** (#1949). The
+ * collector opened recording a sale — *Sell* and *Sell set*, into a sale already there or a new one —
+ * and finding or adding its buyer, and kept everything else about a sale in the app: **no deleting,
+ * and no moving a sale through payment and shipping.** So the map is of what is allowed, as
+ * {@link AUCTION_API_WRITES} is: each writer is imported by `operations/sales.ts` and by nothing
+ * else, the sale writer sets the *to review* marker (#1948) in its own transaction, and every other
+ * writer of `sales.ts` — read off its exports by verb, so one added later has to be placed — and of
+ * the buyer's share link stays out of every operation module.
+ */
+const SALE_API_WRITES = new Map<string, string>([
+  ["recordSaleLinesThroughApi", "src/lib/sales.ts"],
+  ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
+]);
+
+const SALE_SHARE_WRITES = ["createSaleShareToken", "setSaleShareOptions", "revokeSaleShareToken"];
+
+describe("the agent API's operation modules (#1949)", () => {
+  const salesModule = path.join(AGENT_API, "operations/sales.ts");
+  const domain = readFileSync(path.join(ROOT, "src/lib/sales.ts"), "utf8");
+  const salesWriters = [
+    ...domain.matchAll(
+      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle)[A-Za-z]*)\(/g
+    ),
+  ].map((match) => match[1]);
+
+  it("reach the sale writes from their own module and nowhere else", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      if (file === salesModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (SALE_API_WRITES.has(name)) misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(misplaced, [], `The sale writes belong to operations/sales.ts (#1949).\n  ${misplaced.join("\n  ")}`);
+    // The control: the walk sees that module import every one of them.
+    const names = importedBindings(salesModule).map((binding) => binding.name);
+    for (const name of SALE_API_WRITES.keys()) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/sales.ts`);
+    }
+  });
+
+  it("record a sale only with the to-review marker, in the write's own transaction", () => {
+    const body = exportedFunctionBody(domain, "recordSaleLinesThroughApi");
+    const marks = [...body.matchAll(/markSaleWrittenByApi\(tx,/g)].length;
+    // Both branches — adding to a sale already there, and starting one — mark it.
+    assert.equal(marks, 2, "`recordSaleLinesThroughApi` writes a sale without the to-review marker (#1948)");
+  });
+
+  it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
+    assert.ok(salesWriters.length >= 10, `found only ${salesWriters.length} writers in sales.ts`);
+    assert.ok(salesWriters.includes("deleteSale") && salesWriters.includes("setSaleStatus"));
+    const closed = new Set([
+      ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
+      ...SALE_SHARE_WRITES,
+    ]);
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (closed.has(name)) breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `Deleting a sale and moving it through payment and shipping stay in the app (#1949).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("names only real exports", () => {
+    for (const [name, module] of SALE_API_WRITES) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+    const share = readFileSync(path.join(ROOT, "src/lib/sale-share.ts"), "utf8");
+    for (const name of SALE_SHARE_WRITES) {
+      assert.match(share, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of sale-share.ts any more`);
+    }
+  });
+});

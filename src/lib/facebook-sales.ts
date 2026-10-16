@@ -81,11 +81,8 @@ export async function lookupFacebookBuyer(
 }
 
 /**
- * The buyer of a sale on the Facebook platform, by their profile: an existing contact takes the buyer
- * role and, where it has none, the profile link; otherwise a buyer is created with both. Nothing
- * typed is no buyer, as on any sale. Refuses a platform that is not Facebook's, a link that is not a
- * profile, a name held by somebody with a different link, and a link alone that matches nobody — a
- * contact needs a name. The caller has checked the collection is the collector's.
+ * The buyer of a sale on the Facebook platform, by their profile: {@link findOrCreateBuyer}, refusing
+ * a platform that is not Facebook's. The caller has checked the collection is the collector's.
  */
 export async function resolveFacebookBuyer(
   collectionId: string,
@@ -99,10 +96,37 @@ export async function resolveFacebookBuyer(
   if (platform?.platformModule !== FACEBOOK_PLATFORM_MODULE) {
     return { ok: false, message: "A buyer is found by their Facebook profile only on the Facebook platform." };
   }
+  const resolved = await findOrCreateBuyer(collectionId, input);
+  return resolved.ok ? { ok: true, buyerId: resolved.buyerId } : resolved;
+}
+
+/** Who {@link findOrCreateBuyer} settled on. */
+export interface BuyerResolved {
+  ok: true;
+  /** The buyer contact, or null when nothing was typed — no buyer, as on any sale. */
+  buyerId: string | null;
+  /** A contact was created for them, rather than found. */
+  created: boolean;
+  /** How an existing contact was found; null when one was created, or nobody named. */
+  matchedBy: "profile" | "name" | null;
+}
+
+/**
+ * A buyer found by their profile link first and their name second, or created: an existing contact
+ * takes the buyer role and, where it has none, the profile link; otherwise a buyer is created with
+ * both. Nothing typed is no buyer. Refuses a link that is not a profile, a name held by somebody with
+ * a different link, and a link alone that matches nobody — a contact needs a name. *Sell*'s rule on
+ * Facebook (#1777), and the agent API's `find_or_create_buyer` (#1949), which reaches it with or
+ * without a link. The caller has checked the collection is the collector's.
+ */
+export async function findOrCreateBuyer(
+  collectionId: string,
+  input: { name: string; profileUrl: string }
+): Promise<BuyerResolved | { ok: false; message: string }> {
   const name = input.name.trim();
   const profile = normalizeFacebookProfileUrl(input.profileUrl);
   if (!profile.ok) return profile;
-  if (!name && !profile.value) return { ok: true, buyerId: null };
+  if (!name && !profile.value) return { ok: true, buyerId: null, created: false, matchedBy: null };
 
   const { contact, conflict } = await findFacebookBuyer(collectionId, name, profile.value);
   if (conflict) return { ok: false, message: conflict };
@@ -114,14 +138,14 @@ export async function resolveFacebookBuyer(
         ...(profile.value && !contact.facebookProfileUrl ? { facebookProfileUrl: profile.value } : {}),
       },
     });
-    return { ok: true, buyerId: contact.id };
+    return { ok: true, buyerId: contact.id, created: false, matchedBy: contact.matchedBy };
   }
   if (!name) return { ok: false, message: "Nobody has that profile yet — name the buyer as their profile shows it." };
   const created = await prisma.contact.create({
     data: { collectionId, name, buyer: true, facebookProfileUrl: profile.value },
     select: { id: true },
   });
-  return { ok: true, buyerId: created.id };
+  return { ok: true, buyerId: created.id, created: true, matchedBy: null };
 }
 
 /**
