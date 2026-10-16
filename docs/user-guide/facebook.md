@@ -17,10 +17,29 @@ sale — or that nobody bid. On a quick buy you record who bought it and for how
 
 ## The Facebook platform
 
-Every collection has one **Facebook** [platform](platforms.md), and its settings — currency, listing
-templates, photo limits and the rest — are on the **Platform** tab of **Settings → Facebook**, beside
-the **Groups** tab this guide is mostly about. It starts **switched off**: tick **Switched on** there
-when you start selling on Facebook, so the offer and sale forms offer it.
+Every collection has one **Facebook** [platform](platforms.md), and its settings are on the
+**Platform** tab of **Settings → Facebook**, beside the **Groups** tab this guide is mostly about. It
+starts **switched off**: tick **Switched on** there when you start selling on Facebook, so the offer
+and sale forms offer it.
+
+The Platform tab holds only what selling on Facebook uses:
+
+- **Platform** — **Switched on**, the **Market** results on Facebook count in, and your **Notes**.
+- **Offers and sales** — the **Currency** every Facebook offer and sale is in (unless its group has
+  one of its own), the **Listing language**, the **Minimum price** the *min* button beside an
+  offer's price applies, and the **Shipping options** a Facebook sale picks from.
+- **Listing texts** — the **Listing templates** that write each offer's title, description, private
+  note and photo tile labels (a post puts the title and the description in through `{title}` and
+  `{description}`), the description's format, and the **Listing text limits** an offer's texts are
+  counted against.
+- **Photos** — the photo limits, **covering symbols** on offer photos (on from the start, since
+  Facebook's rules are why covering exists), the sides to photograph, the collage template, single
+  photos while the limit allows and grouping series on their own photos.
+
+Four settings other platforms have are **not** on it, because on Facebook they are
+[Facebook defaults](#facebook-defaults) your groups follow: how a new offer starts (auction or quick
+buy), what an auction opens at, when a quick buy wants refreshing, and the message to a buyer after a
+sale.
 
 It does **not** switch the [Assistant](assistant.md) on, and none of the Colnect checks is asked of
 its offers.
@@ -52,7 +71,7 @@ What applies to auctions and quick buys alike:
 - **A new offer starts as** — **Auction** or **Quick buy**. Each offer can still be changed on its
   own form. Until you change it, this is **Auction**, which is what every Facebook offer was before
   quick buys.
-- **Currency** — shown, not set here: it is the platform's own currency, set on its contact.
+- **Currency** — shown, not set here: it is the platform's own currency, set on the Platform tab.
 - **A post may mix auctions and quick buys** — off, the lots of one [post](#a-post-with-several-lots)
   are all auctions or all quick buys; on, one post may hold both.
 - **Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's

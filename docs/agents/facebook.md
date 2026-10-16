@@ -96,6 +96,22 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   in **neither** rule table of `platform-modules.ts`: no listing half, no capture, no close, so it
   inherits nobody's rules by existing (`tests/unit/platform-modules.test.ts` pins that).
 
+- **The Platform tab offers only what Facebook uses** (#1958, the list confirmed by the collector on
+  2026-10-16 and kept in the issue's body under *What the Facebook page keeps*). The rule was #1944's:
+  a setting is dropped only where nothing about selling on Facebook reads it, so the trim changes no
+  output. A Facebook offer is an ordinary offer with a kit beside it — its generated title,
+  description and private note, the counters against the text limits, the photo plan and covers, the
+  *min* button and a sale's shipping options all read the platform as they do anywhere — so the
+  measure left exactly the four #1661/#1671 had already moved to `FacebookDefaults` and the groups:
+  `defaultListingType`, `defaultStartingPrice`, `refreshQuickBuysAfterDays`, `buyerMessageTemplate`.
+  `PlatformFields` leaves them out when `platformModule` is Facebook and puts one `FieldNote` in their
+  place naming where they went. Saving the tab clears whatever was still stored in them
+  (`parsePlatformFields` reads an absent field as blank), which is harmless: nothing reads them for
+  Facebook — `readRefreshThresholds` and `sale-buyer-message.ts` skip the platform's columns there,
+  and the offer form's seed from the platform's `defaultListingType` is overwritten by the group,
+  which `resolveFacebookOffer` requires. Before dropping another, find its readers: a setting that
+  looks foreign to Facebook (the private note, the text limits) is still read on a Facebook offer.
+
 - **A group's settings follow the platform's unless set custom** (#1661, amending ADR-0061 §6). The
   platform's own are a `FacebookDefaults` row keyed by the platform (`readFacebookDefaults`,
   no row = `FACEBOOK_BLANK_SETTINGS`), with the group's columns bar the currency — that is
