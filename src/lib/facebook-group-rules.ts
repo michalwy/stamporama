@@ -109,8 +109,9 @@ export function toFacebookMultiLotLayout(value: string | null | undefined): Face
 /**
  * The post's own number (#1854) — `1` for *Post #1* (#1842), bare as `{offer}` is, so the template
  * writes any prefix. Offered only where a post always has one: a captioned post's text and its
- * captions. An offer posted alone has no post number (ADR-0061 §2), so the post templates do not
- * offer it, and nothing would stand in for it there (#1692).
+ * captions. An offer posted alone has no post number until it is published, when its post of one lot
+ * gets one (#1989) — so the post templates, which write it before and after, do not offer it, and
+ * nothing would stand in for it there (#1692).
  */
 export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
   token: "{post}",
@@ -120,8 +121,9 @@ export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
 
 /**
  * The post's title (#1862), as the collector gave it — offered where `{post}` is and for the same
- * reason: an offer posted alone has no post, so no title either. A post made before titles has none
- * until it is given one; the kit then names the gap rather than filling it (#1692).
+ * reason: an offer posted alone has no post until it is published, so no title either. A post made
+ * before titles has none until it is given one; the kit then names the gap rather than filling it
+ * (#1692).
  */
 export const FACEBOOK_POST_TITLE_PLACEHOLDER: FacebookPostPlaceholder = {
   token: "{postTitle}",

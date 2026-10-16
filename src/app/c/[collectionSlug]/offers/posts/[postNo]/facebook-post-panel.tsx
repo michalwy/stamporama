@@ -43,9 +43,10 @@ import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 
-// A multi-lot Facebook post's own screen (#1842): the one place every offer in the post is seen with
-// its state, and the post is managed as one. Until it existed the post was seen from any lot's
-// Facebook card, which repeated the whole post on every lot.
+// A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
+// and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
+// which repeated the whole post on every lot. A post of one lot — an offer posted alone, once it is
+// published (#1989) — is this screen with one row, its text written as a single post's.
 //
 // - **The post's title** (#1862), in its heading beside its number, edited in place — what tells the
 //   post apart from the others running at once. A post made before titles is named by number until it
@@ -212,10 +213,12 @@ export function FacebookPostPanel({
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
   if (isError || !screen) {
-    // A post left with one lot is dissolved, and its address goes with it.
+    // A post not yet up left with one lot is dissolved, one left with none removed, and its address goes
+    // with it.
     return (
       <p style={MUTED}>
-        This post no longer exists — a post left with one lot is dissolved, and that offer is posted alone.{" "}
+        This post no longer exists — a post not yet up that is left with one lot is dissolved, and that offer
+        is in no post again.{" "}
         <Link href={`/c/${collectionSlug}/offers`} style={LINK}>
           Back to offers
         </Link>
@@ -264,7 +267,9 @@ export function FacebookPostPanel({
         ? `Post #${postNo} approved — all its lots are up`
         : target === "pending"
           ? `Post #${postNo} submitted — waiting for the group's approval`
-          : `Post #${postNo} is up — all ${lots.length} lots active`
+          : lots.length > 1
+            ? `Post #${postNo} is up — all ${lots.length} lots active`
+            : `Post #${postNo} is up`
     );
   }
 
@@ -333,17 +338,20 @@ export function FacebookPostPanel({
   }
 
   function takeOut(lot: FacebookKitLot) {
-    // Taking out one of two lots dissolves the post (ADR-0061 §2): the screen has nothing left to show,
-    // so it goes to the offer that is now posted alone.
-    const remaining = lots.length === 2 ? lots.find((l) => l.offerId !== lot.offerId) : undefined;
+    // Taking out one of two lots dissolves the post (ADR-0061 §2), and taking out the only one removes
+    // it (#1989): the screen has nothing left to show, so it goes to the offer, now in no post.
+    const remaining =
+      lots.length === 2 ? lots.find((l) => l.offerId !== lot.offerId) : lots.length === 1 ? lot : undefined;
     run(
       async () => {
         const { removeFacebookLotAction } = await import("@/app/actions/facebook");
         return removeFacebookLotAction(lot.offerId);
       },
-      remaining
-        ? `Offer #${lot.offerNo} taken out — post #${postNo} is dissolved and offer #${remaining.offerNo} is posted alone`
-        : `Offer #${lot.offerNo} taken out of post #${postNo}`,
+      remaining === lot
+        ? `Offer #${lot.offerNo} taken out — post #${postNo} is removed and the offer is in no post`
+        : remaining
+          ? `Offer #${lot.offerNo} taken out — post #${postNo} is dissolved and offer #${remaining.offerNo} is in no post`
+          : `Offer #${lot.offerNo} taken out of post #${postNo}`,
       remaining ? () => router.push(`/c/${collectionSlug}/offers/${remaining.offerId}`) : undefined
     );
   }
@@ -433,7 +441,7 @@ export function FacebookPostPanel({
           onSave={rename}
         />
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-          A Facebook post of {lots.length} lots in{" "}
+          {lots.length > 1 ? `A Facebook post of ${lots.length} lots in ` : "A Facebook post of one offer, posted alone, in "}
           <a href={kit.group.url} target="_blank" rel="noreferrer" style={LINK}>
             {kit.group.name} ↗
           </a>
@@ -684,8 +692,12 @@ export function FacebookPostPanel({
 
       {dialog.kind === "withdrawLot" && (
         <ConfirmDialog
-          title={`Withdraw lot ${dialog.lot.lotNo}`}
-          message="This lot is no longer for sale; the post and its other lots stay up. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          title={dialog.lot.lotNo === null ? `Withdraw offer #${dialog.lot.offerNo}` : `Withdraw lot ${dialog.lot.lotNo}`}
+          message={
+            lots.length > 1
+              ? "This lot is no longer for sale; the post and its other lots stay up. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+              : "This takes the listing down. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          }
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           isPending={isPending}
@@ -697,11 +709,15 @@ export function FacebookPostPanel({
 
       {dialog.kind === "takeOut" && (
         <ConfirmDialog
-          title={`Take lot ${dialog.lot.lotNo} out of the post`}
+          title={
+            dialog.lot.lotNo === null ? `Take offer #${dialog.lot.offerNo} out of the post` : `Take lot ${dialog.lot.lotNo} out of the post`
+          }
           message={
-            lots.length === 2
-              ? "The post is left with one lot, so it is dissolved: both offers are then posted alone. The offers themselves are untouched."
-              : "The lots after it move up one. The offer itself is untouched and is then posted alone."
+            lots.length === 1
+              ? "The post is left with no lot, so it is removed. The offer itself is untouched and is then in no post — published alone, it gets a post of its own again."
+              : lots.length === 2
+                ? "The post is left with one lot, so it is dissolved: both offers are then in no post. The offers themselves are untouched."
+                : "The lots after it move up one. The offer itself is untouched and is then in no post."
           }
           actionLabel="Take out"
           pendingLabel="Taking out…"
@@ -718,7 +734,7 @@ export function FacebookPostPanel({
           collectionId={collectionId}
           postId={postId}
           postNo={postNo}
-          nextLotNo={Math.max(0, ...lots.map((l) => l.lotNo ?? 0)) + 1}
+          nextLotNo={Math.max(lots.length, ...lots.map((l) => l.lotNo ?? 0)) + 1}
           isPending={isPending}
           error={error}
           onCancel={close}

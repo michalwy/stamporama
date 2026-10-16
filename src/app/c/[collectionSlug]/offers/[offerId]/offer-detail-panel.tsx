@@ -477,7 +477,9 @@ export function OfferDetailPanel({
   // over, and the header's own field takes a correction.
   // A lot of a Facebook post holding several is asked every time (#1668): Activate takes the whole
   // post live, and the link it asks for is the post's — the lot's own, if it has one, is its photo's.
-  const facebookPostLots = offer.facebook?.post ? offer.facebook.lots.length : null;
+  // The one lot of its post (#1989) is an offer posted alone, whose link is its own.
+  const facebookPostLots =
+    offer.facebook?.post && offer.facebook.lots.length > 1 ? offer.facebook.lots.length : null;
   // On Facebook *Publish…* is asked every time (#1847): its dialog is where live or waiting for the
   // group's approval is chosen.
   const needsUrlToActivate =
@@ -678,11 +680,11 @@ export function OfferDetailPanel({
   /** Go live with the URL the platform gave back (#399): `publishOffer` transitions first and writes
    * the URL after, so a refused activation — a lost set, a missing price — leaves no listing link
    * behind on an offer that never went live. A blank URL is a normal answer. */
-  function publish(url: string, target: PublishTarget, endsAt?: string) {
+  function publish(url: string, target: PublishTarget, endsAt?: string, postTitle?: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { publishOfferAction } = await import("@/app/actions/offers");
-      const result = await publishOfferAction(offerId, url, target, endsAt);
+      const result = await publishOfferAction(offerId, url, target, endsAt, postTitle);
       if (result.status === "success") {
         setActivating(null);
         // Whatever the Assistant reported described the form, and the form has now been posted.
@@ -1727,6 +1729,7 @@ export function OfferDetailPanel({
           initialTarget={activating.target}
           approving={activating.approving}
           offerId={offerId}
+          askPostTitle={offer.facebook !== null && offer.facebook.post === null}
           isPending={isPending}
           error={actionError}
           onClose={() => {
@@ -1852,7 +1855,7 @@ export function OfferDetailPanel({
           title="Withdraw offer"
           message={
             // A post still waiting for approval is taken back whole (#1779).
-            offer.state === "pending" && offer.facebook?.post
+            offer.state === "pending" && offer.facebook?.post && offer.facebook.lots.length > 1
               ? "This takes the post back from the group: every lot of it still waiting for approval is withdrawn with this one. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
               : "This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
           }

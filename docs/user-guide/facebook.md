@@ -322,6 +322,22 @@ of several lots, the same kit is on the post's own screen — see
   offer's type, or the offer's own (below);
 - **↓ Photos**: the offer's photos as one download.
 
+### Every offer that goes up is a post
+
+On Facebook what you put up is always a post — with one offer in it or many — and Stamporama keeps it
+that way. **Publish…** on a Facebook offer that is in no post makes it a **post of its own**, with a
+number — **Post #12** — and asks for the post's **title** beside the link. The title is optional: left
+empty, the post is listed as having no title, and nothing is filled in for it. Creating an offer makes
+no post — only publishing it alone does — so an offer you mean to put in a post with others never
+passes through one of its own.
+
+A post of one offer reads exactly as a single post always did: its text comes from the auction or
+quick-buy post template, the layout for posts of several lots does not apply, and **↓ Photos** is the
+offer's own download. The offer's Facebook card keeps everything it showed before and adds the post's
+number, title and where it stands, with **Open post** — the post's screen, with that one offer as its
+only row. If the group turns the post down, the offer goes back to Ready and stays in its post;
+publishing it again publishes that post.
+
 ### Once it is posted, the text stays as posted
 
 Until the offer goes up, its post text follows the template: edit the group's template, Facebook's
@@ -463,13 +479,20 @@ keeps the title it went up with, as it keeps everything else.
 
 ### The list of posts
 
-**Marketplaces → Facebook** in the sidebar lists every post of several lots, newest first, headed
-*Facebook posts*. An offer posted on its own is not a post of several lots and stays only on the
-**Offers** screen. Each row shows the post's number, title and group, where it stands (being prepared, ready
-to post, waiting for approval, up in the group, or over), how many lots it holds and how many of them
-are still for sale — neither sold nor withdrawn — its layout (**Text** or **Captions**), the day it went
-up and its link. Click a row to open the post's screen. Narrow the list with the **group** filter,
-the **stage** chips and **No title**; click a lit chip again to show every post.
+**Marketplaces → Facebook** in the sidebar lists every post, newest first, headed *Facebook posts* —
+posts of several lots and offers posted alone alike, so it is everything you have put up on Facebook.
+Each row shows the post's number, title and group, where it stands (being prepared, ready to post,
+waiting for approval, up in the group, or over), how many lots it holds and how many of them are still
+for sale — neither sold nor withdrawn — and its layout (**Text** or **Captions**), or **Posted alone**
+for a post of one offer; then the day it went up and its link. Click a row to open the post's screen.
+Narrow the list with the **group** filter, the **stage** chips and **No title**; click a lit chip again
+to show every post.
+
+Above the posts, **Not in a post yet** lists the Facebook offers being prepared or Ready that are in no
+post — each one linking to its offer — so the screen shows the whole of Facebook, posted or not. Each
+gets its post when you publish it alone, or joins one with **Post together** or **Add to post…** on the
+**Offers** screen. The group filter narrows it too, **Being prepared** and **Ready to post** narrow it to
+offers in that state, and it is hidden under the other stages and **No title**.
 
 Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · Generalgouvernement
 1940–44 · lot 3 of 5** and
@@ -516,9 +539,11 @@ waiting for approval or in the group — its lots stay in the order they were po
 grip nor the sorting is offered.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
-move up, and a post left with one lot becomes an ordinary single post — its number is not used again.
-Once the post is up, its lots stay as they were posted. Deleting a lot's offer works the same way as
-taking it out.
+move up, and the offer taken out is in no post again — it gets a post of its own only when you publish
+it alone. A post left with one lot is dissolved the same way, so that offer is in no post either; its
+number is not used again. Once the post is up, its lots stay as they were posted. Deleting a lot's
+offer works the same way as taking it out, except that a post already up keeps its last lot as a post
+of one, and is removed only with it.
 
 A lot cannot be moved to another group while it is in a post; take it out first. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.
@@ -558,8 +583,8 @@ A captioned post is written from its own templates, set beside the layout:
   | `{postTitle}` | the post's title |
 
 `{post}` and `{postTitle}` are offered only in these templates. An offer posted alone has no post
-number and no title, so the auction and quick-buy post templates do not take them: there they stay as
-typed, and the field says so. A post made before titles has none until you give it one; while it has
+number or title until it is published, and its text is written from the auction and quick-buy post
+templates, so those do not take them: there they stay as typed, and the field says so. A post made before titles has none until you give it one; while it has
 none, `{postTitle}` is left empty and the kit says so under the post text — nothing is put in its
 place.
 

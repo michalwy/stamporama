@@ -2981,10 +2981,11 @@ model FacebookDefaults {
   @@map("facebook_defaults")
 }
 
-// A post holding several lots in one Facebook group (#1544; ADR-0061 §2): an album, each photo a lot
-// bid on in its own comments. Its lots are offers naming it (`Offer.facebookPostId`), numbered by
-// `Offer.facebookLotNo`, sharing its group and their closing time. An offer posted alone has no post
-// row. The closing time is kept on each lot (`Offer.endsAt`), where everything that reads an
+// A post in one Facebook group (#1544; ADR-0061 §2): one offer posted alone, or an album of several,
+// each photo a lot bid on in its own comments. Every Facebook offer that has gone up is in one
+// (#1989) — an offer posted alone gets its post of one lot when it is published. Its lots are offers
+// naming it (`Offer.facebookPostId`), numbered by `Offer.facebookLotNo`, sharing its group and their
+// closing time. The closing time is kept on each lot (`Offer.endsAt`), where everything that reads an
 // auction's end already looks, and written to all of them together. The post's link is likewise each
 // lot's own `url` (#1668): activating the post writes it into every lot that has no link of its own.
 model FacebookPost {
@@ -5290,8 +5291,10 @@ model Offer {
   // How much a bid must beat the last by (#1544), on a Facebook auction: read from the group when the
   // offer is created, then the offer's own. Null on every other offer, a Facebook quick buy included.
   bidIncrement Decimal? @db.Decimal(10, 2)
-  // The multi-lot post this offer is a lot of, and its number there (#1544; ADR-0061 §2) — both null
-  // on an offer posted alone. `SetNull`: a post is removed only by the app, which renumbers first.
+  // The post this offer is a lot of, and its number there (#1544; ADR-0061 §2) — a post of one lot for
+  // an offer posted alone (#1989), made when it is published. Both null on a Facebook offer not yet
+  // published or grouped, and off Facebook. `SetNull`: a post is removed only by the app, which
+  // renumbers first.
   facebookPostId String?
   facebookLotNo  Int?
   // This offer's own post template (#1780), overriding its group's for this offer only — for the
