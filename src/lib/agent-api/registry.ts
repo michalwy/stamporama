@@ -19,7 +19,8 @@
 // `record_auction_lot_outcome`, taking it to eighty; #1635 added the four price-observation
 // operations, three of which write, taking it to eighty-four; #1651 added `set_copy_stamp`, taking it
 // to eighty-five; #1910 added the fifteen shipping and packing operations, eleven of which write,
-// taking it to **one hundred**. Each one is an entry here
+// taking it to one hundred; #1949 added the five sale operations, three of which write, taking it
+// to **one hundred and five**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -30,7 +31,8 @@
 // phrase and answered with a verdict instead of a result list — then the three records those ids
 // open, then the two reads over what is
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
-// drafting a listing and drafting one before pricing and wording it — then the exchange workflow in
+// drafting a listing and drafting one before pricing and wording it, and recording it sold last
+// (#1949): the sales already recorded, the buyer, and the sale — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
 // this counterparty have that answers it, what is this set still missing, then the trade itself,
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
@@ -94,6 +96,13 @@ import {
   setOfferPriceOperation,
   setOfferTextOperation,
 } from "./operations/offers";
+import {
+  findOrCreateBuyerOperation,
+  getSaleOperation,
+  listSalesOperation,
+  sellOfferOperation,
+  sellOfferSetOperation,
+} from "./operations/sales";
 import {
   findChecklistGapsOperation,
   listWantsOperation,
@@ -223,6 +232,11 @@ export const OPERATIONS: readonly Operation[] = [
   draftOfferOperation,
   setOfferPriceOperation,
   setOfferTextOperation,
+  listSalesOperation,
+  getSaleOperation,
+  findOrCreateBuyerOperation,
+  sellOfferOperation,
+  sellOfferSetOperation,
   listWantsOperation,
   matchWantsOperation,
   findChecklistGapsOperation,

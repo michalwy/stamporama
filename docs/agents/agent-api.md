@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps and #1910 the shipping and packing data; both wrappers exist and the registry carries **one hundred operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data and #1949 sales; both wrappers exist and the registry carries **one hundred and five operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1168's bid recommendation, and #1037's catalog-number
-resolver. Thirteen counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Fourteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) and *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following) and *the registry carries one hundred operations* (from #1910 until #1949).
 
-**Sixty-two of them write** since #1910 added eleven; *fifty of them write* was the count from #1635 until
+**Sixty-five of them write** since #1949 added three; *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -141,6 +141,7 @@ src/lib/agent-api/
   area-reads.ts     the area row, the tree order, the catalogue spelling, the refusals (#1539)
   auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627, #1628)
   shipping-reads.ts carriers, options, supplies and uses as told; amounts, "supply: quantity", naming a supply or service (#1910)
+  sale-reads.ts     the sale row and record, the buyer, a sold set's price (#1949)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -167,10 +168,11 @@ src/lib/agent-api/
     areas.ts        the six area operations (#1539)                     ← server-side
     auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
     shipping.ts     the fourteen carrier, option, supply and use operations (#1910)  ← server-side
+    sales.ts        the two sale reads, the buyer, and selling an offer or a set (#1949)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -912,6 +914,57 @@ rule one layer over**: `offers/listing/` is a sub-route of `offers/[offerId]` an
 takes precedence* (`offers.md`, #322). A stable sort keeps registry order between templates of equal
 specificity, which is what decides the order a `405` lists its methods in.
 
+## Recording sales (#1949)
+
+**Five operations, finishing the offer workflow**: the collector's scenario is *list my Facebook
+offers → find what sold and to whom → record it*. Reading Facebook is the agent's own work, outside
+the app; `list_offers` already lists the offers, and these record the outcome.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_sales` | no | the sales, by platform, buyer, status, span of days, *to review* or number — to see what is already recorded |
+| `get_sale` | no | one sale: its buyer, lines (offer number, set, price, copies) and figures |
+| `find_or_create_buyer` | yes | the contact a buyer is — by Facebook profile link, then name — or a new one |
+| `sell_offer` | yes | every set the offer has left, into the buyer's sale or a new one, at `price` each |
+| `sell_offer_set` | yes | one set of it, the same way |
+
+**Everything here is the app's own path.** The buyer is `findOrCreateBuyer` in `facebook-sales.ts`,
+which is what *Sell* reaches on Facebook through `resolveFacebookBuyer` (#1777) — the platform check
+split off so the agent reaches the same lookup with or without a link. The sets left are
+`listSellableOffers`, the dialog's own list; the write is `recordSaleLinesThroughApi` in `sales.ts`,
+which runs `createSale`'s and `addSaleLines`' own guards (split into `prepareSaleHeader` /
+`insertSaleHeader` and `checkSaleLineDrafts` / `writeSaleLines` for it) and then writes the header,
+the lines and the *to review* marker (#1948) **in one transaction** — so a sale cannot be written
+through the API unmarked, and a new sale whose set is refused is never left behind empty, which
+*Sell*'s two calls can do. `list_sales` reads `listSalesPaginated` with `countSales` beside it for
+the total, both over `saleListWhere`; the span of days and the sale number were added to
+`SaleListFilters` for it.
+
+**Four things are decisions rather than plumbing.**
+
+- **`price` is required and is per set.** The agent read what the set sold for — the winning bid,
+  the price paid — and states it; nothing defaults to the offer's stored figure, which on an auction
+  is a bid that may be stale or nought. #1949 said *a running auction's bid is already
+  `set_offer_price`*: it is not — on an auction `set_offer_price` writes the **starting** price
+  (*`set_offer_price` writes the figure the seller states*, above) — and the collector chose on
+  2026-10-16 to leave it so: the sale takes its price, and the agent records no running bid.
+- **A sale already *Sent* is never added to.** The dialog does it behind *Show sent sales too*, as a
+  correction (#1950); a correction is the collector's.
+- **A buyer is named exactly where a sale is recorded or narrowed**, over the contacts that are
+  buyers — `resolveSeller`, the purchases' rule (#1390), its refusal naming `find_or_create_buyer`.
+  And `find_or_create_buyer` refuses a **new** buyer whose name is close to a contact already here
+  unless the agent says it is a different person — `create_seller`'s rule; *Sell*'s own lookup has no
+  such check, but a collector typing sees the list and an agent does not.
+- **`sale` and `sold_at` exclude each other.** A new sale needs the day it sold; an existing sale
+  keeps its own, and a `buyer` sent with `sale` must be that sale's.
+
+**The boundary is the import map in `tests/unit/agent-api-operation-boundary.test.ts`**:
+`recordSaleLinesThroughApi` and `findOrCreateBuyer` are reached from `operations/sales.ts` alone, the
+first must mark the sale in both branches, and **every other writer of `sales.ts`** — read off its
+exports by verb, so one added later has to be placed — and the share link's are out of every
+operation module. `tests/integration/agent-api-sales.test.ts` drives the scenario through the real
+route and checks that no operation named for a sale deletes or moves one.
+
 ## Wants and checklists
 
 **Three operations, opening the third of the workflows** (#712): *what am I looking for,
@@ -1419,8 +1472,8 @@ hold for every auction write this surface will ever make:
   that mark (*Keeping the auction register*) — and this map is unchanged. An operation able to clear the marker could hide its own work from the review it is
   waiting for, which is `markOfferListingSynced`'s shape in `FORBIDDEN`.
 
-**A sale carries the same marker** (#1948, `offers.md`), laid before the sale writes of #1949 exist
-and bound by the same two rules: every sale write marks the sale through `markSaleWrittenByApi`, in
+**A sale carries the same marker** (#1948, `offers.md`), laid before the sale writes of #1949 existed
+and bound by the same two rules — which #1949's `recordSaleLinesThroughApi` keeps (*Recording sales*): every sale write marks the sale through `markSaleWrittenByApi`, in
 its own transaction, naming what it did (`saleLineAddedAction` words a line — *added offer #2680 at
 15 PLN*); and nothing reachable from an agent clears it — `confirmSaleReview` and
 `CONFIRMED_SALE_API_REVIEW` are on `REVIEW_CLEARERS` beside the auctions' three.
@@ -2395,13 +2448,16 @@ exist cannot be.
 - **The agent never deletes shipping or packing data** (#1910): no carrier, service, option, supply or
   use without a sale, and no purchase supply line corrected or removed. See *Setting up shipping and
   packing* above.
+- **The agent never deletes a sale or moves one** (#1949): no sale or line removed, no status, header,
+  price, set choice, packing, shipping or share link changed. It records sales and finds or adds
+  their buyers, and what it records waits for the collector's *Confirm*. See *Recording sales* above.
 - **Price observations are deleted** (#1635): they are market facts the assistant itself records,
   not the collector's transactions, and a misread one must be removable — see *Recording price
   observations* above.
 
 Do not add a publish-shaped, send-shaped, bid-shaped or copy-touching operation to the
-registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, or deletes,
-moves or reorders an issue or a stamp beyond moving an issue to another area. *Two boundaries* was this
+registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, deletes a sale or moves one through payment
+and shipping, or deletes, moves or reorders an issue or a stamp beyond moving an issue to another area. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
@@ -2626,7 +2682,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and five operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2651,9 +2707,10 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 `update_carrier`, `add_carrier_service`, `update_carrier_service`, `list_shipping_options`,
 `create_shipping_option`, `update_shipping_option`, `list_packing_supplies`,
 `get_packing_supply_history`, `create_packing_supply`, `update_packing_supply`, `record_supply_use`
-and `update_supply_use`.
+and `update_supply_use`; #1949 added `list_sales`, `get_sale`, `find_or_create_buyer`, `sell_offer`
+and `sell_offer_set`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

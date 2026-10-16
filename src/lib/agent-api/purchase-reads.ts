@@ -138,7 +138,10 @@ export const MAX_SELLER_SUGGESTIONS = 10;
 export function resolveSeller(
   value: string,
   candidates: readonly SellerCandidate[],
-  parameter: string
+  parameter: string,
+  /** Who the contact is and the operation that adds one — a buyer is added by
+   *  `find_or_create_buyer` (#1949), and the refusal names the right one. */
+  newcomer: { readonly who: string; readonly operation: string } = { who: "seller", operation: "create_seller" }
 ): string {
   const trimmed = value.trim();
   const byId = candidates.find((candidate) => candidate.id === trimmed);
@@ -167,8 +170,8 @@ export function resolveSeller(
     close.length > 0
       ? `No contact in this collection is called "${trimmed}". These are close: ${close
           .map((candidate) => candidate.name)
-          .join(", ")}. Send one of them as "${parameter}" if it is the one meant; if the seller is somebody new, create them with \`create_seller\` first.`
-      : `No contact in this collection is called "${trimmed}", and none is close to it. If the seller is somebody new, create them with \`create_seller\` first and send the id it returns as "${parameter}".`,
+          .join(", ")}. Send one of them as "${parameter}" if it is the one meant; if the ${newcomer.who} is somebody new, create them with \`${newcomer.operation}\` first.`
+      : `No contact in this collection is called "${trimmed}", and none is close to it. If the ${newcomer.who} is somebody new, create them with \`${newcomer.operation}\` first and send the id it returns as "${parameter}".`,
     close.map((candidate) => candidate.name)
   );
 }

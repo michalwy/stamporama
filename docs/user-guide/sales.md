@@ -616,7 +616,7 @@ The sheet always prints in light colours, even if you use the dark [theme](appea
 
 ## What the assistant recorded — *To review · API*
 
-When an [AI assistant](agent-api.md) records a sale for you, or adds a sold offer to one you already
+When an [AI assistant](agent-api.md) records a sale for you (see [what it can do on sales](agent-api.md#what-it-can-do-and-what-it-will-not)), or adds a sold offer to one you already
 have, the sale is marked **To review · API** — on its row in the Sales list and on its own screen —
 and it stays marked until you say you have looked. An assistant reading a marketplace thread can
 match the wrong buyer or a wrong price, and this is how you find what it wrote. Hover the chip to see

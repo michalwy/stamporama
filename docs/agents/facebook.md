@@ -508,7 +508,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   refused as somebody else, since `Contact.name` is unique. A found contact gets the buyer role and,
   where it has none, the link; otherwise a buyer is created with both — a link alone that matches
   nobody is refused, a contact needing a name, and nothing typed is no buyer. It refuses a platform
-  that is not Facebook's. `createSaleAction` checks the collection before that write, since
+  that is not Facebook's — the one check `resolveFacebookBuyer` adds to `findOrCreateBuyer`, which the
+  agent API's `find_or_create_buyer` reaches directly, with or without a link (#1949). `createSaleAction` checks the collection before that write, since
   `createSale` would only check it after. **The currency**: `createSaleAction` takes `forOfferId`, and
   `facebookOfferSaleCurrency` hands a Facebook offer's currency to `createSale` as `offerCurrency`, so
   a group's own currency survives and the platform lock is neither read nor written — #1545's rule,

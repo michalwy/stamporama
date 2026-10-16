@@ -629,6 +629,33 @@ export async function createSale(
   input: SaleHeaderInput,
   opts: { offerCurrency?: string } = {}
 ): Promise<string> {
+  const prepared = await prepareSaleHeader(ownerId, collectionId, input, opts);
+  // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
+  // row it belongs to stand or fall together — and so do the usual packing supplies of the carrier
+  // service it is sent as (#1899, #1909, #1923), filled in as the sale's supply lines.
+  return prisma.$transaction((tx) => insertSaleHeader(tx, collectionId, prepared));
+}
+
+/** A sale header checked and resolved, ready to insert: what {@link insertSaleHeader} writes. */
+interface PreparedSaleHeader {
+  input: SaleHeaderInput;
+  currency: string;
+  fxRateToBase: Prisma.Decimal | null;
+  shipping: ResolvedSaleShipping | null;
+  sentAsServiceId: string | null;
+  /** The service the parcel goes as — its own, else its option's — whose supplies are filled in. */
+  sentAs: string | null;
+}
+
+/** Everything {@link createSale} checks and resolves before it writes — the owner, the platform, the
+ *  buyer, the currency and its frozen rate, the shipping. Shared with the agent API's sale write
+ *  (#1949), which inserts the header in the same transaction as its lines. */
+async function prepareSaleHeader(
+  ownerId: string,
+  collectionId: string,
+  input: SaleHeaderInput,
+  opts: { offerCurrency?: string }
+): Promise<PreparedSaleHeader> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
   await assertBuyer(collectionId, input.buyerId);
@@ -651,36 +678,41 @@ export async function createSale(
   // What the parcel is sent as (#1923): the service the form named, or the option's.
   const sentAsServiceId = shipping ? storedSentAs(shipping.sentAs, null) : null;
   const sentAs = sentAsServiceId ?? shipping?.sentAs.optionServiceId ?? null;
-  // In a transaction for the number's sake (#432), as `createPurchase` is: the counter bump and the
-  // row it belongs to stand or fall together — and so do the usual packing supplies of the carrier
-  // service it is sent as (#1899, #1909, #1923), filled in as the sale's supply lines.
-  const sale = await prisma.$transaction(async (tx) => {
-    const created = await tx.sale.create({
-      data: {
-        collectionId,
-        saleNo: await allocateEntityNumber(tx, collectionId, "sale"),
-        platformId: input.platformId,
-        buyerId: input.buyerId,
-        externalRef: input.externalRef,
-        transactionUrl: input.transactionUrl,
-        soldAt: input.soldAt,
-        currency,
-        fxRateToBase,
-        buyerHandling: input.buyerHandling,
-        buyerPaidTotal: input.buyerPaidTotal,
-        commission: input.commission,
-        ...shipping?.columns,
-        sentAsServiceId,
-        // Seed the transition log with the initial `ordered` event (#191), so every sale has a
-        // non-empty status timeline from the moment it is recorded.
-        statusEvents: { create: { status: "ordered" } },
-      },
-      select: { id: true },
-    });
-    await applyServiceSupplies(tx, created.id, null, sentAs);
-    return created;
+  return { input, currency, fxRateToBase, shipping, sentAsServiceId, sentAs };
+}
+
+/** Insert a prepared sale header, numbered, with its first status event and its service's usual
+ *  packing supplies, inside the caller's transaction. Returns the new sale id. */
+async function insertSaleHeader(
+  tx: DbTransaction,
+  collectionId: string,
+  prepared: PreparedSaleHeader
+): Promise<string> {
+  const { input } = prepared;
+  const created = await tx.sale.create({
+    data: {
+      collectionId,
+      saleNo: await allocateEntityNumber(tx, collectionId, "sale"),
+      platformId: input.platformId,
+      buyerId: input.buyerId,
+      externalRef: input.externalRef,
+      transactionUrl: input.transactionUrl,
+      soldAt: input.soldAt,
+      currency: prepared.currency,
+      fxRateToBase: prepared.fxRateToBase,
+      buyerHandling: input.buyerHandling,
+      buyerPaidTotal: input.buyerPaidTotal,
+      commission: input.commission,
+      ...prepared.shipping?.columns,
+      sentAsServiceId: prepared.sentAsServiceId,
+      // Seed the transition log with the initial `ordered` event (#191), so every sale has a
+      // non-empty status timeline from the moment it is recorded.
+      statusEvents: { create: { status: "ordered" } },
+    },
+    select: { id: true },
   });
-  return sale.id;
+  await applyServiceSupplies(tx, created.id, null, prepared.sentAs);
+  return created.id;
 }
 
 // ── Fulfillment status + packing mutations (#191/#192) ────────────────────────
@@ -941,6 +973,20 @@ export async function addSaleLines(
   opts: { toSentSale?: boolean } = {}
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
+  assertSaleTakesLines(ref, drafts, opts);
+  const offerIds = await checkSaleLineDrafts(ref, drafts);
+  await refusingDoubleSale(() =>
+    prisma.$transaction((tx) => writeSaleLines(tx, saleId, drafts, offerIds))
+  );
+}
+
+/** The two refusals about the sale itself rather than its lines: nothing to add, and a sale already
+ *  sent that the caller did not say it meant (#1950). */
+function assertSaleTakesLines(
+  ref: Pick<SaleRef, "status">,
+  drafts: readonly SaleLineDraft[],
+  opts: { toSentSale?: boolean }
+): void {
   if (drafts.length === 0) {
     throw new SaleActionBlockedError("empty", "Choose at least one set to add.");
   }
@@ -950,7 +996,18 @@ export async function addSaleLines(
       "This sale has already been sent. Add to an open sale or start a new one."
     );
   }
+}
 
+/**
+ * Every guard a sold set passes before it is written (ADR-0013): its offer is in the collection, on
+ * the sale's platform, in the sale's currency and still sellable; the set is the offer's; the copies
+ * are exactly the set's; none has left already. Returns the offers the drafts touch. Reads only, so
+ * a sale not yet inserted can be checked against the platform and currency it will have.
+ */
+async function checkSaleLineDrafts(
+  ref: Pick<SaleRef, "collectionId" | "platformId" | "currency">,
+  drafts: readonly SaleLineDraft[]
+): Promise<string[]> {
   const offerIds = [...new Set(drafts.map((d) => d.offerId))];
   const offers = await prisma.offer.findMany({
     where: { id: { in: offerIds }, collectionId: ref.collectionId },
@@ -1012,56 +1069,123 @@ export async function addSaleLines(
       throw new SaleActionBlockedError("already-sold", "One or more of these copies has already been sold.");
     }
   }
+  return offerIds;
+}
 
+/** The unique on `sale_line_item.itemId` is the no-double-sale backstop: a copy that left on another
+ *  sale between the check and the write is refused in the check's own words. */
+async function refusingDoubleSale<T>(run: () => Promise<T>): Promise<T> {
   try {
-    await prisma.$transaction(async (tx) => {
-      for (const line of drafts) {
-        await tx.saleLine.create({
-          data: {
-            saleId,
-            offerId: line.offerId,
-            offerSetId: line.offerSetId,
-            price: line.price,
-            setChoicePending: line.setChoicePending ?? false,
-            items: { create: line.itemIds.map((itemId) => ({ itemId })) },
-          },
-        });
-      }
-      // Flip an offer to `sold` only once every set has sold through it (the only stored side
-      // effect; set / item sold state stays derived).
-      //
-      // The sale also **resolves the bidding** (#215, #469): "in active bidding" says a bid has been
-      // placed and the collector is committed *before the sale is recorded*, so recording it is
-      // exactly what ends that state. Left standing, a sold listing would keep an "In bidding" chip
-      // that reads as an auction still running.
-      for (const offerId of offerIds) {
-        if (await isOfferFullySold(tx, offerId)) {
-          await tx.offer.update({
-            where: { id: offerId },
-            // `closedAt` (#512) is stamped with the state, as it is on a withdrawal: it is what the
-            // generated-photo purge measures the grace period from.
-            data: { state: "sold", stateChangedAt: new Date(), inActiveBidding: false, closedAt: new Date() },
-          });
-        }
-      }
-      // A sale is a **composition change** (#700), and the strongest of them: the sets that sold
-      // leave what the listing has to offer, and #315 drops them from its photo plan. So a listing
-      // still up after a partial sale is out of step exactly as one whose sets were edited is —
-      // it advertises a quantity it no longer has and pictures a copy that has gone — and it is
-      // flagged by the same rule, cleared by the same three things (#542: the Assistant's update,
-      // a republication, *Mark as up to date*).
-      //
-      // **After** the flip above, deliberately: an offer that just sold out is `sold`, which the
-      // rule excludes, so the sale that closes a listing does not ask anyone to go and fix it. Only
-      // the one that leaves something behind does.
-      await markListingContentChanged(offerIds, tx);
-    });
+    return await run();
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       throw new SaleActionBlockedError("already-sold", "One or more of these copies has already been sold.");
     }
     throw e;
   }
+}
+
+/** Write checked sold sets onto a sale, inside the caller's transaction, with what a sale does to its
+ *  offers. */
+async function writeSaleLines(
+  tx: DbTransaction,
+  saleId: string,
+  drafts: readonly SaleLineDraft[],
+  offerIds: readonly string[]
+): Promise<void> {
+  for (const line of drafts) {
+    await tx.saleLine.create({
+      data: {
+        saleId,
+        offerId: line.offerId,
+        offerSetId: line.offerSetId,
+        price: line.price,
+        setChoicePending: line.setChoicePending ?? false,
+        items: { create: line.itemIds.map((itemId) => ({ itemId })) },
+      },
+    });
+  }
+  // Flip an offer to `sold` only once every set has sold through it (the only stored side
+  // effect; set / item sold state stays derived).
+  //
+  // The sale also **resolves the bidding** (#215, #469): "in active bidding" says a bid has been
+  // placed and the collector is committed *before the sale is recorded*, so recording it is
+  // exactly what ends that state. Left standing, a sold listing would keep an "In bidding" chip
+  // that reads as an auction still running.
+  for (const offerId of offerIds) {
+    if (await isOfferFullySold(tx, offerId)) {
+      await tx.offer.update({
+        where: { id: offerId },
+        // `closedAt` (#512) is stamped with the state, as it is on a withdrawal: it is what the
+        // generated-photo purge measures the grace period from.
+        data: { state: "sold", stateChangedAt: new Date(), inActiveBidding: false, closedAt: new Date() },
+      });
+    }
+  }
+  // A sale is a **composition change** (#700), and the strongest of them: the sets that sold
+  // leave what the listing has to offer, and #315 drops them from its photo plan. So a listing
+  // still up after a partial sale is out of step exactly as one whose sets were edited is —
+  // it advertises a quantity it no longer has and pictures a copy that has gone — and it is
+  // flagged by the same rule, cleared by the same three things (#542: the Assistant's update,
+  // a republication, *Mark as up to date*).
+  //
+  // **After** the flip above, deliberately: an offer that just sold out is `sold`, which the
+  // rule excludes, so the sale that closes a listing does not ask anyone to go and fix it. Only
+  // the one that leaves something behind does.
+  await markListingContentChanged([...offerIds], tx);
+}
+
+/** Where the agent API records sold sets (#1949): onto a sale already there, or onto a new one. */
+export type ApiSaleTarget =
+  | { saleId: string }
+  | { header: SaleHeaderInput; offerCurrency?: string };
+
+/**
+ * Record sold sets through the agent API (#1949) — the *Sell* dialog's two acts, adding the sets to a
+ * sale or starting a sale with them, by the same guards, **in one transaction** with the *to review*
+ * marker (#1948): a sale cannot be written through the API and come out unmarked, and a new sale
+ * whose sets are refused is never left behind empty. `actions` is what the marker names, worded by
+ * the caller (`saleLineAddedAction`).
+ *
+ * Narrower than the dialog in one respect: a sale already *Sent* is refused outright, since adding to
+ * one is a correction (#1950) and the dialog makes it only behind *Show sent sales too*.
+ */
+export async function recordSaleLinesThroughApi(
+  ownerId: string,
+  collectionId: string,
+  target: ApiSaleTarget,
+  drafts: SaleLineDraft[],
+  actions: readonly string[]
+): Promise<{ saleId: string; created: boolean }> {
+  if ("saleId" in target) {
+    const ref = await assertSaleOwner(ownerId, target.saleId);
+    if (ref.collectionId !== collectionId) throw new Error("Sale not found or access denied.");
+    assertSaleTakesLines(ref, drafts, {});
+    const offerIds = await checkSaleLineDrafts(ref, drafts);
+    await refusingDoubleSale(() =>
+      prisma.$transaction(async (tx) => {
+        await writeSaleLines(tx, target.saleId, drafts, offerIds);
+        await markSaleWrittenByApi(tx, target.saleId, { kind: "changed", actions });
+      })
+    );
+    return { saleId: target.saleId, created: false };
+  }
+
+  const prepared = await prepareSaleHeader(ownerId, collectionId, target.header, {
+    ...(target.offerCurrency ? { offerCurrency: target.offerCurrency } : {}),
+  });
+  const ref = { collectionId, platformId: target.header.platformId, currency: prepared.currency };
+  assertSaleTakesLines({ status: "ordered" }, drafts, {});
+  const offerIds = await checkSaleLineDrafts(ref, drafts);
+  const saleId = await refusingDoubleSale(() =>
+    prisma.$transaction(async (tx) => {
+      const id = await insertSaleHeader(tx, collectionId, prepared);
+      await writeSaleLines(tx, id, drafts, offerIds);
+      await markSaleWrittenByApi(tx, id, { kind: "created", actions });
+      return id;
+    })
+  );
+  return { saleId, created: true };
 }
 
 /** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which
@@ -1722,6 +1846,12 @@ export interface SaleListFilters {
    * confirmed. A boolean on the `setChoicePending` reasoning: a sale can be waiting on it in any
    * status, so it combines with the status chips rather than being one of them. */
   toReview?: boolean;
+  /** Sold on or after this day / on or before this day, both inclusive (#1949, the agent API's
+   *  `list_sales`). Each is the start of its UTC day; the upper bound covers the whole of it. */
+  soldFrom?: Date;
+  soldTo?: Date;
+  /** One sale by its short number (#432) — what `s12` means in the quick-jump box. */
+  saleNo?: number;
   offset?: number;
   pageSize?: number;
 }
@@ -1765,7 +1895,27 @@ function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.S
     ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
     // `apiReviewAt` is null exactly when there is no marker (#1948).
     ...(filters.toReview ? { apiReviewAt: { not: null } } : {}),
+    ...(filters.soldFrom || filters.soldTo
+      ? {
+          soldAt: {
+            ...(filters.soldFrom ? { gte: filters.soldFrom } : {}),
+            ...(filters.soldTo ? { lt: new Date(filters.soldTo.getTime() + 24 * 60 * 60 * 1000) } : {}),
+          },
+        }
+      : {}),
+    ...(filters.saleNo !== undefined ? { saleNo: filters.saleNo } : {}),
   };
+}
+
+/** How many sales match the Sales list's filters — the agent API's `total` (#1949), counted over
+ *  `saleListWhere` so it cannot disagree with the page it describes. */
+export async function countSales(
+  ownerId: string,
+  collectionId: string,
+  filters: SaleListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.sale.count({ where: saleListWhere(collectionId, filters) });
 }
 
 /**
