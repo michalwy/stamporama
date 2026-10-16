@@ -107,7 +107,12 @@ an added optional key is not a new version.
   page's Platform section went, and #1960 put its figures on the platform's own page, as the second
   row of its summary strip (ADR-0059 §4).
 - Each module page gained a **Platform** tab carrying the whole set of a platform's settings; #1956,
-  #1957, #1958 and #1959 trim each to what its platform uses.
+  #1957, #1958 and #1959 trim each to what its platform uses. A setting a module never reads is
+  dropped through one table (`UNUSED_PLATFORM_SETTINGS` in `platform-modules.ts`): not offered on the
+  page, stored as null by the writer, and cleared by a migration — so no reader learns the rule.
+  Delcampe's (#1957) drops the private note template and its cap; Allegro's (#1956) those two and the
+  quick-buy refresh threshold; Colnect's (#1959) the listing type, description format and title cap. Facebook's four (#1958) are not in it: they are read, from its
+  defaults and groups, so the page only hides them.
 - A new collection is created with its five module platforms; a collection that somehow lacks one
   gets it the first time Settings opens (`ensureModulePlatforms`). The Facebook platform starts
   needing covers on its photos, which used to happen when a contact was first named as Facebook

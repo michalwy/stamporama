@@ -289,12 +289,13 @@ export type DroppablePlatformSetting =
   | "maxPrivateNoteLength"
   | "defaultListingType"
   | "descriptionFormat"
-  | "maxTitleLength";
+  | "maxTitleLength"
+  | "refreshQuickBuysAfterDays";
 
 /**
  * The platform settings each module's platform **does not use** (#1944): its page does not offer
  * them and saving it writes them empty, so nothing on a module's page is a setting that does nothing.
- * Each module's list was confirmed with the collector in its own issue — Delcampe's in #1957.
+ * Each module's list was confirmed with the collector in its own issue — #1956, #1957, #1959.
  *
  * - **Delcampe** — its upload carries no private note: `personal_reference` is the offer's number
  *   and nothing else (#635), so a note generated from a template, and the cap on its length, reach
@@ -303,10 +304,15 @@ export type DroppablePlatformSetting =
  *   type (and with it no default starting price, which only an auction has); its short description
  *   is a plain-text field, so no description format — saved as plain text; and it has no title field,
  *   so no cap on one. The title *template* stays: it names the offer and its sets here.
+ * - **Allegro** (#1956) — its listings have no seller-only note either: neither the publish nor the
+ *   Assistant's Allegro form carries one (only Colnect's form has the field). And an Allegro quick
+ *   buy stays up until it sells or is ended without sinking out of sight, so it is never reposted to
+ *   be seen again — the refresh threshold marks nothing worth doing there.
  */
 const UNUSED_PLATFORM_SETTINGS: Readonly<Record<string, readonly DroppablePlatformSetting[]>> = {
   [DELCAMPE_PLATFORM_MODULE]: ["privateNoteTemplate", "maxPrivateNoteLength"],
   [COLNECT_PLATFORM_MODULE]: ["defaultListingType", "descriptionFormat", "maxTitleLength"],
+  [ALLEGRO_PLATFORM_MODULE]: ["privateNoteTemplate", "maxPrivateNoteLength", "refreshQuickBuysAfterDays"],
 };
 
 /** Whether a platform of `platformModule` uses `setting` — always, for a generic platform. */

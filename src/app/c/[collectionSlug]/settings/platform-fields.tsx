@@ -172,11 +172,13 @@ export interface PlatformFieldsProps {
 export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) {
   const isModule = !!platform?.platformModule;
   const isFacebook = platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
-  // What this platform's module does not use is not offered (#1944): Delcampe has no private note
-  // (#1957); Colnect no listing type, description format or title cap (#1959). Nothing stored is left
-  // to show: `platforms.ts` writes such a setting empty on every save.
+  // What this platform's module does not use is not offered (#1944): Delcampe and Allegro have no
+  // private note (#1957, #1956); Colnect no listing type, description format or title cap (#1959).
+  // Nothing stored is left to show: `platforms.ts` writes such a setting empty on every save.
   const usesPrivateNote = platformUsesSetting(platform?.platformModule, "privateNoteTemplate");
   const usesPrivateNoteLimit = platformUsesSetting(platform?.platformModule, "maxPrivateNoteLength");
+  // Allegro's quick buys never sink, so it has no refresh threshold (#1956).
+  const usesRefresh = platformUsesSetting(platform?.platformModule, "refreshQuickBuysAfterDays");
   const templateCount = usesPrivateNote ? TEMPLATE_COUNT : TEMPLATE_COUNT - 1;
   const usesListingType = platformUsesSetting(platform?.platformModule, "defaultListingType");
   const usesFormat = platformUsesSetting(platform?.platformModule, "descriptionFormat");
@@ -455,7 +457,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
 
           {/* Not on Facebook: there the refresh and the buyer's message are Facebook's own settings,
               which its groups follow (#1661). */}
-          {!isFacebook && (
+          {!isFacebook && usesRefresh && (
             <div>
               <LabelWithError htmlFor="platform-refresh-quick-buys">
                 Refresh quick buys after (days, optional)

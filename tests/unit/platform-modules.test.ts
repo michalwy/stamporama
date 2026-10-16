@@ -129,15 +129,23 @@ describe("platformUsesSetting", () => {
     assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "descriptionFormat"), true);
   });
 
-  it("keeps every setting on a generic platform and on the modules not yet trimmed", () => {
+  it("drops Allegro's private note, its cap and the quick-buy refresh (#1956)", () => {
+    assert.equal(platformUsesSetting(ALLEGRO_PLATFORM_MODULE, "privateNoteTemplate"), false);
+    assert.equal(platformUsesSetting(ALLEGRO_PLATFORM_MODULE, "maxPrivateNoteLength"), false);
+    assert.equal(platformUsesSetting(ALLEGRO_PLATFORM_MODULE, "refreshQuickBuysAfterDays"), false);
+    assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "refreshQuickBuysAfterDays"), true);
+  });
+
+  it("keeps every setting on a generic platform", () => {
     const settings = [
       "privateNoteTemplate",
       "maxPrivateNoteLength",
       "defaultListingType",
       "descriptionFormat",
       "maxTitleLength",
+      "refreshQuickBuysAfterDays",
     ] as const;
-    for (const platformModule of [null, undefined, ALLEGRO_PLATFORM_MODULE]) {
+    for (const platformModule of [null, undefined]) {
       for (const setting of settings) assert.equal(platformUsesSetting(platformModule, setting), true);
     }
   });
