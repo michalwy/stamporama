@@ -53,6 +53,18 @@ conversation with the user is in Polish.
 **Never a closing keyword** (`Closes`, `Fixes`, `Resolves`) in an issue body: GitHub acts on it and
 closes things nobody has verified. Use `Refs #NNN`.
 
+## Tell the backlog review
+
+**After filing a new issue, send the backlog-review session a short message naming it**: the issue's
+number and title, nothing more (#1985, decided with the user on 2026-10-16). It is the one message
+between sessions the rules allow ([`collaboration.md`](collaboration.md) § *The user routes
+everything*); everything else is still routed by the user.
+
+- **Facts only** — never a request, a priority or a suggested place in the queue. What to do with the
+  issue stays the review's and the user's call (#1481).
+- **No backlog-review session running → nothing is sent and nothing waits.** The review finds the
+  issue in the backlog as before.
+
 ## When an issue changes
 
 Amend the **body**, not only a comment. A *Done when* amended in a comment while the body keeps its
