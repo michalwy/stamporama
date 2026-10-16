@@ -73,7 +73,8 @@ import {
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
-import { ReplacesField } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
+import { ReplacesButton } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
+import { REPLACING_DISPOSITION } from "@/lib/replacement-rules";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
 import { markFaultIds, markTagIds, sameFaults } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
@@ -1473,13 +1474,29 @@ export function IssueRunDialog({
                             onCompare={() => setComparingId(a.tileId)}
                             inRun
                           />
-                          {/* Each row its own *Replaces…* (#1937), under what it is decided by.
-                              Choosing a copy makes *In collection* the row's own, ticked. */}
-                          <ReplacesField
-                            marginTop="0.25rem"
+                        </div>
+                        <span
+                          style={{
+                            marginLeft: "auto",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                          }}
+                        >
+                          <DispositionChips
+                            values={d.disposition}
+                            disabled={isPending}
+                            tabIndex={-1}
+                            onToggle={(flag, on) =>
+                              setOwn(a.tileId, "disposition", { ...d.disposition, [flag]: on })
+                            }
+                          />
+                          {/* Each row its own *Replaces…* (#1937), beside the dispositions it
+                              decides (#1972): choosing a copy makes *In collection* alone the row's
+                              own. */}
+                          <ReplacesButton
                             collectionId={collectionId}
                             stampId={a.stampId}
-                            conditions={conditions}
                             value={replacesOf(a.tileId, a.stampId)}
                             disabled={isPending}
                             tabIndex={-1}
@@ -1491,20 +1508,8 @@ export function IssueRunDialog({
                                 else next.delete(a.tileId);
                                 return next;
                               });
-                              if (itemId && !d.disposition.inCollection) {
-                                setOwn(a.tileId, "disposition", { ...d.disposition, inCollection: true });
-                              }
+                              if (itemId) setOwn(a.tileId, "disposition", { ...REPLACING_DISPOSITION });
                             }}
-                          />
-                        </div>
-                        <span style={{ marginLeft: "auto" }}>
-                          <DispositionChips
-                            values={d.disposition}
-                            disabled={isPending}
-                            tabIndex={-1}
-                            onToggle={(flag, on) =>
-                              setOwn(a.tileId, "disposition", { ...d.disposition, [flag]: on })
-                            }
                           />
                         </span>
                       </div>

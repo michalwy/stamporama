@@ -1531,9 +1531,10 @@ stamps first, then the other stamps of its issue — and **its own details**.
   under *its own details* does, and the row then says *own disposition*. Tab passes over the chips,
   so it still goes from one catalogue value to the next.
 - **Each row can replace a copy you hold**, as a single tile can: when the row's stamp has a copy in
-  your collection, **Replaces** under its holdings line picks the copy that row's piece takes the
-  place of, and ticks *In collection* as the row's own. Each row has its own; two rows cannot replace
-  the same copy. Give the row another stamp and its choice goes with the old one.
+  your collection, the **Replaces** button beside the row's disposition chips opens the same picker,
+  and the copy you choose makes *In collection* — and nothing else — the row's own disposition. Each
+  row has its own; two rows cannot replace the same copy. Give the row another stamp and its choice
+  goes with the old one.
 - **Where a stamp states a perforation or a watermark, what you read off the piece marks it**, exactly
   as it does on a shortlist: gauge a run in the viewer, or say which watermark you see, and the
   stamps it fits are marked.
@@ -2148,18 +2149,25 @@ in your collection and nothing being sorted, no thumbnails are drawn and the lin
 It is **only for looking**. Nothing in the window changes anything, and nothing decides which copy is
 better: that call is yours. **Back to the identification** (or Escape) returns you to the step with
 everything as you left it, and whatever you then decide — keeping the new piece in the collection,
-letting your old copy go with **Replaces** below — you do in the step itself. When you use
+letting your old copy go with **Replaces** beside the dispositions — you do in the step itself. When you use
 **Identify again** on a tile that is already a copy, that copy is the piece on the left, so it is not
 listed among the ones you compare it with.
 
 **Replacing a copy you hold.** When you identify a [scan tile](#card-scans) and the stamp has a copy
-**in your collection**, the step offers **Replaces** under the thumbnails: pick the copy the piece in hand takes the place of — each named by
-its number, condition and where it lies — and identifying records a
+**in your collection**, a small **Replaces** button stands beside the disposition chips. It opens a
+picker of the stamp's copies **in your collection** — copies held for sale or for trade are not
+offered, since there is nothing in the collection for them to be replaced in. Each is shown as its
+picture, with its number, its condition and certificate chips and where it lies; click a picture to
+enlarge it, and **Choose** the copy the piece in hand takes the place of. Identifying then records a
 [replacement](inventory.md#replacing-a-copy-with-a-better-one), which appears on **Inventory →
-Replacements** at once. Choosing a copy ticks **In collection**, since the piece is going there in its
-place. Nothing else about identifying changes: the new copy is filed where you file it, and the old
-one stays where it lies until you settle the pair on Replacements. A copy already being replaced is
-listed but cannot be chosen. *Replaces* is offered when you identify **one tile as one stamp** — not
+Replacements** at once.
+
+Choosing a copy turns **In collection** on and **For sale** and **For trade** off, since the piece is
+going into the collection in its place. The button then reads *Replaces #1234* — hover it to see that
+copy's picture, click it to choose another — and its **✕** clears the choice, leaving the dispositions
+as they are. Nothing else about identifying changes: the new copy is filed where you file it, and the
+old one stays where it lies until you settle the pair on Replacements. A copy already being replaced is
+shown but cannot be chosen. *Replaces* is offered when you identify **one tile as one stamp** — not
 for several tiles ticked as one stamp, a piece that is one of several possible variants, a piece
 carrying several stamps, or **Identify again**.
 
