@@ -390,15 +390,17 @@ async function settingsData(
     titleTemplate: data.titleTemplate ?? null,
     descriptionTemplate: data.descriptionTemplate ?? null,
     privateNoteTemplate: uses("privateNoteTemplate") ? (data.privateNoteTemplate ?? null) : null,
-    descriptionFormat: normalizeDescriptionFormat(data.descriptionFormat),
+    descriptionFormat: normalizeDescriptionFormat(
+      uses("descriptionFormat") ? data.descriptionFormat : null
+    ),
     titleLanguage: normalizeLanguage(data.titleLanguage),
-    ...listingDefaults(data),
+    ...listingDefaults(uses("defaultListingType") ? data : { ...data, defaultListingType: null }),
     // The platform's floor (#731). Written on its own rather than through the helper above,
     // because it is the one per-listing figure that does not depend on the listing type.
     minimumPrice: amount(data.minimumPrice),
     refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
-    maxTitleLength: data.maxTitleLength ?? null,
+    maxTitleLength: uses("maxTitleLength") ? (data.maxTitleLength ?? null) : null,
     maxDescriptionLength: data.maxDescriptionLength ?? null,
     maxPrivateNoteLength: uses("maxPrivateNoteLength") ? (data.maxPrivateNoteLength ?? null) : null,
     maxPhotos: data.maxPhotos ?? null,

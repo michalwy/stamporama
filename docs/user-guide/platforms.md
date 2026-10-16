@@ -79,7 +79,8 @@ partial: the tile says how many lack a rate, and hovering it says why.
 
 A platform's page is in four sections: the **platform** itself, what an **offer and a sale** on it
 start as, the **listing texts**, and the **photos**. Everything below is the same on a module
-platform's Platform tab and on one of your own.
+platform's Platform tab and on one of your own, except where a module's tab leaves out what its
+marketplace never uses — [Facebook's](facebook.md#the-facebook-platform) and [Colnect's](collections.md#colnect-platform) do.
 
 ### The platform
 

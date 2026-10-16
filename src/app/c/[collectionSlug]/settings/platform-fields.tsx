@@ -173,10 +173,14 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
   const isModule = !!platform?.platformModule;
   const isFacebook = platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
   // What this platform's module does not use is not offered (#1944): Delcampe has no private note
-  // (#1957). Nothing stored is left to show: `platforms.ts` writes such a setting empty on every save.
+  // (#1957); Colnect no listing type, description format or title cap (#1959). Nothing stored is left
+  // to show: `platforms.ts` writes such a setting empty on every save.
   const usesPrivateNote = platformUsesSetting(platform?.platformModule, "privateNoteTemplate");
   const usesPrivateNoteLimit = platformUsesSetting(platform?.platformModule, "maxPrivateNoteLength");
   const templateCount = usesPrivateNote ? TEMPLATE_COUNT : TEMPLATE_COUNT - 1;
+  const usesListingType = platformUsesSetting(platform?.platformModule, "defaultListingType");
+  const usesFormat = platformUsesSetting(platform?.platformModule, "descriptionFormat");
+  const usesTitleLimit = platformUsesSetting(platform?.platformModule, "maxTitleLength");
   const [coverColor, setCoverColor] = useState(platform?.coverColor ?? DEFAULT_PHOTO_COVER_COLOR);
   // The listing templates (#210, #266, #267) live in their own dialog — held here and submitted
   // through hidden fields, so the one Save carries them.
@@ -188,7 +192,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
     tileLabelRightTemplate: platform?.tileLabelRightTemplate ?? "",
   });
   const [descriptionFormat, setDescriptionFormat] = useState<DescriptionFormat>(
-    normalizeDescriptionFormat(platform?.descriptionFormat)
+    normalizeDescriptionFormat(usesFormat ? platform?.descriptionFormat : null)
   );
   // Decides whether the default **starting price** exists at all (#449): that figure belongs to an
   // auction, and offering it on a quick-buy platform would ask for a number nothing reads.
@@ -379,13 +383,14 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
           {/* What a new offer here starts as (#449). Not on Facebook, which offers only what it uses
               (#1958): a new offer there is sold as its group says (#1671), and the opening figure,
               the refresh and the buyer's message are Facebook defaults its groups follow (#1661).
-              This note is where the four went. */}
+              This note is where the four went. Nor on Colnect, which sells at a fixed price only
+              (#1959). */}
           {isFacebook ? (
             <FieldNote>
               How a new offer starts, what an auction opens at, when a quick buy is refreshed and the
               message to a buyer are Facebook defaults, on the Groups tab.
             </FieldNote>
-          ) : (
+          ) : !usesListingType ? null : (
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="platform-default-listing-type">
@@ -518,7 +523,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             {usesPrivateNote && (
               <input type="hidden" name="privateNoteTemplate" value={templates.privateNoteTemplate} />
             )}
-            <input type="hidden" name="descriptionFormat" value={descriptionFormat} />
+            {usesFormat && <input type="hidden" name="descriptionFormat" value={descriptionFormat} />}
             <input type="hidden" name="tileLabelLeftTemplate" value={templates.tileLabelLeftTemplate} />
             <input type="hidden" name="tileLabelRightTemplate" value={templates.tileLabelRightTemplate} />
             <LabelWithError>
@@ -526,15 +531,17 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
                 Listing templates
                 <InfoHint>
                   Title, description{usesPrivateNote ? ", private note" : ""} and photo tile label for
-                  this platform&rsquo;s listings, each generated from a {"{token}"} template with a live preview — and what the
-                  description field accepts: plain text, HTML or Markdown.
+                  this platform&rsquo;s listings, each generated from a {"{token}"} template with a live preview
+                  {usesFormat ? " — and what the description field accepts: plain text, HTML or Markdown." : "."}
                 </InfoHint>
               </span>
             </LabelWithError>
             <SummaryRow
               summary={
                 configuredTemplates
-                  ? `${configuredTemplates} of ${templateCount} configured · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description`
+                  ? `${configuredTemplates} of ${templateCount} configured${
+                      usesFormat ? ` · ${DESCRIPTION_FORMAT_LABELS[descriptionFormat]} description` : ""
+                    }`
                   : "None — listings use the catalog/copy label"
               }
               muted={!configuredTemplates}
@@ -556,13 +563,15 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
               </span>
             </LabelWithError>
             <div style={{ display: "flex", gap: "0.75rem" }}>
-              <LimitField
-                id="platform-max-title-length"
-                name="maxTitleLength"
-                label="Max title"
-                max={MAX_LISTING_TEXT_LENGTH_LIMIT}
-                defaultValue={platform?.maxTitleLength}
-              />
+              {usesTitleLimit && (
+                <LimitField
+                  id="platform-max-title-length"
+                  name="maxTitleLength"
+                  label="Max title"
+                  max={MAX_LISTING_TEXT_LENGTH_LIMIT}
+                  defaultValue={platform?.maxTitleLength}
+                />
+              )}
               <LimitField
                 id="platform-max-description-length"
                 name="maxDescriptionLength"
@@ -770,7 +779,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             collectionId={collectionId}
             language={titleLanguage || null}
             templates={templates}
-            descriptionFormat={descriptionFormat}
+            descriptionFormat={usesFormat ? descriptionFormat : null}
             privateNote={usesPrivateNote}
             onCancel={() => setTemplatesOpen(false)}
             onSave={(next, format) => {

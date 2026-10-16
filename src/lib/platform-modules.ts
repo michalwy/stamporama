@@ -284,7 +284,12 @@ export function supportsAssistantClose(platformModule: string | null): boolean {
 /** A platform setting a module's platform may not use (#1956–#1959) — the names `Platform` stores
  *  it under. Only those dropped through this table are listed; the four Facebook's groups decide are
  *  left out by `PlatformFields` itself (#1958). */
-export type DroppablePlatformSetting = "privateNoteTemplate" | "maxPrivateNoteLength";
+export type DroppablePlatformSetting =
+  | "privateNoteTemplate"
+  | "maxPrivateNoteLength"
+  | "defaultListingType"
+  | "descriptionFormat"
+  | "maxTitleLength";
 
 /**
  * The platform settings each module's platform **does not use** (#1944): its page does not offer
@@ -294,9 +299,14 @@ export type DroppablePlatformSetting = "privateNoteTemplate" | "maxPrivateNoteLe
  * - **Delcampe** — its upload carries no private note: `personal_reference` is the offer's number
  *   and nothing else (#635), so a note generated from a template, and the cap on its length, reach
  *   nothing there. A Delcampe offer's own private note is still written by hand.
+ * - **Colnect** (#1959) — its sale form takes a fixed price and has no auction, so no default listing
+ *   type (and with it no default starting price, which only an auction has); its short description
+ *   is a plain-text field, so no description format — saved as plain text; and it has no title field,
+ *   so no cap on one. The title *template* stays: it names the offer and its sets here.
  */
 const UNUSED_PLATFORM_SETTINGS: Readonly<Record<string, readonly DroppablePlatformSetting[]>> = {
   [DELCAMPE_PLATFORM_MODULE]: ["privateNoteTemplate", "maxPrivateNoteLength"],
+  [COLNECT_PLATFORM_MODULE]: ["defaultListingType", "descriptionFormat", "maxTitleLength"],
 };
 
 /** Whether a platform of `platformModule` uses `setting` — always, for a generic platform. */
