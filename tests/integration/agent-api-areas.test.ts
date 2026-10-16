@@ -112,7 +112,7 @@ describe("areas through the agent API (#1539)", () => {
     // A grouping-only area with no catalogue configuration at all.
     europeId = (await prisma.collectionArea.create({ data: { collectionId, name: "Europe", assignable: false } })).id;
     // A marketplace listing in German is what makes German a title language (#293).
-    await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, titleLanguage: "de" } });
+    await prisma.platform.create({ data: { collectionId, name: "Delcampe", titleLanguage: "de" } });
 
     token = (await createAssistantToken(userId, collectionId, { label: "area agent", scope: "read_write", kind: "agent" })).token;
     readOnlyToken = (await createAssistantToken(userId, collectionId, { label: "area agent, read", scope: "read", kind: "agent" })).token;

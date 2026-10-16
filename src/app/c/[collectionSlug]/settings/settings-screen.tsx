@@ -46,7 +46,8 @@ import { DuplicatesPanel } from "./duplicates-panel";
 import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
-import { PhilasearchPlatformPanel } from "./philasearch-platform-panel";
+import { ModulePlatformTab } from "./module-platform-tab";
+import { PlatformsPanel } from "./platforms-panel";
 import { FacebookSettingsBody } from "./facebook-settings-page";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
@@ -88,6 +89,14 @@ import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
 import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
 import type { DelcampeLearnedCategoryList } from "@/lib/delcampe-categories";
 import type { FacebookGroupList } from "@/lib/facebook-groups";
+import type { PlatformListItem } from "@/lib/platforms";
+import {
+  ALLEGRO_PLATFORM_MODULE,
+  COLNECT_PLATFORM_MODULE,
+  DELCAMPE_PLATFORM_MODULE,
+  FACEBOOK_PLATFORM_MODULE,
+  PHILASEARCH_PLATFORM_MODULE,
+} from "@/lib/platform-modules";
 
 interface SettingsScreenProps {
   collectionId: string;
@@ -136,12 +145,10 @@ interface SettingsScreenProps {
   /** Colnect's four standard lists with what each mirrors (#684) — one row each, configured or
    *  not, since the set is Colnect's and is fixed. */
   initialColnectListMappings: ColnectListMappingData[];
-  /** Which platform contact is Colnect (#406), or null when none is — the setting the listing
-   * checks ride on. */
-  colnectPlatformId: string | null;
-  /** Which platform contact is Allegro (#355), or null when none is — the setting the Assistant's
-   * lot capture rides on. */
-  allegroPlatformId: string | null;
+  /** The collection's generic platforms (#1955), for Settings → Platforms. */
+  genericPlatforms: PlatformListItem[];
+  /** The five module platforms (#1955), by module id — each module page's Platform tab. */
+  modulePlatforms: Record<string, PlatformListItem>;
   /** This instance's own API connection to the collector's Allegro account (#476). Secret-free by
    *  construction — the client secret and both tokens never cross to the browser. */
   allegroConnection: AllegroConnectionStatus;
@@ -151,17 +158,11 @@ interface SettingsScreenProps {
   /** What the collection has learned about Allegro's categories (#488) — both registers, empty with
    *  a null platform until one of the collection's platforms is Allegro. */
   allegroLearnedCategories: AllegroLearnedCategoryList;
-  /** Which platform is Delcampe (#608), and the profiles its uploads are built from. */
-  delcampePlatformId: string | null;
+  /** The profiles Delcampe uploads are built from (#608), and its learned categories. */
   delcampeListingProfiles: DelcampeListingProfileList;
   delcampeLearnedCategories: DelcampeLearnedCategoryList;
-  /** Which platform is Facebook (#1543), and the groups under it. */
-  facebookPlatformId: string | null;
+  /** The groups under the Facebook platform (#1543). */
   facebookGroups: FacebookGroupList;
-  /** Which platform is Philasearch (#742) — the setting a lot captured from its pages rides on. */
-  philasearchPlatformId: string | null;
-  /** Every platform contact, for that picker. */
-  platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
   /** Email (#1372): the instance's mail provider as a summary — never its key — and this
    * collection's undelivered mail. */
@@ -355,6 +356,7 @@ function entrySummary(
           connection={props.allegroConnection}
           profiles={props.allegroListingProfiles}
           categories={props.allegroLearnedCategories}
+          platform={props.modulePlatforms[ALLEGRO_PLATFORM_MODULE]}
           active={part}
           onOpen={choosePart}
         />
@@ -364,6 +366,7 @@ function entrySummary(
         <DelcampeSummary
           profiles={props.delcampeListingProfiles}
           categories={props.delcampeLearnedCategories}
+          platform={props.modulePlatforms[DELCAMPE_PLATFORM_MODULE]}
           active={part}
           onOpen={choosePart}
         />
@@ -375,6 +378,7 @@ function entrySummary(
           conditions={props.initialColnectConditionMappings}
           attributes={props.initialAttributes}
           lists={props.initialColnectListMappings}
+          platform={props.modulePlatforms[COLNECT_PLATFORM_MODULE]}
           active={part}
           onOpen={choosePart}
         />
@@ -722,18 +726,14 @@ function SettingsEntryBody({
   initialColnectMappings,
   initialColnectConditionMappings,
   initialColnectListMappings,
-  colnectPlatformId,
-  allegroPlatformId,
+  genericPlatforms,
+  modulePlatforms,
   allegroConnection,
   allegroListingProfiles,
   allegroLearnedCategories,
-  delcampePlatformId,
   delcampeListingProfiles,
   delcampeLearnedCategories,
-  facebookPlatformId,
   facebookGroups,
-  philasearchPlatformId,
-  platformContacts,
   initialAssistantTokens,
   mailSettings,
   auctionReminder,
@@ -910,13 +910,14 @@ function SettingsEntryBody({
           initialSupplies={initialPackingSupplies}
         />
       );
+    case "platforms":
+      return <PlatformsPanel collectionId={collectionId} initialPlatforms={genericPlatforms} />;
     case "allegro":
       return (
         <AllegroSettingsBody
           part={part}
           collectionId={collectionId}
-          platforms={platformContacts}
-          platformId={allegroPlatformId}
+          platform={modulePlatforms[ALLEGRO_PLATFORM_MODULE]}
           connection={allegroConnection}
           profiles={allegroListingProfiles}
           categories={allegroLearnedCategories}
@@ -927,8 +928,7 @@ function SettingsEntryBody({
         <DelcampeSettingsBody
           part={part}
           collectionId={collectionId}
-          platforms={platformContacts}
-          platformId={delcampePlatformId}
+          platform={modulePlatforms[DELCAMPE_PLATFORM_MODULE]}
           profiles={delcampeListingProfiles}
           categories={delcampeLearnedCategories}
         />
@@ -936,19 +936,19 @@ function SettingsEntryBody({
     case "facebook":
       return (
         <FacebookSettingsBody
+          part={part}
           collectionId={collectionId}
-          platforms={platformContacts}
-          platformId={facebookPlatformId}
+          platform={modulePlatforms[FACEBOOK_PLATFORM_MODULE]}
           groups={facebookGroups}
         />
       );
     case "philasearch":
-      // The whole page (#742): a marketplace this collection only bids on needs nothing else.
+      // The whole page (#742): a marketplace this collection only bids on needs nothing but its
+      // platform (#1955).
       return (
-        <PhilasearchPlatformPanel
+        <ModulePlatformTab
           collectionId={collectionId}
-          platforms={platformContacts}
-          selectedId={philasearchPlatformId}
+          platform={modulePlatforms[PHILASEARCH_PLATFORM_MODULE]}
         />
       );
     case "acceptance":
@@ -972,8 +972,7 @@ function SettingsEntryBody({
         <ColnectSettingsBody
           part={part}
           collectionId={collectionId}
-          platforms={platformContacts}
-          platformId={colnectPlatformId}
+          platform={modulePlatforms[COLNECT_PLATFORM_MODULE]}
           vendors={initialTree.map((v) => ({
             id: v.id,
             name: v.name,

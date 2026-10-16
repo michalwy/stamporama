@@ -438,7 +438,7 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
   };
 }
 
-/** Verify a contact exists in the collection and carries the `platform` role; returns its fixed
+/** Verify a platform exists in the collection; returns its fixed
  * currency (#196), which may be null when not set yet, alongside its listing templates + language. */
 async function assertPlatform(
   collectionId: string,
@@ -462,8 +462,8 @@ async function assertPlatform(
       platformModule: string | null;
     }
 > {
-  const contact = await prisma.contact.findFirst({
-    where: { id: platformId, collectionId, platform: true },
+  const contact = await prisma.platform.findFirst({
+    where: { id: platformId, collectionId },
     select: {
       platformCurrency: true,
       defaultStartingPrice: true,
@@ -525,7 +525,7 @@ async function resolvePlatformCurrency(
       "Set this platform's currency before listing an offer on it."
     );
   }
-  await prisma.contact.update({
+  await prisma.platform.update({
     where: { id: platformId },
     data: { platformCurrency: first },
   });
@@ -3838,7 +3838,7 @@ export async function listReadyOffersForListing(
   // Which Assistant module, if any, can post to this platform (#406). It decides whether the listing
   // preconditions are asked at all: they are that module's own rules, and reporting "no Colnect
   // item-ID" on a Delcampe batch is noise about a form nobody is going to fill from here.
-  const platform = await prisma.contact.findFirst({
+  const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
     select: {
       platformModule: true,

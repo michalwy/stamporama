@@ -4,6 +4,8 @@
 
 Accepted
 
+Both registers hang off the Allegro module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a platform contact.
+
 ## Context
 
 ADR-0025 took the account-side half of what `POST /sale/product-offers` demands. The other half is

@@ -55,11 +55,10 @@ describe("offer number (#416)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "NumberMarket",
-          platform: true,
           platformCurrency: "EUR",
           // The private note is what the address is for, so this is the template under test.
           privateNoteTemplate: "{offerUrl}",
@@ -67,8 +66,8 @@ describe("offer number (#416)", () => {
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId: otherCollectionId, name: "OtherMarket", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId: otherCollectionId, name: "OtherMarket", platformCurrency: "EUR" },
       })
     ).id;
   });

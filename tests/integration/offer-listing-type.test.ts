@@ -50,7 +50,7 @@ describe("offer listing type and its prices (#449)", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp A" } })).id;
     conditionId = (
@@ -259,11 +259,10 @@ describe("offer listing type and its prices (#449)", () => {
   it("takes the platform's default listing type when the form states none", async () => {
     // The `defaultStartingPrice` rule (#362): read at creation, then owned by the offer.
     const auctionOnly = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Auction house ${Date.now()}`,
-          platform: true,
           defaultListingType: "auction",
         },
       })

@@ -7,6 +7,5 @@ export const CONTACT_ROLES: { key: keyof ContactRoles; label: string }[] = [
   { key: "buyer", label: "Buyer" },
   { key: "exchangePartner", label: "Exchange partner" },
   { key: "auctionHouse", label: "Auction house" },
-  { key: "platform", label: "Platform" },
   { key: "other", label: "Other" },
 ];

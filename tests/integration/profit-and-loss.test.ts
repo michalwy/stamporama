@@ -46,10 +46,10 @@ describe("profit and loss screen (#1305)", () => {
       })
     ).id;
     delcampe = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     allegro = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     conditionId = (
       await prisma.stampCondition.create({

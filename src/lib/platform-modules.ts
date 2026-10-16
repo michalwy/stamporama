@@ -1,23 +1,19 @@
-// Which marketplace a platform `Contact` is, as far as the Assistant is concerned (#406, part of
-// #155) — pure, no Prisma.
+// Which marketplace a `Platform` is, as far as the app's modules are concerned (#406, part of #155;
+// #1955) — pure, no Prisma.
 //
-// `Contact.platformModule` holds the id of the extension's `PlatformModule` that knows that
-// marketplace's sale form (#408). It exists because the listing preconditions (#406) are **one
-// module's rules** — a Colnect item-ID on every stamp, a Colnect grade for every condition — and a
-// platform with no module has no such rules to fail. Checking them on a Delcampe listing would
-// report a problem about a form nobody is going to fill from here.
+// `Platform.platformModule` holds the id of the module that knows that marketplace (#408): the
+// extension's `PlatformModule` where there is one, and otherwise the app's own Settings page for it.
+// It exists because the listing preconditions (#406) are **one module's rules** — a Colnect item-ID
+// on every stamp, a Colnect grade for every condition — and a platform with no module has no such
+// rules to fail. Checking them on a Delcampe listing would report a problem about a form nobody is
+// going to fill from here.
 //
-// Which contact carries it is set on that marketplace's **own Settings tab** — Colnect's beside the
-// catalog and condition mappings it belongs with, Allegro's on a tab of its own — never on the
-// contact form: it is one fact per collection ("which platform *is* Colnect"), and the collector
-// deciding it is already on that tab. Exactly one contact may hold each id, since each is one
-// marketplace; `setModulePlatform` is what enforces that.
-//
-// There is still deliberately no registry of modules here, and no enumeration to pick from. Each id
-// is written by the one setter that owns its tab, so the ids are named where they are used and a
-// list of them would be a vocabulary nothing reads.
+// Since #1955 (ADR-0071) the five modules are **platforms of their own**, one of each per collection,
+// named after their module and configured on that module's own Settings page; nothing picks which
+// platform is which any more. `MODULE_PLATFORMS` is the list — read by whatever creates them and by
+// the name rule that keeps a generic platform from taking one of their names.
 
-/** The value `Contact.platformModule` carries for Colnect, and what the extension recognises. */
+/** The value `Platform.platformModule` carries for Colnect, and what the extension recognises. */
 export const COLNECT_PLATFORM_MODULE = "colnect";
 
 /**
@@ -27,7 +23,7 @@ export const COLNECT_PLATFORM_MODULE = "colnect";
  * gates nothing about offers. What it names is the platform an **auction lot captured from an
  * allegro.pl page** belongs to: a capture never asks which marketplace it is on, because the page it
  * was read from already answers that. It is the one fact a capture cannot read off the listing,
- * since the platform is a `Contact` of this collection and not something Allegro knows about.
+ * since the platform is a `Platform` of this collection and not something Allegro knows about.
  */
 export const ALLEGRO_PLATFORM_MODULE = "allegro";
 
@@ -37,7 +33,7 @@ export const ALLEGRO_PLATFORM_MODULE = "allegro";
  * A **marker and nothing more**, and pointedly absent from the listing rules below. Delcampe is
  * listed to by uploading a CSV built here (#610), not by an extension filling a form, so there is no
  * module to post with: `hasListingModule` answers false and the offer screens offer no ⚡ handoff,
- * which is the truthful outcome rather than a gap. What the marker *is* read for is which `Contact`
+ * which is the truthful outcome rather than a gap. What the marker *is* read for is which `Platform`
  * this collection calls Delcampe — the platform its listing profiles (#608), its learned categories
  * (#609) and its export (#610) hang off, and the one fact none of those can work out for itself.
  */
@@ -46,7 +42,7 @@ export const DELCAMPE_PLATFORM_MODULE = "delcampe";
 /**
  * The same, for Facebook (#1543; ADR-0061).
  *
- * A marker for **which `Contact` is Facebook**, and nothing more, Delcampe's shape: Facebook has no
+ * A marker for **which `Platform` is Facebook**, and nothing more, Delcampe's shape: Facebook has no
  * listing half here (a group post is prepared as a kit and posted by hand, #1544) and no capture, so
  * it is absent from both rule tables below. What the marker is read for is the platform the
  * collection's groups hang off — the one fact the groups cannot work out for themselves.
@@ -61,6 +57,28 @@ export const FACEBOOK_PLATFORM_MODULE = "facebook";
  * lot's seller is the house and the platform is Philasearch — the split ADR-0021 was drawn around.
  */
 export const PHILASEARCH_PLATFORM_MODULE = "philasearch";
+
+/** The five module platforms, each with the fixed name its platform carries (#1955) — in the order
+ *  the Settings navigation lists their pages. */
+export const MODULE_PLATFORMS: readonly { module: string; name: string }[] = [
+  { module: ALLEGRO_PLATFORM_MODULE, name: "Allegro" },
+  { module: DELCAMPE_PLATFORM_MODULE, name: "Delcampe" },
+  { module: FACEBOOK_PLATFORM_MODULE, name: "Facebook" },
+  { module: PHILASEARCH_PLATFORM_MODULE, name: "Philasearch" },
+  { module: COLNECT_PLATFORM_MODULE, name: "Colnect" },
+];
+
+/** The fixed name of `module`'s platform, or null for an id that is not one of the five. */
+export function modulePlatformName(module: string | null | undefined): string | null {
+  return MODULE_PLATFORMS.find((m) => m.module === module)?.name ?? null;
+}
+
+/** Whether `name` is one of the module platforms' names, ignoring case and the space around it — the
+ *  names a generic platform may not take (#1955). */
+export function isModulePlatformName(name: string): boolean {
+  const wanted = name.trim().toLowerCase();
+  return MODULE_PLATFORMS.some((m) => m.name.toLowerCase() === wanted);
+}
 
 /**
  * How one marketplace's captured lots are recognised, refreshed and grouped (#742).

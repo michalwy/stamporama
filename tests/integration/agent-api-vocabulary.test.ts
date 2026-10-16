@@ -159,17 +159,17 @@ describe("the collection vocabulary operation", () => {
       data: { vendorId: otherVendor.id, name: "Not Ours", currency: "USD" },
     });
 
-    await prisma.contact.create({
-      data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+    await prisma.platform.create({
+      data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
     });
     // A platform whose currency the collector has not set yet: nullable in the schema and
     // domain-enforced before the first offer, so an agent should be able to see it is unset.
-    await prisma.contact.create({
-      data: { collectionId, name: "Allegro", platform: true },
+    await prisma.platform.create({
+      data: { collectionId, name: "Allegro" },
     });
-    // **The row that must never appear.** `Contact` is one table for buyers, sellers, exchange
-    // partners and platforms, and it carries personal details. A `platform` filter that was
-    // forgotten would hand an agent this person's email to hold for a whole session.
+    // **The row that must never appear.** A contact is a person, and carries personal details; the
+    // platforms are a table of their own since #1955, and a read reaching the wrong one would hand an
+    // agent this person's email to hold for a whole session.
     await prisma.contact.create({
       data: {
         collectionId,
@@ -180,23 +180,25 @@ describe("the collection vocabulary operation", () => {
         notes: "Pays late.",
       },
     });
-    // And one that is both, since the flags are independent and combinable — it *is* a platform, so
-    // it appears, and its personal columns still must not.
-    await prisma.contact.create({
+    // A platform carrying the collector's private notes — it appears, and its notes must not.
+    await prisma.platform.create({
       data: {
         collectionId,
         name: "Marketplace Ltd",
-        platform: true,
-        seller: true,
         platformCurrency: "GBP",
-        email: "billing@example.com",
+        notes: "Account billing@example.com, pays late.",
       },
+    });
+    // A platform switched off (#1955): still named by what was recorded on it, so still listed.
+    await prisma.platform.create({
+      data: { collectionId, name: "Old forum", platformCurrency: "PLN", enabled: false },
     });
   });
 
   after(async () => {
     const ids = [collectionId, otherCollectionId];
     await prisma.contact.deleteMany({ where: { collectionId: { in: ids } } });
+    await prisma.platform.deleteMany({ where: { collectionId: { in: ids } } });
     await prisma.catalogName.deleteMany({ where: { vendor: { collectionId: { in: ids } } } });
     await prisma.catalogVendor.deleteMany({ where: { collectionId: { in: ids } } });
     await prisma.location.deleteMany({ where: { collectionId: { in: ids }, parentId: { not: null } } });
@@ -224,7 +226,7 @@ describe("the collection vocabulary operation", () => {
     assert.equal(vocabulary.locations.length, 2);
     assert.equal(vocabulary.catalogVendors.length, 1);
     assert.equal(vocabulary.catalogs.length, 1);
-    assert.equal(vocabulary.platforms.length, 3);
+    assert.equal(vocabulary.platforms.length, 4);
   });
 
   it("scopes everything to the token's own collection", async () => {
@@ -355,29 +357,32 @@ describe("the collection vocabulary operation", () => {
       assert.equal(allegro.currency, null);
     });
 
-    it("returns only contacts flagged as platforms", async () => {
+    it("returns the platforms and never a contact (#1955)", async () => {
       const platforms = (await readCollectionVocabulary(context)).platforms;
       assert.ok(!platforms.some((row) => row.name === "Jan Kowalski"));
-    });
-
-    it("includes a contact that is a platform and something else too", async () => {
-      // The role flags are independent and combinable (ADR-0007 §4), so `platform: true` is the
-      // whole test and a second role must not exclude it.
-      const platforms = (await readCollectionVocabulary(context)).platforms;
       assert.ok(platforms.some((row) => row.name === "Marketplace Ltd"));
     });
 
-    it("carries no personal detail from the contact row at all", async () => {
-      // The filter and the `select` are two independent guards and neither is relied on alone. This
-      // asserts the projection: an agent holds this for a whole session, and a trading partner's
-      // email has no business in it.
+    it("marks a switched-off platform, and only that one (#1955)", async () => {
+      const platforms = (await readCollectionVocabulary(context)).platforms;
+      assert.deepEqual(
+        platforms.filter((row) => "enabled" in row).map((row) => [row.name, row.enabled]),
+        [["Old forum", false]]
+      );
+    });
+
+    it("carries no private detail from the platform row at all", async () => {
+      // The `select` and the mapper are two independent guards and neither is relied on alone. This
+      // asserts the projection: an agent holds this for a whole session, and the collector's notes
+      // have no business in it.
       const platforms = (await readCollectionVocabulary(context)).platforms;
       const serialised = JSON.stringify(platforms);
-      for (const leak of ["jan@example.com", "billing@example.com", "+48 000 000 000", "Pays late."]) {
+      for (const leak of ["jan@example.com", "billing@example.com", "+48 000 000 000", "Pays late.", "pays late"]) {
         assert.ok(!serialised.includes(leak), `${leak} must not reach the agent`);
       }
       for (const row of platforms) {
-        assert.deepEqual(Object.keys(row).sort(), ["currency", "id", "name"]);
+        const keys = Object.keys(row).filter((k) => k !== "enabled").sort();
+        assert.deepEqual(keys, ["currency", "id", "name"]);
       }
     });
   });

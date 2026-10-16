@@ -56,7 +56,7 @@ import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
-import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
+import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 
@@ -681,13 +681,13 @@ export function InventoryItemRow({
         ).toLowerCase()}.`;
 
   // Platforms this copy is deliberately never listed on (#506), named from the collection's own
-  // contacts. Read here rather than threaded down, for the reason `useCollectionItemNoPad` is: the
-  // copy row is rendered from eight screens, and one shared, cached query costs less than one more
-  // prop through all of them. An id with no contact behind it is a platform since deleted, whose
+  // platforms (#1955). Read here rather than threaded down, for the reason `useCollectionItemNoPad`
+  // is: the copy row is rendered from eight screens, and one shared, cached query costs less than one
+  // more prop through all of them. An id with no platform behind it is one since deleted, whose
   // exclusion means nothing any more, so it is chipped as nothing.
-  const { data: contacts } = useContacts(collectionId);
+  const { data: platforms } = usePlatforms(collectionId);
   const excludedNames = item.excludedPlatformIds
-    .map((id) => contacts?.find((c) => c.id === id)?.name)
+    .map((id) => platforms?.find((p) => p.id === id)?.name)
     .filter((name): name is string => !!name);
   const excludedHere =
     !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);

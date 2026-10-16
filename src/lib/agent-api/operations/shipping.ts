@@ -64,7 +64,7 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 
 // Carriers and their rate lists, platform shipping options, packing supplies and their uses without a
 // sale (#1910) — the shipping and packing data an agent sets up and keeps, instead of the collector
-// typing it in under Settings, on a platform's contact dialog and on the Supplies screen.
+// typing it in under Settings, on a platform's settings and on the Supplies screen.
 //
 // ## What it writes, and the boundary
 //

@@ -11,7 +11,6 @@ import {
   updateOffer,
   type OfferInput,
 } from "../../src/lib/offers";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import {
   createFacebookGroup,
   setFacebookGroupArchived,
@@ -76,16 +75,16 @@ describe("Facebook auction offers (#1544)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Mercury" } })).id;
     conditionId = (
       await prisma.stampCondition.create({
@@ -186,7 +185,7 @@ describe("Facebook auction offers (#1544)", () => {
     assert.equal(offer.startingPrice?.toFixed(2), "4.00", "the group's starting amount");
     assert.equal(offer.bidIncrement?.toFixed(2), "0.50", "the group's increment");
     assert.equal(offer.facebookGroupId, groupId);
-    const platform = await prisma.contact.findUniqueOrThrow({ where: { id: facebookId } });
+    const platform = await prisma.platform.findUniqueOrThrow({ where: { id: facebookId } });
     assert.equal(platform.platformCurrency, "PLN");
 
     // A figure the form states outranks the group's.

@@ -22,23 +22,14 @@ import {
 } from "./cost-to-catalog";
 import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
 import { readTradeBalance } from "./trade-valuation";
-import {
-  ALLEGRO_PLATFORM_MODULE,
-  DELCAMPE_PLATFORM_MODULE,
-  FACEBOOK_PLATFORM_MODULE,
-} from "./platform-modules";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   auctionPremiumTerms,
   auctionWinRate,
   auctionWonSpend,
-  averageDaysToSale,
   contactPeriodRange,
-  isInContactRange,
   type MoneyEntry,
-  offerClosedOn,
   OPEN_TRADE_STATUSES,
-  sellThrough,
   NOT_DELIVERED_PURCHASE_STATUSES,
   sumMoney,
   toBaseAmount,
@@ -50,9 +41,9 @@ import {
 
 // The read behind a contact's own page (#1708): its header, and one section per role it plays —
 // **purchases** (the contact as seller), **sales** (the contact as buyer), **auctions** (the contact
-// as the seller or house an auction sale is tracked with, #1709), **platform** (the marketplace
-// offers, sales and purchases go through, #1710) and **trades** (the contact as exchange partner,
-// #1710).
+// as the seller or house an auction sale is tracked with, #1709) and **trades** (the contact as
+// exchange partner, #1710). A marketplace is no contact since #1955 (ADR-0071): its figures belong
+// on the platform's own page.
 //
 // **A section shows when the contact has the role or has data for it**, the data counted over all
 // time: a contact created on the fly from a purchase's supplier field carries no roles, and its
@@ -156,40 +147,6 @@ export interface ContactAuctions {
   rows: ContactAuctionSaleRow[];
 }
 
-/** Which of the marketplaces with a Settings tab of their own this platform is, by its module. */
-export type ContactPlatformSettings = "allegro" | "delcampe" | "facebook";
-
-const PLATFORM_SETTINGS_TABS: Record<string, ContactPlatformSettings> = {
-  [ALLEGRO_PLATFORM_MODULE]: "allegro",
-  [DELCAMPE_PLATFORM_MODULE]: "delcampe",
-  [FACEBOOK_PLATFORM_MODULE]: "facebook",
-};
-
-export interface ContactPlatform {
-  /** Offers live on it now, and ready to go up — **today's** figures, whatever the period: a state
-   *  is where an offer is, not something that happened in a period. */
-  activeCount: number;
-  readyCount: number;
-  /** Offers that ended in the period: sold on the day of their sale, withdrawn on the day they were
-   *  withdrawn (`offerClosedOn`). */
-  soldCount: number;
-  withdrawnCount: number;
-  /** Sold of the offers that ended, 0–1; null when none ended. */
-  sellThrough: number | null;
-  /** The mean days from listing to sale over the sold offers with a listing date; null with none. */
-  avgDaysToSale: number | null;
-  /** How many sold offers the average is over — those missing a listing date are not. */
-  timedCount: number;
-  /** Sales made through it, and what their buyers paid — the sales section's own measure. */
-  salesCount: number;
-  revenue: MoneyTotal;
-  /** Purchases made through it, and their order totals (#852). */
-  purchaseCount: number;
-  purchaseSpent: MoneyTotal;
-  /** The marketplace's own Settings tab, where it has one. */
-  settings: ContactPlatformSettings | null;
-}
-
 export interface ContactTradeRow {
   id: string;
   tradeNo: number;
@@ -234,8 +191,6 @@ export interface ContactPage {
   sales: ContactSales | null;
   /** Null when the contact is no auction house and no auction sale is tracked with it. */
   auctions: ContactAuctions | null;
-  /** Null when the contact is not a platform and nothing ever went through it. */
-  platform: ContactPlatform | null;
   /** Null when the contact is not an exchange partner and no trade was ever made with it. */
   trades: ContactTrades | null;
 }
@@ -262,18 +217,12 @@ export async function getContactPage(
   const dateWhere = bounds.gte || bounds.lt ? bounds : undefined;
 
   const { collectionId } = contact;
-  const [purchaseCount, saleCount, auctionSaleCount, platformCounts, tradeCount] = await Promise.all([
+  const [purchaseCount, saleCount, auctionSaleCount, tradeCount] = await Promise.all([
     prisma.purchase.count({ where: purchaseWhere(contact) }),
     prisma.sale.count({ where: { collectionId, buyerId: contact.id } }),
     prisma.auctionSale.count({ where: { collectionId, sellerId: contact.id } }),
-    Promise.all([
-      prisma.offer.count({ where: { collectionId, platformId: contact.id } }),
-      prisma.sale.count({ where: { collectionId, platformId: contact.id } }),
-      prisma.purchase.count({ where: platformPurchaseWhere(contact) }),
-    ]),
     prisma.trade.count({ where: { collectionId, partnerId: contact.id } }),
   ]);
-  const platformUsed = platformCounts.some((n) => n > 0);
 
   return {
     contact,
@@ -294,10 +243,6 @@ export async function getContactPage(
       contact.auctionHouse || auctionSaleCount > 0
         ? await readAuctions(ownerId, contact, baseCurrency, dateWhere)
         : null,
-    platform:
-      contact.platform || platformUsed
-        ? await readPlatform(contact, baseCurrency, range, dateWhere)
-        : null,
     trades:
       contact.exchangePartner || tradeCount > 0
         ? await readTrades(ownerId, contact, dateWhere)
@@ -314,16 +259,6 @@ function purchaseWhere(contact: ContactListItem) {
   return {
     collectionId: contact.collectionId,
     contactId: contact.id,
-    kind: "purchase",
-    tradeId: null,
-  };
-}
-
-/** The purchases made **through** the contact as a platform — `purchaseWhere`'s rule otherwise. */
-function platformPurchaseWhere(contact: ContactListItem) {
-  return {
-    collectionId: contact.collectionId,
-    platformId: contact.id,
     kind: "purchase",
     tradeId: null,
   };
@@ -636,110 +571,6 @@ async function readAuctions(
     exposure,
     toReviewCount,
     rows,
-  };
-}
-
-/**
- * The contact as a **platform** (#1710): the offers on it, the sales and purchases made through it,
- * and where its own settings are.
- *
- * Active and ready are counted as they stand today. Every other figure is over the period, and an
- * offer that ended is placed by `offerClosedOn` — which is why the closed offers are read and placed
- * here rather than narrowed by `closedAt` alone: that stamp is not the sale date (#512's backfill).
- */
-async function readPlatform(
-  contact: ContactListItem,
-  baseCurrency: string,
-  range: DateRange,
-  dateWhere: { gte?: Date; lt?: Date } | undefined
-): Promise<ContactPlatform> {
-  const { collectionId } = contact;
-  const platformId = contact.id;
-  const [activeCount, readyCount, closed, sales, purchases] = await Promise.all([
-    prisma.offer.count({ where: { collectionId, platformId, state: "active" } }),
-    prisma.offer.count({ where: { collectionId, platformId, state: "ready" } }),
-    prisma.offer.findMany({
-      where: {
-        collectionId,
-        platformId,
-        state: { in: ["sold", "withdrawn"] },
-        // A first cut in the database; `offerClosedOn` below has the last word on the day.
-        ...(dateWhere
-          ? {
-              OR: [
-                { saleLines: { some: { sale: { soldAt: dateWhere } } } },
-                { closedAt: dateWhere },
-              ],
-            }
-          : {}),
-      },
-      select: {
-        state: true,
-        listingDate: true,
-        closedAt: true,
-        saleLines: { select: { sale: { select: { soldAt: true } } } },
-      },
-    }),
-    readSales({ collectionId, platformId }, baseCurrency, dateWhere),
-    prisma.purchase.findMany({
-      where: {
-        ...platformPurchaseWhere(contact),
-        ...(dateWhere ? { purchasedAt: dateWhere } : {}),
-      },
-      select: {
-        currency: true,
-        fxRateToBase: true,
-        shippingCost: true,
-        lots: { select: { id: true, price: true } },
-        expenses: { select: { id: true, price: true } },
-        supplyLines: { select: { id: true, price: true } },
-      },
-    }),
-  ]);
-
-  let soldCount = 0;
-  let withdrawnCount = 0;
-  const timed: { listedOn: string; soldOn: string }[] = [];
-  for (const o of closed) {
-    const sold = o.state === "sold";
-    const on = offerClosedOn(
-      o.closedAt ? isoDate(o.closedAt) : null,
-      sold ? o.saleLines.map((l) => isoDate(l.sale.soldAt)) : []
-    );
-    if (!on || !isInContactRange(on, range)) continue;
-    if (!sold) {
-      withdrawnCount += 1;
-      continue;
-    }
-    soldCount += 1;
-    if (o.listingDate) timed.push({ listedOn: isoDate(o.listingDate), soldOn: on });
-  }
-
-  const purchaseSpent = sumMoney(
-    purchases.map((p) => {
-      const spend = orderSpend(p, purchaseCostsOf(p), baseCurrency);
-      return {
-        amount: Number(spend.tx.total),
-        currency: p.currency,
-        base: spend.base ? Number(spend.base.total) : null,
-      };
-    }),
-    baseCurrency
-  );
-
-  return {
-    activeCount,
-    readyCount,
-    soldCount,
-    withdrawnCount,
-    sellThrough: sellThrough(soldCount, withdrawnCount),
-    avgDaysToSale: averageDaysToSale(timed),
-    timedCount: timed.length,
-    salesCount: sales.count,
-    revenue: sales.revenue,
-    purchaseCount: purchases.length,
-    purchaseSpent,
-    settings: (contact.platformModule && PLATFORM_SETTINGS_TABS[contact.platformModule]) || null,
   };
 }
 

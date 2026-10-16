@@ -189,7 +189,7 @@ describe("auction lot line anchors (#510)", () => {
     }
 
     sellerId = (await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } })).id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
   });
 
   after(async () => {

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer } from "../../src/lib/offers";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup, updateFacebookDefaults } from "../../src/lib/facebook-groups";
 import { FACEBOOK_BLANK_SETTINGS, FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { readSaleBuyerMessage } from "../../src/lib/sale-buyer-message";
@@ -46,25 +45,24 @@ describe("The message to a buyer (#1815)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Delcampe",
-          platform: true,
           platformCurrency: "EUR",
           buyerMessageTemplate: "Sale {sale} for {buyer}: {itemsTotal}\n{shippingOptions}",
         },
       })
     ).id;
     silentId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro", platformCurrency: "PLN" } })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     // The Delcampe letter is sent by a service that costs the collector less than the buyer pays: the
     // message lists the buyer's price (#1909).
     const carrier = await prisma.carrier.create({ data: { collectionId, name: "La Poste" } });

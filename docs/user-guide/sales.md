@@ -56,7 +56,7 @@ the field shows is what is saved. An empty field stays empty.
 - **Shipping option** and **Postage** — how the buyer asked for it to be sent, and what
   posting it costs you (**subtracts**). The envelope and cards it goes in are added on the sale
   itself — see [Packing supplies](#packing-supplies). The list is the platform's own: the
-  [shipping options](contacts.md#shipping-options) you set up on the contact, each shown with what
+  [shipping options](platforms.md#shipping-options) you set up on the platform, each shown with what
   the buyer pays for it. Picking one fills in the postage and its currency from the carrier service
   the option is linked to — what that service costs *you*, from your rate list under
   [Settings → Carriers](collections.md#carriers); an option linked to no service leaves the postage
@@ -192,7 +192,7 @@ net and the profit use that total.
 - A unit from a batch bought in another currency with **no rate** into your base currency is
   counted the same way — no cost yet, the total incomplete — until the purchase has a rate.
 - **A shipping option can fill them in.** When the [carrier service](collections.md#carriers) a
-  platform's [shipping option](contacts.md#shipping-options) is linked to lists its usual supplies,
+  platform's [shipping option](platforms.md#shipping-options) is linked to lists its usual supplies,
   choosing the option — when you record the sale, on the **Postage** row or in **Edit header** —
   adds those lines, taken from stock like any other; adjust them for this parcel as you need.
   **Changing the option** — or [Sent as](#sent-as) — swaps the lines that are still exactly the old
@@ -410,7 +410,7 @@ Whether the number becomes a **link** depends on that carrier:
    looks a parcel up, with `{code}` where the tracking number goes, e.g.
    `https://emonitoring.poczta-polska.pl/?numer={code}`. Leave the address blank for a carrier with
    no tracking page.
-2. Link the platform's [shipping option](contacts.md#shipping-options) to one of the carrier's
+2. Link the platform's [shipping option](platforms.md#shipping-options) to one of the carrier's
    services, so the common case needs no thought.
 3. Record the sale, pick the carrier that actually took it when you mark it Sent, and the tracking
    number becomes a **📦 link** straight to the parcel.
@@ -522,7 +522,7 @@ already knows the figures, so the platform can write that message for you from a
 copies it — plain text, ready to paste into the chat — with a confirmation at the edge of the
 screen.
 
-The template is set per platform: on the platform's [contact](contacts.md#message-to-buyer), or for
+The template is set per platform: on the [platform](platforms.md#message-to-buyer), or for
 Facebook under **Settings → Facebook**, where a group can have its own
 ([Facebook](facebook.md#buyer-messages)). A platform without a template offers no message — the
 button is simply not there. The account number and the next steps are ordinary text in the

@@ -53,11 +53,10 @@ describe("recording an Allegro order as a sale (#463)", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           platformCurrency: "PLN",
           platformModule: ALLEGRO_PLATFORM_MODULE,
         },

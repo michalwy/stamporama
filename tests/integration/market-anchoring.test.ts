@@ -13,6 +13,7 @@ import {
 } from "../../src/lib/market-values";
 import { loadRealizationRatios } from "../../src/lib/realization-ratios";
 import { createContact, updateContact } from "../../src/lib/contacts";
+import { createPlatform, updatePlatform } from "../../src/lib/platforms";
 import { setCollectionHomeMarket } from "../../src/lib/collections";
 import { getCollectionAreas, updateCollectionArea } from "../../src/lib/areas";
 import { OPERATIONS, matchPath, pickMethod } from "../../src/lib/agent-api/registry";
@@ -153,7 +154,7 @@ describe("markets and anchoring (#1634)", () => {
     danzigStampId = await stamp("Danzig 5", danzigId);
     polishStampId = await stamp("Poland 5", polandId);
 
-    platformId = (await createContact(userId, collectionId, { name: "Philasearch", platform: true, platformCurrency: "EUR" })).id;
+    platformId = (await createPlatform(userId, collectionId, { name: "Philasearch.com", platformCurrency: "EUR" })).id;
     houseId = (await createContact(userId, collectionId, { name: "Köhler", auctionHouse: true })).id;
     sellerId = (await createContact(userId, collectionId, { name: "Allegro seller", seller: true })).id;
   });
@@ -162,6 +163,7 @@ describe("markets and anchoring (#1634)", () => {
     await prisma.priceObservation.deleteMany({ where: { collectionId } });
     await prisma.auctionSale.deleteMany({ where: { collectionId } });
     await prisma.contact.updateMany({ where: { collectionId }, data: { market: null } });
+    await prisma.platform.updateMany({ where: { collectionId }, data: { market: null } });
     await prisma.collectionArea.updateMany({ where: { collectionId }, data: { anchorMarkets: [] } });
     await prisma.collection.update({ where: { id: collectionId }, data: { homeMarket: "PL" } });
   });
@@ -186,12 +188,7 @@ describe("markets and anchoring (#1634)", () => {
   });
 
   it("takes an observation's market from its house, else its platform", async () => {
-    const platform = await updateContact(userId, platformId, {
-      name: "Philasearch",
-      platform: true,
-      platformCurrency: "EUR",
-      market: "de",
-    });
+    const platform = await updatePlatform(userId, platformId, { name: "Philasearch.com", platformCurrency: "EUR", market: "de" });
     assert.equal(platform.market, "DE");
     const viaPlatform = await createPriceObservation(userId, polishStampId, raw({ auctionHouseId: null }));
     await updateContact(userId, houseId, { name: "Köhler", auctionHouse: true, market: "AT" });
@@ -254,7 +251,7 @@ describe("markets and anchoring (#1634)", () => {
 
   it("takes an own lot's market from its sale's seller, else the sale's platform", async () => {
     await updateCollectionArea(userId, polandId, { name: "Poland", parentId: europeId, anchorMarkets: ["CH"] });
-    await updateContact(userId, platformId, { name: "Philasearch", platform: true, platformCurrency: "EUR", market: "CH" });
+    await updatePlatform(userId, platformId, { name: "Philasearch.com", platformCurrency: "EUR", market: "CH" });
     await closedLot(polishStampId, "30.00");
     let [value] = await getStampMarketValue(userId, collectionId, polishStampId);
     assert.deepEqual(value.lots.map((lot) => lot.market), ["CH"]);

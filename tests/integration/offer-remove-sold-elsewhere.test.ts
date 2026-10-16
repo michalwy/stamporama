@@ -64,7 +64,7 @@ describe("removing an offer's sets sold elsewhere (#1805)", () => {
         data: { slug: `col-soldelsewhere-${ts}`, name: `Collection soldelsewhere-${ts}`, baseCurrency: "PLN", ownerId: userId },
       })
     ).id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Copernicus", issuedYear: 1973 } })).id;
     conditionId = (
       await prisma.stampCondition.create({

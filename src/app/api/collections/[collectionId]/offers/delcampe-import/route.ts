@@ -10,7 +10,7 @@ import { DelcampeImportError, importDelcampeActiveItems } from "@/lib/delcampe-i
 // than a redirect.
 //
 // **A refusal about the file is a 400 with one sentence**, because there is nothing to fix listing
-// by listing — the wrong export was picked, no platform is marked as Delcampe, the download failed.
+// by listing — the wrong export was picked, the Delcampe platform is switched off, the download failed.
 // What the *rows* could not do is not a refusal at all: it is the report, and it comes back with a
 // 200 beside everything the import did do.
 

@@ -60,8 +60,8 @@ async function seed(): Promise<Fixtures> {
   });
   // A platform listed by hand: no Assistant module, so `preparing → ready` asks nothing of the
   // goods and the only gate in play on this file's offers is the one being tested.
-  const platform = await prisma.contact.create({
-    data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+  const platform = await prisma.platform.create({
+    data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
   });
   const condition = await prisma.stampCondition.create({
     data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },

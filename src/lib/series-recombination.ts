@@ -217,8 +217,8 @@ async function readRecombinationPool(
   opts: { stopWithoutSingles: boolean }
 ): Promise<RecombinationPool> {
   await assertCollectionOwner(ownerId, collectionId);
-  const platform = await prisma.contact.findFirst({
-    where: { id: platformId, collectionId, platform: true },
+  const platform = await prisma.platform.findFirst({
+    where: { id: platformId, collectionId },
     select: { name: true },
   });
   if (!platform) throw new Error("Platform not found.");

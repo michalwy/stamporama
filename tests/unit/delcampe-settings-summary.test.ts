@@ -58,9 +58,12 @@ function categories(
 const READ = { count: 7012, lastRefreshedAt: "2026-09-29T08:00:00.000Z", source: "read" } as const;
 const BUNDLED = { count: 6980, lastRefreshedAt: "2026-06-01", source: "bundled" } as const;
 
+/** The module platform as most tests need it: switched on, selling in its currency (#1955). */
+const ON = { enabled: true, platformCurrency: "EUR" };
+
 describe("Delcampe settings summary (#1479)", () => {
   it("has a tile per tab, in the tabs' order", () => {
-    const tiles = delcampeSummary(profiles([]), categories(0, READ), date);
+    const tiles = delcampeSummary(profiles([]), categories(0, READ), date, ON);
     assert.deepEqual(
       tiles.map((t) => [t.part, t.title]),
       DELCAMPE_SETTINGS_PARTS.map((p) => [p.key, p.label])
@@ -71,7 +74,8 @@ describe("Delcampe settings summary (#1479)", () => {
     const [tile] = delcampeSummary(
       profiles([profile("Standard letter", true), profile("Heavy lot")]),
       categories(0, READ),
-      date
+      date,
+      ON
     );
     assert.equal(tile.figure, "2 profiles");
     assert.equal(tile.detail, "Default: Standard letter");
@@ -79,19 +83,19 @@ describe("Delcampe settings summary (#1479)", () => {
 
   it("says when profiles have no default, and says nothing more of none", () => {
     assert.equal(
-      delcampeSummary(profiles([profile("Standard letter")]), categories(0, READ), date)[0].detail,
+      delcampeSummary(profiles([profile("Standard letter")]), categories(0, READ), date, ON)[0].detail,
       "No default"
     );
-    const [none] = delcampeSummary(profiles([]), categories(0, READ), date);
+    const [none] = delcampeSummary(profiles([]), categories(0, READ), date, ON);
     assert.equal(none.figure, "0 profiles");
     assert.equal(none.detail, null);
   });
 
   it("counts the kinds of stamp mapped and dates the list read here", () => {
-    const [, one] = delcampeSummary(profiles([]), categories(1, READ), date);
+    const [, one] = delcampeSummary(profiles([]), categories(1, READ), date, ON);
     assert.equal(one.figure, "1 kind of stamp mapped");
     assert.equal(one.detail, "Delcampe’s list read on 2026-09-29");
-    const [, many] = delcampeSummary(profiles([]), categories(3, READ), date);
+    const [, many] = delcampeSummary(profiles([]), categories(3, READ), date, ON);
     assert.equal(many.figure, "3 kinds of stamp mapped");
   });
 
@@ -104,7 +108,7 @@ describe("Delcampe settings summary (#1479)", () => {
   });
 
   it("says the platform is not chosen, and still states the list", () => {
-    const [p, c] = delcampeSummary(profiles([], null), categories(0, BUNDLED, null), date);
+    const [p, c] = delcampeSummary(profiles([], null), categories(0, BUNDLED, null), date, ON);
     assert.equal(p.figure, NO_DELCAMPE_PLATFORM);
     assert.equal(p.detail, null);
     assert.equal(c.figure, NO_DELCAMPE_PLATFORM);

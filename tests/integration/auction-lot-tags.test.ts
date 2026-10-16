@@ -81,7 +81,7 @@ describe("tags on auction lots (#1625)", () => {
 
     const sale = async (cid: string) => {
       const platformId = (
-        await prisma.contact.create({ data: { collectionId: cid, name: "Allegro", platform: true } })
+        await prisma.platform.create({ data: { collectionId: cid, name: "Allegro" } })
       ).id;
       const sellerId = (
         await prisma.contact.create({ data: { collectionId: cid, name: "Philkam", seller: true } })

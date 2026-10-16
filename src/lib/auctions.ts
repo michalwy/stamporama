@@ -243,14 +243,15 @@ function assertHoldsStamps(lot: { notStamps: boolean }): void {
   }
 }
 
-/** Verify a contact belongs to the collection before it is written onto a sale. Both FKs are
- * `Restrict`, so a cross-collection id would otherwise be caught only by the database. */
-async function assertContact(collectionId: string, contactId: string, role: "seller" | "platform"): Promise<void> {
-  const contact = await prisma.contact.findFirst({
-    where: { id: contactId, collectionId },
-    select: { id: true },
-  });
-  if (contact) return;
+/** Verify the seller (a contact) or the platform belongs to the collection before it is written onto
+ * a sale. Both FKs are `Restrict`, so a cross-collection id would otherwise be caught only by the
+ * database. */
+async function assertContact(collectionId: string, id: string, role: "seller" | "platform"): Promise<void> {
+  const found =
+    role === "seller"
+      ? await prisma.contact.findFirst({ where: { id, collectionId }, select: { id: true } })
+      : await prisma.platform.findFirst({ where: { id, collectionId }, select: { id: true } });
+  if (found) return;
   throw new AuctionActionBlockedError(
     role === "seller" ? "no-seller" : "no-platform",
     role === "seller" ? "Pick the seller this lot is being bought from." : "Pick the platform this lot is listed on."
@@ -1956,7 +1957,7 @@ async function resolveNewSaleCurrency(
         })
       : null,
     platformId
-      ? prisma.contact.findFirst({
+      ? prisma.platform.findFirst({
           where: { id: platformId, collectionId },
           select: { platformCurrency: true },
         })
@@ -2072,7 +2073,7 @@ async function newAuctionSaleData(
   const defaults = await getAuctionSellerDefaults(ownerId, collectionId, input.sellerId);
   const [seller, platform] = await Promise.all([
     prisma.contact.findUniqueOrThrow({ where: { id: input.sellerId }, select: { name: true } }),
-    prisma.contact.findUniqueOrThrow({ where: { id: input.platformId }, select: { name: true } }),
+    prisma.platform.findUniqueOrThrow({ where: { id: input.platformId }, select: { name: true } }),
   ]);
   return {
     collectionId,
@@ -2110,7 +2111,7 @@ export async function updateAuctionSale(
   await assertContact(sale.collectionId, input.platformId, "platform");
   const [seller, platform] = await Promise.all([
     prisma.contact.findUniqueOrThrow({ where: { id: input.sellerId }, select: { name: true } }),
-    prisma.contact.findUniqueOrThrow({ where: { id: input.platformId }, select: { name: true } }),
+    prisma.platform.findUniqueOrThrow({ where: { id: input.platformId }, select: { name: true } }),
   ]);
 
   await prisma.auctionSale.update({
@@ -2495,7 +2496,7 @@ export async function captureAuctionLot(
   if (!platform) {
     throw new AuctionActionBlockedError(
       "no-platform-module",
-      `No platform in this collection is marked as ${rules.name}. Set one under ${rules.settingsLocation}, then capture again.`
+      `The ${rules.name} platform is switched off. Switch it on under ${rules.settingsLocation}, then capture again.`
     );
   }
 
@@ -3742,7 +3743,7 @@ async function apiPlatformRules(
   collectionId: string,
   platformId: string
 ): Promise<{ id: string; name: string; lotNoIsListingId: boolean; parcelIsNamedSale: boolean }> {
-  const platform = await prisma.contact.findFirst({
+  const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
     select: { id: true, name: true, platformModule: true },
   });

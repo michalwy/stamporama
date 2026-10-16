@@ -269,7 +269,7 @@ something the app wrote, a globe opens per-language texts, a caret expands or co
 type into Stamporama are written in. It starts as **English** and only matters once you write in
 another language: a platform that lists in one, or an [album](albums.md) printed in one. Anything set
 to your default language needs no translations at all, so it never adds fields anywhere. See
-[Contacts → Listing language](contacts.md#adding-and-editing) for how translations work.
+[Platforms → Listing language](platforms.md#listing-language) for how translations work.
 
 The languages you can type translations for are never configured anywhere — they are simply the ones
 you are **using**, whether on a platform or in an album, minus your default. Add an album in Danish
@@ -319,7 +319,7 @@ You cannot mark an area as grouping-only while issues or stamps are still assign
 The **Symbol** box in the **Add area** / **Edit area** dialog, beside the name, holds the area's
 symbol — usually its flag as an emoji, `🇵🇱` for Poland. It is optional and empty until you fill it
 in, existing areas included, and it is the same in every language. It feeds the `{areaSymbol}` token
-in [templates](contacts.md#adding-and-editing). A sub-area does **not** take its parent's symbol, so
+in [templates](platforms.md#listing-templates). A sub-area does **not** take its parent's symbol, so
 give one to every area whose listings should show it — `Second Republic` as well as `Poland`.
 
 ### Anchoring markets
@@ -556,7 +556,7 @@ Each new variant comes out the way one added through the single dialog does: its
 
 ### Issue and stamp names in other languages
 
-The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).
+The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](platforms.md#listing-templates).
 
 Stamp names are the largest set of text to translate and every entry is typed by hand, so treat it as something you fill in for the stamps you actually list, not a job to finish up front — an untranslated stamp simply lists under its default name.
 
@@ -591,19 +591,15 @@ rest.
 
 ## Colnect platform
 
-The platform choice at the top of **Settings → Colnect** says which of your [platforms](contacts.md)
-*is* Colnect. Pick it from the list — every contact carrying the **Platform** role is offered — and
-the choice saves on the spot. Only one platform can be Colnect, so picking a different one moves the
-marker rather than adding a second. With no platform in the collection yet there is nothing to pick,
-and the page says how to add one.
+Every collection has one **Colnect** [platform](platforms.md), configured on the **Platform** tab of
+**Settings → Colnect** — whether it is **switched on**, its currency, templates, limits and photos. It
+starts switched off; switch it on when you start selling on Colnect.
 
-Naming it is what turns on the [listing checks](offers.md#what-the-assistant-cant-post) in the bulk
-listing workspace: offers headed for that platform are tested against what Colnect's sale form needs
-— an item-ID on every stamp, a grade for every condition, and sets that are interchangeable — before
-you hand one to the Assistant. Leave it **— not set —** and nothing is checked anywhere; every
-platform is listed by hand, exactly as before. It changes nothing else: templates, limits, photos,
-pricing and publishing all work the same either way. The mappings in the tabs are the collection's
-and work whether or not a platform is chosen.
+Offers on it are what the [listing checks](offers.md#what-the-assistant-cant-post) in the bulk
+listing workspace test against what Colnect's sale form needs — an item-ID on every stamp, a grade for
+every condition, and sets that are interchangeable — before you hand one to the Assistant. Offers on
+any other platform are checked against nothing and listed by hand. The mappings in the other tabs are
+the collection's and work whether or not the platform is switched on.
 
 ## Colnect catalog mapping
 
@@ -917,7 +913,7 @@ Each collection keeps its own list of **conditions** — the grades used when va
 - Give a condition its catalogue **symbol** — `**` for MNH, `*` for MH, `(*)` for no gum — in the
   **Symbol** box beside the abbreviation. It is optional and empty until you fill it in, including on
   the default conditions, and it is the same in every language. It feeds the `{conditionSymbol}`
-  token in [templates](contacts.md#adding-and-editing); a condition without one prints nothing there.
+  token in [templates](platforms.md#listing-templates); a condition without one prints nothing there.
 - Give each condition a **colour**, so its chip stands out wherever copies are listed — see [Condition and certificate colours](#condition-and-certificate-colours) below.
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
@@ -928,7 +924,7 @@ Certificate and guarantee status is tracked as a separate dimension, not as part
 
 Once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields are labelled with your default language (e.g. *Name — English (en)*) and the condition's pane grows an **In other languages** block: a line per language, headed by the language's name, with an **Abbreviation** box under the default abbreviation and a **Name** box under the default name — nothing sits under **Symbol**. The two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. A blank box always falls back to the default text, which it shows greyed, so a title never ends up with a gap. The translations are saved together with the condition, so **Revert** — or discarding the change when you leave the row — drops them too.
 
-These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](contacts.md#adding-and-editing).
+These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](platforms.md#listing-templates).
 The **Symbol** has no translations — `**` reads the same in every language.
 
 ## Certificate statuses
@@ -1216,7 +1212,7 @@ these six filled in on a collection of any size. Denomination and perforation ne
 
 ### Attributes in listing titles and descriptions
 
-All six are available as tokens in [listing texts](contacts.md#adding-and-editing) — `{denomination}`, `{perforation}`, `{color}`, `{watermark}`, `{paper}` and `{printing}` — so a title can say `Mi·PL 240 10 gr carmine perf 11½` without any of that having been typed into the stamp's name. A stamp that states nothing for an attribute renders the token empty and takes the separator around it with it, exactly as `{format}` does for a single, so putting one in a template costs nothing on the stamps you have not filled in yet.
+All six are available as tokens in [listing texts](platforms.md#listing-templates) — `{denomination}`, `{perforation}`, `{color}`, `{watermark}`, `{paper}` and `{printing}` — so a title can say `Mi·PL 240 10 gr carmine perf 11½` without any of that having been typed into the stamp's name. A stamp that states nothing for an attribute renders the token empty and takes the separator around it with it, exactly as `{format}` does for a single, so putting one in a template costs nothing on the stamps you have not filled in yet.
 
 The four list ones use the language of the platform being listed on, and the title preview marks one that has no translation yet so you can fill it in from there. Denomination and perforation are printed as recorded in every language.
 
@@ -1249,7 +1245,7 @@ takes — *C6 envelope × 1, Transport card A6 × 2*. Service names are unique w
 
 Carriers and their rate lists belong to the **collection**, never to a platform: the same Poczta
 Polska carries an Allegro parcel and a Delcampe one, tracks both at the same address and charges you
-the same for both. What a platform has is its [shipping options](contacts.md#shipping-options) — what
+the same for both. What a platform has is its [shipping options](platforms.md#shipping-options) — what
 buyers there choose from, at the price *they* pay — each linked to a service here. Choosing an option
 on a sale fills in the postage with its service's cost and the sale's
 [packing supplies](sales.md#packing-supplies) with its service's list, all still editable on the
@@ -1340,7 +1336,7 @@ A few things are worth knowing:
 - **Choosing a template on an offer copies its values onto that offer.** The offer does not follow the template afterwards, so editing or deleting a template never changes the look of offers you have already prepared — exactly like the description template on a platform.
 - **Pairing only refines a listing that already photographs both sides.** The template says how the two scans are arranged; the offer (and the platform it was created on) says which sides are photographed at all. A paired template turns a listing set to *Front and back* into *Front and back, paired* and leaves a *Front only* or *Back only* one exactly as it was — it never quietly adds the other side.
 
-A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the [platform itself](contacts.md#offer-photos).
+A template says nothing about what a platform will accept (how many photos, how large a file); those limits belong to the [platform itself](platforms.md#offer-photos).
 
 Set one of these as a platform's **collage template** and every new offer on that platform starts with its numbers already filled in; you can still adjust them per offer with the **⚙** button in the offer's Photos card ([Offers → Photo settings](offers.md#photo-settings)).
 

@@ -159,10 +159,10 @@ describe("offer generator (#1287)", () => {
       await prisma.stampCondition.create({ data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 } })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true, platformCurrency: "EUR" } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect", platformCurrency: "EUR" } })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe", platformCurrency: "EUR" } })
     ).id;
   });
 

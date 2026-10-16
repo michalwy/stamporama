@@ -58,7 +58,7 @@ describe("choosing which set left on a sale line (#697)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
   });
 

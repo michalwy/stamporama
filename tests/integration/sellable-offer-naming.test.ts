@@ -50,7 +50,7 @@ describe("sellable offers name a listing by its title (#1026)", () => {
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
 
     const mk = async () =>

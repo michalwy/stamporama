@@ -15,18 +15,15 @@ Nothing reads the comments under a post, so you follow an offer yourself: on an 
 highest bid while it runs, and when it ends you record who won and for how much — which records the
 sale — or that nobody bid. On a quick buy you record who bought it and for how much.
 
-## Which platform is Facebook
+## The Facebook platform
 
-The choice at the top right of the page, beside its title. Pick the contact you use for Facebook —
-it needs the **Platform** role (see [Contacts](contacts.md)) — and its currency, listing templates and
-photo limits are set on the contact itself, exactly as for any other platform. Until you pick one,
-the page says so, and has nowhere to put a group.
+Every collection has one **Facebook** [platform](platforms.md), and its settings — currency, listing
+templates, photo limits and the rest — are on the **Platform** tab of **Settings → Facebook**, beside
+the **Groups** tab this guide is mostly about. It starts **switched off**: tick **Switched on** there
+when you start selling on Facebook, so the offer and sale forms offer it.
 
-Only one platform can be Facebook at a time. Choosing another moves the setting; the groups stay with
-the contact they were added to, so the page then shows the new platform's groups.
-
-Naming it does **not** switch the [Assistant](assistant.md) on, and none of the Colnect checks is
-asked of its offers.
+It does **not** switch the [Assistant](assistant.md) on, and none of the Colnect checks is asked of
+its offers.
 
 ## Facebook defaults
 

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, setOfferState } from "../../src/lib/offers";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import {
@@ -52,11 +51,11 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Mercury" } })).id;
     conditionId = (
       await prisma.stampCondition.create({ data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 } })

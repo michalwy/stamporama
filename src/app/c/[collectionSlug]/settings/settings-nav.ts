@@ -56,6 +56,7 @@ export type SettingsEntryKey =
   | "collages"
   | "shipping"
   | "packing-supplies"
+  | "platforms"
   | "allegro"
   | "delcampe"
   | "facebook"
@@ -232,11 +233,19 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     label: "Packing supplies",
     hint: "The envelopes, cards and the like your parcels are packed with. Their cost comes from the purchases they were bought on.",
   },
+  // The collector's own platforms (#1955; ADR-0071) — one entry for all of them, ahead of the five
+  // module platforms, which each keep a page of their own.
+  {
+    key: "platforms",
+    group: "selling",
+    label: "Platforms",
+    hint: "The marketplaces you sell or buy on beyond the five with pages of their own, and what each one's offers and listings carry.",
+  },
   {
     key: "allegro",
     group: "selling",
     label: "Allegro",
-    hint: "Which platform is Allegro, the account this instance publishes with, and what its listings carry.",
+    hint: "The account this instance publishes with, what its listings carry, and the Allegro platform's own settings.",
     // Account first (#1475): it is the default, so the sign-in callback's plain `?tab=allegro` lands
     // on it without naming a part.
     parts: ALLEGRO_SETTINGS_PARTS,
@@ -245,20 +254,24 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     key: "delcampe",
     group: "selling",
     label: "Delcampe",
-    hint: "Which platform is Delcampe, and what the rows of an upload file carry.",
+    hint: "What the rows of an upload file carry, and the Delcampe platform's own settings.",
     parts: DELCAMPE_SETTINGS_PARTS,
   },
   {
     key: "facebook",
     group: "selling",
     label: "Facebook",
-    hint: "Which platform is Facebook, and the groups you auction in with each group's own customs.",
+    hint: "The groups you auction in with each group's own customs, and the Facebook platform's own settings.",
+    parts: [
+      { key: "groups", label: "Groups" },
+      { key: "platform", label: "Platform" },
+    ],
   },
   {
     key: "philasearch",
     group: "selling",
     label: "Philasearch",
-    hint: "Which platform is Philasearch, so a lot captured from its pages lands on it.",
+    hint: "The Philasearch platform a lot captured from its pages lands on, switched on here.",
   },
 
   {
@@ -287,7 +300,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     key: "colnect",
     group: "partners",
     label: "Colnect",
-    hint: "Which platform is Colnect, and what your catalogues, grades, attributes and lists are called there.",
+    hint: "What your catalogues, grades, attributes and lists are called on Colnect, and the Colnect platform's own settings.",
     // In the order the setup happens in (#1480): the three translations of our vocabulary, then the
     // lists, which read in the other direction and presuppose the rest.
     parts: COLNECT_SETTINGS_PARTS,

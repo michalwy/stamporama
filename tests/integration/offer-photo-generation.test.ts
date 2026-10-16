@@ -144,19 +144,18 @@ describe("offer photo generation (#311)", () => {
     ).id;
     // The platform's limits are read live by the renderer; a modest edge keeps the test fast.
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Delcampe ${ts}`,
-          platform: true,
           maxPhotos: 6,
           maxPhotoEdge: 900,
         },
       })
     ).id;
     barePlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: `Bare ${ts}`, platform: true },
+      await prisma.platform.create({
+        data: { collectionId, name: `Bare ${ts}` },
       })
     ).id;
 

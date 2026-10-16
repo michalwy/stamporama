@@ -48,7 +48,7 @@ describe("derived offer set label (#379)", () => {
       },
     });
     collectionId = col.id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });

@@ -4,6 +4,8 @@
 
 Accepted. Resolves the design question in #23; schema and arithmetic in #350.
 
+An auction sale's platform is a `Platform` since [ADR-0071](0071-platform-entity.md) (#1955); the seller stays a contact, and a house selling directly is two records.
+
 ## Context
 
 Auction tracking was originally framed as a **register of market auction results** — a table of

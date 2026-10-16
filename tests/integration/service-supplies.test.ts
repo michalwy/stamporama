@@ -106,13 +106,13 @@ describe("a carrier service's usual packing supplies", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "EUR" },
       })
     ).id;
     envelopeId = await createPackingSupply(userId, collectionId, "C6 envelope");

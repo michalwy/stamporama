@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
-import { setAllegroPlatform } from "@/lib/allegro";
 import {
   type AllegroDevicePrompt,
   type AllegroDeviceResult,
@@ -25,8 +24,8 @@ import {
 import { resolveSaleHeader, type SaleHeaderRaw } from "@/lib/sale-header-input";
 import { parsePrice } from "@/lib/sale-rules";
 
-// Settings → Allegro (#355, #476). Two things live on this tab: which platform contact is Allegro,
-// and this instance's own connection to the collector's Allegro account through the public API.
+// Settings → Allegro (#355, #476): this instance's own connection to the collector's Allegro account
+// through the public API. The Allegro platform's own settings are `platforms.ts`' (#1955).
 
 export type AllegroActionState = { status: "success" } | { status: "error"; message: string };
 
@@ -34,24 +33,6 @@ async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
   return session;
-}
-
-/**
- * Point the Allegro settings at one platform contact, or clear it with an empty id. One write per
- * change — the select *is* the control, exactly as the Colnect platform picker works — and exclusive,
- * the domain layer clearing whoever held it so this can never leave two.
- */
-export async function setAllegroPlatformAction(
-  collectionId: string,
-  contactId: string
-): Promise<AllegroActionState> {
-  const session = await getSession();
-  try {
-    await setAllegroPlatform(session.user.id, collectionId, contactId || null);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save the Allegro platform. Please try again." };
-  }
 }
 
 // --- The API connection (#476) -------------------------------------------------------------

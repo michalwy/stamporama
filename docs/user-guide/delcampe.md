@@ -1,7 +1,7 @@
 # Delcampe
 
 Delcampe is a platform you **sell** on, and Stamporama prepares its listings the way it prepares
-every other platform's: the title and description come from that platform contact's
+every other platform's: the title and description come from that platform's
 [templates](offers.md#listing-title), the price and quantity from the offer, the photos from its
 photo plan. What is different is how a listing gets there — Delcampe takes an uploaded file rather
 than a form filled in by the browser extension.
@@ -10,13 +10,14 @@ Everything on this page is set up under **Settings → Delcampe**.
 
 ## The Delcampe page
 
-**Settings → Delcampe** has the platform choice at the top right, beside the page title, and two
-tabs under a strip of figures:
+**Settings → Delcampe** has three tabs under a strip of figures:
 
 - **Listing profiles** — what your upload rows carry; see [Listing profiles](#listing-profiles).
   This is the tab the page opens on.
 - **Categories** — what finishing offers has taught Stamporama, and the state of Delcampe's own
   category list; see [Categories](#categories).
+- **Platform** — the Delcampe platform's own settings: whether it is switched on, its currency,
+  templates, limits and photos; see [The Delcampe platform](#the-delcampe-platform).
 
 The strip above the tabs says where each stands — how many profiles you have and which is the
 default, how many kinds of stamp have a category mapped, and whether Delcampe's list has been read
@@ -26,15 +27,14 @@ Delcampe listings go up as a file you upload yourself.
 Hover the ⓘ beside a heading or a field for what it means; the sections below say the same at
 length.
 
-## Which platform is Delcampe
+## The Delcampe platform
 
-The choice at the top of the page, and the one everything else hangs off. Pick the contact you use
-for Delcampe — it needs the **Platform** role (see [Contacts](contacts.md)) — and its currency,
-listing templates and photo limits are set on the contact itself, exactly as for any other platform.
-Until you pick one, both tabs say so.
+Every collection has one **Delcampe** [platform](platforms.md), and everything else on this page
+hangs off it. Its settings — currency, listing templates, photo limits and the rest — are on the
+**Platform** tab. It starts **switched off**: tick **Switched on** there when you start selling on
+Delcampe, so the offer and sale forms offer it.
 
-Only one platform can be Delcampe at a time. Naming it does **not** switch the
-[Assistant](assistant.md) on: there is no Delcampe form for the extension to fill, so no
+It does **not** switch the [Assistant](assistant.md) on: there is no Delcampe form for the extension to fill, so no
 ⚡ *List via Assistant* button appears on those offers, and none of the Colnect checks (a catalog
 item-ID on every stamp, a mapped grade) is asked of them.
 
@@ -213,7 +213,7 @@ title is one nobody proofread.
 ### The title cap
 
 Delcampe refuses a title past a certain length. Type that length into **Max title (characters)** on
-the Delcampe platform contact (see [Contacts](contacts.md#listing-text-limits)). From then on a
+the Delcampe platform (see [Platforms](platforms.md#listing-text-limits)). From then on a
 counter appears wherever a title is written, an over-long title **cannot be marked Ready** — the
 button says which text is over and by how much — and the export refuses one before building
 anything.

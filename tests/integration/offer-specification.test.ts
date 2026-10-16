@@ -39,8 +39,8 @@ describe("an offer's specification (#1758)", () => {
     ).id;
     // The platform lists in Polish; the collection writes its own names in English.
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, titleLanguage: "pl" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", titleLanguage: "pl" },
       })
     ).id;
 

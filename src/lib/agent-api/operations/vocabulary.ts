@@ -183,33 +183,27 @@ export async function readCollectionVocabulary(
         orderBy: [{ vendor: { name: "asc" } }, { name: "asc" }],
         select: { id: true, name: true, vendorId: true, currency: true },
       }),
-      // **`platform: true` is the whole of the filter and it is load-bearing.** `Contact` is one
-      // table for buyers, sellers, exchange partners, auction houses and platforms, and it carries
-      // `email`, `phone`, `fullName` and `notes`. A query without this flag would hand an agent a
-      // trading partner's personal details to hold for a whole session.
-      //
-      // **Three guards, and they answer different questions — measured rather than assumed.** This
-      // `where` decides *whose rows*; the `select` decides *which columns leave the database*; the
-      // mapper below decides *what reaches the agent*, naming each field rather than spreading the
-      // row. **Only the last of those actually protects the response**: dropping this filter and
-      // adding `email` to the `select` together still leaked nothing, because the mapper copies
-      // neither. So the mapper is the guard and these two are depth behind it — do not "simplify"
-      // it into a spread.
-      prisma.contact.findMany({
-        where: { collectionId, platform: true },
+      // The platforms (#1955; ADR-0071), every one — a switched-off platform still names the records
+      // on it, so a read must be able to filter by it. **Three guards** over what leaves: this
+      // `where` decides *whose rows*, the `select` *which columns*, and the mapper below *what reaches
+      // the agent*, naming each field rather than spreading the row. The mapper is the one that
+      // holds — the row carries the collector's private notes — so do not "simplify" it into a spread.
+      prisma.platform.findMany({
+        where: { collectionId },
         orderBy: { name: "asc" },
         select: {
           id: true,
           name: true,
           platformCurrency: true,
           platformModule: true,
+          enabled: true,
           // The groups a Facebook offer may be in (#1663) — in use only, as the offer form offers them.
           facebookGroups: { where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } },
         },
       }),
-      // **The same three guards over the same table, and here the mapper matters more** (#712).
-      // A platform is a marketplace; an exchange partner is a **person** — and `Contact` is the row
-      // that carries `email`, `phone`, `fullName` and `notes`. Two fields leave this query and two
+      // **The same three guards, and here the mapper matters more** (#712). A platform is a
+      // marketplace; an exchange partner is a **person** — and `Contact` is the row that carries
+      // `email`, `phone`, `fullName` and `notes`. Two fields leave this query and two
       // reach the agent. The role flags are independent and combinable (ADR-0007 §4), so a contact
       // who is both a partner and a seller is returned; their personal columns still are not.
       prisma.contact.findMany({
@@ -291,6 +285,7 @@ export async function readCollectionVocabulary(
     platforms: platforms.map((row): PlatformVocabularyEntry => ({
       ...entry(row.id, row.name, null, undefined),
       currency: row.platformCurrency,
+      ...(row.enabled ? {} : { enabled: false as const }),
       ...(row.platformModule === FACEBOOK_PLATFORM_MODULE
         ? { facebookGroups: row.facebookGroups.map((g) => entry(g.id, g.name, null, undefined)) }
         : {}),
@@ -329,7 +324,7 @@ export const getCollectionVocabularyOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

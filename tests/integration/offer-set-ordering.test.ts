@@ -46,7 +46,7 @@ describe("offer set + copy ordering (#306)", () => {
       data: { slug: `col-order-${ts}`, name: `Collection order-${ts}`, baseCurrency: "EUR", ownerId: userId },
     });
     collectionId = col.id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });

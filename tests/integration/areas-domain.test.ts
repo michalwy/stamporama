@@ -624,15 +624,15 @@ describe("area title translations", () => {
 
   it("derives the translation languages from the platforms, minus the default language", async () => {
     assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), []);
-    await prisma.contact.createMany({
+    await prisma.platform.createMany({
       data: [
-        { collectionId, name: "Allegro", platform: true, titleLanguage: "pl" },
-        { collectionId, name: "Delcampe", platform: true, titleLanguage: "en" },
-        { collectionId, name: "Delcampe FR", platform: true, titleLanguage: "en" },
-        { collectionId, name: "Ricardo", platform: true, titleLanguage: "de" },
-        { collectionId, name: "Jan Kowalski", seller: true, titleLanguage: null },
+        { collectionId, name: "Allegro", titleLanguage: "pl" },
+        { collectionId, name: "Delcampe", titleLanguage: "en" },
+        { collectionId, name: "Delcampe FR", titleLanguage: "en" },
+        { collectionId, name: "Ricardo", titleLanguage: "de" },
       ],
     });
+    await prisma.contact.create({ data: { collectionId, name: "Jan Kowalski", seller: true } });
     // The collection's own text is English (the migration default), so the English platforms need
     // no translation row — only the genuinely foreign languages show up.
     assert.deepEqual(await getCollectionTitleLanguages(userId, collectionId), ["de", "pl"]);
@@ -656,8 +656,8 @@ describe("translation languages derived from albums (#777)", () => {
     areaId = (
       await createCollectionArea(userId, collectionId, { name: "Denmark", assignable: false })
     ).id;
-    await prisma.contact.create({
-      data: { collectionId, name: "Allegro", platform: true, titleLanguage: "pl" },
+    await prisma.platform.create({
+      data: { collectionId, name: "Allegro", titleLanguage: "pl" },
     });
   });
 

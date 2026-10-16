@@ -19,7 +19,7 @@ import type { PlatformOrders } from "./orders";
 // that is only ever bid on — Allegro — is never asked to match a catalogue or to post a sale. Which
 // module carries which half is `moduleReports()`, so no surface hard-codes ids.
 export interface PlatformModule {
-  /** Stable id, e.g. "colnect". Also what `Contact.platformModule` stores (#406/#355). */
+  /** Stable id, e.g. "colnect". Also what `Platform.platformModule` stores (#406/#355). */
   id: string;
   /** Human-facing name, e.g. "Colnect". */
   name: string;

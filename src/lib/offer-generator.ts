@@ -102,8 +102,8 @@ async function readGeneratorState(
   includeSpecialised: boolean
 ): Promise<GeneratorState> {
   await assertCollectionOwner(ownerId, collectionId);
-  const platform = await prisma.contact.findFirst({
-    where: { id: input.platformId, collectionId, platform: true },
+  const platform = await prisma.platform.findFirst({
+    where: { id: input.platformId, collectionId },
     select: { name: true, platformModule: true },
   });
   if (!platform) throw new Error("Platform not found.");

@@ -75,13 +75,12 @@ export interface SubtypeVocabularyEntry extends VocabularyEntry {
 }
 
 /**
- * A marketplace an offer can be drafted against (#196).
+ * A marketplace an offer can be drafted against (#196) — a `Platform` (#1955; ADR-0071), named as
+ * the platform contact it used to be was named.
  *
- * **A `Contact` with `platform: true`, projected down to three fields, and the projection is the
- * point.** That model is shared with buyers, sellers and exchange partners, so it carries `email`,
- * `phone`, `fullName` and `notes` — a trading partner's personal details, which an agent has no
- * business holding for a session. None of them is here, and only rows flagged `platform` are
- * returned at all.
+ * **Projected down to a few fields, and the projection is the point.** The row carries the
+ * collector's private `notes` and every listing setting; none of them is an agent's business for a
+ * session, and none is here.
  */
 export interface PlatformVocabularyEntry extends VocabularyEntry {
   /**
@@ -93,6 +92,12 @@ export interface PlatformVocabularyEntry extends VocabularyEntry {
    * platform, and the currency follows from this field.
    */
   readonly currency: string | null;
+  /**
+   * `false` on a platform the collector has **switched off** (#1955): the screens no longer offer it
+   * for a new record, though everything recorded on it keeps naming it. Omitted on every platform
+   * that is on, the usual case, so they pay nothing for the key.
+   */
+  readonly enabled?: false;
   /**
    * The groups an offer on this platform may be in — present on the **Facebook** platform only
    * (#1663), and only the groups in use. A Facebook offer is in one group (#1544), so

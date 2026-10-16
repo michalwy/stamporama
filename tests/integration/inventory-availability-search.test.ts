@@ -64,10 +64,10 @@ describe("inventory availability + location-ref search", () => {
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
     delcampeId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     allegroId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
 
     const box = await createLocation(userId, collectionId, { name: "Box 1", assignable: true });

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer } from "../../src/lib/offers";
-import { setColnectPlatform } from "../../src/lib/colnect";
 import { createShippingOption } from "../../src/lib/shipping-options";
 import {
   ColnectOrderError,
@@ -117,17 +116,16 @@ describe("Colnect transaction import (#698)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Colnect",
-          platform: true,
           platformCurrency: "EUR",
           maxPhotos: 6,
         },
       })
     ).id;
-    await setColnectPlatform(userId, collectionId, platformId);
+    await prisma.platform.update({ where: { id: platformId }, data: { platformModule: "colnect" } });
   });
 
   after(async () => {

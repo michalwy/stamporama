@@ -475,12 +475,12 @@ export async function buildLotProposal(
   };
 }
 
-/** The language the platform's listings are written in (`Contact.titleLanguage`, #293) — what
+/** The language the platform's listings are written in (`Platform.titleLanguage`, #293) — what
  * `syncGeneratedTexts` renders the lot's title and description in. Null for the collection's default,
  * and for a proposal read before a platform is chosen. */
 async function listingLanguage(collectionId: string, platformId: string): Promise<string | null> {
   if (!platformId) return null;
-  const platform = await prisma.contact.findFirst({
+  const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
     select: { titleLanguage: true },
   });

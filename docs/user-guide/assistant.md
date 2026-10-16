@@ -134,12 +134,10 @@ Two rules are worth knowing, because they are deliberate:
   reliably, and a composition that is quietly wrong is worse than one you have not written yet — it
   is what every catalogue figure and every headroom is computed from.
 
-Before the first capture, tell Stamporama **which of your platforms is Allegro**: **Settings →
-Allegro**, one select. That is the one thing an auction page cannot tell the Assistant — the page
-knows it is Allegro, but not which of your [contacts](contacts.md) that marketplace is. Until it is
-set, the capture window says so and saves nothing.
+Before the first capture, switch the **Allegro** [platform](platforms.md) on: the **Platform** tab of
+**Settings → Allegro**, **Switched on**. Until it is, the capture window says so and saves nothing.
 
-That select is about a marketplace you *buy* on, and it is all the capture needs. Connecting the
+That switch is about a marketplace you *buy* on, and it is all the capture needs. Connecting the
 Allegro account you *sell* from is a separate, optional step on the same tab — see
 [Allegro](allegro.md).
 
@@ -168,8 +166,8 @@ there is.
 
 **After-auction sales** are refused, in as many words: those lots are no longer being bid on.
 
-Before the first capture, name **which of your platforms is Philasearch** in the **Platform** choice
-at the top right of **Settings → Philasearch**.
+Before the first capture, switch the **Philasearch** [platform](platforms.md) on: **Settings →
+Philasearch**, **Switched on**.
 
 ## Find in Stamporama — asking about anything you can select
 
@@ -666,7 +664,7 @@ the line stating when it started, beside the buyer, gains a small mark:
 - **Import** — it is not recorded yet, and one click records it: the buyer, the transaction's date,
   its id, a link back to it, one line per listing matched to the offer it was here and priced at what
   it sold for, and the shipping Colnect names — matched to one of the platform's
-  [shipping options](contacts.md#shipping-options) by name where one is called the same.
+  [shipping options](platforms.md#shipping-options) by name where one is called the same.
 
 On the **transactions list** the same mark appears beside each row's *Details* link, but it only ever
 **answers** — **Sale #34** or **Not recorded**. There is no button there, and that is deliberate: the

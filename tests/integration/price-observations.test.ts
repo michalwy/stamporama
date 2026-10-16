@@ -140,7 +140,7 @@ describe("price observations (#1633)", () => {
     await stamp("Mi 6 a", umbrellaId);
 
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })
     ).id;
     houseId = (
       await prisma.contact.create({
@@ -375,9 +375,11 @@ describe("price observations (#1633)", () => {
         auctionHouseName: `Rauhut ${suffix}`,
       })
     );
-    const platform = await prisma.contact.findFirstOrThrow({ where: { collectionId, name: `Delcampe ${suffix}` } });
+    // The platform is a platform (#1955) — a generic one, switched on — and the house a contact.
+    const platform = await prisma.platform.findFirstOrThrow({ where: { collectionId, name: `Delcampe ${suffix}` } });
     const house = await prisma.contact.findFirstOrThrow({ where: { collectionId, name: `Rauhut ${suffix}` } });
-    assert.equal(platform.platform, true);
+    assert.equal(platform.platformModule, null);
+    assert.equal(platform.enabled, true);
     assert.equal(house.auctionHouse, true);
   });
 

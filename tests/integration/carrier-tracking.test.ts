@@ -50,8 +50,8 @@ describe("carriers + sale tracking", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
   });

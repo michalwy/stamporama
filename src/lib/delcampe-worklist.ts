@@ -61,7 +61,7 @@ export interface DelcampeUnmatchedListing {
 }
 
 export interface DelcampeWorklist {
-  /** The platform contact marked as Delcampe, or null — with none there is nothing to import
+  /** The platform marked as Delcampe, or null — with none there is nothing to import
    *  against, and the screen says so rather than showing an empty worklist that looks settled. */
   platform: { id: string; name: string } | null;
   import: {

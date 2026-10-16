@@ -96,7 +96,7 @@ describe("packing supplies used without a sale", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     envelopeId = await createPackingSupply(userId, collectionId, "C6 envelope");
     batchA = await createPurchaseSupplyLine(userId, await purchase("2026-01-01"), {

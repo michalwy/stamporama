@@ -242,7 +242,7 @@ describe("estimated value (#602)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
   });
 

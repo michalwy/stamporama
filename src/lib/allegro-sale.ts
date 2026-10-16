@@ -211,7 +211,7 @@ export async function getAllegroOrderSalePrefill(
         ...modulePlatform,
         platformCurrency:
           (
-            await prisma.contact.findUnique({
+            await prisma.platform.findUnique({
               where: { id: modulePlatform.id },
               select: { platformCurrency: true },
             })

@@ -1130,8 +1130,8 @@ describe("identifying scan tiles into copies (#567)", () => {
       data: { collectionId, name: "Seller", seller: true },
       select: { id: true },
     });
-    const platform = await prisma.contact.create({
-      data: { collectionId, name: "House", platform: true },
+    const platform = await prisma.platform.create({
+      data: { collectionId, name: "House" },
       select: { id: true },
     });
     const sale = await prisma.auctionSale.create({

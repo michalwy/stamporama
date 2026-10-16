@@ -83,10 +83,10 @@ describe("auction lot party facets (#1029)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Köhler", seller: true } })
     ).id;
     allegro = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     delcampe = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
 
     // Three lots across two sellers and two platforms, so no pair of the numbers below coincides:

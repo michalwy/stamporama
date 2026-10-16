@@ -7,6 +7,8 @@ Accepted, but **partially superseded by [ADR-0013](0013-offer-owned-sale-composi
 replaced by an offer-owned model (`Offer ⊃ Set ⊃ Item`, `Lot` removed). §3 (offer lifecycle),
 §4 (currency / FX freeze), and §6 (P/L allocation) remain in force.
 
+Offers and sales name a `Platform` since [ADR-0071](0071-platform-entity.md) (#1955), no longer a platform contact; the currency lock (§4) reads it unchanged.
+
 ## Context
 
 A collector sells stamps — individually or in sets — across several marketplaces at once

@@ -52,8 +52,8 @@ describe("offer filter counts + needs-action facet", () => {
     const condition = await prisma.stampCondition.create({
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
-    delcampeId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
-    allegroId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    delcampeId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
+    allegroId = (await prisma.platform.create({ data: { collectionId, name: "Allegro" } })).id;
 
     const mk = async () =>
       (await createItem(userId, collectionId, { stampId: stamp.id, conditionId: condition.id, forSale: true })).id;

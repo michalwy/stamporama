@@ -1,15 +1,14 @@
 import "server-only";
 import { prisma } from "./db";
-import { getModulePlatform, setModulePlatform } from "./module-platform";
+import { getModulePlatform } from "./module-platform";
 import { PHILASEARCH_PLATFORM_MODULE } from "./platform-modules";
 
-// Which platform contact **is** Philasearch (#742) — the one setting the Assistant's lot capture from
-// philasearch.com rides on, and the whole of Settings → Philasearch.
+// The Philasearch platform (#742; #1955) — what a lot captured from philasearch.com lands on. Since
+// #1955 it is the collection's one Philasearch module platform, switched on or off on Settings →
+// Philasearch. A lot page names the house selling it and the house's sale; the aggregator itself is
+// this platform.
 //
-// A thin file on purpose, exactly as `allegro.ts` and `delcampe.ts` are: the exclusivity rule is
-// `module-platform.ts`'s, and everything a capture then does is `auctions.ts`'s. A lot page names the
-// house selling it and the house's sale; which `Contact` of this collection the aggregator itself is,
-// it cannot say.
+// A thin file on purpose, as `allegro.ts` is: everything a capture does is `auctions.ts`'s.
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const collection = await prisma.collection.findFirst({
@@ -19,22 +18,11 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
   if (!collection) throw new Error("Collection not found");
 }
 
-/** The platform contact currently marked as Philasearch, or null when none is. */
+/** The Philasearch platform while it is switched on, or null. */
 export async function getPhilasearchPlatform(
   ownerId: string,
   collectionId: string
 ): Promise<{ id: string; name: string } | null> {
   await assertCollectionOwner(ownerId, collectionId);
   return getModulePlatform(collectionId, PHILASEARCH_PLATFORM_MODULE);
-}
-
-/** Mark one platform contact as Philasearch, or clear the setting with null. Exclusive, and refuses
- *  a contact that is not a platform of this collection — see {@link setModulePlatform}. */
-export async function setPhilasearchPlatform(
-  ownerId: string,
-  collectionId: string,
-  contactId: string | null
-): Promise<void> {
-  await assertCollectionOwner(ownerId, collectionId);
-  await setModulePlatform(collectionId, PHILASEARCH_PLATFORM_MODULE, contactId);
 }

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
-import { setModulePlatform } from "../../src/lib/module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "../../src/lib/platform-modules";
 import {
   confirmAuctionLotReviews,
@@ -102,9 +101,9 @@ describe("record_auction_lot_outcome (#1628)", () => {
       })
     ).id;
     const allegroId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true, platformCurrency: "EUR" } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro", platformCurrency: "EUR" } })
     ).id;
-    await setModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE, allegroId);
+    await prisma.platform.update({ where: { id: allegroId }, data: { platformModule: ALLEGRO_PLATFORM_MODULE } });
     await prisma.contact.create({
       data: { collectionId, name: "Philkam", seller: true, defaultCurrency: "EUR", buyerPremiumPercent: "10" },
     });

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
-import { setAllegroPlatform } from "../../src/lib/allegro";
 import { auctionLotExposure, listAuctionLots } from "../../src/lib/auctions";
 import { setAuctionLotTags } from "../../src/lib/tags";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
@@ -104,12 +103,12 @@ describe("auction reads (#1036)", () => {
     ).id;
 
     const platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "EUR" },
       })
     ).id;
     // The offer number stored on a lot is read as one only on the collection's Allegro platform (#575).
-    await setAllegroPlatform(userId, collectionId, platformId);
+    await prisma.platform.update({ where: { id: platformId }, data: { platformModule: "allegro" } });
     const sellerId = (
       await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } })
     ).id;

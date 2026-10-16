@@ -52,11 +52,10 @@ describe("platform default starting price (#362/#449)", () => {
       })
     ).id;
     flatPlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "FlatMarket",
-          platform: true,
           platformCurrency: "EUR",
           defaultListingType: "auction",
           defaultStartingPrice: "5.00",
@@ -64,8 +63,8 @@ describe("platform default starting price (#362/#449)", () => {
       })
     ).id;
     plainPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "PlainMarket", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "PlainMarket", platformCurrency: "EUR" },
       })
     ).id;
   });

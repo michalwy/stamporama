@@ -116,7 +116,7 @@ import {
 import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
-import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
+import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import { useLastUsedPlatform } from "@/app/c/[collectionSlug]/offers/use-last-used-platform";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
@@ -293,8 +293,10 @@ export function InventoryListPanel({
   const { invalidateList } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
-  const { data: contacts = [] } = useContacts(collectionId);
-  const offerPlatforms = useMemo(() => contacts.filter((c) => c.platform), [contacts]);
+  // The platforms an offer can be made on (#1955): switched on. The filters asking about offers on a
+  // platform list the same, since a switched-off one takes no new offers to ask about.
+  const { data: allPlatforms = [] } = usePlatforms(collectionId);
+  const offerPlatforms = useMemo(() => allPlatforms.filter((p) => p.enabled), [allPlatforms]);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
 
   // Area + year, the one selection every list rail shares (#143, #844): the address bar wins where
@@ -1558,9 +1560,9 @@ export function InventoryListPanel({
                   bundle and grouping — sit at the end where they cannot be mistaken for one. */}
 
               {/* "For sale, not yet offered on platform X" (#259): pick a platform to surface
-                  for-sale copies still needing a listing there. Lists every platform contact
+                  for-sale copies still needing a listing there. Lists every platform
                   (not just ones with existing offers), since the point is to catch platforms
-                  that haven't been used yet. Only shown once at least one platform contact
+                  that haven't been used yet. Only shown once at least one platform
                   exists. */}
               {offerPlatforms.length > 0 && (
                 <Tooltip content="Show for-sale copies with no active offer on the chosen platform — or the copies deliberately kept off it">

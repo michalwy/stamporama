@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { getFacebookPlatform, setFacebookPlatform } from "../../src/lib/facebook";
+import { getFacebookPlatform } from "../../src/lib/facebook";
 import {
   createFacebookGroup,
   deleteFacebookGroup,
@@ -37,7 +37,6 @@ describe("Facebook groups (#1543)", () => {
   let otherUserId: string;
   let collectionId: string;
   let facebookId: string;
-  let otherPlatformId: string;
 
   before(async () => {
     const ts = Date.now();
@@ -66,12 +65,9 @@ describe("Facebook groups (#1543)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
-    ).id;
-    otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
     ).id;
   });
 
@@ -101,19 +97,14 @@ describe("Facebook groups (#1543)", () => {
     );
   });
 
-  it("marks the platform, exclusively, and refuses a contact that is not a platform", async () => {
-    await setFacebookPlatform(userId, collectionId, facebookId);
+  it("hangs the groups off the Facebook platform while it is switched on", async () => {
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     assert.equal((await getFacebookPlatform(userId, collectionId))?.id, facebookId);
-    await setFacebookPlatform(userId, collectionId, otherPlatformId);
-    assert.equal((await getFacebookPlatform(userId, collectionId))?.id, otherPlatformId);
-    await setFacebookPlatform(userId, collectionId, facebookId);
-    assert.equal(
-      await prisma.contact.count({ where: { collectionId, platformModule: "facebook" } }),
-      1
-    );
-
-    const person = await prisma.contact.create({ data: { collectionId, name: "A buyer", buyer: true } });
-    await assert.rejects(() => setFacebookPlatform(userId, collectionId, person.id), /Platform not found/);
+    // Switched off, it answers as an unchosen platform did (#1955).
+    await prisma.platform.update({ where: { id: facebookId }, data: { enabled: false } });
+    assert.equal(await getFacebookPlatform(userId, collectionId), null);
+    await prisma.platform.update({ where: { id: facebookId }, data: { enabled: true } });
+    assert.equal((await getFacebookPlatform(userId, collectionId))?.id, facebookId);
   });
 
   it("refuses another user's collection", async () => {

@@ -6,7 +6,7 @@ import { matchesDelcampeSoldItemsUrl, readDelcampeOrders } from "./orders";
 //
 // Everything else Delcampe needs from this app already happens inside it. There is no listing half
 // because Delcampe is listed to by uploading a CSV this app writes (#610), not by an extension
-// filling a form — which is exactly why `Contact.platformModule` naming Delcampe (#608) has always
+// filling a form — which is exactly why `Platform.platformModule` naming Delcampe (#608) has always
 // been a marker rather than a promise about listing (#471). There is no extraction half, Delcampe
 // being a marketplace rather than a catalogue to match our stamps against, and no capture half:
 // these are the collector's own sales, not somebody else's auctions to bid on.

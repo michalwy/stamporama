@@ -173,7 +173,7 @@ describe("auction lot composition (#353)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } })
     ).id;
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     saleId = await createAuctionSale(userId, collectionId, {
       sellerId,

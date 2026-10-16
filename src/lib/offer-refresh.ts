@@ -24,10 +24,9 @@ export interface RefreshThresholds {
  */
 export async function readRefreshThresholds(collectionId: string): Promise<RefreshThresholds> {
   const [platforms, groups] = await Promise.all([
-    prisma.contact.findMany({
+    prisma.platform.findMany({
       where: {
         collectionId,
-        platform: true,
         refreshQuickBuysAfterDays: { not: null },
         OR: [{ platformModule: null }, { platformModule: { not: FACEBOOK_PLATFORM_MODULE } }],
       },

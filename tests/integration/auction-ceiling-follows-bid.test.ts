@@ -59,7 +59,7 @@ describe("auction ceiling follows the bid (#1515)", () => {
       })
     ).id;
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     saleId = await createAuctionSale(userId, collectionId, {
       sellerId,

@@ -109,7 +109,7 @@ describe("stamp copy counts", () => {
     const held = await createItem(userId, collectionId, { stampId: soldStampId, conditionId });
     const gone = await createItem(userId, collectionId, { stampId: soldStampId, conditionId });
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     const offer = await prisma.offer.create({
       // Past the collection's counter: this row bypasses `allocateOfferNumber` (#416).

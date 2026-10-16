@@ -112,7 +112,7 @@ describe("auction lots that are not stamps (#1624)", () => {
       await prisma.contact.create({ data: { collectionId, name: "Antykwariat", seller: true } })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
   });
 

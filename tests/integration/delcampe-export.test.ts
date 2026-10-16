@@ -15,7 +15,6 @@ import {
   enqueueOfferPhotoGeneration,
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
-import { setDelcampePlatform } from "../../src/lib/delcampe";
 import { createDelcampeListingProfile } from "../../src/lib/delcampe-listing-profile";
 import { DELCAMPE_PROFILE_DEFAULTS } from "../../src/lib/delcampe-listing-profile-rules";
 import { setDelcampeOfferCategory } from "../../src/lib/delcampe-offer-listing";
@@ -160,11 +159,10 @@ describe("Delcampe Easy Uploader export (#610)", () => {
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Delcampe",
-          platform: true,
           platformCurrency: "EUR",
           maxPhotos: 6,
           maxPhotoEdge: 900,
@@ -173,7 +171,7 @@ describe("Delcampe Easy Uploader export (#610)", () => {
         },
       })
     ).id;
-    await setDelcampePlatform(userId, collectionId, platformId);
+    await prisma.platform.update({ where: { id: platformId }, data: { platformModule: "delcampe" } });
     await createDelcampeListingProfile(userId, collectionId, {
       ...DELCAMPE_PROFILE_DEFAULTS,
       name: "Standard letter",
@@ -292,7 +290,7 @@ describe("Delcampe Easy Uploader export (#610)", () => {
 
   it("refuses a batch that is not this collection's Delcampe platform, or not ready", async () => {
     const otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     const elsewhere = await createOffer(userId, collectionId, {
       platformId: otherPlatformId,

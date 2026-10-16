@@ -30,7 +30,7 @@ export type TemplateKey =
   | "tileLabelLeftTemplate"
   | "tileLabelRightTemplate";
 
-/** The three templates as the contact form holds them (blank = not configured). */
+/** The templates as the platform form holds them (blank = not configured). */
 export type ListingTemplates = Record<TemplateKey, string>;
 
 /**
@@ -153,7 +153,7 @@ export interface ListingTemplatesDialogProps {
 }
 
 /**
- * Every listing template a platform configures, in **one** dialog off the contact form (#266/#267,
+ * Every listing template a platform configures, in **one** dialog off the platform's settings (#266/#267,
  * #308): the sample copies the previews run on are chosen once at the top, then **one template at a
  * time, in tabs**, its field beside its live preview and its token chips underneath (#1933). They
  * used to stack, every configured one open, and a platform with all five set up ran to several
@@ -268,7 +268,7 @@ export function ListingTemplatesDialog({
 
 /**
  * The description's format (#319) — what the platform's description field accepts. It sits with the
- * description *template* rather than in the contact form's own fields because the two are one
+ * description *template* rather than in the platform form's own fields because the two are one
  * decision: the template writes the text, this says how the platform will read it. Seeded onto every
  * offer created on this platform (ADR-0019 §4), so changing it here leaves prepared listings alone.
  */

@@ -46,7 +46,7 @@ describe("an offer's specification share link (#1760)", () => {
       })
     ).id;
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Facebook", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Facebook" } })
     ).id;
     const stampId = (await prisma.stamp.create({ data: { collectionId, name: "Copernicus" } })).id;
     const conditionId = (
@@ -210,7 +210,7 @@ describe("an offer's specification share link (#1760)", () => {
     assert.equal(shared.spec.language, "en");
     assert.equal(shared.spec.rows.length, 2);
 
-    await prisma.contact.updateMany({ where: { collectionId, platform: true }, data: { titleLanguage: "pl" } });
+    await prisma.platform.updateMany({ where: { collectionId }, data: { titleLanguage: "pl" } });
     // The language is part of what the link showed, so the old link now reads as changed…
     assert.equal((await readSharedOfferSpecification(access))?.standing, "changed");
     // …and a new one speaks Polish.

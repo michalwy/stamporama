@@ -72,9 +72,14 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   collages: [],
   shipping: [],
   "packing-supplies": [],
-  // The header's platform choice is found on the first tab; the tabs themselves come from `parts`.
+  // The collector's own platforms: rows of a list, each one's fields in its pane (#1955).
+  platforms: [],
+  // The tabs themselves come from `parts`; the Platform tab's fields are every module page's (#1955).
   allegro: [
-    { label: "Allegro platform" },
+    { label: "Switched on", part: "platform", words: ["platform", "enabled", "off"] },
+    { label: "Market", part: "platform" },
+    { label: "Listing templates", part: "platform" },
+    { label: "Shipping options", part: "platform" },
     { label: "Application", words: ["account"] },
     { label: "Client ID" },
     { label: "Application name" },
@@ -89,17 +94,21 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
       words: ["learned"],
     },
   ],
-  // The header's platform choice is found on the first tab; the tabs themselves come from `parts`.
   delcampe: [
-    { label: "Delcampe platform" },
+    { label: "Switched on", part: "platform", words: ["platform", "enabled", "off"] },
+    { label: "Market", part: "platform" },
+    { label: "Listing templates", part: "platform" },
+    { label: "Shipping options", part: "platform" },
     { label: "Delcampe’s own category list", part: "categories" },
     { label: "What each kind of stamp was uploaded as", part: "categories", words: ["learned"] },
   ],
-  // The platform choice in the header, and Facebook's own settings, the pane the page opens on
-  // (#1661). A group's fields are in the pane of the group chosen, which is a row of the collector's
-  // list rather than a field of the page.
+  // Facebook's own settings, the pane the page opens on (#1661). A group's fields are in the pane of
+  // the group chosen, which is a row of the collector's list rather than a field of the page.
   facebook: [
-    { label: "Facebook platform", words: ["groups"] },
+    { label: "Switched on", part: "platform", words: ["platform", "enabled", "off"] },
+    { label: "Market", part: "platform" },
+    { label: "Listing templates", part: "platform" },
+    { label: "Shipping options", part: "platform" },
     {
       label: "Facebook defaults",
       words: [
@@ -117,7 +126,13 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
       ],
     },
   ],
-  philasearch: [{ label: "Philasearch platform" }],
+  // The whole page is the Philasearch platform's settings (#1955).
+  philasearch: [
+    { label: "Switched on", words: ["platform", "enabled", "off"] },
+    { label: "Market" },
+    { label: "Listing templates" },
+    { label: "Shipping options" },
+  ],
   acceptance: [],
   bids: [
     { label: "Bargain floor" },
@@ -129,9 +144,11 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Sent at" },
     { label: "Time zone" },
   ],
-  // The header's platform choice, found on the first tab (#1480); the tabs come from `parts`.
   colnect: [
-    { label: "Colnect platform" },
+    { label: "Switched on", part: "platform", words: ["platform", "enabled", "off"] },
+    { label: "Market", part: "platform" },
+    { label: "Listing templates", part: "platform" },
+    { label: "Shipping options", part: "platform" },
     { label: "Without a Colnect word", part: "attributes", words: ["unmapped", "mapping"] },
     { label: "Fill matching", part: "attributes" },
     { label: "Mirrors", part: "lists" },

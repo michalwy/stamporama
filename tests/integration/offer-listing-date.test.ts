@@ -50,7 +50,7 @@ describe("offer listing date on publication (#320)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
   });
 

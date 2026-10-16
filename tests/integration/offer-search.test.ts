@@ -44,8 +44,8 @@ describe("offer list search (#465)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "SearchMarket", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "SearchMarket", platformCurrency: "EUR" },
       })
     ).id;
     vendorId = (

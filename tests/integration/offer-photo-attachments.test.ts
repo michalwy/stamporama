@@ -138,11 +138,10 @@ describe("offer photo attachments (#313)", () => {
       })
     ).id;
     const platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Delcampe ${ts}`,
-          platform: true,
           maxPhotos: 6,
           maxPhotoEdge: 700,
         },
@@ -395,7 +394,7 @@ describe("offer photo attachments (#313)", () => {
   it("keeps an image over the platform's limit generated, but out of the upload set and the ZIP", async () => {
     // The platform takes 6; this offer plans 4. Squeeze it to 2 and the last two are over the limit
     // — still rendered and stored, just not going up.
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: (await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).platformId },
       data: { maxPhotos: 2 },
     });
@@ -417,7 +416,7 @@ describe("offer photo attachments (#313)", () => {
       "the ZIP is the upload set alone"
     );
 
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: (await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).platformId },
       data: { maxPhotos: 6 },
     });
@@ -665,11 +664,10 @@ describe("one photo per copy (#434)", () => {
       })
     ).id;
     const platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: `Delcampe bulk ${ts}`,
-          platform: true,
           maxPhotos: 12,
           maxPhotoEdge: 700,
         },

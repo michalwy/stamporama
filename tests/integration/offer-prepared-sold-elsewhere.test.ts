@@ -14,7 +14,6 @@ import {
   setOfferState,
 } from "../../src/lib/offers";
 import { addSaleLines, createSale } from "../../src/lib/sales";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { createFacebookPost, publishOfferOrPost } from "../../src/lib/facebook-posts";
@@ -96,13 +95,13 @@ describe("a prepared offer holding a copy sold elsewhere (#1876)", () => {
         data: { slug: `col-preparedsold-${ts}`, name: `Collection preparedsold-${ts}`, baseCurrency: "PLN", ownerId: userId },
       })
     ).id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     groupId = (
       await createFacebookGroup(userId, collectionId, {
         ...FACEBOOK_GROUP_DEFAULTS,

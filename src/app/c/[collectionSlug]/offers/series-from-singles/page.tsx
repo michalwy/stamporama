@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
-import { listContacts } from "@/lib/contacts";
+import { listPlatforms } from "@/lib/platforms";
 import { getStampConditions } from "@/lib/conditions";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampFormats } from "@/lib/stamp-formats";
@@ -31,14 +31,15 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const [contacts, conditions, certificateStatuses, formats, subtypes] = await Promise.all([
-    listContacts(session.user.id, collection.id),
+  const [allPlatforms, conditions, certificateStatuses, formats, subtypes] = await Promise.all([
+    listPlatforms(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
   ]);
-  const platforms = contacts.filter((c) => c.platform).map((c) => ({ id: c.id, name: c.name }));
+  // The switched-on platforms (#1955) — what a series is offered on.
+  const platforms = allPlatforms.filter((p) => p.enabled).map((p) => ({ id: p.id, name: p.name }));
   const named = (rows: { id: string; name: string }[]) => rows.map((row) => ({ id: row.id, name: row.name }));
 
   return (

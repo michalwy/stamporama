@@ -56,8 +56,8 @@ import {
 async function allegroPlatformOf(
   collectionId: string
 ): Promise<{ id: string; name: string } | null> {
-  const platform = await prisma.contact.findFirst({
-    where: { collectionId, platform: true, platformModule: ALLEGRO_PLATFORM_MODULE },
+  const platform = await prisma.platform.findFirst({
+    where: { collectionId, platformModule: ALLEGRO_PLATFORM_MODULE },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -68,7 +68,7 @@ async function requireAllegroPlatform(collectionId: string): Promise<{ id: strin
   const platform = await allegroPlatformOf(collectionId);
   if (!platform) {
     throw new Error(
-      "This collection has no Allegro platform yet. Name one at the top of Settings → Allegro first."
+      "This collection has no Allegro platform yet. Open Settings → Allegro once to create it."
     );
   }
   return platform;

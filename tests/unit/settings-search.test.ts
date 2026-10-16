@@ -32,14 +32,16 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
     "allegro-connection-panel.tsx",
     "allegro-profiles-panel.tsx",
     "allegro-categories-panel.tsx",
+    "platform-fields.tsx",
   ],
   delcampe: [
     "delcampe-settings-page.tsx",
     "delcampe-profiles-panel.tsx",
     "delcampe-categories-panel.tsx",
+    "platform-fields.tsx",
   ],
-  facebook: ["facebook-settings-page.tsx"],
-  philasearch: ["philasearch-platform-panel.tsx"],
+  facebook: ["facebook-settings-page.tsx", "platform-fields.tsx"],
+  philasearch: ["platform-fields.tsx"],
   "auction-reminder": ["auction-reminder-panel.tsx"],
   colnect: [
     "colnect-settings-page.tsx",
@@ -47,6 +49,7 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
     "colnect-conditions-panel.tsx",
     "colnect-attributes-panel.tsx",
     "colnect-lists-panel.tsx",
+    "platform-fields.tsx",
   ],
   assistant: ["assistant-panel.tsx"],
   email: ["email-panel.tsx"],
@@ -91,9 +94,7 @@ describe("settings search (#1470)", () => {
 
   it("counts the entry's name towards a field, but not alone", () => {
     assert.deepEqual(shape("allegro profiles"), [["allegro", ["Listing profiles"]]]);
-    assert.deepEqual(shape("colnect"), [
-      ["colnect", ["Colnect platform", "Without a Colnect word"]],
-    ]);
+    assert.deepEqual(shape("colnect"), [["colnect", ["Without a Colnect word"]]]);
     assert.deepEqual(shape("colnect unmapped"), [["colnect", ["Without a Colnect word"]]]);
   });
 
@@ -101,7 +102,7 @@ describe("settings search (#1470)", () => {
     const keys = searchSettings("platform")!.map((m) => m.entry.key);
     const order = SETTINGS_ENTRIES.map((e) => e.key).filter((k) => keys.includes(k));
     assert.deepEqual(keys, order);
-    assert.deepEqual(keys, ["allegro", "delcampe", "facebook", "philasearch", "colnect"]);
+    assert.deepEqual(keys, ["platforms", "allegro", "delcampe", "facebook", "philasearch", "colnect"]);
   });
 
   it("ignores case, accents, spacing and the kind of apostrophe", () => {

@@ -606,7 +606,7 @@ export interface ItemListFilters {
   forTrade?: boolean;
 }
 
-/** The platform contacts of this collection among `ids` (#506). Anything else is **dropped**, not
+/** The platforms of this collection among `ids` (#506). Anything else is **dropped**, not
  * refused: an id a form carries for a platform since deleted, or one belonging to another
  * collection, says the same thing as no exclusion at all, and a copy edit is no place to fail over
  * it. Deduplicated — the exclusions are a set. */
@@ -616,8 +616,8 @@ async function resolvePlatformIds(
 ): Promise<string[]> {
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0) return [];
-  const rows = await prisma.contact.findMany({
-    where: { id: { in: unique }, collectionId, platform: true },
+  const rows = await prisma.platform.findMany({
+    where: { id: { in: unique }, collectionId },
     select: { id: true },
   });
   return rows.map((r) => r.id);

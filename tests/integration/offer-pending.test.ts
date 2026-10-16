@@ -47,10 +47,10 @@ describe("the Pending offer state (#1778)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp P" } })).id;
     conditionId = (

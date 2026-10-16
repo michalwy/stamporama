@@ -46,7 +46,7 @@ describe("the to-review marker on sales (#1948)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Facebook", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Facebook" } })
     ).id;
   });
 

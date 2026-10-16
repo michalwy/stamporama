@@ -111,13 +111,13 @@ describe("a sale's Sent as", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformCurrency: "PLN" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "PLN" },
       })
     ).id;
     envelopeId = await createPackingSupply(userId, collectionId, "C6 envelope");

@@ -34,7 +34,6 @@ import {
   createFacebookGroupAction,
   deleteFacebookGroupAction,
   setFacebookGroupArchivedAction,
-  setFacebookPlatformAction,
   updateFacebookDefaultsAction,
   updateFacebookGroupAction,
 } from "@/app/actions/facebook";
@@ -45,7 +44,8 @@ import {
   parseFacebookSettingsCase,
   type FacebookSettingsCase,
 } from "./facebook-settings-cases";
-import { MarketplacePlatformSelect } from "./marketplace-platform-select";
+import type { PlatformListItem } from "@/lib/platforms";
+import { ModulePlatformTab } from "./module-platform-tab";
 import { SETTINGS_FIELD_SELECT_STYLE } from "./settings-field-grid";
 import {
   AddRowAction,
@@ -67,11 +67,12 @@ import {
 } from "./list-detail";
 
 /*
- * Settings → Facebook (#1543; ADR-0061): which platform is Facebook, in the page header as on every
- * marketplace page, and the **groups** under it — list beside detail, the dictionaries' shape (#1471).
+ * Settings → Facebook (#1543; ADR-0061): the **groups** under the Facebook platform — list beside
+ * detail, the dictionaries' shape (#1471) — and, on a tab of its own, the **Platform** (#1955): the
+ * Facebook platform's own settings and its on/off switch, which replaced the choice of which contact
+ * was Facebook.
  *
- * Facebook is one platform and its groups sit under it, so the page has no tabs of its own: the groups
- * are what is configured here, and what a group holds is its customs — how a new offer there is sold, the post
+ * Facebook is one platform and its groups sit under it: the groups are what is configured here, and what a group holds is its customs — how a new offer there is sold, the post
  * templates for an auction and a quick buy (#1671), the standing note, and the defaults a new auction
  * there starts from. **Facebook's own row comes first** (#1661): the
  * settings every group follows, each of which a group may instead set custom for itself. Groups in
@@ -86,49 +87,22 @@ import {
  */
 
 export function FacebookSettingsBody({
+  part,
   collectionId,
-  platforms,
-  platformId,
+  platform,
   groups,
 }: {
+  part: string | null;
   collectionId: string;
-  platforms: { id: string; name: string }[];
-  platformId: string | null;
+  platform: PlatformListItem;
   groups: FacebookGroupList;
 }) {
-  return (
-    <>
-      <MarketplacePlatformSelect
-        id="facebook-platform"
-        ariaLabel="Facebook platform"
-        platforms={platforms}
-        selectedId={platformId}
-        save={(contactId) => setFacebookPlatformAction(collectionId, contactId)}
-      />
-      {groups.platformId ? (
-        <GroupsListDetail collectionId={collectionId} list={groups} />
-      ) : (
-        <NoPlatform hasPlatforms={platforms.length > 0} />
-      )}
-    </>
-  );
-}
-
-/** What the page says before a platform is Facebook — and, with none, how to get one. */
-function NoPlatform({ hasPlatforms }: { hasPlatforms: boolean }) {
-  return (
+  if (part === "platform") return <ModulePlatformTab collectionId={collectionId} platform={platform} />;
+  return groups.platformId ? (
+    <GroupsListDetail collectionId={collectionId} list={groups} />
+  ) : (
     <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-      {hasPlatforms ? (
-        <>
-          Choose which of your platforms is Facebook at the top of this page. Your groups belong to
-          that platform.
-        </>
-      ) : (
-        <>
-          This collection has no platforms yet. Add a contact with the <strong>Platform</strong> role
-          under <strong>Contacts</strong>, then choose it as Facebook at the top of this page.
-        </>
-      )}
+      The Facebook platform is not set up yet. Reload the page to create it.
     </p>
   );
 }

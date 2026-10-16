@@ -96,11 +96,10 @@ describe("unknown-variant listing text (#619)", () => {
       })
     ).id;
     cataloguePlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Colnect",
-          platform: true,
           platformModule: "colnect",
           platformCurrency: "EUR",
           descriptionTemplate: TEMPLATE,
@@ -108,11 +107,10 @@ describe("unknown-variant listing text (#619)", () => {
       })
     ).id;
     plainPlatformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "By hand",
-          platform: true,
           platformCurrency: "EUR",
           descriptionTemplate: TEMPLATE,
         },

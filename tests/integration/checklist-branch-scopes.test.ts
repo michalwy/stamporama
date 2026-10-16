@@ -121,7 +121,7 @@ describe("a checklist branch's scoped actions (#1520)", () => {
     itemOff = await copy(s3, 3);
 
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
     for (const [offerNo, itemId] of [
       [9101, item1],

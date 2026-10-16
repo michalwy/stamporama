@@ -125,7 +125,7 @@ export function evaluateAllegroApiBlockers(input: AllegroApiReadiness): AllegroP
     return [
       blocker(
         "not-allegro-platform",
-        "This offer's platform is not the one marked as Allegro, so there is no account to publish it to. Mark it under Settings → Allegro, or post this listing by hand."
+        "This offer's platform is not the Allegro platform, so there is no account to publish it to. Post this listing by hand, or make the offer on the Allegro platform."
       ),
     ];
   }

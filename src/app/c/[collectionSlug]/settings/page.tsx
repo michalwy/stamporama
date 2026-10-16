@@ -16,24 +16,16 @@ import { getStampAttributeLists } from "@/lib/stamp-attributes";
 import { getStampSizePresets } from "@/lib/stamp-size-presets";
 import { listScanningProfiles } from "@/lib/scanning-profiles";
 import { getTags } from "@/lib/tags";
-import {
-  getColnectMappings,
-  getColnectConditionMappings,
-  getColnectPlatform,
-  listPlatformContacts,
-} from "@/lib/colnect";
+import { getColnectMappings, getColnectConditionMappings } from "@/lib/colnect";
 import { getColnectListMappings } from "@/lib/colnect-list-sync";
-import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { getMailSettings } from "@/lib/mail/messages";
 import { getAuctionReminderSettings } from "@/lib/auction-reminder";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
-import { getDelcampePlatform } from "@/lib/delcampe";
 import { listDelcampeListingProfiles } from "@/lib/delcampe-listing-profile";
 import { listDelcampeLearnedCategories } from "@/lib/delcampe-categories";
-import { getPhilasearchPlatform } from "@/lib/philasearch";
-import { getFacebookPlatform } from "@/lib/facebook";
+import { ensureModulePlatforms, listPlatforms } from "@/lib/platforms";
 import { listFacebookGroups } from "@/lib/facebook-groups";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
@@ -78,6 +70,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
+  // Before anything reads them: the module pages, and the profiles and groups hanging off their
+  // platforms, assume each of the five exists (#1955). One read once they do.
+  await ensureModulePlatforms(collection.id);
 
   const [
     areas,
@@ -101,18 +96,14 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     colnectMappings,
     colnectConditionMappings,
     colnectListMappings,
-    colnectPlatform,
-    allegroPlatform,
+    genericPlatforms,
+    modulePlatforms,
     allegroConnection,
     allegroListingProfiles,
     allegroLearnedCategories,
-    delcampePlatform,
     delcampeListingProfiles,
     delcampeLearnedCategories,
-    facebookPlatform,
     facebookGroups,
-    philasearchPlatform,
-    platformContacts,
     assistantTokens,
     photoStorageBytes,
     storageCache,
@@ -141,18 +132,14 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getColnectMappings(session.user.id, collection.id),
     getColnectConditionMappings(session.user.id, collection.id),
     getColnectListMappings(session.user.id, collection.id),
-    getColnectPlatform(session.user.id, collection.id),
-    getAllegroPlatform(session.user.id, collection.id),
+    listPlatforms(session.user.id, collection.id, "generic"),
+    listPlatforms(session.user.id, collection.id, "module"),
     getAllegroConnectionStatus(session.user.id, collection.id),
     listAllegroListingProfiles(session.user.id, collection.id),
     listAllegroLearnedCategories(session.user.id, collection.id),
-    getDelcampePlatform(session.user.id, collection.id),
     listDelcampeListingProfiles(session.user.id, collection.id),
     listDelcampeLearnedCategories(session.user.id, collection.id),
-    getFacebookPlatform(session.user.id, collection.id),
     listFacebookGroups(session.user.id, collection.id),
-    getPhilasearchPlatform(session.user.id, collection.id),
-    listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
     getStorageCacheStatus(session.user.id, collection.id),
@@ -212,18 +199,16 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           initialColnectMappings={colnectMappings}
           initialColnectConditionMappings={colnectConditionMappings}
           initialColnectListMappings={colnectListMappings}
-          colnectPlatformId={colnectPlatform?.id ?? null}
-          allegroPlatformId={allegroPlatform?.id ?? null}
+          genericPlatforms={genericPlatforms}
+          modulePlatforms={Object.fromEntries(
+            modulePlatforms.map((p) => [p.platformModule!, p])
+          )}
           allegroConnection={allegroConnection}
           allegroListingProfiles={allegroListingProfiles}
           allegroLearnedCategories={allegroLearnedCategories}
-          delcampePlatformId={delcampePlatform?.id ?? null}
           delcampeListingProfiles={delcampeListingProfiles}
           delcampeLearnedCategories={delcampeLearnedCategories}
-          facebookPlatformId={facebookPlatform?.id ?? null}
           facebookGroups={facebookGroups}
-          philasearchPlatformId={philasearchPlatform?.id ?? null}
-          platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           mailSettings={mailSettings}
           auctionReminder={auctionReminder}

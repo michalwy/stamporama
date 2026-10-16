@@ -42,8 +42,8 @@ export async function listDelcampeLearnedCategories(
   collectionId: string
 ): Promise<DelcampeLearnedCategoryList> {
   await assertCollectionOwner(ownerId, collectionId);
-  const platform = await prisma.contact.findFirst({
-    where: { collectionId, platform: true, platformModule: DELCAMPE_PLATFORM_MODULE },
+  const platform = await prisma.platform.findFirst({
+    where: { collectionId, platformModule: DELCAMPE_PLATFORM_MODULE },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

@@ -50,7 +50,7 @@ describe("the Dashboard's Sales section (#1809)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     buyerId = (
       await prisma.contact.create({ data: { collectionId, name: "Anna Buyer", buyer: true } })
@@ -170,8 +170,8 @@ describe("the Dashboard's Sales section (#1809)", () => {
   it("carries the bell's own platform-sale group, so the two never disagree", async () => {
     // A live Allegro listing the sync has seen an order for, with no sale recorded here (#499).
     const allegroId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Allegro", platform: true, platformModule: "allegro" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Allegro", platformModule: "allegro" },
       })
     ).id;
     const stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp D" } })).id;

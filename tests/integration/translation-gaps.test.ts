@@ -112,11 +112,10 @@ describe("translation gaps + in-place filling (#299, #300)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Allegro",
-          platform: true,
           titleTemplate: TEMPLATE,
           titleLanguage: "pl",
         },
@@ -242,7 +241,7 @@ describe("translation gaps + in-place filling (#299, #300)", () => {
   it("collects the gaps of every generated text over the offer's own composition", async () => {
     const offerId = await offer();
     await addOfferSet(userId, offerId, [copyId]);
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: platformId },
       // A description template naming a token the title does not use.
       data: { titleTemplate: "{name}", descriptionTemplate: "{#set}{issueName}{/set}" },
@@ -253,7 +252,7 @@ describe("translation gaps + in-place filling (#299, #300)", () => {
       gaps.map((g) => `${g.entityType}:${g.entityField}`).sort(),
       ["issue:name"] // `{name}` was filled above; `{condition}` etc. are no longer rendered.
     );
-    await prisma.contact.update({
+    await prisma.platform.update({
       where: { id: platformId },
       data: { titleTemplate: TEMPLATE, descriptionTemplate: null },
     });

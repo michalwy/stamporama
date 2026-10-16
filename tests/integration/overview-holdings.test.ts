@@ -96,7 +96,7 @@ describe("overview holdings (#1398)", () => {
     });
     const sold = await copy({ forSale: true });
     const platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })
     ).id;
     const offer = await prisma.offer.create({
       data: { collectionId, offerNo: 1, platformId, currency: "EUR", price: "1.00" },

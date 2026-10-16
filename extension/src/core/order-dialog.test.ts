@@ -118,11 +118,11 @@ describe("showOrderDialog", () => {
     showOrderDialog(
       doc,
       "hflVE",
-      { kind: "refused", message: "No platform is marked as Colnect yet.", problems: [] },
+      { kind: "refused", message: "The Colnect platform is switched off.", problems: [] },
       null
     );
     const items = [...doc.querySelectorAll(`[${ORDER_DIALOG_ATTR}] li`)].map((li) => li.textContent);
-    assert.deepEqual(items, ["No platform is marked as Colnect yet."]);
+    assert.deepEqual(items, ["The Colnect platform is switched off."]);
   });
 
   it("replaces what it was saying rather than stacking a second window", () => {

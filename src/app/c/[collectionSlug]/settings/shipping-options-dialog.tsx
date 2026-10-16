@@ -61,7 +61,7 @@ const ACTIONS_CELL: React.CSSProperties = {
 
 export interface ShippingOptionsDialogProps {
   collectionId: string;
-  /** The platform whose options these are. Only ever a *saved* contact — the dialog cannot be
+  /** The platform whose options these are. Only ever a *saved* platform — the dialog cannot be
    * opened while adding one, since an option has to hang off a platform that exists. */
   platformId: string;
   platformName: string;
@@ -69,14 +69,14 @@ export interface ShippingOptionsDialogProps {
    * pays in it — and every row can pick its own anyway. */
   defaultCurrency: string;
   onClose: () => void;
-  /** Raised with the current count after every change, so the contact form's summary line stays
+  /** Raised with the current count after every change, so the platform form's summary line stays
    * truthful without re-fetching. */
   onCountChange?: (count: number) => void;
 }
 
 type RowState = { kind: "none" } | { kind: "edit"; id: string } | { kind: "delete"; id: string };
 
-/** This dialog stacks above the contact form at `zIndexBase` 200, so its panel sits at 201 — the
+/** This dialog stacks above the settings page at `zIndexBase` 200, so its panel sits at 201 — the
  * row menus portal to `<body>` and have to be raised past it, or they open behind the panel. */
 const DIALOG_Z_INDEX_BASE = 200;
 const ROW_MENU_Z_INDEX = DIALOG_Z_INDEX_BASE + 100;
@@ -85,11 +85,11 @@ const ROW_MENU_Z_INDEX = DIALOG_Z_INDEX_BASE + 100;
  * The platform's shipping options (#468, #1909) — what its buyers can choose from, at the price they
  * pay, each linked to the carrier service it is sent by. What sending costs the collector is not
  * here: it is the service's, in the global rate list under Settings → Carriers. Opened from the
- * contact dialog's Platform tab, beside the listing templates, because it is the same kind of fact:
+ * platform's settings (#1955), beside the listing templates, because it is the same kind of fact:
  * something configured once per marketplace and then picked from on every sale.
  *
  * Unlike the templates dialog, this one **writes as you go**: its rows are their own records, not
- * fields of the contact, so there is nothing for the contact's Save to carry. Deletion confirms
+ * fields of the platform, so there is nothing for the platform form's Save to carry. Deletion confirms
  * inline rather than in a nested `ConfirmDialog` — a third stacked dialog for one row is more
  * ceremony than the act deserves, and the rows are cheap to re-add.
  */

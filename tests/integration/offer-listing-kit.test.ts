@@ -87,11 +87,10 @@ describe("offer listing kit (#405)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({
+      await prisma.platform.create({
         data: {
           collectionId,
           name: "Colnect",
-          platform: true,
           platformModule: "colnect",
           platformCurrency: "EUR",
           descriptionTemplate: "Stamps as pictured.",
@@ -318,8 +317,8 @@ describe("offer listing kit (#405)", () => {
 
   it("refuses a platform the Assistant has no module for, and says nothing else", async () => {
     const handListed = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     const offerId = await createOffer(userId, collectionId, {

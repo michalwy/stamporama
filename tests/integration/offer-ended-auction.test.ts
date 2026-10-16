@@ -53,7 +53,7 @@ describe("ended auctions with a bid (#490)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Allegro" } })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Stamp A" } })).id;
     conditionId = (

@@ -51,8 +51,8 @@ describe("purchase return (spent vs. realized)", () => {
     });
     collectionId = col.id;
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe" },
       })
     ).id;
 

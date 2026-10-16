@@ -64,7 +64,7 @@ describe("recording a listing's URL (#412)", () => {
       })
     ).id;
     platformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
   });
 

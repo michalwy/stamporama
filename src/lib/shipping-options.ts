@@ -58,15 +58,14 @@ async function assertOptionOwner(ownerId: string, optionId: string): Promise<{ c
   return { collectionId: option.collectionId };
 }
 
-/** Check the platform exists in the collection and carries the `platform` role — the same guard the
- * sale/offer writers apply before routing anything to a contact as a platform. */
+/** Check the platform exists in the collection — the same guard the sale/offer writers apply
+ * before routing anything to a platform. */
 async function assertPlatform(collectionId: string, platformId: string): Promise<void> {
-  const contact = await prisma.contact.findFirst({
+  const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
-    select: { platform: true },
+    select: { id: true },
   });
-  if (!contact) throw new Error("Platform not found in this collection.");
-  if (!contact.platform) throw new Error("This contact is not a platform.");
+  if (!platform) throw new Error("Platform not found in this collection.");
 }
 
 const SERVICE_SELECT = {
@@ -88,12 +87,12 @@ export async function getShippingOptions(
   ownerId: string,
   platformId: string
 ): Promise<ShippingOptionData[]> {
-  const contact = await prisma.contact.findUnique({
+  const platform = await prisma.platform.findUnique({
     where: { id: platformId },
     select: { collectionId: true },
   });
-  if (!contact) throw new Error("Platform not found.");
-  await assertCollectionOwner(ownerId, contact.collectionId);
+  if (!platform) throw new Error("Platform not found.");
+  await assertCollectionOwner(ownerId, platform.collectionId);
   const rows = await prisma.shippingOption.findMany({
     where: { platformId },
     orderBy: { name: "asc" },

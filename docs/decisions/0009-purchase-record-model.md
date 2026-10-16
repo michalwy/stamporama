@@ -4,6 +4,8 @@
 
 Accepted
 
+A purchase's platform is a `Platform` since [ADR-0071](0071-platform-entity.md) (#1955), no longer a contact carrying the Platform role; the supplier stays a contact.
+
 ## Context
 
 A collector buys stamps from dealers, auction houses, private sellers, and online

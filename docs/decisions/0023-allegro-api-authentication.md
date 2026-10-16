@@ -4,6 +4,8 @@
 
 Accepted
 
+The Allegro platform this connection attaches to is the Allegro module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact marked as Allegro.
+
 ## Context
 
 Allegro is extension-only in this app today. The platform module (#355) carries the **capture**

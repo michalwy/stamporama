@@ -6,7 +6,6 @@ import { createItem } from "../../src/lib/items";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { addOfferSet, createOffer, setOfferState, type OfferInput } from "../../src/lib/offers";
 import { getSaleDetail } from "../../src/lib/sales";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
@@ -93,12 +92,12 @@ describe("the sale operations (#1949)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({ data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" } })
+      await prisma.platform.create({ data: { collectionId, name: "Facebook", platformCurrency: "PLN" } })
     ).id;
     delcampeId = (
-      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" } })
+      await prisma.platform.create({ data: { collectionId, name: "Delcampe", platformCurrency: "EUR" } })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     groupId = (
       await createFacebookGroup(userId, collectionId, {
         ...FACEBOOK_GROUP_DEFAULTS,

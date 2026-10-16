@@ -4,6 +4,8 @@
 
 Accepted
 
+Which platform is Allegro is no longer a contact chosen in Settings: since [ADR-0071](0071-platform-entity.md) (#1955) it is the collection's Allegro module platform, switched on on its page.
+
 ## Context
 
 Colnect has no public API or import (#155). The chosen mechanism for matching Colnect catalog pages

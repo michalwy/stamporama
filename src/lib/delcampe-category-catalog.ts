@@ -259,8 +259,8 @@ function chunk<T>(rows: readonly T[], size: number): T[][] {
 /** Whether any collection on this instance has named a Delcampe platform. The refresh is somebody
  *  else's site, so an instance that does not list there does not walk it. */
 export async function anyCollectionListsOnDelcampe(): Promise<boolean> {
-  const contact = await prisma.contact.findFirst({
-    where: { platform: true, platformModule: DELCAMPE_PLATFORM_MODULE },
+  const contact = await prisma.platform.findFirst({
+    where: { platformModule: DELCAMPE_PLATFORM_MODULE },
     select: { id: true },
   });
   return contact !== null;

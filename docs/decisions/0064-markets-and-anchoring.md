@@ -6,6 +6,8 @@ Accepted. Written by #1634. **Amends ADR-0022** (§2: a datapoint now also has a
 from an anchoring market enters a figure), **ADR-0029** §2 (the ratio is learned only from those), and
 **closes ADR-0063 §8**, which left markets to this decision.
 
+A platform's market is the platform's own since [ADR-0071](0071-platform-entity.md) (#1955); the rule — the house's market, else the platform's — is unchanged.
+
 ## Context
 
 Prices differ between markets. A foreign result is good evidence for German material — the Reich,

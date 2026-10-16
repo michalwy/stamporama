@@ -90,8 +90,8 @@ describe("item disposal (#394)", () => {
 
   it("refuses a copy held by a live offer, naming it", async () => {
     const copy = await addCopy();
-    const platform = await prisma.contact.create({
-      data: { collectionId: f.collectionId, name: "Marketplace", platform: true },
+    const platform = await prisma.platform.create({
+      data: { collectionId: f.collectionId, name: "Marketplace" },
     });
     const offer = await prisma.offer.create({
       data: {

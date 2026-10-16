@@ -11,12 +11,14 @@
 import type { AllegroConnectionStatus } from "@/lib/allegro-connection";
 import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
+import { platformTileWords, type PlatformTileFacts } from "./platform-summary";
 
 /** The Allegro page's tabs, in their order; the first is the default and the sign-in callback's. */
 export const ALLEGRO_SETTINGS_PARTS = [
   { key: "account", label: "Account" },
   { key: "profiles", label: "Listing profiles" },
   { key: "categories", label: "Categories" },
+  { key: "platform", label: "Platform" },
 ] as const;
 
 export type AllegroSettingsPart = (typeof ALLEGRO_SETTINGS_PARTS)[number]["key"];
@@ -59,7 +61,8 @@ export const NO_ALLEGRO_PLATFORM = "Platform not chosen";
 export function allegroSummary(
   connection: AllegroConnectionStatus,
   profiles: AllegroListingProfileList,
-  categories: AllegroLearnedCategoryList
+  categories: AllegroLearnedCategoryList,
+  platform: PlatformTileFacts
 ): AllegroSummaryTile[] {
   const state = allegroConnectionState(connection);
   const account: AllegroSummaryTile = {
@@ -109,5 +112,5 @@ export function allegroSummary(
     flagged: false,
   };
 
-  return [account, profileTile, categoryTile];
+  return [account, profileTile, categoryTile, { part: "platform", ...platformTileWords(platform), flagged: false }];
 }

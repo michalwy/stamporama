@@ -5,7 +5,6 @@ import { useState, useTransition, type CSSProperties, type ReactNode } from "rea
 import type {
   ContactAuctions,
   ContactPage,
-  ContactPlatform,
   ContactPurchases,
   ContactSales,
   ContactTradeValue,
@@ -126,20 +125,6 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       status: statuses.join(","),
       search: "",
     })}`;
-  // The platform section's three lists (#1710), each narrowed to this platform and, by the same
-  // empty-param rule as above, to nothing the list happens to remember.
-  const platformHrefs: PlatformHrefs = {
-    offers: (state: string) =>
-      `/c/${collectionSlug}/offers?${new URLSearchParams({ platform: contact.id, state, search: "" })}`,
-    sales: `/c/${collectionSlug}/sales?${new URLSearchParams({ platform: contact.id, status: "", search: "" })}`,
-    purchases: `/c/${collectionSlug}/purchases?${new URLSearchParams({
-      type: "purchase",
-      platform: contact.id,
-      supplier: "",
-      status: "",
-    })}`,
-    settings: (tab: string) => `/c/${collectionSlug}/settings?tab=${tab}`,
-  };
   const tradesHref = (statuses: readonly string[] = []) =>
     `/c/${collectionSlug}/trades?${new URLSearchParams({
       partner: contact.id,
@@ -215,7 +200,6 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           {data.auctions && (
             <AuctionsCard auctions={data.auctions} collectionSlug={collectionSlug} href={lotsHref} />
           )}
-          {data.platform && <PlatformCard platform={data.platform} href={platformHrefs} />}
           {data.trades && (
             <TradesCard
               trades={data.trades}
@@ -224,11 +208,11 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
               href={tradesHref}
             />
           )}
-          {!data.purchases && !data.sales && !data.auctions && !data.platform && !data.trades && (
+          {!data.purchases && !data.sales && !data.auctions && !data.trades && (
             <DetailCard title="Activity">
               <EmptyNote>
                 Nothing recorded with {contact.name} yet. Give the contact the Seller, Buyer, Auction
-                house, Platform or Exchange partner role to see those sections before anything is
+                house or Exchange partner role to see those sections before anything is
                 recorded.
               </EmptyNote>
             </DetailCard>
@@ -239,7 +223,6 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       {editing && (
         <ContactFormDialog
           mode="edit"
-          collectionId={collectionId}
           contact={contact}
           isPending={isPending}
           error={error}
@@ -616,72 +599,6 @@ function AuctionsCard({
             </RowLinkItem>
           ))}
         </RowList>
-      )}
-    </DetailCard>
-  );
-}
-
-interface PlatformHrefs {
-  offers: (state: string) => string;
-  sales: string;
-  purchases: string;
-  settings: (tab: string) => string;
-}
-
-const PLATFORM_SETTINGS_LABEL: Record<NonNullable<ContactPlatform["settings"]>, string> = {
-  allegro: "Allegro settings",
-  delcampe: "Delcampe settings",
-  facebook: "Facebook settings",
-};
-
-/** The contact as a platform (#1710). Active and ready are today's; the rest are the period's. */
-function PlatformCard({ platform: p, href }: { platform: ContactPlatform; href: PlatformHrefs }) {
-  const ended = p.soldCount + p.withdrawnCount;
-  return (
-    <DetailCard title="Platform">
-      <FieldGrid min="10rem">
-        <Figure label="Offers active" href={href.offers("active")} hint="now">
-          {p.activeCount}
-        </Figure>
-        <Figure label="Offers ready" href={href.offers("ready")} hint="now">
-          {p.readyCount}
-        </Figure>
-        <Figure label="Offers sold" href={href.offers("sold")}>
-          {p.soldCount}
-        </Figure>
-        <Figure label="Sales through it" href={href.sales}>
-          {p.salesCount}
-        </Figure>
-        <Figure label="Revenue" href={href.sales} hint={moneyHint(p.revenue, "sale")}>
-          <Money total={p.revenue} noun="sale" />
-        </Figure>
-        <Figure
-          label="Sell-through"
-          href={ended > 0 ? href.offers("sold,withdrawn") : null}
-          hint={ended > 0 ? `${p.soldCount} of ${ended} ended` : undefined}
-        >
-          {p.sellThrough == null ? "—" : `${Math.round(p.sellThrough * 100)}%`}
-        </Figure>
-        <Figure
-          label="Time to sale"
-          href={p.avgDaysToSale == null ? null : href.offers("sold")}
-          hint={p.timedCount < p.soldCount ? `over ${p.timedCount} of ${p.soldCount} sold` : undefined}
-        >
-          {p.avgDaysToSale == null ? "—" : `${p.avgDaysToSale} days`}
-        </Figure>
-        <Figure label="Purchases through it" href={href.purchases}>
-          {p.purchaseCount}
-        </Figure>
-        <Figure label="Spent through it" href={href.purchases} hint={moneyHint(p.purchaseSpent, "purchase")}>
-          <Money total={p.purchaseSpent} noun="purchase" />
-        </Figure>
-      </FieldGrid>
-      {p.settings && (
-        <div style={{ marginTop: "1rem" }}>
-          <Link href={href.settings(p.settings)} style={{ ...LINK, fontSize: "0.875rem" }}>
-            {PLATFORM_SETTINGS_LABEL[p.settings]} →
-          </Link>
-        </div>
       )}
     </DetailCard>
   );

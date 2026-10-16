@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer, patchOffer, repostOffer, setOfferState, type OfferInput } from "../../src/lib/offers";
-import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup, updateFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
 import { freezeUnfrozenFacebookPosts, getFacebookOfferKit } from "../../src/lib/facebook-auctions";
@@ -59,11 +58,11 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
       })
     ).id;
     facebookId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Facebook", platform: true, platformCurrency: "PLN" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Facebook", platformCurrency: "PLN" },
       })
     ).id;
-    await setFacebookPlatform(userId, collectionId, facebookId);
+    await prisma.platform.update({ where: { id: facebookId }, data: { platformModule: "facebook" } });
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Mercury" } })).id;
     conditionId = (
       await prisma.stampCondition.create({

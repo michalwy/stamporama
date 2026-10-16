@@ -99,8 +99,8 @@ export async function listFacebookGroupChoices(
     select: { id: true },
   });
   if (!owned) throw new Error("Collection not found");
-  const platform = await prisma.contact.findFirst({
-    where: { id: platformId, collectionId, platform: true },
+  const platform = await prisma.platform.findFirst({
+    where: { id: platformId, collectionId },
     select: { platformModule: true, platformCurrency: true },
   });
   if (platform?.platformModule !== FACEBOOK_PLATFORM_MODULE) return { isFacebook: false, groups: [] };

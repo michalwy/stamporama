@@ -124,8 +124,8 @@ async function assertPlatform(
   collectionId: string,
   platformId: string
 ): Promise<{ platformCurrency: string | null }> {
-  const contact = await prisma.contact.findFirst({
-    where: { id: platformId, collectionId, platform: true },
+  const contact = await prisma.platform.findFirst({
+    where: { id: platformId, collectionId },
     select: { platformCurrency: true },
   });
   if (!contact) {
@@ -153,7 +153,7 @@ async function resolvePlatformCurrency(
       "Set this platform's currency before recording a sale on it."
     );
   }
-  await prisma.contact.update({
+  await prisma.platform.update({
     where: { id: platformId },
     data: { platformCurrency: first },
   });

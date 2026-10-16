@@ -210,8 +210,8 @@ describe("find_missing_translations and set_translations (#1452)", () => {
     // A German marketplace makes German a translation language (#293); the Polish album below makes
     // Polish one (#777).
     platformId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Briefmarken.de", platform: true, titleLanguage: "de", titleTemplate: "{name} {issueName} {conditionAbbr}" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Briefmarken.de", titleLanguage: "de", titleTemplate: "{name} {issueName} {conditionAbbr}" },
       })
     ).id;
     copyId = (await createItem(userId, collectionId, { stampId: mercury, conditionId, forSale: true })).id;

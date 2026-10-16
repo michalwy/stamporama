@@ -20,7 +20,7 @@ texts — are an [album template](collections.md#album-templates) in Settings, a
   name of your own; from that moment it is yours and changing the area or the language never touches
   it again. The suggestion is the area's *own* name — an area you only use for grouping is suggested
   under its own name, not its parent's, because that is the branch you chose. Where you have written
-  a [title name translation](contacts.md#title-names-per-language) for the album's language, that is
+  a [title name translation](platforms.md#title-names-per-language) for the album's language, that is
   the spelling you get; where you have not, the area's plain name. The language is never added to the name — an album
   printed in Polish is called *Rzesza Niemiecka*, not *Deutsches Reich (polski)*.
 - **Area** — entries are gathered from it and everything under it. Pick it from the same
@@ -38,7 +38,7 @@ The album gathers its entries straight away.
 
 An album made before its area had a name in the album's language is called by the area's plain
 name, and that is what prints at the top of every page. Once you write the
-[title name translation](contacts.md#title-names-per-language), the album **offers** it — on the
+[title name translation](platforms.md#title-names-per-language), the album **offers** it — on the
 album screen and in the page editor: *Use the name in Polish: Polska?* It never renames itself.
 
 - **Use …** renames the album. If cards you have already printed carry the old name at the top, you

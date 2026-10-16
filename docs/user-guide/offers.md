@@ -370,7 +370,7 @@ sold or withdrawn offers, which are read-only.
 Every offer has its own **title** — shown large on the detail header and as the offer's name in the
 list. It starts from the copies you list: with no template configured on the platform it is the plain
 catalog/copy label (the same label the set cards use); when the platform has a **listing title
-template** (see [Contacts](contacts.md#adding-and-editing)) the title is generated from that template
+template** (see [Contacts](platforms.md#listing-templates)) the title is generated from that template
 instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer. Starting an offer empty
 and adding lots afterwards works the same way: the title is generated the moment the offer first
 lists something, so it is there for copying and for the
@@ -402,11 +402,11 @@ The title is yours to change:
   [Generated texts follow the composition](#generated-texts-follow-the-composition)). Regenerating
   overwrites a title you edited by hand. With **no title template at all** — neither this listing's
   nor the platform's — there is nothing to rebuild from, so the entry is there but greyed out, with
-  a line under it saying so; set a title template on the platform's contact first. It is greyed
+  a line under it saying so; set a title template on the platform first. It is greyed
   rather than missing on purpose: the title is the one text with no **↻** of its own beside it, so
   this entry is the only place on the screen that can explain itself.
 - **Regenerate it in another language** — once your platforms list in more than one
-  [language](contacts.md#adding-and-editing), the same menu also offers **Regenerate title in …** for
+  [language](platforms.md#listing-language), the same menu also offers **Regenerate title in …** for
   each of the others, and the same for the description and private note where the platform has a
   template for them. It is a one-off: the text is rebuilt using the text you entered for that
   language, and nothing about the choice is remembered — the platform keeps its own listing language
@@ -421,7 +421,7 @@ its card.
 Under the header sits **Listing text** — the offer's long **description**, and a **private note** only
 you ever see (some platforms let you attach one to a listing for your own reference; it is never shown
 to a buyer). Both are generated when the offer is created, from the platform's
-[description and private-note templates](contacts.md#description-and-private-note), and both are
+[description and private-note templates](platforms.md#description-and-private-note), and both are
 optional: a platform with no template for a field generates nothing, and while both are empty the
 whole section collapses to a single **+ Add listing text** row.
 
@@ -445,7 +445,7 @@ Each field carries its own three controls:
 
 A copy's [faults](faults.md) reach the description through the platform's template: `{faults}` names
 them and `{#faultyCopy}…{/faultyCopy}` lists them copy by copy, skipping the sound ones (see
-[Telling a buyer about faults](contacts.md#telling-a-buyer-about-faults)). They are written in the
+[Telling a buyer about faults](platforms.md#telling-a-buyer-about-faults)). They are written in the
 platform's language, each from the fault's own translation, and a fault with no translation into it
 is written in your own language and listed as a missing translation, which you can fill in place.
 The title never names them.
@@ -458,7 +458,7 @@ up to date.
 
 Some platforms cap these texts hard — Colnect, for instance, takes 100 characters for the description
 and 100 for the private note. Record the cap once on the platform
-([Listing text limits](contacts.md#listing-text-limits)) and a **character counter** appears beside
+([Listing text limits](platforms.md#listing-text-limits)) and a **character counter** appears beside
 that field's label: `72 / 100`, counting up as you type. Past the limit it turns amber and says by how
 much — `104 / 100 · over by 4`.
 
@@ -503,7 +503,7 @@ press ↻ once on any field you would rather have kept up to date automatically.
 ### Description format
 
 The description carries a **format** — plain text, HTML or Markdown — copied from the platform when
-the offer was created (see [Description format](contacts.md#description-format)). The selector at the
+the offer was created (see [Description format](platforms.md#description-format)). The selector at the
 left of the description's own row of buttons changes it for **this listing alone**: use it for the
 offer that turns out to be an exception, not to reconfigure the platform.
 
@@ -557,7 +557,7 @@ box again removes the translation and the default text comes back.
 
 An **{area}** gap is filled on the area whose title name actually appears in your titles, which is
 not always the copy's own area: with title names rolled up from a parent (see
-[Area names in titles](contacts.md#area-names-in-titles)), the parent is the one that needs the
+[Area names in titles](platforms.md#area-names-in-titles)), the parent is the one that needs the
 translation, and that is the row the panel writes to.
 
 The same panel appears on the offer screen, under the listing text, for the translations missing
@@ -573,7 +573,7 @@ button row — beside **Generate**, where its effect is.
 
 The dialog opens with a one-line reminder of what the platform accepts (how many photos, longest
 edge, file size). Those are the platform's limits, not the offer's — change them on the
-[platform contact](contacts.md#offer-photos). Below that sit the settings that belong to this
+[platform](platforms.md#offer-photos). Below that sit the settings that belong to this
 listing, in two columns — what is photographed and how each stamp is labelled on the left, how the
 photos are gathered into collages on the right:
 
@@ -964,7 +964,7 @@ is fine: nothing depends on the numbers matching afterwards.
 
 Some platforms punish photos showing certain symbols — Facebook warns over a portrait of Hitler or a
 swastika on German Reich material. On a platform set to
-[cover symbols](contacts.md#offer-photos), or an offer you set to *Covered* in its
+[cover symbols](platforms.md#offer-photos), or an offer you set to *Covered* in its
 [photo settings](#photo-settings), you cover them on the photos **of the offer** — the copy's and
 the stamp's own photos never change.
 
@@ -1659,10 +1659,10 @@ this listing will really carry, in the title as in the description. Both preview
 offer will: the lot as the one set it is created as (a `{#set}…{/set}` block appears once, not once
 per copy), in the platform's listing language. `{area}`, `{year}`, `{condition}` and `{count}` are the ones a job lot
 is mostly made of; the rest of the vocabulary is there if you want it. The description lists the
-[repeating blocks](contacts.md#description-and-private-note) as well — `{#copy}…{/copy}` to write one
+[repeating blocks](platforms.md#description-and-private-note) as well — `{#copy}…{/copy}` to write one
 line per copy, a condition legend, and the rest — exactly as a platform's description template does.
 A name the preview could only print in your default language is listed under it as a link — click it
-to enter the translation right there, as in a platform's [template builder](contacts.md#adding-and-editing).
+to enter the translation right there, as in a platform's [template builder](platforms.md#listing-templates).
 
 Because they are templates, the wording **keeps following the offer**. Strike a copy that sold
 somewhere else and the title re-reads at 99 by itself — which finished text could not do, and which
@@ -2143,7 +2143,7 @@ listings are created from an uploaded file — [Delcampe](delcampe.md) — it re
 once it has been assembled. Nothing is shortened for you.
 
 Because caps are read live, tightening one under
-[Listing text limits](contacts.md#listing-text-limits) reaches offers that were marked Ready under
+[Listing text limits](platforms.md#listing-text-limits) reaches offers that were marked Ready under
 the old number. They stay Ready; the bulk listing card reports them, and the Delcampe export refuses
 them by name.
 
@@ -2997,5 +2997,5 @@ counts that copy once.
 
 - [Inventory](inventory.md) — the copies you compose offers from.
 - [Sales](sales.md) — record a sale when an offer's set sells.
-- [Contacts](contacts.md) — mark a contact as a **platform** to list on it.
+- [Platforms](platforms.md) — the marketplaces you list on, and what a new offer on each starts as.
 - [Purchases](purchases.md) — where a copy's cost-basis comes from, used later for profit/loss.

@@ -92,7 +92,7 @@ describe("dashboard: Auctions I bid in (#1812)", () => {
       })
     ).id;
     sellerId = (await prisma.contact.create({ data: { collectionId, name: "Heinrich", seller: true } })).id;
-    platformId = (await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })).id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Philasearch" } })).id;
 
     const running = await newSale("Spring sale");
     closingLot = await newLot(running, "Danzig 1920", inHours(3));

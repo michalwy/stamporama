@@ -62,6 +62,9 @@ const LISTS = [
   list(4, "For sale", false),
 ];
 
+/** The module platform as most tests need it: switched on, selling in its currency (#1955). */
+const ON = { enabled: true, platformCurrency: "EUR" };
+
 function tile(part: string, ...args: Parameters<typeof colnectSummary>) {
   return colnectSummary(...args).find((t) => t.part === part)!;
 }
@@ -69,22 +72,23 @@ function tile(part: string, ...args: Parameters<typeof colnectSummary>) {
 describe("Colnect settings summary (#1480)", () => {
   it("has one tile per tab, in the tabs' order", () => {
     assert.deepEqual(
-      colnectSummary([], [], attributes(), LISTS).map((t) => [t.part, t.title]),
+      colnectSummary([], [], attributes(), LISTS, ON).map((t) => [t.part, t.title]),
       [
         ["catalogs", "Catalogs"],
         ["conditions", "Conditions"],
         ["attributes", "Attributes"],
         ["lists", "List sync"],
+        ["platform", "Platform"],
       ]
     );
   });
 
   it("counts the catalogs mapped, and says the rest match themselves when there are none", () => {
-    const some = tile("catalogs", [mapping("Pol", "Fi"), mapping("Sg", "SG")], [], attributes(), LISTS);
+    const some = tile("catalogs", [mapping("Pol", "Fi"), mapping("Sg", "SG")], [], attributes(), LISTS, ON);
     assert.equal(some.figure, "2 catalogs mapped");
     assert.equal(some.detail, "Pol → Fi, Sg → SG");
 
-    const none = tile("catalogs", [], [], attributes(), LISTS);
+    const none = tile("catalogs", [], [], attributes(), LISTS, ON);
     assert.equal(none.figure, "None mapped");
     assert.equal(none.detail, "Same abbreviations match themselves");
   });
@@ -95,12 +99,13 @@ describe("Colnect settings summary (#1480)", () => {
       [],
       [condition("MNH", "1"), condition("U", "4"), condition("Cover", null)],
       attributes(),
-      LISTS
+      LISTS,
+      ON
     );
     assert.equal(t.figure, "2 of 3 mapped");
     assert.equal(t.detail, "Not mapped: Cover");
 
-    assert.equal(tile("conditions", [], [], attributes(), LISTS).figure, "No conditions yet");
+    assert.equal(tile("conditions", [], [], attributes(), LISTS, ON).figure, "No conditions yet");
   });
 
   it("names a long run of names only in part", () => {
@@ -109,7 +114,8 @@ describe("Colnect settings summary (#1480)", () => {
       [],
       ["A", "B", "C", "D", "E"].map((a) => condition(a, null)),
       attributes(),
-      LISTS
+      LISTS,
+      ON
     );
     assert.equal(t.detail, "Not mapped: A, B, C and 2 more");
   });
@@ -125,22 +131,22 @@ describe("Colnect settings summary (#1480)", () => {
       assert.equal(unmappedAttributeCount(lists), 3);
       assert.equal(unmappedAttributeCount(lists, "paper"), 2);
 
-      const t = tile("attributes", [], [], lists, LISTS);
+      const t = tile("attributes", [], [], lists, LISTS, ON);
       assert.equal(t.figure, "3 values without a Colnect word");
       assert.equal(t.detail, "of 5 values");
     });
 
     it("opens its tab narrowed while any value is unmapped, and plainly once none is", () => {
-      assert.deepEqual(tile("attributes", [], [], lists, LISTS).view, {
+      assert.deepEqual(tile("attributes", [], [], lists, LISTS, ON).view, {
         [COLNECT_UNMAPPED_PARAM]: "1",
       });
 
       const mapped = attributes({ color: [value("Carmine", "carmine")] });
-      const t = tile("attributes", [], [], mapped, LISTS);
+      const t = tile("attributes", [], [], mapped, LISTS, ON);
       assert.equal(t.figure, "All mapped");
       assert.equal(t.view, undefined);
 
-      assert.equal(tile("attributes", [], [], attributes(), LISTS).figure, "No values yet");
+      assert.equal(tile("attributes", [], [], attributes(), LISTS, ON).figure, "No values yet");
     });
 
     it("the figure is the tab's own count, narrowed list by list", () => {
@@ -154,7 +160,7 @@ describe("Colnect settings summary (#1480)", () => {
   });
 
   it("says which lists are set to sync", () => {
-    const t = tile("lists", [], [], attributes(), LISTS);
+    const t = tile("lists", [], [], attributes(), LISTS, ON);
     assert.equal(t.figure, "2 of 4 synced");
     assert.equal(t.detail, "Collection, Wishlist");
 
@@ -163,7 +169,8 @@ describe("Colnect settings summary (#1480)", () => {
       [],
       [],
       attributes(),
-      LISTS.map((l) => ({ ...l, enabled: false }))
+      LISTS.map((l) => ({ ...l, enabled: false })),
+      ON
     );
     assert.equal(none.figure, "None synced");
     assert.equal(none.detail, null);

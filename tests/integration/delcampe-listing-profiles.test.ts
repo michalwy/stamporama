@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { getDelcampePlatform, setDelcampePlatform } from "../../src/lib/delcampe";
+import { getDelcampePlatform } from "../../src/lib/delcampe";
 import {
   createDelcampeListingProfile,
   deleteDelcampeListingProfile,
@@ -64,12 +64,12 @@ describe("Delcampe listing profiles (#608)", () => {
       })
     ).id;
     delcampeId = (
-      await prisma.contact.create({
-        data: { collectionId, name: "Delcampe", platform: true, platformCurrency: "EUR" },
+      await prisma.platform.create({
+        data: { collectionId, name: "Delcampe", platformCurrency: "EUR" },
       })
     ).id;
     otherPlatformId = (
-      await prisma.contact.create({ data: { collectionId, name: "Colnect", platform: true } })
+      await prisma.platform.create({ data: { collectionId, name: "Colnect" } })
     ).id;
     offerId = (
       await prisma.offer.create({
@@ -107,12 +107,13 @@ describe("Delcampe listing profiles (#608)", () => {
     );
   });
 
-  it("marks the platform, exclusively", async () => {
-    await setDelcampePlatform(userId, collectionId, delcampeId);
+  it("finds the Delcampe platform by its module, while it is switched on (#1955)", async () => {
+    await prisma.platform.update({ where: { id: delcampeId }, data: { platformModule: "delcampe" } });
     assert.equal((await getDelcampePlatform(userId, collectionId))?.id, delcampeId);
-    await setDelcampePlatform(userId, collectionId, otherPlatformId);
-    assert.equal((await getDelcampePlatform(userId, collectionId))?.id, otherPlatformId);
-    await setDelcampePlatform(userId, collectionId, delcampeId);
+    // One per collection: a second Delcampe is refused by the database.
+    await assert.rejects(() =>
+      prisma.platform.update({ where: { id: otherPlatformId }, data: { platformModule: "delcampe" } })
+    );
   });
 
   it("makes the first profile the platform's default on its own", async () => {
