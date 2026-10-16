@@ -119,6 +119,8 @@ describe("platform figures (#1960)", () => {
   });
 
   after(async () => {
+    // Sales before the offers their lines name, the offers before the platforms they name.
+    await prisma.sale.deleteMany({ where: { collectionId } });
     await prisma.offer.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } });
