@@ -391,7 +391,8 @@ A post can hold several offers as **lots** — an album, each photo a lot of its
 bar, then give the post a **title** — *Generalgouvernement 1940–44*, say — and choose **Post together**.
 Every post has one: with several posts running at once, it tells them apart. They must all be Facebook offers in the same group, not yet posted and not in another post —
 and all auctions or all quick buys, unless the group's posts may mix them (**A post may mix auctions
-and quick buys**, above). They become lots 1, 2, 3… in the order you ticked them. The auctions among
+and quick buys**, above). They become lots 1, 2, 3… in the order you ticked them — until the post is up
+you can [change that order](#changing-the-order-of-the-lots) on its screen. The auctions among
 them share one closing time — the first auction's — from then on: changing it on one lot changes it
 on all of them. A quick buy has no closing time.
 
@@ -455,7 +456,8 @@ keeps the title it went up with, as it keeps everything else.
   offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
   a quick buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the
   offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
-  takes the lot out of the post. A row wraps onto the next line on a narrow window rather than shrinking
+  takes the lot out of the post. Until the post is up, a row's **⠿** grip drags the lot to another place
+  ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking
   the photo. Everything a post needs is here — its text, its photos and, captioned, its captions — so
   posting needs no lot opened.
 
@@ -494,6 +496,24 @@ together** — a Facebook offer in the post's group, not yet posted, in no other
 post's listing type unless the group's posts may mix them. One that does not qualify is named with
 the reason and the others are added; on the **Offers** screen it stays ticked. A post waiting for
 approval or up in the group takes no new lots.
+
+#### Changing the order of the lots
+
+Until a post is up — while it is being prepared or Ready — its lots can be put in another order on the
+post's screen: a series in catalogue order, say, or the best lot first.
+
+- **Drag a lot** by the **⠿** grip beside its lot number, and drop it where it should go; a line shows
+  where it will land.
+- **Sort the whole post** from the line under the *Lots* heading: by **catalogue number** (each lot's
+  lowest number; lots with none go last), or by **price, lowest first** or **highest first** (the price
+  its row shows — a quick buy's price, an auction's starting price, or its highest bid once one is
+  recorded; lots with no price go last). Lots that tie keep their order, and you can still drag lots
+  afterwards to adjust it.
+
+The lot numbers follow the new order at once, and so does everything made from them: the post text,
+the captions, the order and names of the photos in **↓ Photos** (`lot-01-…`). Once the post is up —
+waiting for approval or in the group — its lots stay in the order they were posted, and neither the
+grip nor the sorting is offered.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
 move up, and a post left with one lot becomes an ordinary single post — its number is not used again.

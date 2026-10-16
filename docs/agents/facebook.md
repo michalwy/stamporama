@@ -428,6 +428,24 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the refused under the *Lots* heading. The integration test is
   `tests/integration/facebook-post-add-lots.test.ts`.
 
+- **A post's lots can be reordered before it goes up** (#1986, raised on 2026-10-16; ADR-0061 §2 as
+  amended). `reorderFacebookLots` (`facebook-posts.ts`) takes **every** lot's offer id in the new order
+  and renumbers them in two passes (the unique index, `detachFacebookLot`'s shape); it refuses once a
+  lot is past Ready (#1800) and, through `facebookLotOrderRefusal` (pure), an order that does not name
+  exactly the post's lots — a lot added or taken out meanwhile makes the browser's order stale. The
+  lot number **is** the order, so the kit (`readKitLots` orders by it), the captioned post's `{offer}`,
+  the ZIP's `lot-NN-` names and each lot photo's download name all follow with nothing else written;
+  the lot photo's fingerprint holds no lot number, so nothing is redrawn, and the auctions already share
+  one closing time. **Sorting is the browser's**: `sortFacebookLots` (pure) gives the ids for
+  `catalog` — `FacebookKitLot.catalogSortKey`, the lowest of the lot's copies' numbers through
+  `catalogSortKeyOf`, compared by `compareCatalogSortKeys` — or `priceAsc` / `priceDesc` over
+  `facebookLotPrice` (the row's own figure, moved there from the panel); unnumbered or unpriced lots
+  last, ties in their order, and the result goes through the same write. The panel drags rows with
+  `reorder-list.tsx` (`handleOnly`, the grip beside *Lot N*, an `<li>` drop line since the lots are an
+  `<ol>`) and draws the asked order (`movedOrder`) until the screen is read again. The integration test
+  is `tests/integration/facebook-post-reorder.test.ts` (checked when written to fail with the posted
+  gate removed).
+
 - **A post's screen lists the names it prints untranslated** (#1889, raised by the collector on
   2026-10-13; #1733's links on a third surface). `FacebookPostScreen.translations` — null once any lot
   is up, its text frozen (#1800) — is `facebookPostTranslations`: per lot, the template it is written

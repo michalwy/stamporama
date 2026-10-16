@@ -4,6 +4,9 @@ import {
   describeFacebookAuctionCopies,
   describeRefusedLots,
   facebookLotAddRefusal,
+  facebookLotOrderRefusal,
+  facebookLotPrice,
+  sortFacebookLots,
   facebookLotPrintedTexts,
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
@@ -1027,5 +1030,61 @@ describe("facebookLotPrintedTexts (#1889)", () => {
     assert.deepEqual(facebookLotPrintedTexts(""), []);
     // A near miss is not the token.
     assert.deepEqual(facebookLotPrintedTexts("{Title} {titles} title"), []);
+  });
+});
+
+describe("the order of a post's lots (#1986)", () => {
+  const lot = (
+    offerId: string,
+    catalogSortKey: string | null,
+    figures: { type?: "auction" | "fixed"; price?: string; startingPrice?: string | null } = {}
+  ) => ({
+    offerId,
+    catalogSortKey,
+    listingType: figures.type ?? "auction",
+    price: figures.price ?? "0.00",
+    startingPrice: figures.startingPrice ?? null,
+  });
+
+  it("reads a lot's price as its row shows it", () => {
+    assert.deepEqual(facebookLotPrice(lot("a", null, { type: "fixed", price: "20.00" })), {
+      label: "Price",
+      amount: "20.00",
+    });
+    assert.deepEqual(facebookLotPrice(lot("a", null, { price: "7.00", startingPrice: "3.00" })), {
+      label: "Bid",
+      amount: "7.00",
+    });
+    assert.deepEqual(facebookLotPrice(lot("a", null, { startingPrice: "3.00" })), { label: "Start", amount: "3.00" });
+  });
+
+  it("sorts by catalogue number, the unnumbered last and ties in their order", () => {
+    const lots = [
+      lot("none", null),
+      lot("200", "0000000200"),
+      lot("bl3", "bl0000000003"),
+      lot("12a", "0000000012"),
+      lot("12b", "0000000012"),
+    ];
+    assert.deepEqual(sortFacebookLots(lots, "catalog"), ["12a", "12b", "200", "bl3", "none"]);
+  });
+
+  it("sorts by price either way, a lot with no price last both times", () => {
+    const lots = [
+      lot("start5", null, { startingPrice: "5.00" }),
+      lot("none", null),
+      lot("bid12", null, { price: "12.00", startingPrice: "3.00" }),
+      lot("quick7.5", null, { type: "fixed", price: "7.50" }),
+      lot("start5b", null, { startingPrice: "5" }),
+    ];
+    assert.deepEqual(sortFacebookLots(lots, "priceAsc"), ["start5", "start5b", "quick7.5", "bid12", "none"]);
+    assert.deepEqual(sortFacebookLots(lots, "priceDesc"), ["bid12", "quick7.5", "start5", "start5b", "none"]);
+  });
+
+  it("accepts only an order naming every lot of the post once", () => {
+    assert.equal(facebookLotOrderRefusal(["a", "b", "c"], ["c", "a", "b"]), null);
+    for (const order of [["a", "b"], ["a", "b", "c", "c"], ["a", "b", "x"], ["a", "a", "b"]]) {
+      assert.match(facebookLotOrderRefusal(["a", "b", "c"], order) ?? "", /lots have changed/);
+    }
   });
 });
