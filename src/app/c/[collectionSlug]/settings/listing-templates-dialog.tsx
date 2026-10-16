@@ -145,8 +145,9 @@ export interface ListingTemplatesDialogProps {
   language: string | null;
   templates: ListingTemplates;
   /** What this platform's description field accepts (#319) — configured here, next to the template
-   * that writes it, and seeded onto every offer created on the platform. */
-  descriptionFormat: DescriptionFormat;
+   * that writes it, and seeded onto every offer created on the platform. Null where the platform's
+   * module does not use one (#1959, Colnect): its description is plain text, and no format is shown. */
+  descriptionFormat: DescriptionFormat | null;
   /** Whether the platform uses a private-note template — not on Delcampe (#1957), whose upload has
    *  nowhere to put one; there the tab is not offered and the template saves empty. */
   privateNote?: boolean;
@@ -174,6 +175,7 @@ export function ListingTemplatesDialog({
 }: ListingTemplatesDialogProps) {
   const tabs = privateNote ? TABS : TABS.filter((t) => !t.keys.includes("privateNoteTemplate"));
   const [draft, setDraft] = useState<ListingTemplates>(templates);
+  const offersFormat = descriptionFormat !== null;
   const [format, setFormat] = useState<DescriptionFormat>(normalizeDescriptionFormat(descriptionFormat));
   const [tab, setTab] = useState(0);
   // Two samples so a `{#set}` block in a multi-line template visibly repeats; the title previews on
@@ -231,7 +233,7 @@ export function ListingTemplatesDialog({
               // The description is the one text with a format (#319): it is what gets pasted into the
               // platform's own field, and the platforms disagree about what that field takes.
               extra={
-                f.key === "descriptionTemplate" ? (
+                f.key === "descriptionTemplate" && offersFormat ? (
                   <DescriptionFormatField value={format} onChange={setFormat} />
                 ) : undefined
               }

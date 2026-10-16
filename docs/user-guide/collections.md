@@ -569,9 +569,8 @@ When a stamp has **no** item-ID yet, the same tag appears with a **magnifying-gl
 
 ## The Colnect page
 
-**Settings → Colnect** (under *Partners*) has five tabs — the four below and **Platform**, the
-Colnect [platform](platforms.md)'s own settings — under a strip of figures, and under that strip a
-row of the platform's own figures (see [The platform in
+**Settings → Colnect** (under *Partners*) has five tabs under a strip of figures, and under that
+strip a row of the [platform](platforms.md)'s own figures (see [The platform in
 figures](platforms.md#the-platform-in-figures)):
 
 - **Catalogs** — which of your catalogs each Colnect abbreviation means; see [Colnect catalog
@@ -582,6 +581,7 @@ figures](platforms.md#the-platform-in-figures)):
   [Colnect attribute mapping](#colnect-attribute-mapping).
 - **List sync** — what each of Colnect's own lists mirrors here; see [Colnect list
   sync](#colnect-list-sync).
+- **Platform** — the Colnect platform's own settings; see [Colnect platform](#colnect-platform).
 
 The strip above the tabs says where each stands — how many catalogs are mapped, how many of your
 conditions have a grade, how many attribute values still have no Colnect word, and which lists are
@@ -595,8 +595,24 @@ rest.
 ## Colnect platform
 
 Every collection has one **Colnect** [platform](platforms.md), configured on the **Platform** tab of
-**Settings → Colnect** — whether it is **switched on**, its currency, templates, limits and photos. It
-starts switched off; switch it on when you start selling on Colnect.
+**Settings → Colnect**. It starts switched off; switch it on when you start selling on Colnect.
+
+The tab offers only what selling on Colnect uses — the [platform's settings](platforms.md#the-platforms-settings)
+less four:
+
+- **Platform** — switched on, market and notes.
+- **Offers and sales** — currency, listing language, minimum price, *refresh quick buys after*,
+  the message to the buyer and the shipping options.
+- **Listing texts** — the title, description, private note and photo tile label templates, and the
+  limits on the description and the private note (Colnect caps both at 100 characters).
+- **Photos** — all of them: the limits, cover symbols, sides, collage template, single photos and
+  series grouping.
+
+Left out: the **default listing type** and **default starting price**, because Colnect sells at a
+fixed price only; the **description format**, because Colnect's short description is plain text —
+a Colnect offer's always is; and the **max title**, because Colnect's sale form has no title. The
+title template stays: it names the offer and its sets here, and the message to the buyer lists items
+by it.
 
 Offers on it are what the [listing checks](offers.md#what-the-assistant-cant-post) in the bulk
 listing workspace test against what Colnect's sale form needs — an item-ID on every stamp, a grade for

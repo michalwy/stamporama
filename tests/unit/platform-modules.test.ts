@@ -121,10 +121,24 @@ describe("platformUsesSetting", () => {
     assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "maxPrivateNoteLength"), false);
   });
 
+  it("drops Colnect's listing type, description format and title cap, which its form has no use for (#1959)", () => {
+    assert.equal(platformUsesSetting(COLNECT_PLATFORM_MODULE, "defaultListingType"), false);
+    assert.equal(platformUsesSetting(COLNECT_PLATFORM_MODULE, "descriptionFormat"), false);
+    assert.equal(platformUsesSetting(COLNECT_PLATFORM_MODULE, "maxTitleLength"), false);
+    assert.equal(platformUsesSetting(COLNECT_PLATFORM_MODULE, "privateNoteTemplate"), true);
+    assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "descriptionFormat"), true);
+  });
+
   it("keeps every setting on a generic platform and on the modules not yet trimmed", () => {
-    for (const platformModule of [null, undefined, ALLEGRO_PLATFORM_MODULE, COLNECT_PLATFORM_MODULE]) {
-      assert.equal(platformUsesSetting(platformModule, "privateNoteTemplate"), true);
-      assert.equal(platformUsesSetting(platformModule, "maxPrivateNoteLength"), true);
+    const settings = [
+      "privateNoteTemplate",
+      "maxPrivateNoteLength",
+      "defaultListingType",
+      "descriptionFormat",
+      "maxTitleLength",
+    ] as const;
+    for (const platformModule of [null, undefined, ALLEGRO_PLATFORM_MODULE]) {
+      for (const setting of settings) assert.equal(platformUsesSetting(platformModule, setting), true);
     }
   });
 });

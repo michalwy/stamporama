@@ -11,6 +11,7 @@ import {
 } from "../../src/lib/platforms";
 import {
   ALLEGRO_PLATFORM_MODULE,
+  COLNECT_PLATFORM_MODULE,
   DELCAMPE_PLATFORM_MODULE,
   MODULE_PLATFORMS,
 } from "../../src/lib/platform-modules";
@@ -112,6 +113,36 @@ describe("Module platforms (#1955)", () => {
     const allegro = await updatePlatform(userId, (await platformOf(ALLEGRO_PLATFORM_MODULE)).id, sent);
     assert.equal(allegro.privateNoteTemplate, "{#copy}{ref}{/copy}");
     assert.equal(allegro.maxPrivateNoteLength, 200);
+  });
+
+  it("saves Colnect's listing type, starting price, format and title cap empty, and Allegro's as sent (#1959)", async () => {
+    await ensureModulePlatforms(collectionId);
+    const platformOf = (platformModule: string) =>
+      prisma.platform.findFirstOrThrow({ where: { collectionId, platformModule }, select: { id: true } });
+    const sent = {
+      name: "ignored",
+      defaultListingType: "auction",
+      defaultStartingPrice: "5",
+      descriptionFormat: "html",
+      maxTitleLength: 80,
+      maxDescriptionLength: 100,
+      privateNoteTemplate: "{#copy}{ref}{/copy}",
+    };
+
+    const colnect = await updatePlatform(userId, (await platformOf(COLNECT_PLATFORM_MODULE)).id, sent);
+    assert.equal(colnect.defaultListingType, null);
+    assert.equal(colnect.defaultStartingPrice, null);
+    assert.equal(colnect.descriptionFormat, "plain");
+    assert.equal(colnect.maxTitleLength, null);
+    // What Colnect does use is kept as sent.
+    assert.equal(colnect.maxDescriptionLength, 100);
+    assert.equal(colnect.privateNoteTemplate, "{#copy}{ref}{/copy}");
+
+    const allegro = await updatePlatform(userId, (await platformOf(ALLEGRO_PLATFORM_MODULE)).id, sent);
+    assert.equal(allegro.defaultListingType, "auction");
+    assert.equal(allegro.defaultStartingPrice, "5.00");
+    assert.equal(allegro.descriptionFormat, "html");
+    assert.equal(allegro.maxTitleLength, 80);
   });
 
   it("refuses another owner", async () => {
