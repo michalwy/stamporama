@@ -21,9 +21,9 @@ the account you sell from.
   profiles](#listing-profiles).
 - **Categories** — what publishing has taught Stamporama; see [Learned
   categories](#learned-categories).
-- **Platform** — the Allegro [platform](platforms.md)'s own settings: whether it is **switched on**,
-  its currency, templates, limits and photos. It starts switched off; switch it on when you start
-  buying or selling on Allegro.
+- **Platform** — the Allegro [platform](platforms.md)'s own settings; see [The Allegro
+  platform's settings](#the-allegro-platforms-settings). It starts switched off; switch it on when
+  you start buying or selling on Allegro.
 
 The strip above the tabs says where each stands — the connection, how many profiles you have and
 which is the default, and how many categories have been learned — and clicking a figure opens its
@@ -37,6 +37,29 @@ list it counts; see [The platform in figures](platforms.md#the-platform-in-figur
 
 Explanations sit behind the ⓘ beside a field or a heading rather than on the page; this guide has
 the rest.
+
+## The Allegro platform's settings
+
+The **Platform** tab offers only what selling on Allegro uses — each is described in
+[Platforms](platforms.md):
+
+- **Platform** — whether it is **switched on**, its **market** and your **notes**.
+- **Offers and sales** — **currency**, **listing language**, **default listing type** (and the
+  **default starting price** while that is an auction), **minimum price**, **message to buyer** and
+  **shipping options**.
+- **Listing texts** — the **title**, **description** and **photo tile label** templates, the
+  description's format, and the **max title** and **max description** limits.
+- **Photos** — the photo limits, covering symbols, the sides to photograph, the collage template,
+  single photos while the limit allows, and grouping series on their own photos.
+
+Three settings other platforms have are not here, because nothing about selling on Allegro reads
+them:
+
+- **Private note** template and **max private note** — an Allegro listing has no note only you see,
+  so offers on Allegro get no generated private note.
+- **Refresh quick buys after** — an Allegro quick buy stays up until it sells or you end it, without
+  sinking out of sight, so it never needs reposting. Allegro offers are never marked as needing a
+  refresh.
 
 ## What connecting gives you
 

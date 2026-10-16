@@ -19,7 +19,8 @@ import { PlatformFields } from "./platform-fields";
  * the starting price, the quick-buy refresh and the buyer's message — which `PlatformFields` leaves
  * out for the Facebook platform. Delcampe's (#1957) is the whole set less the private note and its
  * cap, through `platformUsesSetting`, which also has the save write them empty; Colnect's (#1959)
- * the whole set less its listing type, description format and title cap, the same way.
+ * the whole set less its listing type, description format and title cap, and Allegro's (#1956) less
+ * the private note, its cap and the quick-buy refresh, the same way.
  */
 export function ModulePlatformTab({
   collectionId,

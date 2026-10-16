@@ -398,7 +398,9 @@ async function settingsData(
     // The platform's floor (#731). Written on its own rather than through the helper above,
     // because it is the one per-listing figure that does not depend on the listing type.
     minimumPrice: amount(data.minimumPrice),
-    refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
+    refreshQuickBuysAfterDays: uses("refreshQuickBuysAfterDays")
+      ? refreshDays(data.refreshQuickBuysAfterDays)
+      : null,
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
     maxTitleLength: uses("maxTitleLength") ? (data.maxTitleLength ?? null) : null,
     maxDescriptionLength: data.maxDescriptionLength ?? null,

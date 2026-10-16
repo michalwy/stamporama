@@ -100,19 +100,28 @@ describe("Module platforms (#1955)", () => {
     );
   });
 
-  it("saves Delcampe's private note and its cap empty, whatever is sent, and Allegro's as sent (#1957)", async () => {
+  it("saves Delcampe's private note and its cap empty, whatever is sent (#1957), and Allegro's too, with its refresh (#1956)", async () => {
     await ensureModulePlatforms(collectionId);
     const platformOf = (platformModule: string) =>
       prisma.platform.findFirstOrThrow({ where: { collectionId, platformModule }, select: { id: true } });
-    const sent = { name: "ignored", privateNoteTemplate: "{#copy}{ref}{/copy}", maxPrivateNoteLength: 200 };
+    const sent = {
+      name: "ignored",
+      privateNoteTemplate: "{#copy}{ref}{/copy}",
+      maxPrivateNoteLength: 200,
+      refreshQuickBuysAfterDays: 7,
+      maxTitleLength: 75,
+    };
 
     const delcampe = await updatePlatform(userId, (await platformOf(DELCAMPE_PLATFORM_MODULE)).id, sent);
     assert.equal(delcampe.privateNoteTemplate, null);
     assert.equal(delcampe.maxPrivateNoteLength, null);
+    assert.equal(delcampe.refreshQuickBuysAfterDays, 7);
 
     const allegro = await updatePlatform(userId, (await platformOf(ALLEGRO_PLATFORM_MODULE)).id, sent);
-    assert.equal(allegro.privateNoteTemplate, "{#copy}{ref}{/copy}");
-    assert.equal(allegro.maxPrivateNoteLength, 200);
+    assert.equal(allegro.privateNoteTemplate, null);
+    assert.equal(allegro.maxPrivateNoteLength, null);
+    assert.equal(allegro.refreshQuickBuysAfterDays, null);
+    assert.equal(allegro.maxTitleLength, 75);
   });
 
   it("saves Colnect's listing type, starting price, format and title cap empty, and Allegro's as sent (#1959)", async () => {

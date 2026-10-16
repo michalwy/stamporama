@@ -138,11 +138,12 @@ to list at the floor is exactly what it was added for. Leave it empty for platfo
 figure.
 
 A platform also has **Refresh quick buys after (days)**: how long a quick buy may be up there before
-it has sunk out of sight and wants posting again — a few days on Delcampe, never on Allegro. An
+it has sunk out of sight and wants posting again — a few days on Delcampe, for example. An
 active quick buy up that long is marked on the offers list (see [Quick buys that need
 refreshing](offers.md#quick-buys-that-need-refreshing)). Leave it empty for never. The Facebook
 platform does not show it: there it is set on the Groups tab of Settings → Facebook, where each group
-can follow it or set its own.
+can follow it or set its own. Nor does the Allegro platform, whose quick buys never need reposting
+([Allegro](allegro.md#the-allegro-platforms-settings)).
 
 ## Listing language
 
@@ -180,8 +181,9 @@ searches out a specific one. Two copies are used, each treated as its own set, s
 preview beside it, so the dialog fits the window whichever you are writing; a long preview scrolls
 inside its own box. **Template syntax**, at the end of the tab row, explains the token syntax when
 you hover it. Switching tabs keeps what you typed, and **Save templates** saves all of them at once; platforms that have no private note simply leave
-that one empty. The Delcampe platform has no **Private note** tab at all, nor a **Max private note**
-limit, since Delcampe has nowhere to put one ([Delcampe](delcampe.md#the-delcampe-platform)).
+that one empty. The Delcampe and Allegro platforms have no **Private note** tab at all, nor a **Max
+private note** limit, since neither marketplace has anywhere to put one
+([Delcampe](delcampe.md#the-delcampe-platform), [Allegro](allegro.md#the-allegro-platforms-settings)).
 
 The two photo tile labels behave a little differently from the other three: they are **copied onto
 each new offer** on this platform rather than read from here when photos are generated (see
@@ -599,7 +601,8 @@ The Facebook platform has no such field here: its message is set on the Groups t
 ## Listing text limits
 
 Under the templates sits **Listing text limits** — **Max title (characters)**, **Max description
-(characters)** and **Max private note (characters)**. These are the platform's own hard caps: how
+(characters)** and **Max private note (characters)** (not on the Delcampe or Allegro platform, which
+have no private note). These are the platform's own hard caps: how
 much text its listing form will physically accept. Colnect, for example, takes 100 characters for
 each of its two texts. Leave a field blank when the platform states no limit, which is the usual
 case.
