@@ -54,9 +54,11 @@ import {
   deriveAuctionSaleName,
   isAuctionLotStatus,
   isAuctionSaleStatus,
+  saleFinish,
   AUCTION_LOT_OUTCOMES,
   type AuctionLotOutcome,
   type AuctionLotStatus,
+  type AuctionSaleFinish,
   type AuctionSaleStatus,
 } from "./auction-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
@@ -1614,6 +1616,13 @@ export interface AuctionSaleListItem {
   /** How many of its lots carry the marker, whatever their outcome. A sale shows the chip when
    * either this or {@link apiReview} says so — the collector's decision on #1626. */
   lotsToReview: number;
+  /** What finishes the sale now that every lot is closed (#1954) — null while one is still open,
+   * when it holds none, and once it is settled or closed. Read off the lots, so a lot closed through
+   * the agent API leaves the sale marked as ready exactly as one closed in the app does. */
+  finish: AuctionSaleFinish | null;
+  /** Whether the collector has answered *settle, close or not now* for this sale (#1954). It is
+   * asked once, so a ready sale still unasked asks the next time its screen is opened. */
+  finishAsked: boolean;
   createdAt: Date;
 }
 
@@ -1631,6 +1640,7 @@ const SALE_SELECT = {
   apiReviewAt: true,
   apiReviewCreated: true,
   apiReviewFields: true,
+  finishAskedAt: true,
   createdAt: true,
   sellerId: true,
   platformId: true,
@@ -1640,6 +1650,9 @@ const SALE_SELECT = {
     select: {
       id: true,
       status: true,
+      // Whether a won lot is already in a purchase — not counted as won by `saleFinish` (#1954).
+      purchaseLotId: true,
+      purchaseExpenseId: true,
       // The sale's count of lots waiting for review (#1626).
       apiReviewAt: true,
       currentBid: true,
@@ -1672,11 +1685,12 @@ function toSaleListItem(
     premiumFixed: money(row.premiumFixed),
     shippingCost: money(row.shippingCost),
   };
+  const status = (isAuctionSaleStatus(row.status) ? row.status : "open") as AuctionSaleStatus;
   return {
     id: row.id,
     name: row.name,
     url: row.url,
-    status: (isAuctionSaleStatus(row.status) ? row.status : "open") as AuctionSaleStatus,
+    status,
     sellerId: row.sellerId,
     sellerName: row.seller.name,
     platformId: row.platformId,
@@ -1707,7 +1721,29 @@ function toSaleListItem(
     ),
     apiReview: readApiReviewMark(row),
     lotsToReview: row.lots.filter((lot) => lot.apiReviewAt !== null).length,
+    finish: saleFinish(status, row.lots.map(finishLot)),
+    finishAsked: row.finishAskedAt !== null,
     createdAt: row.createdAt,
+  };
+}
+
+/** A lot as {@link saleFinish} reads it: how it went, and whether it is already in a purchase. */
+function finishLot(lot: {
+  status: string;
+  myBid: Prisma.Decimal | null;
+  finalPrice: Prisma.Decimal | null;
+  wonTie: boolean | null;
+  purchaseLotId: string | null;
+  purchaseExpenseId: string | null;
+}): { outcome: AuctionLotOutcome; settled: boolean } {
+  return {
+    outcome: lotOutcome({
+      status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
+      myBid: money(lot.myBid),
+      finalPrice: money(lot.finalPrice),
+      wonTie: lot.wonTie,
+    }),
+    settled: lot.purchaseLotId !== null || lot.purchaseExpenseId !== null,
   };
 }
 
@@ -2111,6 +2147,76 @@ export async function setAuctionSaleStatus(
     );
   }
   await prisma.auctionSale.update({ where: { id: saleId }, data: { status } });
+}
+
+/** The collector's answer to *every lot is closed — settle it, close it, or not now?* (#1954). */
+export type AuctionSaleFinishAnswer = "settle" | "close" | "later";
+
+/**
+ * Record the answer to the question a sale asks once its last open lot is closed (#1954), so it is
+ * never asked again. `close` also closes the sale, as its own *Close sale* button does; `settle`
+ * only records the answer, because the settle dialog it opens is what settles; `later` leaves the
+ * sale as it is, its own button still there to do the rest.
+ */
+export async function answerAuctionSaleFinish(
+  ownerId: string,
+  saleId: string,
+  answer: AuctionSaleFinishAnswer
+): Promise<void> {
+  const sale = await assertSaleOwner(ownerId, saleId);
+  if (answer === "close" && sale.purchaseId) {
+    throw new AuctionActionBlockedError(
+      "settled",
+      "This sale has been settled into a purchase and cannot be closed here."
+    );
+  }
+  await prisma.auctionSale.update({
+    where: { id: saleId },
+    data: { finishAskedAt: new Date(), ...(answer === "close" ? { status: "closed" } : {}) },
+  });
+}
+
+/** What a lot closed in the app hands back (#1954): the sale to ask *settle, close or not now?*,
+ * when that close left it ready and it has not been asked yet. */
+export interface AuctionSaleFinishAsk {
+  saleId: string;
+  saleName: string;
+  finish: AuctionSaleFinish;
+  /** Won lots not yet in a purchase — what *Settle* would turn into one. */
+  wonCount: number;
+}
+
+/** {@link AuctionSaleFinishAsk} for a sale, or null when it is not ready or was already asked. */
+async function saleFinishAsk(saleId: string): Promise<AuctionSaleFinishAsk | null> {
+  const sale = await prisma.auctionSale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: {
+      name: true,
+      status: true,
+      finishAskedAt: true,
+      lots: {
+        select: {
+          status: true,
+          myBid: true,
+          finalPrice: true,
+          wonTie: true,
+          purchaseLotId: true,
+          purchaseExpenseId: true,
+        },
+      },
+    },
+  });
+  if (sale.finishAskedAt !== null) return null;
+  const status = (isAuctionSaleStatus(sale.status) ? sale.status : "open") as AuctionSaleStatus;
+  const lots = sale.lots.map(finishLot);
+  const finish = saleFinish(status, lots);
+  if (!finish) return null;
+  return {
+    saleId,
+    saleName: sale.name,
+    finish,
+    wonCount: lots.filter((lot) => lot.outcome === "won" && !lot.settled).length,
+  };
 }
 
 /** Delete a sale. Refused while it still holds lots: the FK cascades, so deleting the parcel would
@@ -3007,13 +3113,18 @@ export async function recordAuctionLotTransition(
   ownerId: string,
   lotId: string,
   transition: AuctionLotTransition
-): Promise<void> {
+): Promise<{ askToFinish: AuctionSaleFinishAsk | null }> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.update({
     where: { id: lotId },
     data: await lotTransitionData(lot.collectionId, lotId, transition),
   });
+  // Closing the sale's last open lot asks whether to finish the sale too (#1954). Reopening a lot
+  // can never leave a sale ready, so only a close or a cancel looks. The agent API's own close does
+  // not ask: the sale is left marked as ready, and asks when its screen is next opened.
+  const askToFinish = transition.status === "open" ? null : await saleFinishAsk(lot.auctionSaleId);
+  return { askToFinish };
 }
 
 /** What `cancelled` and `open` write: no result, so no price, no rate and no tie-break. */

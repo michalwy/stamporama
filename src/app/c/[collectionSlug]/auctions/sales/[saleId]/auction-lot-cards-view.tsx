@@ -38,6 +38,7 @@ import { AuctionLotLineRow } from "./auction-lot-line-row";
 import { Icon, type IconName } from "@/app/icons";
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { tagFilterTriggerLabel } from "@/lib/tag-filter";
+import type { AuctionSaleFinishAsk } from "@/lib/auctions";
 
 // **A parcel's lots, as collapsible cards over what each one holds** (#353).
 //
@@ -396,8 +397,9 @@ interface LotCardProps {
   onSetMaxBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetBidAndCeiling: (lot: AuctionLotDetailView, myBid: string, maxBid: string) => void;
   onMarkChecked: (lot: AuctionLotDetailView) => void;
-  /** Refresh after the row recorded an outcome (#354). */
-  onChanged: () => void;
+  /** Refresh after the row recorded an outcome (#354) — with the sale to ask *settle, close or not
+   * now?* about when that close left no lot open (#1954). */
+  onChanged: (askToFinish?: AuctionSaleFinishAsk | null) => void;
 }
 
 /** One lot as a card: the watchlist row itself as the sticky header, its composition underneath. */
@@ -576,8 +578,9 @@ interface AuctionLotCardsViewProps {
    * latched by the panel and released once the flash has run (#850). Null when the sale was
    * opened on its own, and null again a couple of seconds after an arrival. */
   arrivedLotId: string | null;
-  /** Refresh the sale after a composition change. */
-  onChanged: () => void;
+  /** Refresh the sale after a composition change, or after a lot's outcome — carrying the sale to
+   * ask about when that close left no lot open (#1954). */
+  onChanged: (askToFinish?: AuctionSaleFinishAsk | null) => void;
   onEditLot: (lot: AuctionLotDetailView) => void;
   onDeleteLot: (lot: AuctionLotDetailView) => void;
   onSetBid: (lot: AuctionLotDetailView, value: string) => void;

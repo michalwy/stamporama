@@ -18,6 +18,8 @@ import { AuctionLotFormDialog } from "../../auction-lot-form-dialog";
 import { AuctionLotCardsView } from "./auction-lot-cards-view";
 import { AuctionSaleFormDialog } from "../../auction-sale-form-dialog";
 import { AuctionSettleDialog } from "./auction-settle-dialog";
+import { SaleFinishQuestion } from "../../sale-finish-question";
+import type { AuctionSaleFinishAsk } from "@/lib/auctions";
 import {
   AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_OUTCOME_LABEL,
@@ -53,7 +55,9 @@ type DialogState =
   | { kind: "editLot"; lot: AuctionLotDetailView }
   | { kind: "deleteLot"; lot: AuctionLotDetailView }
   | { kind: "settle" }
-  | { kind: "close" };
+  | { kind: "close" }
+  // Every lot is closed: settle, close or not now? (#1954)
+  | { kind: "finish"; ask: AuctionSaleFinishAsk };
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -114,7 +118,26 @@ export function AuctionSaleDetailPanel({
   // and both the flash and the exception below must outlive that.
   const [requestedLotId] = useState<string | null>(() => searchParams.get("lot"));
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-  const { data: sale, isLoading } = useAuctionSaleDetail(collectionId, saleId);
+  const { data: sale, isLoading, isFetching } = useAuctionSaleDetail(collectionId, saleId);
+  // A sale whose lots were all closed without the question being asked — through the agent API, or
+  // before #1954 — asks it on opening, once (#1954). Read off the first fetch to settle rather than
+  // a copy cached from an earlier visit, and only then: a lot closed on this screen asks through
+  // its own close, so this cannot ask a second time.
+  const [finishLooked, setFinishLooked] = useState(false);
+  if (sale && !isFetching && !finishLooked) {
+    setFinishLooked(true);
+    if (sale.finish && !sale.finishAsked && dialog.kind === "none") {
+      setDialog({
+        kind: "finish",
+        ask: {
+          saleId: sale.id,
+          saleName: sale.name,
+          finish: sale.finish,
+          wonCount: sale.lots.filter((lot) => lot.outcome === "won" && !lot.settled).length,
+        },
+      });
+    }
+  }
   const lotIds = useMemo(() => sale?.lots.map((l) => l.id) ?? [], [sale]);
   // Only a lot **this sale holds** is an arrival (#1015) — the purchase order's rule (#911),
   // through the same helper. A param naming anything else has nothing to point at, so it resolves
@@ -304,7 +327,7 @@ export function AuctionSaleDetailPanel({
         >
           {sale.name}
         </h2>
-        <SaleStatusChip status={sale.status} />
+        <SaleStatusChip status={sale.status} finish={sale.finish} />
         <SaleApiReviewChip mark={sale.apiReview} lotsToReview={sale.lotsToReview} />
         {sale.url && (
           <a
@@ -649,7 +672,10 @@ export function AuctionSaleDetailPanel({
           now={now}
           isPending={isPending}
           arrivedLotId={arrivedLotId}
-          onChanged={() => invalidateAll(collectionId)}
+          onChanged={(askToFinish) => {
+            invalidateAll(collectionId);
+            if (askToFinish) setDialog({ kind: "finish", ask: askToFinish });
+          }}
           onEditLot={(row) => setDialog({ kind: "editLot", lot: row })}
           onDeleteLot={(row) => setDialog({ kind: "deleteLot", lot: row })}
           onSetBid={(row, value) =>
@@ -740,6 +766,15 @@ export function AuctionSaleDetailPanel({
             setDialog({ kind: "none" });
             invalidateAll(collectionId);
           }}
+        />
+      )}
+
+      {dialog.kind === "finish" && (
+        <SaleFinishQuestion
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          ask={dialog.ask}
+          onDone={() => setDialog({ kind: "none" })}
         />
       )}
 

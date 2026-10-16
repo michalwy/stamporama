@@ -114,6 +114,31 @@ export function isAuctionSaleStatus(value: string): value is AuctionSaleStatus {
   return VALID_SALE_STATUS.has(value as AuctionSaleStatus);
 }
 
+/**
+ * What finishes an open sale whose lots are all closed (#1954): `settle` it into a purchase when a
+ * lot was won, `close` it when none was — the sale's own *Settle…* and *Close sale* buttons.
+ */
+export type AuctionSaleFinish = "settle" | "close";
+
+export const AUCTION_SALE_FINISH_LABEL: Record<AuctionSaleFinish, string> = {
+  settle: "Ready to settle",
+  close: "Ready to close",
+};
+
+/**
+ * The finish an `open` sale is ready for, or null while it is not (#1954): a sale with no lots, or
+ * with a lot still open, is still being bid; a settled or closed one is finished already. A lot
+ * already transcribed into a purchase is not counted as won — the settlement screen's own rule.
+ */
+export function saleFinish(
+  status: AuctionSaleStatus,
+  lots: readonly { outcome: AuctionLotOutcome; settled: boolean }[]
+): AuctionSaleFinish | null {
+  if (status !== "open" || lots.length === 0) return null;
+  if (lots.some((lot) => lot.outcome === "pending")) return null;
+  return lots.some((lot) => lot.outcome === "won" && !lot.settled) ? "settle" : "close";
+}
+
 // ── Staleness (§5) ──────────────────────────────────────────────────────────
 
 /**

@@ -4,10 +4,12 @@ import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   AUCTION_LOT_OUTCOME_LABEL,
+  AUCTION_SALE_FINISH_LABEL,
   AUCTION_SALE_STATUS_LABEL,
   bidFreshness,
   type AuctionLotOutcome,
   type AuctionLotStatus,
+  type AuctionSaleFinish,
   type AuctionSaleStatus,
   type BidFreshness,
 } from "@/lib/auction-rules";
@@ -77,7 +79,24 @@ const SALE_STATUS: Record<AuctionSaleStatus, { token: string | null; title: stri
   closed: { token: null, title: "Nothing was won — there is nothing to settle" },
 };
 
-export function SaleStatusChip({ status }: { status: AuctionSaleStatus }) {
+/** An open sale with no lot left open (#1954) says what finishes it in place of *Open* — one chip,
+ * because it is still open and the two would only repeat each other. */
+const SALE_FINISH: Record<AuctionSaleFinish, string> = {
+  settle: "Every lot is closed and something was won — settle the parcel into a purchase",
+  close: "Every lot is closed and nothing was won — close the sale",
+};
+
+export function SaleStatusChip({
+  status,
+  finish = null,
+}: {
+  status: AuctionSaleStatus;
+  /** What the sale is ready for once its lots are all closed (#1954); null while it is not. */
+  finish?: AuctionSaleFinish | null;
+}) {
+  if (status === "open" && finish) {
+    return tinted("warning", AUCTION_SALE_FINISH_LABEL[finish], SALE_FINISH[finish]);
+  }
   const meta = SALE_STATUS[status];
   return tinted(meta.token, AUCTION_SALE_STATUS_LABEL[status], meta.title);
 }

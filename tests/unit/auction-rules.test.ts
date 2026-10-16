@@ -11,6 +11,7 @@ import {
   isAuctionLotStatus,
   isAuctionSaleStatus,
   isTerminalLotStatus,
+  saleFinish,
   normalizeAuctionText,
   normalizeAuctionUrl,
   parseAuctionAmount,
@@ -404,5 +405,37 @@ describe("auctionLotName", () => {
 
   it("reads a lot with no derived name at all", () => {
     assert.equal(auctionLotName({ title: null, lotNo: "7" }), "Lot 7");
+  });
+});
+
+describe("saleFinish (#1954)", () => {
+  const lot = (outcome: "pending" | "won" | "lost" | "observed" | "cancelled", settled = false) => ({
+    outcome,
+    settled,
+  });
+
+  it("is not ready while a lot is still open", () => {
+    assert.equal(saleFinish("open", [lot("won"), lot("pending")]), null);
+  });
+
+  it("is not ready with no lots at all", () => {
+    assert.equal(saleFinish("open", []), null);
+  });
+
+  it("settles once every lot is closed and one was won", () => {
+    assert.equal(saleFinish("open", [lot("won"), lot("lost"), lot("cancelled")]), "settle");
+  });
+
+  it("closes once every lot is closed and none was won", () => {
+    assert.equal(saleFinish("open", [lot("lost"), lot("observed"), lot("cancelled")]), "close");
+  });
+
+  it("does not count a won lot already in a purchase", () => {
+    assert.equal(saleFinish("open", [lot("won", true), lot("lost")]), "close");
+  });
+
+  it("is never ready once the sale is settled or closed", () => {
+    assert.equal(saleFinish("settled", [lot("won")]), null);
+    assert.equal(saleFinish("closed", [lot("lost")]), null);
   });
 });

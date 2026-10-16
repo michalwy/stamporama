@@ -71,6 +71,8 @@ import {
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
 import { AuctionLotTagsDialog } from "./auction-lot-tags-dialog";
+import { SaleFinishQuestion } from "./sale-finish-question";
+import type { AuctionSaleFinishAsk } from "@/lib/auctions";
 import { Icon } from "@/app/icons";
 import { API_REVIEW_LABEL } from "@/lib/auction-review";
 
@@ -93,7 +95,9 @@ type DialogState =
   | { kind: "edit"; lot: AuctionLotView }
   | { kind: "lines"; lot: AuctionLotView }
   | { kind: "delete"; lot: AuctionLotView }
-  | { kind: "tags"; lots: AuctionLotView[] };
+  | { kind: "tags"; lots: AuctionLotView[] }
+  // Closing a sale's last open lot asks whether to finish the sale too (#1954).
+  | { kind: "finish"; ask: AuctionSaleFinishAsk };
 
 /** The selection bar's quiet buttons — the Offers list's `LINK_BTN`. */
 const LINK_BTN: React.CSSProperties = {
@@ -150,6 +154,11 @@ export function AuctionLotsPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
   const { data: parties } = useAuctionParties(collectionId);
+  // Asked here rather than by the row: a closed lot leaves this list, and its row with it (#1954).
+  const recordedOutcome = (askToFinish?: AuctionSaleFinishAsk | null) => {
+    invalidateAll(collectionId);
+    if (askToFinish) setDialog({ kind: "finish", ask: askToFinish });
+  };
 
   // Remembered filter selections, per collection, with the URL winning whenever it carries one —
   // the offers list's rule (#325), so a shared link still means exactly what it says.
@@ -1272,7 +1281,7 @@ export function AuctionLotsPanel({
                       })
                     }
                     onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
-                    onOutcomeRecorded={() => invalidateAll(collectionId)}
+                    onOutcomeRecorded={recordedOutcome}
                     selection={{ selected: selection.has(lot.id), onToggle: toggleSelected }}
                   />
                 ))}
@@ -1323,7 +1332,7 @@ export function AuctionLotsPanel({
                     })
                   }
                   onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
-                  onOutcomeRecorded={() => invalidateAll(collectionId)}
+                  onOutcomeRecorded={recordedOutcome}
                   selection={{ selected: selection.has(lot.id), onToggle: toggleSelected }}
                 />
               ))}
@@ -1365,6 +1374,15 @@ export function AuctionLotsPanel({
           areas={areas}
           onClose={closeDialog}
           onChanged={() => invalidateAll(collectionId)}
+        />
+      )}
+
+      {dialog.kind === "finish" && (
+        <SaleFinishQuestion
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          ask={dialog.ask}
+          onDone={closeDialog}
         />
       )}
 

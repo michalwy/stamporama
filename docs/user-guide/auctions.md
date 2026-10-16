@@ -1023,6 +1023,24 @@ Lost and cancelled lots are skipped and stay exactly where they are: a lost lot 
 observation, and that is the other half of what this feature is for. A sale where **nothing** was
 won has no purchase to make, so the button reads **Close sale** instead.
 
+### When the last lot closes
+
+Closing — or cancelling — the **last open lot** of a sale asks what to do with the sale, wherever you
+closed it: on the Lots list or on the sale's own screen. **Every lot is closed** offers what the
+sale's own button would:
+
+- **Settle into a purchase…** when something was won, opening the same settle dialog as **Settle…**;
+- **Close sale** when nothing was, which closes it straight away;
+- **Not now**, which leaves the sale as it is — its own button still does the rest later.
+
+It is asked **once per sale**. Putting a lot back to open and closing it again does not ask a second
+time, and neither does closing the dialog, which counts as *Not now*.
+
+Until it is settled or closed, an open sale with no lot left open says so in place of **Open**: its
+chip reads **Ready to settle**, or **Ready to close** when nothing was won, on the sale's screen and
+on the Sales list. A lot closed by your assistant through the agent API does not ask anything — the
+sale is simply marked ready, and the question waits for the next time you open it.
+
 Afterwards the two records point at each other — the sale links to its purchase, the purchase back
 to the sale — and the bidding record is frozen: to change a settled lot's figures, edit the
 purchase. Deleting the purchase is how a settlement is undone; the sale, its lots and their results
