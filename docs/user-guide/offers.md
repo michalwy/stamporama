@@ -1893,8 +1893,10 @@ Each row shows:
   it (*MNH ×3*, *MH ×1*), coloured as condition chips are everywhere. Clicking anywhere else on the
   row opens the offer.
 - **What still stops it from being marked ready** — a missing price, and the same reasons the offer's
-  own **Mark ready** button gives (an unmatched stamp, a text over the platform's limit, photos not yet
-  checked for symbols, a set sold elsewhere). Hover a reason for what to do about it. Missing or
+  own **Mark ready** button gives (an unmatched stamp, a text over the platform's limit, a set sold
+  elsewhere). Hover a reason for what to do about it. Photos not yet checked for symbols show as
+  **Check covers (N)**, which you can clear from the row — see
+  [Checking covers](#checking-covers). Missing or
   out-of-date photos are not listed as a reason: **Mark ready** generates them itself. A row with
   nothing in the way says **Can be marked ready**.
 - **The price table, compact** — the same figures as on the offer's own screen
@@ -1922,6 +1924,23 @@ catalogue numbers, condition, faults, certificate, location and catalogue value 
 exactly you are pricing without leaving the screen. **Hide copies** folds them away again. Click a
 copy to open its own page.
 
+### Checking covers
+
+On a platform that needs [symbols covered](#covering-symbols), an offer whose photos have not all been
+checked shows **Check covers (N)** among its reasons, N being how many photos are left. Click it to go
+through them right there — the same walk as **Check N photos** on the offer's own screen, with the
+same keys, the covers carried from one photo to the next, and **Nothing to cover on the remaining N
+photos** for material that shows nothing to hide. When you close it, the row shows what is still in
+the way; with **Regenerate photos when done** ticked, the offer's images are made again with the
+covers.
+
+To cover a series spread over many offers in one sitting, tick them and press **Check covers** above
+the list. It walks every unchecked photo of the ticked offers in one go, offer after offer in the
+list's order, each photo named with its offer's number — so the covers you draw on one stamp are
+proposed on the next one's photo even when it belongs to the next offer. **Nothing to cover on this
+offer's remaining N photos** marks the current offer's only. Photos of copies from areas that carry no
+forbidden symbols are not part of this walk; open the offer itself to cover one of those.
+
 ### Setting the prices
 
 Type a price into a row's field and press **Enter**: the price is saved and the cursor moves to the
@@ -1935,12 +1954,14 @@ price, exactly as on the offer's own screen.
 
 ### Acting on several offers
 
-Tick offers, or tick the box above the list to select every row loaded so far. Two actions act on the
-ticked offers in view:
+Tick offers, or tick the box above the list to select every row loaded so far. Three actions act on
+the ticked offers in view:
 
 - **Use estimated price** gives every ticked offer that has **no price yet** its estimated value. Offers
   that already have a price keep it, so you only need to type the exceptions. The count on the button
   says how many it will price.
+- **Check covers** walks the ticked offers' photos not yet checked for symbols in one pass — see
+  [Checking covers](#checking-covers). The count on the button says how many photos are left.
 - **Mark ready** moves the ticked offers to **Ready**. Where only the photos are missing it generates
   them first, and the offer turns ready once they are done — the row says so while it waits. An offer
   that cannot be marked ready stays ticked and is named under the bar with the reason.

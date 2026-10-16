@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { PrepareOffer } from "@/lib/offers";
 import { pricingReadyFor } from "@/lib/offer-rules";
+import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
@@ -27,6 +28,7 @@ import {
   usePrepareOffersInfinite,
   type PrepareFilters,
 } from "../use-offers-query";
+import { OffersCoverWalk } from "../[offerId]/offer-cover-walk";
 import { PrepareOfferRow } from "./prepare-offer-row";
 
 // The Prepare screen (#1894). Preparing offers used to be priced one at a time — filter the Offers
@@ -37,6 +39,9 @@ import { PrepareOfferRow } from "./prepare-offer-row";
 //
 // It is the Offers list's selection model (#1031), not a new one: a filter never unticks anything,
 // and every bulk action reaches only the ticked rows in view (`rows-in-view.ts`, `offer-selection.ts`).
+//
+// Covers are checked from here too (#1942): a row opens its offer's walk, and *Check covers* walks the
+// ticked offers' unchecked photos in one pass.
 
 const BULK_BTN: React.CSSProperties = {
   display: "inline-flex",
@@ -71,6 +76,11 @@ interface BulkSkip {
 /** The offer has no stated price yet — the figure *Use estimated price* fills. */
 function unpriced(offer: PrepareOffer): boolean {
   return !pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice);
+}
+
+/** How many of the offer's photos its ready gate still wants checked for symbols (#1665). */
+function uncheckedCovers(offer: PrepareOffer): number {
+  return offer.readyBlockers.find(isCoverReadinessBlocker)?.count ?? 0;
 }
 
 export function PreparePanel({
@@ -176,6 +186,11 @@ export function PreparePanel({
 
   /** Ticked, without a price, and with an estimate to take — what *Use estimated price* acts on. */
   const estimable = selectedInView.filter((o) => unpriced(o) && o.suggestedPrice !== null);
+
+  /** Ticked and with photos left to check, in the list's order — what *Check covers* walks (#1942). */
+  const toCover = rows.filter((r) => selection.has(r.id) && uncheckedCovers(r) > 0);
+  const coverCount = toCover.reduce((sum, o) => sum + uncheckedCovers(o), 0);
+  const [walking, setWalking] = useState<{ id: string; offerNo: number }[] | null>(null);
 
   function applyEstimates() {
     const batch = estimable;
@@ -413,6 +428,25 @@ export function PreparePanel({
                             Use estimated price{estimable.length > 0 ? ` (${estimable.length})` : ""}
                           </button>
                         </Tooltip>
+                        <Tooltip
+                          content={
+                            toCover.length > 0
+                              ? "Go through the ticked offers' photos not yet checked for symbols, offer after offer in one walk — covers carry on from photo to photo."
+                              : "None of the ticked offers has photos left to check for symbols."
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setWalking(toCover.map((o) => ({ id: o.id, offerNo: o.offerNo })))}
+                            disabled={isPending || toCover.length === 0}
+                            style={{
+                              ...BULK_BTN,
+                              ...(toCover.length === 0 ? { cursor: "default", color: "var(--color-text-muted)" } : {}),
+                            }}
+                          >
+                            Check covers{coverCount > 0 ? ` (${coverCount})` : ""}
+                          </button>
+                        </Tooltip>
                         <Tooltip content="Mark the ticked offers ready. Missing or out-of-date photos are generated first, and the offer turns ready once they are done; an offer that cannot be readied is named below.">
                           <button type="button" onClick={markReady} disabled={isPending} style={BULK_BTN}>
                             <Icon name="check" size="sm" />{" "}
@@ -479,6 +513,14 @@ export function PreparePanel({
           )}
         </div>
       </div>
+      {walking && (
+        <OffersCoverWalk
+          collectionId={collectionId}
+          offers={walking}
+          onClose={() => setWalking(null)}
+          onChanged={() => void invalidateAll(collectionId)}
+        />
+      )}
     </div>
   );
 }

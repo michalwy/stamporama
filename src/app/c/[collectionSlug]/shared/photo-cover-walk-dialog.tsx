@@ -43,6 +43,10 @@ import { usePersistedFlag } from "./use-persisted-flag";
 // front, and a back's on the next back. They are only proposed — shown as such, editable, and saved
 // by moving on with Enter like anything drawn; Skip, Previous or closing leaves the photo unchecked.
 // *Carry covers to the next photo* turns it off, remembered on this browser.
+//
+// The Prepare screen walks several offers in one go (#1942): each photo carries the offer it is walked
+// for, and *the remaining photos* then means the current offer's — the bulk mark stays per offer, as
+// in the offer's own walk — while covers carry on from one offer to the next.
 
 /** Where *Carry covers to the next photo* is remembered (#1703). */
 const CARRY_COVERS_KEY = "stamporama:carry-photo-covers";
@@ -57,20 +61,34 @@ export interface CoverWalkEntry {
   side?: "front" | "back" | null;
   checked: boolean;
   covers: PhotoCover[];
+  /** The offer the photo is walked for, in a walk across several (#1942). */
+  group?: string;
 }
 
 /** Marks unchecked photos *nothing to cover* (#1701): the copy's with an `itemId`, else every one
- *  remaining. Answers the ids it marked, or why it could not. */
+ *  remaining — of the offer `group` names, in a walk across several (#1942). Answers the ids it
+ *  marked, or why it could not. */
 export type MarkNothingToCover = (
-  itemId: string | null
+  itemId: string | null,
+  group?: string
 ) => Promise<{ photoIds: string[] } | { error: string }>;
 
+/** How far a bulk *nothing to cover* reaches: one copy's photos, one offer's in a walk across several
+ *  (#1942), or every one remaining. */
+export type NothingToCoverScope = "copy" | "offer" | "all";
+
 /** What *Nothing to cover on the remaining N photos* reads (#1701), on the offer and in the walk. */
-export function nothingToCoverLabel(count: number, scope: "copy" | "all"): string {
+export function nothingToCoverLabel(count: number, scope: NothingToCoverScope): string {
   const photos = count === 1 ? "photo" : `${count} photos`;
+  return `Nothing to cover on ${remainingOf(scope)}${photos}`;
+}
+
+function remainingOf(scope: NothingToCoverScope): string {
   return scope === "copy"
-    ? `Nothing to cover on this copy's remaining ${photos}`
-    : `Nothing to cover on the remaining ${photos}`;
+    ? "this copy's remaining "
+    : scope === "offer"
+      ? "this offer's remaining "
+      : "the remaining ";
 }
 
 /** The one confirmation before photos are marked *nothing to cover* in bulk (#1701), naming the
@@ -85,7 +103,7 @@ export function NothingToCoverConfirm({
   onClose,
 }: {
   count: number;
-  scope: "copy" | "all";
+  scope: NothingToCoverScope;
   isPending: boolean;
   error?: string;
   zIndexBase?: number;
@@ -93,7 +111,7 @@ export function NothingToCoverConfirm({
   onClose: () => void;
 }) {
   const photos = count === 1 ? "1 photo" : `${count} photos`;
-  const which = scope === "copy" ? `this copy's remaining ${photos}` : `the remaining ${photos}`;
+  const which = `${remainingOf(scope)}${photos}`;
   return (
     <ConfirmDialog
       title="Nothing to cover"
@@ -143,9 +161,9 @@ export function PhotoCoverWalkDialog({
   /** Offered by an offer's walk (#1703): covers saved on one photo proposed on the next of its side. */
   carryCovers?: boolean;
   /** After every save, so the caller can pick up the counts it shows. `saved` is true for a photo
-   *  saved — what `changed` on close counts — and false for a bulk *nothing to cover*, which draws
-   *  nothing. */
-  onSaved?: (saved: boolean) => void;
+   *  saved — what `changed` on close counts, and `entry` is that photo — and false for a bulk
+   *  *nothing to cover*, which draws nothing. */
+  onSaved?: (saved: boolean, entry?: CoverWalkEntry) => void;
   /** `changed` is whether anything was saved while the walk was open. */
   onClose: (changed: boolean) => void;
 }) {
@@ -169,10 +187,17 @@ export function PhotoCoverWalkDialog({
 
   const left = entries.filter((e) => !e.checked).length;
   const last = index >= entries.length - 1;
-  // This copy's unchecked photos, the current one included. Offered apart from *all remaining* only
+  // What *the remaining photos* reaches: every one, or in a walk across several offers the current
+  // offer's (#1942).
+  const restScope: NothingToCoverScope = entry?.group != null ? "offer" : "all";
+  const restLeft =
+    entry?.group != null ? entries.filter((e) => !e.checked && e.group === entry.group).length : left;
+  // This copy's unchecked photos, the current one included. Offered apart from *the remaining* only
   // when the two would mark different photos.
   const copyLeft =
-    entry?.itemId != null ? entries.filter((e) => !e.checked && e.itemId === entry.itemId).length : 0;
+    entry?.itemId != null
+      ? entries.filter((e) => !e.checked && e.itemId === entry.itemId && e.group === entry.group).length
+      : 0;
 
   /** Move to another photo, starting from what is stored for it, or from the covers its side carries
    *  when it is still unchecked — `from` and `carry` are the list and the carried covers to read,
@@ -223,7 +248,7 @@ export function PhotoCoverWalkDialog({
       const carry = carryAfterSave(carried, entry.side, result.state.covers);
       setCarried(carry);
       setDirty(false);
-      onSaved?.(true);
+      onSaved?.(true, entry);
       if (last) onClose(true);
       else go(index + 1, updated, carry);
     });
@@ -234,7 +259,10 @@ export function PhotoCoverWalkDialog({
     const scope = bulk;
     setBulkError(undefined);
     startTransition(async () => {
-      const result = await onMarkNothingToCover(scope === "copy" ? (entry?.itemId ?? null) : null);
+      const result = await onMarkNothingToCover(
+        scope === "copy" ? (entry?.itemId ?? null) : null,
+        entry?.group
+      );
       if ("error" in result) {
         setBulkError(result.error);
         return;
@@ -334,14 +362,14 @@ export function PhotoCoverWalkDialog({
         </div>
         <DialogFooter error={error}>
           {footerNote && <span style={{ ...DIALOG_FOOTER_LEADING, fontSize: "0.8125rem" }}>{footerNote}</span>}
-          {onMarkNothingToCover && copyLeft > 0 && copyLeft < left && (
+          {onMarkNothingToCover && copyLeft > 0 && copyLeft < restLeft && (
             <DialogSecondaryButton disabled={isPending || dirty} onClick={() => setBulk("copy")}>
               {nothingToCoverLabel(copyLeft, "copy")}
             </DialogSecondaryButton>
           )}
-          {onMarkNothingToCover && left > 0 && (
+          {onMarkNothingToCover && restLeft > 0 && (
             <DialogSecondaryButton disabled={isPending || dirty} onClick={() => setBulk("all")}>
-              {nothingToCoverLabel(left, "all")}
+              {nothingToCoverLabel(restLeft, restScope)}
             </DialogSecondaryButton>
           )}
           <DialogSecondaryButton disabled={isPending || index === 0} onClick={() => go(index - 1)}>
@@ -357,8 +385,8 @@ export function PhotoCoverWalkDialog({
       </DialogShell>
       {bulk && (
         <NothingToCoverConfirm
-          count={bulk === "copy" ? copyLeft : left}
-          scope={bulk}
+          count={bulk === "copy" ? copyLeft : restLeft}
+          scope={bulk === "copy" ? "copy" : restScope}
           isPending={isPending}
           error={bulkError}
           zIndexBase={400}
