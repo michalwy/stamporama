@@ -9,6 +9,7 @@ import {
   captureModuleRules,
   hasListingModule,
   listingModuleRules,
+  platformUsesSetting,
   supportsAssistantClose,
   usesPlatformCatalogue,
   usesPlatformConditions,
@@ -111,5 +112,19 @@ describe("the Facebook marker (#1543)", () => {
       PHILASEARCH_PLATFORM_MODULE,
     ];
     assert.ok(!others.includes(FACEBOOK_PLATFORM_MODULE));
+  });
+});
+
+describe("platformUsesSetting", () => {
+  it("drops Delcampe's private note and its cap, which its upload has nowhere to put (#1957)", () => {
+    assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "privateNoteTemplate"), false);
+    assert.equal(platformUsesSetting(DELCAMPE_PLATFORM_MODULE, "maxPrivateNoteLength"), false);
+  });
+
+  it("keeps every setting on a generic platform and on the modules not yet trimmed", () => {
+    for (const platformModule of [null, undefined, ALLEGRO_PLATFORM_MODULE, COLNECT_PLATFORM_MODULE]) {
+      assert.equal(platformUsesSetting(platformModule, "privateNoteTemplate"), true);
+      assert.equal(platformUsesSetting(platformModule, "maxPrivateNoteLength"), true);
+    }
   });
 });

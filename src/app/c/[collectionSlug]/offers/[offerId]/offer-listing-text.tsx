@@ -12,6 +12,7 @@ import {
   type DescriptionFormat,
 } from "@/lib/description-format";
 import type { OfferDetail } from "@/lib/offers";
+import { platformUsesSetting } from "@/lib/platform-modules";
 import { Icon } from "@/app/icons";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -110,7 +111,7 @@ const FIELDS: readonly {
     limitKey: "maxDescriptionLength",
     placeholder: "No description yet — write one, or generate it from the platform's template.",
     regenerateTitle: "Regenerate this description from its template",
-    noTemplateTitle: "Neither this listing nor the platform has a description template — set one on the platform's contact",
+    noTemplateTitle: "Neither this listing nor the platform has a description template — set one in the platform's settings",
   },
   {
     // The private note names the platform where the description does not, and that is the schema
@@ -123,7 +124,7 @@ const FIELDS: readonly {
     note: "only you see this",
     placeholder: "No private note yet — write one, or generate it from the platform's template.",
     regenerateTitle: "Regenerate from the platform's private-note template",
-    noTemplateTitle: "This platform has no private-note template — set one on its contact",
+    noTemplateTitle: "This platform has no private-note template — set one in its settings",
   },
 ];
 
@@ -266,7 +267,16 @@ export function OfferListingText({
                     label={f.label.toLowerCase()}
                     format={f.key === "description" ? format : undefined}
                   />
-                  <Tooltip content={offer.regeneratable[f.key] ? f.regenerateTitle : f.noTemplateTitle}>
+                  <Tooltip
+                    content={
+                      offer.regeneratable[f.key]
+                        ? f.regenerateTitle
+                        : f.key === "privateNote" &&
+                            !platformUsesSetting(offer.platformModule, "privateNoteTemplate")
+                          ? `${offer.platformName} has no private-note template — write the note by hand`
+                          : f.noTemplateTitle
+                    }
+                  >
                     <button
                       type="button"
                       onClick={() => onRegenerate(f.key)}

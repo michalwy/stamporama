@@ -280,3 +280,29 @@ export function supportsAssistantUpdate(platformModule: string | null): boolean 
 export function supportsAssistantClose(platformModule: string | null): boolean {
   return platformModule === COLNECT_PLATFORM_MODULE;
 }
+
+/** A platform setting a module's platform may not use (#1956–#1959) — the names `Platform` stores
+ *  it under. Only those dropped through this table are listed; the four Facebook's groups decide are
+ *  left out by `PlatformFields` itself (#1958). */
+export type DroppablePlatformSetting = "privateNoteTemplate" | "maxPrivateNoteLength";
+
+/**
+ * The platform settings each module's platform **does not use** (#1944): its page does not offer
+ * them and saving it writes them empty, so nothing on a module's page is a setting that does nothing.
+ * Each module's list was confirmed with the collector in its own issue — Delcampe's in #1957.
+ *
+ * - **Delcampe** — its upload carries no private note: `personal_reference` is the offer's number
+ *   and nothing else (#635), so a note generated from a template, and the cap on its length, reach
+ *   nothing there. A Delcampe offer's own private note is still written by hand.
+ */
+const UNUSED_PLATFORM_SETTINGS: Readonly<Record<string, readonly DroppablePlatformSetting[]>> = {
+  [DELCAMPE_PLATFORM_MODULE]: ["privateNoteTemplate", "maxPrivateNoteLength"],
+};
+
+/** Whether a platform of `platformModule` uses `setting` — always, for a generic platform. */
+export function platformUsesSetting(
+  platformModule: string | null | undefined,
+  setting: DroppablePlatformSetting
+): boolean {
+  return !(platformModule && UNUSED_PLATFORM_SETTINGS[platformModule]?.includes(setting));
+}

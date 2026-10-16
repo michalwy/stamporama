@@ -147,6 +147,9 @@ export interface ListingTemplatesDialogProps {
   /** What this platform's description field accepts (#319) — configured here, next to the template
    * that writes it, and seeded onto every offer created on the platform. */
   descriptionFormat: DescriptionFormat;
+  /** Whether the platform uses a private-note template — not on Delcampe (#1957), whose upload has
+   *  nowhere to put one; there the tab is not offered and the template saves empty. */
+  privateNote?: boolean;
   onCancel: () => void;
   /** Save all three at once — one dialog, one logical save. */
   onSave: (templates: ListingTemplates, descriptionFormat: DescriptionFormat) => void;
@@ -165,9 +168,11 @@ export function ListingTemplatesDialog({
   language,
   templates,
   descriptionFormat,
+  privateNote = true,
   onCancel,
   onSave,
 }: ListingTemplatesDialogProps) {
+  const tabs = privateNote ? TABS : TABS.filter((t) => !t.keys.includes("privateNoteTemplate"));
   const [draft, setDraft] = useState<ListingTemplates>(templates);
   const [format, setFormat] = useState<DescriptionFormat>(normalizeDescriptionFormat(descriptionFormat));
   const [tab, setTab] = useState(0);
@@ -196,7 +201,7 @@ export function ListingTemplatesDialog({
           padding: "0 1.5rem",
         }}
       >
-        {TABS.map((t, i) => (
+        {tabs.map((t, i) => (
           <button
             key={t.label}
             type="button"
@@ -219,7 +224,7 @@ export function ListingTemplatesDialog({
 
       <DialogBody>
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {TEMPLATE_FIELDS.filter((f) => TABS[tab].keys.includes(f.key)).map((f) => (
+          {TEMPLATE_FIELDS.filter((f) => tabs[tab].keys.includes(f.key)).map((f) => (
             <TemplateBuilder
               key={f.key}
               split
@@ -254,7 +259,7 @@ export function ListingTemplatesDialog({
             {
               titleTemplate: draft.titleTemplate.trim(),
               descriptionTemplate: draft.descriptionTemplate.trim(),
-              privateNoteTemplate: draft.privateNoteTemplate.trim(),
+              privateNoteTemplate: privateNote ? draft.privateNoteTemplate.trim() : "",
               tileLabelLeftTemplate: draft.tileLabelLeftTemplate.trim(),
               tileLabelRightTemplate: draft.tileLabelRightTemplate.trim(),
             },

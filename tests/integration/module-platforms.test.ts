@@ -7,8 +7,13 @@ import {
   ensureModulePlatforms,
   getModulePlatformSettings,
   setPlatformEnabled,
+  updatePlatform,
 } from "../../src/lib/platforms";
-import { MODULE_PLATFORMS } from "../../src/lib/platform-modules";
+import {
+  ALLEGRO_PLATFORM_MODULE,
+  DELCAMPE_PLATFORM_MODULE,
+  MODULE_PLATFORMS,
+} from "../../src/lib/platform-modules";
 
 // The module platforms (#1955; ADR-0071): every collection holds exactly one platform per module,
 // named after it and switched off until its page turns it on. What the Colnect page used to choose —
@@ -92,6 +97,21 @@ describe("Module platforms (#1955)", () => {
         data: { collectionId, name: "Another Colnect", platformModule: "colnect" },
       })
     );
+  });
+
+  it("saves Delcampe's private note and its cap empty, whatever is sent, and Allegro's as sent (#1957)", async () => {
+    await ensureModulePlatforms(collectionId);
+    const platformOf = (platformModule: string) =>
+      prisma.platform.findFirstOrThrow({ where: { collectionId, platformModule }, select: { id: true } });
+    const sent = { name: "ignored", privateNoteTemplate: "{#copy}{ref}{/copy}", maxPrivateNoteLength: 200 };
+
+    const delcampe = await updatePlatform(userId, (await platformOf(DELCAMPE_PLATFORM_MODULE)).id, sent);
+    assert.equal(delcampe.privateNoteTemplate, null);
+    assert.equal(delcampe.maxPrivateNoteLength, null);
+
+    const allegro = await updatePlatform(userId, (await platformOf(ALLEGRO_PLATFORM_MODULE)).id, sent);
+    assert.equal(allegro.privateNoteTemplate, "{#copy}{ref}{/copy}");
+    assert.equal(allegro.maxPrivateNoteLength, 200);
   });
 
   it("refuses another owner", async () => {
