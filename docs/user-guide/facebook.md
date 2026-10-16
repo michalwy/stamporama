@@ -569,8 +569,8 @@ In a post with several lots, each lot has its own result, recorded on its own of
 ## Selling a Facebook offer
 
 A Facebook offer — an auction or a quick buy — is sold with the ordinary **Sell**, as on every
-platform (see [Offers](offers.md)): add it to an existing sale on Facebook in the offer's currency, or
-start a new one. Each set goes in at the offer's current price; change it on the sale's screen if the
+platform (see [Offers](offers.md#selling-directly-from-the-list)): add it to an open sale on Facebook
+in the offer's currency — one not yet sent — or start a new one. Each set goes in at the offer's current price; change it on the sale's screen if the
 buyer paid something else. The offer becomes **Sold**.
 
 What is Facebook's own is the **buyer** of a new sale. Instead of picking a contact, you type them as

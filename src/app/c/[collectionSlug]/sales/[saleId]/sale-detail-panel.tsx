@@ -843,7 +843,8 @@ export function SaleDetailPanel({
             run(
               async () => {
                 const { addSaleLinesAction } = await import("@/app/actions/sales");
-                return addSaleLinesAction(sale.id, lines);
+                // The collector opened this very sale, so a sent one takes the sets too (#1950).
+                return addSaleLinesAction(sale.id, lines, { toSentSale: true });
               },
               () => setDialog({ kind: "none" })
             )

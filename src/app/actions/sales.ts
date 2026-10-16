@@ -227,7 +227,8 @@ export interface SaleLineRaw {
 
 export async function addSaleLinesAction(
   saleId: string,
-  raw: SaleLineRaw[]
+  raw: SaleLineRaw[],
+  opts: { toSentSale?: boolean } = {}
 ): Promise<SaleActionState> {
   const session = await getSession();
   if (raw.length === 0) {
@@ -248,7 +249,7 @@ export async function addSaleLinesAction(
     });
   }
   try {
-    await addSaleLines(session.user.id, saleId, lines);
+    await addSaleLines(session.user.id, saleId, lines, { toSentSale: opts.toSentSale === true });
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the sold sets.");
