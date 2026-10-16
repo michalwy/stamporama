@@ -1591,7 +1591,7 @@ through `getAuctionLotDetail` — `listAuctionLots`' row building for one lot �
 nothing past them.** It sends `status` — `closed` or `cancelled` — and for a closed lot the
 `final_price` and, on a tie, `won_tie`. **Won or lost is never sent**: it is `lotOutcome` off the
 money (`auctions.md`), and the answer reports the `outcome` read back through `getAuctionLotDetail`,
-the row the lots screen draws, so the agent and the screen cannot disagree about one lot.
+the row the lots screen draws, so the agent and the screen cannot disagree about one lot. Closing a sale's last open lot this way asks the collector nothing (#1954): the sale is left marked **Ready to settle** / **Ready to close**, and its screen asks *settle, close or not now?* the next time it is opened (`auctions.md`).
 
 **The closing rules are the app's, by construction rather than by copy.** `recordAuctionLotTransition`'s
 body was split into `lotTransitionData` — the two judgements (a price is required unless no bid was

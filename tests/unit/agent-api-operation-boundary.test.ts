@@ -265,6 +265,7 @@ const AUCTION_WRITES = new Map<string, string>([
   ["createAuctionSale", "creates a sale"],
   ["updateAuctionSale", "edits a sale's terms"],
   ["setAuctionSaleStatus", "opens or closes a sale"],
+  ["answerAuctionSaleFinish", "records the settle-or-close answer, closing the sale on close (#1954)"],
   ["deleteAuctionSale", "deletes a sale"],
   ["createAuctionLot", "adds a lot to the watchlist"],
   ["captureAuctionLot", "adds a listing to the watchlist, or refreshes its bid (#355)"],

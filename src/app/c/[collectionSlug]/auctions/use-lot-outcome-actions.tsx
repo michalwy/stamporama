@@ -16,6 +16,7 @@ import {
   type AuctionLotStatus,
 } from "@/lib/auction-rules";
 import { closingPricePrefill, lotOutcome } from "@/lib/auction-lot";
+import type { AuctionSaleFinishAsk } from "@/lib/auctions";
 import { formatInstant } from "./auction-format";
 import { formControl } from "@/app/control-style";
 
@@ -146,7 +147,10 @@ type TieAnswer = boolean | null;
  */
 export function useLotOutcomeActions(
   lot: OutcomeLot,
-  onChanged: () => void
+  /** Given the sale to ask *settle, close or not now?* when this close left it with no open lot
+   * (#1954). The screen asks rather than the row: on the watchlist the row is gone once its lot
+   * closes, closed lots being hidden. */
+  onChanged: (askToFinish?: AuctionSaleFinishAsk | null) => void
 ): { actions: RowAction[]; dialog: React.ReactNode } {
   const [dialog, setDialog] = useState<OutcomeDialog>({ kind: "none" });
   const [finalPrice, setFinalPrice] = useState("");
@@ -188,7 +192,7 @@ export function useLotOutcomeActions(
       const result = await setAuctionLotStatusAction(lot.id, status, price, tie);
       if (result.status === "success") {
         setDialog({ kind: "none" });
-        onChanged();
+        onChanged(result.askToFinish);
       } else {
         setError(result.message);
       }

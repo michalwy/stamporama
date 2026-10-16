@@ -4733,6 +4733,10 @@ model AuctionSale {
   apiReviewAt      DateTime?
   apiReviewCreated Boolean   @default(false)
   apiReviewFields  String[]  @default([])
+  // When the collector answered *settle, close or not now* (#1954), asked once all the sale's lots
+  // were closed; null means not asked yet. Asked once per sale — reopening and closing a lot again
+  // does not ask twice. Whether the sale is ready to be asked is read off its lots, never stored.
+  finishAskedAt    DateTime?
 
   collection Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   seller     Contact      @relation("AuctionSaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)

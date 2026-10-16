@@ -6,6 +6,7 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   AuctionActionBlockedError,
+  answerAuctionSaleFinish,
   confirmAuctionLotReviews,
   confirmAuctionSaleReview,
   createAuctionLot,
@@ -29,6 +30,8 @@ import {
   updateAuctionLotLine,
   updateAuctionSale,
   type AuctionLotTransition,
+  type AuctionSaleFinishAnswer,
+  type AuctionSaleFinishAsk,
   type AuctionSettlementInput,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
@@ -58,6 +61,12 @@ import {
 // auction defaults (#350) have somewhere to live from the next lot onwards.
 
 export type AuctionActionState = { status: "success" } | { status: "error"; message: string };
+
+/** A lot moved along its lifecycle, with the sale to ask *settle, close or not now?* when closing it
+ * left the sale with no open lot (#1954). */
+export type LotTransitionActionState =
+  | { status: "success"; askToFinish: AuctionSaleFinishAsk | null }
+  | { status: "error"; message: string };
 
 export type CreateAuctionActionState =
   | { status: "success"; id: string }
@@ -183,6 +192,20 @@ export async function setAuctionSaleStatusAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to change the sale's status.");
+  }
+}
+
+/** Answer the question a sale asks once its lots are all closed (#1954) — `close` closes it too. */
+export async function answerAuctionSaleFinishAction(
+  saleId: string,
+  answer: AuctionSaleFinishAnswer
+): Promise<AuctionActionState> {
+  const session = await getSession();
+  try {
+    await answerAuctionSaleFinish(session.user.id, saleId, answer);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to record the answer.");
   }
 }
 
@@ -522,7 +545,7 @@ export async function setAuctionLotStatusAction(
   status: "closed" | "cancelled" | "open",
   rawFinalPrice = "",
   wonTie: boolean | null = null
-): Promise<AuctionActionState> {
+): Promise<LotTransitionActionState> {
   const session = await getSession();
   let transition: AuctionLotTransition;
   if (status === "closed") {
@@ -533,8 +556,8 @@ export async function setAuctionLotStatusAction(
     transition = { status };
   }
   try {
-    await recordAuctionLotTransition(session.user.id, lotId, transition);
-    return { status: "success" };
+    const { askToFinish } = await recordAuctionLotTransition(session.user.id, lotId, transition);
+    return { status: "success", askToFinish };
   } catch (e) {
     return fail(e, "Failed to record the lot.");
   }

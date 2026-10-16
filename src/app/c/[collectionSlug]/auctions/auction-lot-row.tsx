@@ -27,6 +27,7 @@ import {
   type AuctionFees,
 } from "@/lib/auction-lot";
 import type { BidRecommendation } from "@/lib/bid-recommendation";
+import type { AuctionSaleFinishAsk } from "@/lib/auctions";
 import type { AuctionLotView } from "./use-auctions-query";
 import {
   ApiReviewChip,
@@ -492,8 +493,9 @@ interface AuctionLotRowProps {
   onEditComposition: (lot: AuctionLotView) => void;
   /** Refresh after an outcome was recorded (#354). The row owns those entries and their dialog
    * itself — both screens get the same three without knowing about the flow — so all it needs back
-   * is "something changed". */
-  onOutcomeRecorded: () => void;
+   * is "something changed" — and, when that close left the sale with no open lot, the sale to ask
+   * *settle, close or not now?* about (#1954). */
+  onOutcomeRecorded: (askToFinish?: AuctionSaleFinishAsk | null) => void;
   /**
    * When set, the row is the **header of a collapsible card** over its composition (#353, the
    * sale's own screen). A caret is drawn ahead of the title and is the *only* thing that toggles:
