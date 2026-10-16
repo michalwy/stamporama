@@ -2309,6 +2309,41 @@ for**, with a short line beside it saying why:
 The other button stays usable in its ordinary style — the highlight is a suggestion, not a lock. An
 offer that is not on Needs action highlights neither.
 
+### Updating and closing from the offers list
+
+Bringing a batch of Colnect listings back in step does not need each offer opened. Filter the offers
+list to **Needs action** and work from there:
+
+- **One row at a time.** A Needs action Colnect row carries the action its offer's header would
+  highlight — **Close via Assistant** or **Update via Assistant** — as a button beside its Needs action
+  chip; hover it for the reason. The other action is in the row's **⋮**.
+- **The ticked offers together.** With offers ticked, the selection bar offers **Close N via
+  Assistant** and **Update N via Assistant**. Each runs only on the ticked offers it suits — a close on
+  those with nothing left to sell, an update on those still selling something — and the button says how
+  many that is. Ticked offers it does not suit are left alone and stay ticked.
+
+Either way a confirmation comes first, saying what will happen and how many offers it covers. An
+update removes the sets sold elsewhere first, exactly as the header's
+[does](#when-sets-have-sold-elsewhere); a close withdraws the offer here once Colnect confirms.
+
+The Assistant handles **one listing at a time**, so the list queues them and runs them one after
+another. Each row says where it is — *Queued*, what is happening now (*Closing on Colnect…*,
+*Waiting for you to save it on Colnect*), then *Closed*, *Updated* or *Failed:* with the reason — and
+a line above the rows follows the queue as a whole:
+
+- **Updates wait for you.** Each update opens the listing's edit form on Colnect, filled in, and the
+  next one opens only once you have saved that one. If you decide not to save a form, **Stop waiting**
+  moves the queue on without it.
+- **Closes run by themselves**, a few seconds apart, so Colnect is never asked too quickly.
+- **A failure stops nothing else.** The failed offer stays on Needs action with the reason on its row,
+  and the rest of the queue carries on. Run its action again from the row to retry.
+- **Cancel queue** drops the offers not started yet — they stay exactly as they were. The one running
+  finishes first, so a listing is never left closed on Colnect while still Active here.
+
+Once the queue is done, the list refreshes and a message sums it up (*3 closed · 2 updated · 1
+failed*); **Dismiss** clears the results from the rows. Like every action on the selection bar, it
+only reaches the ticked offers **in view**.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

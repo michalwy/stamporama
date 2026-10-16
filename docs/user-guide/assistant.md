@@ -554,6 +554,10 @@ The button is there only for an offer that records which Colnect sale it is — 
 listing's URL was captured or pasted in. Offers on other platforms are withdrawn by hand, after taking
 the listing down there.
 
+Several listings can be closed — or updated — from the **offers list** too, one row at a time or the
+ticked ones together; the Assistant takes them one after another. See
+[Updating and closing from the offers list](offers.md#updating-and-closing-from-the-offers-list).
+
 ## Clickable Stamporama links
 
 If you put the [`{offerUrl}` token](contacts.md) in a platform's **private note** template, your

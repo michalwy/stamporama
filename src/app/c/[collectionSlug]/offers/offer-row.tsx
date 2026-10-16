@@ -15,6 +15,11 @@ import {
   type OfferState,
 } from "@/lib/offer-rules";
 import { isEmptiedListing } from "@/lib/offer-listing-drift";
+import {
+  assistantRunLabel,
+  type AssistantRun,
+  type AssistantRunAct,
+} from "@/lib/offer-assistant-runs";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -125,6 +130,12 @@ interface OfferRowProps {
   onDelete: (offer: OfferListItem) => void;
   /** Narrows the list to the lots of this row's Facebook post (#1842); absent while it already is. */
   onNarrowToPost?: (postNo: number) => void;
+  /** Update or close this listing via the Assistant (#1969) — opens the confirmation. */
+  onAssistantRun: (offer: OfferListItem, act: AssistantRunAct) => void;
+  /** This offer's place in the list's Assistant queue, while it has one (#1969). */
+  assistantRun: AssistantRun | null;
+  /** Why the Assistant cannot be asked right now — not installed, not connected — or null. */
+  assistantUnavailable: string | null;
   /** Bulk selection: when present the row gains a checkbox in the gutter the list's select-all
    * shares. **Every** row gets one, terminal offers included — unlike the copies list (#373), where
    * one eligibility rule covers every bulk action, the two actions here disagree (a withdrawn offer
@@ -153,6 +164,9 @@ export function OfferRow({
   onSetInActiveBidding,
   onDelete,
   onNarrowToPost,
+  onAssistantRun,
+  assistantRun,
+  assistantUnavailable,
   selection,
 }: OfferRowProps) {
     const [hovered, setHovered] = useState(false);
@@ -193,6 +207,14 @@ export function OfferRow({
       };
     });
 
+  // The way off *Needs action* (#1804/#1969): the action the offer calls for is the row's button, the
+  // other one its ⋮ entry — a highlight, never a restriction. Neither while the offer is in the queue
+  // or once its run is done (the row is re-read when the queue drains); after a failure, both again.
+  const remedy = offer.assistant?.remedy ?? null;
+  const queued = assistantRun !== null && assistantRun.status !== "failed";
+  const otherAct: AssistantRunAct | null =
+    remedy && !queued ? (remedy.action === "close" ? "update" : "close") : null;
+
   const menuActions: RowAction[] = [
     ...(offer.url
       ? [{ key: "listing", label: offer.state === "pending" ? "Open pending post" : "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
@@ -203,6 +225,18 @@ export function OfferRow({
     ...stateActions,
     ...(!terminal && offer.setCount > 0
       ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => onSell(offer) } as RowAction]
+      : []),
+    ...(otherAct
+      ? [
+          {
+            key: `assistant-${otherAct}`,
+            label: otherAct === "close" ? "Close via Assistant…" : "Update via Assistant…",
+            icon: otherAct === "close" ? "withdraw" : "refresh",
+            disabled: assistantUnavailable !== null,
+            hint: assistantUnavailable ?? undefined,
+            onSelect: () => onAssistantRun(offer, otherAct),
+          } as RowAction,
+        ]
       : []),
     ...(offer.inActiveBidding
       ? [
@@ -372,6 +406,26 @@ export function OfferRow({
             );
           })()}
           {offer.needsAction && <NeedsActionChip soldCopyCount={offer.soldCopyCount} />}
+          {remedy && !queued && (
+            <Tooltip content={assistantUnavailable ?? remedy.hint}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssistantRun(offer, remedy.action);
+                }}
+                disabled={assistantUnavailable !== null}
+                style={{
+                  ...QUICK_ADVANCE_BTN,
+                  ...(assistantUnavailable !== null ? { opacity: 0.55, cursor: "default" } : {}),
+                }}
+              >
+                <Icon name={remedy.action === "close" ? "withdraw" : "refresh"} size="sm" />
+                {remedy.action === "close" ? "Close via Assistant" : "Update via Assistant"}
+              </button>
+            </Tooltip>
+          )}
+          {assistantRun && <AssistantRunChip run={assistantRun} />}
           {/* An auction (#449) — shown because the figure at the end of this line is then a standing
               bid rather than a price the seller set. "In bidding" beside it is the other question:
               whether anyone has actually bid (#215). */}
@@ -459,5 +513,36 @@ export function OfferRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Where this offer is in the list's Assistant queue (#1969): *Queued*, what the running one is doing,
+ *  *Closed* / *Updated*, or *Failed:* with the reason — on the row, so it is read where the offer is. */
+function AssistantRunChip({ run }: { run: AssistantRun }) {
+  const tone =
+    run.status === "failed"
+      ? "var(--color-error)"
+      : run.status === "done"
+        ? "var(--color-accent)"
+        : "var(--color-text-secondary)";
+  return (
+    <span
+      role="status"
+      style={{
+        ...CHIP,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        color: tone,
+        border: `1px solid ${run.status === "failed" ? "var(--color-error)" : "var(--color-border)"}`,
+        whiteSpace: run.status === "failed" ? "normal" : "nowrap",
+      }}
+    >
+      <Icon
+        name={run.status === "failed" ? "warning" : run.status === "done" ? "check" : "assistant"}
+        size="sm"
+      />
+      {assistantRunLabel(run)}
+    </span>
   );
 }
