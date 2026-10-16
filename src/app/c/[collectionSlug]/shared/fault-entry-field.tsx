@@ -23,6 +23,10 @@ import { multiLineFormControl } from "@/app/control-style";
 // way a multi-select would — or typed and committed with Enter. A name the dictionary does not hold
 // becomes a new fault **when the dialog is saved**, never before, so a cancelled dialog leaves none.
 
+// One line of chips or typing comes to the shared control height exactly (#1973), so the box stands
+// level with a field beside it — the copy dialog's *Value reduction* — instead of a few pixels over:
+// the typing line is a block with a fixed line height, so the page's 1.5 line height and an inline
+// box's baseline gap cannot add to it, and 0.25rem above and below leaves room for a chip.
 const BOX_STYLE: React.CSSProperties = {
   ...multiLineFormControl,
   display: "flex",
@@ -30,7 +34,7 @@ const BOX_STYLE: React.CSSProperties = {
   alignItems: "center",
   gap: "0.375rem",
   width: "100%",
-  padding: "0.375rem 0.5rem",
+  padding: "0.25rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
   background: "var(--color-bg-elevated)",
@@ -38,7 +42,9 @@ const BOX_STYLE: React.CSSProperties = {
 };
 
 const INNER_INPUT_STYLE: React.CSSProperties = {
+  display: "block",
   width: "100%",
+  lineHeight: "1.25rem",
   border: "none",
   outline: "none",
   background: "transparent",
