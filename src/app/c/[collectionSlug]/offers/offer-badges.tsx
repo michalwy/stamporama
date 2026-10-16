@@ -244,7 +244,8 @@ export function InActiveBiddingChip() {
   );
 }
 
-/** A lot of a multi-lot Facebook post (#1842), on its row: *Post #N · lot M*, opening the post's own
+/** A lot of a Facebook post (#1842), on its row: *Post #N · lot M* — *Post #N* for an offer posted
+ *  alone, the one lot of its post (#1989) — opening the post's own
  *  screen, with a narrowing control beside the words that filters the list to the post's lots. Two
  *  targets in one chip because both answer "this post": where it is managed, and which rows are in it.
  *  The post's title (#1862) is on the chip's hover — a row has no room for it. */
@@ -259,7 +260,8 @@ export function FacebookPostChip({
   postNo: number;
   /** The post's title; null on a post made before titles until it is given one. */
   title: string | null;
-  lotNo: number;
+  /** Null in a post of one lot. */
+  lotNo: number | null;
   /** Filters the list to this post's lots; absent where the list already is. */
   onNarrow?: () => void;
 }) {
@@ -280,7 +282,8 @@ export function FacebookPostChip({
           onClick={(e) => e.stopPropagation()}
           style={{ color: "var(--color-accent)", textDecoration: "none" }}
         >
-          Post #{postNo} · lot {lotNo}
+          Post #{postNo}
+          {lotNo !== null && ` · lot ${lotNo}`}
         </Link>
       </Tooltip>
       {onNarrow && (

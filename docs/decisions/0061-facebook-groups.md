@@ -14,7 +14,8 @@ Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary
 amended by #1780: an offer can carry its own post template, overriding its group's. §3 is amended
 by #1800: a published offer's post text is frozen as it was posted. §2 is amended by #1841: a post of
 several lots can carry each lot's text in its photo's caption. §2 is amended by #1842: a post of
-several lots has a number and a screen of its own.
+several lots has a number and a screen of its own. §2 is amended by #1989: every Facebook offer that
+goes up is in a post — an offer posted alone is a post of one lot, made when it is published.
 
 Facebook is the Facebook module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact named as Facebook; its groups and settings are unchanged.
 
@@ -152,6 +153,34 @@ ticked or added in was final short of taking lots out and adding them again.
   number or by price (either way); the result is a starting point that can still be adjusted by hand.
 - **The lot numbers are the order**: nothing else stores it, so the post's text, its captions and the
   photo download's order and names (`lot-NN-…`) follow at once.
+
+**Amended by #1989 (decided with the collector on 2026-10-16): every Facebook offer that goes up is
+in a post.** On Facebook what the collector puts up is always a post, with one offer in it or many.
+Modelling only the many-lot case as a post left the list of posts (#1850) an overview of the albums
+alone, not of what is up in the groups, and handled singles and albums through two different paths.
+*Both post shapes exist* stands — the shapes are still one lot and several — but both are now a post.
+
+- **An offer gets its post of one lot when it is published**, not when it is created: publishing a
+  Facebook offer that is in no post — *Pending* or *Active*, whichever comes first, by any path —
+  makes its post and puts it in as lot 1. Until then it is just an offer, so offers meant for a post
+  of several never pass through a throwaway post, and post numbers go only to what went up.
+- **A post of one lot is numbered and titled like any post** (#1862): *Publish…* asks for the title,
+  and one left empty is flagged as missing, never filled in (#1692).
+- **It reads as the single post it always was**: its text comes from the post templates, not the
+  caption ones; the layout of several lots does not apply; `{lot}` stays empty; its photos are the
+  offer's own download; and its screen is the post screen with one row. The offer's card keeps its
+  kit and names the post with a link to it.
+- **Grouping works on offers in no post**, as before (*Post together*, *Add to post*, #1870). A lot
+  taken out of a post not yet up is an offer in no post again, and a post not yet up that is left
+  with one lot is dissolved, its offer in no post — either gets a post of its own only if it is
+  published alone. A post already up keeps its last lot as a post of one, and goes only with it.
+- **State, link, publishing, approval and freezing** move with the post for every offer, as they
+  already did for posts of several (#1778, #1800, #1847): a one-lot post's link is its lot's listing
+  link, and a repost (#1718) records the new link there.
+- **The list of posts shows every post**, and adds *Not in a post yet*: the Facebook offers being
+  prepared or Ready that are in no post, so it is a complete picture of Facebook, published or not.
+- **Existing data**: every Facebook offer in no post that had gone up became a post of one lot, its
+  link, state and frozen text as they were, numbered in the offers' creation order and untitled.
 
 ### 3. Posting starts as a kit to paste
 

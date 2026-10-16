@@ -50,6 +50,10 @@ import {
 // later would shorten the auction. The dialog shows it beside a proposal counted from today with the
 // group's length and time of day, and the field holds whichever the collector settles on — written
 // to every auction of the post. A quick buy closes at no time and is not asked.
+//
+// A Facebook offer published in no post goes up as a post of one lot (#1989), made by this publish,
+// so the dialog asks for that post's title too. It may be left empty: the post is then listed as
+// untitled, never given a title nobody wrote (#1692).
 
 const INPUT: React.CSSProperties = {
   ...formControl,
@@ -84,6 +88,7 @@ export function ActivateOfferDialog({
   canWait = true,
   approving = false,
   offerId,
+  askPostTitle = false,
   isPending,
   error,
   onClose,
@@ -104,13 +109,18 @@ export function ActivateOfferDialog({
   approving?: boolean;
   /** Approving, the offer whose Facebook auctions may be asked for a closing time (#1779). */
   offerId?: string;
+  /** A Facebook offer in no post: publishing makes its post of one lot (#1989), whose title is asked. */
+  askPostTitle?: boolean;
   isPending: boolean;
   error?: string;
   onClose: () => void;
-  /** `endsAt` is sent only when the closing time was asked: an ISO instant, or "" for none. */
-  onConfirm: (url: string, target: PublishTarget, endsAt?: string) => void;
+  /** `endsAt` is sent only when the closing time was asked: an ISO instant, or "" for none.
+   *  `postTitle` only when the post's title was asked, "" when left empty. */
+  onConfirm: (url: string, target: PublishTarget, endsAt?: string, postTitle?: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
+  const [postTitle, setPostTitle] = useState("");
+  const asksTitle = askPostTitle && !approving;
   const [target, setTarget] = useState<PublishTarget>(
     approving || !canWait
       ? "active"
@@ -130,7 +140,12 @@ export function ActivateOfferDialog({
   const written = toLocalInputValue(closing.value?.endsAt ?? null);
   const endsAtValue = endsAt ?? (proposal || written);
   const confirm = () =>
-    onConfirm(url, target, closing.value ? fromLocalInputValue(endsAtValue) : undefined);
+    onConfirm(
+      url,
+      target,
+      closing.value ? fromLocalInputValue(endsAtValue) : undefined,
+      asksTitle ? postTitle : undefined
+    );
   const busy = isPending || closing.loading;
   const lots = facebookLots ?? 0;
   const pending = target === "pending";
@@ -204,6 +219,24 @@ export function ActivateOfferDialog({
             />
             Waiting for approval — the platform or group has to accept it first
           </label>
+        )}
+        {asksTitle && (
+          <div style={{ marginBottom: "1rem" }}>
+            <LabelWithError htmlFor="f-post-title">Post title (optional)</LabelWithError>
+            <TextInput
+              id="f-post-title"
+              value={postTitle}
+              disabled={isPending}
+              onChange={(e) => setPostTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !busy) confirm();
+              }}
+              style={INPUT}
+            />
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              It goes up as a post of its own, named by this on Facebook posts. Left empty, it is listed as untitled.
+            </p>
+          </div>
         )}
         <LabelWithError htmlFor="f-listing-url">{label}</LabelWithError>
         <TextInput

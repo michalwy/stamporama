@@ -664,7 +664,8 @@ export interface FacebookPostSource {
 
 /** The group's templates and note as the source reads them, and the layout the post has **now** — its
  *  own, or its group's (#1841); `text` for an offer posted alone. `post` is the multi-lot post the lots
- *  are in, its title as it reads now (#1862); absent or null for an offer posted alone. */
+ *  are in, its title as it reads now (#1862); absent or null for an offer in no post. A post of one
+ *  lot (#1989) is laid out as `text` and its lot carries no number, so it renders as one posted alone. */
 export interface FacebookPostSourceGroup {
   postTemplate: string;
   quickBuyTemplate: string;

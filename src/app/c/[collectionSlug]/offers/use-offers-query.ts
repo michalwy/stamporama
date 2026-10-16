@@ -26,7 +26,7 @@ import type {
   OfferListNeighbours,
 } from "@/lib/offers";
 import type { OfferListContext } from "./list-context";
-import type { FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookOfferNotInPost, FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
@@ -102,9 +102,13 @@ export const offerKeys = {
    *  the row it is on. */
   prepare: (collectionId: string, filters: PrepareFilters) =>
     ["offers", collectionId, "prepare", filters] as const,
-  /** The list of multi-lot Facebook posts (#1850) — under the offers key for the same reason. */
+  /** The list of Facebook posts (#1850) — under the offers key for the same reason. */
   facebookPosts: (collectionId: string, filters: FacebookPostFilters) =>
     ["offers", collectionId, "facebook-posts", filters] as const,
+  /** The Facebook offers in no post yet (#1989), beside the list of posts — under the offers key, so
+   *  publishing or grouping one refreshes it. */
+  facebookNotInPost: (collectionId: string, groupIds: readonly string[], states: readonly string[] | null) =>
+    ["offers", collectionId, "facebook-not-in-post", groupIds, states] as const,
 };
 
 export interface FacebookPostFilters {
@@ -252,7 +256,30 @@ export function useFacebookLotCandidates(collectionId: string, postId: string) {
   });
 }
 
-/** Every multi-lot Facebook post, newest first and a page at a time (#1850). */
+/** The Facebook offers in no post and not yet up (#1989), in offer order — `states` null for both
+ *  states such an offer can be in. */
+export function useFacebookOffersNotInPost(
+  collectionId: string,
+  groupIds: readonly string[],
+  states: readonly string[] | null,
+  enabled: boolean
+) {
+  return useQuery<FacebookOfferNotInPost[]>({
+    queryKey: offerKeys.facebookNotInPost(collectionId, groupIds, states),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (groupIds.length) params.set("group", groupIds.join(","));
+      if (states) params.set("state", states.join(","));
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/not-in-post?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch the offers not in a post");
+      return res.json();
+    },
+    enabled,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Every Facebook post, newest first and a page at a time (#1850). */
 export function useFacebookPostsInfinite(collectionId: string, filters: FacebookPostFilters) {
   return useInfiniteQuery<{ items: FacebookPostListItem[]; nextCursor: string | null }>({
     queryKey: offerKeys.facebookPosts(collectionId, filters),

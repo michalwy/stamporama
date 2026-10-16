@@ -31,8 +31,8 @@ import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlu
 
 // A Facebook post's kit (#1544; ADR-0061 §3): its text and its photos, each taken in one click — and,
 // for a post of several lots, how it is laid out (#1841). Drawn by an offer posted alone on its own
-// Facebook card, and by a multi-lot post on the post's own screen (#1842); a lot's card no longer
-// repeats it.
+// Facebook card, and by every post on the post's own screen (#1842) — a post of one lot (#1989) as an
+// offer posted alone reads; a lot of several no longer repeats it on its card.
 //
 // On the post's screen the kit shows every photo the post puts up, in post order, large enough to
 // recognise the stamps (#1848): captioned, each lot's one photo with its caption and its own *Copy*;
@@ -161,14 +161,15 @@ export function FacebookPostKit({
   selfOfferId: string | null;
   /** The screen re-reads itself after a write; the kit holds no copy of its own. */
   onChanged: () => void;
-  /** A multi-lot post's screen draws its list of lots here, under the post-wide part, each row taking
-   *  what the kit puts up for that lot (#1863). */
+  /** A post's screen draws its list of lots here, under the post-wide part — one row for a post of
+   *  one lot (#1989) — each row taking what the kit puts up for that lot (#1863). */
   renderLots?: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
 }) {
   const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const multiLot = kit.post !== null;
+  // A post of one lot (#1989) reads as an offer posted alone: no layout choice, no lot numbers.
+  const multiLot = kit.post !== null && kit.lots.length > 1;
   const {
     source: postText,
     html,
@@ -347,7 +348,7 @@ export function FacebookPostKit({
                 <Link href={settingHref("standingNote")} style={{ color: "var(--color-accent)" }}>
                   set it in Settings → Facebook
                 </Link>
-              ) : multiLot && lot && lot.offerId !== selfOfferId ? (
+              ) : lot && lot.offerId !== selfOfferId ? (
                 <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
                   open #{lot.offerNo}
                 </Link>
@@ -368,7 +369,7 @@ export function FacebookPostKit({
           {error}
         </p>
       )}
-      {multiLot && renderLots && (
+      {kit.post !== null && renderLots && (
         <PostLots
           kit={kit}
           captioned={captioned}

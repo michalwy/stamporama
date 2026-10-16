@@ -7,10 +7,11 @@ import { listFacebookPostGroups } from "@/lib/facebook-posts";
 import { FacebookPostsListPanel } from "./facebook-posts-list-panel";
 import { Screen } from "@/app/screen";
 
-// The list of multi-lot Facebook posts (#1850) — the sidebar's Marketplaces → Facebook, beside the
-// Allegro and Delcampe screens: what was put up in the groups, read back. A post is otherwise reached
-// only through one of its lots. An offer posted alone has no post of its own (ADR-0061 §2) and stays
-// on the offers list. The static `posts` segment takes precedence over `[offerId]`.
+// The list of Facebook posts (#1850) — the sidebar's Marketplaces → Facebook, beside the Allegro and
+// Delcampe screens: what was put up in the groups, read back. A post is otherwise reached only through
+// one of its lots. Every Facebook offer that went up is in a post, one posted alone in a post of one lot
+// (#1989), and the Facebook offers not yet in one are listed above the posts. The static `posts`
+// segment takes precedence over `[offerId]`.
 
 export const metadata = { title: "Facebook posts" };
 

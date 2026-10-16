@@ -27,6 +27,10 @@ import { FacebookPostKit } from "./facebook-post-kit";
 // the post stands, and *Open post* — since the post has a screen of its own (#1842) with every lot, the
 // kit and the moves the post makes as one; the card used to repeat all of that on every lot.
 //
+// An offer posted alone is the one lot of its post once it is published (#1989): the card keeps its kit
+// as before and adds the post's name and stage with *Open post*. Before it is published it is in no
+// post, and the card says it goes up as a post of its own.
+//
 // While an auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
 // the comments, so the standing bid is typed here, dated, and once the closing time has passed the card
 // says so. The result is the offer's own *Sell* — to the winner, found by their Facebook profile — or
@@ -141,6 +145,8 @@ export function OfferFacebookCard({
   const self = kit.lots.find((l) => l.offerId === offerId) ?? kit.lots[0];
 
   const auction = isAuctionListing(self.listingType);
+  // Posted alone: in no post yet, or the one lot of its post (#1989) — its kit and link are its own.
+  const alone = kit.lots.length < 2;
   // How the post is laid out — as posted once it is up (#1800) — which decides whether this offer's
   // own template writes its lot of the post's text or its photo's caption (#1841).
   const { layout } = useMemo(() => renderFacebookKitPost(kit), [kit]);
@@ -234,7 +240,7 @@ export function OfferFacebookCard({
       {/* The post: alone, with its kit here — or a lot of a post holding several, which has a screen
           of its own (#1842) where the lots, the kit and the post's moves are; this card only names it. */}
       <div style={{ marginTop: "0.75rem" }}>
-        {kit.post ? (
+        {kit.post && !alone ? (
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
             <p style={{ ...MUTED, margin: 0 }}>
               <strong style={{ color: "var(--color-text-primary)" }}>{facebookPostLabel(kit.post)}</strong> · lot{" "}
@@ -250,9 +256,34 @@ export function OfferFacebookCard({
           </div>
         ) : (
           <>
-            <p style={{ ...MUTED, margin: "0 0 0.875rem" }}>
-              Posted alone — one {auction ? "auction" : "quick buy"}, one post.
-            </p>
+            {kit.post ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: "1rem",
+                  marginBottom: "0.875rem",
+                }}
+              >
+                <p style={{ ...MUTED, margin: 0 }}>
+                  <strong style={{ color: "var(--color-text-primary)" }}>{facebookPostLabel(kit.post)}</strong> · posted
+                  alone — one {auction ? "auction" : "quick buy"}, one post ·{" "}
+                  {FACEBOOK_POST_STAGE_LABEL[facebookPostStage(kit.lots)]}
+                </p>
+                <Link
+                  href={`/c/${collectionSlug}/offers/posts/${kit.post.postNo}`}
+                  style={{ ...MUTED, color: "var(--color-accent)", whiteSpace: "nowrap" }}
+                >
+                  Open post →
+                </Link>
+              </div>
+            ) : (
+              <p style={{ ...MUTED, margin: "0 0 0.875rem" }}>
+                Not in a post yet — published alone, it goes up as a post of its own, one{" "}
+                {auction ? "auction" : "quick buy"}.
+              </p>
+            )}
             <FacebookPostKit collectionSlug={collectionSlug} kit={kit} selfOfferId={offerId} onChanged={onChanged} />
           </>
         )}
@@ -263,7 +294,7 @@ export function OfferFacebookCard({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.25rem" }}>
           <p style={{ ...SECTION_LABEL, margin: 0 }}>
             {auction ? "Auction" : "Quick-buy"} {captioned ? "caption" : "post"} template
-            {kit.post ? " for this lot" : ""}
+            {alone ? "" : " for this lot"}
           </p>
           <label style={{ ...MUTED, display: "inline-flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
             <input
@@ -314,7 +345,7 @@ export function OfferFacebookCard({
 
       {/* Where the post went up: the offer's own listing link, asked by Activate (#1668). A lot's is
           its post's, recorded from the post's screen (#1842). */}
-      {!kit.post && (
+      {alone && (
         <div style={{ marginTop: "0.875rem" }}>
           <p style={SECTION_LABEL}>Listing link</p>
           {posted && self.url ? (

@@ -226,10 +226,10 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   fails with the activation guard removed (checked when written). Another platform holding the same
   copy is not asked: listing in two places is the collector's business.
 
-- **A multi-lot post is a row; a single post is not** (ADR-0061 §2). `FacebookPost` (group only)
-  exists only for several lots; its lots are offers with `facebookPostId` + `facebookLotNo`, unique
-  per post. An offer posted alone has no post row and its own `url` is the post's link, so publishing
-  it is the ordinary `publishOffer`. **The post's link is every lot's own `url` too** (#1668, decided
+- **A post is a row; its lots are offers** (ADR-0061 §2). `FacebookPost` (group only) holds several
+  lots, or one offer posted alone once it has gone up (#1989, below); its lots are offers with
+  `facebookPostId` + `facebookLotNo`, unique per post. An offer in no post is published through the
+  ordinary `publishOffer`, which makes its post of one lot on the way. **The post's link is every lot's own `url` too** (#1668, decided
   with the collector on 2026-10-07): the post's own column and the card's *Post link* field were a
   second field for one address, and both are gone — the migration moved a recorded post link into
   each lot whose `url` was empty, then dropped the column. A post is up once any lot is
@@ -240,8 +240,39 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the group's `mixedListingTypes` says otherwise: `facebookPostRefusal` takes the group's setting
   (`facebookGroupMixesTypes`) and `facebookMixedTypesRefusal` names each type's offers, and
   `updateOffer` asks `facebookLotTypeRefusal` before a lot changes type inside such a post.
-  `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), dissolves a
-  post left with one lot, and runs on take-out and on `deleteOffer`.
+  `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), deletes a post
+  left with none, dissolves one left with one lot **not yet up** (#1989 — one left with a lot that went
+  up stays, a post of one), and runs on take-out, on `deleteOffer` and on `updateOffer` moving a lot
+  off Facebook.
+
+- **Every Facebook offer that goes up is in a post** (#1989, decided with the collector on
+  2026-10-16, amending ADR-0061 §2): an offer posted alone is a post of one lot, made **when it is
+  published**, never when it is created. `placeInOneLotFacebookPost` (`offers.ts`, private — it needs
+  `allocateEntityNumber`, which `offers.ts` already imports from `items.ts`) is the one writer: it runs
+  in `setOfferState` on any move into Pending/Active **before** `freezeFacebookPostText`, so the freeze
+  reads the post, in `freezeIfPublished` for an offer created or duplicated already up, and in
+  `updateOffer` for an offer moved onto Facebook once already up — a no-op for an offer in a post or
+  off Facebook. Every publish path reaches it through the transition, so `publishOfferOrPost` needs
+  no branch of its own beyond the title: `postTitle` (asked by `ActivateOfferDialog`'s `askPostTitle`,
+  a Facebook offer in no post and not approving) is written with `setFacebookPostTitle` after
+  `publishOffer`, and a blank one leaves the post untitled (#1692) — the list's *No title* filter
+  flags it. The snapshot is written before the title, so its `postTitle` is `""`; nothing a post of
+  one renders reads it, since `{postTitle}` is in no post template. **A post of one reads as an offer
+  posted alone**: `facebookPostLayout` takes `{ layout, lotCount }` and is `text` under two lots;
+  `getFacebookOfferKit` nulls the lone lot's `lotNo` (so `{lot}` and the gaps behave as on a single
+  post) and gives the offer's own `photoZipPath`; `OfferListItem.facebookPost.lotNo` is null there
+  (the chip reads *Post #N*). On the client "posted alone" is `kit.lots.length < 2`, not `!kit.post`:
+  the card keeps its kit, listing link and *Repost…* and adds the post's name, stage and *Open post*;
+  the kit's `multiLot` (layout select, lot numbers) is `kit.post && lots > 1`, while its `renderLots`
+  is drawn for any post, so the post's screen has its one row. Taking out the only lot of a post not
+  up (after a rejection) removes the post. **The migration**
+  (`20261016180000_facebook_every_offer_in_post`) gave every Facebook offer in no post in a state past
+  Ready (`isFacebookLotPosted`'s reading — a withdrawn or sold offer included) a post of one, numbered
+  from `nextFacebookPostNo` in `createdAt` order, untitled; link, state and snapshot stay on the
+  offer, where they already were. The integration test is
+  `tests/integration/facebook-single-posts.test.ts`, which runs the migration's SQL in a rolled-back
+  transaction over seeded rows; removing the transition's placement or restoring the old dissolve
+  rule each fails it (checked when written).
 
 - **A post of several lots can be captioned** (#1841, decided with the collector on 2026-10-12;
   ADR-0061 §2). `multiLotLayout` (`text` | `captions`, `FACEBOOK_MULTI_LOT_LAYOUTS`) and three
@@ -260,7 +291,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `missingPostText` and names the shared text's empty placeholders with `lotNo: null`. **`{post}`**
   (#1854, `FACEBOOK_POST_NUMBER_PLACEHOLDER`) is the post's `postNo`, bare, in the shared text and
   every caption — an offer's own template included, since it writes the caption — and in **no** post
-  template: an offer posted alone has no number and nothing stands in for it (#1692), so there it is
+  template: an offer posted alone has no number until it is published (its post of one lot, #1989, is
+  written from the post templates all the same) and nothing stands in for it (#1692), so there it is
   *unknown* and kept as typed. Both functions take `postNo` explicitly (the kit's `post.postNo`); it
   is the post's identity rather than its content, so it is read live and not frozen. **Freezing**:
   `FacebookFrozenLot` gained `layout` and `postText` (a snapshot without them reads as `text`), and
@@ -345,7 +377,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the summary and the detail walk (`list-context.ts`) but not the toolbar's counts, as `bidding`. The
   integration test is `tests/integration/facebook-post-screen.test.ts`.
 
-- **A list of every multi-lot post** (#1850, decided with the collector on 2026-10-12): the sidebar's
+- **A list of every post** (#1850, decided with the collector on 2026-10-12): the sidebar's
   **Marketplaces → Facebook** — there, not under Offers as the issue first proposed, since the
   *Sold on Allegro* entry it was to sit beside had moved to Marketplaces as *Allegro* (#762, #971) —
   at `/c/[slug]/offers/posts`, headed *Facebook posts*; the post screens under it light that entry and
@@ -358,8 +390,13 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`facebookPostStageWhere`), written to `facebookPostStage`'s precedence — pending, up, over, ready,
   preparing — since the stage is no column; the integration test
   (`tests/integration/facebook-posts-list.test.ts`) checks every filtered row's own stage. The group
-  filter's options are the groups holding posts (`listFacebookPostGroups`). Only multi-lot posts are
-  listed — an offer posted alone has no row (ADR-0061 §2).
+  filter's options are the groups holding posts (`listFacebookPostGroups`). Since #1989 every post is
+  listed, a post of one lot included (its row says *Posted alone* in place of the lots and layout), and
+  **Not in a post yet** sits above the rows: `listFacebookOffersNotInPost` (Facebook offers with no
+  post in Preparing or Ready, read through `readKitLots` for the title) behind
+  `GET …/facebook-posts/not-in-post` (a static segment shadowing `[postId]`), under
+  `offerKeys.facebookNotInPost`. The group filter narrows it; the *Being prepared* / *Ready to post*
+  chips narrow it to that state; the other stages and *No title* hide it.
 
 - **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
   2026-10-12), so posting needs no lot opened. Photos are `PHOTO_SIZE` (18rem) drawn from the `full`

@@ -4,6 +4,7 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
 import { candidateIdsOf } from "./candidate-set-rules";
 import {
+  allocateEntityNumber,
   allocateOfferNumber,
   getHoldingsValuationByGroup,
   getHoldingsValuationForItems,
@@ -192,7 +193,7 @@ import {
   type FacebookOfferKit,
   type FacebookOfferResolution,
 } from "./facebook-auctions";
-import { facebookDefaultStartingPrice } from "./facebook-post-rules";
+import { facebookDefaultStartingPrice, isFacebookLotPosted } from "./facebook-post-rules";
 import { pruneFacebookLotPhotos } from "./facebook-lot-photos";
 import type { PlanDrift } from "./offer-generator-rules";
 
@@ -2537,10 +2538,10 @@ export interface OfferListItem {
   facebookGroupId: string | null;
   bidIncrement: string | null;
   facebookPostId: string | null;
-  /** The multi-lot post this offer is a lot of, by the post's number and the lot's (#1842) and the
-   *  post's title (#1862) — the row's *Post #N · lot M* chip, the title on its hover. Null for an offer
-   *  posted alone and off Facebook. */
-  facebookPost: { postNo: number; title: string | null; lotNo: number } | null;
+  /** The post this offer is a lot of, by the post's number and the lot's (#1842) and the post's title
+   *  (#1862) — the row's *Post #N · lot M* chip, the title on its hover. `lotNo` is null in a post of
+   *  one lot (#1989), whose chip is *Post #N*. Null for an offer in no post and off Facebook. */
+  facebookPost: { postNo: number; title: string | null; lotNo: number | null } | null;
   /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
    *  changing the listing type drops it. */
   facebookOwnTemplate: boolean;
@@ -2578,7 +2579,7 @@ const OFFER_SELECT = {
   bidIncrement: true,
   facebookPostId: true,
   facebookLotNo: true,
-  facebookPost: { select: { postNo: true, title: true } },
+  facebookPost: { select: { postNo: true, title: true, _count: { select: { lots: true } } } },
   facebookPostTemplate: true,
   readyAfterPhotosAt: true,
   readyAfterPhotosRefusal: true,
@@ -2610,7 +2611,7 @@ type OfferRow = {
   bidIncrement: Decimal | null;
   facebookPostId: string | null;
   facebookLotNo: number | null;
-  facebookPost: { postNo: number; title: string | null } | null;
+  facebookPost: { postNo: number; title: string | null; _count: { lots: number } } | null;
   facebookPostTemplate: string | null;
   readyAfterPhotosAt: Date | null;
   readyAfterPhotosRefusal: string | null;
@@ -2701,7 +2702,11 @@ function toListItem(
     facebookPostId: row.facebookPostId,
     facebookPost:
       row.facebookPost && row.facebookLotNo !== null
-        ? { postNo: row.facebookPost.postNo, title: row.facebookPost.title, lotNo: row.facebookLotNo }
+        ? {
+            postNo: row.facebookPost.postNo,
+            title: row.facebookPost.title,
+            lotNo: row.facebookPost._count.lots > 1 ? row.facebookLotNo : null,
+          }
         : null,
     facebookOwnTemplate: row.facebookPostTemplate !== null,
     readyAfterPhotos: row.readyAfterPhotosAt !== null,
@@ -6795,10 +6800,37 @@ async function finishOfferCreation(
   await freezeIfPublished(offerId, prepared.input.state);
 }
 
-/** A Facebook offer created already up — Pending or Active — is published as it is made, so its post
- *  text is frozen there and then (#1800), after the texts the offer's id completes. */
+/** A Facebook offer created already up — Pending or Active — is published as it is made, so it gets
+ *  its post of one lot (#1989) and its post text is frozen there and then (#1800), after the texts the
+ *  offer's id completes. */
 async function freezeIfPublished(offerId: string, state: OfferState): Promise<void> {
-  if (isLiveState(state)) await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
+  if (!isLiveState(state)) return;
+  await placeInOneLotFacebookPost(offerId);
+  await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
+}
+
+/**
+ * Give a Facebook offer that is going up in no post its post of one lot (#1989, amending ADR-0061 §2):
+ * every Facebook offer that has gone up is in a post, as it is on Facebook, so the list of posts shows
+ * everything up there. Made at publication, never at creation — an offer meant for a post of several
+ * lots never passes through a throwaway post, and post numbers go only to what went up. Untitled: a
+ * title is the collector's words (#1692), asked for by *Publish…*, and a post without one is flagged.
+ * A no-op for an offer already in a post and off Facebook.
+ */
+async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const offer = await tx.offer.findUnique({
+      where: { id: offerId },
+      select: { collectionId: true, facebookGroupId: true, facebookPostId: true },
+    });
+    if (!offer?.facebookGroupId || offer.facebookPostId) return;
+    const postNo = await allocateEntityNumber(tx, offer.collectionId, "facebookPost");
+    const post = await tx.facebookPost.create({
+      data: { collectionId: offer.collectionId, postNo, groupId: offer.facebookGroupId },
+      select: { id: true },
+    });
+    await tx.offer.update({ where: { id: offerId }, data: { facebookPostId: post.id, facebookLotNo: 1 } });
+  });
 }
 
 /** Render the listing texts once more, now that the offer has an id (#415). A no-op for every
@@ -7115,6 +7147,11 @@ export async function updateOffer(
   // Off Facebook, it is no lot any more: its captioned photo goes, and the last lot's of a post it
   // dissolved (#1861).
   if (postId && !facebook.facebookGroupId) await pruneFacebookLotPhotos(ref.collectionId);
+  // Moved onto Facebook once already up, it is a Facebook offer that went up, so it is in a post
+  // (#1989) — one of its own.
+  if (!postId && facebook.facebookGroupId && isFacebookLotPosted(ref.state)) {
+    await placeInOneLotFacebookPost(offerId);
+  }
 
   // The header form writes no texts, so the only question is the price — and on an auction, only the
   // *starting* one (#542): the current figure is where the bidding stands, and noting a bid is not a
@@ -7805,10 +7842,11 @@ async function transitionOffer(
       readyAfterPhotosRefusal: null,
     },
   });
-  // Going up — Pending or Active, whichever comes first — is publication, and a Facebook offer's post
-  // text is frozen as it reads now (#1800). Only where none is frozen yet: approving a pending post or
-  // resuming a paused one puts up nothing new.
+  // Going up — Pending or Active, whichever comes first — is publication: a Facebook offer in no post
+  // gets its post of one lot (#1989), and its post text is frozen as it reads now (#1800). Only where
+  // none is frozen yet: approving a pending post or resuming a paused one puts up nothing new.
   if (ref.facebookGroupId && isLiveState(to)) {
+    await placeInOneLotFacebookPost(offerId);
     await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
   }
 

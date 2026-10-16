@@ -25,8 +25,8 @@ then a **Marketplaces** group holding one screen per platform, named for the pla
   [Allegro guide](allegro.md#sold-on-allegro).
 - **Marketplaces → Delcampe** — the same sitting on the marketplace next door, headed *On
   Delcampe*: what you currently have listed there. See the [Delcampe guide](delcampe.md).
-- **Marketplaces → Facebook** — every post of several lots you have made in your Facebook groups,
-  headed *Facebook posts*. See the [Facebook guide](facebook.md#the-list-of-posts).
+- **Marketplaces → Facebook** — every post you have put up in your Facebook groups, an offer posted
+  alone included, and the Facebook offers not yet in a post, headed *Facebook posts*. See the [Facebook guide](facebook.md#the-list-of-posts).
 
 ## Offer number and short link
 

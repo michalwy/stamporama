@@ -47,17 +47,19 @@ import {
   isAuctionListing,
   isOfferState,
   normalizeListingType,
+  type OfferListingType,
   type OfferState,
 } from "./offer-rules";
 
-// A post holding several lots in one Facebook group (#1544; ADR-0061 §2, §3).
+// A post in one Facebook group (#1544; ADR-0061 §2, §3) — several lots, or one offer posted alone.
 //
 // The lots are ordinary Facebook offers — auctions, or quick buys (#1671), of one type unless the
 // group lets its posts mix them; what a post adds is that they go up **together**: one group, one
 // closing time for its auctions, numbered in the order they were put in, and one activation that
 // takes all of them live. The post's link is each lot's own listing link (#1668), given once when any lot is
-// activated. An offer posted alone needs none of this; it is activated and its link recorded the way
-// every other listing is published.
+// activated. Every Facebook offer that has gone up is in a post (#1989): one published in no post is
+// published the ordinary way, and `setOfferState` makes its post of one lot as it goes up — which
+// from then on reads, renders and moves as an offer posted alone always did.
 //
 // This module sits on the far side of `offers.ts` (it goes through `setOfferState`, so every gate an
 // activation asks is asked of each lot); `facebook-auctions.ts` is the half `offers.ts` imports.
@@ -279,7 +281,7 @@ export async function listFacebookLotCandidates(
   return mixes ? offers : offers.filter((o) => types.includes(o.listingType));
 }
 
-/** What a multi-lot post's own screen draws (#1842): the post's kit — the group, the lots in lot
+/** What a post's own screen draws (#1842): the post's kit — the group, the lots in lot
  *  order, the text and photos — and, per lot, the sales it left on. */
 export interface FacebookPostScreen {
   postId: string;
@@ -328,9 +330,9 @@ export async function findFacebookPostId(
 }
 
 /**
- * A multi-lot post as its own screen shows it (#1842): the kit every lot's card used to repeat, read
- * once off its first lot, and each lot's sale. Null for a post that is gone — dissolved when it was
- * left with one lot.
+ * A post as its own screen shows it (#1842): the kit every lot's card used to repeat, read once off its
+ * first lot, and each lot's sale. Null for a post that is gone — dissolved when it was left with one
+ * lot not yet up, or removed with its last lot.
  */
 export async function getFacebookPostScreen(ownerId: string, postId: string): Promise<FacebookPostScreen | null> {
   const post = await prisma.facebookPost.findUnique({
@@ -479,7 +481,8 @@ export async function regenerateFacebookLotTexts(
   return chosen.length;
 }
 
-/** One multi-lot post as the list of posts draws it (#1850). */
+/** One post as the list of posts draws it (#1850) — of several lots, or of one offer posted alone
+ *  (#1989). */
 export interface FacebookPostListItem {
   postId: string;
   postNo: number;
@@ -533,9 +536,10 @@ function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWh
 }
 
 /**
- * Every multi-lot post in a collection, newest first (#1850) — an offer posted alone has no post of
- * its own (ADR-0061 §2) and stays on the offers list. Paged by offset like the other lists; a post's
- * stage is read off its lots, so its filter is a query over them rather than a column.
+ * Every post in a collection, newest first (#1850) — of several lots or of one, since every Facebook
+ * offer that has gone up is in a post (#1989). Paged by offset like the other lists; a post's stage is
+ * read off its lots, so its filter is a query over them rather than a column. The Facebook offers not
+ * yet in a post are `listFacebookOffersNotInPost`'s.
  */
 export async function listFacebookPostsPaginated(
   ownerId: string,
@@ -594,12 +598,69 @@ export async function listFacebookPostsPaginated(
       lotCount: row.lots.length,
       forSaleCount: row.lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state)).length,
       stage: facebookPostStage(row.lots),
-      layout: facebookPostLayout(row, settings.get(row.group.id) ?? { multiLotLayout: "text" }),
+      layout: facebookPostLayout(
+        { layout: row.layout, lotCount: row.lots.length },
+        settings.get(row.group.id) ?? { multiLotLayout: "text" }
+      ),
       postedOn: posted.length ? posted[0].toISOString().slice(0, 10) : null,
       link: facebookPostLink(row.lots),
     };
   });
   return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
+}
+
+/** A Facebook offer not yet in a post (#1989), as the list of posts names it under *Not in a post
+ *  yet*: still being prepared or Ready, its post made when it is published or grouped. */
+export interface FacebookOfferNotInPost {
+  offerId: string;
+  offerNo: number;
+  title: string;
+  listingType: OfferListingType;
+  state: OfferState;
+  group: { id: string; name: string; archived: boolean };
+}
+
+/** The states a Facebook offer is in while it has no post yet — what *Not in a post yet* lists, and
+ *  what the list's *Being prepared* and *Ready to post* chips narrow it to. */
+const NOT_YET_POSTED_STATES: readonly OfferState[] = OFFER_STATES.filter((s) => !isFacebookLotPosted(s));
+
+/**
+ * The Facebook offers in a collection that are in no post and not yet up (#1989) — so the list of posts
+ * is a complete picture of Facebook, published or not. Each gets its post when it is published alone
+ * (a post of one lot) or put into one with others. In offer order; `groupIds` and `states` narrow it as
+ * the list's group filter and stage chips do.
+ */
+export async function listFacebookOffersNotInPost(
+  ownerId: string,
+  collectionId: string,
+  filters: { groupIds?: readonly string[]; states?: readonly OfferState[] } = {}
+): Promise<FacebookOfferNotInPost[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const states = (filters.states ?? NOT_YET_POSTED_STATES).filter((s) => NOT_YET_POSTED_STATES.includes(s));
+  const where: Prisma.OfferWhereInput = {
+    facebookGroupId: filters.groupIds?.length ? { in: [...filters.groupIds] } : { not: null },
+    facebookPostId: null,
+    state: { in: [...states] },
+  };
+  const [lots, groups] = await Promise.all([
+    readKitLots(collectionId, where),
+    prisma.offer.findMany({
+      where: { ...where, collectionId },
+      select: { id: true, facebookGroup: { select: { id: true, name: true, archivedAt: true } } },
+    }),
+  ]);
+  const groupOf = new Map(groups.map((o) => [o.id, o.facebookGroup!]));
+  return lots.map((lot) => {
+    const group = groupOf.get(lot.offerId)!;
+    return {
+      offerId: lot.offerId,
+      offerNo: lot.offerNo,
+      title: lot.title,
+      listingType: lot.listingType,
+      state: lot.state,
+      group: { id: group.id, name: group.name, archived: group.archivedAt !== null },
+    };
+  });
 }
 
 /** The groups a collection's posts are in, by name — what the list of posts filters by (#1850). */
@@ -724,8 +785,10 @@ export async function setFacebookPostTitle(ownerId: string, postId: string, titl
 
 /**
  * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook offer
- * that is the post's link. An offer posted alone, and every offer off Facebook, is the ordinary
- * `publishOffer`; a lot of a post holding several takes the whole post live with it.
+ * that is the post's link. A lot of a post takes the whole post live with it. An offer in no post,
+ * and every offer off Facebook, is the ordinary `publishOffer` — which, for a Facebook offer, makes
+ * its post of one lot as it goes up (#1989); `postTitle` is that post's title, a blank one leaving it
+ * untitled (#1692).
  *
  * `to` is `pending` when the post went to the group's administrator rather than straight up (#1778):
  * the link is then the pending post's. Approving a pending offer is this same call with `active`.
@@ -735,15 +798,22 @@ export async function publishOfferOrPost(
   offerId: string,
   url: string | null,
   to: "active" | "pending" = "active",
-  endsAt?: Date | null
+  endsAt?: Date | null,
+  postTitle?: string
 ): Promise<void> {
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
   // The auctions an approval may re-time (#1779), read before anything moves: once approved they are
   // no longer told apart from the post's lots that were already up.
   const approved =
     to === "active" && endsAt !== undefined ? await pendingFacebookAuctions(ownerId, offerId) : [];
-  if (!offer?.facebookPostId) await publishOffer(ownerId, offerId, url, to);
-  else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
+  if (!offer?.facebookPostId) {
+    await publishOffer(ownerId, offerId, url, to);
+    const title = postTitle?.trim();
+    if (title) {
+      const placed = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
+      if (placed?.facebookPostId) await setFacebookPostTitle(ownerId, placed.facebookPostId, title);
+    }
+  } else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
   if (approved.length > 0) {
     await prisma.offer.updateMany({ where: { id: { in: approved } }, data: { endsAt } });
     // The post in the group is corrected to the closing time the approval states, so the text frozen

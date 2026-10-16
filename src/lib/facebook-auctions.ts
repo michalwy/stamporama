@@ -309,9 +309,11 @@ export async function offerItemIds(offerId: string): Promise<string[]> {
 }
 
 /**
- * Take an offer out of its multi-lot post, inside the caller's transaction: the lots after it move up
- * one, and a post left with a single lot is **dissolved** — one offer is a post of its own, which
- * needs no row (ADR-0061 §2). A no-op for an offer in no post.
+ * Take an offer out of its post, inside the caller's transaction: the lots after it move up one. A
+ * post left with no lot is deleted, and one left with a single lot that has **not** gone up is
+ * **dissolved** — that offer is an offer in no post again, and gets a post of its own only if it is
+ * published alone (#1989). A post left with one lot that has gone up stays, a post of one lot: every
+ * Facebook offer that went up is in a post. A no-op for an offer in no post.
  */
 export async function detachFacebookLot(tx: DbTransaction, offerId: string): Promise<void> {
   const offer = await tx.offer.findUnique({
@@ -327,9 +329,9 @@ export async function detachFacebookLot(tx: DbTransaction, offerId: string): Pro
   const rest = await tx.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true },
+    select: { id: true, state: true },
   });
-  if (rest.length < 2) {
+  if (rest.length === 0 || (rest.length === 1 && !isFacebookLotPosted(rest[0].state))) {
     await tx.offer.updateMany({
       where: { facebookPostId: postId },
       data: { facebookPostId: null, facebookLotNo: null },
@@ -354,7 +356,7 @@ export async function detachFacebookLot(tx: DbTransaction, offerId: string): Pro
 export interface FacebookKitLot {
   offerId: string;
   offerNo: number;
-  /** Null for an offer posted alone. */
+  /** Null for an offer posted alone — in no post yet, or the one lot of its post (#1989). */
   lotNo: number | null;
   /** Which template the lot's text is built from (#1671): an auction's, or a quick buy's. */
   listingType: OfferListingType;
@@ -411,29 +413,31 @@ export interface FacebookOfferKit {
     quickBuyCaptionTemplate: string;
     captionPostTemplate: string;
   };
-  /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
+  /** The post this offer is a lot of — of several lots, or of this offer alone once it is published
+   *  (#1989) — or null for an offer in no post yet. Its link is each
    *  lot's own `url` (#1668), so the post carries none. `postNo` is its short number (#1842), what its
    *  screen is reached by; `title` its title (#1862), null on a post made before titles until it is
    *  given one; `layout` is the post's own choice (#1841), or null while it follows its group's. */
   post: { id: string; postNo: number; title: string | null; layout: FacebookMultiLotLayout | null } | null;
   /** How the post is laid out now (#1841): the post's own choice, else its group's; always `text` for
-   *  an offer posted alone. A published post is drawn in the layout it went up in, which its frozen
-   *  lots carry. */
+   *  an offer posted alone, its post holding one lot or none yet. A published post is drawn in the
+   *  layout it went up in, which its frozen lots carry. */
   layout: FacebookMultiLotLayout;
-  /** The post's lots in lot order — or this offer alone. */
+  /** The post's lots in lot order — or this offer alone. A post of one lot reads as an offer posted
+   *  alone (#1989): its lot carries no number, so `{lot}` is empty. */
   lots: FacebookKitLot[];
   /** Where one click downloads the photos, in lot order: the offer's own archive when it is posted
-   *  alone, the post's when it is a lot — one photo per lot in a captioned post (#1841). */
+   *  alone, the post's when it is one of several lots — one photo per lot in a captioned post (#1841). */
   photoZipPath: string;
 }
 
-/** How a post is laid out (#1841): its own choice, else its group's; an offer posted alone is no
- *  post of several lots and always `text`. */
+/** How a post is laid out (#1841): its own choice, else its group's. An offer posted alone — in no
+ *  post yet, or the one lot of its post (#1989) — is no post of several lots and always `text`. */
 export function facebookPostLayout(
-  post: { layout: string | null } | null,
+  post: { layout: string | null; lotCount: number } | null,
   settings: Pick<FacebookEffectiveSettings, "multiLotLayout">
 ): FacebookMultiLotLayout {
-  if (!post) return "text";
+  if (!post || post.lotCount < 2) return "text";
   return post.layout === null ? settings.multiLotLayout : toFacebookMultiLotLayout(post.layout);
 }
 
@@ -520,6 +524,10 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     offer.collectionId,
     offer.facebookPostId ? { facebookPostId: offer.facebookPostId } : { id: offerId }
   );
+  // A post of one lot is written as an offer posted alone is (#1989): no lot number, so `{lot}` stays
+  // empty and nothing is named as missing for it.
+  const alone = lots.length < 2;
+  if (alone) for (const lot of lots) lot.lotNo = null;
   const base = `/api/collections/${offer.collectionId}`;
   // The post reads as the group posts now — its own template, or the platform's it follows (#1661).
   // A lot already published is drawn from its snapshot instead (#1800); these are for the rest, and
@@ -552,9 +560,12 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
           layout: offer.facebookPost.layout === null ? null : toFacebookMultiLotLayout(offer.facebookPost.layout),
         }
       : null,
-    layout: facebookPostLayout(offer.facebookPost, settings),
+    layout: facebookPostLayout(
+      offer.facebookPost && { layout: offer.facebookPost.layout, lotCount: lots.length },
+      settings
+    ),
     lots,
-    photoZipPath: offer.facebookPost
+    photoZipPath: offer.facebookPost && !alone
       ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
   };
@@ -589,7 +600,7 @@ export async function freezeFacebookPostText(
       id: true,
       collectionId: true,
       facebookGroupId: true,
-      facebookPost: { select: { layout: true, title: true } },
+      facebookPost: { select: { layout: true, title: true, _count: { select: { lots: true } } } },
     },
   });
   const now = new Date().toISOString();
@@ -603,7 +614,8 @@ export async function freezeFacebookPostText(
       const groupId = target.facebookGroupId!;
       if (!settingsByGroup.has(groupId)) settingsByGroup.set(groupId, await readFacebookGroupSettings(groupId));
       const settings = settingsByGroup.get(groupId)!;
-      const layout = facebookPostLayout(target.facebookPost, settings);
+      const post = target.facebookPost;
+      const layout = facebookPostLayout(post && { layout: post.layout, lotCount: post._count.lots }, settings);
       const snapshot: FacebookFrozenLot = {
         frozenAt: now,
         listingType: lot.listingType,

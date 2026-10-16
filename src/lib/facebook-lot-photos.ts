@@ -193,7 +193,10 @@ function readPostRow(postId: string) {
 async function postPhotoLayout(post: Pick<PostRow, "layout" | "groupId" | "lots">) {
   const frozen = readFacebookFrozenLot(post.lots.at(-1)?.facebookPostSnapshot);
   if (frozen) return frozen.layout;
-  return facebookPostLayout(post, await readFacebookGroupSettings(post.groupId));
+  return facebookPostLayout(
+    { layout: post.layout, lotCount: post.lots.length },
+    await readFacebookGroupSettings(post.groupId)
+  );
 }
 
 /** Queue a lot's photo to be drawn. A run already queued or under way is left alone. */
