@@ -11,6 +11,7 @@ import {
   STICKY_TOOLBAR_STYLE,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useMeasuredHeight, usePinnedSelectionBar } from "@/app/c/[collectionSlug]/shared/sticky-header";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
@@ -615,6 +616,10 @@ export function AuctionLotsPanel({
     });
   }
 
+  // The selection bar pins right under the pinned toolbar (#1979), as on the Offers list.
+  const [toolbarRef, toolbarHeight] = useMeasuredHeight<HTMLDivElement>();
+  const { sentinelRef: selectionBarSentinelRef, style: selectionBarPinStyle } = usePinnedSelectionBar(toolbarHeight);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* What the filtered watchlist can cost (#523) — above the toolbar rather than inside it,
@@ -625,6 +630,7 @@ export function AuctionLotsPanel({
       {/* Toolbar — pinned while the rows scroll under it (#358), carrying the page background so
           rows never show through it. */}
       <div
+        ref={toolbarRef}
         style={{
           ...STICKY_TOOLBAR_STYLE,
           display: "flex",
@@ -1075,6 +1081,8 @@ export function AuctionLotsPanel({
           background: "var(--color-bg-elevated)",
         }}
       >
+        {/* Mounted for the screen's life, so the selection bar's pin can tell when it is stuck. */}
+        <div ref={selectionBarSentinelRef} style={{ height: 0 }} aria-hidden />
         {isLoading && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             Loading lots…
@@ -1095,10 +1103,12 @@ export function AuctionLotsPanel({
             are rows, so the select-all box and the feature itself can be found before anything is
             ticked; the actions arrive with the selection. It counts and acts on the ticked lots in
             view, and while every ticked lot is hidden it keeps only *Clear*. Two actions: *Tags…*
-            (#1625) and *Confirm* (#1626), the to-review marker on the ticked lots that carry it. */}
+            (#1625) and *Confirm* (#1626), the to-review marker on the ticked lots that carry it.
+            It pins under the toolbar while the rows scroll (#1979). */}
         {rows.length > 0 && (
           <div
             style={{
+              ...selectionBarPinStyle,
               display: "flex",
               alignItems: "center",
               gap: "0.625rem",

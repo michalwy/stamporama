@@ -19,6 +19,7 @@ import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/share
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { usePinnedSelectionBar } from "@/app/c/[collectionSlug]/shared/sticky-header";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
@@ -260,6 +261,10 @@ export function PreparePanel({
 
   const hasFilters = !!platformId || !!filterAreaId || noPrice;
 
+  // The selection bar pins at the top edge while the rows scroll (#1979) — nothing above it on
+  // this screen is pinned, so there is no toolbar height to sit under.
+  const { sentinelRef: selectionBarSentinelRef, style: selectionBarPinStyle } = usePinnedSelectionBar(0);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flex: 1 }}>
       {/* Toolbar: the platform (and its Facebook group), and only the offers with no price yet. */}
@@ -329,6 +334,8 @@ export function PreparePanel({
             borderLeft: "1px solid var(--color-border)",
           }}
         >
+          {/* Mounted for the screen's life, so the selection bar's pin can tell when it is stuck. */}
+          <div ref={selectionBarSentinelRef} style={{ height: 0 }} aria-hidden />
           {isLoading && <Empty>Loading the offers being prepared…</Empty>}
 
           {!isLoading && rows.length === 0 && (
@@ -341,9 +348,11 @@ export function PreparePanel({
 
           {rows.length > 0 && (
             <>
-              {/* The selection bar, drawn while there are rows: the select-all box lives in it. */}
+              {/* The selection bar, drawn while there are rows: the select-all box lives in it.
+                  Pinned while the rows scroll (#1979). */}
               <div
                 style={{
+                  ...selectionBarPinStyle,
                   display: "flex",
                   alignItems: "center",
                   gap: "0.625rem",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 // Pinned headers on a long, page-scrolled list (#172, #621, #637).
 //
@@ -66,4 +66,32 @@ export function useMeasuredHeight<T extends HTMLElement>() {
     return () => observer.disconnect();
   }, []);
   return [ref, height] as const;
+}
+
+/**
+ * The pin for a list's **selection bar drawn inside the list's card** — the Offers list's, the
+ * Prepare screen's and the auction lots' (#1979). Those bars are always up while there are rows,
+ * because the select-all box lives in them aligned with the rows' own gutter, so they cannot be a
+ * row of the sticky filter block the way the Copies list's banner is (#848): they belong to the
+ * card. They pin instead the way a purchase's selection bar does — at `topOffset`, the measured
+ * height of whatever the page pins above the card (the filter row, or `0` where nothing is
+ * pinned) — so on every list the bar ends up in the same place, directly under the filter row,
+ * with its actions in reach however far down the ticking went. Nothing moves when it pins: the
+ * bar was already in the flow, so the rows do not shift (#885 is about bars that arrive).
+ *
+ * Render the returned `sentinelRef` on a zero-height element **always mounted** directly above the
+ * bar (its observer is attached once, so a sentinel that arrives with the first rows is never
+ * watched), and spread `style` onto the bar, whose background must be opaque. The z-index is one
+ * under `STICKY_TOOLBAR_STYLE`'s, so the filter row covers the bar rather than the reverse in the
+ * frame before a new height is measured.
+ */
+export function usePinnedSelectionBar(topOffset: number) {
+  const { sentinelRef, stuck } = useStuck(topOffset);
+  const style: CSSProperties = {
+    position: "sticky",
+    top: topOffset,
+    zIndex: 4,
+    boxShadow: stuck ? STUCK_SHADOW : undefined,
+  };
+  return { sentinelRef, style };
 }

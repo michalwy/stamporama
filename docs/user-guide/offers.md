@@ -1954,8 +1954,8 @@ price, exactly as on the offer's own screen.
 
 ### Acting on several offers
 
-Tick offers, or tick the box above the list to select every row loaded so far. Three actions act on
-the ticked offers in view:
+Tick offers, or tick the box above the list to select every row loaded so far. That bar stays at the
+top of the window as you scroll. Three actions act on the ticked offers in view:
 
 - **Use estimated price** gives every ticked offer that has **no price yet** its estimated value. Offers
   that already have a price keep it, so you only need to type the exceptions. The count on the button
@@ -2847,7 +2847,9 @@ set can't be deleted — withdraw it.
 
 Every row in the offers list carries a **checkbox** on its left, and a bar at the top of the list
 carries one for **all of them**. Tick a few rows, or tick the bar's box to take everything, and the
-bar turns into a count with the actions that work on a selection:
+bar turns into a count with the actions that work on a selection. The bar **stays at the top of the
+window**, under the pinned toolbar, as you scroll — so offers ticked far down the list are acted on
+where you ticked them:
 
 - **Mark ready** — marks the ticked **Preparing** offers ready, each exactly as its own **Mark ready**
   does: one whose photos are all that stands in the way has them generated and turns Ready once they
