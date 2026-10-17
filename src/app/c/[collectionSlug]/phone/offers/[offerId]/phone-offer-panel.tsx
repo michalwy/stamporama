@@ -19,6 +19,7 @@ import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useInvalidateOffers } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { withdrawOfferMessage } from "@/app/c/[collectionSlug]/offers/withdraw-offer-message";
 import { PhoneOfferPrice } from "../phone-offer-price";
+import { PhoneOfferSell } from "./phone-offer-sell";
 
 const MOVE: Record<PhoneOfferMove, { label: string; icon: IconName }> = {
   pause: { label: "Pause", icon: "pause" },
@@ -32,12 +33,17 @@ const MOVE: Record<PhoneOfferMove, { label: string; icon: IconName }> = {
  * applies the desk's rules and refuses in the desk's words; Withdraw asks first, in the desk's
  * sentence. Afterwards the page is read again from the server and every offer list is marked stale,
  * so going back to the list shows the offer where it now is.
+ *
+ * *Sell* (#2009) comes first, while the offer has a set left to sell: it is the move the screen is
+ * opened for at a fair or on a quick buy.
  */
 export function PhoneOfferPanel({
   collectionId,
+  collectionSlug,
   offer,
 }: {
   collectionId: string;
+  collectionSlug: string;
   offer: PhoneOffer;
 }) {
   const router = useRouter();
@@ -117,6 +123,10 @@ export function PhoneOfferPanel({
           <OfferStateChip state={offer.state} />
         </div>
       </div>
+
+      {offer.setsLeft > 0 && (
+        <PhoneOfferSell collectionId={collectionId} collectionSlug={collectionSlug} offer={offer} />
+      )}
 
       {moves.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

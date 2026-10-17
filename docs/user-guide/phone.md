@@ -98,6 +98,21 @@ first copy in the offer that has one.
 
 Below are the moves you can make on the phone, each only where the desk would allow it:
 
+- **Sell…** an active, paused or pending offer that still has something to sell — at a fair, or on a
+  Facebook quick buy, the moment it is agreed. Enter the **buyer** — pick one of your contacts as you
+  type, or type a new name, which becomes a new contact; leave it blank for a buyer you do not know —
+  and the **price**, which starts at the offer's own. On a Facebook offer the buyer is named by their
+  Facebook profile, as at the desk: their name as the profile shows it and, optionally, the link, and
+  the form says whether that is someone you already know. **Record sale** records a new sale dated
+  today on the offer's platform, exactly as the desk's **Sell** → **Create new sale** would, and
+  takes you to **Sales to do**, where it waits for payment.
+
+  An offer of several identical sets (a quantity of 3, say) is sold **one set at a time**. When others
+  are left, the sale says *Set not chosen*: which copy goes is chosen at the desk, when packing, from
+  the sale. The offer is sold once its last set is.
+
+  Everything else about the sale — buyer handling, commission, shipping, adding it to a sale already
+  open — is done at the desk, on the sale itself.
 - **Pause** an active offer, and **Resume** a paused one.
 - **Withdraw…** any offer that is not sold or withdrawn. It asks first, with the desk's own warning:
   withdrawn is final. A lot of a Facebook post still waiting for approval takes the whole post back

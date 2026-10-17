@@ -14,8 +14,8 @@ interface PhoneOfferPageProps {
 }
 
 // An offer on the phone (#2008, ADR-0072): its picture, title, price, platform and state, and the
-// three moves the phone makes on it — pause, resume, withdraw. Its *Full app* goes to the offer's own
-// screen at the desk, where everything else about it is done.
+// moves the phone makes on it — sell it (#2009), pause, resume, withdraw. Its *Full app* goes to the
+// offer's own screen at the desk, where everything else about it is done.
 export default async function PhoneOfferPage({ params }: PhoneOfferPageProps) {
   const { collectionSlug, offerId } = await params;
 
@@ -30,7 +30,7 @@ export default async function PhoneOfferPage({ params }: PhoneOfferPageProps) {
 
   return (
     <PhoneScreen title={`Offer #${offer.offerNo}`} fullAppHref={`/c/${collectionSlug}/offers/${offer.id}`}>
-      <PhoneOfferPanel collectionId={collection.id} offer={offer} />
+      <PhoneOfferPanel collectionId={collection.id} collectionSlug={collectionSlug} offer={offer} />
     </PhoneScreen>
   );
 }

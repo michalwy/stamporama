@@ -22,7 +22,7 @@ import type { ShippingOptionData } from "@/lib/shipping-options";
 import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
-import type { FacebookBuyerLookup } from "@/lib/facebook-sales";
+import { useFacebookBuyerLookup } from "./use-facebook-buyer-lookup";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -117,7 +117,6 @@ export function SaleFormDialog({
   const [buyerId, setBuyerId] = useState(initial?.buyerId ?? "");
   const [buyerName, setBuyerName] = useState(initial?.buyerName ?? "");
   const [buyerProfileUrl, setBuyerProfileUrl] = useState("");
-  const [fetchedBuyer, setFetchedBuyer] = useState<FacebookBuyerLookup | null>(null);
   const [externalRef, setExternalRef] = useState(initial?.externalRef ?? "");
   const [transactionUrl, setTransactionUrl] = useState(initial?.transactionUrl ?? "");
   const [soldAt, setSoldAt] = useState(initial?.soldAt ?? today);
@@ -236,34 +235,14 @@ export function SaleFormDialog({
     setShippingCurrency(service.currency);
   }
 
-  // Who the buyer typed by their Facebook profile is (#1777), re-read a moment after typing stops: the
-  // same lookup the save makes, so what the form says and what the save does cannot disagree.
-  const buyerTyped = buyerByFacebookProfile && (!!buyerName.trim() || !!buyerProfileUrl.trim());
-  useEffect(() => {
-    if (!buyerTyped) return;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const { lookupFacebookBuyerAction } = await import("@/app/actions/facebook");
-      const result = await lookupFacebookBuyerAction(collectionId, buyerName, buyerProfileUrl);
-      if (!cancelled) setFetchedBuyer(result);
-    }, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [collectionId, buyerName, buyerProfileUrl, buyerTyped]);
-  // Nothing typed asks nothing: an answer about what was cleared away is not shown.
-  const buyerLookup = buyerTyped ? fetchedBuyer : null;
-  const buyerConflict = buyerLookup?.conflict ?? null;
-  const buyerWho = buyerLookup?.contact
-    ? buyerLookup.contact.matchedBy === "profile"
-      ? `${buyerLookup.contact.name} — found by their profile link.`
-      : `${buyerLookup.contact.name} — an existing contact${
-          buyerLookup.contact.facebookProfileUrl || !buyerProfileUrl.trim() ? "" : "; the link will be added to it"
-        }.`
-    : buyerLookup && buyerName.trim()
-      ? `A new buyer, ${buyerName.trim()}, will be created.`
-      : null;
+  // Who the buyer typed by their Facebook profile is (#1777) — the lookup the save makes, shared with
+  // the phone's *Sell* (#2009).
+  const { conflict: buyerConflict, who: buyerWho } = useFacebookBuyerLookup(
+    collectionId,
+    buyerByFacebookProfile,
+    buyerName,
+    buyerProfileUrl
+  );
 
   // Buyer handling can be entered directly, or derived from the total the buyer paid (#205):
   // handling = total − gross (sum of the sale's offer prices). Gross is only known once sold units

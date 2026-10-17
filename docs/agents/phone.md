@@ -115,6 +115,29 @@ desktop-only.
 - **No back link** on either screen, as on the shell's: the phone's own back gesture goes back, and
   keeps the list's narrowing, which a link would have to carry.
 
+## Sell an offer (#2009)
+
+- **On the offer screen, first among the moves**, while the offer has a set left to sell
+  (`PhoneOffer.setsLeft`, from the desk's own `listSellableOffers`, narrowed to the offer by its
+  `offerId` option — so the phone offers *Sell* exactly where the desk's sale flow would list the
+  offer). Inline, not a dialog: buyer and price, nothing else.
+- **The desk's *Sell* → *Create new sale*, in one act**: `sellPhoneOffer` (`src/lib/phone-offers.ts`)
+  resolves the header through `resolveSaleHeader` — the buyer a picked contact or a typed name found
+  or created, a Facebook offer's buyer by their profile (`buyerByFacebookProfile`, #1777) in the
+  offer's currency (`facebookOfferSaleCurrency`) — dated today, the other header fields blank, and
+  writes the sale **and** its line in one transaction (`createSaleWithLines`, which the agent API's
+  new-sale branch now shares), so a refused set leaves no empty sale behind for the collector to find
+  at the desk. Adding to a sale already open stays at the desk. The Facebook lookup and its words are
+  `useFacebookBuyerLookup`, shared with the desk's sale form; the buyer picker is the desk's
+  `PurchaseContactSelect`, drawn at the tap target through its `inputStyle`.
+- **One set at a time** (decided with the collector on 2026-10-17): the first set left, at the price
+  given (the offer's own, blank when it has none — `phoneSalePriceDefault`). With other sets left the
+  line is **picked, not chosen** (`setChoicePending`, #697, also decided then), so the desk's *Set not
+  chosen* chip and picker carry the choice to the packing table; the only set left is a choice. Pure,
+  in `src/lib/phone-offer-sale.ts`.
+- Afterwards the phone goes to **Sales to do** (`phoneSalesPath`), where the sale waits for payment —
+  its further steps are #2007's.
+
 ## The stamp screen (#2003)
 
 - **`/c/[collectionSlug]/phone/stamps/[stampId]`** (`phoneStampPath`). It has **no row on the start
@@ -173,7 +196,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Photos on a purchase, from the phone's camera | #2011 |
 | Sales to do: paid, packed, sent | #2007 |
 | Offers: list, offer screen, pause / resume / withdraw | #2008 |
-| Sell an offer | #2009 |
+| Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |
 
 **Browsing is read only** except starting a purchase and its photos. **Stays at the desk**: preparing,

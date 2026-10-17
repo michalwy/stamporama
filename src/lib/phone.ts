@@ -53,6 +53,11 @@ export function phoneBrowseIssuePath(collectionSlug: string, issueId: string): s
   return `${phoneBrowsePath(collectionSlug)}/issues/${issueId}`;
 }
 
+/** Sales to do (#2007) — where a sale recorded on the phone (#2009) is taken on from. */
+export function phoneSalesPath(collectionSlug: string): string {
+  return `${phoneHomePath(collectionSlug)}/sales`;
+}
+
 export type PhoneStart =
   /** Exactly one collection: straight into it. */
   | { kind: "collection"; href: string }
