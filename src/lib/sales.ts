@@ -8,7 +8,7 @@ import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
-import { isSellableOfferState, SELLABLE_OFFER_STATES } from "./sale-rules";
+import { isSellableOfferState, SELLABLE_OFFER_STATES, shipmentGoingBy } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
 import {
   computeCopySaleProfit,
@@ -37,7 +37,8 @@ import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
 import { readShareAddress, type ShareAddress } from "./share-address";
-import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard-sales-rules";
+import { SALES_WAITING_STATUSES } from "./dashboard-sales-rules";
+import type { SaleToDo } from "./phone-sales-rules";
 import { settleSupplies } from "./supply-settlement";
 import {
   SALE_SUPPLY_COST_SELECT,
@@ -1920,7 +1921,9 @@ export async function countSales(
 
 /**
  * Every sale still waiting on the collector — awaiting payment, to pack, to send — for the
- * Dashboard's Sales section (#1809; grouped by `dashboard-sales-rules.ts`).
+ * Dashboard's Sales section (#1809; grouped by `dashboard-sales-rules.ts`) and the phone's sales to
+ * do (#2007), which also reads what each sale's next step asks about: its parcel and its unpacked
+ * copies, worked out as the sale screen works them out (`parcelInForce`, `shipmentGoingBy`).
  *
  * The set is the Sales list's own status filter (`saleListWhere`), so each group is exactly what its
  * link opens. Read whole rather than paged: these are the sales in flight, not the history, and a
@@ -1933,7 +1936,7 @@ export async function countSales(
 export async function listSalesAwaitingFulfilment(
   ownerId: string,
   collectionId: string
-): Promise<SaleAwaitingFulfilment[]> {
+): Promise<SaleToDo[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.sale.findMany({
     where: saleListWhere(collectionId, { statuses: [...SALES_WAITING_STATUSES] }),
@@ -1947,7 +1950,10 @@ export async function listSalesAwaitingFulfilment(
       createdAt: true,
       platform: { select: { name: true } },
       buyer: { select: { name: true } },
-      lines: { select: { price: true } },
+      lines: { select: { price: true, items: { select: { packed: true } } } },
+      trackingCode: true,
+      shippingOptionName: true,
+      ...PARCEL_IN_FORCE_SELECT,
       // Only the waiting statuses' events: a sale in flight has a handful, and its own status's
       // latest is picked below — "the latest event of all" is ambiguous when two share an instant.
       statusEvents: {
@@ -1965,6 +1971,7 @@ export async function listSalesAwaitingFulfilment(
     const entered = row.statusEvents
       .filter((e) => e.status === row.status)
       .reduce<Date | null>((max, e) => (max && max > e.changedAt ? max : e.changedAt), null);
+    const parcel = parcelInForce(row);
     return [
       {
         id: row.id,
@@ -1975,6 +1982,14 @@ export async function listSalesAwaitingFulfilment(
         buyerTotal: buyerTotal.toFixed(2),
         currency: row.currency,
         since: entered ?? row.createdAt,
+        trackingCode: row.trackingCode,
+        carrierId: parcel.carrier?.id ?? null,
+        goingBy: shipmentGoingBy({
+          sentAsDiffers: parcel.sentAsDiffers,
+          sentAsServiceName: parcel.sentAs?.name ?? null,
+          shippingOptionName: row.shippingOptionName,
+        }),
+        unpackedItemCount: row.lines.flatMap((l) => l.items).filter((i) => !i.packed).length,
       },
     ];
   });
@@ -2212,6 +2227,44 @@ const SENT_AS_SERVICE_SELECT = {
   carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
 } as const;
 
+/** What {@link parcelInForce} reads off a sale. */
+const PARCEL_IN_FORCE_SELECT = {
+  // The sale's own carrier, and the carrier of the service it is sent as for the fallback default
+  // (#491, #1909, #1923). Only the *link* is derived from either — it is a way of looking the
+  // parcel up, not a fact the sale freezes, so a carrier that moves its tracking site is corrected
+  // once and every sale it carried follows.
+  carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
+  sentAsServiceId: true,
+  sentAs: { select: SENT_AS_SERVICE_SELECT },
+  shippingOption: { select: { serviceId: true, service: { select: SENT_AS_SERVICE_SELECT } } },
+} as const;
+
+interface ServiceInForce {
+  id: string;
+  name: string;
+  carrier: { id: string; name: string; trackingUrlTemplate: string | null };
+}
+
+/**
+ * The parcel's service and carrier in force (#1923): the service the sale itself says it went by,
+ * else its option's; the carrier the sale recorded, else that service's — the **default** (#491,
+ * #1909). One reading for the sale screen and the phone (#2007).
+ */
+function parcelInForce(sale: {
+  carrier: ServiceInForce["carrier"] | null;
+  sentAsServiceId: string | null;
+  sentAs: ServiceInForce | null;
+  shippingOption: { serviceId: string | null; service: ServiceInForce | null } | null;
+}) {
+  const sentAs = sale.sentAs ?? sale.shippingOption?.service ?? null;
+  return {
+    sentAs,
+    carrier: sale.carrier ?? sentAs?.carrier ?? null,
+    sentAsDiffers:
+      sale.sentAsServiceId != null && sale.sentAsServiceId !== sale.shippingOption?.serviceId,
+  };
+}
+
 /** Full sale read model for the detail view (ADR-0013). Runs the pure allocation engine
  * (`distributeSaleShared`, #163) to resolve each line's net proceeds. */
 export async function getSaleDetail(ownerId: string, saleId: string): Promise<SaleDetail | null> {
@@ -2245,14 +2298,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
         },
       },
       trackingCode: true,
-      // The sale's own carrier, and the carrier of the service it is sent as for the fallback default
-      // (#491, #1909, #1923). Only the *link* is derived from either — it is a way of looking the
-      // parcel up, not a fact the sale freezes, so a carrier that moves its tracking site is
-      // corrected once and every sale it carried follows.
-      carrier: { select: { id: true, name: true, trackingUrlTemplate: true } },
-      sentAsServiceId: true,
-      sentAs: { select: SENT_AS_SERVICE_SELECT },
-      shippingOption: { select: { serviceId: true, service: { select: SENT_AS_SERVICE_SELECT } } },
+      ...PARCEL_IN_FORCE_SELECT,
       commission: true,
       status: true,
       apiReviewAt: true,
@@ -2353,10 +2399,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const buyerNetTx = gross + shared.buyerHandling - shared.commission;
   const net = buyerNetTx * rate - shippingBase;
 
-  // The service the parcel went by (#1923): the sale's own answer, else its option's.
-  const sentAs = sale.sentAs ?? sale.shippingOption?.service ?? null;
-  // What the sale said, else the carrier of the service it is sent as (#491, #1909, #1923).
-  const carrier = sale.carrier ?? sentAs?.carrier ?? null;
+  // The service the parcel went by and its carrier (#491, #1909, #1923).
+  const { sentAs, carrier, sentAsDiffers } = parcelInForce(sale);
 
   // "All packed" hint (#192): true only when the sale has copies and every one is packed. Never
   // changes the status — the detail view surfaces it as a prompt to advance to `packed`.
@@ -2386,7 +2430,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     shippingOptionName: sale.shippingOptionName,
     sentAsServiceId: sale.sentAsServiceId,
     sentAs: sentAs && { serviceId: sentAs.id, serviceName: sentAs.name, carrierName: sentAs.carrier.name },
-    sentAsDiffers: sale.sentAsServiceId != null && sale.sentAsServiceId !== sale.shippingOption?.serviceId,
+    sentAsDiffers,
     shippingCost: money(sale.shippingCost),
     shippingCurrency: sale.shippingCurrency,
     shippingBase: sale.shippingCost == null ? null : resolved.postageBase.toFixed(2),

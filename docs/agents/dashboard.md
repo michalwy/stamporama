@@ -72,7 +72,9 @@ operational dashboard*; read the ADR before changing what the screen is.
   the integration test hit), the sale's creation where there is none — oldest first. Its amount is
   **what the buyer pays**, in the sale's currency (the collector, 2026-10-11): `buyerPaidTotal` where
   that is the anchor (#205), otherwise the lines plus buyer handling — not the list's net in base
-  currency, because on an unpaid sale this is the money being waited for.
+  currency, because on an unpaid sale this is the money being waited for. The same reader, groups and
+  order feed the phone's *Sales to do* (#2007, `phone.md`), which is why it also returns each sale's
+  parcel and unpacked count.
 
 - **Incoming purchases** (#1810) — three groups in `src/lib/dashboard-incoming-rules.ts` (pure:
   group specs, row wording) filled by three providers in `dashboard.ts`. *In transit* and *Arrived,

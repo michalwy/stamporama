@@ -62,3 +62,18 @@ export function parseSaleDate(raw: string): Date | null {
   if (d.toISOString().slice(0, 10) !== trimmed) return null;
   return d;
 }
+
+/**
+ * What the parcel is going by, as the shipment step names it (#491, #1923): the service the sale
+ * says it was *sent as* when that is not its option's, else the option's snapshot name — null when
+ * the sale names neither. Shared by the desk's shipment dialog and the phone's (#2007).
+ */
+export function shipmentGoingBy(sale: {
+  sentAsDiffers: boolean;
+  sentAsServiceName: string | null;
+  shippingOptionName: string | null;
+}): string | null {
+  return sale.sentAsDiffers && sale.sentAsServiceName
+    ? sale.sentAsServiceName
+    : sale.shippingOptionName;
+}

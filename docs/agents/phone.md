@@ -52,6 +52,25 @@ desktop-only.
 - **The sign-in screen** keeps a margin from a phone's edges and shrinks its padding with the window
   (`clamp`); it is not a breakpoint, and the desk sees the card as before.
 
+## Sales to do (#2007)
+
+- **`phone/sales`** lists the Dashboard's Sales section's three status groups — the same reader
+  (`listSalesAwaitingFulfilment`), the same groups and order (`salesInStatus`), the row's wording from
+  `saleDashboardItem`. The bell's *Sold on Allegro, no sale recorded* group is not here: it is the
+  step before a sale exists, and recording a sale is the desk's. Rules in `phone-sales-rules.ts`
+  (pure); *Full app* is the Sales list.
+- **One step forward per sale** (`phoneSaleStep`): *Mark paid*, *Mark packed*, *Mark sent*. No other
+  status, no step back.
+- **The desk's writes and the desk's questions, never a copy of them**: `setSaleStatusAction`,
+  `markSaleCopiesPackedAction`, `updateSaleShipmentAction`; the questions are `asksAboutUnpackedCopies`
+  (#973) then `asksForShipment` (#491) in `sale-status.ts`, which the desk's sale screen asks through
+  too, and the shipment step's *going by* is `shipmentGoingBy` (`sale-rules.ts`). The reader works the
+  parcel out with `parcelInForce`, the one the sale screen's read uses. Asked inline in the row, not a
+  dialog.
+- **Mark paid asks nothing** — the desk's total-paid prompt (#443) is skippable, and the phone skips
+  it, since the issue settled that *sent* is the one step that takes input and the amounts stay at the
+  desk (decided in writing #2007).
+
 ## The phone screens
 
 The first step, each its own issue (ADR-0072 §5):
