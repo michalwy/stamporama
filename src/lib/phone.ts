@@ -11,6 +11,11 @@ export function phoneHomePath(collectionSlug: string): string {
   return `/c/${collectionSlug}/phone`;
 }
 
+/** One stamp's phone screen (#2003) — what a search hit and a browsed stamp open on the phone. */
+export function phoneStampPath(collectionSlug: string, stampId: string): string {
+  return `${phoneHomePath(collectionSlug)}/stamps/${stampId}`;
+}
+
 export type PhoneStart =
   /** Exactly one collection: straight into it. */
   | { kind: "collection"; href: string }
