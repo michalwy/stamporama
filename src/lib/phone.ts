@@ -58,6 +58,16 @@ export function phoneSalesPath(collectionSlug: string): string {
   return `${phoneHomePath(collectionSlug)}/sales`;
 }
 
+/** Starting a purchase on the phone (#2006): the form. */
+export function phonePurchaseNewPath(collectionSlug: string): string {
+  return `${phoneHomePath(collectionSlug)}/purchases/new`;
+}
+
+/** A purchase started on the phone — what saving the form opens, and where #2011 adds its photos. */
+export function phonePurchasePath(collectionSlug: string, purchaseId: string): string {
+  return `${phoneHomePath(collectionSlug)}/purchases/${purchaseId}`;
+}
+
 export type PhoneStart =
   /** Exactly one collection: straight into it. */
   | { kind: "collection"; href: string }

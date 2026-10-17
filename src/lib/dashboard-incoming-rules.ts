@@ -6,10 +6,14 @@ import { intakeDocumentName, isOpeningBalance } from "./purchase-kind";
  * and how a row of each reads. `dashboard.ts` does the reads, through the functions the Intake
  * documents list and the purchase's scans card read through.
  *
+ * - **Started on the phone** (#2006) — purchases the phone started that the collector has not yet
+ *   said *Done at the desk* to. First, being the step before any other: the parcel is still in the
+ *   collector's bag.
  * - **In transit** — purchase orders on their way.
  * - **Arrived, to sort** — documents in hand with a lot still open: an arrived purchase, and an
  *   opening balance in progress, which has no delivery status and is listed here only while its
- *   lots are open.
+ *   lots are open. A purchase still marked *started on the phone* is left to the group above, so
+ *   one parcel is never two rows; once *Done at the desk*, it is listed here while a lot is open.
  * - **Scans to cut** — uploaded card scans nothing has been cut from yet: the cards offering
  *   *Review the cut*. Not the bell's: #1675 took them out of the notification centre, so this group
  *   reads the cards' own rule.
@@ -20,6 +24,8 @@ import { intakeDocumentName, isOpeningBalance } from "./purchase-kind";
  */
 
 export const INCOMING_GROUPS = {
+  /** No list filter names this set; the purchase list marks each of its rows. */
+  startedOnPhone: { id: "incoming-started-on-phone", title: "Started on the phone, to complete", href: "purchases" },
   inTransit: { id: "incoming-in-transit", title: "In transit", href: "purchases?status=in_transit" },
   /**
    * The *Arrived* filter is the nearest the list has to this set — chosen by the collector on
@@ -43,6 +49,7 @@ export interface IncomingPurchaseRow {
   currency: string;
   total: string | null;
   statusChangedAt: string;
+  toCompleteSince: string | null;
 }
 
 /** How a document is numbered on a line that names it — the notification centre's wording. */
@@ -65,6 +72,11 @@ export function incomingPurchaseItem(p: IncomingPurchaseRow): DashboardItem {
     at: p.statusChangedAt,
     href: `purchases/${p.id}`,
   };
+}
+
+/** A purchase started on the phone (#2006): the same row, aged from when the phone started it. */
+export function phoneStartedPurchaseItem(p: IncomingPurchaseRow): DashboardItem {
+  return { ...incomingPurchaseItem(p), at: p.toCompleteSince ?? p.statusChangedAt };
 }
 
 /** The fields of a sheet waiting to be cut that its row reads. */

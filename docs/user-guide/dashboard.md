@@ -46,8 +46,12 @@ filtered to that status.
 
 ## Incoming purchases
 
-Three groups, in the order a parcel goes through them:
+Four groups, in the order a parcel goes through them:
 
+- **Started on the phone, to complete** — purchases you [started on the phone](phone.md#starting-a-purchase)
+  and have not yet marked **Done at the desk**. They are listed here and not again under *Arrived, to
+  sort*; once done, a purchase with an open lot moves there. Its age is counted from when the phone
+  started it.
 - **In transit** — purchase orders marked *In transit*.
 - **Arrived, to sort** — orders marked *Arrived* that still have an open lot, and opening balances
   still in progress with an open lot. Once every lot is closed — or the document is marked

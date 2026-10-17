@@ -26,8 +26,15 @@ import {
   incomingGroup,
   incomingPurchaseItem,
   incomingSheetItem,
+  phoneStartedPurchaseItem,
 } from "./dashboard-incoming-rules";
-import { countPurchases, listPurchasesPaginated, type PurchaseListFilters } from "./purchases";
+import {
+  countPurchases,
+  listPurchasesPaginated,
+  type PurchaseListFilters,
+  type PurchaseListItem,
+  type PurchaseSortBy,
+} from "./purchases";
 import { listSheetsToCut } from "./scan-sheets";
 import {
   offersNeedingActionForDashboard,
@@ -126,33 +133,51 @@ const salesInFlight: DashboardProvider = async ({ ownerId, collectionId }) =>
   salesDashboardGroups(await listSalesAwaitingFulfilment(ownerId, collectionId));
 
 /**
- * Incoming purchases (#1810): orders in transit and documents arrived with lots still open, read
- * through the Intake documents list's own reader — oldest in its state first — and the scans nothing
- * has been cut from yet, read by the scans card's own rule. Three groups, one provider each, so the
- * section is the order the parcel goes through: on its way, on the desk, on the scanner.
+ * Incoming purchases (#1810): purchases started on the phone and not yet completed at the desk
+ * (#2006), orders in transit and documents arrived with lots still open, read through the Intake
+ * documents list's own reader — oldest in its state first — and the scans nothing has been cut from
+ * yet, read by the scans card's own rule. Four groups, one provider each, so the section is the order
+ * the parcel goes through: in the bag, on its way, on the desk, on the scanner.
  */
 async function purchaseGroup(
   ctx: DashboardContext,
   spec: { id: string; title: string; href: string },
-  filters: PurchaseListFilters
+  filters: PurchaseListFilters,
+  row: (p: PurchaseListItem) => DashboardItem = incomingPurchaseItem,
+  sortBy: PurchaseSortBy = "statusChangedAt"
 ): Promise<DashboardGroup[]> {
   const [page, count] = await Promise.all([
     listPurchasesPaginated(ctx.ownerId, ctx.collectionId, {
       ...filters,
-      sortBy: "statusChangedAt",
+      sortBy,
       sortDir: "asc",
       pageSize: DASHBOARD_ROW_LIMIT,
     }),
     countPurchases(ctx.ownerId, ctx.collectionId, filters),
   ]);
-  return [incomingGroup(spec, count, page.items.map(incomingPurchaseItem))];
+  return [incomingGroup(spec, count, page.items.map((p) => row(p)))];
 }
+
+/** Started on the phone (#2006), oldest first by when the phone started it. */
+const startedOnPhoneProvider: DashboardProvider = (ctx) =>
+  purchaseGroup(
+    ctx,
+    INCOMING_GROUPS.startedOnPhone,
+    { toComplete: true },
+    phoneStartedPurchaseItem,
+    "toCompleteSince"
+  );
 
 const inTransitProvider: DashboardProvider = (ctx) =>
   purchaseGroup(ctx, INCOMING_GROUPS.inTransit, { status: "in_transit" });
 
 const arrivedToSortProvider: DashboardProvider = (ctx) =>
-  purchaseGroup(ctx, INCOMING_GROUPS.arrivedToSort, { inProgress: true, withOpenLots: true });
+  purchaseGroup(ctx, INCOMING_GROUPS.arrivedToSort, {
+    inProgress: true,
+    withOpenLots: true,
+    // Still marked started on the phone: listed in the group above, not twice (#2006).
+    toComplete: false,
+  });
 
 const scansToCutProvider: DashboardProvider = async ({ ownerId, collectionId }) => {
   const { total, sheets } = await listSheetsToCut(ownerId, collectionId, DASHBOARD_ROW_LIMIT);
@@ -314,7 +339,12 @@ const tradeShippingGroups: DashboardProvider = ({ ownerId, collectionId }) =>
 
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
   sales: [platformSales, salesInFlight],
-  "incoming-purchases": [inTransitProvider, arrivedToSortProvider, scansToCutProvider],
+  "incoming-purchases": [
+    startedOnPhoneProvider,
+    inTransitProvider,
+    arrivedToSortProvider,
+    scansToCutProvider,
+  ],
   offers: [offersToHandleProvider],
   auctions: [auctionWindowsProvider, wonNotPurchasedProvider],
   trades: [tradeShippingGroups],
