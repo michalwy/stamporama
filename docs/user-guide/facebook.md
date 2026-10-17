@@ -492,7 +492,9 @@ Above the posts, **Not in a post yet** lists the Facebook offers being prepared 
 post — each one linking to its offer — so the screen shows the whole of Facebook, posted or not. Each
 gets its post when you publish it alone, or joins one with **Post together** or **Add to post…** on the
 **Offers** screen. The group filter narrows it too, **Being prepared** and **Ready to post** narrow it to
-offers in that state, and it is hidden under the other stages and **No title**.
+offers in that state, and it is hidden under the other stages and **No title**. It starts folded to one
+line — **Not in a post yet · 68** — so the posts follow straight beneath; click it to open the list and
+again to fold it. The screen remembers which way you left it, in this browser.
 
 Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · Generalgouvernement
 1940–44 · lot 3 of 5** and
