@@ -138,6 +138,25 @@ desktop-only.
 - Afterwards the phone goes to **Sales to do** (`phoneSalesPath`), where the sale waits for payment —
   its further steps are #2007's.
 
+## A Facebook group auction (#2010)
+
+- **The desk card's *Bidding*, on the offer screen above *Sell***: `PhoneOfferBidding`
+  (`phone/offers/[offerId]/phone-offer-bidding.tsx`), shown while `PhoneOffer.bidding` is set. When
+  it is set is **one rule for both screens**, `facebookBidding` (`src/lib/facebook-bidding-rules.ts`,
+  pure, unit-tested): an auction, `active` or `paused` — the caller has checked the group — closed once
+  `endsAt` has passed, *has a bid* off a non-zero price. The desk's `OfferFacebookCard` was rewired to
+  it, and the button's words (`recordBidLabel`) and the closed line's advice (`FACEBOOK_CLOSED_ADVICE`)
+  are shared with it.
+- **The write is the desk card's**, `patchOfferAction(…, "price")`, so the bid is the offer's price
+  dated by `priceCheckedAt` (#1545) and the desk cannot tell where it was typed. `closed` is decided
+  in `getPhoneOffer` at the read, so the server render and hydration agree; the relative times
+  (*closes in*, *recorded … ago*) are the phone's clock and locale, drawn after mount (`useHydrated`).
+  *Closes in …* is a line the desk card does not have — the desk shows the closing time on the
+  offer's header and rows, the phone screen nowhere else.
+- **Closing is the screen's existing *Sell* (#2009) and *Withdraw* (#2008)**, as #1777 made it at the
+  desk — nothing of its own. `PhoneOfferSell` is keyed on the offer's price, so a bid just recorded
+  becomes the price *Sell* starts at (`phoneSalePriceDefault`).
+
 ## Start a purchase (#2006)
 
 - **What the phone writes** (decided with the collector on 2026-10-17): a real purchase through

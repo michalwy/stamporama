@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
-import { getOfferDetail } from "./offers";
+import { getOfferDetail, type OfferDetail } from "./offers";
 import { readOfferUploadPlan } from "./offer-photo-generation";
 import { normalizeRole, sortPhotos } from "./photos";
 import { createSaleWithLines, listSellableOffers } from "./sales";
@@ -8,6 +8,7 @@ import { resolveSaleHeader } from "./sale-header-input";
 import { parsePrice } from "./sale-rules";
 import { facebookOfferSaleCurrency } from "./facebook-sales";
 import { phoneSaleLine } from "./phone-offer-sale";
+import { facebookBidding, type FacebookBidding } from "./facebook-bidding-rules";
 import type { OfferListingType, OfferState } from "./offer-rules";
 
 /**
@@ -40,6 +41,10 @@ export interface PhoneOffer {
   setsLeft: number;
   /** A Facebook offer's buyer is named by their Facebook profile (#1777), as at the desk. */
   buyerByFacebookProfile: boolean;
+  /** A Facebook group auction's bidding while it is up (#2010) — the desk card's rule, `closed` as of
+   *  the read — with when it closes and when the standing bid was recorded (ISO-8601). Null on every
+   *  other offer, and on an auction not up in its group. */
+  bidding: (FacebookBidding & { endsAt: string | null; priceCheckedAt: string | null }) | null;
 }
 
 /** The owner's offer in this collection for the phone, or null when it is not theirs or not here. */
@@ -71,7 +76,23 @@ export async function getPhoneOffer(
       detail.state === "pending" && !!detail.facebook?.post && detail.facebook.lots.length > 1,
     setsLeft: sellable?.sets.length ?? 0,
     buyerByFacebookProfile: !!detail.facebookGroupId,
+    bidding: readPhoneBidding(detail, new Date()),
   };
+}
+
+function readPhoneBidding(
+  detail: OfferDetail,
+  now: Date
+): PhoneOffer["bidding"] {
+  if (!detail.facebookGroupId) return null;
+  const bidding = facebookBidding(detail, now);
+  return (
+    bidding && {
+      ...bidding,
+      endsAt: detail.endsAt?.toISOString() ?? null,
+      priceCheckedAt: detail.priceCheckedAt?.toISOString() ?? null,
+    }
+  );
 }
 
 /** Who bought and for how much, as the phone's *Sell* form sends it (#2009). */

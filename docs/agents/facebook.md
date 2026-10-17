@@ -587,6 +587,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `patchOfferAction(…, "price")`, so `priceCheckedAt` dates it by #449's existing rule and nothing
   raises drift (#542 keeps an auction's current price outside it). The offers list carries
   `priceCheckedAt` and draws the age beside a running auction's figure, in every platform's row.
+  When the card shows the bidding and calls it closed is `facebookBidding`
+  (`facebook-bidding-rules.ts`, pure), shared with the phone offer screen, which records the bid
+  through the same action (#2010, `phone.md`).
 
 - **A closed Facebook auction asks for its result with or without a bid** — `auctionNeedsResolution`
   takes `facebook` and skips the *somebody bid* part for it, and `endedAuctionWhere` adds

@@ -20,6 +20,7 @@ import { useInvalidateOffers } from "@/app/c/[collectionSlug]/offers/use-offers-
 import { withdrawOfferMessage } from "@/app/c/[collectionSlug]/offers/withdraw-offer-message";
 import { PhoneOfferPrice } from "../phone-offer-price";
 import { PhoneOfferSell } from "./phone-offer-sell";
+import { PhoneOfferBidding } from "./phone-offer-bidding";
 
 const MOVE: Record<PhoneOfferMove, { label: string; icon: IconName }> = {
   pause: { label: "Pause", icon: "pause" },
@@ -36,6 +37,10 @@ const MOVE: Record<PhoneOfferMove, { label: string; icon: IconName }> = {
  *
  * *Sell* (#2009) comes first, while the offer has a set left to sell: it is the move the screen is
  * opened for at a fair or on a quick buy.
+ *
+ * A Facebook group auction that is up shows its bidding above them (#2010): the bid recorded as it
+ * comes in, and once it has closed, the winning bid, after which *Sell* closes it to the winner or
+ * *Withdraw* takes it down when nobody bid.
  */
 export function PhoneOfferPanel({
   collectionId,
@@ -124,8 +129,16 @@ export function PhoneOfferPanel({
         </div>
       </div>
 
+      {offer.bidding && <PhoneOfferBidding collectionId={collectionId} offer={offer} bidding={offer.bidding} />}
+
+      {/* Keyed on the price, so a bid recorded above becomes the price *Sell* offers. */}
       {offer.setsLeft > 0 && (
-        <PhoneOfferSell collectionId={collectionId} collectionSlug={collectionSlug} offer={offer} />
+        <PhoneOfferSell
+          key={offer.price}
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          offer={offer}
+        />
       )}
 
       {moves.length > 0 && (

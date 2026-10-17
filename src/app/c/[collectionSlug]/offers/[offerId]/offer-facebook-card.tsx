@@ -11,6 +11,7 @@ import {
   isFacebookLotPosted,
 } from "@/lib/facebook-post-rules";
 import { isAuctionListing } from "@/lib/offer-rules";
+import { FACEBOOK_CLOSED_ADVICE, facebookBidding, recordBidLabel } from "@/lib/facebook-bidding-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
@@ -176,14 +177,13 @@ export function OfferFacebookCard({
   // Posted: once the offer has gone up — anything past Ready.
   const posted = isFacebookLotPosted(self.state);
 
-  // Up in the group: the offer is running — an auction may have closed and wait for its result.
-  const up = self.state === "active" || self.state === "paused";
   // Waiting for the group's administrator (#1778): nobody bids on a post nobody can see, so the
   // bidding stays hidden; the link is the pending post's, and says so.
   const pendingApproval = self.state === "pending";
   const now = new Date();
-  const closed = auction && up && self.endsAt !== null && new Date(self.endsAt).getTime() <= now.getTime();
-  const hasBid = self.price !== "0.00";
+  // The bidding while the auction is up in the group — it may have closed and wait for its result.
+  // The rule is shared with the phone offer screen (#2010).
+  const bidding = facebookBidding(self, now);
 
   function run(task: () => Promise<{ status: "success" } | { status: "error"; message: string }>) {
     setError(null);
@@ -418,16 +418,16 @@ export function OfferFacebookCard({
 
       {/* The bidding, typed by hand while it runs (#1545). Once it has closed the winning bid can still
           be typed before selling — the figure *Sell* puts on the sale (#1777). */}
-      {up && auction && (
+      {bidding && (
         <div style={{ marginTop: "0.875rem" }}>
           <p style={SECTION_LABEL}>Bidding</p>
-          {closed && (
+          {bidding.closed && (
             <p style={{ ...MUTED, margin: "0 0 0.375rem", color: "var(--color-warning)", fontWeight: 600 }}>
-              Closed {formatRelative(self.endsAt!, now)} — sell it to the winner, or withdraw it if nobody bid.
+              Closed {formatRelative(self.endsAt!, now)} — {FACEBOOK_CLOSED_ADVICE}
             </p>
           )}
           <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
-            {hasBid ? (
+            {bidding.hasBid ? (
               <>
                 Highest bid <strong style={{ color: "var(--color-text-primary)" }}>{self.price} {self.currency}</strong>
                 {self.priceCheckedAt && (
@@ -454,7 +454,7 @@ export function OfferFacebookCard({
               aria-label="Highest bid"
             />
             <DialogSecondaryButton type="button" disabled={isPending || !bid.trim()} onClick={recordBid}>
-              {closed ? "Record winning bid" : "Record bid"}
+              {recordBidLabel(bidding.closed)}
             </DialogSecondaryButton>
           </div>
         </div>

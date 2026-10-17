@@ -662,6 +662,10 @@ under the post and choose **Record bid**. The card shows it with when you record
 typed days ago looks as old as it is. Recording a bid is the same as editing the offer's price in
 place; it changes nothing about the post itself.
 
+Away from the desk, record it on the phone: the auction's offer screen there has the same
+**Bidding** part — see [Stamporama on a phone](phone.md#a-facebook-group-auction). A bid recorded on
+the phone is the same bid, and the desk shows it exactly as if you had typed it there.
+
 ## When an auction ends
 
 Once an auction's closing time has passed, it asks for its result: its row on the **Offers** screen
@@ -678,6 +682,9 @@ Answer it as on any platform:
   them again is a new offer.
 
 In a post with several lots, each lot has its own result, recorded on its own offer.
+
+Both can be done from the phone too, on the auction's offer screen: **Sell…** to the winner, at the
+winning bid, or **Withdraw…**.
 
 ## Selling a Facebook offer
 
