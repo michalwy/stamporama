@@ -125,6 +125,7 @@ import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
 import { PurchasePhoneCard } from "./purchase-phone-card";
+import { PurchasePhotosCard } from "./purchase-photos-card";
 import type { NotedStamp } from "@/lib/phone-purchase-rules";
 import { PurchaseSuppliesCard } from "./purchase-supplies-card";
 import type { PackingSupplyData } from "@/lib/packing-supplies";
@@ -360,6 +361,8 @@ interface PurchaseDetailPanelProps {
   packingSupplies: PackingSupplyData[];
   /** The stamps the phone noted as bought when it started this purchase (#2006); empty otherwise. */
   notedStamps: NotedStamp[];
+  /** The purchase's photos (#2011), in the order they were added. */
+  photoIds: string[];
 }
 
 export function PurchaseDetailPanel({
@@ -375,6 +378,7 @@ export function PurchaseDetailPanel({
   certificateStatuses,
   packingSupplies,
   notedStamps,
+  photoIds,
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
   // Storage locations, re-read client-side rather than taken from the server render (#624). Filing
@@ -398,6 +402,8 @@ export function PurchaseDetailPanel({
   // The order's other lines (#1907): an Expenses or Packing supplies card is drawn only once it has
   // one, so adding the first is the header's `⋮`, and the dialog it opens is held here.
   const [addingExpense, setAddingExpense] = useState(false);
+  // The Photos card's file input, which the header's `⋮ → Add photos` opens (#2011).
+  const photoInput = useRef<HTMLInputElement>(null);
   const [addingSupplies, setAddingSupplies] = useState(false);
   const [arriving, setArriving] = useState(false);
   // Marking the order completed with work still left on it (#1449): the dialog that says what.
@@ -910,6 +916,16 @@ export function PurchaseDetailPanel({
             },
           },
         ]),
+    {
+      key: "add-photos",
+      label: "Add photos",
+      icon: "purchasePhotos" as const,
+      disabled: isPending,
+      onSelect: () => {
+        setError(undefined);
+        photoInput.current?.click();
+      },
+    },
     ...(packingSupplies.length > 0
       ? [
           {
@@ -1276,6 +1292,19 @@ export function PurchaseDetailPanel({
         notedStamps={notedStamps}
         isPending={isPending}
         run={run}
+      />
+
+      {/* What was bought, as a whole (#2011) — mostly taken on the phone at the fair. Drawn once it
+          has a photo; mounted regardless, because the header's *Add photos* opens its file input. */}
+      <PurchasePhotosCard
+        collectionId={collectionId}
+        purchaseId={purchase.id}
+        photoIds={photoIds}
+        inputRef={photoInput}
+        isPending={isPending}
+        error={error}
+        run={run}
+        clearError={() => setError(undefined)}
       />
 
       {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.

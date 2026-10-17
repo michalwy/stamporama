@@ -259,6 +259,20 @@ the lot or marking the order *Completed* leaves it on, so a purchase is never ta
 before you say so. The stamps you noted stay on the card afterwards, as a record of what the parcel
 held; they never become copies by themselves.
 
+## Photos of a purchase
+
+A purchase can carry **photos of what was bought, as a whole** — a stockbook, a set, a box of covers —
+so you can tell one parcel from another. They are usually taken on the phone when you buy
+([Starting a purchase](phone.md#starting-a-purchase)), but any purchase can have them. They are not
+photos of single stamps: a copy gets its own photos during intake, and a purchase's photos never
+become a copy's.
+
+Once a purchase has a photo, a **Photos** card on its screen shows them. Hover one to see it larger,
+click it to open it full size and step through the others. **Add photos** on the card — or the header's
+**⋮ → Add photos** while it has none — picks pictures from your computer (JPEG, PNG or WebP), as
+many as you like. To remove one, open it and click **Remove photo**; the photo is deleted, and nothing
+else about the purchase changes.
+
 ## Editing and deleting
 
 Use the **⋮** menu on a row to **Edit** or **Delete**.
@@ -266,8 +280,8 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
 - **Edit** reopens the header dialog. It never touches a purchase's lots or expenses —
   those are managed during intake. The order's own screen carries the same **Edit header**
   button, so you do not have to come back here to fix a date or add the postage.
-- **Delete** removes the purchase along with any lots and expenses (and the stamps noted on the
-  phone, for one started there). This cannot be undone.
+- **Delete** removes the purchase along with any lots and expenses, its photos, and the stamps noted
+  on the phone for one started there. This cannot be undone.
   Once lots have been resolved into copies (during intake), a purchase whose lots still hold
   copies cannot be deleted until those copies are detached.
 

@@ -17,6 +17,9 @@ import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { phonePurchasePath } from "@/lib/phone";
 import { PHONE_PURCHASE_STAMP_LIMIT } from "@/lib/phone-purchase-rules";
 import { phoneSearchHit, phoneSearchMiss } from "@/lib/phone-search-view";
+import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
+import { stagePurchasePhoto } from "@/app/c/[collectionSlug]/purchases/purchase-photo-upload";
+import { PhoneCameraButton } from "../phone-camera-button";
 
 /**
  * The phone's *Start a purchase* (#2006, ADR-0072): who it was bought from, what was paid and when,
@@ -26,12 +29,22 @@ import { phoneSearchHit, phoneSearchMiss } from "@/lib/phone-search-view";
  * The stamps are found with **the phone search** — the start screen's own (`searchCollection`), its
  * rows worded by `phoneSearchHit` with the held and wanted marks — and a tap adds one. The field is
  * inside the purchase's form, so Enter there searches rather than saving.
+ *
+ * **Photos of what was bought** (#2011) are taken with the phone's camera and uploaded the moment
+ * each is taken, so saving waits only for the last one; a picture taken by mistake comes off before
+ * saving. They become the purchase's photos as it is saved.
  */
 
 interface PickedStamp {
   stampId: string;
   title: string;
   numbers: string;
+}
+
+interface TakenPhoto {
+  uploadId: string;
+  /** The picture on this phone, shown until the purchase has it. */
+  previewUrl: string;
 }
 
 interface PhonePurchaseFormProps {
@@ -56,6 +69,9 @@ export function PhonePurchaseForm({
   const [picked, setPicked] = useState<PickedStamp[]>([]);
   const [searchText, setSearchText] = useState("");
   const [query, setQuery] = useState("");
+  const [photos, setPhotos] = useState<TakenPhoto[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const search = useQuery<CollectionSearchResult>({
     queryKey: ["phone", collectionId, "purchaseStampSearch", query] as const,
@@ -75,16 +91,35 @@ export function PhonePurchaseForm({
     setQuery(searchText.trim());
   }
 
+  async function takePhoto(file: File) {
+    setPhotoError(null);
+    setUploading((n) => n + 1);
+    try {
+      const staged = await stagePurchasePhoto(collectionId, file);
+      setPhotos((all) => [...all, { uploadId: staged.id, previewUrl: URL.createObjectURL(file) }]);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "The photo could not be uploaded.");
+    } finally {
+      setUploading((n) => n - 1);
+    }
+  }
+
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (uploading > 0) return;
     setError(null);
     const formData = new FormData(e.currentTarget);
     for (const s of picked) formData.append("stampId", s.stampId);
+    for (const p of photos) formData.append("photoUploadId", p.uploadId);
     startTransition(async () => {
       const result = await startPhonePurchaseAction(collectionId, formData);
       if (result.status === "success") {
         invalidateList(collectionId);
-        toast({ message: "Purchase started — complete it at the desk" });
+        toast(
+          result.warning
+            ? { message: result.warning, tone: "error" }
+            : { message: "Purchase started — complete it at the desk" }
+        );
         router.push(phonePurchasePath(collectionSlug, result.id));
       } else {
         setError(result.message);
@@ -241,14 +276,49 @@ export function PhonePurchaseForm({
             })}
       </section>
 
+      <section style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <span style={LABEL}>
+          Photos <span style={OPTIONAL}>optional</span>
+        </span>
+        {photos.length > 0 && (
+          <div style={PHOTO_GRID}>
+            {photos.map((p) => (
+              <div key={p.uploadId} style={{ position: "relative" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- a picture still on this phone */}
+                <img src={p.previewUrl} alt="Photo taken" style={PHOTO} />
+                <button
+                  type="button"
+                  aria-label="Take this photo off"
+                  disabled={isPending}
+                  onClick={() => {
+                    URL.revokeObjectURL(p.previewUrl);
+                    setPhotos((all) => all.filter((q) => q.uploadId !== p.uploadId));
+                  }}
+                  style={PHOTO_OFF}
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {uploading > 0 && <p style={NOTE}>Uploading {uploading === 1 ? "the photo" : `${uploading} photos`}…</p>}
+        {photoError && <p style={ERROR}>{photoError}</p>}
+        <PhoneCameraButton
+          label={photos.length > 0 ? "Take another photo" : "Take a photo"}
+          disabled={isPending}
+          onPicture={(file) => void takePhoto(file)}
+        />
+      </section>
+
       {error && (
         <p role="alert" style={ERROR}>
           {error}
         </p>
       )}
 
-      <button type="submit" disabled={isPending} style={PRIMARY}>
-        {isPending ? "Saving…" : "Start the purchase"}
+      <button type="submit" disabled={isPending || uploading > 0} style={PRIMARY}>
+        {isPending ? "Saving…" : uploading > 0 ? "Uploading the photos…" : "Start the purchase"}
       </button>
       <p style={NOTE}>
         The lots, the copies and the cost split are done at the desk, where it is marked to complete.
@@ -300,6 +370,32 @@ const ICON_BUTTON: CSSProperties = {
   minWidth: PHONE_TAP_TARGET,
   background: "transparent",
   color: "var(--color-text-secondary)",
+};
+
+const PHOTO_GRID: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "0.5rem",
+};
+
+const PHOTO: CSSProperties = {
+  display: "block",
+  width: "100%",
+  aspectRatio: "1",
+  objectFit: THUMB_OBJECT_FIT,
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-muted)",
+};
+
+const PHOTO_OFF: CSSProperties = {
+  ...phoneButton,
+  position: "absolute",
+  top: 0,
+  right: 0,
+  minWidth: PHONE_TAP_TARGET,
+  padding: 0,
+  background: "rgba(0,0,0,0.55)",
+  color: "#fff",
 };
 
 const ELLIPSIS: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };

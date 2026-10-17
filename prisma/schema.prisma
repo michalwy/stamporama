@@ -3809,6 +3809,9 @@ model Photo {
   /** Fourth owner (#566): a scan tile, holding its front/back crop before any copy exists to hang
    * it on. #567 moves the images onto the new copy by reassigning this column to `itemId`. */
   tileId         String?
+  /** Fifth owner (#2011): a purchase — a picture of what was bought as a whole (a stockbook, a set,
+   * a box), taken on the phone when it is bought. No role: a plain list in `sortOrder`. */
+  purchaseId     String?
   /** The card scan this picture was cut from (#1915) — a tile's front or back crop, and the same
    * picture after it has moved onto a copy. Null on everything not cut from a scan, and once the
    * scan's batch is deleted. Kept apart from `tileId` because ownership moves and provenance does
@@ -3847,6 +3850,7 @@ model Photo {
   stamp Stamp? @relation(fields: [stampId], references: [id], onDelete: Cascade)
   offer Offer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
   tile  ScanTile? @relation(fields: [tileId], references: [id], onDelete: Cascade)
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   /** `SetNull`: deleting a batch leaves its copies' pictures exactly as they are (#1218), and only
    * the record of where they were cut from goes with the scan. */
   scanSheet ScanSheet? @relation(fields: [scanSheetId], references: [id], onDelete: SetNull)
@@ -3866,6 +3870,7 @@ model Photo {
   @@index([stampId])
   @@index([offerId])
   @@index([tileId])
+  @@index([purchaseId])
   @@index([scanSheetId])
   @@map("photo")
 }
@@ -4024,6 +4029,8 @@ model Purchase {
   trade       Trade?            @relation("TradePurchase", fields: [tradeId], references: [id], onDelete: Restrict)
   // The stamps the phone noted as bought when it started this purchase (#2006).
   notedStamps PurchaseNotedStamp[]
+  // Pictures of what was bought, as a whole (#2011) — taken on the phone, kept on the purchase.
+  photos Photo[]
 
   @@unique([collectionId, purchaseNo])
   @@index([collectionId])
