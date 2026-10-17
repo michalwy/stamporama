@@ -624,6 +624,7 @@ export async function startPurchaseOnPhone(
   }
 
   const header = await resolveHeader(collectionId, col.baseCurrency, "purchase", {
+    contactId: input.sellerContactId,
     contactName: input.sellerName,
     purchasedAt: input.purchasedAt,
     currency: input.currency,

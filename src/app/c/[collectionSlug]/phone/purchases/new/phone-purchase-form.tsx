@@ -8,6 +8,7 @@ import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
+import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { Icon } from "@/app/icons";
 import { PHONE_TAP_TARGET, phoneButton, phoneRow } from "@/app/phone-screen";
 import { useToast } from "@/app/toast-provider";
@@ -39,7 +40,6 @@ interface PhonePurchaseFormProps {
   baseCurrency: string;
   /** `yyyy-mm-dd`, the server's — the date's default and its latest. */
   today: string;
-  sellerNames: string[];
 }
 
 export function PhonePurchaseForm({
@@ -47,7 +47,6 @@ export function PhonePurchaseForm({
   collectionSlug,
   baseCurrency,
   today,
-  sellerNames,
 }: PhonePurchaseFormProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -95,23 +94,21 @@ export function PhonePurchaseForm({
 
   return (
     <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <label style={LABEL}>
-        Bought from
-        <TextInput
-          name="sellerName"
-          list="phone-purchase-sellers"
-          required
+      <div style={LABEL}>
+        <label htmlFor="phone-purchase-seller">Bought from</label>
+        {/* The desk's own seller picker, at a thumb's height: a picked seller by id, a typed name
+            found among the contacts or saved as a new seller. */}
+        <PurchaseContactSelect
+          collectionId={collectionId}
+          idFieldName="sellerContactId"
+          nameFieldName="sellerName"
+          role="seller"
+          inputId="phone-purchase-seller"
+          placeholder="Search or add a seller…"
           disabled={isPending}
-          autoCapitalize="words"
-          {...NO_AUTOFILL}
-          style={FIELD}
+          inputStyle={FIELD}
         />
-      </label>
-      <datalist id="phone-purchase-sellers">
-        {sellerNames.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
+      </div>
 
       <div style={{ display: "flex", gap: "0.5rem" }}>
         <label style={{ ...LABEL, flex: 1, minWidth: 0 }}>

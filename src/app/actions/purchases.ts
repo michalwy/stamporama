@@ -599,6 +599,7 @@ export async function startPhonePurchaseAction(
   const session = await getSession();
   const read = readPhonePurchaseFields(
     {
+      sellerContactId: str(formData, "sellerContactId"),
       sellerName: str(formData, "sellerName"),
       amount: str(formData, "amount"),
       currency: str(formData, "currency"),

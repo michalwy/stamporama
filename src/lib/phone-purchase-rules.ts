@@ -22,6 +22,8 @@ export const PHONE_PURCHASE_STAMP_LIMIT = 50;
 
 /** What the phone's form sends, as strings off the form. */
 export interface PhonePurchaseFields {
+  /** The picked seller's id, empty when the name was typed rather than picked. */
+  sellerContactId: string;
   sellerName: string;
   amount: string;
   currency: string;
@@ -32,7 +34,9 @@ export interface PhonePurchaseFields {
 
 /** The form read and checked: what `startPurchaseOnPhone` writes. */
 export interface PhonePurchaseInput {
-  /** An existing contact by its name, or the name of a new one (`resolvePurchaseContact`). */
+  /** The picked seller, or null when the name was typed. */
+  sellerContactId: string | null;
+  /** The seller's name: an existing contact by its name, or a new one (`resolvePurchaseContact`). */
   sellerName: string;
   /** The amount paid, two decimals — the one lot's price. */
   amount: number;
@@ -80,6 +84,7 @@ export function readPhonePurchaseFields(
 
   return {
     input: {
+      sellerContactId: fields.sellerContactId.trim() || null,
       sellerName,
       amount: Number(roundAmount(amount)),
       currency,
