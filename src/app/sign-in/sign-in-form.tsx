@@ -44,12 +44,18 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
   }
 
   return (
+    // Usable at a phone's width too (#2002, ADR-0072): the home-screen icon lands here when the
+    // phone is signed out, so the card keeps a margin from the screen's edges and gives up some of its
+    // own padding on a narrow screen. The one sizing in it that reads the window, and it is not a
+    // breakpoint — the desk sees the card as it did.
     <main
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        padding: "1rem",
+        boxSizing: "border-box",
         background: "var(--color-bg-page)",
       }}
     >
@@ -58,9 +64,12 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
           background: "var(--color-bg-elevated)",
           border: "1px solid var(--color-border)",
           borderRadius: "0.75rem",
-          padding: "2.5rem",
+          padding: "clamp(1.5rem, 7vw, 2.5rem)",
+          // Border-box, so the card can never be wider than the screen it is on; 29rem is the 24rem
+          // of content it always had plus its padding on the desk.
+          boxSizing: "border-box",
           width: "100%",
-          maxWidth: "24rem",
+          maxWidth: "29rem",
           boxShadow: "0 1px 4px 0 rgb(0 0 0 / 0.06)",
         }}
       >

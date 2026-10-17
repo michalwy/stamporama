@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { signInPathFrom } from "@/lib/sign-in-return";
+import { phoneHomePath } from "@/lib/phone";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
 import { QuickJumpBox } from "./quick-jump-box";
@@ -798,6 +799,14 @@ export function CollectionSidebar({
           icon={<Icon name="settings" />}
           label="Settings"
           active={isActive(`${base}/settings`)}
+        />
+        {/* The way to the phone start screen (#2002, ADR-0072 §3), for a desk page opened on a phone
+            — there is no redirect by device. Never `active`: a phone screen has no sidebar. */}
+        <NavItem
+          href={phoneHomePath(collectionSlug)}
+          icon={<Icon name="phone" />}
+          label="Phone screens"
+          active={false}
         />
         <div style={{ padding: "0.375rem 0.75rem" }}>
           <ThemeToggle />

@@ -124,6 +124,8 @@ import {
   Settings,
   ShoppingBag,
   ShoppingCart,
+  Smartphone,
+  Monitor,
   SquareDashedMousePointer,
   Highlighter,
   SquarePlus,
@@ -197,6 +199,10 @@ const GLYPHS = {
   settings: Settings,
   signOut: LogOut,
   collections: Boxes,
+  /** The phone screens (#2002, ADR-0072) — the full app's way to the phone start screen. */
+  phone: Smartphone,
+  /** The full app, seen from a phone screen (#2002) — the way back to the desk's screens. */
+  desk: Monitor,
   notifications: Bell,
 
   // The everyday verbs.

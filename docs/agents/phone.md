@@ -25,6 +25,33 @@ desktop-only.
 - **The screen-frame rule (`Screen`, `SCREEN_CAPS`) is a desktop rule.** Phone pages use a phone frame
   of their own, and the screen-frame test knows the difference (#2002).
 
+## The shell (#2002)
+
+- **`/phone`** (`src/app/phone/page.tsx`) is the manifest's `start_url`. `phoneStart` (`src/lib/phone.ts`,
+  pure, unit-tested) decides it: one collection → its phone start, several → a phone list of them,
+  none → a line pointing at the full app. **No collection is remembered** — with several the list is
+  one tap. Signed out, it goes to `/sign-in?next=/phone` like any screen (#1176), so signing in on
+  the phone lands back on the phone.
+- **A collection's phone start** is `/c/[collectionSlug]/phone` (`phoneHomePath`). Its rows come from
+  `PHONE_ENTRIES` (`phone/phone-entries.ts`), **empty until the first phone screen lands** — each
+  screen in the table below adds its own row. *Other collections* shows only when there are several.
+- **No sidebar on a phone screen**: the collection layout hands the sidebar to `CollectionFrame`,
+  which leaves it out when the open segment is `phone` (`useSelectedLayoutSegment`). The phone
+  screens stay inside the layout's providers and collection check — no route group, no second copy.
+- **`PhoneScreen`** (`src/app/phone-screen.tsx`) is the phone frame: `PHONE_SCREEN_WIDTH` (30rem,
+  centred when opened on a desk), a sticky header with the title and **Full app**, `fullAppHref`
+  required so every phone screen names its desk counterpart. `PHONE_TAP_TARGET` (3rem) is the floor
+  for a thumb's control; `phoneRow` is the list row. `tests/unit/screen-frame.test.ts` holds every
+  page under `phone/` and `src/app/phone/` to `PhoneScreen` and away from `Screen`.
+- **The full app's link** is *Phone screens* in the sidebar footer.
+- **The manifest** is `src/app/manifest.ts`, `scope: "/"` so *Full app* stays in the home-screen
+  window. Its icons are in `public/`: `phone-icon-192/512.png` rendered from `src/app/icon.svg`, and
+  `phone-icon-maskable-512.png` from `public/phone-icon-maskable.svg` (the mark inside Android's safe
+  zone on white) — the render command is in that file. The manifest is fetched without the session
+  cookie, so nothing in it depends on who is signed in.
+- **The sign-in screen** keeps a margin from a phone's edges and shrinks its padding with the window
+  (`clamp`); it is not a breakpoint, and the desk sees the card as before.
+
 ## The phone screens
 
 The first step, each its own issue (ADR-0072 §5):
