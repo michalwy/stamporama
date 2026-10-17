@@ -33,6 +33,7 @@ import {
 import { parseAmount, parsePrice } from "@/lib/sale-rules";
 import { assertCollectionOwner } from "@/lib/platform-category";
 import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
+import { sellPhoneOffer, type PhoneOfferSaleInput } from "@/lib/phone-offers";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
@@ -110,6 +111,23 @@ export async function createSaleAction(
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to start this sale. Please try again.");
+  }
+}
+
+/** Sell one set of an offer from the phone (#2009): a new sale to the buyer at the price, dated
+ *  today — the desk's *Sell* in one act, by the desk's rules (`sellPhoneOffer`). */
+export async function sellOfferFromPhoneAction(
+  collectionId: string,
+  offerId: string,
+  input: PhoneOfferSaleInput
+): Promise<CreateSaleActionState> {
+  const session = await getSession();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await sellPhoneOffer(session.user.id, collectionId, offerId, input, today);
+    return result.ok ? { status: "success", id: result.saleId } : { status: "error", message: result.message };
+  } catch (e) {
+    return fail(e, "Failed to record this sale. Please try again.");
   }
 }
 

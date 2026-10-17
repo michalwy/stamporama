@@ -274,14 +274,14 @@ const SELLABLE_OFFER_SELECT = {
 
 /**
  * Offers that can be recorded as sold (ADR-0013): `active` or `paused` offers in the collection,
- * optionally on one `platformId`, each expanded into its still-available sets. A set whose copies
- * have already left on an earlier sale is dropped, and an offer with no available set is omitted
- * entirely. Newest offer first.
+ * optionally on one `platformId` — or just the one `offerId`, the phone's *Sell* (#2009) — each
+ * expanded into its still-available sets. A set whose copies have already left on an earlier sale is
+ * dropped, and an offer with no available set is omitted entirely. Newest offer first.
  */
 export async function listSellableOffers(
   ownerId: string,
   collectionId: string,
-  opts: { platformId?: string } = {}
+  opts: { platformId?: string; offerId?: string } = {}
 ): Promise<SellableOffer[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -290,6 +290,7 @@ export async function listSellableOffers(
       collectionId,
       state: { in: [...SELLABLE_OFFER_STATES] },
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
+      ...(opts.offerId ? { id: opts.offerId } : {}),
     },
     orderBy: { createdAt: "desc" },
     select: SELLABLE_OFFER_SELECT,
@@ -415,8 +416,8 @@ export interface SaleLineDraft {
   itemIds: string[];
   /** The set above was **picked, not chosen** (#697): the line names it so every read keeps working,
    *  but nobody has said which physical copy goes. Written by an automatic pick — an imported
-   *  multi-quantity order (#698), a buyer's own pick (#699) — and absent (false) everywhere a person
-   *  recorded the sale, since they chose the set on the way in. */
+   *  multi-quantity order (#698), a buyer's own pick (#699), the phone's one-set *Sell* while other
+   *  sets are left (#2009) — and absent (false) everywhere a person chose the set on the way in. */
   setChoicePending?: boolean;
 }
 
@@ -1172,21 +1173,54 @@ export async function recordSaleLinesThroughApi(
     return { saleId: target.saleId, created: false };
   }
 
-  const prepared = await prepareSaleHeader(ownerId, collectionId, target.header, {
-    ...(target.offerCurrency ? { offerCurrency: target.offerCurrency } : {}),
-  });
-  const ref = { collectionId, platformId: target.header.platformId, currency: prepared.currency };
+  const saleId = await insertSaleWithLines(
+    ownerId,
+    collectionId,
+    target.header,
+    drafts,
+    target.offerCurrency ? { offerCurrency: target.offerCurrency } : {},
+    (tx, id) => markSaleWrittenByApi(tx, id, { kind: "created", actions })
+  );
+  return { saleId, created: true };
+}
+
+/**
+ * Start a sale **with** its sold sets, in one transaction (#2009) — the *Sell* dialog's *Create new
+ * sale* as one act, for the phone, where a sale left behind empty because its set was refused is a
+ * sale the collector would have to find at the desk and delete. The header and the lines pass the
+ * same guards as `createSale` and `addSaleLines`.
+ */
+export async function createSaleWithLines(
+  ownerId: string,
+  collectionId: string,
+  header: SaleHeaderInput,
+  drafts: SaleLineDraft[],
+  opts: { offerCurrency?: string } = {}
+): Promise<string> {
+  return insertSaleWithLines(ownerId, collectionId, header, drafts, opts);
+}
+
+/** A new sale and its lines in one transaction, and — for the agent API — its marker in the same one. */
+async function insertSaleWithLines(
+  ownerId: string,
+  collectionId: string,
+  header: SaleHeaderInput,
+  drafts: SaleLineDraft[],
+  opts: { offerCurrency?: string },
+  alsoInTransaction?: (tx: DbTransaction, saleId: string) => Promise<unknown>
+): Promise<string> {
+  const prepared = await prepareSaleHeader(ownerId, collectionId, header, opts);
+  const ref = { collectionId, platformId: header.platformId, currency: prepared.currency };
   assertSaleTakesLines({ status: "ordered" }, drafts, {});
   const offerIds = await checkSaleLineDrafts(ref, drafts);
-  const saleId = await refusingDoubleSale(() =>
+  return refusingDoubleSale(() =>
     prisma.$transaction(async (tx) => {
       const id = await insertSaleHeader(tx, collectionId, prepared);
       await writeSaleLines(tx, id, drafts, offerIds);
-      await markSaleWrittenByApi(tx, id, { kind: "created", actions });
+      if (alsoInTransaction) await alsoInTransaction(tx, id);
       return id;
     })
   );
-  return { saleId, created: true };
 }
 
 /** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which

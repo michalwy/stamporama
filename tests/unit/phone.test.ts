@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PHONE_START_PATH, phoneHomePath, phoneStart } from "../../src/lib/phone";
+import { PHONE_START_PATH, phoneHomePath, phoneSalesPath, phoneStart } from "../../src/lib/phone";
 import { isReturnableScreen } from "../../src/lib/sign-in-return";
 
 // Where the home-screen icon lands (#2002, ADR-0072 §3): `/phone` goes straight into the collector's
@@ -26,6 +26,7 @@ describe("phoneStart", () => {
 describe("the phone's addresses", () => {
   it("puts a collection's phone screens under its own path", () => {
     assert.equal(phoneHomePath("poland"), "/c/poland/phone");
+    assert.equal(phoneSalesPath("poland"), "/c/poland/phone/sales");
   });
 
   // Signing in on the phone has to land back on the phone, not on the desk's collections list.

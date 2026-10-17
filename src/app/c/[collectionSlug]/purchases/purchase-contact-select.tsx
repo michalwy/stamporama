@@ -36,6 +36,9 @@ interface PurchaseContactSelectProps {
    * from the collector's own bidding, and the role it gets on creation is the server's to set. */
   role?: "platform" | "seller" | "buyer";
   disabled?: boolean;
+  /** The field's style, when it is not the desk form's — the phone's *Sell* (#2009) draws it at a
+   *  thumb's height. */
+  inputStyle?: React.CSSProperties;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
    * edited to a name that has not been matched to a suggestion), the current text, and — when a
    * suggestion was picked — what that contact says about *new offers on it*. Lets a parent react
@@ -76,6 +79,7 @@ export function PurchaseContactSelect({
   placeholder,
   role,
   disabled,
+  inputStyle = INPUT_STYLE,
   onSelectionChange,
 }: PurchaseContactSelectProps) {
   const [selectedId, setSelectedId] = useState(initialContactId ?? "");
@@ -130,7 +134,7 @@ export function PurchaseContactSelect({
           })
         }
         placeholder={placeholder}
-        inputStyle={INPUT_STYLE}
+        inputStyle={inputStyle}
         inputId={inputId}
         disabled={disabled}
       />
