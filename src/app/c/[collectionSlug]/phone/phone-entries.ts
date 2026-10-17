@@ -16,6 +16,8 @@ export interface PhoneEntry {
 }
 
 export const PHONE_ENTRIES: readonly PhoneEntry[] = [
+  // #2005 — the stamp in hand without its catalogue number: area → year → issue → stamp.
+  { label: "Browse by area", path: "browse", icon: "areas" },
   // #2007 — the sales that move during the day: paid, packed, sent.
   { label: "Sales to do", path: "sales", icon: "sales" },
   // #2008 — offers that change during the day: pause, resume, withdraw.

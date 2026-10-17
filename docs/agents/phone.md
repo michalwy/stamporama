@@ -119,6 +119,26 @@ desktop-only.
 - Copies are listed up to `PHONE_STAMP_COPY_LIMIT` (100); past that the screen says the rest are at
   the desk.
 
+## Browse (#2005)
+
+- **Area → year → issue → stamp, one page a level, the level in the path**: `phone/browse` (the
+  top-level areas), `browse/areas/[areaId]` (its sub-areas, then the years of its **own** issues),
+  `browse/areas/[areaId]/[year]` (`none` for no year, as the desk's Issues list says it) and
+  `browse/issues/[issueId]`. Addresses in `src/lib/phone.ts`; the phone's back gesture walks back up.
+- **A year is the issues of the area itself**, not of its sub-areas — those are browsed on their own,
+  so a stamp is never reached twice by two routes. An area row's count is its whole subtree's,
+  rolled up from each area's own (`phoneAreaChildren`), as the desk's area rail rolls them (#843).
+- **The desk's reads**: the years are `listIssueYearFacets`, an area-year's issues are
+  `listIssuesPaginated` under its area and year filters (up to `PHONE_BROWSE_ISSUE_LIMIT`), an issue's
+  stamps are `listIssueMembers` — copies and want summaries exactly as the issue tree shows them — and
+  catalogue numbers are labelled by `makeCatalogLabeller`, as the stamp screen labels them. Reads in
+  `src/lib/phone-browse.ts`; layout and words in `phone-browse-view.ts` (pure, unit-tested).
+- **A stamp's marks** (`phoneStampMarks`): `N held` or *Not held* — the stamp's own copies, the desk
+  badge's figure — the copies under its variants beside it, never in it (#528), and *Wanted* in
+  `WANT_PRIORITY_CHIP`'s colour for the loudest open want, the desk's want chip's colour.
+- **Every empty level says so in a sentence**; *Full app* goes to the area tree, the Issues list under
+  the same `areaId`/`year`, or the issue screen.
+
 ## The phone screens
 
 The first step, each its own issue (ADR-0072 §5):

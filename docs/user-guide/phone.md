@@ -84,6 +84,28 @@ These change the offer in Stamporama only — pausing or ending the listing on t
 done there, as from the desk. Preparing, publishing and editing an offer stay at the desk: **Full
 app** opens the same offer there.
 
+## Browse by area
+
+**Browse by area** finds a stamp when you do not know its catalogue number, by where and when it was
+issued: area, then year, then issue, then the stamp.
+
+1. The first screen lists your top-level areas, each with how many issues are filed under it, its
+   sub-areas included.
+2. Tapping an area shows its **sub-areas**, which go further down the tree the same way, and the
+   **years** of the issues filed in that area itself, oldest first; issues with no year are under
+   **No year** at the end.
+3. Tapping a year lists that year's issues in the area, with how many stamps each has.
+4. Tapping an issue lists its stamps in the issue's own order, each variant drawn under the stamp it
+   varies. Each stamp shows its catalogue numbers, its name (or its denomination and colour), and at a
+   glance **how many copies you hold** — or *Not held* — and **Wanted** when it is on your open wants,
+   in the colour of the most urgent want. Copies held under its variants are counted beside it.
+5. Tapping a stamp opens its phone screen (below).
+
+A level with nothing in it says so plainly — an area with no sub-areas and no issues, a year with no
+issues, an issue with no stamps. Browsing only reads; areas, issues and stamps are set up at the desk.
+**Full app** opens the desk's area tree, the Issues list narrowed to the area (and year), or the issue
+itself.
+
 ## A stamp on the phone
 
 Each stamp has a phone screen that answers, on one screen read top to bottom, what you want to know

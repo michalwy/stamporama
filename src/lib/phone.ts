@@ -16,6 +16,43 @@ export function phoneStampPath(collectionSlug: string, stampId: string): string 
   return `${phoneHomePath(collectionSlug)}/stamps/${stampId}`;
 }
 
+/** Browsing (#2005): the collection's top-level areas, where area → year → issue → stamp starts. */
+export function phoneBrowsePath(collectionSlug: string): string {
+  return `${phoneHomePath(collectionSlug)}/browse`;
+}
+
+/** One area while browsing: its sub-areas and the years of its own issues. */
+export function phoneBrowseAreaPath(collectionSlug: string, areaId: string): string {
+  return `${phoneBrowsePath(collectionSlug)}/areas/${areaId}`;
+}
+
+/**
+ * The address segment of the issues with no year — the desk's issue list says `none` for that bucket
+ * (`IssueListFilterOpts.year`), and the phone says the same.
+ */
+export const PHONE_NO_YEAR = "none";
+
+/** One year of one area's issues; `null` is the issues with no year. */
+export function phoneBrowseYearPath(
+  collectionSlug: string,
+  areaId: string,
+  year: number | null
+): string {
+  return `${phoneBrowseAreaPath(collectionSlug, areaId)}/${year === null ? PHONE_NO_YEAR : year}`;
+}
+
+/** What a year segment of the address says: a year, the no-year bucket, or nothing this screen has. */
+export function parsePhoneYear(segment: string): number | null | undefined {
+  if (segment === PHONE_NO_YEAR) return null;
+  if (!/^\d{1,4}$/.test(segment)) return undefined;
+  return Number(segment);
+}
+
+/** One issue's stamps while browsing — what a stamp on the phone is opened from. */
+export function phoneBrowseIssuePath(collectionSlug: string, issueId: string): string {
+  return `${phoneBrowsePath(collectionSlug)}/issues/${issueId}`;
+}
+
 export type PhoneStart =
   /** Exactly one collection: straight into it. */
   | { kind: "collection"; href: string }
