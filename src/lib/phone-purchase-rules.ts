@@ -30,6 +30,8 @@ export interface PhonePurchaseFields {
   purchasedAt: string;
   description: string;
   stampIds: readonly string[];
+  /** Photos the phone's camera took and staged (#2011), in the order taken. */
+  photoUploadIds: readonly string[];
 }
 
 /** The form read and checked: what `startPurchaseOnPhone` writes. */
@@ -47,6 +49,8 @@ export interface PhonePurchaseInput {
   description: string | null;
   /** In the order picked, each once. */
   stampIds: string[];
+  /** Staged photos of what was bought (#2011), in the order taken, each once. */
+  photoUploadIds: string[];
 }
 
 /**
@@ -91,6 +95,7 @@ export function readPhonePurchaseFields(
       purchasedAt,
       description: fields.description.trim() || null,
       stampIds,
+      photoUploadIds: [...new Set(fields.photoUploadIds.map((id) => id.trim()).filter(Boolean))],
     },
   };
 }

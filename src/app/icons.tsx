@@ -80,6 +80,7 @@ import {
   House,
   LayoutDashboard,
   ImageOff,
+  Images,
   Info,
   Layers,
   Lightbulb,
@@ -203,6 +204,11 @@ const GLYPHS = {
   phone: Smartphone,
   /** The full app, seen from a phone screen (#2002) — the way back to the desk's screens. */
   desk: Monitor,
+  /** Taking a picture with the phone's camera (#2011). Not `snapshot`, which keeps the view on
+   * screen as a photo. */
+  camera: Camera,
+  /** A purchase's photos (#2011) — pictures of what was bought, as a whole. */
+  purchasePhotos: Images,
   notifications: Bell,
 
   // The everyday verbs.

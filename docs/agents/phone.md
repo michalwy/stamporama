@@ -183,9 +183,31 @@ desktop-only.
   desk's card and the phone. Form rules in `phone-purchase-rules.ts` (pure, unit-tested).
 - **Screens**: `phone/purchases/new` (the form; *Full app* is the purchase list) and
   `phone/purchases/[purchaseId]` (what was saved, read back; *Full app* is the desk's purchase
-  screen) — the screen #2011 adds its camera to. At the desk, `PurchasePhoneCard` on the purchase
-  screen carries the mark, the noted stamps and *Done at the desk*; it stays after the mark only
-  while stamps were noted.
+  screen). At the desk, `PurchasePhoneCard` on the purchase screen carries the mark, the noted stamps
+  and *Done at the desk*; it stays after the mark only while stamps were noted.
+
+## Photos on a purchase (#2011)
+
+- **The purchase is a fifth `Photo` owner** (`Photo.purchaseId`, decided with the collector on
+  2026-10-17): pictures of what was bought as a whole, never of single copies, which keep their own
+  from intake. No role — a plain list in `sortOrder`. It goes through `PhotoOwner` in `photos.ts`
+  (`addPurchasePhotos`, `removePurchasePhoto`, `listPurchasePhotos`), so ownership, the byte moves,
+  serving and the storage total are the copies' own; it is added and removed one act at a time
+  rather than through a dialog's change-set. `deletePurchase` reads the bytes' addresses first and
+  deletes them only once the delete went through, as it does a card scan's.
+- **The camera** is `PhoneCameraButton` (`phone/purchases/phone-camera-button.tsx`): a file input
+  with `capture="environment"` and `accept="image/*"` — a narrower list makes some phones offer the
+  file picker instead. Each picture is **staged the moment it is taken** through the collection's
+  upload route (`stagePurchasePhoto`), so saving waits only for the last. On the form the upload ids
+  go with the purchase (`photoUploadIds`): `startPurchaseOnPhone` checks every one is staged in the
+  collection **before** writing, so a lost upload refuses the purchase rather than leaving one to be
+  started twice, and attaches them after — a failure there keeps the purchase and says so
+  (`warning`). On the purchase screen *Take a photo* adds to it at once (`addPurchasePhotosAction`).
+  **Removing is the desk's**; a tap opens the full-size bytes, as on the stamp screen.
+- **At the desk** `PurchasePhotosCard`, drawn once there is a photo (as the Expenses card, #1907); the
+  header's `⋮ → Add photos` opens its file input, mounted regardless. A click enlarges one in the
+  **bare** `PhotoLightbox` (`photo-viewer.tsx`), whose action is *Remove photo* — not the
+  collection's lightbox, whose *Measure and mark* needs a stamp the picture does not have.
 
 ## The stamp screen (#2003)
 
@@ -248,7 +270,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |
 
-**Browsing is read only** except starting a purchase (#2006, above) and its photos. **Stays at the desk**: preparing,
+**Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers; intake, lots and the cost split; everything not in the table.
 **Rejected for now**: recognising a stamp from a photo (2026-10-17). A new phone screen is a decision
 of its own and is added to this table.

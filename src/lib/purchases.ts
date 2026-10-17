@@ -10,6 +10,7 @@ import { realizedProceedsForItems } from "./sales";
 import { loadCostEstimates } from "./cost-estimates";
 import { summarizePurchaseReturn, type PurchaseReturn, type ReturnBasis } from "./purchase-return";
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
+import { addPurchasePhotos, deletePhotoStorageRefs, purchasePhotoStorageRefs } from "./photos";
 import { roundAmount } from "./decimal-input";
 import {
   INTAKE_PARTY_NONE,
@@ -611,7 +612,7 @@ export async function startPurchaseOnPhone(
   ownerId: string,
   collectionId: string,
   input: PhonePurchaseInput
-): Promise<string> {
+): Promise<{ id: string; photoError: string | null }> {
   await assertCollectionOwner(ownerId, collectionId);
   const col = await prisma.collection.findUniqueOrThrow({
     where: { id: collectionId },
@@ -621,6 +622,16 @@ export async function startPurchaseOnPhone(
   if (input.stampIds.length > 0) {
     const found = await prisma.stamp.count({ where: { id: { in: input.stampIds }, collectionId } });
     if (found !== input.stampIds.length) throw new Error("A stamp picked is not in this collection.");
+  }
+  // The photos taken (#2011) are checked before anything is written, so a lost upload refuses the
+  // purchase rather than leaving one behind that the collector would start again.
+  if (input.photoUploadIds.length > 0) {
+    const staged = await prisma.photoUpload.count({
+      where: { id: { in: input.photoUploadIds }, collectionId },
+    });
+    if (staged !== input.photoUploadIds.length) {
+      throw new Error("A photo taken was not received. Take it again.");
+    }
   }
 
   const header = await resolveHeader(collectionId, col.baseCurrency, "purchase", {
@@ -650,7 +661,16 @@ export async function startPurchaseOnPhone(
     });
     return purchase;
   });
-  return created.id;
+  // After the purchase is written, since moving bytes cannot be rolled back with it. A failure here
+  // keeps the purchase — saved once, not twice — and says the photos are to be added again.
+  let photoError: string | null = null;
+  try {
+    await addPurchasePhotos(ownerId, created.id, input.photoUploadIds);
+  } catch (err) {
+    console.error("Attaching the phone's photos to a purchase failed", err);
+    photoError = "The purchase was saved, but its photos were not — take them again on its screen";
+  }
+  return { id: created.id, photoError };
 }
 
 /**
@@ -916,6 +936,8 @@ export async function deletePurchase(
   // Read off the purchase itself since #586: the scans hang here rather than on the lots, which is
   // also why deleting a lot no longer reaches for them at all.
   const scanBytes = await collectScanStorageRefs([purchaseId]);
+  // Its own photos (#2011) the same way: read now, deleted once the purchase is gone.
+  const photoBytes = await purchasePhotoStorageRefs(purchaseId);
   // Its supply lines are batches; what sales took from them is then short, and the supplies' other
   // batches cover it where they can (#1898).
   const supplyLines = await prisma.purchaseSupplyLine.findMany({
@@ -939,6 +961,7 @@ export async function deletePurchase(
     throw err;
   }
   await deleteScanStorageRefs(scanBytes);
+  await deletePhotoStorageRefs(photoBytes);
 }
 
 /** Prisma FK-restrict violation (P2003) / required-relation guard (P2014). */

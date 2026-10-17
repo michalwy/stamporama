@@ -22,6 +22,7 @@ const fields: PhonePurchaseFields = {
   purchasedAt: "2026-10-17",
   description: "  Stockbook Poland 1950s ",
   stampIds: ["s1", "s2", "s1", " "],
+  photoUploadIds: ["u1", "u1", "u2", ""],
 };
 
 function read(patch: Partial<PhonePurchaseFields>) {
@@ -29,7 +30,7 @@ function read(patch: Partial<PhonePurchaseFields>) {
 }
 
 describe("readPhonePurchaseFields (#2006)", () => {
-  it("reads the form: trimmed, the amount to two places, each stamp once in the order picked", () => {
+  it("reads the form: trimmed, the amount to two places, each stamp and photo once in order", () => {
     assert.deepEqual(read({}), {
       input: {
         sellerContactId: null,
@@ -39,6 +40,7 @@ describe("readPhonePurchaseFields (#2006)", () => {
         purchasedAt: "2026-10-17",
         description: "Stockbook Poland 1950s",
         stampIds: ["s1", "s2"],
+        photoUploadIds: ["u1", "u2"],
       },
     });
   });

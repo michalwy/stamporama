@@ -32,7 +32,8 @@ import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 // storage interface — this module is the only place that reconciles `Photo`/`PhotoUpload` rows
 // with stored bytes so there are never orphaned files.
 //
-// A `Photo` is **polymorphic**: it hangs off exactly one owner, an `Item`, a `Stamp` or an `Offer`.
+// A `Photo` is **polymorphic**: it hangs off exactly one owner — an `Item`, a `Stamp`, an `Offer`, a
+// scan tile or a `Purchase`.
 // The change-set apply / list / byte-cleanup logic is written once over a `PhotoOwner` and exposed
 // through thin per-owner wrappers so callers stay explicit about what they own.
 //
@@ -42,11 +43,15 @@ import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 // (#566) sit outside `PhotoOwner` for the same reason: they are *cut* from a retained card scan, so
 // their lifecycle lives in `scan-sheets.ts` — and its other end in `scan-tiles.ts` (#567), where a
 // crop stops being a tile's and becomes a copy's by reassigning `tileId` to `itemId`. What is shared is everything below that owner seam —
-// serving (`getPhotoForServing`) and the collection's storage total both handle all four owners,
+// serving (`getPhotoForServing`) and the collection's storage total both handle all five owners,
 // and **a new owner has to be added to both** or its images 404 while its rows look perfectly fine.
+//
+// A purchase (#2011) is the fifth owner and goes through `PhotoOwner`: its pictures are uploaded like
+// a copy's, only added and removed one act at a time rather than through a dialog's change-set, and
+// they carry no role.
 
 /** The single owner a photo belongs to. Exactly one field is set (DB CHECK enforces XOR). */
-export type PhotoOwner = { itemId: string } | { stampId: string };
+export type PhotoOwner = { itemId: string } | { stampId: string } | { purchaseId: string };
 
 function isItemOwner(o: PhotoOwner): o is { itemId: string } {
   return "itemId" in o;
@@ -263,11 +268,20 @@ async function resolveStampCollection(stampId: string): Promise<string> {
   return stamp.collectionId;
 }
 
-/** The collection that owns a photo owner (item or stamp). */
+async function resolvePurchaseCollection(purchaseId: string): Promise<string> {
+  const purchase = await prisma.purchase.findUnique({
+    where: { id: purchaseId },
+    select: { collectionId: true },
+  });
+  if (!purchase) throw new PhotoAuthError("Purchase not found.");
+  return purchase.collectionId;
+}
+
+/** The collection that owns a photo owner (item, stamp or purchase). */
 async function resolveOwnerCollection(owner: PhotoOwner): Promise<string> {
-  return isItemOwner(owner)
-    ? resolveItemCollection(owner.itemId)
-    : resolveStampCollection(owner.stampId);
+  if (isItemOwner(owner)) return resolveItemCollection(owner.itemId);
+  if ("stampId" in owner) return resolveStampCollection(owner.stampId);
+  return resolvePurchaseCollection(owner.purchaseId);
 }
 
 /** Delete both stored variants under a photo/upload prefix, best-effort. Never throws — byte
@@ -402,7 +416,45 @@ export async function applyStampPhotoChangeSet(
   return applyPhotoChangeSetForOwner(ownerId, { stampId }, changeSet);
 }
 
-/** Apply a pending change-set to one photo owner (item or stamp) in one logical Save. Removals
+/** Add staged uploads to a purchase as its photos (#2011), after the ones it has, in the order
+ * given. A purchase's photos are of what was bought as a whole and carry no role. */
+export async function addPurchasePhotos(
+  ownerId: string,
+  purchaseId: string,
+  uploadIds: readonly string[]
+): Promise<void> {
+  if (uploadIds.length === 0) return;
+  const last = await prisma.photo.aggregate({
+    where: { purchaseId },
+    _max: { sortOrder: true },
+  });
+  const next = (last._max.sortOrder ?? -1) + 1;
+  await applyPhotoChangeSetForOwner(
+    ownerId,
+    { purchaseId },
+    {
+      add: uploadIds.map((uploadId, i) => ({
+        uploadId,
+        role: null,
+        title: null,
+        sortOrder: next + i,
+      })),
+      update: [],
+      remove: [],
+    }
+  );
+}
+
+/** Remove one of a purchase's photos (#2011), its bytes with it. */
+export async function removePurchasePhoto(
+  ownerId: string,
+  purchaseId: string,
+  photoId: string
+): Promise<void> {
+  await applyPhotoChangeSetForOwner(ownerId, { purchaseId }, { add: [], update: [], remove: [photoId] });
+}
+
+/** Apply a pending change-set to one photo owner (item, stamp or purchase) in one logical Save. Removals
  * and updates are validated against the owner's own photos; adds consume staged uploads from
  * the same collection. Front/back stay singletons: an add into an occupied slot replaces the
  * incumbent. Staged bytes are moved to the permanent `<collectionId>/<photoId>` prefix before
@@ -1018,6 +1070,14 @@ export async function listStampPhotos(
   return listOwnerPhotos(ownerId, { stampId });
 }
 
+/** A purchase's photos (#2011), in the order they were added. */
+export async function listPurchasePhotos(
+  ownerId: string,
+  purchaseId: string
+): Promise<PhotoData[]> {
+  return listOwnerPhotos(ownerId, { purchaseId });
+}
+
 async function listOwnerPhotos(
   ownerId: string,
   owner: PhotoOwner
@@ -1069,7 +1129,7 @@ export async function getPhotoForServing(photoId: string): Promise<{
       storageBackend: true,
       storageKey: true,
       mime: true,
-      // Polymorphic owner (#137, #311, #566): exactly one of item/stamp/offer/tile is set —
+      // Polymorphic owner (#137, #311, #566, #2011): exactly one of item/stamp/offer/tile/purchase is set —
       // resolve the owning collection + owner from whichever it is. Generated offer images (#311)
       // and scan tiles (#566) are served through this same route, unchanged.
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
@@ -1080,10 +1140,11 @@ export async function getPhotoForServing(photoId: string): Promise<{
       // moment a card was scanned outside an order, so every tile on the collection's own Card
       // scans screen served a 404 and the strip drew broken images.
       tile: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      purchase: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
     },
   });
   if (!photo) return null;
-  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile;
+  const owner = photo.item ?? photo.stamp ?? photo.offer ?? photo.tile ?? photo.purchase;
   if (!owner) return null;
   return {
     collectionId: owner.collectionId,
@@ -1106,6 +1167,27 @@ export async function deletePhotoBytesForStamp(stampId: string): Promise<void> {
   await deletePhotoBytesForOwner({ stampId });
 }
 
+/** Where a purchase's photos' bytes are (#2011), read **before** the purchase is deleted — the
+ * cascade drops the rows, never the files — and deleted with {@link deletePhotoStorageRefs} only
+ * **after** the delete went through, since it can be refused (a lot still holding copies). */
+export async function purchasePhotoStorageRefs(purchaseId: string): Promise<PhotoStorageRef[]> {
+  return prisma.photo.findMany({
+    where: { purchaseId },
+    select: { storageBackend: true, storageKey: true, mime: true },
+  });
+}
+
+export interface PhotoStorageRef {
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+}
+
+/** Delete the bytes {@link purchasePhotoStorageRefs} read, best-effort. */
+export async function deletePhotoStorageRefs(refs: readonly PhotoStorageRef[]): Promise<void> {
+  await Promise.all(refs.map((r) => deleteVariants(r.storageBackend, r.storageKey, r.mime)));
+}
+
 async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
   const rows = await prisma.photo.findMany({
     where: owner,
@@ -1117,8 +1199,8 @@ async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
 }
 
 /** Total bytes of all committed photos in a collection (#144). Photos are polymorphic — each hangs
- * off an `Item`, a `Stamp`, an `Offer` (#311) or a scan tile (#566), all collection-scoped — so we
- * sum `sizeBytes` across the four owners. Generated offer images count: they occupy the volume like
+ * off an `Item`, a `Stamp`, an `Offer` (#311), a scan tile (#566) or a `Purchase` (#2011), all
+ * collection-scoped — so we sum `sizeBytes` across the five owners. Generated offer images count: they occupy the volume like
  * any other file, even though they could be recreated. Staged `PhotoUpload` rows are transient
  * (orphan-GC sweeps them) and excluded. Only the `full` variant size is tracked on the row;
  * thumbnails are not counted. Owner-checked.
@@ -1133,7 +1215,7 @@ export async function getCollectionPhotoStorageBytes(
   collectionId: string
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [copyPhotos, stampPhotos, offerPhotos, tilePhotos, scanSheets] = await Promise.all([
+  const [copyPhotos, stampPhotos, offerPhotos, tilePhotos, purchasePhotos, scanSheets] = await Promise.all([
     prisma.photo.aggregate({
       where: { item: { collectionId } },
       _sum: { sizeBytes: true },
@@ -1152,6 +1234,10 @@ export async function getCollectionPhotoStorageBytes(
       where: { tile: { collectionId } },
       _sum: { sizeBytes: true },
     }),
+    prisma.photo.aggregate({
+      where: { purchase: { collectionId } },
+      _sum: { sizeBytes: true },
+    }),
     prisma.scanSheet.aggregate({
       where: { collectionId },
       _sum: { sizeBytes: true },
@@ -1162,6 +1248,7 @@ export async function getCollectionPhotoStorageBytes(
     (stampPhotos._sum.sizeBytes ?? 0) +
     (offerPhotos._sum.sizeBytes ?? 0) +
     (tilePhotos._sum.sizeBytes ?? 0) +
+    (purchasePhotos._sum.sizeBytes ?? 0) +
     (scanSheets._sum.sizeBytes ?? 0)
   );
 }

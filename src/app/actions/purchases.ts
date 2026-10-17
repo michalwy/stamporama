@@ -45,7 +45,7 @@ import {
   type LotBulkChanges,
 } from "@/lib/lots";
 import type { ArrivingCopy } from "@/lib/want-rules";
-import { parsePhotoChangeSet } from "@/lib/photos";
+import { addPurchasePhotos, parsePhotoChangeSet, removePurchasePhoto } from "@/lib/photos";
 import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
 
@@ -62,7 +62,8 @@ export type PurchaseActionState =
 /** Create returns the new purchase's id so the caller can navigate straight to its
  * detail view (#139). */
 export type CreatePurchaseActionState =
-  | { status: "success"; id: string }
+  /** `warning` (#2011): the purchase was saved but something beside it was not — its photos. */
+  | { status: "success"; id: string; warning?: string }
   | { status: "error"; message: string };
 
 /** Result of a lot-close attempt exposed to the client: success, a friendly error, or a
@@ -606,13 +607,14 @@ export async function startPhonePurchaseAction(
       purchasedAt: str(formData, "purchasedAt"),
       description: str(formData, "description"),
       stampIds: formData.getAll("stampId").map(String),
+      photoUploadIds: formData.getAll("photoUploadId").map(String),
     },
     new Date().toISOString().slice(0, 10)
   );
   if ("error" in read) return { status: "error", message: read.error };
   try {
-    const id = await startPurchaseOnPhone(session.user.id, collectionId, read.input);
-    return { status: "success", id };
+    const { id, photoError } = await startPurchaseOnPhone(session.user.id, collectionId, read.input);
+    return photoError ? { status: "success", id, warning: photoError } : { status: "success", id };
   } catch (e) {
     return {
       status: "error",
@@ -631,6 +633,40 @@ export async function markPurchaseDoneAtDeskAction(purchaseId: string): Promise<
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to take the mark off. Please try again.",
+    };
+  }
+}
+
+/** Add photos to a purchase (#2011): staged uploads, from the phone's camera or the desk's picker. */
+export async function addPurchasePhotosAction(
+  purchaseId: string,
+  uploadIds: string[]
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await addPurchasePhotos(session.user.id, purchaseId, uploadIds);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add the photos. Please try again.",
+    };
+  }
+}
+
+/** Remove one of a purchase's photos (#2011). */
+export async function removePurchasePhotoAction(
+  purchaseId: string,
+  photoId: string
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await removePurchasePhoto(session.user.id, purchaseId, photoId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to remove the photo. Please try again.",
     };
   }
 }

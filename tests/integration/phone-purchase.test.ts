@@ -38,6 +38,7 @@ describe("starting a purchase on the phone (#2006)", () => {
       purchasedAt: "2026-10-17",
       description: "Stockbook Poland 1950s",
       stampIds: [stampB, stampA],
+      photoUploadIds: [],
       ...patch,
     };
   }
@@ -95,7 +96,7 @@ describe("starting a purchase on the phone (#2006)", () => {
   });
 
   it("writes an arrived purchase with one open lot, the stamps noted and the mark", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input());
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input());
     const row = await prisma.purchase.findUniqueOrThrow({
       where: { id },
       select: {
@@ -130,13 +131,13 @@ describe("starting a purchase on the phone (#2006)", () => {
   });
 
   it("takes a picked seller by its id", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input({ sellerContactId: sellerId, sellerName: "Kowalski", stampIds: [] }));
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input({ sellerContactId: sellerId, sellerName: "Kowalski", stampIds: [] }));
     const row = await prisma.purchase.findUniqueOrThrow({ where: { id }, select: { contactId: true } });
     assert.equal(row.contactId, sellerId);
   });
 
   it("creates a new seller for a name no contact has", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input({ sellerName: "Fair stall 12", stampIds: [] }));
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input({ sellerName: "Fair stall 12", stampIds: [] }));
     const row = await prisma.purchase.findUniqueOrThrow({
       where: { id },
       select: { contact: { select: { name: true, seller: true } }, notedStamps: true },
@@ -156,7 +157,7 @@ describe("starting a purchase on the phone (#2006)", () => {
   });
 
   it("reads the noted stamps in the order picked, labelled", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input());
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input());
     const stamps = await listPurchaseNotedStamps(userId, id);
     assert.deepEqual(
       stamps.map((s) => [s.stampId, s.name, s.catalogNumbers]),
@@ -169,7 +170,7 @@ describe("starting a purchase on the phone (#2006)", () => {
   });
 
   it("is marked on the list and listed on the Dashboard until Done at the desk, and nothing else clears it", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input({ stampIds: [] }));
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input({ stampIds: [] }));
     const page = await listPurchasesPaginated(userId, collectionId, { pageSize: 200 });
     assert.ok(page.items.find((p) => p.id === id)?.toCompleteSince);
     const marked = await listPurchasesPaginated(userId, collectionId, { toComplete: true, pageSize: 200 });
@@ -201,7 +202,7 @@ describe("starting a purchase on the phone (#2006)", () => {
   });
 
   it("deletes its noted stamps with it", async () => {
-    const id = await startPurchaseOnPhone(userId, collectionId, input());
+    const { id } = await startPurchaseOnPhone(userId, collectionId, input());
     await deletePurchase(userId, id);
     assert.equal(await prisma.purchaseNotedStamp.count({ where: { purchaseId: id } }), 0);
   });

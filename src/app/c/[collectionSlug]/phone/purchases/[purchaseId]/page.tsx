@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getPurchaseDetail } from "@/lib/lots";
 import { listPurchaseNotedStamps } from "@/lib/purchase-noted-stamps";
+import { listPurchasePhotos } from "@/lib/photos";
 import { phonePurchaseNewPath, phoneStampPath } from "@/lib/phone";
 import {
   PHONE_PURCHASE_MARK,
@@ -16,6 +17,7 @@ import {
 import { formatEntityNo } from "@/lib/quick-jump";
 import { Icon } from "@/app/icons";
 import { PhoneScreen, phoneRow } from "@/app/phone-screen";
+import { PhonePurchasePhotos } from "./phone-purchase-photos";
 
 export const metadata = { title: "Purchase" };
 
@@ -25,7 +27,8 @@ interface PhonePurchasePageProps {
 
 // A purchase on the phone (#2006): what the phone recorded — seller, date, what was paid, the stamps
 // noted — read back after saving, and the mark the desk will see. Read only: the purchase is
-// completed at the desk, which *Full app* opens. #2011 adds its photos here.
+// completed at the desk, which *Full app* opens — except its photos (#2011), which the phone's camera
+// adds to here as well as when the purchase is started.
 export default async function PhonePurchasePage({ params }: PhonePurchasePageProps) {
   const { collectionSlug, purchaseId } = await params;
 
@@ -37,7 +40,10 @@ export default async function PhonePurchasePage({ params }: PhonePurchasePagePro
 
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase || purchase.collectionId !== collection.id || purchase.kind !== "purchase") notFound();
-  const stamps = await listPurchaseNotedStamps(session.user.id, purchase.id);
+  const [stamps, photos] = await Promise.all([
+    listPurchaseNotedStamps(session.user.id, purchase.id),
+    listPurchasePhotos(session.user.id, purchase.id),
+  ]);
 
   return (
     <PhoneScreen
@@ -60,6 +66,12 @@ export default async function PhonePurchasePage({ params }: PhonePurchasePagePro
         )}
         {purchase.toCompleteSince && <span style={MARK}>{PHONE_PURCHASE_MARK}</span>}
       </section>
+
+      <PhonePurchasePhotos
+        collectionId={collection.id}
+        purchaseId={purchase.id}
+        photoIds={photos.map((p) => p.id)}
+      />
 
       {stamps.length > 0 && (
         <section style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

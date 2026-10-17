@@ -13,6 +13,7 @@ import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference"
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { listPackingSupplies } from "@/lib/packing-supplies";
 import { listPurchaseNotedStamps } from "@/lib/purchase-noted-stamps";
+import { listPurchasePhotos } from "@/lib/photos";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { intakeDocumentName } from "@/lib/purchase-kind";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
@@ -49,7 +50,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase || purchase.collectionId !== collection.id) notFound();
 
-  const [conditions, certificateStatuses, areas, locations, packingSupplies, notedStamps] =
+  const [conditions, certificateStatuses, areas, locations, packingSupplies, notedStamps, photos] =
     await Promise.all([
       getStampConditions(session.user.id, collection.id),
       getCertificateStatuses(session.user.id, collection.id),
@@ -58,6 +59,8 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
       listPackingSupplies(session.user.id, collection.id),
       // The stamps the phone noted when it started this purchase (#2006).
       listPurchaseNotedStamps(session.user.id, purchase.id),
+      // Its photos (#2011): what was bought, as a whole.
+      listPurchasePhotos(session.user.id, purchase.id),
     ]);
 
   // Copies now stream into each lot card via paginated client queries (#172), so the page no
@@ -105,6 +108,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         certificateStatuses={certificateStatuses}
         packingSupplies={packingSupplies}
         notedStamps={notedStamps}
+        photoIds={photos.map((p) => p.id)}
       />
     </Screen>
   );

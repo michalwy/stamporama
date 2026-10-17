@@ -75,12 +75,18 @@ is still in your bag. You finish it at the desk, as any other purchase.
 - **Stamps bought** — optional. Find a stamp with the same search as the start screen, and tap it to
   add it; each row says whether you hold it and whether it is wanted, so you can see a gap filled
   before you pay. **×** takes one off again.
+- **Photos** — optional. **Take a photo** opens the phone's camera; take a picture of what you bought
+  as a whole — the stockbook, the set, the box — so you can tell this purchase from the others when
+  it reaches the desk. Each photo is uploaded as soon as it is taken, and **×** takes one off before
+  you save. Take as many as you like.
 
 **Start the purchase** saves it and shows it back: the seller, the number and date, what was paid,
-what it was and the stamps you noted, with the mark *Started on the phone — to complete*. **Start
-another purchase** goes straight to a new one; **Full app** opens it at the desk.
+what it was, its photos and the stamps you noted, with the mark *Started on the phone — to complete*.
+**Take another photo** there adds one more to the purchase straight away, and a tap on a photo opens it
+at full size. **Start another purchase** goes straight to a new one; **Full app** opens it at the desk,
+where photos are also removed.
 
-The phone makes no copies and splits no costs. What it saves is an ordinary purchase marked
+Photos of single stamps are still taken at the desk, during intake. The phone makes no copies and splits no costs. What it saves is an ordinary purchase marked
 *Arrived*, with one open lot at the amount paid, named by what it was — at the desk you take the stamps
 in, split the lot or add more, and close it as usual. See
 [Purchases started on the phone](purchases.md#purchases-started-on-the-phone).
