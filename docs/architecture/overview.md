@@ -50,6 +50,14 @@ Optional (autoupdate profile):
 └─────────────────────────────────┘
 ```
 
+### Reaching the server from a phone (ADR-0072)
+
+The phone screens under `/c/[collectionSlug]/phone/` run in the phone's browser against the same
+server, signed in with the same account; the app has no offline mode and no Android client. Access
+from outside home is the installation's: **one HTTPS address, the same on the desk and on the
+phone**, set as `BETTER_AUTH_URL`, because a session ends on a move to another address or between
+http and https. Every other screen is desktop-only, with no breakpoints (`docs/agents/phone.md`).
+
 ### Behind a reverse proxy
 
 Nearly every self-hosted deployment sits behind one — nginx, Caddy, a Cloudflare tunnel — and there
