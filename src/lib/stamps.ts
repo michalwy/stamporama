@@ -82,6 +82,7 @@ import {
 } from "./stamp-attribute-kinds";
 import type { StampSizeFields } from "./stamp-size";
 import { roundAmount } from "./decimal-input";
+import { parseStampNoSearch } from "./quick-jump";
 import type { Prisma } from "@/generated/prisma/client";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
@@ -1217,7 +1218,8 @@ export interface StampSearchItem {
   subtype: SubtypeLabel | null;
 }
 
-const PICKER_LIMIT = 20;
+/** How many stamps a picker search returns — exported for a screen that says when it is full. */
+export const PICKER_LIMIT = 20;
 
 /**
  * The substrings to recall stamps by from a picker query, matched against the stored catalog
@@ -1264,6 +1266,10 @@ function catalogRecallToken(text: string): { values: string[]; insensitive: bool
  * area prefix + number). That normalization is what lets `Mi PL200`, `MiPL200`, and `200`
  * all resolve to the same stamp. Returns ≤20 rows, catalog matches first, then by newest
  * issue year.
+ *
+ * A stamp's **short number** (#1574) written as a search reads it — `#901`, or `st 901` — finds that
+ * stamp too (#2004, {@link parseStampNoSearch}), *in addition to* whatever the text matches, and
+ * leads the list: it names one stamp exactly. A bare `901` stays a catalogue number.
  */
 export async function searchStampsForPicker(
   ownerId: string,
@@ -1274,6 +1280,7 @@ export async function searchStampsForPicker(
   const text = query.trim();
   if (!text) return [];
   const catalogToken = catalogRecallToken(text);
+  const stampNo = parseStampNoSearch(text);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const or: any[] = [
@@ -1299,30 +1306,42 @@ export async function searchStampsForPicker(
   const locationRefWhere = { locationRef: { contains: text, mode: "insensitive" as const } };
   or.push({ items: { some: locationRefWhere } });
 
-  const [candidates, vendors, areaRows, issuePrefixes] = await Promise.all([
+  const candidateSelect = {
+    id: true,
+    stampNo: true,
+    parentId: true,
+    name: true,
+    issuedYear: true,
+    catalogNumbers: { select: { catalogVendorId: true, number: true } },
+    stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+    issueMemberships: {
+      select: { issueId: true, issue: { select: { name: true, year: true } } },
+      take: 1,
+    },
+    variants: { select: VARIANT_FLAG_SELECT },
+    // The candidate's own subtype, for the result row's chip (#340) — `variants` above carries
+    // the children's, which answers a different question (is this an umbrella?).
+    subtype: { select: { name: true, isDefault: true } },
+    // Pre-filtered to the matching copies only, so its presence *is* the location hit.
+    items: { where: locationRefWhere, select: { id: true }, take: 1 },
+  } as const;
+
+  const [recalled, numbered, vendors, areaRows, issuePrefixes] = await Promise.all([
     prisma.stamp.findMany({
       where: { collectionId, OR: or },
-      select: {
-        id: true,
-        parentId: true,
-        name: true,
-        issuedYear: true,
-        catalogNumbers: { select: { catalogVendorId: true, number: true } },
-        stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-        issueMemberships: {
-          select: { issueId: true, issue: { select: { name: true, year: true } } },
-          take: 1,
-        },
-        variants: { select: VARIANT_FLAG_SELECT },
-        // The candidate's own subtype, for the result row's chip (#340) — `variants` above carries
-        // the children's, which answers a different question (is this an umbrella?).
-        subtype: { select: { name: true, isDefault: true } },
-        // Pre-filtered to the matching copies only, so its presence *is* the location hit.
-        items: { where: locationRefWhere, select: { id: true }, take: 1 },
-      },
+      select: candidateSelect,
       // Cap recall generously; precision + ranking narrow to PICKER_LIMIT below.
       take: 200,
     }),
+    // The stamp the short number names (#2004), read on its own rather than added to the net
+    // above: `#901` also recalls every catalogue number containing 901, and the capped net could
+    // come back full without the one stamp the number names.
+    stampNo !== null
+      ? prisma.stamp.findUnique({
+          where: { collectionId_stampNo: { collectionId, stampNo } },
+          select: candidateSelect,
+        })
+      : Promise.resolve(null),
     prisma.catalogVendor.findMany({
       where: { collectionId },
       select: { id: true, abbreviation: true },
@@ -1342,12 +1361,16 @@ export async function searchStampsForPicker(
     loadIssuePrefixMap(collectionId),
   ]);
 
+  const candidates =
+    numbered && !recalled.some((s) => s.id === numbered.id) ? [numbered, ...recalled] : recalled;
+
   const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
   const areaNames = new Map(areaRows.map((a) => [a.id, a.name]));
   const areaNodes = buildAreaPrefixNodes(areaRows);
 
   interface Scored {
     item: StampSearchItem;
+    exactNumber: boolean;
     exactCatalog: boolean;
   }
   const scored: Scored[] = [];
@@ -1379,11 +1402,14 @@ export async function searchStampsForPicker(
     const issueHit = !!issueName && issueName.toLowerCase().includes(lower);
     const catalogHit = catalogKeyMatches(text, keys);
     const locationHit = s.items.length > 0;
+    const numberHit = stampNo !== null && s.stampNo === stampNo;
 
-    if (!nameHit && !issueHit && !catalogHit && !locationHit) continue;
+    if (!nameHit && !issueHit && !catalogHit && !locationHit && !numberHit) continue;
 
     scored.push({
-      // Catalog-number matches are the most specific intent, so rank them first.
+      // The stamp's own number names exactly one stamp; a catalog-number match is the next most
+      // specific intent. Both rank ahead of the rest.
+      exactNumber: numberHit,
       exactCatalog: catalogHit,
       item: {
         stampId: s.id,
@@ -1404,6 +1430,7 @@ export async function searchStampsForPicker(
   }
 
   scored.sort((a, b) => {
+    if (a.exactNumber !== b.exactNumber) return a.exactNumber ? -1 : 1;
     if (a.exactCatalog !== b.exactCatalog) return a.exactCatalog ? -1 : 1;
     return (b.item.issueYear ?? 0) - (a.item.issueYear ?? 0);
   });

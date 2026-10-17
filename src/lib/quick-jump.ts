@@ -120,6 +120,16 @@ export function parseStampNoRef(input: string): number | null {
   return target?.entity === "stamp" ? target.no : null;
 }
 
+/** A stamp's short number as a **search box** reads it (#2004), or null when `search` is not one:
+ * `#901`, the way a stamp row shows the number, or `st 901`, the way the quick-jump box takes it.
+ * A bare `901` is not one — it stays a catalogue number, for {@link parseStampNoRef}'s reason — and
+ * a search that reads one matches the stamp *in addition to* the text, never instead of it. */
+export function parseStampNoSearch(search: string): number | null {
+  const ref = parseStampNoRef(search);
+  if (ref !== null) return ref;
+  return search.trim().startsWith(ENTITY_NO_PREFIX) ? parseEntityNoSearch(search) : null;
+}
+
 /** How an entity is named back to the collector when a jump finds nothing. */
 export function quickJumpLabel(entity: QuickJumpEntity): string {
   return QUICK_JUMP_PREFIXES.find((p) => p.entity === entity)?.label ?? entity;

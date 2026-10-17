@@ -36,7 +36,30 @@ The icon opens straight into your collection. If you have **several collections*
 first; tap the one to open, and **Other collections** at the bottom of a collection's start screen
 brings the list back.
 
-The start screen lists the phone screens, one row each. New ones arrive with new releases.
+The start screen lists the phone screens, one row each. New ones arrive with new releases. Above
+them is the search for a stamp.
+
+## Finding a stamp
+
+The field at the top of the start screen finds a stamp by what you have in front of you:
+
+- a **catalog number**, in any spacing — `Mi PL 200`, `MiPL200` or just `200`;
+- the stamp's **name**, or the name of its issue;
+- the stamp's **own number**, as its row shows it — `#901` (or `st 901`, as in **Jump to…**).
+
+It is the same search the desk's stamp pickers and **Find in Stamporama** use, so it finds what they
+find. Type and press the search key.
+
+Each stamp found is one row: its name (or its catalog number when it has none), its catalog numbers
+and its own number, where it sits — area, issue year and name — and two marks you read without
+opening it:
+
+- **3 held**, or **Not held** — the copies you hold of it. Copies filed under its variants are counted
+  beside it (*2 under its variants*), so a stamp you hold only as variants does not read as missing.
+- **Wanted** — the stamp is on your wants, with the priority when it is high or low.
+
+Tap a row to open the stamp's phone screen. When nothing matches, the screen says so. The search
+shows up to 20 stamps; when it is full, typing more narrows it.
 
 ## Sales to do
 
@@ -131,8 +154,8 @@ value* — so an empty answer is never a gap. The screen only reads: nothing on 
 **The stamp's full page**, at the bottom, and **Full app** at the top open the stamp's page on the
 desk.
 
-The phone screens for finding a stamp — by typing, or by browsing area, year and issue — open this
-screen.
+[Finding a stamp](#finding-a-stamp) on the start screen opens this screen, and so will browsing by
+area, year and issue.
 
 ## Between the phone and the full app
 

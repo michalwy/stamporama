@@ -167,7 +167,9 @@ numbers — on its row in the Issues tree, on the Stamps list, in the stamp pick
 catalog you read and never repeats between areas, so it is the one way to name a stamp that cannot
 be mistaken. A new stamp takes the next number when it is created, a deleted stamp's number is never
 given to another, and the number never changes. Typing `st 901` in **Jump to…** opens the stamp's
-page. The stamps you already had were numbered once, area by area in catalog order, so the numbers
+page. A stamp picker's search — and **Find in Stamporama** and the [phone's search](phone.md#finding-a-stamp)
+— finds it by `#901` or `st 901` too, at the top of whatever else the text matches; a bare `901` is
+read as a catalog number only. The stamps you already had were numbered once, area by area in catalog order, so the numbers
 read in a sensible order from the start.
 
 On the **Issues** list, the toolbar's search box matches the issue's own number (`12` or `#12`), the issue name, the name of any stamp in it, and catalog numbers — both the issue's own range numbers and its stamps'. Catalog numbers may be typed the way they are printed, with the catalog abbreviation and country prefix and in any spacing: `Mi PL 200`, `MiPL200`, `PL200`, and `200` all find the same issue, and `Fi BL31` finds a Fischer block. Leading a search with a catalog abbreviation narrows the catalog-number part of the match to that catalog. This is the same reading of a catalog number as the dedicated **catalog number** filter next to it, which searches catalog numbers only.
