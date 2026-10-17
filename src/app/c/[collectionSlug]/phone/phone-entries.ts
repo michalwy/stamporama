@@ -4,8 +4,8 @@ import type { IconName } from "@/app/icons";
  * What the phone start screen offers (#2002, ADR-0072 §5) — one row per phone screen, in the order
  * the collector reaches for them.
  *
- * Empty until the first phone screen lands: each of #2003–#2011 adds its own row here, and a new
- * phone screen is a decision of its own, named in `docs/agents/phone.md` before it is added.
+ * Each of #2003–#2011 adds its own row here, and a new phone screen is a decision of its own, named
+ * in `docs/agents/phone.md` before it is added.
  */
 export interface PhoneEntry {
   label: string;
@@ -14,4 +14,7 @@ export interface PhoneEntry {
   icon: IconName;
 }
 
-export const PHONE_ENTRIES: readonly PhoneEntry[] = [];
+export const PHONE_ENTRIES: readonly PhoneEntry[] = [
+  // #2007 — the sales that move during the day: paid, packed, sent.
+  { label: "Sales to do", path: "sales", icon: "sales" },
+];

@@ -55,14 +55,25 @@ export function saleDashboardItem(sale: SaleAwaitingFulfilment): DashboardItem {
 }
 
 /**
- * The sales split into their status groups, each oldest-in-status first (the lower sale number
- * breaking a tie), every group returned even when empty — the screen shows the zero.
+ * The sales in one status, oldest in it first (the lower sale number breaking a tie) — a group's
+ * rows, on the Dashboard and on the phone's sales to do (#2007) alike.
+ */
+export function salesInStatus<T extends SaleAwaitingFulfilment>(
+  sales: readonly T[],
+  status: SaleStatus
+): T[] {
+  return sales
+    .filter((s) => s.status === status)
+    .sort((a, b) => a.since.getTime() - b.since.getTime() || a.saleNo - b.saleNo);
+}
+
+/**
+ * The sales split into their status groups, each oldest-in-status first, every group returned even
+ * when empty — the screen shows the zero.
  */
 export function salesDashboardGroups(sales: readonly SaleAwaitingFulfilment[]): DashboardGroup[] {
   return SALES_DASHBOARD_GROUPS.map(({ status, id, title }) => {
-    const inStatus = sales
-      .filter((s) => s.status === status)
-      .sort((a, b) => a.since.getTime() - b.since.getTime() || a.saleNo - b.saleNo);
+    const inStatus = salesInStatus(sales, status);
     return {
       id,
       title,

@@ -23,7 +23,7 @@ import {
 import { CopiesWithoutCost } from "./copies-without-cost";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
-import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
+import { CUSTOM_SHIPPING_OPTION, shipmentGoingBy } from "@/lib/sale-rules";
 import type { ShippingOptionData } from "@/lib/shipping-options";
 import type { CarrierData } from "@/lib/carriers";
 import { getShippingOptionsAction } from "@/app/actions/shipping-options";
@@ -43,7 +43,7 @@ import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
-import { isSaleStatus } from "@/lib/sale-status";
+import { asksAboutUnpackedCopies, asksForShipment, isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -183,8 +183,7 @@ export function SaleDetailPanel({
    * that is #192's hint territory and it must not gain a dialog.
    */
   function needsPackingCheck(next: SaleStatus): boolean {
-    const nextIdx = SALE_STATUS_ORDER.indexOf(next);
-    return sale.unpackedItemCount > 0 && nextIdx >= packedIdx && nextIdx > statusIdx;
+    return asksAboutUnpackedCopies(sale.status, next, sale.unpackedItemCount);
   }
 
   // Moving to `paid` is the moment the money is known, and #205's buyer handling is derived from
@@ -223,7 +222,7 @@ export function SaleDetailPanel({
     // Sending the parcel is the moment the tracking number exists and is in hand (#491) — the same
     // reasoning as the total on `paid` above. Only asked when the sale carries none: one already
     // recorded has answered, and re-asking would invite overwriting it.
-    if (next === "sent" && sale.trackingCode == null) {
+    if (asksForShipment(next, sale.trackingCode)) {
       setError(undefined);
       setDialog({ kind: "shipment", mode: "sent" });
       return;
@@ -956,7 +955,11 @@ export function SaleDetailPanel({
       {dialog.kind === "shipment" && (
         <ShipmentDialog
           mode={dialog.mode}
-          goingBy={sale.sentAsDiffers && sale.sentAs ? sale.sentAs.serviceName : sale.shippingOptionName}
+          goingBy={shipmentGoingBy({
+            sentAsDiffers: sale.sentAsDiffers,
+            sentAsServiceName: sale.sentAs?.serviceName ?? null,
+            shippingOptionName: sale.shippingOptionName,
+          })}
           carriers={carriers}
           carrierId={sale.carrierId}
           trackingCode={sale.trackingCode}

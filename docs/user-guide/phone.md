@@ -38,6 +38,27 @@ brings the list back.
 
 The start screen lists the phone screens, one row each. New ones arrive with new releases.
 
+## Sales to do
+
+**Sales to do** lists the sales waiting for their next step, in the same three groups as the
+Dashboard's Sales section — **Awaiting payment**, **To pack** and **To send** — the one that has
+waited longest in its group first. Each row shows the sale's number, the buyer, the platform and what
+the buyer pays.
+
+Each row has one button that moves the sale a step on — **Mark paid**, **Mark packed** or **Mark
+sent**. The sale then shows on the desk exactly as if you had moved it there, status history
+included. On the way, the phone asks what the desk would ask:
+
+- **Mark packed** (and **Mark sent**) on a sale whose copies are not all marked as packed asks what to
+  do: mark them all packed and move on, move on and leave them, or do nothing.
+- **Mark sent** on a sale with no tracking number yet asks for the **carrier** — the one its shipping
+  service suggests comes pre-selected — and the **tracking number**. **Skip** marks it sent without a
+  number; you can add one on the sale at the desk later.
+
+**Mark paid** asks nothing on the phone: the total the buyer paid, which the desk offers to record at
+that moment, is entered at the desk. Everything else on a sale — its lines, amounts, shipping and
+corrections to its status — stays at the desk; **Full app** opens the Sales list.
+
 ## Between the phone and the full app
 
 There is no automatic switch by device — you choose:

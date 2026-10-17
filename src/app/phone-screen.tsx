@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
+import { baseBtn } from "@/app/button-style";
 import { Icon } from "@/app/icons";
 
 /**
@@ -42,6 +43,16 @@ export const phoneRow: CSSProperties = {
   fontWeight: 500,
   textDecoration: "none",
   boxSizing: "border-box",
+};
+
+/**
+ * A phone screen's button: the one button shape (`baseBtn`), a thumb's height and the phone's type
+ * size. The colours are the caller's, as on every `baseBtn`.
+ */
+export const phoneButton: CSSProperties = {
+  ...baseBtn,
+  minHeight: PHONE_TAP_TARGET,
+  fontSize: "1rem",
 };
 
 interface PhoneScreenProps {
