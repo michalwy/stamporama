@@ -12,6 +12,7 @@ import {
   restoreItem,
   resolveItemVariant,
   getItemListItem,
+  getItemListItems,
   getItemStamps,
   setItemPlatformExclusion,
 } from "@/lib/items";
@@ -307,6 +308,16 @@ export async function createItemForOfferAction(
   } catch {
     return { status: "error", message: "Failed to add copy. Please try again." };
   }
+}
+
+/** The copies the want review names (#1992), read as the Copies list reads them — a read, so it
+ *  throws rather than returning a state, and the query around it reports the failure. */
+export async function getItemListItemsAction(
+  collectionId: string,
+  itemIds: string[]
+): Promise<ItemListItem[]> {
+  const session = await getSession();
+  return getItemListItems(session.user.id, collectionId, itemIds);
 }
 
 export async function updateItemAction(

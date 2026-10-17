@@ -720,6 +720,26 @@ export async function getItemListItem(
   return item;
 }
 
+/** Several copies of one collection as {@link ItemListItem}s, in the order asked. The want review
+ *  (#1992) draws each copy that raised a want as the Copies list draws it, and it knows its copies
+ *  only by id. An id that names nothing in this collection is left out rather than refused. */
+export async function getItemListItems(
+  ownerId: string,
+  collectionId: string,
+  itemIds: readonly string[]
+): Promise<ItemListItem[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const ids = [...new Set(itemIds)];
+  if (ids.length === 0) return [];
+  const rows = await prisma.item.findMany({
+    where: { collectionId, id: { in: ids } },
+    select: ITEM_LIST_SELECT,
+  });
+  const items = await withCostEstimates(collectionId, await enrichItemRows(collectionId, rows));
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
 export async function listItems(
   ownerId: string,
   collectionId: string,
