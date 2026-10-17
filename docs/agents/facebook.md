@@ -396,7 +396,12 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   post in Preparing or Ready, read through `readKitLots` for the title) behind
   `GET …/facebook-posts/not-in-post` (a static segment shadowing `[postId]`), under
   `offerKeys.facebookNotInPost`. The group filter narrows it; the *Being prepared* / *Ready to post*
-  chips narrow it to that state; the other stages and *No title* hide it.
+  chips narrow it to that state; the other stages and *No title* hide it. It **folds to one line**, its
+  heading and count (#1991, decided with the collector on 2026-10-17): sixty-odd offers in no post
+  pushed the posts far down, useful when wanted and noise otherwise. Folded the first time, and then
+  as last left — a `usePersistedFlag` per collection (`…:notInPostExpanded:<collectionId>`), like the
+  Offers summary bar's *More*; a client preference, not URL state, since it is not a filter. The count
+  is the filtered list's length, so it follows the group filter.
 
 - **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
   2026-10-12), so posting needs no lot opened. Photos are `PHOTO_SIZE` (18rem) drawn from the `full`
