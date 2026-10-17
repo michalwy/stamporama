@@ -7,6 +7,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
+import { CollectionFrame } from "./collection-frame";
 import { UmbrellaPricesQuestionProvider } from "./shared/umbrella-prices-question";
 import { SpecialisedChecklistsProvider } from "./shared/specialised-checklists";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
@@ -64,22 +65,20 @@ export default async function CollectionLayout({
       <SpecialisedChecklistsProvider collectionId={collection.id} initial={includeSpecialised}>
         {/* #1573's question, asked from whichever screen gives a priced stamp its first variant. */}
         <UmbrellaPricesQuestionProvider>
-          <div
-            style={{
-              display: "flex",
-              minHeight: "100vh",
-              background: "var(--color-bg-page)",
-            }}
+          {/* The sidebar beside the screen, or no sidebar on a phone screen (#2002). */}
+          <CollectionFrame
+            sidebar={
+              <CollectionSidebar
+                collectionSlug={collectionSlug}
+                collectionId={collection.id}
+                collectionName={collection.name}
+                appVersion={getAppVersionLabel()}
+                appReleaseDate={getAppReleaseDate()}
+              />
+            }
           >
-            <CollectionSidebar
-              collectionSlug={collectionSlug}
-              collectionId={collection.id}
-              collectionName={collection.name}
-              appVersion={getAppVersionLabel()}
-              appReleaseDate={getAppReleaseDate()}
-            />
-            <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
-          </div>
+            {children}
+          </CollectionFrame>
         </UmbrellaPricesQuestionProvider>
       </SpecialisedChecklistsProvider>
     </QueryProvider>

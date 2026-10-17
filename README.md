@@ -55,6 +55,11 @@ section of `.env.prod.example`. Resend is the one provider so far, and it only s
 on a domain you have verified with Resend. Mail only ever goes to your own account address; check it
 with **Settings → Email → Send a test message** — see [Email](docs/user-guide/email.md).
 
+Stamporama also has a few **phone screens** for use away from the desk — at a fair, or handling the
+day's sales — added to an Android phone's home screen as an icon. The phone works online against
+your own server, so the server needs **one HTTPS address reachable from outside home, the same on
+the desk and on the phone** — see [Stamporama on a phone](docs/user-guide/phone.md).
+
 There is also the **Stamporama Assistant**, a Chrome extension that matches Colnect catalog pages against your collection while you browse, marks your own marketplace listings with the offer they are here, records a Delcampe order as a sale from the screen you pack it on, and — the only things anywhere here that write to Colnect — applies a Colnect list difference for you and closes a Colnect listing when you withdraw its offer (ADR-0042). It installs from an unlisted Chrome Web Store listing in one click and updates itself from there — see the [user guide](docs/user-guide/assistant.md).
 
 Not to be confused with it, the instance can also be handed to an **AI assistant** — Claude, or anything else that speaks MCP (revision `2026-07-28`) — at `/api/mcp`, so that you can ask about your collection in ordinary words; `/api/v1` is the same surface over plain HTTP for a script. It connects to **one collection**, through a token you make in **Settings → Assistant & API**, and that token is either **read only** or **read and write** — read only is the setting to start from. A writing token can draft, price and title a listing, build and balance a trade, or enter a purchase — its header, empty lots and expenses, and its seller as a new contact — but only inside Stamporama, and it never touches the copies themselves. Two things are absent rather than switched off: it **never publishes to a marketplace** and it **never reaches a counterparty** — putting an offer in front of the public, and anything a trading partner would see, stay with you. What it can do grows each release, and the assistant reads the current list itself — see [Connecting an AI assistant](docs/user-guide/agent-api.md).
