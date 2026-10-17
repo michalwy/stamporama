@@ -626,6 +626,28 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   photo's link. `rejectOfferOrPost` takes every pending lot back to Ready (links cleared, the
   ordinary `pending → ready`); `setOfferStateAction` routes every `→ ready` through it.
 
+- **A post that is up goes back to Ready** (#1998, decided with the collector on 2026-10-17; ADR-0061
+  §2 as amended). `takeFacebookPostBackToReady` (`facebook-posts.ts`), asked of any lot, through
+  `takeFacebookPostBackToReadyAction` (`actions/facebook.ts`) from the post's screen and each lot's card
+  (`BackToReadyDialog`, `offers/back-to-ready-dialog.tsx`, names the lots that stay and the bids
+  cleared). `active | paused → ready` is **not** a manual transition — every other platform's listing
+  that went up stays one, and `menuTransitions` must not offer it — so it is
+  `takeFacebookOfferBackToReady` (`offers.ts`), `transitionOffer` with `takeDown`: a Facebook offer that
+  is up only, no ready gate (a rejection's reason: it was ready when it went up), and on top of the
+  move's own unfreezing it clears `url`/`colnectSaleId` as a rejection does, `listingDate` and
+  `lastPostedAt` (publishing again is a first Publish, `approvalStamp` included), and an auction's bid
+  (`price` 0 — the card's *no bid* — `priceCheckedAt`, `bidderCount`, `inActiveBidding`,
+  `biddingNoticeAt`); `endsAt` stays. Which lots go is `facebookBackToReadyPlan` (pure): sold and
+  withdrawn stay, everything else goes, and `facebookPostMoves().backToReady` is no pending lot and
+  one active or paused. **The split** (some lot stays) makes a post through `allocateEntityNumber` with
+  the old one's group, title and `layout` column verbatim (null follows the group, as the old one
+  did), and moves the going lots into it numbered from 1 in lot order **before** any transition, so a
+  refusal halfway leaves one post with nothing sold in it and asking again finishes it; the staying
+  lots keep their lot numbers, gaps and all, which is why the post screen's row number is the lot's
+  `lotNo` now rather than its index (the index only while a drag is drawn). The integration test is
+  `tests/integration/facebook-post-back-to-ready.test.ts` (checked when written to fail with the split
+  or the bid clearing removed).
+
 - **What the Facebook side of Pending adds** (#1779; the collector decided the closing time on
   2026-10-11, the rest was decided in writing the issue). **A pending-post link proposes Pending**:
   `isFacebookPendingPostUrl` (pure, `facebook-post-rules.ts`: a facebook.com host and a

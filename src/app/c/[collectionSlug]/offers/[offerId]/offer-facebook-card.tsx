@@ -6,6 +6,7 @@ import type { FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   FACEBOOK_POST_STAGE_LABEL,
   facebookPostLabel,
+  facebookPostMoves,
   facebookPostStage,
   isFacebookLotPosted,
 } from "@/lib/facebook-post-rules";
@@ -14,7 +15,9 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
+import { useToast } from "@/app/toast-provider";
 import { PendingLinkMark } from "../offer-badges";
+import { BackToReadyDialog, backToReadyDone } from "../back-to-ready-dialog";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
 import { renderFacebookKitPost } from "./facebook-kit-post";
@@ -36,6 +39,9 @@ import { FacebookPostKit } from "./facebook-post-kit";
 // says so. The result is the offer's own *Sell* — to the winner, found by their Facebook profile — or
 // *Withdraw* when nobody bid, as on every platform (#1777); the card records neither. A quick buy
 // (#1671) has no bidding, so while it is up the card has nothing of its own to follow.
+//
+// While the post is up the card offers *Back to Ready…* (#1998) — the Publish was a mistake, or the post
+// is gone from the group — which, as every move of a post, takes the whole post back, not this lot.
 //
 // An offer may carry its own post template (#1780), overriding its group's for this offer only: the
 // card shows *Same as group* with the template it follows, or the offer's own once *Custom for this
@@ -140,7 +146,9 @@ export function OfferFacebookCard({
   // The offer's own template being written (#1780) — null while nothing is typed that is not saved.
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmBackToReady, setConfirmBackToReady] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
 
   const self = kit.lots.find((l) => l.offerId === offerId) ?? kit.lots[0];
 
@@ -194,6 +202,22 @@ export function OfferFacebookCard({
     run(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       return patchOfferAction(offerId, "price", bid);
+    });
+  }
+
+  // The whole post goes back, asked of this lot (#1998); split, this lot is Ready in a new post.
+  function backToReady() {
+    setError(null);
+    startTransition(async () => {
+      const { takeFacebookPostBackToReadyAction } = await import("@/app/actions/facebook");
+      const result = await takeFacebookPostBackToReadyAction(offerId);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setConfirmBackToReady(false);
+      toast({ message: backToReadyDone(result) });
+      onChanged();
     });
   }
 
@@ -288,6 +312,18 @@ export function OfferFacebookCard({
           </>
         )}
       </div>
+
+      {/* A post that is up taken back to Ready (#1998) — the whole post, asked of this lot. */}
+      {kit.post && facebookPostMoves(kit.lots).backToReady && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.875rem" }}>
+          <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setConfirmBackToReady(true)}>
+            Back to Ready…
+          </DialogSecondaryButton>
+          <span style={MUTED}>
+            {alone ? "Published by mistake, or gone from the group." : "The whole post — published by mistake, or gone from the group."}
+          </span>
+        </div>
+      )}
 
       {/* This offer's own post template (#1780): the group's it follows, or its own. */}
       <div style={{ marginTop: "0.875rem" }}>
@@ -424,10 +460,25 @@ export function OfferFacebookCard({
         </div>
       )}
 
-      {error && (
+      {error && !confirmBackToReady && (
         <p role="alert" style={{ color: "var(--color-error)", fontSize: "0.8125rem", margin: "0.375rem 0 0" }}>
           {error}
         </p>
+      )}
+
+      {confirmBackToReady && kit.post && (
+        <BackToReadyDialog
+          postNo={kit.post.postNo}
+          lots={kit.lots}
+          isPending={isPending}
+          error={error ?? undefined}
+          onClose={() => {
+            if (isPending) return;
+            setConfirmBackToReady(false);
+            setError(null);
+          }}
+          onConfirm={backToReady}
+        />
       )}
     </section>
   );

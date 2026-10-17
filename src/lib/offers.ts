@@ -7611,6 +7611,19 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   await transitionOffer(ownerId, offerId, to, false);
 }
 
+/**
+ * Take a Facebook offer that is up back to Ready (#1998): `active | paused → ready`, a move no manual
+ * transition offers, since on every other platform a listing that went up stays a listing. On Facebook
+ * the collector posts by hand, so a Publish can be a mistake, and a post can vanish from the group —
+ * either way the offer is to be as if it had never been published: no listing link, its post text
+ * following the template again, no listing date or repost to count days up from, and an auction's
+ * recorded bids cleared. Its closing time stays, as on any Ready offer. The post it is a lot of is
+ * `facebook-posts.ts`'s to move as one (`takeFacebookPostBackToReady`).
+ */
+export async function takeFacebookOfferBackToReady(ownerId: string, offerId: string): Promise<void> {
+  await transitionOffer(ownerId, offerId, "ready", false, true);
+}
+
 /** The state an offer is in, for a caller that routes on it — the owner's offer only. */
 export async function readOwnOfferState(ownerId: string, offerId: string): Promise<OfferState> {
   return (await assertOfferOwner(ownerId, offerId)).state;
@@ -7690,19 +7703,28 @@ export async function settleReadyAfterPhotos(offerId: string, failure: string | 
  * The one lifecycle move, with the gate (#418/#311) and every other refusal in one place.
  * `generatePhotos` is {@link markOfferReady}'s: a ready gate that fails on the photos alone is not
  * thrown but turned into a queued generation, and every check after the gate still runs first, so a
- * missing price is refused before anything is queued.
+ * missing price is refused before anything is queued. `takeDown` is
+ * {@link takeFacebookOfferBackToReady}'s: the one way from a Facebook offer that is up to Ready.
  */
 async function transitionOffer(
   ownerId: string,
   offerId: string,
   to: OfferState,
-  generatePhotos: boolean
+  generatePhotos: boolean,
+  takeDown = false
 ): Promise<MarkReadyOutcome> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (to === "sold") {
     throw new OfferActionBlockedError("bad-transition", "An offer is marked sold by recording a sale, not directly.");
   }
-  if (!canTransition(ref.state, to)) {
+  if (takeDown) {
+    if (!ref.facebookGroupId || (ref.state !== "active" && ref.state !== "paused")) {
+      throw new OfferActionBlockedError(
+        "bad-transition",
+        `Only a Facebook offer that is up goes back to Ready this way — this one is ${ref.state}.`
+      );
+    }
+  } else if (!canTransition(ref.state, to)) {
     throw new OfferActionBlockedError("bad-transition", `Cannot move an offer from ${ref.state} to ${to}.`);
   }
   // Marking an offer ready or publishing it (Activate, #188/#246): it must actually list something.
@@ -7727,8 +7749,11 @@ async function transitionOffer(
   //
   // Photos alone are what {@link markOfferReady} turns into a queued run (#1893); the moment they
   // share the gate with anything else, the whole refusal stands and nothing is generated.
+  //
+  // Nor on taking a Facebook post that is up back to Ready (#1998), for the same reason: the offer was
+  // ready when it went up, and the post it went up in is a mistake or gone either way.
   let awaitingPhotos = false;
-  if (to === "ready" && ref.state !== "pending") {
+  if (to === "ready" && ref.state !== "pending" && !takeDown) {
     const blockers = await readReadyBlockers(ref.collectionId, offerId);
     awaitingPhotos =
       generatePhotos && blockers.length > 0 && blockers.every(isPhotoReadinessBlocker);
@@ -7815,7 +7840,19 @@ async function transitionOffer(
   }
   // A rejection (`pending → ready`) takes the pending link with it: it led to a post the platform
   // turned down, and a Ready offer carrying a listing link would be a false record of a listing.
-  const rejecting = ref.state === "pending" && to === "ready";
+  // Taking a post that is up back to Ready (#1998) takes the link for the same reason, and with it
+  // what the time up was counted from — publishing again is a first Publish — and an auction's
+  // recorded bids, which were bids on a post that is a mistake or gone.
+  const rejecting = (ref.state === "pending" && to === "ready") || takeDown;
+  const takenDown: Prisma.OfferUpdateInput = takeDown
+    ? {
+        listingDate: null,
+        lastPostedAt: null,
+        ...(isAuctionListing(ref.listingType)
+          ? { price: "0", priceCheckedAt: null, bidderCount: null, inActiveBidding: false, biddingNoticeAt: null }
+          : {}),
+      }
+    : {};
   // An offer back in Ready or Preparing is not up, so its Facebook post text follows the template
   // again until it is published anew (#1800).
   const unpublishing = to === "ready" || to === "preparing";
@@ -7835,6 +7872,7 @@ async function transitionOffer(
       // and rewrites nothing, so a change made during the pause is still a change nobody pushed.
       ...(submitting ? { listingContentChangedAt: null } : {}),
       ...(rejecting ? { url: null, colnectSaleId: null } : {}),
+      ...takenDown,
       ...(unpublishing ? { facebookPostSnapshot: Prisma.DbNull } : {}),
       // Any move ends a wait for the photos (#1893) and the reason the last one failed: the offer is
       // no longer the Preparing offer either was about.

@@ -16,6 +16,7 @@ import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./faceb
 import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
   describeRefusedLots,
+  facebookBackToReadyPlan,
   facebookLayoutLotTemplate,
   facebookLotAddRefusal,
   facebookLotOrderRefusal,
@@ -34,10 +35,12 @@ import {
   offersPrintedTextGaps,
   offersTextStatus,
   publishOffer,
+  readOwnOfferState,
   regenerateOfferTitleAndDescription,
   readSoldElsewhereRefusal,
   setOfferState,
   syncGeneratedTexts,
+  takeFacebookOfferBackToReady,
   type OfferTextStatus,
 } from "./offers";
 import { titleFallbackKey, type TitleFallback } from "./offer-title-template";
@@ -952,6 +955,106 @@ export async function rejectOfferOrPost(ownerId: string, offerId: string): Promi
   });
   if (!lots.some((l) => l.id === offerId)) return setOfferState(ownerId, offerId, "ready");
   for (const lot of lots) await setOfferState(ownerId, lot.id, "ready");
+}
+
+/** What taking a post back to Ready did (#1998): the post the lots are Ready in now — the same one,
+ *  or the new one they moved into when lots sold or withdrawn stayed behind — and whether it split. */
+export interface FacebookBackToReady {
+  postId: string;
+  postNo: number;
+  /** The post left holding the lots that stayed, when the post was split; null otherwise. */
+  keptPostNo: number | null;
+}
+
+/**
+ * Take a Facebook post that is up back to Ready (#1998) — the Publish was a mistake, or the post is
+ * gone from the group — asked of any lot of it, since the post moves as one.
+ *
+ * Only the lots still for sale go back ({@link facebookBackToReadyPlan}); each goes through
+ * `takeFacebookOfferBackToReady`, which clears its link, unfreezes its text, stops its days up and
+ * clears an auction's recorded bids. A lot sold or withdrawn stays as it is, and then the post is
+ * **split**: those lots stay in the post as it went up — its number, lot numbers, links and frozen
+ * text — and the lots going back move into a new post in the same group, with the same title and
+ * layout, numbered in their lot order. When every lot goes back the post itself is Ready again and
+ * nothing new is made.
+ *
+ * The move into the new post comes first, so a refusal halfway through leaves the lots that went
+ * back and the ones still up in one post with nothing sold in it — and asking again finishes it.
+ * Refused while the post waits for the group's approval (that is *Rejected — back to Ready*) and
+ * once nothing in it is up any more.
+ */
+export async function takeFacebookPostBackToReady(ownerId: string, offerId: string): Promise<FacebookBackToReady> {
+  await readOwnOfferState(ownerId, offerId);
+  const offer = await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { facebookPostId: true } });
+  // Every Facebook offer that has gone up is in a post (#1989), so one in none has nothing up.
+  if (!offer.facebookPostId) {
+    throw new OfferActionBlockedError("bad-transition", "Only a Facebook post that is up goes back to Ready — this offer is in no post.");
+  }
+  const postId = offer.facebookPostId;
+  await assertPostOwner(ownerId, postId);
+  const post = await prisma.facebookPost.findUniqueOrThrow({
+    where: { id: postId },
+    select: {
+      collectionId: true,
+      groupId: true,
+      postNo: true,
+      title: true,
+      layout: true,
+      lots: {
+        orderBy: { facebookLotNo: "asc" },
+        select: { id: true, state: true, listingType: true, price: true },
+      },
+    },
+  });
+  const lots = post.lots.map((l) => ({
+    ...l,
+    listingType: normalizeListingType(l.listingType),
+    price: l.price.toFixed(2),
+  }));
+  if (lots.some((l) => l.state === "pending")) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      `Post #${post.postNo} is waiting for the group's approval — if the group turned it down, it is *Rejected — back to Ready*.`
+    );
+  }
+  if (!lots.some((l) => l.state === "active" || l.state === "paused")) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      `Post #${post.postNo} has nothing up for sale to take back to Ready.`
+    );
+  }
+  const { going, staying } = facebookBackToReadyPlan(lots);
+
+  let target = { postId, postNo: post.postNo, keptPostNo: null as number | null };
+  if (staying.length > 0) {
+    target = await prisma.$transaction(async (tx) => {
+      const postNo = await allocateEntityNumber(tx, post.collectionId, "facebookPost");
+      const split = await tx.facebookPost.create({
+        data: {
+          collectionId: post.collectionId,
+          postNo,
+          title: post.title,
+          groupId: post.groupId,
+          layout: post.layout,
+        },
+        select: { id: true },
+      });
+      for (const [index, lot] of going.entries()) {
+        await tx.offer.update({
+          where: { id: lot.id },
+          data: { facebookPostId: split.id, facebookLotNo: index + 1 },
+        });
+      }
+      return { postId: split.id, postNo, keptPostNo: post.postNo };
+    });
+  }
+  for (const lot of going) {
+    if (lot.state === "active" || lot.state === "paused") await takeFacebookOfferBackToReady(ownerId, lot.id);
+  }
+  // The lots' photos follow where they are now: the text they went up with no longer holds them (#1861).
+  await syncFacebookPostLotPhotos(target.postId);
+  if (target.postId !== postId) await syncFacebookPostLotPhotos(postId);
+  return target;
 }
 
 /**

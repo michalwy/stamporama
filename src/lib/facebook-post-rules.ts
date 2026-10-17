@@ -753,6 +753,8 @@ export function isFacebookLotPosted(state: string): boolean {
  *    *Waiting for approval*;
  *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
  *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
+ *  - `backToReady` — while the post is up and a lot of it is still for sale (#1998): a Publish that
+ *    was a mistake, or a post gone from the group, taken back to Ready (`facebookBackToReadyPlan`);
  *  - `takeOut` — a lot may leave the post only until the post is up;
  *  - `addLots` — offers may join the post as further lots only until it is up, too (#1870);
  *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
@@ -762,6 +764,7 @@ export interface FacebookPostMoves {
   approve: boolean;
   reject: boolean;
   withdraw: boolean;
+  backToReady: boolean;
   takeOut: boolean;
   addLots: boolean;
   waiting: number[];
@@ -778,10 +781,37 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     approve: pending && onlyIn(["ready", "pending", "active"]),
     reject: pending,
     withdraw: pending,
+    backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
     takeOut: !posted,
     addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
   };
+}
+
+/** Whether a lot is up in the group and still for sale — running or paused. */
+function isFacebookLotUp(state: string): boolean {
+  return state === "active" || state === "paused";
+}
+
+/** What taking a post that is up back to Ready does to its lots (#1998), as its confirmation names
+ *  them: the lots still for sale go back (`going`, in lot order), a lot sold or withdrawn stays where
+ *  it is (`staying`) — and then the post is split, the lots going back moving into a new post — and
+ *  an auction going back with a bid recorded has it cleared (`bidsCleared`). */
+export interface FacebookBackToReadyPlan<T> {
+  going: T[];
+  staying: T[];
+  bidsCleared: T[];
+}
+
+export function facebookBackToReadyPlan<T extends { state: string; listingType: OfferListingType; price: string }>(
+  lots: readonly T[]
+): FacebookBackToReadyPlan<T> {
+  const staying = lots.filter((l) => l.state === "sold" || l.state === "withdrawn");
+  const going = lots.filter((l) => !staying.includes(l));
+  const bidsCleared = going.filter(
+    (l) => isFacebookLotUp(l.state) && isAuctionListing(l.listingType) && Number(l.price) > 0
+  );
+  return { going, staying, bidsCleared };
 }
 
 /** Where a multi-lot post stands as a whole (#1842), read off its lots — what the post's screen and

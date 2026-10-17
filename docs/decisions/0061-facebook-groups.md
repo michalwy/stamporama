@@ -15,7 +15,8 @@ amended by #1780: an offer can carry its own post template, overriding its group
 by #1800: a published offer's post text is frozen as it was posted. §2 is amended by #1841: a post of
 several lots can carry each lot's text in its photo's caption. §2 is amended by #1842: a post of
 several lots has a number and a screen of its own. §2 is amended by #1989: every Facebook offer that
-goes up is in a post — an offer posted alone is a post of one lot, made when it is published.
+goes up is in a post — an offer posted alone is a post of one lot, made when it is published. §2 is
+amended by #1998: a post that is up can be taken back to Ready, split when lots sold or withdrawn stay.
 
 Facebook is the Facebook module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact named as Facebook; its groups and settings are unchanged.
 
@@ -181,6 +182,22 @@ alone, not of what is up in the groups, and handled singles and albums through t
   prepared or Ready that are in no post, so it is a complete picture of Facebook, published or not.
 - **Existing data**: every Facebook offer in no post that had gone up became a post of one lot, its
   link, state and frozen text as they were, numbered in the offers' creation order and untitled.
+
+**Amended by #1998 (decided with the collector on 2026-10-17): a post that is up can be taken back to
+Ready.** The collector posts by hand, so a Publish can be a mistake — the post never went up, or the
+wrong link was given — and a post can vanish from the group, removed by its admin or taken down to be
+corrected. Until then the only way back to Ready was a rejection while the post waited for approval.
+
+- **One move covers both**, *Back to Ready…*, on the post's screen and each lot's card while the post
+  is up and a lot of it is still for sale; as every move of a post it acts on the whole post.
+- **Only the lots still for sale go back**, as if never published: no listing link (it is not kept as
+  an earlier post — nobody can be sent there), the text no longer frozen (§3 as amended by #1800), no
+  listing date, so the time up stops and publishing again is a first Publish, and an auction's recorded
+  bids cleared (§4). The closing time stays, as on any Ready offer.
+- **A lot sold or withdrawn stays as it is, and the post splits**: those lots stay in the post as it
+  went up — number, link, frozen text — and the lots going back move into a new post in the same
+  group, with the same title, layout and lot order, which is Ready. When every lot goes back the post
+  itself is Ready again and nothing new is made.
 
 ### 3. Posting starts as a kit to paste
 
