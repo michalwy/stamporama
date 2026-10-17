@@ -4,22 +4,30 @@ import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
+import { searchCollection } from "@/lib/collection-search";
+import { PICKER_LIMIT } from "@/lib/stamps";
+import { trimTextInput } from "@/lib/text-input";
 import { phoneHomePath, PHONE_START_PATH } from "@/lib/phone";
 import { Icon } from "@/app/icons";
 import { PhoneScreen, phoneRow } from "@/app/phone-screen";
 import { PHONE_ENTRIES } from "./phone-entries";
+import { PhoneStampSearch } from "./phone-stamp-search";
 
 export const metadata = { title: "Phone" };
 
 interface PhoneHomePageProps {
   params: Promise<{ collectionSlug: string }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }
 
 // A collection's phone start screen (#2002, ADR-0072): where the home-screen icon lands, by way of
 // `/phone`, and what the full app's *Phone* link opens. One row per phone screen; its *Full app*
-// goes to the collection's own start on the desk.
-export default async function PhoneHomePage({ params }: PhoneHomePageProps) {
+// goes to the collection's own start on the desk. Above the rows, the search for a stamp (#2004),
+// its query the page's `q`.
+export default async function PhoneHomePage({ params, searchParams }: PhoneHomePageProps) {
   const { collectionSlug } = await params;
+  const { q } = await searchParams;
+  const query = trimTextInput(typeof q === "string" ? q : "");
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
@@ -30,9 +38,21 @@ export default async function PhoneHomePage({ params }: PhoneHomePageProps) {
   // collection `/phone` comes straight back here.
   const several = (await getCollectionsByOwner(session.user.id)).length > 1;
   const home = phoneHomePath(collectionSlug);
+  // The desk's *have I got this?* search, its stamps only: an issue is reached by browsing (#2005)
+  // and a copy is read on its stamp's screen.
+  const stamps = query
+    ? (await searchCollection(session.user.id, collection.id, query)).stamps
+    : [];
 
   return (
     <PhoneScreen title={collection.name} fullAppHref={`/c/${collectionSlug}`}>
+      <PhoneStampSearch
+        action={home}
+        collectionSlug={collectionSlug}
+        query={query}
+        stamps={stamps}
+        full={stamps.length >= PICKER_LIMIT}
+      />
       {PHONE_ENTRIES.length === 0 ? (
         <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-muted)" }}>
           No phone screens yet — use the full app.

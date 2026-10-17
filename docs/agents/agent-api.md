@@ -745,7 +745,10 @@ number, for the box's reason. A short number is read **before** anything else is
 never reach the catalogue resolver. `stampIdFromRef` turns one into an id and otherwise passes the
 value through untouched, so each operation's own *no stamp with id …* check still answers for an id;
 a number naming nothing is refused as a number. In a list (`stampIdsFromRefs`) one such number
-refuses the whole call, as a catalogue number that resolves to nothing does.
+refuses the whole call, as a catalogue number that resolves to nothing does. **`search_collection`
+is a search, not a reference**: its `query` finds the stamp a `#901` or `st 901` names *in addition
+to* the text's matches, first in the stamps group, and a number naming nothing is simply no extra
+row (#2004 — the stamp search's own rule, `parseStampNoSearch`).
 
 ## Working on offers
 

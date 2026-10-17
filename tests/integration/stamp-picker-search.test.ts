@@ -92,6 +92,20 @@ describe("searchStampsForPicker catalog recall", () => {
   it("does not turn a plain word query into a catalog hit", async () => {
     assert.deepEqual(await ids("IIIB"), [], "a near-miss numeral is not a match");
   });
+
+  // The stamp's own short number (#1574), as a row shows it and as the quick-jump box takes it
+  // (#2004) — the phone search's third way in, and the same here for every caller.
+  it("finds a stamp by its short number, ahead of whatever else the text matches", async () => {
+    const { stampNo } = await prisma.stamp.findUniqueOrThrow({
+      where: { id: romanStampId },
+      select: { stampNo: true },
+    });
+    for (const query of [`#${stampNo}`, `st ${stampNo}`, `ST#${stampNo}`]) {
+      assert.equal((await ids(query))[0], romanStampId, `query: ${query}`);
+    }
+    // No stamp carries this number, and nothing else matches it.
+    assert.deepEqual(await ids("#987654"), []);
+  });
 });
 
 // A **variant** number in a collection large enough to drown it. `7c`, `7cI` and `7cII` are

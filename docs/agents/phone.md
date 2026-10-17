@@ -34,7 +34,8 @@ desktop-only.
   the phone lands back on the phone.
 - **A collection's phone start** is `/c/[collectionSlug]/phone` (`phoneHomePath`). Its rows come from
   `PHONE_ENTRIES` (`phone/phone-entries.ts`) — each screen in the table below adds its own row,
-  except the stamp screen, which search and browsing open. *Other collections* shows only when
+  except the stamp screen, which search and browsing open, and the search, which is the start
+  screen's own field above the rows. *Other collections* shows only when
   there are several.
 - **No sidebar on a phone screen**: the collection layout hands the sidebar to `CollectionFrame`,
   which leaves it out when the open segment is `phone` (`useSelectedLayoutSegment`). The phone
@@ -52,6 +53,25 @@ desktop-only.
   cookie, so nothing in it depends on who is signed in.
 - **The sign-in screen** keeps a margin from a phone's edges and shrinks its padding with the window
   (`clamp`); it is not a breakpoint, and the desk sees the card as before.
+
+## Search (#2004)
+
+- **On the start screen, above the rows** — the search is the start screen's, not a row of its own
+  in `PHONE_ENTRIES`. A plain GET form (`phone-stamp-search.tsx`): the query is the page's `q`, read
+  on the server, so the back gesture returns to the hits and there is no client state.
+- **The desk's *have I got this?* search, its stamps only**: `searchCollection`
+  (`collection-search.ts`), whose stamp half is the stamp pickers' `searchStampsForPicker`. Issues
+  are reached by browsing (#2005) and a copy is read on its stamp's screen. The row's words are
+  `phoneSearchHit` (`src/lib/phone-search-view.ts`, pure): the title as the stamp screen titles
+  itself, *N held* / *Not held* with the variants' figure beside it (#528), and *Wanted* off the open
+  wants, with the loudest priority when it is not normal. A full answer (`PICKER_LIMIT`, 20) says so.
+- **The stamp's short number is matched in the shared search, not on the phone**
+  (`parseStampNoSearch` in `quick-jump.ts`): `#901` as a row shows it, or `st 901` as the box takes
+  it, finds that stamp *in addition to* the text and leads the list; a bare `901` stays a catalogue
+  number (#1574's rule). It lives in `searchStampsForPicker` so the phone, the desk's pickers, *Find
+  in Stamporama* and the agent API's `search_collection` match alike — a phone-only number match
+  would have been a second notion of *match*. The numbered stamp is read on its own, beside the
+  capped recall net, since `#901` also recalls every catalogue number containing 901.
 
 ## Sales to do (#2007)
 

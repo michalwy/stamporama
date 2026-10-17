@@ -5,6 +5,7 @@ import {
   parseEntityNoSearch,
   parseQuickJump,
   parseStampNoRef,
+  parseStampNoSearch,
   quickJumpLabel,
   QUICK_JUMP_PREFIXES,
 } from "../../src/lib/quick-jump";
@@ -119,5 +120,24 @@ describe("parseStampNoRef (#1574)", () => {
     assert.equal(parseStampNoRef("st 12a"), null);
     // An id is passed through by the caller, never read as a number.
     assert.equal(parseStampNoRef("cm0abc123stamp"), null);
+  });
+});
+
+describe("parseStampNoSearch (#2004)", () => {
+  it("reads `#901` as a row shows it, and `st 901` as the box takes it", () => {
+    assert.equal(parseStampNoSearch("#901"), 901);
+    assert.equal(parseStampNoSearch(" # 901 "), 901);
+    assert.equal(parseStampNoSearch("st 901"), 901);
+    assert.equal(parseStampNoSearch("ST#901"), 901);
+  });
+
+  it("leaves a bare number, a catalogue number and text alone", () => {
+    // A bare number stays a catalogue number, as in the box.
+    assert.equal(parseStampNoSearch("901"), null);
+    assert.equal(parseStampNoSearch("Mi PL 200"), null);
+    assert.equal(parseStampNoSearch("#901a"), null);
+    assert.equal(parseStampNoSearch("#0"), null);
+    assert.equal(parseStampNoSearch("eagle"), null);
+    assert.equal(parseStampNoSearch("s 901"), null);
   });
 });
