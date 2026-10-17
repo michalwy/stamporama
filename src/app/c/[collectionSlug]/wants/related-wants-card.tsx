@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { WantListItem } from "@/lib/wants";
 import { WANT_PRIORITY_CHIP, WANT_PRIORITY_LABEL } from "@/lib/want-rules";
+import { wantAxisTexts, type WantAxisDictionaries } from "@/lib/want-axes";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
@@ -37,17 +38,6 @@ const CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** One axis as text: the members joined, or `anyLabel` when the set is empty — the want list row's
- *  own rule, so a want reads the same on both screens. An empty axis says "any" out loud, because a
- *  blank one and an unanswered one look identical and mean opposite things (ADR-0032 §1). */
-function axisText(
-  ids: (string | null)[],
-  nameFor: (id: string | null) => string,
-  anyLabel: string
-): string {
-  return ids.length === 0 ? anyLabel : ids.map(nameFor).join(", ");
-}
-
 function WantCardRow({
   want,
   names,
@@ -55,16 +45,13 @@ function WantCardRow({
   isLast,
 }: {
   want: WantListItem;
-  names: {
-    condition: (id: string | null) => string;
-    certificate: (id: string | null) => string;
-    format: (id: string | null) => string;
-  };
+  names: WantAxisDictionaries;
   actions: RowAction[];
   isLast: boolean;
 }) {
   const open = want.closedAt === null;
   const priority = WANT_PRIORITY_CHIP[want.priority];
+  const axes = wantAxisTexts(want, names);
 
   return (
     <div
@@ -86,11 +73,9 @@ function WantCardRow({
             opacity: open ? 1 : 0.6,
           }}
         >
-          <span style={CHIP}>{axisText(want.conditionIds, names.condition, "Any condition")}</span>
-          <span style={CHIP}>
-            {axisText(want.certificateStatusIds, names.certificate, "Certificate: any")}
-          </span>
-          <span style={CHIP}>{axisText(want.formatIds, names.format, "Any format")}</span>
+          <span style={CHIP}>{axes.condition}</span>
+          <span style={CHIP}>{axes.certificate}</span>
+          <span style={CHIP}>{axes.format}</span>
           <span
             style={{
               ...CHIP,
@@ -155,18 +140,11 @@ export function RelatedWantsCard({
   const [closeError, setCloseError] = useState<string | undefined>();
   const [deleteError, setDeleteError] = useState<string | undefined>();
 
-  const names = {
-    condition: (id: string | null) => {
-      const c = (conditions ?? []).find((x) => x.id === id);
-      return c ? c.abbreviation || c.name : "?";
-    },
-    // `null` is each axis's own "none" value, never "any" — ADR-0032 §3.
-    certificate: (id: string | null) =>
-      id === null
-        ? "No certificate"
-        : ((certificateStatuses ?? []).find((c) => c.id === id)?.name ?? "?"),
-    format: (id: string | null) =>
-      id === null ? "Single" : ((formats ?? []).find((f) => f.id === id)?.name ?? "?"),
+  // The axes are named by the one rule the phone stamp screen states them with too (#2003).
+  const names: WantAxisDictionaries = {
+    conditions: conditions ?? [],
+    certificateStatuses: certificateStatuses ?? [],
+    formats: formats ?? [],
   };
 
   function close(want: WantListItem) {

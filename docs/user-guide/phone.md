@@ -84,6 +84,34 @@ These change the offer in Stamporama only — pausing or ending the listing on t
 done there, as from the desk. Preparing, publishing and editing an offer stay at the desk: **Full
 app** opens the same offer there.
 
+## A stamp on the phone
+
+Each stamp has a phone screen that answers, on one screen read top to bottom, what you want to know
+with the stamp in your hand:
+
+- **The picture** — the stamp's own photos, the first at the screen's width. A stamp with no photo of
+  its own shows the photos of your copies of it, and says so; with neither, it says *No picture*.
+  Tap a photo to see it at full size.
+- **Copies** — how many you hold, then each copy: its condition and certificate (and the format, for
+  a pair or a block), where it is kept, and whether it is in the collection, for sale or for trade.
+  Copies held under the stamp's variants, and copies that might be this stamp, are counted on their
+  own lines, as on the desk.
+- **Wants** — whether the stamp is on your wants, and what each want would accept: condition,
+  certificate and format, as the want list states them. A closed want is shown faded.
+- **Market value** — what the market paid, per condition and certificate: the median of the auction
+  results recorded for this stamp, with how many there are and how far to trust the figure. It is
+  the figure the desk's Valuation window shows.
+- **Catalogue value** — the stamp's catalogue price as the stamp's page shows it, and the
+  cross-catalogue average per condition and certificate, in your collection's currency.
+
+Every part that has nothing to show says so — *No copies held*, *Not on your wants*, *No market
+value* — so an empty answer is never a gap. The screen only reads: nothing on it changes anything.
+**The stamp's full page**, at the bottom, and **Full app** at the top open the stamp's page on the
+desk.
+
+The phone screens for finding a stamp — by typing, or by browsing area, year and issue — open this
+screen.
+
 ## Between the phone and the full app
 
 There is no automatic switch by device — you choose:

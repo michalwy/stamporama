@@ -33,8 +33,9 @@ desktop-only.
   one tap. Signed out, it goes to `/sign-in?next=/phone` like any screen (#1176), so signing in on
   the phone lands back on the phone.
 - **A collection's phone start** is `/c/[collectionSlug]/phone` (`phoneHomePath`). Its rows come from
-  `PHONE_ENTRIES` (`phone/phone-entries.ts`) — each screen in the table below adds its own row.
-  *Other collections* shows only when there are several.
+  `PHONE_ENTRIES` (`phone/phone-entries.ts`) — each screen in the table below adds its own row,
+  except the stamp screen, which search and browsing open. *Other collections* shows only when
+  there are several.
 - **No sidebar on a phone screen**: the collection layout hands the sidebar to `CollectionFrame`,
   which leaves it out when the open segment is `phone` (`useSelectedLayoutSegment`). The phone
   screens stay inside the layout's providers and collection check — no route group, no second copy.
@@ -93,6 +94,30 @@ desktop-only.
   Afterwards `router.refresh()` reads the page again and `invalidateAll` marks the lists stale.
 - **No back link** on either screen, as on the shell's: the phone's own back gesture goes back, and
   keeps the list's narrowing, which a link would have to carry.
+
+## The stamp screen (#2003)
+
+- **`/c/[collectionSlug]/phone/stamps/[stampId]`** (`phoneStampPath`). It has **no row on the start
+  screen**: a stamp is opened from a search hit (#2004) or a browsed issue (#2005), never chosen
+  bare. *Full app* and *The stamp's full page* both go to the desk's stamp page.
+- **The desk's reads, nothing of its own**: `getPhoneStamp` (`src/lib/phone-stamp.ts`) gathers the
+  stamp as its page reads it, the copies as the Copies card (held only — `excludeGone`, disposed left
+  out), the wants as the Wants card (open and closed), market value from
+  `getStampMarketEvidenceByStamp` (the Valuation dialog's) and the cross-catalogue average from
+  `getStampPriceDetails` (the Catalog prices card's). The words are pure, in `phone-stamp-view.ts`,
+  unit-tested.
+- **A want's acceptance sets are worded by `wantAxisTexts`** (`src/lib/want-axes.ts`), the rule the
+  desk's Wants card was rewired to — one wording on both screens.
+- **One column, the desk's grids flattened**: a value is a row labelled `MNH · No cert.` (plus the
+  format for a multiple), in the grid's order (`sortByValueAxes`). Market confidence is **spelled
+  out** (`7 results · high confidence`), not a colour: the desk colours the amount and explains it on
+  hover, and a phone has no hover.
+- **The picture** is the stamp's own photos, else its copies' (#1290) with a line saying so, else
+  *No picture*; a tap opens the full-size bytes — no lightbox, whose arrows and measuring are a
+  desk's. It is the screen's one client module, because the photo addresses and `THUMB_OBJECT_FIT`
+  live in client modules.
+- Copies are listed up to `PHONE_STAMP_COPY_LIMIT` (100); past that the screen says the rest are at
+  the desk.
 
 ## The phone screens
 
