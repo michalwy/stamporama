@@ -1972,6 +1972,9 @@ export function PurchaseDetailPanel({
       {wantReview && (
         <WantReviewDialog
           collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={purchase.baseCurrency}
           copies={wantReview.copies}
           matches={wantReview.matches}
           onClose={() => setWantReview(null)}

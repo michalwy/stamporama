@@ -2345,6 +2345,9 @@ export function InventoryListPanel({
       {wantReview && (
         <WantReviewDialog
           collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
           copies={wantReview.copies}
           matches={wantReview.matches}
           onClose={() => setWantReview(null)}

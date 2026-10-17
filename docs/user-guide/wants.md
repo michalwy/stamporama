@@ -295,7 +295,13 @@ honest: you have paid for it, you do not have it, and there is nothing yet to ju
 
 Then Stamporama shows you the **open wants that copy could satisfy**, and lets you decide
 for each one. When several copies arrive together and more than one of them could satisfy the same
-want, that want is shown **once**, naming every one of those copies:
+want, that want is shown **once**, naming every one of those copies.
+
+Each want shows the stamp it is for as the want list does — its picture, catalogue numbers, area,
+issue and year — with what it takes beneath, and under it **the copies that could satisfy it**, each
+as its row on the Copies list: picture, number, condition, certificate and location. A stamp with no
+name of its own is read by its catalogue number and its issue. Up to five copies are drawn per want;
+any more are named by number below them. For each want:
 
 - **Close want** — it is met. The want stays on the list under **Closed**, and can be
   reopened later.
