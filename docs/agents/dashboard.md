@@ -76,8 +76,12 @@ operational dashboard*; read the ADR before changing what the screen is.
   order feed the phone's *Sales to do* (#2007, `phone.md`), which is why it also returns each sale's
   parcel and unpacked count.
 
-- **Incoming purchases** (#1810) — three groups in `src/lib/dashboard-incoming-rules.ts` (pure:
-  group specs, row wording) filled by three providers in `dashboard.ts`. *In transit* and *Arrived,
+- **Incoming purchases** (#1810) — four groups in `src/lib/dashboard-incoming-rules.ts` (pure:
+  group specs, row wording) filled by four providers in `dashboard.ts`. *Started on the phone, to
+  complete* (#2006) comes first: the list's reader under `toComplete: true`, sorted and aged by
+  `toCompleteSince`, its *N more →* the plain purchase list (no filter names the set; every row is
+  marked). *Arrived, to sort* reads `toComplete: false`, so a phone purchase — stored `arrived` with an
+  open lot — is one row, not two, until *Done at the desk* moves it there. *In transit* and *Arrived,
   to sort* read through the Intake documents list's own reader (`listPurchasesPaginated` /
   `countPurchases`) with two filters no toolbar offers — `inProgress` (stored `arrived`, **both
   kinds**, unlike the `arrived` status filter, which is a delivery status and a purchase's own) and

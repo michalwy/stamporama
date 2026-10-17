@@ -138,6 +138,36 @@ desktop-only.
 - Afterwards the phone goes to **Sales to do** (`phoneSalesPath`), where the sale waits for payment —
   its further steps are #2007's.
 
+## Start a purchase (#2006)
+
+- **What the phone writes** (decided with the collector on 2026-10-17): a real purchase through
+  `startPurchaseOnPhone` (`purchases.ts`), never a loose note — stored **`arrived`** (bought at a fair
+  is in hand), with **one open lot** priced at the amount paid and titled by the description, so the
+  order has its figure, its spend and its ROI from the start. No copies and no cost split: closing
+  the lot stays at the desk, which may re-price, split or add lots as for any purchase. A separate
+  *amount* column on `Purchase` was rejected — it would have been a second notion of what an order
+  cost beside its lines.
+- **The stamps are noted, only the stamp** (`PurchaseNotedStamp`: stamp and position, no condition or
+  quantity — the collector's choice): a reminder of what is in the parcel, which makes no copy and
+  takes no part in intake. Picked through **the phone search** — the collection search route behind
+  the start screen's field, rows worded by `phoneSearchHit` — so a hit says held / wanted before
+  paying. At most `PHONE_PURCHASE_STAMP_LIMIT` (50). Read back by `listPurchaseNotedStamps`
+  (`purchase-noted-stamps.ts`), labelled as the pickers label them.
+- **The seller is the desk's own picker**, `PurchaseContactSelect` with `role="seller"`, drawn at the
+  tap target through its `inputStyle` (as #2009's buyer): a picked seller by id, a typed name resolved
+  on save by `resolvePurchaseContact` — an existing contact by name in any case, else a new seller.
+- **The mark** is `Purchase.toCompleteSince` — when the phone started it, null once the collector
+  says **Done at the desk** (`markPurchaseDoneAtDesk`; the label is `DONE_AT_DESK_LABEL`, named apart
+  from the status's *Mark completed*, decided 2026-10-17). **Nothing else clears it** — not closing
+  the lot, not marking the order completed (#2006's *Done when*). A purchase only, by CHECK
+  `purchase_to_complete_kind`. The words are `PHONE_PURCHASE_MARK`, the same on the list row, the
+  desk's card and the phone. Form rules in `phone-purchase-rules.ts` (pure, unit-tested).
+- **Screens**: `phone/purchases/new` (the form; *Full app* is the purchase list) and
+  `phone/purchases/[purchaseId]` (what was saved, read back; *Full app* is the desk's purchase
+  screen) — the screen #2011 adds its camera to. At the desk, `PurchasePhoneCard` on the purchase
+  screen carries the mark, the noted stamps and *Done at the desk*; it stays after the mark only
+  while stamps were noted.
+
 ## The stamp screen (#2003)
 
 - **`/c/[collectionSlug]/phone/stamps/[stampId]`** (`phoneStampPath`). It has **no row on the start
@@ -199,7 +229,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |
 
-**Browsing is read only** except starting a purchase and its photos. **Stays at the desk**: preparing,
+**Browsing is read only** except starting a purchase (#2006, above) and its photos. **Stays at the desk**: preparing,
 editing and publishing offers; intake, lots and the cost split; everything not in the table.
 **Rejected for now**: recognising a stamp from a photo (2026-10-17). A new phone screen is a decision
 of its own and is added to this table.

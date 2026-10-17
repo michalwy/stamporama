@@ -9,13 +9,16 @@ import {
   updatePurchase,
   setPurchaseStatus,
   markPurchaseCompleted,
+  markPurchaseDoneAtDesk,
   reopenCompletedPurchase,
   deletePurchase,
+  startPurchaseOnPhone,
   type PurchaseCreateInput,
   type PurchaseStatus,
 } from "@/lib/purchases";
 import { isPurchaseKind } from "@/lib/purchase-kind";
 import { isPurchaseStatus } from "@/lib/purchase-status";
+import { readPhonePurchaseFields } from "@/lib/phone-purchase-rules";
 import {
   createPurchaseExpense,
   deletePurchaseExpense,
@@ -581,6 +584,53 @@ export async function markPurchaseCompletedAction(purchaseId: string): Promise<P
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to mark completed. Please try again.",
+    };
+  }
+}
+
+/**
+ * Start a purchase on the phone (#2006, ADR-0072): seller, amount and currency, date, and optionally
+ * the stamps bought and a description. The rules of what it writes are `startPurchaseOnPhone`'s.
+ */
+export async function startPhonePurchaseAction(
+  collectionId: string,
+  formData: FormData
+): Promise<CreatePurchaseActionState> {
+  const session = await getSession();
+  const read = readPhonePurchaseFields(
+    {
+      sellerContactId: str(formData, "sellerContactId"),
+      sellerName: str(formData, "sellerName"),
+      amount: str(formData, "amount"),
+      currency: str(formData, "currency"),
+      purchasedAt: str(formData, "purchasedAt"),
+      description: str(formData, "description"),
+      stampIds: formData.getAll("stampId").map(String),
+    },
+    new Date().toISOString().slice(0, 10)
+  );
+  if ("error" in read) return { status: "error", message: read.error };
+  try {
+    const id = await startPurchaseOnPhone(session.user.id, collectionId, read.input);
+    return { status: "success", id };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to start the purchase. Please try again.",
+    };
+  }
+}
+
+/** *Done at the desk* (#2006): take the *started on the phone — to complete* mark off a purchase. */
+export async function markPurchaseDoneAtDeskAction(purchaseId: string): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await markPurchaseDoneAtDesk(session.user.id, purchaseId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to take the mark off. Please try again.",
     };
   }
 }

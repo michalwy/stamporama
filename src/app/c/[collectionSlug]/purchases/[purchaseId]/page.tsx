@@ -12,6 +12,7 @@ import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { listPackingSupplies } from "@/lib/packing-supplies";
+import { listPurchaseNotedStamps } from "@/lib/purchase-noted-stamps";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { intakeDocumentName } from "@/lib/purchase-kind";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
@@ -48,13 +49,16 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase || purchase.collectionId !== collection.id) notFound();
 
-  const [conditions, certificateStatuses, areas, locations, packingSupplies] = await Promise.all([
-    getStampConditions(session.user.id, collection.id),
-    getCertificateStatuses(session.user.id, collection.id),
-    getCollectionAreas(session.user.id, collection.id),
-    getLocations(session.user.id, collection.id),
-    listPackingSupplies(session.user.id, collection.id),
-  ]);
+  const [conditions, certificateStatuses, areas, locations, packingSupplies, notedStamps] =
+    await Promise.all([
+      getStampConditions(session.user.id, collection.id),
+      getCertificateStatuses(session.user.id, collection.id),
+      getCollectionAreas(session.user.id, collection.id),
+      getLocations(session.user.id, collection.id),
+      listPackingSupplies(session.user.id, collection.id),
+      // The stamps the phone noted when it started this purchase (#2006).
+      listPurchaseNotedStamps(session.user.id, purchase.id),
+    ]);
 
   // Copies now stream into each lot card via paginated client queries (#172), so the page no
   // longer preloads them. Issue headers for the grouped-by-issue view are still loaded here
@@ -100,6 +104,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         conditions={conditions}
         certificateStatuses={certificateStatuses}
         packingSupplies={packingSupplies}
+        notedStamps={notedStamps}
       />
     </Screen>
   );

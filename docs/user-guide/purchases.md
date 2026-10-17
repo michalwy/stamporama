@@ -179,7 +179,8 @@ what each piece became. Rename the document or give its lot a value whenever you
 
 Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.md)). A purchase then
 shows its **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, a
-*Trade* mark when the order came from closing a trade, the delivery **status**, a
+*Trade* mark when the order came from closing a trade, the delivery **status**, the mark
+*Started on the phone — to complete* on a purchase [started on the phone](#purchases-started-on-the-phone), a
 short summary of its lines (how many **lots** and **expenses**), and the **total** — the sum
 of every lot, every expense, every packing-supply line, and the shipping cost, shown in the
 purchase's currency. A
@@ -237,6 +238,27 @@ Click **Add purchase**. (For stamps you already own, click **Add opening balance
 Save records the purchase. Its lines — the stamps you bought (lots) and any non-inventory
 expenses — are added afterwards during intake.
 
+## Purchases started on the phone
+
+A purchase you start on the phone ([Starting a purchase](phone.md#starting-a-purchase)) arrives here as
+an ordinary purchase: the seller, the date and the currency you gave, the status *Arrived*, and **one
+open lot** priced at the amount you paid and named by what you said it was. Nothing else is done on
+the phone — no copies, no cost split.
+
+Until you say it is finished it carries the mark **Started on the phone — to complete**:
+
+- on its row in this list, beside the status;
+- on its own screen, in a card above its lines, which also lists the **stamps you noted** on the phone,
+  each a link to the stamp;
+- on the [Dashboard](dashboard.md#incoming-purchases), under *Started on the phone, to complete*.
+
+Complete it as any purchase — take the stamps in, re-price or split the lot, add the shipping, close
+the lot — then click **Done at the desk** on its card. That takes the mark off and the purchase off
+the Dashboard's group, and changes nothing else. **Nothing takes the mark off on its own**: closing
+the lot or marking the order *Completed* leaves it on, so a purchase is never taken for finished
+before you say so. The stamps you noted stay on the card afterwards, as a record of what the parcel
+held; they never become copies by themselves.
+
 ## Editing and deleting
 
 Use the **⋮** menu on a row to **Edit** or **Delete**.
@@ -244,7 +266,8 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
 - **Edit** reopens the header dialog. It never touches a purchase's lots or expenses —
   those are managed during intake. The order's own screen carries the same **Edit header**
   button, so you do not have to come back here to fix a date or add the postage.
-- **Delete** removes the purchase along with any lots and expenses. This cannot be undone.
+- **Delete** removes the purchase along with any lots and expenses (and the stamps noted on the
+  phone, for one started there). This cannot be undone.
   Once lots have been resolved into copies (during intake), a purchase whose lots still hold
   copies cannot be deleted until those copies are detached.
 

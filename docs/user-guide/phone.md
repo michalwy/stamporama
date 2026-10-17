@@ -36,7 +36,8 @@ The icon opens straight into your collection. If you have **several collections*
 first; tap the one to open, and **Other collections** at the bottom of a collection's start screen
 brings the list back.
 
-The start screen lists the phone screens, one row each. New ones arrive with new releases. Above
+The start screen lists the phone screens, one row each — **Browse by area**, **Start a purchase**,
+**Sales to do** and **Offers**. New ones arrive with new releases. Above
 them is the search for a stamp.
 
 ## Finding a stamp
@@ -60,6 +61,29 @@ opening it:
 
 Tap a row to open the stamp's phone screen. When nothing matches, the screen says so. The search
 shows up to 20 stamps; when it is full, typing more narrows it.
+
+## Starting a purchase
+
+**Start a purchase** records something you have just bought — at a fair, at a club meeting — while it
+is still in your bag. You finish it at the desk, as any other purchase.
+
+- **Bought from** — the seller. As you type, the phone suggests your sellers; a name that is not one
+  of your contacts yet is saved as a new seller.
+- **Amount paid** and its **currency** — the currency starts at your collection's base currency.
+- **Date** — today unless you change it; it cannot be after today.
+- **What it was** — optional: *Stockbook Poland 1950s*, *Box of covers*.
+- **Stamps bought** — optional. Find a stamp with the same search as the start screen, and tap it to
+  add it; each row says whether you hold it and whether it is wanted, so you can see a gap filled
+  before you pay. **×** takes one off again.
+
+**Start the purchase** saves it and shows it back: the seller, the number and date, what was paid,
+what it was and the stamps you noted, with the mark *Started on the phone — to complete*. **Start
+another purchase** goes straight to a new one; **Full app** opens it at the desk.
+
+The phone makes no copies and splits no costs. What it saves is an ordinary purchase marked
+*Arrived*, with one open lot at the amount paid, named by what it was — at the desk you take the stamps
+in, split the lot or add more, and close it as usual. See
+[Purchases started on the phone](purchases.md#purchases-started-on-the-phone).
 
 ## Sales to do
 

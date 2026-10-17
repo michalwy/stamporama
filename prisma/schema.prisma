@@ -3417,6 +3417,8 @@ model Stamp {
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
   auctionLotLines    AuctionLotLine[]
+  /** Purchases started on the phone that note this stamp as bought (#2006). */
+  purchaseNotes      PurchaseNotedStamp[]
   priceObservations  PriceObservation[]
   photos             Photo[]
   translations       StampTranslation[]
@@ -3995,6 +3997,12 @@ model Purchase {
   // settled auction routinely holds pieces belonging to a dozen of the purchase's lots. Per lot it
   // existed twenty times over in one parcel and named nothing.
   nextScanBatchNo Int @default(1)
+  // Started on the phone and not yet completed at the desk (#2006, ADR-0072): when the phone
+  // started it, and null once the collector says *Done at the desk* — or for a purchase entered at
+  // the desk. While set, the purchase list marks it *started on the phone — to complete* and the
+  // Dashboard's *Incoming purchases* lists it. Nothing clears it but that one action; a purchase
+  // only (CHECK `purchase_to_complete_kind`).
+  toCompleteSince DateTime?
   createdAt    DateTime @default(now())
 
   collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -4014,10 +4022,13 @@ model Purchase {
   auctionSale AuctionSale?
   // The trade this purchase is the incoming half of (#644), or none.
   trade       Trade?            @relation("TradePurchase", fields: [tradeId], references: [id], onDelete: Restrict)
+  // The stamps the phone noted as bought when it started this purchase (#2006).
+  notedStamps PurchaseNotedStamp[]
 
   @@unique([collectionId, purchaseNo])
   @@index([collectionId])
   @@index([collectionId, kind])
+  @@index([collectionId, toCompleteSince])
   @@index([contactId])
   @@index([platformId])
   @@map("purchase")
@@ -4026,6 +4037,26 @@ model Purchase {
 // Inventory line of a purchase (ADR-0009 §1): a priced lot that resolves into one or
 // more `Item`s over time. Intake lifecycle `status`: open | closed. Cascade-deleted
 // with its purchase.
+// A stamp the phone noted as bought when it started a purchase (#2006, ADR-0072) — a reminder of
+// what is in the parcel, for the desk to take in. **Only the stamp**, no condition or quantity
+// (decided with the collector on 2026-10-17): it makes no copy, takes no part in the cost split and
+// leaves intake exactly as it is. `onDelete: Cascade` on the stamp too: a note about a stamp that
+// no longer exists says nothing.
+model PurchaseNotedStamp {
+  id         String @id @default(cuid())
+  purchaseId String
+  stampId    String
+  // The order the phone picked them in.
+  position   Int
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  stamp    Stamp    @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@unique([purchaseId, stampId])
+  @@index([stampId])
+  @@map("purchase_noted_stamp")
+}
+
 model PurchaseLot {
   id         String @id @default(cuid())
   purchaseId String
