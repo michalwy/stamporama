@@ -109,11 +109,12 @@ describe("the dashboard's Incoming purchases section (#1810)", () => {
     await prisma.user.deleteMany({ where: { id: { in: [userId, strangerId] } } });
   });
 
-  it("shows its three groups with a zero when nothing is incoming", async () => {
+  it("shows its four groups with a zero when nothing is incoming", async () => {
     const s = await section();
     assert.deepEqual(
       s.groups.map((g) => [g.id, g.count]),
       [
+        ["incoming-started-on-phone", 0],
         ["incoming-in-transit", 0],
         ["incoming-arrived-to-sort", 0],
         ["incoming-scans-to-cut", 0],

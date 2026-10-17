@@ -21,6 +21,7 @@ import {
 } from "./purchase-kind";
 import { isPurchaseStatus, statusChangeStamp, type PurchaseStatus } from "./purchase-status";
 import { settleSupplies } from "./supply-settlement";
+import type { PhonePurchaseInput } from "./phone-purchase-rules";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -82,7 +83,7 @@ export type { PurchaseStatus };
 
 /** `statusChangedAt` (#1810) is the dashboard's order — how long a document has been in its state —
  *  and is offered by no list toolbar or route. */
-export type PurchaseSortBy = "purchasedAt" | "createdAt" | "statusChangedAt";
+export type PurchaseSortBy = "purchasedAt" | "createdAt" | "statusChangedAt" | "toCompleteSince";
 
 /** A priced inventory line. Intake `status` is managed by the close flow (#121); the
  * CRUD dialog only reads/writes the price and never opens the lifecycle here. */
@@ -164,6 +165,9 @@ export interface PurchaseListItem {
   unvaluedLotCount: number;
   /** When {@link status} last changed, ISO (#1810) — the dashboard's *how long in this state*. */
   statusChangedAt: string;
+  /** Started on the phone and not yet *Done at the desk* (#2006): when the phone started it, ISO,
+   *  else null. The row's mark *started on the phone — to complete*. */
+  toCompleteSince: string | null;
 }
 
 export interface PurchaseListFilters {
@@ -184,6 +188,9 @@ export interface PurchaseListFilters {
   /** Documents with at least one lot still open — cost not yet frozen (#1810). The dashboard's
    *  filter; no toolbar offers it. */
   withOpenLots?: boolean;
+  /** Started on the phone and not yet *Done at the desk* (#2006) when true; every other document
+   *  when false. The dashboard's filter; no toolbar offers it. */
+  toComplete?: boolean;
   contactId?: string;
   /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
    *  which includes every opening balance. Empty or absent is no filter. */
@@ -297,7 +304,9 @@ export async function listPurchasesPaginated(
       ? [{ createdAt: dir }]
       : sortBy === "statusChangedAt"
         ? [{ statusChangedAt: dir }, { createdAt: dir }]
-        : [{ purchasedAt: dir }, { createdAt: dir }];
+        : sortBy === "toCompleteSince"
+          ? [{ toCompleteSince: dir }, { createdAt: dir }]
+          : [{ purchasedAt: dir }, { createdAt: dir }];
 
   const rows = await prisma.purchase.findMany({
     where: buildPurchaseListWhere(collectionId, filters),
@@ -316,6 +325,7 @@ export async function listPurchasesPaginated(
       currency: true,
       status: true,
       statusChangedAt: true,
+      toCompleteSince: true,
       shippingCost: true,
       contact: { select: { name: true } },
       platform: { select: { name: true } },
@@ -358,6 +368,7 @@ export async function listPurchasesPaginated(
       total: isOpeningBalance(row) && valued.length === 0 ? null : total.toFixed(2),
       unvaluedLotCount: row.lots.filter((l) => l.price == null).length,
       statusChangedAt: row.statusChangedAt.toISOString(),
+      toCompleteSince: row.toCompleteSince?.toISOString() ?? null,
     };
   });
 
@@ -389,6 +400,9 @@ function buildPurchaseListWhere(
       filters.kind ? { kind: filters.kind } : {},
       filters.inProgress ? { status: "arrived" satisfies PurchaseStatus } : {},
       filters.withOpenLots ? { lots: { some: { status: "open" } } } : {},
+      filters.toComplete === undefined
+        ? {}
+        : { toCompleteSince: filters.toComplete ? { not: null } : null },
       partyWhere("platformId", filters.platformIds),
       partyWhere("contactId", filters.supplierIds),
     ],
@@ -576,6 +590,79 @@ export async function createPurchase(
   );
 
   return (await getPurchase(ownerId, created.id))!;
+}
+
+/**
+ * Start a purchase on the phone (#2006, ADR-0072): a real purchase, never a loose note. Decided with
+ * the collector on 2026-10-17 —
+ *
+ * - stored **`arrived`**: bought at a fair is in hand;
+ * - **one open lot** priced at the amount paid and titled by the description, so the order has its
+ *   figure from the start; the lot makes no copy and closing it — the cost split — stays at the desk,
+ *   where it may be re-priced, split or joined by others as any lot is;
+ * - the stamps the phone picked **noted** on the purchase, only the stamp, in the order picked;
+ * - marked **started on the phone — to complete** (`toCompleteSince`) until the collector says *Done
+ *   at the desk* ({@link markPurchaseDoneAtDesk}); nothing else clears it.
+ *
+ * The seller is found by name or created as a seller, exactly as the desk's dialog does it. One
+ * transaction, so a stamp that is not this collection's leaves no half-made purchase behind.
+ */
+export async function startPurchaseOnPhone(
+  ownerId: string,
+  collectionId: string,
+  input: PhonePurchaseInput
+): Promise<string> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const col = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { baseCurrency: true },
+  });
+
+  if (input.stampIds.length > 0) {
+    const found = await prisma.stamp.count({ where: { id: { in: input.stampIds }, collectionId } });
+    if (found !== input.stampIds.length) throw new Error("A stamp picked is not in this collection.");
+  }
+
+  const header = await resolveHeader(collectionId, col.baseCurrency, "purchase", {
+    contactName: input.sellerName,
+    purchasedAt: input.purchasedAt,
+    currency: input.currency,
+    status: "arrived",
+  });
+
+  const created = await prisma.$transaction(async (tx) => {
+    const purchase = await tx.purchase.create({
+      data: {
+        collectionId,
+        purchaseNo: await allocateEntityNumber(tx, collectionId, "purchase"),
+        kind: "purchase",
+        ...header,
+        toCompleteSince: new Date(),
+        lots: {
+          create: { title: input.description, price: money(input.amount), status: "open" },
+        },
+        notedStamps: {
+          create: input.stampIds.map((stampId, position) => ({ stampId, position })),
+        },
+      },
+      select: { id: true },
+    });
+    return purchase;
+  });
+  return created.id;
+}
+
+/**
+ * *Done at the desk* (#2006): the collector has completed what the phone started, so the mark and
+ * the Dashboard's row go. Nothing else changes — the status, the lots and the noted stamps stay as
+ * they are. Taking the mark off a purchase that has none is a no-op, so two tabs cannot fail it.
+ */
+export async function markPurchaseDoneAtDesk(ownerId: string, purchaseId: string): Promise<void> {
+  await assertPurchaseOwner(ownerId, purchaseId);
+  await prisma.purchase.updateMany({
+    where: { id: purchaseId, toCompleteSince: { not: null } },
+    data: { toCompleteSince: null },
+  });
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   incomingPurchaseItem,
   incomingSheetItem,
   intakeDocumentNo,
+  phoneStartedPurchaseItem,
 } from "../../src/lib/dashboard-incoming-rules";
 
 // How a row of the dashboard's Incoming purchases section reads (#1810): a purchase is its supplier,
@@ -21,6 +22,7 @@ const purchase = {
   currency: "PLN",
   total: "123.45",
   statusChangedAt: "2026-10-02T08:00:00.000Z",
+  toCompleteSince: null,
 };
 
 describe("incomingPurchaseItem (#1810)", () => {
@@ -53,6 +55,16 @@ describe("incomingPurchaseItem (#1810)", () => {
     });
     assert.equal(item.label, "Klaser Polska 1");
     assert.equal(item.detail, "Opening balance #12 · 2026-09-30 · No opening value");
+  });
+});
+
+describe("phoneStartedPurchaseItem (#2006)", () => {
+  it("reads as any purchase row, aged from when the phone started it", () => {
+    const started = { ...purchase, toCompleteSince: "2026-10-01T12:00:00.000Z" };
+    assert.deepEqual(phoneStartedPurchaseItem(started), {
+      ...incomingPurchaseItem(started),
+      at: "2026-10-01T12:00:00.000Z",
+    });
   });
 });
 

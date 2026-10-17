@@ -175,6 +175,8 @@ export interface PurchaseDetail {
   kind: PurchaseKind;
   /** The opening balance's title; null on a purchase. */
   title: string | null;
+  /** The short per-collection number (#432). */
+  purchaseNo: number;
   /** Supplier and platform ids beside their names (#752), so the order screen can open the
    *  Purchases list's own header dialog pre-filled — its two contact pickers are addressed by id. */
   contactId: string | null;
@@ -187,6 +189,9 @@ export interface PurchaseDetail {
   fxRateToBase: string | null;
   shippingCost: string | null;
   status: string;
+  /** Started on the phone and not yet *Done at the desk* (#2006): when the phone started it, ISO,
+   *  else null. */
+  toCompleteSince: string | null;
   lots: LotSummary[];
   expenseCount: number;
   /** The order's non-inventory lines, oldest first (#1390) — the card they are added, restated and
@@ -267,11 +272,13 @@ export async function getPurchaseDetail(
       collectionId: true,
       kind: true,
       title: true,
+      purchaseNo: true,
       purchasedAt: true,
       currency: true,
       fxRateToBase: true,
       shippingCost: true,
       status: true,
+      toCompleteSince: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       contact: { select: { id: true, name: true } },
       platform: { select: { id: true, name: true } },
@@ -389,6 +396,7 @@ export async function getPurchaseDetail(
     collectionId: row.collectionId,
     kind: row.kind as PurchaseKind,
     title: row.title,
+    purchaseNo: row.purchaseNo,
     contactId: row.contact?.id ?? null,
     contactName: row.contact?.name ?? null,
     platformId: row.platform?.id ?? null,
@@ -399,6 +407,7 @@ export async function getPurchaseDetail(
     fxRateToBase: row.fxRateToBase?.toString() ?? null,
     shippingCost: row.shippingCost?.toFixed(2) ?? null,
     status: row.status,
+    toCompleteSince: row.toCompleteSince?.toISOString() ?? null,
     lots,
     expenseCount: row.expenses.length,
     expenses: row.expenses.map((e) => ({ id: e.id, label: e.label, price: e.price.toFixed(2) })),

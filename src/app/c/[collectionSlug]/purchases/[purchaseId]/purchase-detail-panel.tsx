@@ -124,6 +124,8 @@ import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
+import { PurchasePhoneCard } from "./purchase-phone-card";
+import type { NotedStamp } from "@/lib/phone-purchase-rules";
 import { PurchaseSuppliesCard } from "./purchase-supplies-card";
 import type { PackingSupplyData } from "@/lib/packing-supplies";
 import { ScansCard } from "@/app/c/[collectionSlug]/shared/scans-card";
@@ -356,6 +358,8 @@ interface PurchaseDetailPanelProps {
   certificateStatuses: CertificateStatusData[];
   /** The collection's packing supplies (#1897) — what a supply line can name. */
   packingSupplies: PackingSupplyData[];
+  /** The stamps the phone noted as bought when it started this purchase (#2006); empty otherwise. */
+  notedStamps: NotedStamp[];
 }
 
 export function PurchaseDetailPanel({
@@ -370,6 +374,7 @@ export function PurchaseDetailPanel({
   conditions,
   certificateStatuses,
   packingSupplies,
+  notedStamps,
 }: PurchaseDetailPanelProps) {
   const router = useRouter();
   // Storage locations, re-read client-side rather than taken from the server render (#624). Filing
@@ -1261,6 +1266,17 @@ export function PurchaseDetailPanel({
           style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 0 }}
         />
       </div>
+
+      {/* Started on the phone (#2006): the mark, the stamps it noted and *Done at the desk*, above
+          everything the desk does to complete it. */}
+      <PurchasePhoneCard
+        purchaseId={purchase.id}
+        collectionSlug={collectionSlug}
+        toCompleteSince={purchase.toCompleteSince}
+        notedStamps={notedStamps}
+        isPending={isPending}
+        run={run}
+      />
 
       {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.
           A purchase's only: an opening balance paid for nothing. Drawn only once it has a line

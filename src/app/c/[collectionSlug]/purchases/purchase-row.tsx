@@ -13,6 +13,7 @@ import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Icon } from "@/app/icons";
+import { PHONE_PURCHASE_MARK } from "@/lib/phone-purchase-rules";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -23,6 +24,13 @@ const CHIP: React.CSSProperties = {
   color: "var(--color-text-secondary)",
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
+};
+
+const PHONE_MARK_CHIP: React.CSSProperties = {
+  ...CHIP,
+  color: "var(--color-accent)",
+  borderColor: "var(--color-accent-border, var(--color-border))",
+  background: "var(--color-accent-soft)",
 };
 
 const META_INLINE: React.CSSProperties = {
@@ -163,6 +171,14 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
               <Tooltip content="Delivery status">
                 <span style={status.style}>{status.label}</span>
               </Tooltip>
+              {/* Started on the phone (#2006): marked until the collector says Done at the desk. */}
+              {p.toCompleteSince && (
+                <Tooltip content="Started on the phone — seller, amount and date. Complete it here, then choose Done at the desk on its screen.">
+                  <span style={PHONE_MARK_CHIP}>
+                    <Icon name="phone" size="sm" /> {PHONE_PURCHASE_MARK}
+                  </span>
+                </Tooltip>
+              )}
             </>
           )}
         </div>
