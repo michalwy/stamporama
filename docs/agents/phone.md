@@ -33,8 +33,8 @@ desktop-only.
   one tap. Signed out, it goes to `/sign-in?next=/phone` like any screen (#1176), so signing in on
   the phone lands back on the phone.
 - **A collection's phone start** is `/c/[collectionSlug]/phone` (`phoneHomePath`). Its rows come from
-  `PHONE_ENTRIES` (`phone/phone-entries.ts`), **empty until the first phone screen lands** — each
-  screen in the table below adds its own row. *Other collections* shows only when there are several.
+  `PHONE_ENTRIES` (`phone/phone-entries.ts`) — each screen in the table below adds its own row.
+  *Other collections* shows only when there are several.
 - **No sidebar on a phone screen**: the collection layout hands the sidebar to `CollectionFrame`,
   which leaves it out when the open segment is `phone` (`useSelectedLayoutSegment`). The phone
   screens stay inside the layout's providers and collection check — no route group, no second copy.
@@ -70,6 +70,29 @@ desktop-only.
 - **Mark paid asks nothing** — the desk's total-paid prompt (#443) is skippable, and the phone skips
   it, since the issue settled that *sent* is the one step that takes input and the amounts stay at the
   desk (decided in writing #2007).
+
+## Offers (#2008)
+
+- **The list** (`phone/offers/`) is the desk's own pages of offers (`useOffersInfinite`, the offers
+  route) under two narrowings kept in the URL as the desk keeps them, `platform` and `state` — one
+  state or none, none being the desk's default of every offer not closed. **Two selects, not the
+  desk's `FilterChip` row**: a toolbar chip is under `PHONE_TAP_TARGET`, and seven states do not fit a
+  phone's width. The select keeps a style of its own at the tap target rather than spreading
+  `formControl` and overriding its height, which `form-control-height.test.ts` forbids.
+- **The offer screen** (`phone/offers/[offerId]/`) is a server page over `getPhoneOffer`
+  (`src/lib/phone-offers.ts`), which takes its title, price and conversion from `getOfferDetail` so
+  they are the desk's to the letter. **Its picture** (decided with the collector on 2026-10-17): the
+  first image of the upload set (`readOfferUploadPlan`) — what a buyer sees first — else the photo of
+  the first copy, in set order, that has one, front before back (`sortPhotos`).
+- **The moves are pause, resume and withdraw**, from `phoneOfferMoves` (`src/lib/phone-offer-moves.ts`,
+  pure, unit-tested), read off `manualTransitions` rather than listed: the phone offers a move exactly
+  when the desk allows it. **Resume is `paused → active` only** — `ready → active` is publishing and
+  `pending → active` an approval, both desk work that asks for the listing's link. Each move is the
+  desk's `setOfferStateAction`, so a withdrawn lot of a pending Facebook post takes the post with it
+  (#1779) here too; the confirmation's sentence is `withdrawOfferMessage`, shared with the desk's.
+  Afterwards `router.refresh()` reads the page again and `invalidateAll` marks the lists stale.
+- **No back link** on either screen, as on the shell's: the phone's own back gesture goes back, and
+  keeps the list's narrowing, which a link would have to carry.
 
 ## The phone screens
 
