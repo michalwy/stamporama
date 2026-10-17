@@ -86,9 +86,11 @@ describe("needsActionRemedy (#1804)", () => {
 });
 
 describe("isSetSoldElsewhere (#1804)", () => {
-  const soldVia = new Map([
+  const soldVia = new Map<string, string | null>([
     ["a", "set-1"],
     ["b", "set-2"],
+    // Sold on a sale line that names no set — a copy on no offer (#2021).
+    ["d", null],
   ]);
 
   it("is a copy that left through another set's sale", () => {
@@ -101,6 +103,10 @@ describe("isSetSoldElsewhere (#1804)", () => {
 
   it("is never a set sold through this offer", () => {
     assert.equal(isSetSoldElsewhere({ id: "set-1", sold: true, itemIds: ["b"] }, soldVia), false);
+  });
+
+  it("is a copy sold on no offer at all (#2021)", () => {
+    assert.equal(isSetSoldElsewhere({ id: "set-1", sold: false, itemIds: ["d"] }, soldVia), true);
   });
 
   it("is not a set none of whose copies has sold", () => {

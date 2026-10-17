@@ -12,6 +12,7 @@ function input(overrides: Partial<SelectionActionInput> = {}): SelectionActionIn
   return {
     inView: 5,
     listable: 5,
+    sellable: 5,
     collision: null,
     exclusion: null,
     quickOffer: null,
@@ -22,6 +23,7 @@ function input(overrides: Partial<SelectionActionInput> = {}): SelectionActionIn
       newOffer: noop,
       addToOffer: noop,
       addToCollisionOffer: noop,
+      sell: noop,
     },
     ...overrides,
   };
@@ -50,6 +52,7 @@ describe("selection actions", () => {
         "add-to-collision-offer",
         "bulk-edit",
         "platform-exclusion",
+        "sell",
         "new-offer-one-set",
         "new-offer-per-copy",
         "add-to-offer",
@@ -63,6 +66,7 @@ describe("selection actions", () => {
         input({
           inView: 5,
           listable: 3,
+          sellable: 4,
           collision: { offerRef: "#12", offerLabel: "Poland 1950", platformName: "Colnect" },
           exclusion: { platformName: "Delcampe", excluded: false },
         })
@@ -74,6 +78,7 @@ describe("selection actions", () => {
         "Add 3 to #12 instead",
         "Bulk edit 5 copies…",
         "Never list 5 on Delcampe",
+        "Sell 4 copies…",
         "New offer · one set of 3",
         "New offer · 3 sets",
         "Add 3 to offer",
@@ -82,16 +87,30 @@ describe("selection actions", () => {
   });
 
   it("collapses the new-offer pair into one entry for a single listable copy", () => {
-    const menu = selectionMenuActions(buildSelectionActions(input({ inView: 1, listable: 1 })));
+    const menu = selectionMenuActions(
+      buildSelectionActions(input({ inView: 1, listable: 1, sellable: 1 }))
+    );
     assert.deepEqual(
       menu.map((a) => a.label),
-      ["Bulk edit 1 copy…", "New offer · 1 copy", "Add 1 to offer"]
+      ["Bulk edit 1 copy…", "Sell 1 copy…", "New offer · 1 copy", "Add 1 to offer"]
     );
   });
 
   it("leaves the listing entries out when nothing in view can be listed", () => {
-    const actions = buildSelectionActions(input({ inView: 4, listable: 0 }));
+    const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 0 }));
     assert.deepEqual(actions.map((a) => a.key), ["bulk-edit"]);
+  });
+
+  it("offers Sell… for copies in stock that are not for sale (#2021)", () => {
+    const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 4 }));
+    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "sell"]);
+    assert.equal(actions[1].barLabel, "Sell…");
+  });
+
+  it("names how many copies Sell… reaches when only some are in stock (#2021)", () => {
+    const sell = buildSelectionActions(input({ inView: 5, sellable: 2 })).find((a) => a.key === "sell");
+    assert.equal(sell?.barLabel, "Sell 2…");
+    assert.match(sell?.description ?? "", /the 2 of the 5 copies in view that are in stock/);
   });
 
   it("carries the collision warning as a hint on the listing entries only", () => {
@@ -104,10 +123,15 @@ describe("selection actions", () => {
     const hints = Object.fromEntries(actions.map((a) => [a.key, a.hint]));
     const warning = "Already offered on Colnect in this condition.";
     assert.equal(hints["bulk-edit"], undefined);
+    assert.equal(hints["sell"], undefined);
     assert.equal(hints["new-offer-one-set"], warning);
     assert.equal(hints["new-offer-per-copy"], warning);
     assert.equal(hints["add-to-offer"], warning);
-    assert.ok(actions.filter((a) => a.tone !== "link" && a.key !== "bulk-edit").every((a) => a.colliding));
+    assert.ok(
+      actions
+        .filter((a) => a.tone !== "link" && a.key !== "bulk-edit" && a.key !== "sell")
+        .every((a) => a.colliding)
+    );
   });
 
   it("says quick offer mode on the new-offer entries when nothing collides", () => {
@@ -130,6 +154,7 @@ describe("selection actions", () => {
           newOffer: (packaging) => calls.push(`newOffer:${packaging}`),
           addToOffer: () => calls.push("addToOffer"),
           addToCollisionOffer: () => calls.push("addToCollisionOffer"),
+          sell: () => calls.push("sell"),
         },
       })
     );
@@ -138,6 +163,7 @@ describe("selection actions", () => {
       "addToCollisionOffer",
       "bulkEdit",
       "setExclusion:false",
+      "sell",
       "newOffer:one-set",
       "newOffer:per-copy",
       "addToOffer",

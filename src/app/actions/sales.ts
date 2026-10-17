@@ -12,6 +12,7 @@ import {
   updateSaleShipment,
   updateSaleShipping,
   addSaleLines,
+  addSaleCopySet,
   updateSaleLinePrice,
   removeSaleLine,
   swapSaleLineSet,
@@ -272,6 +273,32 @@ export async function addSaleLinesAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the sold sets.");
+  }
+}
+
+/** Copies on no offer sold as **one set** with one typed price (#2021) — from the sale's own screen,
+ * or ticked on Copies and sold into an open sale or a new one. No offer is made for them. */
+export async function addSaleCopySetAction(
+  saleId: string,
+  raw: { itemIds: string[]; price: string },
+  opts: { toSentSale?: boolean } = {}
+): Promise<SaleActionState> {
+  const session = await getSession();
+  if (raw.itemIds.length === 0) {
+    return { status: "error", message: "Choose at least one copy to sell." };
+  }
+  const priced = parsePrice(raw.price);
+  if (!priced.ok) return { status: "error", message: priced.message };
+  try {
+    await addSaleCopySet(
+      session.user.id,
+      saleId,
+      { itemIds: raw.itemIds, price: priced.value },
+      { toSentSale: opts.toSentSale === true }
+    );
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to add the copies to the sale.");
   }
 }
 

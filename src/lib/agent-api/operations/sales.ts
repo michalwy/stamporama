@@ -294,7 +294,7 @@ export const getSaleOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The sale. Each line is one sold set: `offerNo` is the offer it sold from, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `toReview` is present while what this API recorded waits for the collector's confirmation.",
+      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `toReview` is present while what this API recorded waits for the collector's confirmation.",
   },
   handler: async (context, params) => readSale(context, params),
 };

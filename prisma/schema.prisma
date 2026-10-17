@@ -6102,7 +6102,10 @@ model SaleLine {
   // The offer the sale came through; `SetNull` so a historical sale survives offer cleanup.
   offerId    String?
   // The offer set sold; `Restrict` so a sold set cannot be deleted out from under the sale record.
-  offerSetId String
+  // **Null on a set of copies that were on no offer** (#2021, ADR-0013 §8): picked on the sale's own
+  // screen or ticked on Copies, they are one set that belongs to the sale alone — no offer is made
+  // for them, so `offerId` is null too. The copies are this line's `items`, as on every line.
+  offerSetId String?
   // Line sale price in the sale's transaction currency.
   price      Decimal @db.Decimal(10, 2)
   // The line names a set, but **nobody has chosen it yet** (#697).
@@ -6130,9 +6133,9 @@ model SaleLine {
   // they have overridden the pick the line is no longer the buyer's answer.
   setChosenByBuyerAt DateTime?
 
-  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  offer    Offer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
-  offerSet OfferSet @relation(fields: [offerSetId], references: [id], onDelete: Restrict)
+  sale     Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  offer    Offer?    @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  offerSet OfferSet? @relation(fields: [offerSetId], references: [id], onDelete: Restrict)
   items    SaleLineItem[]
 
   @@index([saleId])

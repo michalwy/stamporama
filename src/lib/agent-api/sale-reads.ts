@@ -56,7 +56,8 @@ export interface AgentSaleLine {
   readonly id: string;
   readonly offerId: string | null;
   readonly offerNo: number | null;
-  readonly setId: string;
+  /** The offer set that sold — null on a set of copies on no offer (#2021). */
+  readonly setId: string | null;
   readonly set: string;
   readonly price: string;
   readonly copies: readonly string[];
@@ -166,7 +167,7 @@ export function saleRecord(
     lines: readonly {
       id: string;
       offerId: string | null;
-      offerSetId: string;
+      offerSetId: string | null;
       setLabel: string;
       price: string;
       itemLabels: readonly string[];

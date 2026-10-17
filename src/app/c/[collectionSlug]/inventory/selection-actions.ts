@@ -51,6 +51,9 @@ export interface SelectionActionInput {
   inView: number;
   /** Of those, the ones an offer can be made of — for sale, in hand, still held (#682). */
   listable: number;
+  /** Of those, the ones that can be sold straight onto a sale, on no offer (#2021) — in stock,
+   *  whatever they are kept for (`isInStockForSale`). */
+  sellable: number;
   /** The live offer this selection already duplicates on the platform in scope (#513, #732). */
   collision: { offerRef: string; offerLabel: string; platformName: string } | null;
   /** The platform the list is working through (#506), with whether the whole selection is already
@@ -66,6 +69,7 @@ export interface SelectionActionInput {
     newOffer: (packaging: NewOfferPackaging) => void;
     addToOffer: () => void;
     addToCollisionOffer: () => void;
+    sell: () => void;
   };
 }
 
@@ -113,7 +117,7 @@ function newOfferShortcuts(
  * the collector cannot see (#1021), so neither surface offers anything.
  */
 export function buildSelectionActions(input: SelectionActionInput): SelectionAction[] {
-  const { inView, listable, collision, exclusion, quickOffer, isPending, on } = input;
+  const { inView, listable, sellable, collision, exclusion, quickOffer, isPending, on } = input;
   if (inView === 0) return [];
 
   const actions: SelectionAction[] = [];
@@ -163,6 +167,25 @@ export function buildSelectionActions(input: SelectionActionInput): SelectionAct
       tone: "neutral",
       disabled: isPending,
       onSelect: () => on.setExclusion(!excluded),
+    });
+  }
+
+  // Selling the copies without listing them (#2021): one set on an open sale or a new one, at a price
+  // typed for all of them. Absent when nothing in view is in stock, as the listing half is when
+  // nothing can be listed; where only some are, the labels carry that number.
+  if (sellable > 0) {
+    actions.push({
+      key: "sell",
+      barLabel: sellable < inView ? `Sell ${sellable}…` : "Sell…",
+      menuLabel: `Sell ${copies(sellable)}…`,
+      icon: "sell",
+      description:
+        "Sell these copies as one set with one price, on an open sale or a new one — no offer is made for them." +
+        (sellable < inView
+          ? ` Applies to the ${sellable} of the ${inView} copies in view that are in stock.`
+          : ""),
+      tone: "neutral",
+      onSelect: on.sell,
     });
   }
 

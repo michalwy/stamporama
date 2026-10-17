@@ -6,6 +6,7 @@
 
 import type { OfferState } from "./offer-rules";
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
+import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 
 /** Offer states a sale can be recorded against: an offer must still be live (`active`), merely
  * `paused` on the platform, or `pending` its approval (#1778) — a buyer may answer a post the
@@ -76,4 +77,25 @@ export function shipmentGoingBy(sale: {
   return sale.sentAsDiffers && sale.sentAsServiceName
     ? sale.sentAsServiceName
     : sale.shippingOptionName;
+}
+
+/**
+ * Can this copy be sold as part of a set on no offer (#2021)? In stock: in hand (it goes in the
+ * envelope, so one still in the post cannot), not disposed of, not sold, not traded away. The
+ * in-memory twin of the domain's `IN_STOCK_COPY_WHERE`, for a screen that already holds the copy
+ * rows — Copies decides from it which ticked copies *Sell…* reaches. Whether the copy is in an offer
+ * does not matter: that offer is flagged as for any copy sold elsewhere.
+ */
+export function isInStockForSale(copy: {
+  sold: boolean;
+  tradedAway: unknown;
+  disposedAt: Date | string | null;
+  deliveryState: string;
+}): boolean {
+  return (
+    !copy.sold &&
+    copy.tradedAway == null &&
+    copy.disposedAt == null &&
+    (IN_HAND_DELIVERY_STATES as readonly string[]).includes(copy.deliveryState)
+  );
 }

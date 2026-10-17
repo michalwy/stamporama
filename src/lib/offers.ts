@@ -1310,7 +1310,7 @@ async function needsActionRows(
     SELECT o."id" AS "offerId", o."platformId" AS "platformId", o."state" AS "state",
            COUNT(*)::int AS "deadCount",
            COUNT(*) FILTER (
-             WHERE sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id"
+             WHERE sl."id" IS NOT NULL AND sl."offerSetId" IS DISTINCT FROM s."id"
            )::int AS "soldCount",
            COUNT(*) FILTER (
              WHERE o."state" IN ('active', 'pending')
@@ -1331,7 +1331,7 @@ async function needsActionRows(
       AND o."state" IN ('active', 'pending', 'preparing', 'ready')
       ${scope}
       AND (
-        (sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id")
+        (sl."id" IS NOT NULL AND sl."offerSetId" IS DISTINCT FROM s."id")
         OR (
           o."state" IN ('active', 'pending')
           AND (
@@ -5627,8 +5627,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       isSetSoldElsewhere({ id: s.id, sold, itemIds: s.items.map((li) => li.itemId) }, soldViaSet);
     const elsewhereItem = soldElsewhere
       ? s.items.find((li) => {
-          const via = soldViaSet.get(li.itemId);
-          return via != null && via !== s.id;
+          return soldViaSet.has(li.itemId) && soldViaSet.get(li.itemId) !== s.id;
         })
       : undefined;
     const needs =

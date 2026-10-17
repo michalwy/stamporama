@@ -114,6 +114,29 @@ A sale is **single-currency**, so only offers in the sale's currency can be adde
 the platform's currency after listing, any offer still on the **old** currency is shown flagged
 **⚠ CUR — re-list** and can't be selected — re-list it in the platform's current currency first.
 
+### Selling copies that are on no offer
+
+Not every stamp that leaves was listed first — one sold to someone who asked for it, at a fair, to a
+friend. **Add copies**, beside **Add sold units**, sells such copies without making an offer for
+them. It opens a picker of every copy **in stock** — in hand, not sold, not traded away, not
+disposed of — whatever it is kept for, with the area tree and year facets on the left and a filter
+box over the list (stamp, issue, catalog number or location ref). Tick the copies, type the **price
+for the set** in the sale's currency and press **Add**: the copies become **one set on the sale,
+with that one price**, as an offer's set is sold at one price rather than stamp by stamp. The price
+starts empty and has to be typed — there is no offer to take an asking price from.
+
+Each pick is a set of its own, so open **Add copies** again for the next one; a sale can hold any
+number of them beside sets from offers. On the **Sold units** list such a set reads *on no offer*
+beside its copy count, is named by its copies, and its price can be edited in place like any other.
+It appears nowhere in **Offers**, and on the [packing list](#printing-a-packing-list) its **Offer**
+column reads `—`.
+
+A copy that is also in an offer can be picked. That offer is then flagged **Needs action**, exactly
+as when a copy sells under another listing — see [what a sale changes](#what-a-sale-changes).
+
+The same can be done from **Copies**: tick the copies and choose **Sell…** — see [selling copies
+without an offer](inventory.md#selling-copies-without-an-offer).
+
 ### Step 3 — amounts
 
 The **Amounts** section shows the proceeds breakdown: the gross of the line prices, the shared
@@ -235,7 +258,10 @@ changing the platform's currency later leaves existing sales untouched.
   match](offers.md#listings-that-no-longer-match).
 - Any **other active offer** — on another platform — holding a set with a copy you just sold is
   flagged **Needs action**, so you can take those stale listings down. See
-  [keeping platforms in sync](offers.md) on the Offers page.
+  [keeping platforms in sync](offers.md) on the Offers page. A copy sold [on no
+  offer](#selling-copies-that-are-on-no-offer) flags every offer holding it the same way.
+- **Removing** a unit from the sale puts its copies back in stock, whether it came from an offer or
+  from no offer at all.
 
 The shared amounts are split across the sold units in proportion to their sale prices, and each
 unit's net is converted to your base currency at the frozen rate — this is what
@@ -454,7 +480,9 @@ not *this one*. They are the same thing at the same price — that is why they a
 **which copy actually goes is your choice**, made at the packing table. Pick a piece up, find a thin
 on it, and send the next one instead.
 
-Any sold unit's **⋮** menu carries **Choose set**. It names the offer by its **title** where it has
+Any sold unit from an offer has **Choose set** in its **⋮** menu (a set of [copies on no
+offer](#selling-copies-that-are-on-no-offer) has no other set to be, so its menu offers only
+**Remove**). It names the offer by its **title** where it has
 one, and by the label derived from its contents where it does not — the same name it goes by on the
 offers list. It lists the sets of that unit's own offer that are still available and marks the one
 the line names today with **On this line now** — including when there is only one, since what you

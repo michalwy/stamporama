@@ -4,7 +4,7 @@ import { prisma } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
 import { effectiveFacebookGroupSettings } from "./facebook-group-rules";
-import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
+import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { resolveBuyerHandling } from "./sales";
 import { renderBuyerMessage, type BuyerMessageSale } from "./buyer-message-rules";
@@ -60,6 +60,8 @@ const MESSAGE_SALE_SELECT = {
       },
       // A line whose offer is gone still names its set; the set's title is what it is called then.
       offerSet: { select: { title: true } },
+      // …and a line on no offer (#2021) is called by its copies.
+      items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
     },
   },
 } satisfies Prisma.SaleSelect;
@@ -130,7 +132,9 @@ export async function readSaleBuyerMessage(ownerId: string, saleId: string): Pro
       offerNo: l.offer?.offerNo ?? null,
       title: l.offer
         ? offerDisplayLabel(l.offer.name, l.offer.sets, labeller)
-        : (l.offerSet.title?.trim() ?? ""),
+        : l.offerSet
+          ? (l.offerSet.title?.trim() ?? "")
+          : labeller.set(copiesAsLabelSet(l.items)),
       price: l.price.toFixed(2),
     })),
     shippingOptionName: sale.shippingOptionName,
