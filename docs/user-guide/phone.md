@@ -146,6 +146,24 @@ These change the offer in Stamporama only — pausing or ending the listing on t
 done there, as from the desk. Preparing, publishing and editing an offer stay at the desk: **Full
 app** opens the same offer there.
 
+### A Facebook group auction
+
+While a Facebook group auction is up, its offer screen has a **Bidding** part above the moves, as the
+offer's Facebook card has at the desk. It says when the auction closes, and the highest bid you have
+recorded with when you recorded it — *recorded 3 hours ago* — or that none is recorded yet. Type the
+highest bid you see under the post and tap **Record bid**: it is the same as recording it at the
+desk, which shows it exactly as if you had typed it there.
+
+Once the closing time has passed, the part says the auction has closed and the button reads **Record
+winning bid** — type the winning figure if it is not the last one you recorded. Then close the
+auction from the same screen:
+
+- **Sell…** to the winner, named by their Facebook profile. The price starts at the bid you
+  recorded.
+- **Withdraw…** when nobody bid.
+
+See [Facebook](facebook.md#when-an-auction-ends) for what each of these does.
+
 ## Browse by area
 
 **Browse by area** finds a stamp when you do not know its catalogue number, by where and when it was
