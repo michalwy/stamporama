@@ -147,6 +147,10 @@ right, or top to bottom — and the two whole-card answers mirror the positions 
 vertical or horizontal axis, measured against the extent of each side's own boxes rather than the
 scan's edges. *No mirroring* remains the rule for the first answer, which is the default.
 
+*Amended by #1995:* a back scan added after the card's tiles were identified pairs exactly the same
+way, the tiles that became copies included; a back whose front is a copy becomes that copy's back
+picture when it has none, and goes to the unpaired strip when it has one or the copy was deleted.
+
 Centres are compared in **fractional sheet coordinates**, so a back scanned at a different size still
 lines up. Mutuality is the only guard — there is deliberately no distance cap, which would be one
 more constant to be wrong about.

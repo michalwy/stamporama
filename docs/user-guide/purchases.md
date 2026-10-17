@@ -837,8 +837,9 @@ is.
 
 The choice stays on the batch once the back is added. **Changing it pairs the backs again** under the
 new answer — a back you put on a tile **by hand** is kept where you put it, and so is any back on a
-tile already identified or discarded. A message says how many backs were paired, how many were left
-to pair by hand, and how many were kept.
+tile already identified or discarded. A copy made from the card that has no back picture yet takes
+its back the way it would have at the cut (see *Adding the back after identifying* below). A message
+says how many backs were paired, how many were left to pair by hand, and how many were kept.
 
 **This only happens when the two sides hold the same number of boxes.** If they do not — *Front 12,
 back 9* — nothing is paired automatically and every back lands in the **unpaired backs** strip below
@@ -854,6 +855,27 @@ some of the stamps.
 
 Drag each unpaired back onto its tile. A back that found no front on a card that *did* pair by
 position lands in the same strip and is placed the same way.
+
+#### Adding the back after identifying
+
+Forgot the back scan, and identified the stamps from the fronts alone? Add it to the batch as above,
+whenever you notice. It is cut and paired exactly the same way — by position, and only when both
+sides hold the same number of boxes — and a back whose front has **already become a copy** becomes
+**that copy's back picture**, upright as any back is, just as if the scan had been there before you
+identified the stamp.
+
+- A copy that **already has a back picture** keeps it. The scan's back for that stamp goes to the
+  unpaired backs strip instead, where you can leave it.
+- A tile whose copy has since been **deleted** takes no back; its back goes to the strip too.
+
+The message after the cut says how many backs went to copies already made, and how many were left
+unpaired because the copy already had a back picture.
+
+An unpaired back can also be **dragged onto a tile that has become a copy**, and becomes that copy's
+back picture — but not onto a copy that already has one. Either way the back is the scan's: **Remove
+back scan** and **Replace back scan…** take it off the copy again, and their confirmation names the
+copy. **Unpair back** is still not offered on such a tile; change its pictures from the copy's own
+screen.
 
 #### Taking a back off a tile
 

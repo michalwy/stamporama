@@ -61,6 +61,7 @@ import {
   tilesInView,
   type TileFilter,
 } from "@/lib/scan-tile-filter";
+import { takesDraggedBack } from "@/lib/late-backs";
 import {
   batchBoxState,
   inTickOrder,
@@ -2365,8 +2366,9 @@ function BatchSection({
               worklist={reachesFinishedBatches(filter)}
               // A parked tile takes a dragged back like any other outstanding one (#597) — and is
               // one of the likeliest to want it, the doubt that parked it often being something the
-              // other side settles.
-              droppable={dragging != null && tile.backPhotoId == null && isSelectableTile(tile)}
+              // other side settles. So does a tile that has become a copy with no back picture
+              // (#1995): the back becomes the copy's.
+              droppable={dragging != null && takesDraggedBack(tile)}
               arrived={tile.id === arrivedTileId}
               selected={selected.has(tile.id)}
               ordinal={tickOrdinals.get(tile.id)}
@@ -2684,7 +2686,14 @@ function turnoverReportText(report: BackTurnoverReport): string {
     return "The two sides hold different numbers of stamps, so the backs are on the strip to be paired by hand.";
   }
   const parts = [`${report.paired} paired by position`];
-  if (report.backOnly > 0) parts.push(`${report.backOnly} left to pair by hand`);
+  if (report.toCopies > 0) parts.push(`${report.toCopies} of them given to copies already made`);
+  if (report.backOnly > 0) {
+    parts.push(
+      report.copyHadBack > 0
+        ? `${report.backOnly} left to pair by hand (${report.copyHadBack} because the copy already has a back picture)`
+        : `${report.backOnly} left to pair by hand`
+    );
+  }
   if (report.kept > 0) parts.push(`${report.kept} kept as ${report.kept === 1 ? "it was" : "they were"}`);
   const marks =
     report.marksReplaced.length > 0
@@ -3669,7 +3678,15 @@ function CutReportBanner({
           ) : (
             <>
               Front {report.frontCount}, back {report.backCount}.{" "}
-              <strong>{report.paired}</strong> paired by position.
+              <strong>{report.paired}</strong> paired by position
+              {/* A back added after identifying (#1995): the copies already made took theirs. */}
+              {report.toCopies > 0 && (
+                <>
+                  , {report.toCopies} of them given to{" "}
+                  {report.toCopies === 1 ? "the copy" : "copies"} already made from the card
+                </>
+              )}
+              .
               {report.frontWithoutBack.length > 0 && (
                 <>
                   {" "}
@@ -3680,11 +3697,20 @@ function CutReportBanner({
                   .
                 </>
               )}
-              {report.backOnly > 0 && (
+              {report.copyHadBack > 0 && (
                 <>
                   {" "}
-                  {report.backOnly} {report.backOnly === 1 ? "back" : "backs"} found no front —
-                  drag {report.backOnly === 1 ? "it" : "them"} onto the right tile below.
+                  {report.copyHadBack} {report.copyHadBack === 1 ? "back was" : "backs were"} left
+                  unpaired because the copy already has a back picture, which it keeps.
+                </>
+              )}
+              {report.backOnly - report.copyHadBack > 0 && (
+                <>
+                  {" "}
+                  {report.backOnly - report.copyHadBack}{" "}
+                  {report.backOnly - report.copyHadBack === 1 ? "back" : "backs"} found no front —
+                  drag {report.backOnly - report.copyHadBack === 1 ? "it" : "them"} onto the right
+                  tile below.
                 </>
               )}
             </>
