@@ -26,6 +26,8 @@ import {
   reorderFacebookLots,
   setFacebookPostLayout,
   setFacebookPostTitle,
+  takeFacebookPostBackToReady,
+  type FacebookBackToReady,
   type FacebookLotsAdded,
 } from "@/lib/facebook-posts";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
@@ -182,6 +184,21 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** Take a post that is up back to Ready (#1998), asked of any lot of it: the lots still for sale go
+ *  back, into a new post when lots sold or withdrawn stay behind. */
+export async function takeFacebookPostBackToReadyAction(
+  offerId: string
+): Promise<({ status: "success" } & FacebookBackToReady) | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const moved = await takeFacebookPostBackToReady(session.user.id, offerId);
+    kickOfferPhotoWorker(); // a captioned post's lot photos may have been queued (#1861)
+    return { status: "success", ...moved };
+  } catch (err) {
+    return failure(err, "Failed to take the post back to Ready.");
   }
 }
 

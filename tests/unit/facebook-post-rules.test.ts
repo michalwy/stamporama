@@ -17,6 +17,7 @@ import {
   facebookPostLabel,
   facebookPostLink,
   facebookPostMoves,
+  facebookBackToReadyPlan,
   facebookPostSource,
   facebookPostStage,
   facebookPostTitleRefusal,
@@ -809,13 +810,43 @@ describe("a multi-lot post's screen (#1842)", () => {
     );
   });
 
-  it("offers no move of the post's own once it is up, and no take-out", () => {
+  it("offers no move of the post's own once it is up but Back to Ready, and no take-out", () => {
     const up = facebookPostMoves(lots("active", "sold", "withdrawn"));
     assert.deepEqual(
       [up.activate, up.submit, up.approve, up.reject, up.withdraw, up.takeOut, up.addLots],
       [false, false, false, false, false, false, false]
     );
+    assert.equal(up.backToReady, true);
     assert.deepEqual(up.waiting, []);
+  });
+
+  it("offers Back to Ready only while the post is up with a lot still for sale (#1998)", () => {
+    assert.equal(facebookPostMoves(lots("paused")).backToReady, true);
+    assert.equal(facebookPostMoves(lots("active", "ready")).backToReady, true);
+    assert.equal(facebookPostMoves(lots("sold", "withdrawn")).backToReady, false);
+    assert.equal(facebookPostMoves(lots("pending", "pending")).backToReady, false);
+    assert.equal(facebookPostMoves(lots("ready", "ready")).backToReady, false);
+    assert.equal(facebookPostMoves(lots("ready", "preparing")).backToReady, false);
+  });
+
+  it("names the lots that stay and the bids Back to Ready clears (#1998)", () => {
+    const lot = (lotNo: number, state: string, listingType: "auction" | "fixed", price: string) => ({
+      lotNo,
+      state,
+      listingType,
+      price,
+    });
+    const plan = facebookBackToReadyPlan([
+      lot(1, "active", "auction", "25.00"),
+      lot(2, "sold", "auction", "40.00"),
+      lot(3, "active", "auction", "0.00"),
+      lot(4, "withdrawn", "auction", "0.00"),
+      lot(5, "active", "fixed", "30.00"),
+      lot(6, "paused", "auction", "12.50"),
+    ]);
+    assert.deepEqual(plan.going.map((l) => l.lotNo), [1, 3, 5, 6]);
+    assert.deepEqual(plan.staying.map((l) => l.lotNo), [2, 4]);
+    assert.deepEqual(plan.bidsCleared.map((l) => l.lotNo), [1, 6], "a quick buy's price is no bid");
   });
 
   it("says where the post stands as a whole", () => {

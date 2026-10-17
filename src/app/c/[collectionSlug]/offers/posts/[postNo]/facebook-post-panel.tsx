@@ -36,6 +36,7 @@ import { TranslationGapLinks } from "@/app/c/[collectionSlug]/shared/title-previ
 import { gapKey } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
+import { BackToReadyDialog, backToReadyDone } from "../../back-to-ready-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
 import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
 import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
@@ -54,6 +55,9 @@ import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot
 // - **The post's moves**, made as one — submit for approval, approve, reject, activate, withdraw (#1778,
 //   #1779) — through the same actions the offer screen uses, asked of a lot: the server takes the whole
 //   post with it, so the buttons are offered only where `facebookPostMoves` says the server would.
+//   *Back to Ready…* (#1998) takes a post that is up back — a mistaken Publish, or a post gone from the
+//   group; when lots sold or withdrawn stay behind, the others move into a new post, and the screen
+//   goes there.
 // - **The kit**: the layout, the post's text and the photos' ZIP, above the lots.
 // - **The lots**, listed once (#1863), in lot order and so in posting order: each row is the lot's
 //   photo (its upload set, laid out as text), the lot number, the offer (linking to it), its type, its
@@ -138,6 +142,7 @@ type Dialog =
   | { kind: "none" }
   | { kind: "publish"; target: PublishTarget; approving: boolean }
   | { kind: "reject" }
+  | { kind: "backToReady" }
   | { kind: "withdrawPost" }
   | { kind: "withdrawLot"; lot: FacebookKitLot }
   | { kind: "takeOut"; lot: FacebookKitLot }
@@ -337,6 +342,23 @@ export function FacebookPostPanel({
     }, done);
   }
 
+  // Asked of any lot (#1998); a split post's lots are Ready in a new post, which is where the screen goes.
+  function backToReady() {
+    setError(undefined);
+    startTransition(async () => {
+      const { takeFacebookPostBackToReadyAction } = await import("@/app/actions/facebook");
+      const result = await takeFacebookPostBackToReadyAction(lots[0].offerId);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      toast({ message: backToReadyDone(result) });
+      if (result.postNo !== postNo) router.push(`/c/${collectionSlug}/offers/posts/${result.postNo}`);
+    });
+  }
+
   function takeOut(lot: FacebookKitLot) {
     // Taking out one of two lots dissolves the post (ADR-0061 §2), and taking out the only one removes
     // it (#1989): the screen has nothing left to show, so it goes to the offer, now in no post.
@@ -414,7 +436,7 @@ export function FacebookPostPanel({
     ];
   }
 
-  const anyMove = moves.activate || moves.approve || moves.reject || moves.withdraw;
+  const anyMove = moves.activate || moves.approve || moves.reject || moves.withdraw || moves.backToReady;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -500,14 +522,20 @@ export function FacebookPostPanel({
                 Withdraw…
               </DialogSecondaryButton>
             )}
+            {moves.backToReady && (
+              <>
+                <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog({ kind: "backToReady" })}>
+                  Back to Ready…
+                </DialogSecondaryButton>
+                <span style={MUTED}>Published by mistake, or gone from the group.</span>
+              </>
+            )}
           </div>
         ) : (
           <p style={{ ...MUTED, margin: 0 }}>
             {moves.waiting.length > 0
               ? `Every lot must be Ready before the post goes up: ${moves.waiting.map((n) => `lot ${n}`).join(", ")}.`
-              : stage === "up"
-                ? "The post is up. Each lot is sold or withdrawn on its own, from its row's ⋮."
-                : "Every lot is sold or withdrawn."}
+              : "Every lot is sold or withdrawn."}
           </p>
         )}
         {error && dialog.kind === "none" && (
@@ -617,7 +645,7 @@ export function FacebookPostPanel({
                     <Fragment key={lot.offerId}>
                       {showLineAt(drag, index) && <DropLine />}
                       <LotRow
-                        lotNo={index + 1}
+                        lotNo={movedOrder ? index + 1 : (lot.lotNo ?? index + 1)}
                         drag={drag}
                         index={index}
                         rowRef={(el) => {
@@ -674,6 +702,17 @@ export function FacebookPostPanel({
           error={error}
           onClose={close}
           onConfirm={() => setLotState(pendingLot.offerId, "ready", `Post #${postNo} is back to Ready`)}
+        />
+      )}
+
+      {dialog.kind === "backToReady" && (
+        <BackToReadyDialog
+          postNo={postNo}
+          lots={lots}
+          isPending={isPending}
+          error={error}
+          onClose={close}
+          onConfirm={backToReady}
         />
       )}
 

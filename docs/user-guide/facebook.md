@@ -347,7 +347,7 @@ showed it, and the card says *As posted on …* under it. From then on nothing c
 template edit, not the offer's own template, not a change of the offer's figures — so the text here
 is always the one in the group. A post with several lots freezes as a whole, when it goes up.
 
-Three things still move it:
+Four things still move it:
 
 - **Approving a post with a new closing time** writes that time into the frozen text too, since you
   correct the post in the group to match; nothing else in it changes.
@@ -355,10 +355,44 @@ Three things still move it:
   current template and figures, and recording the repost freezes that text in place of the old.
 - **Rejected — back to Ready** puts the offer back before posting: its text follows the template
   again until it goes up once more.
+- **Back to Ready…** on a post that is up does the same
+  ([below](#taking-a-post-that-is-up-back-to-ready)).
 
 Offers that were already up when this arrived were frozen with the text they showed at that moment.
 Earlier versions of a template are not kept anywhere, so an older post's text cannot be recovered
 if a template had already changed under it.
+
+### Taking a post that is up back to Ready
+
+Once a post is up, **Back to Ready…** takes it back, as if it had never been published. It is for two
+situations:
+
+- **Publish was a mistake** — the post never went up in the group, or you gave the wrong link;
+- **the post is gone from the group** — the group's admin removed it, or you took it down to correct
+  it — and you are going to post it again.
+
+It is on the post's screen and on each lot's Facebook card while the post is up and at least one lot
+of it is still for sale. Like every move of a post it acts on the whole post, from either place. A
+post still waiting for the group's approval has **Rejected — back to Ready** instead, and a post still
+being prepared, or one where every lot is sold or withdrawn, does not offer it.
+
+A confirmation comes first. Every lot still for sale then goes back to **Ready**:
+
+- its **listing link** is cleared — a post that never went up, or is gone, is nowhere a buyer can be
+  sent;
+- its **post text** follows the template again until it goes up once more;
+- an auction's **recorded bid** is cleared — the confirmation names each lot that has one first;
+- an auction's **closing time** stays as it was; change it as on any Ready offer;
+- a quick buy's **days up** stop, and start again when it is published.
+
+The copies stay in their offers. Publishing again is exactly a first **Publish…**, with the new link.
+
+**When some lots are sold or withdrawn, the post is split.** Those lots stay where they are, in the
+post as it went up — its number, its link and its text as posted. The lots going back move into a
+**new post** in the same group, with the same title, layout and lot order, which is Ready; the
+confirmation names the lots that stay, and the post's screen moves to the new post once it is done.
+When every lot goes back, the post itself is Ready again and no new post is made. An offer posted
+alone goes back the same way.
 
 ### An offer's own post template
 
@@ -433,7 +467,8 @@ keeps the title it went up with, as it keeps everything else.
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
   offered only while it can be made: **Publish…** once every lot is Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
-  the group's approval. While some lot is not Ready yet, it says which.
+  the group's approval, and **Back to Ready…** while it is up
+  ([above](#taking-a-post-that-is-up-back-to-ready)). While some lot is not Ready yet, it says which.
 - **Post kit** — the layout (laid out in its text as below, or in captions
   ([below](#a-post-with-several-lots-in-captions))), the **post text** for the whole post — each lot's
   text in lot order, each from its own type's template, or from its offer's own where it has one —
