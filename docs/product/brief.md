@@ -8,6 +8,8 @@ Stamporama
 
 Stamporama is a self-hosted web application for stamp collectors. It helps manage a personal stamp catalog, track collection state, coordinate trades with other collectors, and hunt for new stamps.
 
+It is used at a desk, in a desktop browser. A small set of **phone screens** (ADR-0072) carries it away from the desk: browsing on the go at a fair — do I have this stamp, how many, is it wanted, what is it worth — starting a purchase there, and the day's moves on offers and sales. The phone always works online against the collector's own server; it is the same web app, not a separate one.
+
 ## Language
 
 English first. Additional languages may be added later.
@@ -47,7 +49,7 @@ Each physical copy a collector owns is a separate item (no quantity field — se
 
 ## Deployment
 
-Self-hosted via Docker Compose.
+Self-hosted via Docker Compose. Using the phone screens away from home needs the server reachable at one HTTPS address, the same on the desk and on the phone (ADR-0072).
 
 ## Open Questions
 

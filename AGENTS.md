@@ -11,7 +11,8 @@ not restate that reasoning here; add it to the topic file instead.
 
 - Product name: Stamporama
 - Purpose: a self-hosted web app for stamp collectors
-- Desktop browsers only; no mobile layouts or breakpoints.
+- Desktop browsers only; no mobile layouts or breakpoints — **except the phone screens under
+  `/c/[collectionSlug]/phone/`**, which are phone-only (ADR-0072). → [`phone.md`](docs/agents/phone.md)
 - Core concept: **collection** — the top-level organizing unit that scopes all stamp data for a user
 
 ## Working Rules
@@ -81,6 +82,7 @@ and ADR references.
 | Albums, entries, page plans, hawid stock, templates | [`albums.md`](docs/agents/albums.md) |
 | The Overview screen: Value and Progress tiles | [`overview.md`](docs/agents/overview.md) |
 | The Dashboard: the operational screen of work waiting | [`dashboard.md`](docs/agents/dashboard.md) |
+| Phone screens: the `/phone` path, what the phone does and does not | [`phone.md`](docs/agents/phone.md) |
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
 | Sessions, branches, pull requests, verification, plans | [`collaboration.md`](docs/agents/collaboration.md) |
@@ -120,7 +122,7 @@ there before working against one.
 
 **UI** → `ui-shell.md`, `ui-patterns.md`, `inventory-lists.md`, `offers.md`
 
-- **A screen uses the window's width.** Every collection page is drawn in `Screen`
+- **A screen uses the window's width.** Every collection page but a phone screen is drawn in `Screen`
   (`src/app/screen.tsx`), full width by default; a cap is a `SCREEN_CAPS` key with a stated reason —
   "it was narrow before" is not one — and is listed in `ui-shell.md`. Width goes to columns, grids and
   panes: no single field or line of text runs across the window.
