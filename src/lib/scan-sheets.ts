@@ -41,6 +41,7 @@ import { batchDeletion, batchDeletionRefusal } from "./scan-batch-deletion";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
+import { copyBackPlacement, type CopyBackPlacement } from "./late-backs";
 import {
   applyMarkPatch,
   fillPatch,
@@ -559,12 +560,17 @@ export interface CutReport {
    * boxes and the card was paired by position, `manual` when they did not and every back was left
    * to be dropped onto its tile by hand. `positional` on a front commit, which pairs nothing. */
   pairingMode: PairingMode;
-  /** Backs paired onto an existing front tile. */
+  /** Backs paired onto an existing front tile — or onto the copy it became (#1995). */
   paired: number;
+  /** Of those, backs that became the back picture of a copy already made from the card (#1995). */
+  toCopies: number;
   /** Reading-order positions of front tiles still carrying no back. */
   frontWithoutBack: number[];
-  /** Backs that found no mutual front and became back-only tiles, to be paired by hand. */
+  /** Backs that became back-only tiles, to be paired by hand: those that found no mutual front, and
+   * those whose front's copy could not take one (#1995). */
   backOnly: number;
+  /** Of those, backs whose front had become a copy that already has a back picture (#1995). */
+  copyHadBack: number;
   /** Tiles whose front and back carried **different** marks (#1550): the mark given last won, and
    * this names what it replaced, so the pairing says so rather than quietly picking one. Empty on a
    * front commit. */
@@ -796,8 +802,10 @@ async function commitFrontCut(args: {
     backCount: 0,
     pairingMode: "positional",
     paired: 0,
+    toCopies: 0,
     frontWithoutBack: rows.map((r) => r.position),
     backOnly: 0,
+    copyHadBack: 0,
     marksReplaced: [],
   };
 }
@@ -823,12 +831,17 @@ async function commitBackCut(args: {
   });
 
   // Only front tiles that still have no back take part: a batch's back scan can be cut more than
-  // once across re-cuts, and a tile already carrying a back is not looking for one.
+  // once across re-cuts, and a tile already carrying a back is not looking for one. A tile that has
+  // become a copy takes part like any other (#1995) — the back scan has a box for its stamp, so the
+  // counts only match with it in — and where its back lands is decided after the pairing.
   const frontTiles = await prisma.scanTile.findMany({
     where: { ...scope, batchNo, frontSheetId: { not: null }, backSheetId: null },
     select: {
       id: true,
       position: true,
+      state: true,
+      itemId: true,
+      item: COPY_BACK_SELECT,
       frontX: true,
       frontY: true,
       frontW: true,
@@ -863,13 +876,21 @@ async function commitBackCut(args: {
   // one — the mark given last winning where they differ, and the replacement reported. A box marked
   // in this editor session is later than anything already stored on its front.
   const marksReplaced: CutReport["marksReplaced"] = [];
+  let copyHadBack = 0;
   const rows = ordered.map((box, i) => {
     const frontIndex = backIndexToFront.get(i);
-    const target = frontIndex != null ? frontTiles[frontIndex] : null;
+    const front = frontIndex != null ? frontTiles[frontIndex] : null;
+    // A front that has become a copy gives the back to the copy (#1995) — or, when the copy cannot
+    // take one, sends it to the strip as if it had found no front.
+    const placement = front ? backPlacementOn(front) : null;
+    if (placement === "copy-has-back") copyHadBack += 1;
+    const target = placement === "tile" || placement === "copy" ? front : null;
+    const toCopy = placement === "copy" ? front!.itemId : null;
     const given = boxMark(box, now);
     let mark = given.mark;
     let markedAt = given.markedAt;
-    if (target) {
+    // A copy's condition is the copy's own (#1550): a mark has nothing left to seed there.
+    if (target && !toCopy) {
       const paired = pairedMark(
         { mark: tileMark(target), markedAt: target.markedAt },
         { mark: given.mark, markedAt: given.markedAt }
@@ -883,11 +904,12 @@ async function commitBackCut(args: {
     return {
       tileId: target?.id ?? randomUUID(),
       isNewTile: target == null,
+      toCopy,
       photoId: randomUUID(),
       box,
       crop: crops[i],
       position: target?.position ?? nextPosition++,
-      marks: markColumns({ mark, markedAt }, target == null ? "create" : "update"),
+      marks: toCopy ? {} : markColumns({ mark, markedAt }, target == null ? "create" : "update"),
     };
   });
 
@@ -927,8 +949,15 @@ async function commitBackCut(args: {
             },
           });
         }
-        await tx.photo.create({ data: photoData(r, collectionId, "back", sheetId) });
+        await tx.photo.create({
+          data: r.toCopy
+            ? copyBackPhoto(photoData(r, collectionId, "back", sheetId), r.toCopy)
+            : photoData(r, collectionId, "back", sheetId),
+        });
       }
+      // A back left on the strip is work waiting on a card that may have been finished with, and a
+      // card whose last tiles took their backs is finished with — the new back sheet included.
+      await settleBatchDone(tx, scope, batchNo);
     });
   } catch (err) {
     await rollbackBytes(written);
@@ -938,19 +967,81 @@ async function commitBackCut(args: {
   const frontCount = await prisma.scanTile.count({
     where: { ...scope, batchNo, frontSheetId: { not: null } },
   });
+  const created = rows.filter((r) => r.isNewTile).length;
 
   return {
     batchNo,
     side: "back",
-    created: rows.filter((r) => r.isNewTile).length,
+    created,
     frontCount,
     backCount: ordered.length,
     pairingMode: pairing.mode,
-    paired: pairing.pairs.length,
+    paired: ordered.length - created,
+    toCopies: rows.filter((r) => r.toCopy).length,
     frontWithoutBack: pairing.frontUnmatched.map((i) => frontTiles[i].position),
-    backOnly: pairing.backUnmatched.length,
+    backOnly: created,
+    copyHadBack,
     marksReplaced,
   };
+}
+
+/** What a tile's copy holds in the `back` role (#1995) — the whole question of whether it can take
+ * a back from a scan. */
+const COPY_BACK_SELECT = {
+  select: { photos: { where: { role: "back" }, select: { id: true } } },
+} as const;
+
+/** Where a back paired with this front lands (#1995): on the tile while it is still the tile's —
+ * waiting, parked or discarded, the tile holding its own pictures — or, once it has become a copy,
+ * on that copy when it can take one. */
+function backPlacementOn(front: {
+  state: string;
+  itemId: string | null;
+  item: { photos: readonly { id: string }[] } | null;
+}): "tile" | CopyBackPlacement {
+  if (front.state !== "consumed") return "tile";
+  return copyBackPlacement({
+    exists: front.itemId != null && front.item != null,
+    hasBack: (front.item?.photos.length ?? 0) > 0,
+  });
+}
+
+/** A back crop written straight onto a copy (#1995), exactly as `movePhotosToItem` would have left
+ * it had the back been on the tile when it was identified: owned by the copy, after its front. Its
+ * `scanSheetId` stays, which is what lets *Remove back scan* take it off again (#1915). */
+function copyBackPhoto<T extends { tileId: string | null }>(
+  data: T,
+  itemId: string
+): T & { itemId: string; sortOrder: number } {
+  return { ...data, tileId: null, itemId, sortOrder: 1 };
+}
+
+/**
+ * Keep the batch's *finished with* stamp (#567, #578) true after its backs moved: cleared while any
+ * tile is still open — an unpaired back waiting on the strip is one — and stamped on every sheet
+ * still missing it once none is, as `stampBatchIfFinished` does. A batch with no tiles has nothing
+ * cut and is not finished with anything.
+ */
+async function settleBatchDone(
+  tx: DbTransaction,
+  scope: { collectionId: string; purchaseId: string },
+  batchNo: number
+): Promise<void> {
+  const [remaining, open] = await Promise.all([
+    tx.scanTile.count({ where: { ...scope, batchNo } }),
+    tx.scanTile.count({ where: { ...scope, batchNo, state: { in: [...OPEN_TILE_STATES] } } }),
+  ]);
+  if (open > 0) {
+    await tx.scanSheet.updateMany({
+      where: { ...scope, batchNo, batchDoneAt: { not: null } },
+      data: { batchDoneAt: null },
+    });
+  } else if (remaining > 0) {
+    await tx.scanSheet.updateMany({
+      where: { ...scope, batchNo, batchDoneAt: null },
+      data: { batchDoneAt: new Date() },
+    });
+  }
 }
 
 function photoData(
@@ -1185,6 +1276,11 @@ export async function pairTilesManually(
   if (frontTile.backSheetId != null) {
     throw new ScanValidationError("That tile already has a back image.");
   }
+  // A tile that has become a copy takes the back as the copy's back picture (#1995), as it would
+  // have had the back been there before identifying — but never over a back the copy already has.
+  if (frontTile.state === "consumed") {
+    return pairBackOntoCopy(backTile, frontTile);
+  }
   // A **parked** tile takes a back like any other waiting one (#597), and is one of the tiles most
   // likely to want it: the doubt that parked it is often a watermark or a cancel that the other
   // side settles.
@@ -1225,6 +1321,60 @@ export async function pairTilesManually(
     await tx.scanTile.delete({ where: { id: backTileId } });
   });
   return { mark: paired.mark, replaced: paired.replaced };
+}
+
+/**
+ * Give an unpaired back to the copy a tile became (#1995) — {@link pairTilesManually}'s move with the
+ * picture landing on the copy rather than the tile, where `movePhotosToItem` would have put it had
+ * the back been on the tile when it was identified. The tile records the back's box as any paired
+ * tile does, so *Remove back scan* and *Replace back scan…* find and take it as they take any other.
+ *
+ * **Never over a back the copy has**, whoever gave it, and not onto a copy that was deleted. The
+ * marks are left alone: a copy's condition is the copy's, and the back's mark goes with its tile.
+ */
+async function pairBackOntoCopy(
+  backTile: Awaited<ReturnType<typeof loadTile>>,
+  frontTile: Awaited<ReturnType<typeof loadTile>>
+): Promise<PairingMarks> {
+  const item = frontTile.itemId
+    ? await prisma.item.findUnique({ where: { id: frontTile.itemId }, ...COPY_BACK_SELECT })
+    : null;
+  const placement = copyBackPlacement({
+    exists: item != null,
+    hasBack: (item?.photos.length ?? 0) > 0,
+  });
+  if (placement === "copy-deleted") {
+    throw new ScanValidationError("The copy this tile became has been deleted, so it takes no back.");
+  }
+  if (placement === "copy-has-back") {
+    throw new ScanValidationError(
+      "That copy already has a back picture. Change it on the copy's own screen."
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const moved = await tx.photo.updateMany({
+      where: { tileId: backTile.id, role: "back" },
+      data: { tileId: null, itemId: frontTile.itemId, sortOrder: 1 },
+    });
+    if (moved.count === 0) throw new ScanValidationError("That back image is no longer there.");
+    await tx.scanTile.update({
+      where: { id: frontTile.id },
+      data: {
+        backSheetId: backTile.backSheetId,
+        backX: backTile.backX,
+        backY: backTile.backY,
+        backW: backTile.backW,
+        backH: backTile.backH,
+        backTurn: backTile.backTurn,
+        backPairedByHand: true,
+      },
+    });
+    await tx.scanTile.delete({ where: { id: backTile.id } });
+    // The back may have been the last thing open on the card.
+    await settleBatchDone(tx, scanOwnerWhere(frontTile), frontTile.batchNo);
+  });
+  return { mark: null, replaced: null };
 }
 
 /** What a manual pairing did to the tile's mark (#1550): the mark it now carries, and the one it
@@ -1428,8 +1578,12 @@ export interface BackTurnoverReport {
   pairingMode: PairingMode;
   /** Backs now paired by position. */
   paired: number;
+  /** Of those, backs given to a copy already made from the card that had none (#1995). */
+  toCopies: number;
   /** Backs left on the strip to be paired by hand. */
   backOnly: number;
+  /** Of those, backs whose front had become a copy that already has a back picture (#1995). */
+  copyHadBack: number;
   /** Pairs left exactly where they were: put there by hand, or on a tile already identified or
    * discarded, whose pictures are no longer the strip's to move. */
   kept: number;
@@ -1450,6 +1604,9 @@ export interface BackTurnoverReport {
  *   (#567), and a discarded one is put back in the queue first — the rule `unpairTileBack` follows.
  * - **A back that finds no front stands on the strip as a back-only tile**, as at the cut; one
  *   already there that now finds its front is paired onto it, its mark meeting the front's (#1550).
+ * - **A tile that has become a copy with no back yet takes one**, given to the copy as at the cut
+ *   (#1995); a copy that has a back keeps it, and the back that finds it stays on the strip. A
+ *   back already given to a copy stays where it is, as one on any consumed tile does.
  *
  * **The turn moves with the answer.** A card turned top to bottom lies upside down against one turned
  * left to right, so going to or from it turns every back of the card a half-turn — hand pairs and
@@ -1499,7 +1656,9 @@ export async function setBackTurnover(
     cut: false,
     pairingMode: "positional",
     paired: 0,
+    toCopies: 0,
     backOnly: 0,
+    copyHadBack: 0,
     kept: 0,
     marksReplaced: [],
   };
@@ -1510,6 +1669,8 @@ export async function setBackTurnover(
       id: true,
       position: true,
       state: true,
+      itemId: true,
+      item: COPY_BACK_SELECT,
       frontSheetId: true,
       frontX: true,
       frontY: true,
@@ -1578,11 +1739,13 @@ export async function setBackTurnover(
     (t) => isOpenTileState(t.state) && (t.frontSheetId == null || !t.backPairedByHand)
   );
   const movableIds = new Set(movable.map((t) => t.id));
+  // A tile that has become a copy and carries no back is a front like any other (#1995) — the cut's
+  // own set, so the counts compare as they did there — and where its back lands is decided after.
   const fronts = tiles.filter(
     (t) =>
       t.frontSheetId != null &&
-      isOpenTileState(t.state) &&
-      (t.backSheetId == null || movableIds.has(t.id))
+      ((isOpenTileState(t.state) && (t.backSheetId == null || movableIds.has(t.id))) ||
+        (t.state === "consumed" && t.backSheetId == null))
   );
   const pairing = pairByPosition(
     fronts.map((t) => boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH)!),
@@ -1591,9 +1754,15 @@ export async function setBackTurnover(
     backSheet,
     turnover
   );
-  const targetOf = new Map(
-    pairing.pairs.map((p) => [movable[p.backIndex].id, fronts[p.frontIndex]])
-  );
+  // A back whose front's copy cannot take it is left as if it had found none.
+  const placed = pairing.pairs.filter((p) => {
+    const placement = backPlacementOn(fronts[p.frontIndex]);
+    return placement === "tile" || placement === "copy";
+  });
+  const copyHadBack = pairing.pairs.filter(
+    (p) => backPlacementOn(fronts[p.frontIndex]) === "copy-has-back"
+  ).length;
+  const targetOf = new Map(placed.map((p) => [movable[p.backIndex].id, fronts[p.frontIndex]]));
   // A back is known by the tile it is on now; it stays put when its target is that same tile.
   const staying = movable.filter((t) => t.frontSheetId != null && targetOf.get(t.id)?.id === t.id);
   const relocating = movable.filter((t) => !staying.includes(t));
@@ -1670,6 +1839,27 @@ export async function setBackTurnover(
         const target = targetOf.get(t.id);
         if (!target) continue;
         const from = holderOf.get(t.id) ?? t.id;
+        // Onto a copy (#1995): the picture is the copy's, as at the cut, and no mark is involved.
+        if (target.state === "consumed") {
+          await tx.photo.updateMany({
+            where: { tileId: from, role: "back" },
+            data: { tileId: null, itemId: target.itemId, sortOrder: 1 },
+          });
+          await tx.scanTile.update({
+            where: { id: target.id },
+            data: {
+              backSheetId: backSheet.id,
+              backX: t.backX,
+              backY: t.backY,
+              backW: t.backW,
+              backH: t.backH,
+              backTurn: turnOf(t),
+              backPairedByHand: false,
+            },
+          });
+          await tx.scanTile.delete({ where: { id: from } });
+          continue;
+        }
         // A back that was on the strip carries its own mark (#1550); one taken off a front left its
         // mark there, and the front it lands on keeps its own.
         const backMark = t.frontSheetId == null ? tileMark(t) : null;
@@ -1702,13 +1892,9 @@ export async function setBackTurnover(
         where: { id: collectionId },
         data: { lastBackTurnover: turnover },
       });
-      // A back waiting on the strip means the card is not finished with — `unpairTileBack`'s rule.
-      if (pairing.backUnmatched.length > 0) {
-        await tx.scanSheet.updateMany({
-          where: { ...scope, batchNo, batchDoneAt: { not: null } },
-          data: { batchDoneAt: null },
-        });
-      }
+      // A back waiting on the strip means the card is not finished with — `unpairTileBack`'s rule
+      // — and one given to a copy may have been the last thing open on it.
+      await settleBatchDone(tx, scope, batchNo);
     });
   } catch (err) {
     await rollbackBytes(written);
@@ -1721,8 +1907,10 @@ export async function setBackTurnover(
   return {
     cut: true,
     pairingMode: pairing.mode,
-    paired: pairing.pairs.length,
-    backOnly: pairing.backUnmatched.length,
+    paired: placed.length,
+    toCopies: placed.filter((p) => fronts[p.frontIndex].state === "consumed").length,
+    backOnly: movable.length - placed.length,
+    copyHadBack,
     kept: backs.filter((t) => t.frontSheetId != null && !movableIds.has(t.id)).length,
     marksReplaced,
   };
@@ -1737,6 +1925,8 @@ async function loadTile(tileId: string) {
       purchaseId: true,
       batchNo: true,
       state: true,
+      // The copy a consumed tile became — what a back dragged onto it is given to (#1995).
+      itemId: true,
       frontSheetId: true,
       backSheetId: true,
       backX: true,
@@ -2108,18 +2298,8 @@ export async function removeBackScan(
     await tx.scanSheet.delete({ where: { id: sheet.id } });
 
     // A back on no tile still waiting was the last thing open on a card whose fronts are all dealt
-    // with: the batch is finished with now, and is stamped as `stampBatchIfFinished` would. A batch
-    // with no tiles at all has nothing cut and is not finished with anything.
-    const [remaining, open] = await Promise.all([
-      tx.scanTile.count({ where: { ...scope, batchNo } }),
-      tx.scanTile.count({ where: { ...scope, batchNo, state: { in: [...OPEN_TILE_STATES] } } }),
-    ]);
-    if (remaining > 0 && open === 0) {
-      await tx.scanSheet.updateMany({
-        where: { ...scope, batchNo, batchDoneAt: null },
-        data: { batchDoneAt: new Date() },
-      });
-    }
+    // with: the batch is finished with now, and is stamped as `stampBatchIfFinished` would.
+    await settleBatchDone(tx, scope, batchNo);
 
     return { sheet, photos, report: { unpaired, backOnly: backOnlyIds.length, copies } };
   });
