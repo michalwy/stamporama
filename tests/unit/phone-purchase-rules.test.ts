@@ -15,6 +15,7 @@ import { phonePurchaseNewPath, phonePurchasePath } from "../../src/lib/phone";
 const TODAY = "2026-10-17";
 
 const fields: PhonePurchaseFields = {
+  sellerContactId: "",
   sellerName: "  Kowalski ",
   amount: "120,5",
   currency: "PLN",
@@ -31,6 +32,7 @@ describe("readPhonePurchaseFields (#2006)", () => {
   it("reads the form: trimmed, the amount to two places, each stamp once in the order picked", () => {
     assert.deepEqual(read({}), {
       input: {
+        sellerContactId: null,
         sellerName: "Kowalski",
         amount: 120.5,
         currency: "PLN",
@@ -39,6 +41,12 @@ describe("readPhonePurchaseFields (#2006)", () => {
         stampIds: ["s1", "s2"],
       },
     });
+  });
+
+  it("keeps a picked seller's id beside its name", () => {
+    const r = read({ sellerContactId: " c1 " });
+    assert.ok("input" in r);
+    assert.equal(r.input.sellerContactId, "c1");
   });
 
   it("takes no description and no stamps", () => {

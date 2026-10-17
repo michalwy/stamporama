@@ -153,10 +153,9 @@ desktop-only.
   the start screen's field, rows worded by `phoneSearchHit` — so a hit says held / wanted before
   paying. At most `PHONE_PURCHASE_STAMP_LIMIT` (50). Read back by `listPurchaseNotedStamps`
   (`purchase-noted-stamps.ts`), labelled as the pickers label them.
-- **The seller is a name**: a `<datalist>` of the seller contacts under a text field, resolved on save
-  by `resolvePurchaseContact` — an existing contact by name in any case, else a new seller. The desk's
-  `PurchaseContactSelect` was not reused: its control is the desk's form height, under
-  `PHONE_TAP_TARGET`.
+- **The seller is the desk's own picker**, `PurchaseContactSelect` with `role="seller"`, drawn at the
+  tap target through its `inputStyle` (as #2009's buyer): a picked seller by id, a typed name resolved
+  on save by `resolvePurchaseContact` — an existing contact by name in any case, else a new seller.
 - **The mark** is `Purchase.toCompleteSince` — when the phone started it, null once the collector
   says **Done at the desk** (`markPurchaseDoneAtDesk`; the label is `DONE_AT_DESK_LABEL`, named apart
   from the status's *Mark completed*, decided 2026-10-17). **Nothing else clears it** — not closing

@@ -31,6 +31,7 @@ describe("starting a purchase on the phone (#2006)", () => {
 
   function input(patch: Partial<PhonePurchaseInput> = {}): PhonePurchaseInput {
     return {
+      sellerContactId: null,
       sellerName: "kowalski",
       amount: 120.5,
       currency: "PLN",
@@ -126,6 +127,12 @@ describe("starting a purchase on the phone (#2006)", () => {
     const detail = await getPurchaseDetail(userId, id);
     assert.equal(detail?.toCompleteSince, row.toCompleteSince.toISOString());
     assert.equal(detail?.total, "120.50");
+  });
+
+  it("takes a picked seller by its id", async () => {
+    const id = await startPurchaseOnPhone(userId, collectionId, input({ sellerContactId: sellerId, sellerName: "Kowalski", stampIds: [] }));
+    const row = await prisma.purchase.findUniqueOrThrow({ where: { id }, select: { contactId: true } });
+    assert.equal(row.contactId, sellerId);
   });
 
   it("creates a new seller for a name no contact has", async () => {
