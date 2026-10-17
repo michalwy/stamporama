@@ -29,6 +29,7 @@ import {
 } from "../use-offers-query";
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
+import { withdrawOfferMessage } from "../withdraw-offer-message";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialog";
 import { RepostOfferDialog } from "./repost-offer-dialog";
@@ -1853,12 +1854,10 @@ export function OfferDetailPanel({
       {confirm === "withdraw" && (
         <ConfirmDialog
           title="Withdraw offer"
-          message={
+          message={withdrawOfferMessage(
             // A post still waiting for approval is taken back whole (#1779).
-            offer.state === "pending" && offer.facebook?.post && offer.facebook.lots.length > 1
-              ? "This takes the post back from the group: every lot of it still waiting for approval is withdrawn with this one. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
-              : "This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
-          }
+            offer.state === "pending" && !!offer.facebook?.post && offer.facebook.lots.length > 1
+          )}
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           variant="destructive"

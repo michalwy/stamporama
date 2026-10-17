@@ -17,4 +17,6 @@ export interface PhoneEntry {
 export const PHONE_ENTRIES: readonly PhoneEntry[] = [
   // #2007 — the sales that move during the day: paid, packed, sent.
   { label: "Sales to do", path: "sales", icon: "sales" },
+  // #2008 — offers that change during the day: pause, resume, withdraw.
+  { label: "Offers", path: "offers", icon: "offers" },
 ];

@@ -59,6 +59,31 @@ included. On the way, the phone asks what the desk would ask:
 that moment, is entered at the desk. Everything else on a sale — its lines, amounts, shipping and
 corrections to its status — stays at the desk; **Full app** opens the Sales list.
 
+## Offers
+
+**Offers** on the start screen lists your offers, newest first. Two selects at the top narrow it:
+
+- **Platform** — one platform, or all of them.
+- **State** — one state, or **Not closed**, which is every offer that is neither sold nor withdrawn,
+  as the desk's offers list shows by default.
+
+Each row shows the offer's title, its number, platform, state and price. Tap it to open the offer.
+
+The offer screen shows its picture, title, price, platform and state. The picture is the first
+listing image — what a buyer sees first; until those images are generated, it is the photo of the
+first copy in the offer that has one.
+
+Below are the moves you can make on the phone, each only where the desk would allow it:
+
+- **Pause** an active offer, and **Resume** a paused one.
+- **Withdraw…** any offer that is not sold or withdrawn. It asks first, with the desk's own warning:
+  withdrawn is final. A lot of a Facebook post still waiting for approval takes the whole post back
+  with it, as at the desk.
+
+These change the offer in Stamporama only — pausing or ending the listing on the platform itself is
+done there, as from the desk. Preparing, publishing and editing an offer stay at the desk: **Full
+app** opens the same offer there.
+
 ## Between the phone and the full app
 
 There is no automatic switch by device — you choose:
