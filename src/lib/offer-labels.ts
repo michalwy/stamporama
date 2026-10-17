@@ -51,6 +51,15 @@ export type LabelSetRow = {
   items: readonly LabelSetItemRow[];
 };
 
+/** The copies of a sale line that names no offer set (#2021), as a set to label: no title, so the
+ * label is derived from the copies, in catalogue order — the copies were picked together, never
+ * hand-ordered. */
+export function copiesAsLabelSet(
+  items: readonly { itemId: string; item: { stamp: StampLabelRow } }[]
+): LabelSetRow {
+  return { title: null, items: items.map((li) => ({ itemId: li.itemId, sortOrder: null, item: li.item })) };
+}
+
 /** A set's copies in effective order (#306) — explicit positions first, then catalog order. */
 export function orderedLabelItems<T extends LabelSetItemRow>(items: readonly T[]): T[] {
   return [...items].sort((a, b) =>

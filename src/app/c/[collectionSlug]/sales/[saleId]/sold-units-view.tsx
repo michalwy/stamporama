@@ -970,10 +970,17 @@ function SoldUnitCard({
   // seller's own fulfilment choice, and it stays correctable after the fact — a copy turns out to
   // have a thin and a different one goes in the envelope. Removing and re-adding the line was the
   // only way to say so before, and that path throws away the price and the packing on the way.
-  const actions: RowAction[] = [
-    { key: "choose-set", label: "Choose set", icon: "move", onSelect: onChooseSet },
-    { key: "remove", label: "Remove", icon: "remove", danger: true, separatorBefore: true, onSelect: onRemove },
-  ];
+  //
+  // A set of copies on no offer (#2021) has no other set to be: it is the copies the collector
+  // picked, so it offers only *Remove*.
+  const remove: RowAction = { key: "remove", label: "Remove", icon: "remove", danger: true, onSelect: onRemove };
+  const actions: RowAction[] =
+    line.offerSetId === null
+      ? [remove]
+      : [
+          { key: "choose-set", label: "Choose set", icon: "move", onSelect: onChooseSet },
+          { ...remove, separatorBefore: true },
+        ];
 
   return (
     <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "clip", background: "var(--color-bg-elevated)" }}>
@@ -1008,6 +1015,8 @@ function SoldUnitCard({
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}
+              {/* Sold without being listed (#2021): the set belongs to this sale alone. */}
+              {line.offerSetId === null && " · on no offer"}
             </span>
             {/* A set an automatic pick took rather than a person chose (#697). Drawn where the set is
                 named, and on the sales list from the same column — a flag shown on a list is shown

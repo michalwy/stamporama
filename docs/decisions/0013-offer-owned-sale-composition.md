@@ -38,7 +38,8 @@ Offer   (platformId, url, price, currency, state, …)          — a listing on
   1:N
 OfferSet (offerId, title?, sortOrder)                          — one atomic sellable unit
   N:M ── Item   via OfferSetItem(offerSetId, itemId, sortOrder?) — the copies in that unit
-Sale / SaleLine → offerSetId        (+ sale_line_item.itemId UNIQUE — no-double-sale, unchanged)
+Sale / SaleLine → offerSetId?       (+ sale_line_item.itemId UNIQUE — no-double-sale, unchanged;
+                                      null on copies sold on no offer, §8)
 ```
 
 ### 1. Offer owns its content; there is no shared package
@@ -175,6 +176,35 @@ being asked which one should go.
 buyer answered; each candidate is its copies' scans, a radio, and *Copy 2*. Set titles, copy
 numbers, shelves, cost bases and the rest of the order never enter the payload rather than merely
 going undrawn — the surest way to keep something off a page is for it never to be in it.
+
+### 8. A sale line may sell copies on no offer (#2021)
+
+§2 makes the offer set the unit a sale sells, and every sale before this came through one. But not
+every stamp that leaves was listed: one sold to someone who asked for it, at a fair, to a friend.
+Recording it meant making an offer only to sell it at once — a listing that was never up anywhere,
+and that then sat in Offers as a record of something that did not happen.
+
+So **`SaleLine.offerSetId` is nullable**, and a line with no set names no offer either. Its copies
+are its own `sale_line_item` rows, exactly as on every line — that join was always what retires a
+copy, and the no-double-sale unique stands unchanged — and its price is the one the collector typed.
+**Each pick is one line**: the copies picked together are one set with one price, as an offer's set
+is priced as a whole rather than stamp by stamp, and the price is shared among them for profit by
+the same catalogue weights (ADR-0012 §6). A sale holds any number of such lines beside lines from
+offers, and removing one puts its copies back in stock as removing any line does.
+
+Considered and rejected: **making a hidden offer** for the copies. It keeps `offerSetId` NOT NULL
+and every read untouched, at the price of an offer that is not a listing — one every Offers read
+would have to learn to leave out, forever, and that a collector would meet the moment one of them
+did not.
+
+**What a line on no offer does to the offers around it is §4, unchanged.** A copy it sells may also
+sit in an offer's set — it was in stock, and being listed somewhere does not take a copy out of
+stock — and that offer is then flagged as for any copy sold elsewhere. The derivation reads "sold"
+off the existence of the sale line, never off the set it names, so a line that names none is
+elsewhere for every set.
+
+**Only copies in stock can be picked**: in hand, not disposed of, not sold, not traded away. Not
+`forSale`: a stamp sold to someone who asked for it was rarely marked for sale.
 
 ## Consequences
 

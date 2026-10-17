@@ -1354,7 +1354,7 @@ The bar's buttons sit at the far end of the bar, a long way from the checkboxes 
 ticking. So while copies are ticked, **resting the pointer on a ticked row** shows a small checklist
 button just under that row's checkbox. It opens a menu of **everything the bar can do** — for the
 whole selection, not for that one row — and every entry says how many copies it reaches:
-*Bulk edit 5 copies…*, *New offer · 5 sets*, *Add 5 to offer*.
+*Bulk edit 5 copies…*, *Sell 5 copies…*, *New offer · 5 sets*, *Add 5 to offer*.
 
 It is a shortcut, not a second place to look things up: the bar is still where you see what is
 ticked, how many are hidden by a filter, and whether the selection is already offered. When it is,
@@ -1577,6 +1577,25 @@ collection has no tags yet, the section says so and links to Settings.
 Applying acts on every ticked copy, clears the selection (what has been dealt with should not invite
 doing it twice) and confirms with a toast — worth having on this list, where a moved or re-flagged
 copy often lands outside the filter you are looking through.
+
+## Selling copies without an offer
+
+Copies that were never listed can still be recorded as sold — a stamp someone asked you for, one
+sold at a fair or to a friend. Tick them and choose **Sell…** in the selection bar (or in the
+[selection menu](#the-selection-menu-on-a-ticked-row) on a ticked row). It reaches the ticked copies
+in view that are **in stock** — in hand, not sold, not traded away, not disposed of — whatever they
+are kept for; when only some are, the button says how many, *Sell 3…*.
+
+The dialog asks for the **price for the set** first: the copies become **one set on the sale with
+that one price**, and no offer is made for them. Then pick one of the **open sales** — ordered, paid
+or packed, newest first, each with its buyer, platform and currency, the price being in that sale's
+currency — or **Create new sale**, whose platform decides the currency as usual. Sales already sent
+are not offered. You land on the sale, where the set reads *on no offer* on the **Sold units** list.
+
+A ticked copy that is also in an offer can be sold this way; that offer is then flagged **Needs
+action**, as when a copy sells under another listing. Removing the set from the sale puts its copies
+back in stock. The same can be done from the sale's own screen with **Add copies** — see [selling
+copies that are on no offer](sales.md#selling-copies-that-are-on-no-offer).
 
 ## Grouping the list
 

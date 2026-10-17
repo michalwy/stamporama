@@ -59,19 +59,17 @@ export function needsActionRemedy(offer: {
 /**
  * Whether a set has **sold elsewhere** (#1804): it has not left through this offer's own sale, and
  * one of its copies has left through another set's — another offer's, on this platform or another.
- * `soldVia` maps each sold copy to the set whose sale line took it. Only an offer that is live or
- * still being prepared is asked (`flagsSoldElsewhere`, #1876): a paused or closed one is not about to
- * sell anything.
+ * `soldVia` maps each sold copy to the set whose sale line took it — **null** when that line names no
+ * set, because the copy was sold on no offer at all (#2021), which is elsewhere for every set holding
+ * it. Only an offer that is live or still being prepared is asked (`flagsSoldElsewhere`, #1876): a
+ * paused or closed one is not about to sell anything.
  */
 export function isSetSoldElsewhere(
   set: { id: string; sold: boolean; itemIds: readonly string[] },
-  soldVia: ReadonlyMap<string, string>
+  soldVia: ReadonlyMap<string, string | null>
 ): boolean {
   if (set.sold) return false;
-  return set.itemIds.some((itemId) => {
-    const via = soldVia.get(itemId);
-    return via != null && via !== set.id;
-  });
+  return set.itemIds.some((itemId) => soldVia.has(itemId) && soldVia.get(itemId) !== set.id);
 }
 
 /**

@@ -9,6 +9,10 @@ import type {
 } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
 import type { SaleStatus } from "@/lib/sale-status";
+import {
+  keepRowsAcrossTreeChange,
+  type AreaSelection,
+} from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
 
 interface SalesPage {
   items: SaleListItem[];
@@ -107,6 +111,28 @@ export function useSellableCopies(collectionId: string, platformId: string | und
       return (await res.json()).items;
     },
     enabled,
+  });
+}
+
+/** The copies in stock a set on no offer can be picked from (#2021), scoped by area on the server.
+ * Under the `sales` key, so a sale that takes some of them refreshes the picker too. */
+export function useStockCopiesForSale(
+  collectionId: string,
+  areaIds: string[] | null,
+  /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
+  areaSelection: AreaSelection
+) {
+  const key = (ids: string[] | null) => ["sales", collectionId, "stock-copies", ids ?? []] as const;
+  return useQuery<ItemListItem[]>({
+    queryKey: key(areaIds),
+    ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, key(null)),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      for (const id of areaIds ?? []) params.append("areaId", id);
+      const res = await fetch(`/api/collections/${collectionId}/sales/stock-copies?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to load copies");
+      return (await res.json()).items;
+    },
   });
 }
 

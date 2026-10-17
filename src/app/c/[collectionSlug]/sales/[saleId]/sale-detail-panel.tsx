@@ -31,6 +31,7 @@ import type { SaleShippingRaw } from "@/app/actions/sales";
 import { SaleFormDialog } from "../sale-form-dialog";
 import { SentAsSelect, findCarrierService } from "../sent-as-select";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
+import { AddCopiesDialog } from "./add-copies-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
 import { SaleApiReviewChip } from "../sale-review-chip";
@@ -113,6 +114,7 @@ type Dialog =
   | { kind: "none" }
   | { kind: "editHeader" }
   | { kind: "addLines" }
+  | { kind: "addCopies" }
   | { kind: "removeLine"; lineId: string; label: string }
   | { kind: "chooseSet"; lineId: string }
   | { kind: "share" }
@@ -757,24 +759,40 @@ export function SaleDetailPanel({
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           Sold units
         </h3>
-        <button
-          type="button"
-          onClick={() => {
-            setError(undefined);
-            setDialog({ kind: "addLines" });
-          }}
-          disabled={isPending}
-          style={PRIMARY_BTN}
-        >
-          Add sold units
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {/* Copies that were never listed (#2021): one set with its own price, no offer made. */}
+          <Tooltip content="Sell copies that are on no offer — picked from stock, they become one set on this sale with the price you type">
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setDialog({ kind: "addCopies" });
+              }}
+              disabled={isPending}
+              style={SECONDARY_BTN}
+            >
+              Add copies
+            </button>
+          </Tooltip>
+          <button
+            type="button"
+            onClick={() => {
+              setError(undefined);
+              setDialog({ kind: "addLines" });
+            }}
+            disabled={isPending}
+            style={PRIMARY_BTN}
+          >
+            Add sold units
+          </button>
+        </div>
       </div>
 
       {error && <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>}
 
       {sale.lines.length === 0 ? (
         <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
-          No sold units yet. Add the offers that sold on this platform.
+          No sold units yet. Add the offers that sold on this platform, or copies on no offer.
         </p>
       ) : (
         <SoldUnitsView
@@ -871,6 +889,34 @@ export function SaleDetailPanel({
                 const { addSaleLinesAction } = await import("@/app/actions/sales");
                 // The collector opened this very sale, so a sent one takes the sets too (#1950).
                 return addSaleLinesAction(sale.id, lines, { toSentSale: true });
+              },
+              () => setDialog({ kind: "none" })
+            )
+          }
+        />
+      )}
+
+      {dialog.kind === "addCopies" && (
+        <AddCopiesDialog
+          collectionId={collectionId}
+          currency={sale.currency}
+          baseCurrency={sale.baseCurrency}
+          areas={areas}
+          locations={locations}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onSubmit={(set) =>
+            run(
+              async () => {
+                const { addSaleCopySetAction } = await import("@/app/actions/sales");
+                // This very sale was opened, so a sent one takes the copies too — the sold sets' rule (#1950).
+                return addSaleCopySetAction(sale.id, set, { toSentSale: true });
               },
               () => setDialog({ kind: "none" })
             )

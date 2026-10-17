@@ -6,7 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
-import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
+import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { isSellableOfferState, SELLABLE_OFFER_STATES, shipmentGoingBy } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
@@ -32,6 +32,8 @@ import {
   type ItemListItem,
 } from "./items";
 import { attributeLineToPurchase } from "./purchase-return";
+import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
+import { NOT_TRADED_AWAY } from "./trade-exit";
 import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
@@ -66,6 +68,10 @@ import {
 // recording the sale is all it takes to retire the copies. The pure allocation engine
 // (`sale-allocation.ts`, #163) is fed on read by `getSaleDetail`.
 //
+// A line may also be a **set of copies on no offer** (#2021, ADR-0013 §8): stamps sold without ever
+// being listed, picked on the sale's screen or ticked on Copies. It names no offer and no offer set,
+// carries its copies on `sale_line_item` like every line, and has the price the collector typed.
+//
 // This module owns: the sellable-offer/set picker, create / delete a sale, and the paginated list
 // + detail read models. Whole-set integrity — a series never breaks apart — is enforced by
 // requiring a line's items to be the full current copy set of its set; the DB-level unique on
@@ -85,7 +91,10 @@ export type SaleBlockReason =
   | "sale-sent"
   /** Choosing which set left (#697) on a line whose offer is gone — there is nothing to choose
    *  among. */
-  | "no-offer";
+  | "no-offer"
+  /** A copy picked for a set on no offer (#2021) that is not in stock — sold, traded away, disposed
+   *  of, not yet in hand, or not this collection's. */
+  | "not-in-stock";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1223,6 +1232,105 @@ async function insertSaleWithLines(
   );
 }
 
+// ── Copies on no offer (#2021) ───────────────────────────────────────────────
+//
+// Stamps sold to someone who asked for them, at a fair, to a friend were never listed, and recording
+// them used to mean making an offer only to sell it at once. Now the copies are picked directly and
+// become **one set on the sale**, with one price — as a sale prices an offer's set, not each stamp in
+// it. No offer is made: the line names none, so the set appears nowhere in Offers. Each pick is a set
+// of its own, and a sale holds any number of them beside sets from offers.
+
+/** `Item` fragment: a copy **in stock** — one a set on no offer can take. In hand (the copy goes in
+ *  the envelope, so one still in the post cannot), not disposed of, and not gone: no sale line names
+ *  it and no closed trade gave it away. Being in an offer's set does not matter — that offer is then
+ *  flagged as for any copy sold elsewhere (ADR-0013 §4). */
+const IN_STOCK_COPY_WHERE: Prisma.ItemWhereInput = {
+  disposedAt: null,
+  deliveryState: { in: [...IN_HAND_DELIVERY_STATES] },
+  saleLineItems: { none: {} },
+  ...NOT_TRADED_AWAY,
+};
+
+/** A set of copies on no offer as a form submits it (#2021): the copies picked together and the price
+ *  typed for all of them, in the sale's currency. */
+export interface SaleCopySetDraft {
+  itemIds: string[];
+  /** Validated by the caller (`parsePrice`): the price starts empty and has to be typed. */
+  price: string;
+}
+
+/**
+ * The copies a set on no offer can be picked from (#2021): every copy in stock, optionally under some
+ * areas, enriched as the Copies list draws them. Unpaginated up to the trade picker's bound, as that
+ * picker is (`listOfferableCopies`): the dialog scopes by area here and filters the rest client-side,
+ * so its year facets and its rows cannot disagree.
+ */
+export async function listStockCopiesForSale(
+  ownerId: string,
+  collectionId: string,
+  filters: { areaIds?: string[] | null } = {}
+): Promise<ItemListItem[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const { items } = await listItemsPaginated(ownerId, collectionId, {
+    areaIds: filters.areaIds ?? undefined,
+    deliveryStates: [...IN_HAND_DELIVERY_STATES],
+    excludeGone: true,
+    sortDir: "asc",
+    pageSize: 1000,
+  });
+  return items;
+}
+
+/**
+ * Add copies on no offer to a sale as **one set** with one price (#2021). Every copy must be the
+ * collection's and in stock ({@link IN_STOCK_COPY_WHERE}); the DB-level unique on
+ * `sale_line_item.itemId` backstops a copy that sold elsewhere between the check and the write. A
+ * sale already sent takes the set only with `toSentSale`, by `addSaleLines`' rule (#1950).
+ *
+ * No offer is touched. An offer whose set holds one of these copies is flagged by the derivation,
+ * as for any copy sold elsewhere (ADR-0013 §4), and needs no write here. Returns the new line's id.
+ */
+export async function addSaleCopySet(
+  ownerId: string,
+  saleId: string,
+  draft: SaleCopySetDraft,
+  opts: { toSentSale?: boolean } = {}
+): Promise<string> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  const itemIds = [...new Set(draft.itemIds)];
+  if (itemIds.length === 0) {
+    throw new SaleActionBlockedError("empty", "Choose at least one copy to sell.");
+  }
+  if (isSaleSent(ref.status) && !opts.toSentSale) {
+    throw new SaleActionBlockedError(
+      "sale-sent",
+      "This sale has already been sent. Add to an open sale or start a new one."
+    );
+  }
+  const inStock = await prisma.item.count({
+    where: { id: { in: itemIds }, collectionId: ref.collectionId, ...IN_STOCK_COPY_WHERE },
+  });
+  if (inStock !== itemIds.length) {
+    throw new SaleActionBlockedError(
+      "not-in-stock",
+      "One or more of these copies is no longer in stock — sold, gone, or not yet in hand."
+    );
+  }
+  return refusingDoubleSale(async () => {
+    const line = await prisma.saleLine.create({
+      data: {
+        saleId,
+        offerId: null,
+        offerSetId: null,
+        price: draft.price,
+        items: { create: itemIds.map((itemId) => ({ itemId })) },
+      },
+      select: { id: true },
+    });
+    return line.id;
+  });
+}
+
 /** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which
  * can differ from the offer's asking price (e.g. a discount given to the buyer). The override lives
  * only on this sale line — the originating offer's own asking price is never touched. Gross, net, and
@@ -1333,8 +1441,10 @@ export async function listSaleLineSetOptions(
   });
   if (!line || line.sale.collection.ownerId !== ownerId) return null;
   // A line whose offer was deleted has no choice to offer: the sets it could swap among went with
-  // it, and the copies it holds are all the record still knows about.
-  if (!line.offerId || !line.offer) return null;
+  // it, and the copies it holds are all the record still knows about. Nor has a set of copies on no
+  // offer (#2021): it is the copies the collector picked, and there is nothing beside it.
+  if (!line.offerId || !line.offer || !line.offerSetId) return null;
+  const currentSetId = line.offerSetId;
 
   const allItemIds = line.offer.sets.flatMap((s) => s.items.map((li) => li.itemId));
   // Every copy of this offer that has already left, and on which line — so this line's own copies
@@ -1352,7 +1462,7 @@ export async function listSaleLineSetOptions(
   for (const set of line.offer.sets) {
     // A set is atomic, so one copy gone elsewhere retires the whole set — the sellable picker's rule.
     if (set.items.length === 0) continue;
-    if (set.id !== line.offerSetId && set.items.some((li) => takenElsewhere.has(li.itemId))) continue;
+    if (set.id !== currentSetId && set.items.some((li) => takenElsewhere.has(li.itemId))) continue;
     const items = orderedSetItems(set.items);
     sets.push({
       offerSetId: set.id,
@@ -1375,7 +1485,7 @@ export async function listSaleLineSetOptions(
     lineId,
     offerId: line.offerId,
     offerLabel: offerDisplayLabel(line.offer.name, line.offer.sets, labeller),
-    currentSetId: line.offerSetId,
+    currentSetId,
     setChoicePending: line.setChoicePending,
     sets,
     copies,
@@ -2078,7 +2188,9 @@ export async function listSalePlatforms(
 
 export interface SaleDetailLine {
   id: string;
-  offerSetId: string;
+  /** The offer set that sold, or null on a set of copies on no offer (#2021) — which names no offer
+   *  either, so it has no other set to choose and its label is derived from its copies. */
+  offerSetId: string | null;
   setLabel: string;
   offerId: string | null;
   price: string;
@@ -2404,7 +2516,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   const refsOf = (ids: readonly string[]): SaleCopyRef[] =>
     ids.map((itemId) => ({ itemId, label: copyLabelById.get(itemId) ?? "" }));
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
-    const setLbl = labeller.set(l.offerSet);
+    const setLbl = labeller.set(l.offerSet ?? copiesAsLabelSet(l.items));
     const net = resolved.netOf(l.id);
     return {
       id: l.id,

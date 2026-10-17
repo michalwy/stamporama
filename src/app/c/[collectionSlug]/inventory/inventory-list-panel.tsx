@@ -108,6 +108,8 @@ import { RecordReplacementDialog } from "./replacements/record-replacement-dialo
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
+import { SellCopiesDialog } from "./sell-copies-dialog";
+import { isInStockForSale } from "@/lib/sale-rules";
 import { BulkEditCopiesDialog } from "./bulk-edit-copies-dialog";
 import {
   appendBulkChanges,
@@ -151,6 +153,8 @@ type DialogState =
   // Location and disposition over the whole selection (#682) — the bulk bar's own dialog, and the
   // only one here that acts on copies rather than on a copy.
   | { kind: "bulkEdit"; items: ItemListItem[] }
+  // Sold straight onto a sale as one set, on no offer (#2021) — the ticked copies in stock.
+  | { kind: "sell"; items: ItemListItem[] }
   // Quick offer mode's platform and status over many copies at once (#1287).
   | {
       kind: "generateOffers";
@@ -859,6 +863,8 @@ export function InventoryListPanel({
   // carry — because blurring them into one number would leave the collector unable to tell which
   // of the two took a copy out.
   const listableCopies = useMemo(() => selectedInView.filter(isListableCopy), [selectedInView]);
+  // …and the part that can be **sold** without an offer (#2021): in stock, whatever it is kept for.
+  const sellableCopies = useMemo(() => selectedInView.filter(isInStockForSale), [selectedInView]);
 
   // Setting a copy aside from a platform, or bringing it back (#506). No dialog on either path: it
   // is one reversible flag, and a confirmation for something the very next click can undo is noise.
@@ -1065,6 +1071,7 @@ export function InventoryListPanel({
       buildSelectionActions({
         inView: selectedInView.length,
         listable: listableCopies.length,
+        sellable: sellableCopies.length,
         collision: collisionOffer
           ? {
               offerRef: formatEntityNo(collisionOffer.offerNo),
@@ -1091,6 +1098,7 @@ export function InventoryListPanel({
               ? createQuickOffer(listableCopies, packaging === "per-copy")
               : setDialog({ kind: "addToNewOffer", items: listableCopies, packaging }),
           addToOffer: () => setDialog({ kind: "addToOffer", items: listableCopies }),
+          sell: () => setDialog({ kind: "sell", items: sellableCopies }),
           addToCollisionOffer: () => {
             if (collisionOffer)
               setDialog({
@@ -1104,6 +1112,7 @@ export function InventoryListPanel({
     [
       selectedInView,
       listableCopies,
+      sellableCopies,
       collisionOffer,
       scopedPlatform,
       selectionExcluded,
@@ -2102,6 +2111,17 @@ export function InventoryListPanel({
         <VariantHistoryDialog
           collectionId={collectionId}
           item={dialog.item}
+          onClose={closeDialog}
+        />
+      )}
+
+      {dialog.kind === "sell" && (
+        <SellCopiesDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          itemIds={dialog.items.map((c) => c.id)}
+          onSold={clearSelection}
           onClose={closeDialog}
         />
       )}
