@@ -2159,7 +2159,7 @@ export function InventoryListPanel({
           facebook={dialog.facebook}
           input={dialog.input}
           onClose={() => setDialog({ kind: "none" })}
-          onDone={({ createdOffers, changedOffers }) => {
+          onDone={({ createdOffers, changedOffers, post }) => {
             setDialog({ kind: "none" });
             rememberPlatform(dialog.platformId);
             if (dialog.facebook.facebookGroupId) {
@@ -2173,7 +2173,10 @@ export function InventoryListPanel({
             toast({
               message:
                 `${createdOffers} offer${createdOffers === 1 ? "" : "s"} created` +
+                (post ? ` as the lots of post #${post.postNo}` : "") +
                 (changedOffers > 0 ? `, ${changedOffers} existing offer${changedOffers === 1 ? "" : "s"} added to` : ""),
+              // The post's screen is where the batch is priced and put up (#2030).
+              ...(post ? { href: `/c/${collectionSlug}/offers/posts/${post.postNo}`, linkLabel: "Open post" } : {}),
             });
           }}
         />

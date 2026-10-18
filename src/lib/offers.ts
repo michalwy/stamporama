@@ -8340,7 +8340,12 @@ export interface GeneratedOffersInput {
 export async function writeGeneratedOffers(
   ownerId: string,
   collectionId: string,
-  input: GeneratedOffersInput
+  input: GeneratedOffersInput,
+  opts: {
+    /** Further writes that must stand or fall with the pass, run inside its transaction once every
+     *  offer exists, given the new offers in the pass's order: putting them into one new post (#2030). */
+    inTransaction?: (tx: DbTransaction, createdOfferIds: string[]) => Promise<void>;
+  } = {}
 ): Promise<{ createdOfferIds: string[]; changedOfferIds: string[] }> {
   await assertCollectionOwner(ownerId, collectionId);
   const itemIds = [...input.newOffers.flat(2), ...input.additions.flatMap((addition) => addition.sets.flat())];
@@ -8447,6 +8452,7 @@ export async function writeGeneratedOffers(
         }
       }
       await markListingContentChanged(additions.map((addition) => addition.offerId), tx); // #542
+      await opts.inTransaction?.(tx, created);
       return created;
     },
     // A pass over a large intake is hundreds of offers; the default five seconds is not a bound on it.

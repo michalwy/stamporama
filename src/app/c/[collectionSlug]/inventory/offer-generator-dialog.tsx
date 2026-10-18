@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
+  canGenerateIntoPost,
+  generatorPostRefusal,
   generatorRequestParams,
   generatorSelection,
   keptResultingSetCount,
@@ -16,10 +18,13 @@ import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { DIALOG_MAX_HEIGHT, DIALOG_MAX_WIDTH, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
+import { formControl } from "@/app/control-style";
 import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CertificateStatusChip, ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
@@ -40,6 +45,10 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // plan — an unticked offer's copies go to no other offer, they stay where they are — so the ticks are
 // this dialog's own state, the counts follow them through `generatorSelection`, and only the commit
 // carries them (`skip`). An expanded offer draws its copies with the app's own copy row.
+//
+// On Facebook, a pass whose offers are not yet up can put the offers it creates into one new post
+// (#2030), as its lots in the preview's order — the batch gathered from the start, with no *Post
+// together…* afterwards. Like the ticks, the post's title is carried by the commit alone.
 
 /** Which copies the pass is over: the ticked ones in view, or everything the list's filters show. */
 export type OfferGeneratorInput =
@@ -49,6 +58,8 @@ export type OfferGeneratorInput =
 export interface OfferGeneratorOutcome {
   createdOffers: number;
   changedOffers: number;
+  /** The new post the created offers are the lots of (#2030), when one was asked for. */
+  post: { postNo: number } | null;
 }
 
 const MODES: { value: GeneratorMode; label: string; hint: string }[] = [
@@ -105,6 +116,17 @@ const OPTION: React.CSSProperties = {
 };
 
 const HINT: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-secondary)" };
+
+const TITLE_INPUT: React.CSSProperties = {
+  ...formControl,
+  width: "24rem",
+  padding: "0.375rem 0.625rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+};
 
 // Fixed columns, so fifty lines read as a table: tick, toggle, name, combination, catalogue, quantity,
 // outcome (#1368, the tick #1887). The tick is the copy list's own strip, so it runs from the row's
@@ -187,6 +209,10 @@ export function OfferGeneratorDialog({
   // The lines left out, by id — kept rather than the ticked ones, so every offer starts ticked and a
   // line the plan newly proposes after a change of mode or packaging is ticked too (#1887).
   const [skip, setSkip] = useState<ReadonlySet<string>>(() => new Set());
+  // In a new post (#2030): offered on Facebook only, and only while the bar's status is not yet up.
+  const offerPost = !!facebook.facebookGroupId && canGenerateIntoPost(state);
+  const [inPost, setInPost] = useState(false);
+  const [postTitle, setPostTitle] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const vendorMaps = useAreaVendorMaps(areas, collectionId);
@@ -212,8 +238,20 @@ export function OfferGeneratorDialog({
   const lines = useMemo(() => preview?.lines ?? [], [preview]);
   const selection = useMemo(() => generatorSelection(lines, skip), [lines, skip]);
   const { newOffers, changedOffers } = selection;
+  const intoPost = offerPost && inPost;
+  const postRefusal = intoPost
+    ? generatorPostRefusal({ state, facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
+    : null;
   const canConfirm =
-    !!preview && newOffers + changedOffers > 0 && !preview.creationBlock && !isPending;
+    !!preview && newOffers + changedOffers > 0 && !preview.creationBlock && !postRefusal && !isPending;
+  // Each ticked new offer's lot in the post, in the preview's order — the order the lots are written.
+  const lotNos = useMemo(() => {
+    const byLine = new Map<string, number>();
+    for (const line of lines) {
+      if (line.target.kind === "new" && !skip.has(line.id)) byLine.set(line.id, byLine.size + 1);
+    }
+    return byLine;
+  }, [lines, skip]);
   const allTicked = lines.length > 0 && selection.leftOffers === 0;
 
   function toggleLine(lineId: string) {
@@ -229,12 +267,13 @@ export function OfferGeneratorDialog({
     setSkip(allTicked ? new Set(lines.map((line) => line.id)) : new Set());
   }
 
+  const created = `Create ${plural(newOffers, "offer", "offers")}${intoPost ? " in a new post" : ""}`;
   const actionLabel =
     changedOffers > 0 && newOffers > 0
-      ? `Create ${plural(newOffers, "offer", "offers")}, add to ${changedOffers}`
+      ? `${created}, add to ${changedOffers}`
       : changedOffers > 0
         ? `Add to ${plural(changedOffers, "offer", "offers")}`
-        : `Create ${plural(newOffers, "offer", "offers")}`;
+        : created;
 
   function confirm() {
     if (!preview) return;
@@ -244,12 +283,17 @@ export function OfferGeneratorDialog({
     const commitQuery = generatorRequestParams({
       ...request,
       skip: lines.flatMap((line) => (skip.has(line.id) ? [line.id] : [])),
+      ...(intoPost ? { postTitle } : {}),
     }).toString();
     startTransition(async () => {
       const { generateOffersAction } = await import("@/app/actions/offers");
       const result = await generateOffersAction(collectionId, commitQuery, shown);
       if (result.status === "success") {
-        onDone({ createdOffers: result.createdOffers, changedOffers: result.changedOffers });
+        onDone({
+          createdOffers: result.createdOffers,
+          changedOffers: result.changedOffers,
+          post: result.post ? { postNo: result.post.postNo } : null,
+        });
       } else {
         setError(result.message);
       }
@@ -317,6 +361,36 @@ export function OfferGeneratorDialog({
             </fieldset>
           </div>
 
+          {offerPost && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <label style={{ ...OPTION, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={inPost}
+                  onChange={(e) => setInPost(e.target.checked)}
+                  disabled={isPending}
+                />
+                <span>
+                  In a new post <span style={HINT}>— the new offers become its lots, in this order.</span>
+                </span>
+              </label>
+              {inPost && (
+                <>
+                  <TextInput
+                    aria-label="The post's title"
+                    value={postTitle}
+                    onChange={(e) => setPostTitle(e.target.value)}
+                    disabled={isPending}
+                    placeholder="The post's title, e.g. Generalgouvernement 1940–44"
+                    style={TITLE_INPUT}
+                    {...NO_AUTOFILL}
+                  />
+                  {postRefusal && <span style={HINT}>{postRefusal}</span>}
+                </>
+              )}
+            </div>
+          )}
+
           {isLoading ? (
             <SkeletonBlock style={{ height: "12rem" }} />
           ) : isError || !preview ? (
@@ -350,6 +424,7 @@ export function OfferGeneratorDialog({
                       vendorMaps={vendorMaps}
                       line={line}
                       ticked={!skip.has(line.id)}
+                      lotNo={intoPost ? (lotNos.get(line.id) ?? null) : null}
                       resultingSetCount={keptResultingSetCount(lines, skip, line.id)}
                       disabled={isPending}
                       onToggleTick={() => toggleLine(line.id)}
@@ -486,6 +561,7 @@ function Line({
   vendorMaps,
   line,
   ticked,
+  lotNo,
   resultingSetCount,
   disabled,
   onToggleTick,
@@ -498,6 +574,8 @@ function Line({
   vendorMaps: VendorMaps;
   line: GeneratorLineView;
   ticked: boolean;
+  /** The new offer's lot in the new post (#2030), or null when there is no post or it is no lot. */
+  lotNo: number | null;
   /** What the receiving offer will hold, the unticked lines before it left out. */
   resultingSetCount: number;
   disabled: boolean;
@@ -585,6 +663,7 @@ function Line({
           ) : (
             <>
               <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>New offer</span>
+              {lotNo !== null && <span style={HINT}>· lot {lotNo}</span>}
               {line.biddingMatches.length > 0 && (
                 <Tooltip content={biddingNote(line.biddingMatches)}>
                   <Icon name="warning" size="sm" color="var(--color-text-muted)" />
