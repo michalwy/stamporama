@@ -448,10 +448,8 @@ corrected in one place and every sale it ever carried follows.
 
 ## Packing view
 
-The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
-by default — deliberately unlike the lot and set cards on the [purchase](purchases.md), [offer](offers.md)
-and [auction sale](auctions.md) screens, because a packing list is there to be read, not scanned)
-whose header shows the set, its copy count, price, net and [profit](#profit-and-loss). Expanding it shows the
+The detail screen doubles as a **packing list**. Each sold set is a collapsible card whose header
+shows the set, its copy count, price, net and [profit](#profit-and-loss). Expanding it shows the
 exact physical copies that left — as full inventory rows with catalog number, condition, and
 **location**, so you can pull each piece to pack it. It works like a purchase order:
 
@@ -464,6 +462,15 @@ exact physical copies that left — as full inventory rows with catalog number, 
   prefix first, then the number — so `A9`, `A10`, `A100`, `B-3000` come out in shelf order.
 - Copies load lazily, so even a large sale opens quickly. Use **Collapse all** / **Expand all**
   to switch between an overview and full contents.
+
+**The sets open collapsed, and the screen remembers which ones you opened.** A sale you have never
+opened shows every set folded up, the way the lot and set cards on the [purchase](purchases.md),
+[offer](offers.md) and [auction sale](auctions.md) screens open — a sale of many sets is then a short
+list to scan rather than a long scroll. Whatever you expand or fold, card by card or with **Collapse
+all** / **Expand all**, is kept **for that sale**: reload the page, or come back to it from another
+screen, and the same sets are open. A set you add while the screen is open opens itself, since it is
+the one you are looking at, and is remembered like any other. The memory lives in this browser, for
+the fifty sales you opened most recently.
 
 Each copy row has a **packed** checkbox on its left. Tick it as you physically pack that piece —
 packing happens copy by copy, so this is tracked **per copy**, independent of the sale's overall

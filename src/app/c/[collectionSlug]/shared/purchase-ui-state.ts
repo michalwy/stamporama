@@ -4,16 +4,15 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import {
   EMPTY_PURCHASE_UI_STATE,
-  forgetEntry,
   isEmptyPurchaseUiState,
+  MAX_BYTES,
+  MAX_ENTRIES,
   parsePurchaseUiState,
-  storedBytes,
-  touchAndEvict,
   type PurchaseUiState,
-  type UiStateIndexEntry,
 } from "@/lib/purchase-ui-state";
 
-import { lsGet, lsRemove, notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
+import { lsGet, notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
+import { createRecordUiStore } from "./record-ui-store";
 import type { CardExpansionStore } from "./use-card-expansion";
 
 /**
@@ -44,72 +43,12 @@ export function purchaseUiKey(collectionId: string, purchaseId: string): string 
   return `${ENTRY_PREFIX}${collectionId}:${purchaseId}`;
 }
 
-function readIndex(): UiStateIndexEntry[] {
-  const raw = lsGet(INDEX_KEY);
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((row): UiStateIndexEntry[] => {
-      if (!Array.isArray(row) || row.length < 3) return [];
-      const [key, at, bytes] = row as unknown[];
-      if (typeof key !== "string" || typeof at !== "number" || typeof bytes !== "number") return [];
-      return [{ key, at, bytes }];
-    });
-  } catch {
-    return [];
-  }
-}
-
-function writeIndex(index: readonly UiStateIndexEntry[]): void {
-  // Tuples rather than objects: the index is written on every toggle, and field names repeated
-  // fifty times are the larger half of it.
-  trySet(INDEX_KEY, JSON.stringify(index.map((e) => [e.key, e.at, e.bytes])));
-}
-
-/** `lsSet` swallows a full quota, which is exactly what this store has to react to — so it writes
- * through its own setter and reports whether the write landed. */
-function trySet(key: string, value: string): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    window.localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function removeEntry(key: string): void {
-  lsRemove(key);
-  writeIndex(forgetEntry(readIndex(), key));
-}
+const store = createRecordUiStore(INDEX_KEY, { maxEntries: MAX_ENTRIES, maxBytes: MAX_BYTES });
 
 function writeEntry(key: string, state: PurchaseUiState): void {
   // A screen sitting at its defaults is not worth one of the fifty slots, and storing it would let
   // orders merely opened in passing push out ones actually being worked on.
-  if (isEmptyPurchaseUiState(state)) {
-    removeEntry(key);
-    return;
-  }
-  const raw = JSON.stringify(state);
-  const { index, evicted } = touchAndEvict(readIndex(), key, Date.now(), storedBytes(raw));
-  for (const dropped of evicted) lsRemove(dropped);
-
-  // The quota is shared with every other stored preference, so it can be full even when this
-  // store is well inside its own budget. Give up the least-recently-used order and try again.
-  let live = index;
-  while (!trySet(key, raw)) {
-    if (live.length <= 1) {
-      // Nothing left to trade: keep the screen working and leave the index describing what is
-      // actually stored, rather than claiming an entry that failed to write.
-      writeIndex(forgetEntry(live, key));
-      return;
-    }
-    const oldest = live[live.length - 1];
-    live = live.slice(0, -1);
-    lsRemove(oldest.key);
-  }
-  writeIndex(live);
+  store.write(key, isEmptyPurchaseUiState(state) ? null : JSON.stringify(state));
 }
 
 /** Clear the pre-store per-lot keys, once per page load. Runs at subscription time (an effect)

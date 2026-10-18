@@ -790,33 +790,27 @@ export function SaleDetailPanel({
 
       {error && <div style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</div>}
 
-      {sale.lines.length === 0 ? (
-        <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
-          No sold units yet. Add the offers that sold on this platform, or copies on no offer.
-        </p>
-      ) : (
-        <SoldUnitsView
-          collectionId={collectionId}
-          saleId={sale.id}
-          currency={sale.currency}
-          baseCurrency={sale.baseCurrency}
-          lines={sale.lines}
-          areas={areas}
-          locations={locations}
-          issueHeaderById={issueHeaderById}
-          onRemove={(lineId, label) => setDialog({ kind: "removeLine", lineId, label })}
-          onChooseSet={(lineId) => {
-            setError(undefined);
-            setDialog({ kind: "chooseSet", lineId });
-          }}
-          onEditPrice={(lineId, price) =>
-            run(async () => {
-              const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
-              return updateSaleLinePriceAction(lineId, price);
-            })
-          }
-        />
-      )}
+      <SoldUnitsView
+        collectionId={collectionId}
+        saleId={sale.id}
+        currency={sale.currency}
+        baseCurrency={sale.baseCurrency}
+        lines={sale.lines}
+        areas={areas}
+        locations={locations}
+        issueHeaderById={issueHeaderById}
+        onRemove={(lineId, label) => setDialog({ kind: "removeLine", lineId, label })}
+        onChooseSet={(lineId) => {
+          setError(undefined);
+          setDialog({ kind: "chooseSet", lineId });
+        }}
+        onEditPrice={(lineId, price) =>
+          run(async () => {
+            const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
+            return updateSaleLinePriceAction(lineId, price);
+          })
+        }
+      />
 
       {/* Dialogs */}
       {dialog.kind === "editHeader" && (

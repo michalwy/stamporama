@@ -31,6 +31,8 @@ import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sal
 import { Icon } from "@/app/icons";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { CopiesWithoutCost } from "./copies-without-cost";
+import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
+import { useSaleLineExpansion } from "./sale-line-expansion";
 
 
 // The sales packing view adds "Location ref" to the shared copy sort keys — the in-location
@@ -568,9 +570,17 @@ export function SoldUnitsView({
     [lines, setFilter]
   );
 
-  // Cards default expanded (packing wants contents visible); a set of collapsed line ids overrides.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const allCollapsed = visibleLines.length > 0 && visibleLines.every((l) => collapsed.has(l.id));
+  // Sold sets are collapsed by default (#2034, reversing #382's exemption for the packing view): a
+  // sale of many sets was a long scroll on every visit. Which are open is remembered per sale, and a
+  // set added while the screen is open opens itself — `useCardExpansion`'s rule, which is why this
+  // view is mounted even for an empty sale: the first set added is then one that appeared here.
+  // The ids are the cards on screen, so *Expand all* is about what the collector can see.
+  const expansionStore = useSaleLineExpansion(collectionId, saleId);
+  const expansion = useCardExpansion(
+    visibleLines.map((l) => l.id),
+    null,
+    expansionStore
+  );
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
@@ -606,15 +616,14 @@ export function SoldUnitsView({
   };
 
   // Whole-sale copies for the flat / location views — one lazy query, run only when not by-lot.
-  const flat = useSaleCopies(collectionId, saleId, hydrated && primary !== "lot");
+  const flat = useSaleCopies(collectionId, saleId, hydrated && primary !== "lot" && lines.length > 0);
 
-  function toggle(lineId: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(lineId)) next.delete(lineId);
-      else next.add(lineId);
-      return next;
-    });
+  if (lines.length === 0) {
+    return (
+      <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+        No sold units yet. Add the offers that sold on this platform, or copies on no offer.
+      </p>
+    );
   }
 
   return (
@@ -682,12 +691,10 @@ export function SoldUnitsView({
         {primary === "lot" && (
           <button
             type="button"
-            onClick={() =>
-              setCollapsed(allCollapsed ? new Set() : new Set(visibleLines.map((l) => l.id)))
-            }
+            onClick={expansion.toggleAll}
             style={{ ...TOOLBAR_CHIP, cursor: "pointer", marginLeft: "auto" }}
           >
-            {allCollapsed ? "Expand all" : "Collapse all"}
+            {expansion.allExpanded ? "Collapse all" : "Expand all"}
           </button>
         )}
       </div>
@@ -699,12 +706,12 @@ export function SoldUnitsView({
               key={line.id}
               currency={currency}
               line={line}
-              expanded={hydrated && !collapsed.has(line.id)}
+              expanded={hydrated && expansion.isExpanded(line.id)}
               byIssue={byIssue}
               sortKey={sortKey}
               sortDir={sortDir}
               ctx={ctx}
-              onToggle={() => toggle(line.id)}
+              onToggle={() => expansion.toggle(line.id)}
               onRemove={() => onRemove(line.id, line.setLabel)}
               onEditPrice={(price) => onEditPrice(line.id, price)}
               onChooseSet={() => onChooseSet(line.id)}
