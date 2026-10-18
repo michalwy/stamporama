@@ -466,12 +466,6 @@ function StampTreeNode({
                 visible={hovered && !reordering}
               />
               <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
-              {addCopy.dialog}
-              {addWant.dialog}
-              {copies.dialog}
-              {offers.dialog}
-              {prices.dialog}
-              {quickPrice.dialog}
             </div>
 
             <StampDetailLine collectionId={collectionId}
@@ -491,6 +485,15 @@ function StampTreeNode({
           </div>
         </div>
       </div>
+      {/* The row's dialogs are drawn beside it, never inside it (#2064): a context row's opacity
+          makes a stacking context, so a dialog inside it came out dimmed, see-through and ranked
+          only within the row. The dimming belongs to the row alone. */}
+      {addCopy.dialog}
+      {addWant.dialog}
+      {copies.dialog}
+      {offers.dialog}
+      {prices.dialog}
+      {quickPrice.dialog}
       {!collapsed && (
         <StampTreeGroup
           nodes={children}
