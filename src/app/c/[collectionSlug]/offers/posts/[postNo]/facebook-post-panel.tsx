@@ -48,6 +48,7 @@ import { useFacebookPostLotsPrepare, useFacebookPostScreen, useInvalidateOffers 
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-walk";
 import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../../prepare/prepare-offer-parts";
+import { DeleteFacebookPostDialog, deletedPostMessage } from "../delete-post-dialog";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
@@ -173,7 +174,8 @@ type Dialog =
   | { kind: "regenerate"; scope: RegenerateScope }
   | { kind: "titleTemplate" }
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
-  | { kind: "sell"; lots: FacebookKitLot[] };
+  | { kind: "sell"; lots: FacebookKitLot[] }
+  | { kind: "deletePost" };
 
 /** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
 interface LotSkip {
@@ -600,27 +602,38 @@ export function FacebookPostPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <header>
-        <InlineText
-          value={title ?? ""}
-          placeholder="Post title"
-          display={
-            <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              Post #{postNo}
-              {title ? (
-                <> · {title}</>
-              ) : (
-                <span style={{ ...MUTED, fontSize: "0.875rem", fontWeight: 400, marginLeft: "0.5rem" }}>no title</span>
-              )}
-            </h2>
-          }
-          editable
-          isPending={isPending}
-          inputType="text"
-          editControl
-          editAriaLabel={title ? "Rename this post" : "Give this post a title"}
-          selectOnEdit
-          onSave={rename}
-        />
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <InlineText
+              value={title ?? ""}
+              placeholder="Post title"
+              display={
+                <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                  Post #{postNo}
+                  {title ? (
+                    <> · {title}</>
+                  ) : (
+                    <span style={{ ...MUTED, fontSize: "0.875rem", fontWeight: 400, marginLeft: "0.5rem" }}>no title</span>
+                  )}
+                </h2>
+              }
+              editable
+              isPending={isPending}
+              inputType="text"
+              editControl
+              editAriaLabel={title ? "Rename this post" : "Give this post a title"}
+              selectOnEdit
+              onSave={rename}
+            />
+          </div>
+          {/* In any stage, as long as no lot has sold (#2060) — the dialog says so otherwise. */}
+          <RowActionsMenu
+            ariaLabel="Post actions"
+            actions={[
+              { key: "delete", label: "Delete post…", icon: "delete", danger: true, onSelect: () => setDialog({ kind: "deletePost" }) },
+            ]}
+          />
+        </div>
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
           {lots.length > 1 ? `A Facebook post of ${lots.length} lots in ` : "A Facebook post of one offer, posted alone, in "}
           <a href={kit.group.url} target="_blank" rel="noreferrer" style={LINK}>
@@ -1132,6 +1145,18 @@ export function FacebookPostPanel({
           offers={coverWalk.offers}
           onClose={() => setCoverWalk(null)}
           onChanged={() => void invalidateAll(collectionId)}
+        />
+      )}
+
+      {dialog.kind === "deletePost" && (
+        <DeleteFacebookPostDialog
+          postId={postId}
+          onClose={() => setDialog({ kind: "none" })}
+          onDeleted={(deleted) => {
+            toast({ message: deletedPostMessage(deleted) });
+            router.push(`/c/${collectionSlug}/offers/posts`);
+            void invalidateAll(collectionId);
+          }}
         />
       )}
 

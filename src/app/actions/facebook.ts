@@ -21,6 +21,8 @@ import {
   addFacebookLots,
   changeFacebookLotTitleWords,
   createFacebookPost,
+  deleteFacebookPost,
+  readFacebookPostDeletion,
   refreshFacebookPostTexts,
   regenerateFacebookLotTexts,
   removeFacebookLot,
@@ -32,7 +34,7 @@ import {
   type FacebookBackToReady,
   type FacebookLotsAdded,
 } from "@/lib/facebook-posts";
-import type { FacebookTitleEdge, FacebookTitleWordsMode } from "@/lib/facebook-post-rules";
+import type { FacebookPostDeletion, FacebookTitleEdge, FacebookTitleWordsMode } from "@/lib/facebook-post-rules";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
@@ -187,6 +189,30 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** What deleting a post would take with it, and which lots are in the way (#2060). */
+export async function readFacebookPostDeletionAction(
+  postId: string
+): Promise<({ status: "success" } & FacebookPostDeletion) | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await readFacebookPostDeletion(session.user.id, postId)) };
+  } catch (err) {
+    return failure(err, "Failed to read the post.");
+  }
+}
+
+/** Delete a post together with every offer in it (#2060); refused while a lot has a sold set. */
+export async function deleteFacebookPostAction(
+  postId: string
+): Promise<{ status: "success"; postNo: number; offerCount: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await deleteFacebookPost(session.user.id, postId)) };
+  } catch (err) {
+    return failure(err, "Failed to delete the post.");
   }
 }
 
