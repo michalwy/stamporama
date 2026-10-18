@@ -4198,8 +4198,8 @@ model ScanSheet {
    * object the app stores and it would be dishonest for it to be the invisible one. */
   sizeBytes      Int
   /** When the **last** tile of this batch left `unidentified` (#567) — consumed into a copy or
-   * discarded. From that moment the batch can never be re-cut (a consumed tile refuses it), so the
-   * retained original has no remaining function. Nothing reads it yet; #578's retention sweep is
+   * discarded. From that moment nothing on the batch is left to work (a re-cut keeps every consumed
+   * tile, #2055), so the retained original has no remaining function. Nothing reads it yet; #578's retention sweep is
    * what will, on the closed-offer photos' TTL-after-a-terminal-state pattern (#512). Written now
    * because deriving it from the tiles afterwards is fragile and adding the column later is a
    * migration. Cleared again if a tile ever returns to `unidentified`. */
@@ -4222,6 +4222,12 @@ model ScanSheet {
    * which keeps the default. Unconstrained here for the reason `side` is; `back-turnover.ts` is the
    * vocabulary. */
   turnover       String   @default("in_place")
+  /** Whether this sheet is waiting to be cut again **around the copies a re-cut kept** (#2055). A
+   * re-cut on a card some of whose tiles became copies keeps those tiles, and their boxes stay on
+   * this sheet, so tiles still name it — this is what says the rest of it is uncut all the same.
+   * Set by the re-cut on the batch's sheets, cleared by this sheet's next commit. While it stands the
+   * batch is not finished with, so the retention sweep cannot take the scan being cut. */
+  recutPending   Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

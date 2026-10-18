@@ -38,6 +38,7 @@ import {
 } from "./scan-boxes";
 import { detectSheetBoxes, pickBoxAt, recogniseSheetKind, type SheetKind } from "./scan-detect";
 import { batchDeletion, batchDeletionRefusal } from "./scan-batch-deletion";
+import { freePositions, isLockedTile, outsideLocked } from "./scan-recut";
 import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
@@ -697,20 +698,26 @@ export async function commitCut(
       height: true,
       purgedAt: true,
       turnover: true,
+      recutPending: true,
     },
   });
   assertSheetNotPurged(sheet);
 
-  const alreadyCut = await prisma.scanTile.count({
+  // What already names this sheet. On a sheet a re-cut is pending on (#2055) that is the copies the
+  // re-cut kept — locked, and cut around rather than over; anywhere else it means the scan is cut.
+  const onSheet = await prisma.scanTile.findMany({
     where:
       sheet.side === "front" ? { frontSheetId: sheetId } : { backSheetId: sheetId },
+    select: { state: true },
   });
-  if (alreadyCut > 0) {
+  if (onSheet.length > 0 && !sheet.recutPending) {
     throw new ScanValidationError(
       "This scan has already been cut. Re-cut the batch to start again."
     );
   }
-  if (boxes.length === 0) {
+  // A re-cut whose every remaining box is a copy's is a whole cut with nothing new in it — the
+  // boxes deleted were the mistake. Anywhere else an empty cut is a press made too early.
+  if (boxes.length === 0 && !onSheet.some(isLockedTile)) {
     throw new ScanValidationError("Draw at least one box before committing the cut.");
   }
   assertBoxesInSheet(boxes, sheet);
@@ -727,8 +734,14 @@ export async function commitCut(
   // turned — the tile's turn, as a collector turning each one by hand would have set it.
   const turnover = asBackTurnover(sheet.turnover);
   const turn = sheet.side === "back" ? turnoverBackTurn(turnover) : 0;
-  const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
-  const crops = await cutSheet(original, ordered, turn);
+  const crops =
+    ordered.length > 0
+      ? await cutSheet(
+          await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime),
+          ordered,
+          turn
+        )
+      : [];
 
   return sheet.side === "front"
     ? commitFrontCut({ owner, sheetId, batchNo: sheet.batchNo, ordered, crops })
@@ -755,14 +768,27 @@ async function commitFrontCut(args: {
 }): Promise<CutReport> {
   const { owner, sheetId, batchNo, ordered, crops } = args;
   const { collectionId } = owner;
+  const scope = scanOwnerWhere(owner);
   const now = new Date();
+
+  // **The numbers a copy holds stay its own** (#2055). A copy still in the batch at this point is
+  // one a re-cut kept, and it shows its tile's number (#1924) — so the new tiles take the numbers
+  // left free, in reading order. On a first cut nothing is held and this is 0, 1, 2… as it always was.
+  const held = await prisma.scanTile.findMany({
+    where: { ...scope, batchNo, state: "consumed" },
+    select: { position: true },
+  });
+  const positions = freePositions(
+    held.map((t) => t.position),
+    ordered.length
+  );
 
   const rows = ordered.map((box, i) => ({
     tileId: randomUUID(),
     photoId: randomUUID(),
     box,
     crop: crops[i],
-    position: i,
+    position: positions[i],
     // The box's mark is the tile's (#1550) — given in the editor, or carried through a re-cut.
     marks: markColumns(boxMark(box, now), "create"),
   }));
@@ -788,6 +814,10 @@ async function commitFrontCut(args: {
         });
         await tx.photo.create({ data: photoData(r, collectionId, "front", sheetId) });
       }
+      // The sheet is cut again (#2055) — and a re-cut that kept only copies, with nothing new
+      // drawn, may have been the card's last open work.
+      await tx.scanSheet.update({ where: { id: sheetId }, data: { recutPending: false } });
+      await settleBatchDone(tx, scope, batchNo);
     });
   } catch (err) {
     await rollbackBytes(written);
@@ -955,6 +985,7 @@ async function commitBackCut(args: {
             : photoData(r, collectionId, "back", sheetId),
         });
       }
+      await tx.scanSheet.update({ where: { id: sheetId }, data: { recutPending: false } });
       // A back left on the strip is work waiting on a card that may have been finished with, and a
       // card whose last tiles took their backs is finished with — the new back sheet included.
       await settleBatchDone(tx, scope, batchNo);
@@ -1020,18 +1051,20 @@ function copyBackPhoto<T extends { tileId: string | null }>(
  * Keep the batch's *finished with* stamp (#567, #578) true after its backs moved: cleared while any
  * tile is still open — an unpaired back waiting on the strip is one — and stamped on every sheet
  * still missing it once none is, as `stampBatchIfFinished` does. A batch with no tiles has nothing
- * cut and is not finished with anything.
+ * cut and is not finished with anything — and nor is one with a sheet still waiting to be cut
+ * around the copies a re-cut kept (#2055).
  */
 async function settleBatchDone(
   tx: DbTransaction,
   scope: { collectionId: string; purchaseId: string },
   batchNo: number
 ): Promise<void> {
-  const [remaining, open] = await Promise.all([
+  const [remaining, open, pending] = await Promise.all([
     tx.scanTile.count({ where: { ...scope, batchNo } }),
     tx.scanTile.count({ where: { ...scope, batchNo, state: { in: [...OPEN_TILE_STATES] } } }),
+    tx.scanSheet.count({ where: { ...scope, batchNo, recutPending: true } }),
   ]);
-  if (open > 0) {
+  if (open > 0 || pending > 0) {
     await tx.scanSheet.updateMany({
       where: { ...scope, batchNo, batchDoneAt: { not: null } },
       data: { batchDoneAt: null },
@@ -1173,6 +1206,7 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
       height: true,
       kind: true,
       purgedAt: true,
+      side: true,
     },
   });
   assertSheetNotPurged(sheet);
@@ -1185,9 +1219,37 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
     original,
     isSheetKind(sheet.kind) ? sheet.kind : "stockbook"
   );
-  return detected
+  const proposed = detected
     .map((b) => normalizeBox(b, { width: sheet.width, height: sheet.height }))
     .filter((b): b is Box => b != null);
+  // A re-cut around copies (#2055): their stamps are on the scan and detection finds them, but they
+  // are locked boxes in the editor, not proposals — a second box over one would cut a copy again.
+  return outsideLocked(proposed, await lockedBoxesOn(sheetId, sheet.side));
+}
+
+/** The boxes on a sheet that belong to tiles a re-cut keeps (#2055) — the copies'. */
+async function lockedBoxesOn(sheetId: string, side: string): Promise<Box[]> {
+  const tiles = await prisma.scanTile.findMany({
+    where: side === "back" ? { backSheetId: sheetId } : { frontSheetId: sheetId },
+    select: {
+      state: true,
+      frontX: true,
+      frontY: true,
+      frontW: true,
+      frontH: true,
+      backX: true,
+      backY: true,
+      backW: true,
+      backH: true,
+    },
+  });
+  return tiles.filter(isLockedTile).flatMap((t) => {
+    const box =
+      side === "back"
+        ? boxOrNull(t.backX, t.backY, t.backW, t.backH)
+        : boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH);
+    return box ? [box] : [];
+  });
 }
 
 /**
@@ -2095,10 +2157,13 @@ async function readStoredBytes(backend: string, key: string, mime: string): Prom
  * recoverable at all. The previous boxes stay on screen because they are what the editor reloads;
  * they die with the tiles that carried them, so the caller reads them out first.
  *
- * **Refused if any tile has been consumed.** A consumed tile has become a copy that holds these
- * very images (#567 re-owns the `Photo` rows), and deleting the tile would take a copy's front and
- * back with it. Nothing in #566 can produce that state; the guard is written now because a guard
- * added after the state it guards is a guard that was once missing.
+ * **A tile that has become a copy is kept** (#2055). Its copy holds these very images (#567 re-owns
+ * the `Photo` rows), so deleting it would take a copy's front and back with it — until #2055 that
+ * refused the whole re-cut, and a cutting mistake found while identifying could not be corrected for
+ * the rest of the card. Now the copies' tiles stay exactly as they are, their boxes locked in the
+ * editor, and every other tile — waiting, parked or discarded — goes. The batch's sheets are marked
+ * **pending** then, since the copies' tiles still name them: each counts as uncut until its next
+ * commit cuts it around them. A card on which every tile is a copy has nothing to re-cut and refuses.
  *
  * **Refused once the scan has been swept** (#578), and this is the refusal that sweep exists to make
  * possible: the row survives the purge precisely so this can say *the scan has been deleted* instead
@@ -2125,16 +2190,25 @@ export async function recutBatch(
 /** The tile side of a re-cut, kept apart from the purged-scan guard above. */
 async function clearBatchTiles(owner: ScanOwner, batchNo: number): Promise<number> {
   const scope = scanOwnerWhere(owner);
-  const consumed = await prisma.scanTile.count({
-    where: { ...scope, batchNo, state: "consumed" },
-  });
-  if (consumed > 0) {
+  const [total, consumed] = await Promise.all([
+    prisma.scanTile.count({ where: { ...scope, batchNo } }),
+    prisma.scanTile.count({ where: { ...scope, batchNo, state: "consumed" } }),
+  ]);
+  if (total > 0 && consumed === total) {
     throw new ScanValidationError(
-      `${consumed} ${consumed === 1 ? "tile has" : "tiles have"} already become copies. Re-cutting would delete their images.`
+      "Every tile on this card has become a copy, so there is nothing left to re-cut."
     );
   }
 
-  const discarded = await deleteTiles({ ...scope, batchNo });
+  const discarded = await deleteTiles({ ...scope, batchNo, state: { not: "consumed" } });
+  // The copies kept still name the sheets, which would read as cut — so they are marked as waiting
+  // to be cut around them (#2055). Not needed when nothing was kept: no tile names them then.
+  if (consumed > 0) {
+    await prisma.scanSheet.updateMany({
+      where: { ...scope, batchNo },
+      data: { recutPending: true },
+    });
+  }
   // The batch is being drawn again, so it is no longer finished with (#567) — clearing the stamp
   // is what keeps #578 from sweeping away the original a re-cut is about to be taken from. A batch
   // whose tiles were all *discarded* is exactly the one that reaches here already stamped.
@@ -2317,6 +2391,7 @@ async function deleteTiles(where: {
   collectionId: string;
   purchaseId: string;
   batchNo?: number;
+  state?: { not: string };
 }): Promise<number> {
   const photos = await prisma.photo.findMany({
     where: { tile: where },
@@ -2719,11 +2794,16 @@ async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]
 /**
  * Whether anything has been cut from a sheet — the card's *Review the front cut* / *Review the back
  * cut* stands while it is not. A front sheet is cut once tiles name it as their front, a back sheet
- * once tiles name it as their back. {@link UNCUT_SHEET_WHERE} is the same rule as a query; the two
- * sit together so they cannot drift.
+ * once tiles name it as their back — **unless a re-cut is pending on it** (#2055): the copies a
+ * re-cut kept still name the sheet, and the rest of it is waiting to be cut around them.
+ * {@link UNCUT_SHEET_WHERE} is the same rule as a query; the two sit together so they cannot drift.
  */
-function isSheetCut(side: string, counts: { frontTiles: number; backTiles: number }): boolean {
-  return (side === "back" ? counts.backTiles : counts.frontTiles) > 0;
+function isSheetCut(
+  side: string,
+  counts: { frontTiles: number; backTiles: number },
+  recutPending: boolean
+): boolean {
+  return !recutPending && (side === "back" ? counts.backTiles : counts.frontTiles) > 0;
 }
 
 /** {@link isSheetCut}, negated, as a `where` — and with its bytes still there, since a purged sheet
@@ -2731,6 +2811,7 @@ function isSheetCut(side: string, counts: { frontTiles: number; backTiles: numbe
 const UNCUT_SHEET_WHERE = {
   purgedAt: null,
   OR: [
+    { recutPending: true },
     { side: "front", frontTiles: { none: {} } },
     { side: "back", backTiles: { none: {} } },
   ],
@@ -2854,6 +2935,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         purgedAt: true,
         scanningProfileId: true,
         turnover: true,
+        recutPending: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "asc" },
@@ -3017,7 +3099,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       height: s.height,
       viewWidth: s.viewWidth,
       viewHeight: s.viewHeight,
-      cut: isSheetCut(s.side, s._count),
+      cut: isSheetCut(s.side, s._count, s.recutPending),
       purged: s.purgedAt != null,
       scanningProfileId: s.scanningProfileId,
       turnover: asBackTurnover(s.turnover),

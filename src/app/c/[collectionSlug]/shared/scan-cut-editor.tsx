@@ -35,6 +35,7 @@ import { Icon } from "@/app/icons";
 import { ScanToolButton, scanToolButtonStyle } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
 import type { CutBox } from "@/lib/scan-sheets";
+import { freePositions } from "@/lib/scan-recut";
 import {
   applyMarkPatch,
   fillPatch,
@@ -117,6 +118,14 @@ import {
  * **The front scan only**: a back box's mark meets its front's at the commit and the one given last
  * wins, and this editor cannot know which front each back box will pair with — so filling every back
  * box would undo the exceptions marked on the fronts. Those are marked on the strip once paired.
+ *
+ * ## Re-cutting around copies, since #2055
+ *
+ * A re-cut keeps every tile that has become a copy, because the copy holds that tile's images. Their
+ * boxes are **locked**: drawn on the card, numbered and marked as copies, and outside the editing
+ * altogether — not regions, so nothing can select, move, resize, merge, split or delete them, and a
+ * pick inside one adds nothing. The editable boxes take the numbers no copy holds, in reading order,
+ * which is what the commit gives their tiles (`scan-recut.ts`).
  */
 
 export interface ScanCutEditorSheet {
@@ -130,9 +139,18 @@ export interface ScanCutEditorSheet {
   viewHeight: number;
 }
 
+/** A box on this sheet whose tile has become a copy (#2055): shown, numbered, never edited. */
+export interface ScanCutLockedBox {
+  box: Box;
+  /** The tile's number, as the strip and the copy show it (#1924). */
+  number: number;
+}
+
 interface Props {
   collectionId: string;
   sheet: ScanCutEditorSheet;
+  /** The copies' boxes a re-cut keeps (#2055) — empty on any other cut. */
+  lockedBoxes: readonly ScanCutLockedBox[];
   /** The boxes to open on: a proposal from detection (#574), or a previous cut's boxes when
    * re-cutting — with their tiles' marks (#1550). Empty is still an ordinary case — a scan detection
    * could not read, or a card it found nothing on, opens on an empty canvas and is drawn by hand. */
@@ -192,6 +210,7 @@ const regionOf = (box: CutBox): Region =>
 export function ScanCutEditor({
   collectionId,
   sheet,
+  lockedBoxes,
   initialBoxes,
   frontTileCount,
   committing,
@@ -344,14 +363,19 @@ export function ScanCutEditor({
   const soleSelected = selectedRegions.length === 1 ? selectedRegions[0] : null;
 
   // Reading order drives the number drawn in each box, so the collector sees the order the tiles
-  // will actually be created in — which is the order they will then be worked through in #567.
+  // will actually be created in — which is the order they will then be worked through in #567. Around
+  // copies (#2055) the boxes take the numbers no copy holds, as the commit will.
   const order = useMemo(() => {
+    const numbers = freePositions(
+      lockedBoxes.map((l) => l.number - 1),
+      regions.length
+    );
     const positions = new Map<string, number>();
-    readingOrder(regions.map((r) => r.box)).forEach((regionIndex, position) => {
-      positions.set(regions[regionIndex].id, position + 1);
+    readingOrder(regions.map((r) => r.box)).forEach((regionIndex, i) => {
+      positions.set(regions[regionIndex].id, numbers[i] + 1);
     });
     return positions;
-  }, [regions]);
+  }, [lockedBoxes, regions]);
 
   // ── Editing ────────────────────────────────────────────────────────────────────────────────
 
@@ -423,6 +447,10 @@ export function ScanCutEditor({
         setPickNote("That point is already inside a box, so nothing was added.");
         return;
       }
+      if (lockedBoxes.some((l) => inside(l.box, p))) {
+        setPickNote("That stamp has already become a copy, so nothing was added.");
+        return;
+      }
 
       setPicking(true);
       try {
@@ -443,7 +471,7 @@ export function ScanCutEditor({
         setPicking(false);
       }
     },
-    [picking, regions, sheet.id]
+    [lockedBoxes, picking, regions, sheet.id]
   );
 
   // ── Marking (#1550) ────────────────────────────────────────────────────────────────────────
@@ -695,7 +723,20 @@ export function ScanCutEditor({
                 </>
               ),
             }
-          : null;
+          : lockedBoxes.length > 0
+            ? {
+                tone: "info",
+                body: (
+                  <>
+                    <strong>
+                      {lockedBoxes.length} {lockedBoxes.length === 1 ? "box is" : "boxes are"} locked
+                    </strong>{" "}
+                    — {lockedBoxes.length === 1 ? "its stamp has" : "their stamps have"} become copies,
+                    which keep their images and numbers. Everything else is cut again.
+                  </>
+                ),
+              }
+            : null;
 
   return (
     <DialogShell
@@ -859,6 +900,10 @@ export function ScanCutEditor({
               />
             )}
 
+            {lockedBoxes.map((l) => (
+              <LockedRect key={`locked-${l.number}`} locked={l} scale={view.scale} />
+            ))}
+
             {regions.map((r) => (
               <RegionRect
                 key={r.id}
@@ -922,7 +967,8 @@ export function ScanCutEditor({
         <DialogPrimaryButton
           type="button"
           onClick={() => onCommit(orderedBoxes(regions))}
-          disabled={committing || regions.length === 0}
+          // Around copies an empty cut is a real one (#2055): the boxes deleted were the mistake.
+          disabled={committing || (regions.length === 0 && lockedBoxes.length === 0)}
         >
           {committing
             ? "Cutting…"
@@ -1182,6 +1228,49 @@ function regionOutline(selected: boolean): string {
   const line = selected ? 3 : 2;
   const bright = selected ? "var(--color-action-primary)" : "#fff";
   return `0 0 0 1px ${dark}, 0 0 0 ${1 + line}px ${bright}, 0 0 0 ${2 + line}px ${dark}`;
+}
+
+/** A copy's box (#2055): dimmed, with a lock beside its number, and no pointer events — it is not
+ * a region, so nothing in the editor can reach it. Outlined like a region (#2054), outside the box
+ * and in screen pixels, but **dashed** — white dashes on a dark band, so it shows on any card and
+ * never reads as a box that can be picked up. */
+function LockedRect({ locked, scale }: { locked: ScanCutLockedBox; scale: number }) {
+  const { box } = locked;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: box.x * scale,
+        top: box.y * scale,
+        width: box.w * scale,
+        height: box.h * scale,
+        boxShadow: "0 0 0 4px rgb(0 0 0 / 0.85)",
+        outline: "2px dashed #fff",
+        outlineOffset: 1,
+        background: "rgb(0 0 0 / 0.35)",
+        pointerEvents: "none",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          padding: "0 0.25rem",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.1875rem",
+          fontSize: "0.6875rem",
+          fontWeight: 600,
+          lineHeight: 1.4,
+          background: "rgb(0 0 0 / 0.6)",
+          color: "#fff",
+        }}
+      >
+        <Icon name="locked" size="xs" /> {locked.number} · copy
+      </span>
+    </div>
+  );
 }
 
 function handleOffset(h: Handle): React.CSSProperties {

@@ -264,8 +264,8 @@ export async function markTilesAction(
   }
 }
 
-/** Throw away a batch's tiles, keeping its scans, so the cut can be drawn again. Refused once a
- * tile has become a copy — see `recutBatch`. */
+/** Throw away a batch's tiles, keeping its scans, so the cut can be drawn again. The tiles that
+ * became copies stay, their boxes locked (#2055) — see `recutBatch`. */
 export async function recutBatchAction(
   owner: ScanOwnerRef,
   batchNo: number
