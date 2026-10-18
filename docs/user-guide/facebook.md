@@ -286,7 +286,8 @@ Every other way of making an offer asks for the group too when the platform is F
 
 - the **Lot builder**, under *Create the offer*;
 - **Quick offer mode** on your copies, in its bar beside the platform, which also covers
-  **Generate offers…** — whose sets go only into offers already in that group;
+  **Generate offers…** — whose sets go only into offers already in that group, and whose new offers
+  can go [straight into a new post](#a-post-with-several-lots);
 - **Series from singles**, when you compose a series into a new offer. A series added to an offer
   that already lists it keeps that offer's group.
 
@@ -461,6 +462,13 @@ you can [change that order](#changing-the-order-of-the-lots) on its screen. The 
 them share one closing time — the first auction's — from then on: changing it on one lot changes it
 on all of them. A quick buy has no closing time.
 
+**A batch can start in its post.** On the Copies list, **Generate offers…** in the quick offer bar
+has **In a new post** on Facebook while the bar's status is *Preparing* or *Ready*: tick it and give
+the title, and the offers the pass creates become the lots of one new post in the bar's group, in
+the order the preview lists them. An existing offer that only receives sets is not put in the post.
+The message after the pass opens the post's screen ([Generating offers in
+bulk](inventory.md#generating-offers-in-bulk)).
+
 The post gets a **number** of its own — **Post #12** — counted per collection like an offer's, and
 never given to another post, even after this one is gone. It is named by both wherever it is named —
 **Post #12 · Generalgouvernement 1940–44** — on its screen, in the list of posts and on each lot's
@@ -476,7 +484,8 @@ them. Renaming a post that is already up changes how it is named here, not what 
 keeps the title it went up with, as it keeps everything else.
 
 **The post's screen** is where the post is seen and managed as one. It is reached from that chip, from
-**Open post** on each lot's Facebook card, from the message **Post together** shows, and from the
+**Open post** on each lot's Facebook card, from the message **Post together** and **Generate offers…**
+show, and from the
 [list of posts](#the-list-of-posts). It has:
 
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,

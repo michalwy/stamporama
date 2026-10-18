@@ -24,6 +24,8 @@ import {
 } from "./offers";
 import type { LotChecklist } from "./lot-builder-rules";
 import { readFacebookCreateChoice } from "./facebook-post-rules";
+import { writeFacebookPost } from "./facebook-posts";
+import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
   findPlanDrift,
   fingerprintPlan,
@@ -34,6 +36,7 @@ import {
   seriesSubtitle,
   SKIP_REASON_LABEL,
   SKIP_REASONS,
+  generatorPostRefusal,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -536,6 +539,8 @@ export interface OfferGeneratorResult {
   changedOffers: number;
   sets: number;
   copies: number;
+  /** The new post the created offers are the lots of (#2030), when the pass was asked for one. */
+  post: { postId: string; postNo: number } | null;
 }
 
 /**
@@ -587,19 +592,50 @@ export async function commitOfferGeneration(
     .filter((line) => line.target.kind === "new")
     .map((line) => line.sets.map((set) => set.copies.map((copy) => copy.itemId)));
 
-  try {
-    const written = await writeGeneratedOffers(ownerId, collectionId, {
-      platformId: input.platformId,
+  // In a new post (#2030): only the offers this pass creates, as lots in the preview's order — an
+  // existing offer receiving sets stays where it is. Refused before anything is written; the post is
+  // then made inside the pass's own transaction, so there are never offers without the post asked for.
+  const postTitle = input.postTitle;
+  if (postTitle !== undefined) {
+    const refusal = generatorPostRefusal({
       state: input.state,
-      ...readFacebookCreateChoice(input.facebook),
-      newOffers,
-      additions: [...additions.values()],
+      facebookGroupId: (await isFacebookPlatform(collectionId, input.platformId))
+        ? readFacebookCreateChoice(input.facebook).facebookGroupId
+        : null,
+      newOffers: newOffers.length,
+      title: postTitle,
     });
+    if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
+  }
+  const made: { post: OfferGeneratorResult["post"] } = { post: null };
+
+  try {
+    const written = await writeGeneratedOffers(
+      ownerId,
+      collectionId,
+      {
+        platformId: input.platformId,
+        state: input.state,
+        ...readFacebookCreateChoice(input.facebook),
+        newOffers,
+        additions: [...additions.values()],
+      },
+      postTitle === undefined
+        ? {}
+        : {
+            inTransaction: async (tx, createdOfferIds) => {
+              made.post = await writeFacebookPost(tx, collectionId, createdOfferIds, postTitle);
+            },
+          }
+    );
+    // A post captioned from the start has its lots' photos queued now (#1861), as *Post together*'s.
+    if (made.post) await syncFacebookPostLotPhotos(made.post.postId);
     return {
       createdOffers: written.createdOfferIds.length,
       changedOffers: written.changedOfferIds.length,
       sets: lines.reduce((n, line) => n + line.sets.length, 0),
       copies: lines.reduce((n, line) => n + line.sets.reduce((m, set) => m + set.copies.length, 0), 0),
+      post: made.post,
     };
   } catch (e) {
     if (e instanceof GenerationChangedError) {
@@ -607,6 +643,14 @@ export async function commitOfferGeneration(
     }
     throw e;
   }
+}
+
+async function isFacebookPlatform(collectionId: string, platformId: string): Promise<boolean> {
+  const platform = await prisma.platform.findFirst({
+    where: { id: platformId, collectionId },
+    select: { platformModule: true },
+  });
+  return platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
 }
 
 /** A refusal in the collector's words: the copy or the offer by its number (#314). */

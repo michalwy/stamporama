@@ -1,6 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import {
   detachFacebookLot,
   facebookGroupMixesTypes,
@@ -109,8 +109,27 @@ export async function createFacebookPost(
   const titleRefusal = facebookPostTitleRefusal(title);
   if (titleRefusal) throw new OfferActionBlockedError("facebook-group", titleRefusal);
   await assertCollectionOwner(ownerId, collectionId);
+  const created = await prisma.$transaction((tx) => writeFacebookPost(tx, collectionId, offerIds, title));
+  // A post captioned from the start has its lots' photos queued now (#1861), not when it is opened.
+  await syncFacebookPostLotPhotos(created.postId);
+  return created;
+}
+
+/**
+ * The write half of {@link createFacebookPost}, inside the caller's transaction — so Generate offers
+ * can make its offers and their post as one write (#2030). The offers are read and asked
+ * `facebookPostRefusal` here, in the transaction, and a refusal rolls the caller's write back; the
+ * title is the caller's to have refused before anything was written. The caller queues the lot
+ * photos (`syncFacebookPostLotPhotos`) once the transaction is over.
+ */
+export async function writeFacebookPost(
+  tx: DbTransaction,
+  collectionId: string,
+  offerIds: readonly string[],
+  title: string
+): Promise<{ postId: string; postNo: number }> {
   const ids = [...new Set(offerIds)];
-  const rows = await prisma.offer.findMany({
+  const rows = await tx.offer.findMany({
     where: { id: { in: ids }, collectionId },
     select: {
       id: true,
@@ -137,23 +156,18 @@ export async function createFacebookPost(
 
   const auction = (l: (typeof lots)[number]) => isAuctionListing(l.listingType);
   const endsAt = lots.find((l) => auction(l) && l.endsAt !== null)?.endsAt ?? null;
-  const created = await prisma.$transaction(async (tx) => {
-    const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
-    const post = await tx.facebookPost.create({
-      data: { collectionId, postNo, title: title.trim(), groupId: lots[0].facebookGroupId! },
-      select: { id: true },
-    });
-    for (const [index, lot] of lots.entries()) {
-      await tx.offer.update({
-        where: { id: lot.id },
-        data: { facebookPostId: post.id, facebookLotNo: index + 1, ...(auction(lot) ? { endsAt } : {}) },
-      });
-    }
-    return { postId: post.id, postNo };
+  const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
+  const post = await tx.facebookPost.create({
+    data: { collectionId, postNo, title: title.trim(), groupId: lots[0].facebookGroupId! },
+    select: { id: true },
   });
-  // A post captioned from the start has its lots' photos queued now (#1861), not when it is opened.
-  await syncFacebookPostLotPhotos(created.postId);
-  return created;
+  for (const [index, lot] of lots.entries()) {
+    await tx.offer.update({
+      where: { id: lot.id },
+      data: { facebookPostId: post.id, facebookLotNo: index + 1, ...(auction(lot) ? { endsAt } : {}) },
+    });
+  }
+  return { postId: post.id, postNo };
 }
 
 /** What adding offers to a post did (#1870): the lots they became, in order; each offer turned away,

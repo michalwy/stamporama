@@ -470,6 +470,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the refused under the *Lots* heading. The integration test is
   `tests/integration/facebook-post-add-lots.test.ts`.
 
+- **Generate offers can make its new offers the lots of a new post** (#2030, decided with the
+  collector on 2026-10-18; the first of #2030–#2033, *the post is the one workspace*). The dialog's
+  **In a new post** + title rides the commit only, as `GeneratorRequest.postTitle` (absent = no post,
+  like `skip` never in the preview's query), and is offered while `canGenerateIntoPost` (the bar's
+  status not past Ready) on a Facebook bar. `commitOfferGeneration` asks `generatorPostRefusal`
+  (pure, `offer-generator-rules.ts`: a Facebook group, not yet up, **at least two new offers**, a
+  title) before anything is written, then makes the post **inside the pass's transaction** through
+  `writeGeneratedOffers`' `inTransaction` hook — so a refused post rolls the offers back.
+  `writeFacebookPost` (`facebook-posts.ts`) is `createFacebookPost`'s write half, split out for this,
+  reading the offers and asking `facebookPostRefusal` in the caller's transaction; `offers.ts` cannot
+  import it (`facebook-posts.ts` imports `offers.ts`), hence the hook. **Only the created offers** are
+  lots, in the preview's line order (the dialog shows *· lot N*); an addition to an existing offer
+  stays where it is. The toast links to the post's screen. The integration test is
+  `tests/integration/offer-generator-facebook-post.test.ts`.
+
 - **A post's lots can be reordered before it goes up** (#1986, raised on 2026-10-16; ADR-0061 §2 as
   amended). `reorderFacebookLots` (`facebook-posts.ts`) takes **every** lot's offer id in the new order
   and renumbers them in two passes (the unique index, `detachFacebookLot`'s shape); it refuses once a

@@ -12,6 +12,8 @@ import {
   keptFingerprint,
   keptResultingSetCount,
   parseGeneratorRequest,
+  canGenerateIntoPost,
+  generatorPostRefusal,
   parsePlanFingerprint,
   planOffers,
   seriesSubtitle,
@@ -433,6 +435,11 @@ describe("the generator request (#1287)", () => {
       facebook: { facebookGroupId: "g1", endsAt: "2026-10-10T18:00:00.000Z" },
     };
     assert.deepEqual(parseGeneratorRequest(generatorRequestParams(facebook)), { ...facebook, skip: ["l1", "l2"] });
+    // The new post's title travels with the commit (#2030) — a blank one too, for the server to refuse.
+    for (const postTitle of ["Generalgouvernement 1940–44", ""]) {
+      const post = { ...facebook, postTitle };
+      assert.deepEqual(parseGeneratorRequest(generatorRequestParams(post)), { ...post, skip: ["l1", "l2"] });
+    }
   });
 
   it("refuses a request missing a choice, rather than guessing it", () => {
@@ -455,6 +462,25 @@ describe("the generator request (#1287)", () => {
     const paused = new URLSearchParams(params);
     paused.set("state", "paused");
     assert.equal(parseGeneratorRequest(paused), null);
+  });
+});
+
+describe("generating into a new post (#2030)", () => {
+  const asked = { state: "preparing" as const, facebookGroupId: "g1", newOffers: 3, title: "Germany 1960" };
+
+  it("is offered only while the pass's offers are not yet up", () => {
+    assert.equal(canGenerateIntoPost("preparing"), true);
+    assert.equal(canGenerateIntoPost("ready"), true);
+    assert.equal(canGenerateIntoPost("active"), false);
+  });
+
+  it("asks Post together's rules of the pass: a group, not yet up, two lots and a title", () => {
+    assert.equal(generatorPostRefusal(asked), null);
+    assert.equal(generatorPostRefusal({ ...asked, state: "ready", newOffers: 2 }), null);
+    assert.match(generatorPostRefusal({ ...asked, facebookGroupId: null })!, /Only Facebook offers/);
+    assert.match(generatorPostRefusal({ ...asked, state: "active" })!, /not yet up/);
+    assert.match(generatorPostRefusal({ ...asked, newOffers: 1 })!, /at least two new offers/);
+    assert.match(generatorPostRefusal({ ...asked, title: "  " })!, /needs a title/);
   });
 });
 

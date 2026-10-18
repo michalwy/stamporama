@@ -26,7 +26,7 @@ import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
 import { isCreatableOfferState, type OfferState } from "./offer-rules";
-import type { FacebookCreateChoice } from "./facebook-post-rules";
+import { facebookPostTitleRefusal, isFacebookLotPosted, type FacebookCreateChoice } from "./facebook-post-rules";
 
 // The choices ------------------------------------------------------------------------------------
 
@@ -563,6 +563,9 @@ export interface GeneratorRequest {
   skip: string[];
   /** The group every new offer is an auction in, and when it closes, on Facebook (#1663). */
   facebook: FacebookCreateChoice;
+  /** On Facebook, the title of the one new post the offers the pass creates become the lots of
+   *  (#2030); absent, no post is made. Like `skip`, only the commit carries it. */
+  postTitle?: string;
 }
 
 export function generatorRequestParams(request: GeneratorRequest): URLSearchParams {
@@ -580,6 +583,7 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
   if (request.skip.length > 0) params.set("skip", [...request.skip].sort().join(","));
   if (request.facebook.facebookGroupId) params.set("facebookGroupId", request.facebook.facebookGroupId);
   if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
+  if (request.postTitle !== undefined) params.set("postTitle", request.postTitle);
   return params;
 }
 
@@ -609,7 +613,34 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     targets,
     skip: (sp.get("skip") ?? "").split(",").filter(Boolean),
     facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
+    ...(sp.has("postTitle") ? { postTitle: sp.get("postTitle") ?? "" } : {}),
   };
+}
+
+/** Whether a pass in this status may put its offers into a new post (#2030): only one whose offers
+ *  are not yet up — an offer that is up is already in a post of its own (#1989). */
+export function canGenerateIntoPost(state: OfferState): boolean {
+  return !isFacebookLotPosted(state);
+}
+
+/**
+ * Why a pass cannot put the offers it creates into one new post (#2030), or null. *Post together*'s
+ * rules as they bear on a pass: one Facebook group (the bar's), offers not yet up, at least two lots,
+ * and a title. The listing type needs no asking here — every offer a pass creates starts as its
+ * group's — and is asked again of the written offers when the post is made.
+ */
+export function generatorPostRefusal(request: {
+  state: OfferState;
+  facebookGroupId: string | null;
+  newOffers: number;
+  title: string;
+}): string | null {
+  if (!request.facebookGroupId) return "Only Facebook offers can go into a post — choose the group first.";
+  if (!canGenerateIntoPost(request.state)) {
+    return "Only offers not yet up can go into a new post — an offer that is up is in a post of its own.";
+  }
+  if (request.newOffers < 2) return "A post with several lots needs at least two new offers.";
+  return facebookPostTitleRefusal(request.title);
 }
 
 // ── How the preview states a line (#1368) ──────────────────────────────────────────────────────────

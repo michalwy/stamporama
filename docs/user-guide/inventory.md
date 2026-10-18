@@ -1475,9 +1475,21 @@ titles and descriptions from the platform's templates. That is also why *Ready* 
 where the platform supplies a starting price of its own; otherwise the preview tells you to start the
 offers as *Preparing*.
 
+**On Facebook, the new offers can go straight into a new post.** While the bar's status is
+*Preparing* or *Ready*, tick **In a new post** and give the post a **title**: the offers the pass
+creates become the [lots of one new post](facebook.md#a-post-with-several-lots) in the bar's group,
+in the order the preview lists them — each new offer's line says which lot it will be — and the
+button reads *Create 12 offers in a new post*. Only offers the pass **creates** join the post: an
+existing offer that receives sets stays where it is, in its own post or none. A post needs at least
+two lots, so a pass that would create only one offer cannot be put in a post. The message after the
+pass has **Open post**, the post's screen, where the lots are priced and put up together — no
+*Post together…* afterwards. The auctions among them share one closing time, as in any post.
+Unticked, the pass makes no post, and on any other platform the option is not there.
+
 Confirming creates **all of the ticked offers or none of them**. If anything changed since the
 preview in a ticked offer — a copy sold or went onto another offer, or an offer due to receive sets
-changed status — nothing is created and the message names the copy or the offer. Look at the preview
+changed status — nothing is created and the message names the copy or the offer. The same holds for
+the new post: if it cannot be made, neither are the offers. Look at the preview
 again and confirm once more. A change among the copies of an unticked offer does not stop the rest,
 since nothing of that offer is created.
 
