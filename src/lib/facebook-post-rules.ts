@@ -1137,6 +1137,36 @@ export function describeRefusedLots(refused: readonly { offerNo: number; reason:
   return `Not added: ${refused.map((r) => `#${r.offerNo} ${r.reason}`).join("; ")}.`;
 }
 
+/** A lot of a post with a sold set (#2060), which keeps the post from being deleted. */
+export interface FacebookSoldLot {
+  lotNo: number;
+  offerNo: number;
+}
+
+/** What *Delete post…* says before anything goes (#2060). */
+export interface FacebookPostDeletion {
+  postNo: number;
+  title: string | null;
+  /** The offers that go with the post — every lot of it. */
+  offerCount: number;
+  /** The lots with a sold set, in lot order; while there is one the post cannot be deleted. */
+  soldLots: FacebookSoldLot[];
+  /** Whether the post was submitted to the group — waiting for approval, up or over — so that the
+   *  post in the Facebook group is there to be removed by hand. */
+  submitted: boolean;
+}
+
+/** Why a post cannot be deleted (#2060): the lots with a sold set, named, since such an offer is
+ *  withdrawn and never deleted — the sale record must survive. Null when none has. */
+export function facebookPostDeleteRefusal(soldLots: readonly FacebookSoldLot[]): string | null {
+  if (soldLots.length === 0) return null;
+  const named = soldLots.map((l) => `${l.lotNo} (#${l.offerNo})`);
+  const list = named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  return soldLots.length === 1
+    ? `Lot ${list} has a sold set, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted.`
+    : `Lots ${list} have sold sets, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted.`;
+}
+
 /** A copy already in an active Facebook offer — an auction or a quick buy (#1671) — and the offer. */
 export interface FacebookAuctionCopy {
   itemNo: number;

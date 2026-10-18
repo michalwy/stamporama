@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   describeFacebookAuctionCopies,
   describeRefusedLots,
+  facebookPostDeleteRefusal,
   facebookLotAddRefusal,
   facebookLotOrderRefusal,
   facebookLotPrice,
@@ -1175,5 +1176,29 @@ describe("words added to or removed from every lot's title (#2033)", () => {
   it("changes nothing for blank words", () => {
     assert.equal(facebookTitleWithWords("Mercury", "  ", "start", "add"), null);
     assert.equal(facebookTitleWithWords("Mercury", "", "end", "remove"), null);
+  });
+});
+
+describe("facebookPostDeleteRefusal (#2060)", () => {
+  it("lets a post with no sold lot go", () => {
+    assert.equal(facebookPostDeleteRefusal([]), null);
+  });
+
+  it("names the one lot with a sold set", () => {
+    assert.equal(
+      facebookPostDeleteRefusal([{ lotNo: 2, offerNo: 41 }]),
+      "Lot 2 (#41) has a sold set, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted."
+    );
+  });
+
+  it("names every lot in the way, in the order given", () => {
+    assert.equal(
+      facebookPostDeleteRefusal([
+        { lotNo: 1, offerNo: 40 },
+        { lotNo: 3, offerNo: 42 },
+        { lotNo: 4, offerNo: 43 },
+      ]),
+      "Lots 1 (#40), 3 (#42) and 4 (#43) have sold sets, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted."
+    );
   });
 });

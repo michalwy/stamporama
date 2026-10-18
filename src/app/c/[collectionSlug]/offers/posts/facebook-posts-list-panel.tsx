@@ -9,9 +9,11 @@ import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolb
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { Icon } from "@/app/icons";
+import { useToast } from "@/app/toast-provider";
 import type { FacebookOfferNotInPost, FacebookPostListItem } from "@/lib/facebook-posts";
 import { OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { OfferStateChip } from "../offer-badges";
@@ -25,8 +27,10 @@ import { FACEBOOK_MULTI_LOT_LAYOUT_SHORT_LABEL } from "@/lib/facebook-group-rule
 import {
   useFacebookOffersNotInPost,
   useFacebookPostsInfinite,
+  useInvalidateOffers,
   type FacebookPostFilters,
 } from "../use-offers-query";
+import { DeleteFacebookPostDialog, deletedPostMessage } from "./delete-post-dialog";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -173,6 +177,7 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
               <FacebookPostRow
                 key={post.postId}
                 post={post}
+                collectionId={collectionId}
                 collectionSlug={collectionSlug}
                 isLast={idx === rows.length - 1 && !hasNextPage}
               />
@@ -264,17 +269,23 @@ function NotInPost({
   );
 }
 
-/** One post as a stacked row; the whole row opens the post's screen, as a real link (#557). */
+/** One post as a stacked row; the whole row opens the post's screen, as a real link (#557), and its
+ *  `⋮` deletes it (#2060). */
 function FacebookPostRow({
   post,
+  collectionId,
   collectionSlug,
   isLast,
 }: {
   post: FacebookPostListItem;
+  collectionId: string;
   collectionSlug: string;
   isLast: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { invalidateAll } = useInvalidateOffers();
+  const { toast } = useToast();
   const href = `/c/${collectionSlug}/offers/posts/${post.postNo}`;
   const rowOpen = useRowOpen(href);
   const live = post.stage === "pending" || post.stage === "up";
@@ -326,6 +337,15 @@ function FacebookPostRow({
           >
             {post.group.name}
             {post.group.archived && " (archived)"}
+          </span>
+          <span style={{ flex: 1 }} />
+          <span style={ROW_LINK_ABOVE}>
+            <RowActionsMenu
+              ariaLabel={`Post #${post.postNo} actions`}
+              actions={[
+                { key: "delete", label: "Delete post…", icon: "delete", danger: true, onSelect: () => setDeleting(true) },
+              ]}
+            />
           </span>
         </div>
 
@@ -388,6 +408,17 @@ function FacebookPostRow({
           )}
         </div>
       </div>
+      {deleting && (
+        <DeleteFacebookPostDialog
+          postId={post.postId}
+          onClose={() => setDeleting(false)}
+          onDeleted={(deleted) => {
+            setDeleting(false);
+            toast({ message: deletedPostMessage(deleted) });
+            void invalidateAll(collectionId);
+          }}
+        />
+      )}
     </div>
   );
 }

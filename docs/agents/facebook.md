@@ -403,6 +403,22 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   Offers summary bar's *More*; a client preference, not URL state, since it is not a filter. The count
   is the filtered list's length, so it follows the group filter.
 
+- **A post is deleted with every offer in it** (#2060, decided with the collector on 2026-10-18), in
+  any stage, from the ⋮ beside the post screen's title and from the row's ⋮ on the list of posts —
+  both open `DeleteFacebookPostDialog` (`offers/posts/delete-post-dialog.tsx`). The dialog reads
+  `readFacebookPostDeletion` first (`facebook-posts.ts`: offer count, `submitted` —
+  `isFacebookLotPosted` on any lot — and the lots with a sold set), so the confirmation states the count
+  and, for a submitted post, that the post in the group stays; a sold lot turns the dialog into the
+  refusal with only *Close*. **A lot with a sold set refuses the whole post**, named by
+  `facebookPostDeleteRefusal` (pure, `facebook-post-rules.ts`) — `deleteOffer`'s own guard, the same
+  `SaleLine → offerSet` reading, since such an offer is withdrawn and never deleted. `deleteFacebookPost`
+  asks it again inside its transaction, so a sale recorded while the dialog was open still refuses;
+  it then deletes the offers and the post in one write and the offers' image files after the commit
+  (the photo rows go by cascade; the files are read first, `dropLotPhotos`' shape). Nothing goes
+  through `detachFacebookLot` — no lot outlives the post, so there is nothing to renumber or dissolve —
+  and the number is never reused, `allocateEntityNumber` being a counter. The integration test is
+  `tests/integration/facebook-post-delete.test.ts`.
+
 - **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
   2026-10-12), so posting needs no lot opened. Photos are `PHOTO_SIZE` (18rem) drawn from the `full`
   variant — the 320px thumb is too small to tell stamps apart: captioned, each lot's one photo with its

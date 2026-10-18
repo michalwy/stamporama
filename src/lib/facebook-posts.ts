@@ -21,6 +21,7 @@ import {
   facebookLotAddRefusal,
   facebookLotOrderRefusal,
   facebookLotPrintedTexts,
+  facebookPostDeleteRefusal,
   facebookPostLink,
   facebookPostRefusal,
   facebookPostStage,
@@ -28,11 +29,14 @@ import {
   facebookTitleWithWords,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
+  type FacebookPostDeletion,
   type FacebookPostStage,
+  type FacebookSoldLot,
   type FacebookTitleEdge,
   type FacebookTitleWordsMode,
 } from "./facebook-post-rules";
 import { allocateEntityNumber } from "./items";
+import { deleteVariants } from "./offer-photo-generation";
 import {
   OfferActionBlockedError,
   offersPrintedTextGaps,
@@ -874,6 +878,72 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
   await prisma.$transaction((tx) => detachFacebookLot(tx, offerId));
   // Its lot photo goes with it, and so does the last lot's of a post it dissolved (#1861).
   await pruneFacebookLotPhotos(offer.collectionId);
+}
+
+/** A post's lots with what *Delete post…* weighs (#2060), in lot order. */
+async function readDeletionLots(db: DbTransaction | typeof prisma, postId: string) {
+  const lots = await db.offer.findMany({
+    where: { facebookPostId: postId },
+    orderBy: { facebookLotNo: "asc" },
+    select: { id: true, offerNo: true, facebookLotNo: true, state: true },
+  });
+  const sold = await db.saleLine.findMany({
+    where: { offerSet: { offerId: { in: lots.map((l) => l.id) } } },
+    select: { offerSet: { select: { offerId: true } } },
+  });
+  const soldIds = new Set(sold.map((s) => s.offerSet?.offerId));
+  const soldLots: FacebookSoldLot[] = lots.flatMap((l, i) =>
+    soldIds.has(l.id) ? [{ lotNo: l.facebookLotNo ?? i + 1, offerNo: l.offerNo }] : []
+  );
+  return { lots, soldLots };
+}
+
+/** What deleting a post would take with it, and what is in the way (#2060) — what *Delete post…*
+ *  shows before the collector confirms. */
+export async function readFacebookPostDeletion(ownerId: string, postId: string): Promise<FacebookPostDeletion> {
+  await assertPostOwner(ownerId, postId);
+  const post = await prisma.facebookPost.findUniqueOrThrow({
+    where: { id: postId },
+    select: { postNo: true, title: true },
+  });
+  const { lots, soldLots } = await readDeletionLots(prisma, postId);
+  return {
+    postNo: post.postNo,
+    title: post.title,
+    offerCount: lots.length,
+    soldLots,
+    submitted: lots.some((l) => isFacebookLotPosted(l.state)),
+  };
+}
+
+/**
+ * Delete a post together with every offer in it (#2060) — a batch made by mistake, a post abandoned
+ * before it went up — in any stage. The copies stay in the inventory, as when an offer is deleted.
+ * Refused, naming the lots, while any lot has a sold set: such an offer is withdrawn, never deleted,
+ * because the sale record must survive. A post submitted to the group is not touched there; that is
+ * the collector's to remove by hand. The post's number is never given again (`allocateEntityNumber`).
+ */
+export async function deleteFacebookPost(ownerId: string, postId: string): Promise<{ postNo: number; offerCount: number }> {
+  await assertPostOwner(ownerId, postId);
+  const done = await prisma.$transaction(async (tx) => {
+    // Asked again here, inside the write, so a sale recorded since the dialog opened still refuses.
+    const { lots, soldLots } = await readDeletionLots(tx, postId);
+    const refusal = facebookPostDeleteRefusal(soldLots);
+    if (refusal) throw new OfferActionBlockedError("sold-set", refusal);
+    const ids = lots.map((l) => l.id);
+    // Every image the offers own — generated listing images, uploaded attachments, captioned lot photos
+    // — goes with their rows by cascade, but never their files: those are read now and deleted below.
+    const photos = await tx.photo.findMany({
+      where: { offerId: { in: ids } },
+      select: { storageBackend: true, storageKey: true, mime: true },
+    });
+    await tx.offer.deleteMany({ where: { id: { in: ids } } });
+    const post = await tx.facebookPost.delete({ where: { id: postId }, select: { postNo: true } });
+    return { postNo: post.postNo, offerCount: ids.length, photos };
+  });
+  // Post-commit: the files. Their rows are already gone.
+  await Promise.all(done.photos.map((p) => deleteVariants(p.storageBackend, p.storageKey, p.mime)));
+  return { postNo: done.postNo, offerCount: done.offerCount };
 }
 
 /**
