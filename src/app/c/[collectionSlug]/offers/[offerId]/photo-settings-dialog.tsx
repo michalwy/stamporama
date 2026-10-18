@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -35,9 +35,11 @@ import {
   PHOTO_SIDES,
   PHOTO_SIDES_LABELS,
   applyCollagePairing,
+  type PhotoSides,
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "@/lib/offer-photo-config";
+import type { PostPhotoSetting } from "@/lib/facebook-post-photo-settings-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 
@@ -141,6 +143,43 @@ function gridText(
     : `${rows} × ${columns}`;
 }
 
+/** What a setting the lots of a post do not share reads as (#2032). */
+const DIFFERS = "Differs by lot";
+
+/** Whether two collage drafts hold the same numbers. */
+function sameDraft(a: CollageDraft, b: CollageDraft): boolean {
+  return (Object.keys(a) as (keyof CollageDraft)[]).every((k) => a[k].trim() === b[k].trim());
+}
+
+/** A checkbox that can also say *differs* (#2032): `null` draws it indeterminate. */
+function TriStateCheckbox({
+  name,
+  checked,
+  isPending,
+  onChange,
+}: {
+  name: string;
+  checked: boolean | null;
+  isPending: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = checked === null;
+  }, [checked]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      name={name}
+      checked={checked ?? false}
+      onChange={(e) => onChange(e.target.checked)}
+      disabled={isPending}
+      style={{ cursor: isPending ? "default" : "pointer" }}
+    />
+  );
+}
+
 /** How a platform limit reads when it states none. */
 function limitText(value: number | null, unit: string): string {
   return value == null ? "no limit" : `${value}${unit}`;
@@ -203,6 +242,11 @@ export interface PhotoSettingsDialogProps {
   error?: string;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+  /** A post's dialog (#2032): the settings of all its lots at once. `config` holds what they share;
+   *  `differing` names the settings they do not, each shown as *Differs by lot* and left alone unless
+   *  changed. The form then also posts `changed` once per setting changed — only those are written —
+   *  and, while the sides still differ, `collagePairSides` for a template picked (#694). */
+  bulk?: { lotCount: number; differing: ReadonlySet<PostPhotoSetting> };
 }
 
 /**
@@ -222,17 +266,44 @@ export function PhotoSettingsDialog({
   error,
   onClose,
   onSubmit,
+  bulk,
 }: PhotoSettingsDialogProps) {
-  const [photoSides, setPhotoSides] = useState(config.photoSides);
-  const [labelLeft, setLabelLeft] = useState(config.photoLabelLeftTemplate ?? "");
-  const [labelRight, setLabelRight] = useState(config.photoLabelRightTemplate ?? "");
-  const [preferSingles, setPreferSingles] = useState(config.preferSingles);
-  const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config.collage));
+  // A post's dialog (#2032): a setting the lots do not share starts as *differs* — blank, or null for
+  // a switch — and stays out of the save until the collector changes it.
+  const differs = (setting: PostPhotoSetting) => bulk?.differing.has(setting) ?? false;
+  const [initial] = useState(() => ({
+    coverSymbols: differs("coverSymbols")
+      ? DIFFERS
+      : config.coverSymbols == null
+        ? ""
+        : config.coverSymbols
+          ? "on"
+          : "off",
+    photoSides: differs("photoSides") ? ("" as const) : config.photoSides,
+    labelLeft: config.photoLabelLeftTemplate ?? "",
+    labelRight: config.photoLabelRightTemplate ?? "",
+    preferSingles: differs("preferSingles") ? null : config.preferSingles,
+    groupByChecklist: differs("groupByChecklist") ? null : (config.groupByChecklist ?? false),
+    collage: differs("collage") ? EMPTY_COLLAGE : toDraft(config.collage),
+    groupCollage: differs("groupCollage") ? EMPTY_COLLAGE : toDraft(config.groupCollage ?? null),
+  }));
+  const [coverSymbols, setCoverSymbols] = useState(initial.coverSymbols);
+  // Blank only while the lots' sides differ and none has been picked.
+  const [photoSides, setPhotoSides] = useState<PhotoSides | "">(initial.photoSides);
+  const [labelLeft, setLabelLeft] = useState(initial.labelLeft);
+  const [labelRight, setLabelRight] = useState(initial.labelRight);
+  // A differing label is blank until typed in; typing, even back to blank, is a change.
+  const [labelsTouched, setLabelsTouched] = useState({ left: false, right: false });
+  const [preferSingles, setPreferSingles] = useState(initial.preferSingles);
+  const [collage, setCollage] = useState<CollageDraft>(initial.collage);
   // #1673: series on photos of their own, laid out with a template of their own.
-  const [groupByChecklist, setGroupByChecklist] = useState(config.groupByChecklist ?? false);
-  const [groupCollage, setGroupCollage] = useState<CollageDraft>(() =>
-    toDraft(config.groupCollage ?? null)
-  );
+  const [groupByChecklist, setGroupByChecklist] = useState(initial.groupByChecklist);
+  const [groupCollage, setGroupCollage] = useState<CollageDraft>(initial.groupCollage);
+  // A differing collage group is shown as such until a template is picked, or it is cleared.
+  const [collageDiffers, setCollageDiffers] = useState(differs("collage"));
+  const [groupCollageDiffers, setGroupCollageDiffers] = useState(differs("groupCollage"));
+  // The pairing of the last template picked (#694), carried to each lot while the sides differ.
+  const [pickedPairSides, setPickedPairSides] = useState<boolean | null>(null);
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
   // Regenerate on save (#328), on by default — see the note by the footer checkbox.
   const [regenerate, setRegenerate] = useState(true);
@@ -265,15 +336,19 @@ export function PhotoSettingsDialog({
     }
     const t = templates.find((row) => row.id === templateId);
     if (!t) return;
-    setPhotoSides((sides) => applyCollagePairing(sides, t.pairSides));
+    setPhotoSides((sides) => (sides === "" ? sides : applyCollagePairing(sides, t.pairSides)));
+    setPickedPairSides(t.pairSides);
     setCollage(templateDraft(t));
+    setCollageDiffers(false);
   }
 
   /** Copy a template's numbers onto the series photos (#1673). Its pairing is not read: which sides
    * are photographed is one answer for the whole offer, set by the template above. */
   function applyGroupTemplate(templateId: string) {
     const t = templates.find((row) => row.id === templateId);
-    if (t) setGroupCollage(templateDraft(t));
+    if (!t) return;
+    setGroupCollage(templateDraft(t));
+    setGroupCollageDiffers(false);
   }
 
   const hasGroupCollage = groupCollage.collageRows.trim() !== "";
@@ -289,6 +364,32 @@ export function PhotoSettingsDialog({
     setCollage((c) => ({ ...c, [field]: value }));
   }
 
+  // The settings a post's dialog writes (#2032): each one changed from what the lots share, or given a
+  // value where they differed.
+  const changed: PostPhotoSetting[] = !bulk
+    ? []
+    : (
+        [
+          ["coverSymbols", coverSymbols !== initial.coverSymbols],
+          ["photoSides", photoSides !== initial.photoSides],
+          [
+            "photoLabelLeftTemplate",
+            differs("photoLabelLeftTemplate") ? labelsTouched.left : labelLeft.trim() !== initial.labelLeft,
+          ],
+          [
+            "photoLabelRightTemplate",
+            differs("photoLabelRightTemplate") ? labelsTouched.right : labelRight.trim() !== initial.labelRight,
+          ],
+          ["preferSingles", preferSingles !== initial.preferSingles],
+          ["groupByChecklist", groupByChecklist !== initial.groupByChecklist],
+          ["collage", !collageDiffers && (differs("collage") || !sameDraft(collage, initial.collage))],
+          [
+            "groupCollage",
+            !groupCollageDiffers && (differs("groupCollage") || !sameDraft(groupCollage, initial.groupCollage)),
+          ],
+        ] as const
+      ).flatMap(([setting, isChanged]) => (isChanged ? [setting] : []));
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     onSubmit(new FormData(e.currentTarget));
@@ -296,7 +397,7 @@ export function PhotoSettingsDialog({
 
   return (
     <DialogShell
-      title="Photo settings"
+      title={bulk ? `Photo settings — all ${bulk.lotCount} lots` : "Photo settings"}
       onClose={onClose}
       maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
       minHeight="20rem"
@@ -306,6 +407,16 @@ export function PhotoSettingsDialog({
         onSubmit={handleSubmit}
       >
         <DialogBody>
+          {bulk && (
+            <>
+              {changed.map((setting) => (
+                <input key={setting} type="hidden" name="changed" value={setting} />
+              ))}
+              {photoSides === "" && pickedPairSides !== null && (
+                <input type="hidden" name="collagePairSides" value={pickedPairSides ? "1" : "0"} />
+              )}
+            </>
+          )}
           {/* Two columns (#1931): what is photographed and how each tile is labelled on the left,
               how the tiles are gathered into collages on the right. */}
           <DialogFormColumns>
@@ -317,6 +428,7 @@ export function PhotoSettingsDialog({
                 {limits.maxPhotos === 1 ? "" : "s"}, longest edge{" "}
                 {limitText(limits.maxPhotoEdge, " px")}, up to{" "}
                 {limitText(limits.maxPhotoFileSizeMib, " MiB")} each. Change those on the platform.
+                {bulk && " A change goes to every lot; a setting that differs by lot is left as each lot has it."}
               </p>
 
               {/* Covering symbols (#1665): the platform's rule unless this listing says otherwise. Read
@@ -326,15 +438,17 @@ export function PhotoSettingsDialog({
                 <select
                   id="offer-cover-symbols"
                   name="coverSymbols"
-                  defaultValue={config.coverSymbols == null ? "" : config.coverSymbols ? "on" : "off"}
+                  value={coverSymbols}
+                  onChange={(e) => setCoverSymbols(e.target.value)}
                   disabled={isPending}
                   style={{ ...INPUT_STYLE, cursor: "pointer", maxWidth: "20rem" }}
                 >
+                  {coverSymbols === DIFFERS && <option value={DIFFERS}>{DIFFERS}</option>}
                   <option value="">
                     As {platformName} ({platformCoverSymbols ? "covered" : "not covered"})
                   </option>
-                  <option value="on">Covered on this offer</option>
-                  <option value="off">Not covered on this offer</option>
+                  <option value="on">Covered on this {bulk ? "post" : "offer"}</option>
+                  <option value="off">Not covered on this {bulk ? "post" : "offer"}</option>
                 </select>
               </div>
 
@@ -349,6 +463,7 @@ export function PhotoSettingsDialog({
                     disabled={isPending}
                     style={{ ...INPUT_STYLE, cursor: "pointer" }}
                   >
+                    {photoSides === "" && <option value="">{DIFFERS}</option>}
                     {PHOTO_SIDES.map((side) => (
                       <option key={side} value={side}>
                         {PHOTO_SIDES_LABELS[side]}
@@ -365,8 +480,11 @@ export function PhotoSettingsDialog({
                     id="offer-photo-label-left"
                     name="photoLabelLeftTemplate"
                     value={labelLeft}
-                    onChange={(e) => setLabelLeft(e.target.value)}
-                    placeholder="{ref}"
+                    onChange={(e) => {
+                      setLabelLeft(e.target.value);
+                      setLabelsTouched((t) => ({ ...t, left: true }));
+                    }}
+                    placeholder={differs("photoLabelLeftTemplate") && !labelsTouched.left ? DIFFERS : "{ref}"}
                     disabled={isPending}
                     style={INPUT_STYLE}
                   />
@@ -377,8 +495,11 @@ export function PhotoSettingsDialog({
                     id="offer-photo-label-right"
                     name="photoLabelRightTemplate"
                     value={labelRight}
-                    onChange={(e) => setLabelRight(e.target.value)}
-                    placeholder="{catalog}"
+                    onChange={(e) => {
+                      setLabelRight(e.target.value);
+                      setLabelsTouched((t) => ({ ...t, right: true }));
+                    }}
+                    placeholder={differs("photoLabelRightTemplate") && !labelsTouched.right ? DIFFERS : "{catalog}"}
                     disabled={isPending}
                     style={INPUT_STYLE}
                   />
@@ -425,15 +546,14 @@ export function PhotoSettingsDialog({
                   marginBottom: "0.25rem",
                 }}
               >
-                <input
-                  type="checkbox"
+                <TriStateCheckbox
                   name="preferSingles"
                   checked={preferSingles}
-                  onChange={(e) => setPreferSingles(e.target.checked)}
-                  disabled={isPending}
-                  style={{ cursor: isPending ? "default" : "pointer" }}
+                  isPending={isPending}
+                  onChange={setPreferSingles}
                 />
                 Single photos while {platformName}&rsquo;s limit allows
+                {preferSingles === null && ` (${DIFFERS.toLowerCase()})`}
               </label>
               <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
                 {limits.maxPhotos == null
@@ -458,15 +578,14 @@ export function PhotoSettingsDialog({
                     width: "fit-content",
                   }}
                 >
-                  <input
-                    type="checkbox"
+                  <TriStateCheckbox
                     name="groupByChecklist"
                     checked={groupByChecklist}
-                    onChange={(e) => setGroupByChecklist(e.target.checked)}
-                    disabled={isPending}
-                    style={{ cursor: isPending ? "default" : "pointer" }}
+                    isPending={isPending}
+                    onChange={setGroupByChecklist}
                   />
                   Group series on their own photos
+                  {groupByChecklist === null && ` (${DIFFERS.toLowerCase()})`}
                 </label>
               </Tooltip>
               {/* The group template's numbers travel in hidden fields whether or not the box is
@@ -495,14 +614,16 @@ export function PhotoSettingsDialog({
                       style={{ ...INPUT_STYLE, cursor: "pointer" }}
                     >
                       <option value="">
-                        {hasGroupCollage
-                          ? `${gridText(
-                              groupCollage.collageGridMode,
-                              groupCollage.collageGridShape,
-                              groupCollage.collageRows,
-                              groupCollage.collageColumns
-                            )} — pick another template`
-                          : "Same as the collage below — pick a template"}
+                        {groupCollageDiffers
+                          ? `${DIFFERS} — pick a template`
+                          : hasGroupCollage
+                            ? `${gridText(
+                                groupCollage.collageGridMode,
+                                groupCollage.collageGridShape,
+                                groupCollage.collageRows,
+                                groupCollage.collageColumns
+                              )} — pick another template`
+                            : "Same as the collage below — pick a template"}
                       </option>
                       {templates.map((t) => (
                         <option key={t.id} value={t.id}>
@@ -512,7 +633,10 @@ export function PhotoSettingsDialog({
                     </select>
                     <button
                       type="button"
-                      onClick={() => setGroupCollage(EMPTY_COLLAGE)}
+                      onClick={() => {
+                        setGroupCollage(EMPTY_COLLAGE);
+                        setGroupCollageDiffers(false);
+                      }}
                       disabled={isPending || !hasGroupCollage}
                       style={{
                         ...INPUT_STYLE,
@@ -545,7 +669,11 @@ export function PhotoSettingsDialog({
                     style={{ ...INPUT_STYLE, cursor: "pointer" }}
                   >
                     <option value="">
-                      {templates.length === 0 ? "— no templates defined yet —" : "— pick a template —"}
+                      {templates.length === 0
+                        ? "— no templates defined yet —"
+                        : collageDiffers
+                          ? `${DIFFERS} — pick a template`
+                          : "— pick a template —"}
                     </option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -555,7 +683,10 @@ export function PhotoSettingsDialog({
                   </select>
                   <button
                     type="button"
-                    onClick={() => setCollage(EMPTY_COLLAGE)}
+                    onClick={() => {
+                      setCollage(EMPTY_COLLAGE);
+                      setCollageDiffers(false);
+                    }}
                     disabled={isPending || !hasCollage}
                     style={{
                       ...INPUT_STYLE,
@@ -569,122 +700,133 @@ export function PhotoSettingsDialog({
                   </button>
                 </div>
                 <span style={HINT}>
-                  Copies the template&apos;s numbers into the fields below, where you can adjust them for
-                  this listing. Editing the template later leaves this offer alone.
+                  {bulk
+                    ? "Copies the template's numbers into the fields below, for every lot. Editing the template later leaves the lots alone."
+                    : "Copies the template's numbers into the fields below, where you can adjust them for this listing. Editing the template later leaves this offer alone."}
                 </span>
               </div>
 
-              <div style={{ ...GRID_PAIRS, marginBottom: "1rem" }}>
-                <div style={{ minWidth: 0 }}>
-                  <LabelWithError htmlFor="offer-collage-grid-mode">Grid</LabelWithError>
-                  <select
-                    id="offer-collage-grid-mode"
-                    name="collageGridMode"
-                    value={collage.collageGridMode}
-                    onChange={(e) => set("collageGridMode", normalizeCollageGridMode(e.target.value))}
-                    disabled={isPending}
-                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                  >
-                    {COLLAGE_GRID_MODES.map((mode) => (
-                      <option key={mode} value={mode}>
-                        {COLLAGE_GRID_MODE_LABELS[mode]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {/* The shape is read only by the automatic grid (#1699), so it is shown only there; a
-                    fixed grid keeps it in a hidden field, so switching the grid back restores it. */}
-                {collage.collageGridMode === "auto" ? (
-                  <div style={{ minWidth: 0 }}>
-                    <LabelWithError htmlFor="offer-collage-grid-shape">Shape</LabelWithError>
-                    <select
-                      id="offer-collage-grid-shape"
-                      name="collageGridShape"
-                      value={collage.collageGridShape}
-                      onChange={(e) => set("collageGridShape", normalizeCollageGridShape(e.target.value))}
-                      disabled={isPending}
-                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                    >
-                      {COLLAGE_GRID_SHAPES.map((shape) => (
-                        <option key={shape} value={shape}>
-                          {COLLAGE_GRID_SHAPE_LABELS[shape]}
-                        </option>
-                      ))}
-                    </select>
+              {/* The lots' collages differ (#2032): no numbers to show until a template gives them all
+                  the same ones. */}
+              {collageDiffers ? (
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", margin: 0 }}>
+                  The lots&rsquo; collage numbers differ — each keeps its own unless you pick a template.
+                </p>
+              ) : (
+                <>
+                  <div style={{ ...GRID_PAIRS, marginBottom: "1rem" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <LabelWithError htmlFor="offer-collage-grid-mode">Grid</LabelWithError>
+                      <select
+                        id="offer-collage-grid-mode"
+                        name="collageGridMode"
+                        value={collage.collageGridMode}
+                        onChange={(e) => set("collageGridMode", normalizeCollageGridMode(e.target.value))}
+                        disabled={isPending}
+                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                      >
+                        {COLLAGE_GRID_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {COLLAGE_GRID_MODE_LABELS[mode]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* The shape is read only by the automatic grid (#1699), so it is shown only there; a
+                        fixed grid keeps it in a hidden field, so switching the grid back restores it. */}
+                    {collage.collageGridMode === "auto" ? (
+                      <div style={{ minWidth: 0 }}>
+                        <LabelWithError htmlFor="offer-collage-grid-shape">Shape</LabelWithError>
+                        <select
+                          id="offer-collage-grid-shape"
+                          name="collageGridShape"
+                          value={collage.collageGridShape}
+                          onChange={(e) => set("collageGridShape", normalizeCollageGridShape(e.target.value))}
+                          disabled={isPending}
+                          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                        >
+                          {COLLAGE_GRID_SHAPES.map((shape) => (
+                            <option key={shape} value={shape}>
+                              {COLLAGE_GRID_SHAPE_LABELS[shape]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <input type="hidden" name="collageGridShape" value={collage.collageGridShape} />
+                    )}
+                    <NumberField
+                      id="offer-collage-rows"
+                      name="collageRows"
+                      label={axisLabels.rows}
+                      value={collage.collageRows}
+                      min={MIN_COLLAGE_AXIS}
+                      max={MAX_COLLAGE_AXIS}
+                      isPending={isPending}
+                      onChange={(v) => set("collageRows", v)}
+                    />
+                    <NumberField
+                      id="offer-collage-columns"
+                      name="collageColumns"
+                      label={axisLabels.columns}
+                      value={collage.collageColumns}
+                      min={MIN_COLLAGE_AXIS}
+                      max={MAX_COLLAGE_AXIS}
+                      isPending={isPending}
+                      onChange={(v) => set("collageColumns", v)}
+                    />
                   </div>
-                ) : (
-                  <input type="hidden" name="collageGridShape" value={collage.collageGridShape} />
-                )}
-                <NumberField
-                  id="offer-collage-rows"
-                  name="collageRows"
-                  label={axisLabels.rows}
-                  value={collage.collageRows}
-                  min={MIN_COLLAGE_AXIS}
-                  max={MAX_COLLAGE_AXIS}
-                  isPending={isPending}
-                  onChange={(v) => set("collageRows", v)}
-                />
-                <NumberField
-                  id="offer-collage-columns"
-                  name="collageColumns"
-                  label={axisLabels.columns}
-                  value={collage.collageColumns}
-                  min={MIN_COLLAGE_AXIS}
-                  max={MAX_COLLAGE_AXIS}
-                  isPending={isPending}
-                  onChange={(v) => set("collageColumns", v)}
-                />
-              </div>
 
-              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                <NumberField
-                  id="offer-collage-gap"
-                  name="collageGapPercent"
-                  label="Gap (%)"
-                  value={collage.collageGapPercent}
-                  min={MIN_COLLAGE_PERCENT}
-                  max={MAX_COLLAGE_PERCENT}
-                  hint="Of the stamp."
-                  isPending={isPending}
-                  onChange={(v) => set("collageGapPercent", v)}
-                />
-                <NumberField
-                  id="offer-collage-strip"
-                  name="collageLabelPercent"
-                  label="Label strip (%)"
-                  value={collage.collageLabelPercent}
-                  min={MIN_COLLAGE_LABEL_PERCENT}
-                  max={MAX_COLLAGE_LABEL_PERCENT}
-                  step={COLLAGE_LABEL_STEP}
-                  hint="Of the image, and the label size. Tenths allowed; 0 for none."
-                  isPending={isPending}
-                  onChange={(v) => set("collageLabelPercent", v)}
-                />
-                <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="offer-collage-background">Background</LabelWithError>
-                  {/* The colour travels in a hidden field so an untouched picker stays *blank*: a colour
-                      input always reports a value, which would make "no collage yet" impossible to save. */}
-                  <input type="hidden" name="collageBackground" value={collage.collageBackground} />
-                  <input
-                    id="offer-collage-background"
-                    type="color"
-                    value={collage.collageBackground || DEFAULT_COLLAGE_BACKGROUND}
-                    onChange={(e) => set("collageBackground", e.target.value)}
-                    disabled={isPending}
-                    style={{ ...INPUT_STYLE, width: "5rem", padding: "0.25rem" }}
-                  />
-                </div>
-              </div>
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <NumberField
+                      id="offer-collage-gap"
+                      name="collageGapPercent"
+                      label="Gap (%)"
+                      value={collage.collageGapPercent}
+                      min={MIN_COLLAGE_PERCENT}
+                      max={MAX_COLLAGE_PERCENT}
+                      hint="Of the stamp."
+                      isPending={isPending}
+                      onChange={(v) => set("collageGapPercent", v)}
+                    />
+                    <NumberField
+                      id="offer-collage-strip"
+                      name="collageLabelPercent"
+                      label="Label strip (%)"
+                      value={collage.collageLabelPercent}
+                      min={MIN_COLLAGE_LABEL_PERCENT}
+                      max={MAX_COLLAGE_LABEL_PERCENT}
+                      step={COLLAGE_LABEL_STEP}
+                      hint="Of the image, and the label size. Tenths allowed; 0 for none."
+                      isPending={isPending}
+                      onChange={(v) => set("collageLabelPercent", v)}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="offer-collage-background">Background</LabelWithError>
+                      {/* The colour travels in a hidden field so an untouched picker stays *blank*: a colour
+                          input always reports a value, which would make "no collage yet" impossible to save. */}
+                      <input type="hidden" name="collageBackground" value={collage.collageBackground} />
+                      <input
+                        id="offer-collage-background"
+                        type="color"
+                        value={collage.collageBackground || DEFAULT_COLLAGE_BACKGROUND}
+                        onChange={(e) => set("collageBackground", e.target.value)}
+                        disabled={isPending}
+                        style={{ ...INPUT_STYLE, width: "5rem", padding: "0.25rem" }}
+                      />
+                    </div>
+                  </div>
 
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.75rem 0 0" }}>
-                {collage.collageGridMode === "auto"
-                  ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
-                  : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
-                Their product is how many stamps go on one image either way, and it is a maximum rather
-                than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
-                on this offer yet.
-              </p>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.75rem 0 0" }}>
+                    {collage.collageGridMode === "auto"
+                      ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
+                      : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
+                    Their product is how many stamps go on one image either way, and it is a maximum rather
+                    than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
+                    on this {bulk ? "post" : "offer"} yet.
+                  </p>
+                </>
+              )}
             </div>
           </DialogFormColumns>
         </DialogBody>
@@ -700,7 +842,13 @@ export function PhotoSettingsDialog({
           disabled={isPending}
           error={error}
           leading={
-            <Tooltip content="Render this offer's images again once the settings are saved, replacing the stored ones">
+            <Tooltip
+              content={
+                bulk
+                  ? "Render the images of every lot whose settings changed again once saved, replacing the stored ones"
+                  : "Render this offer's images again once the settings are saved, replacing the stored ones"
+              }
+            >
               <label
                 style={{
                   display: "flex",

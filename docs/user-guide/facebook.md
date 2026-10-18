@@ -526,6 +526,18 @@ keeps the title it went up with, as it keeps everything else.
   changed this way counts as written by hand from then on, as one edited on the offer's screen does;
   the title template above writes it from the template again. Neither is offered once the post is up:
   its text stays as posted.
+- **Photo settings…** — beside the *Lots* heading until the post is up: the photo settings of every
+  lot in one dialog — the same settings as an offer's own [Photo settings](offers.md#photo-settings),
+  such as the sides to photograph or the tile labels — instead of opening each lot's offer. A setting
+  every lot shares shows its value; one where the lots differ shows **Differs by lot** and is left as
+  each lot has it unless you change it. A collage that differs shows no numbers until you pick a
+  template, which then gives every lot the same ones (and, as on an offer, pairs the sides of each lot
+  photographing both). Saving writes only what you changed, to every lot. **Regenerate photos after
+  saving** is ticked, as on an offer, and renders the photos again of every lot whose settings changed;
+  a lot that cannot be rendered — no collage numbers, say — is reported in the message and the rest go
+  ahead. The post keeps no settings of its own: each lot keeps its own afterwards, and a lot added later
+  keeps whatever it had. Once the post is up its photos are the ones posted, so the action is not
+  offered.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,

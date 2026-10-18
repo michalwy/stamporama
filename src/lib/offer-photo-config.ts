@@ -352,3 +352,141 @@ export function parseOfferPhotoConfigInput(
     },
   };
 }
+
+/** The fields every photo-settings form posts, read by name — one list for the offer's dialog and the
+ *  post's (#2032), so the two cannot drift apart. `get` answers blank for a field the form lacks. */
+export function readPhotoConfigFields(
+  get: (name: string) => string
+): Parameters<typeof parseOfferPhotoConfigInput>[0] {
+  return {
+    photoSides: get("photoSides"),
+    preferSingles: get("preferSingles"),
+    photoLabelLeftTemplate: get("photoLabelLeftTemplate"),
+    photoLabelRightTemplate: get("photoLabelRightTemplate"),
+    collageGridMode: get("collageGridMode"),
+    collageGridShape: get("collageGridShape"),
+    collageRows: get("collageRows"),
+    collageColumns: get("collageColumns"),
+    collageGapPercent: get("collageGapPercent"),
+    collageBackground: get("collageBackground"),
+    collageLabelPercent: get("collageLabelPercent"),
+    coverSymbols: get("coverSymbols"),
+    // #1673: the switch, and the group template's numbers as the dialog's hidden fields.
+    groupByChecklist: get("groupByChecklist"),
+    groupCollage: {
+      collageGridMode: get("groupCollageGridMode"),
+      collageGridShape: get("groupCollageGridShape"),
+      collageRows: get("groupCollageRows"),
+      collageColumns: get("groupCollageColumns"),
+      collageGapPercent: get("groupCollageGapPercent"),
+      collageBackground: get("groupCollageBackground"),
+      collageLabelPercent: get("groupCollageLabelPercent"),
+    },
+  };
+}
+
+/** The offer columns a photo configuration is stored in (#308, #1665, #1673). */
+export interface OfferPhotoConfigRow {
+  photoSides: string;
+  photoPreferSingles: boolean;
+  photoLabelLeftTemplate: string | null;
+  photoLabelRightTemplate: string | null;
+  collageGridMode: string | null;
+  collageGridShape: string | null;
+  collageRows: number | null;
+  collageColumns: number | null;
+  collageGapPercent: number | null;
+  collageBackground: string | null;
+  collageLabelPercent: number | null;
+  coverSymbols: boolean | null;
+  photoGroupByChecklist: boolean;
+  groupCollageGridMode: string | null;
+  groupCollageGridShape: string | null;
+  groupCollageRows: number | null;
+  groupCollageColumns: number | null;
+  groupCollageGapPercent: number | null;
+  groupCollageBackground: string | null;
+  groupCollageLabelPercent: number | null;
+}
+
+/** A Prisma `select` of exactly {@link OfferPhotoConfigRow}'s columns. */
+export const OFFER_PHOTO_CONFIG_SELECT = {
+  photoSides: true,
+  photoPreferSingles: true,
+  photoLabelLeftTemplate: true,
+  photoLabelRightTemplate: true,
+  collageGridMode: true,
+  collageGridShape: true,
+  collageRows: true,
+  collageColumns: true,
+  collageGapPercent: true,
+  collageBackground: true,
+  collageLabelPercent: true,
+  coverSymbols: true,
+  photoGroupByChecklist: true,
+  groupCollageGridMode: true,
+  groupCollageGridShape: true,
+  groupCollageRows: true,
+  groupCollageColumns: true,
+  groupCollageGapPercent: true,
+  groupCollageBackground: true,
+  groupCollageLabelPercent: true,
+} as const satisfies Record<keyof OfferPhotoConfigRow, true>;
+
+/** One stored collage group, or null unless every number is there — the group is written whole. */
+function collageFromColumns(c: {
+  mode: string | null;
+  shape: string | null;
+  rows: number | null;
+  columns: number | null;
+  gap: number | null;
+  background: string | null;
+  label: number | null;
+}): OfferCollageValues | null {
+  if (c.rows == null || c.columns == null || c.gap == null || c.background == null || c.label == null) {
+    return null;
+  }
+  return {
+    // Null is `fixed` (#413): the mode postdates the numbers, so an offer prepared before it carries a
+    // complete collage group and no mode at all. Null shape is `landscape` (#1699) for the same reason.
+    collageGridMode: normalizeCollageGridMode(c.mode),
+    collageGridShape: normalizeCollageGridShape(c.shape),
+    collageRows: c.rows,
+    collageColumns: c.columns,
+    collageGapPercent: c.gap,
+    collageBackground: c.background,
+    collageLabelPercent: c.label,
+  };
+}
+
+/** An offer's stored photo configuration as the settings dialogs read it. */
+export function offerPhotoConfigFromRow(row: OfferPhotoConfigRow): Required<OfferPhotoConfigInput> {
+  return {
+    photoSides: normalizePhotoSides(row.photoSides),
+    preferSingles: row.photoPreferSingles,
+    photoLabelLeftTemplate: row.photoLabelLeftTemplate,
+    photoLabelRightTemplate: row.photoLabelRightTemplate,
+    // A platform with no default template leaves the numbers all null: no collage to render yet.
+    collage: collageFromColumns({
+      mode: row.collageGridMode,
+      shape: row.collageGridShape,
+      rows: row.collageRows,
+      columns: row.collageColumns,
+      gap: row.collageGapPercent,
+      background: row.collageBackground,
+      label: row.collageLabelPercent,
+    }),
+    coverSymbols: row.coverSymbols,
+    groupByChecklist: row.photoGroupByChecklist,
+    // Written as a group like the numbers above (#1673); null leaves the groups on those.
+    groupCollage: collageFromColumns({
+      mode: row.groupCollageGridMode,
+      shape: row.groupCollageGridShape,
+      rows: row.groupCollageRows,
+      columns: row.groupCollageColumns,
+      gap: row.groupCollageGapPercent,
+      background: row.groupCollageBackground,
+      label: row.groupCollageLabelPercent,
+    }),
+  };
+}

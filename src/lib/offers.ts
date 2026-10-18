@@ -163,6 +163,7 @@ import { offerScreenUrl } from "./app-url";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 import {
   normalizePhotoSides,
+  offerPhotoConfigFromRow,
   seedCollagePairing,
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
@@ -5825,52 +5826,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // The same derivation the list row makes (#542): the stored instant, but only while the offer is
     // still up. One rule, read in both places, so the row and the screen it opens cannot disagree.
     listingOutOfDate: isListedState(state) ? offer.listingContentChangedAt : null,
-    photoConfig: {
-      photoSides: normalizePhotoSides(offer.photoSides),
-      preferSingles: offer.photoPreferSingles,
-      photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
-      photoLabelRightTemplate: offer.photoLabelRightTemplate,
-      // The collage numbers are written as a group, so one non-null column means the whole set is
-      // there; a platform with no default template leaves them all null (no collage to render yet).
-      collage:
-        offer.collageRows != null &&
-        offer.collageColumns != null &&
-        offer.collageGapPercent != null &&
-        offer.collageBackground != null &&
-        offer.collageLabelPercent != null
-          ? {
-              // Null is `fixed` (#413): the mode postdates the numbers, so an offer prepared before
-              // it carries a complete collage group and no mode at all.
-              collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
-              // Null is `landscape` (#1699), for the same reason.
-              collageGridShape: normalizeCollageGridShape(offer.collageGridShape),
-              collageRows: offer.collageRows,
-              collageColumns: offer.collageColumns,
-              collageGapPercent: offer.collageGapPercent,
-              collageBackground: offer.collageBackground,
-              collageLabelPercent: offer.collageLabelPercent,
-            }
-          : null,
-      coverSymbols: offer.coverSymbols,
-      groupByChecklist: offer.photoGroupByChecklist,
-      // Written as a group like the numbers above (#1673); null leaves the groups on those.
-      groupCollage:
-        offer.groupCollageRows != null &&
-        offer.groupCollageColumns != null &&
-        offer.groupCollageGapPercent != null &&
-        offer.groupCollageBackground != null &&
-        offer.groupCollageLabelPercent != null
-          ? {
-              collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
-              collageGridShape: normalizeCollageGridShape(offer.groupCollageGridShape),
-              collageRows: offer.groupCollageRows,
-              collageColumns: offer.groupCollageColumns,
-              collageGapPercent: offer.groupCollageGapPercent,
-              collageBackground: offer.groupCollageBackground,
-              collageLabelPercent: offer.groupCollageLabelPercent,
-            }
-          : null,
-    },
+    photoConfig: offerPhotoConfigFromRow(offer),
     // The platform's cover rule (#1665), read live: what an offer following it gets.
     platformCoverSymbols: offer.platform.coverSymbols,
     platformPhotoLimits: {
