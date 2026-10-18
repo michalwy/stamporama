@@ -11,7 +11,6 @@ import {
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
   facebookMixedTypesRefusal,
-  facebookMoney,
   facebookPostGaps,
   facebookPostRefusal,
   facebookPostLabel,
@@ -58,10 +57,11 @@ function lot(overrides: Partial<FacebookPostLotText> = {}): FacebookPostLotText 
     title: "Austria 1850 Mercury",
     description: "Mercury, 1850, unused",
     catalog: "Mi·AT 1",
-    startingPrice: "10.00 PLN",
-    increment: "1.00 PLN",
+    startingPrice: "10.00",
+    increment: "1.00",
     closesAt: "Sun 5 Oct, 20:00",
-    price: "",
+    price: null,
+    currency: "PLN",
     ...overrides,
   };
 }
@@ -130,7 +130,7 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     );
     assert.equal(
       text,
-      "Lot 3: Austria 1850 Mercury — Mercury, 1850, unused\nStart 10.00 PLN, +1.00 PLN, ends Sun 5 Oct, 20:00 {startprice}"
+      "Lot 3: Austria 1850 Mercury — Mercury, 1850, unused\nStart 10 zł, +1 zł, ends Sun 5 Oct, 20:00 {startprice}"
     );
   });
 
@@ -140,10 +140,10 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("fills a quick buy's price and keeps an auction's tokens in it as typed (#1671)", () => {
-    const quickBuy = lot({ listingType: "fixed", price: "25.00 PLN" });
+    const quickBuy = lot({ listingType: "fixed", price: "25.00" });
     assert.equal(
       renderFacebookLotText("{title}: {price} {closesAt}", quickBuy),
-      "Austria 1850 Mercury: 25.00 PLN {closesAt}"
+      "Austria 1850 Mercury: 25 zł {closesAt}"
     );
     assert.equal(renderFacebookLotText("{title} {price}", lot()), "Austria 1850 Mercury {price}");
   });
@@ -154,7 +154,7 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
 
   it("puts the offer's bare number where {offer} is, on an offer posted alone and a quick buy (#1694)", () => {
     assert.equal(renderFacebookLotText("#{offer} {title}", lot()), "#412 Austria 1850 Mercury");
-    assert.equal(renderFacebookLotText("Offer {offer}: {price}", lot({ listingType: "fixed", price: "25.00 PLN" })), "Offer 412: 25.00 PLN");
+    assert.equal(renderFacebookLotText("Offer {offer}: {price}", lot({ listingType: "fixed", price: "25.00" })), "Offer 412: 25 zł");
   });
 
   it("gives each lot of a post its own offer's number in {offer} (#1694)", () => {
@@ -172,13 +172,13 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("puts the title in once and leaves {description} empty when the offer has none (#1692)", () => {
-    const quickBuy = lot({ listingType: "fixed", description: "", price: "20.00 PLN" });
+    const quickBuy = lot({ listingType: "fixed", description: "", price: "20.00" });
     const text = renderFacebookPostText(
       { auction: "", quickBuy: "{title}\nKup teraz - {price} + koszty wysyłki\n\n{description}" },
       "",
       [quickBuy]
     );
-    assert.equal(text, "Austria 1850 Mercury\nKup teraz - 20.00 PLN + koszty wysyłki\n\n");
+    assert.equal(text, "Austria 1850 Mercury\nKup teraz - 20 zł + koszty wysyłki\n\n");
   });
 
   it("leaves the template's line breaks as they are, empty placeholders included (#1692)", () => {
@@ -207,7 +207,7 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     const text = renderFacebookPostText({ auction: "{title}\n{terms}\nStart {startingPrice}", quickBuy: "" }, "Shipping 5 PLN.", [
       lot(),
     ]);
-    assert.equal(text, "Austria 1850 Mercury\nShipping 5 PLN.\nStart 10.00 PLN");
+    assert.equal(text, "Austria 1850 Mercury\nShipping 5 PLN.\nStart 10 zł");
   });
 
   it("appends no note to a template without {terms} (#1689)", () => {
@@ -218,9 +218,9 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     const templates = { auction: "Lot {lot} auction: {startingPrice}", quickBuy: "Lot {lot} buy now: {price}" };
     const text = renderFacebookPostText(templates, "", [
       lot({ lotNo: 1 }),
-      lot({ lotNo: 2, listingType: "fixed", price: "25.00 PLN" }),
+      lot({ lotNo: 2, listingType: "fixed", price: "25.00" }),
     ]);
-    assert.equal(text, "Lot 1 auction: 10.00 PLN\n\nLot 2 buy now: 25.00 PLN");
+    assert.equal(text, "Lot 1 auction: 10 zł\n\nLot 2 buy now: 25 zł");
   });
 
   it("leaves an empty standing note empty, the template's lines as they are (#1692)", () => {
@@ -228,16 +228,33 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("writes a figure with its currency, and nothing for none", () => {
-    assert.equal(facebookMoney("1.00", "PLN"), "1 PLN");
-    assert.equal(facebookMoney("1.50", "PLN"), "1.50 PLN");
-    assert.equal(facebookMoney(null, "PLN"), "");
+    assert.equal(renderFacebookLotText("{startingPrice}|{increment}", lot({ increment: "1.50" })), "10 zł|1.50 zł");
+    assert.equal(renderFacebookLotText("[{increment}] [{increment:code}]", lot({ increment: null })), "[] []");
   });
 
   it("writes a whole price in a post without decimals, any other with both (#1787)", () => {
-    const templates = { auction: "", quickBuy: "Kup teraz - {price}" };
-    const quickBuy = (price: string) => lot({ listingType: "fixed", price: facebookMoney(price, "PLN") });
+    const templates = { auction: "", quickBuy: "Kup teraz - {price:code}" };
+    const quickBuy = (price: string) => lot({ listingType: "fixed", price });
     assert.equal(renderFacebookPostText(templates, "", [quickBuy("15.00")]), "Kup teraz - 15 PLN");
     assert.equal(renderFacebookPostText(templates, "", [quickBuy("15.50")]), "Kup teraz - 15.50 PLN");
+  });
+
+  it("writes an amount with the currency's symbol, its code, or neither, as the placeholder asks (#2028)", () => {
+    const quickBuy = lot({ listingType: "fixed", price: "15.00" });
+    assert.equal(renderFacebookLotText("{price}", quickBuy), "15 zł");
+    assert.equal(renderFacebookLotText("{price:symbol}", quickBuy), "15 zł");
+    assert.equal(renderFacebookLotText("{price:code}", quickBuy), "15 PLN");
+    assert.equal(renderFacebookLotText("{price:none}", quickBuy), "15");
+    assert.equal(renderFacebookLotText("{price}", lot({ listingType: "fixed", price: "10.00", currency: "USD" })), "$10");
+    assert.equal(
+      renderFacebookLotText("Start {startingPrice:none} {startingPrice:code}, +{increment:symbol}", lot()),
+      "Start 10 10 PLN, +1 zł"
+    );
+  });
+
+  it("keeps a token with a parameter that is not a choice, or on a placeholder writing no amount, as typed (#2028)", () => {
+    const quickBuy = lot({ listingType: "fixed", price: "15.00" });
+    assert.equal(renderFacebookLotText("{price:cod} {price:} {title:code}", quickBuy), "{price:cod} {price:} {title:code}");
   });
 });
 
@@ -262,7 +279,7 @@ describe("facebookPostGaps (#1692)", () => {
 
   it("names each placed placeholder that is empty, per lot, once", () => {
     const gaps = facebookPostGaps({ ...templates, auction: `${templates.auction}\n{description}` }, "", [
-      lot({ description: "", startingPrice: "" }),
+      lot({ description: "", startingPrice: null }),
     ]);
     assert.deepEqual(gaps.emptyPlaceholders, [
       { lotNo: null, token: "{description}" },
@@ -292,7 +309,7 @@ describe("an offer's own post template (#1780)", () => {
   it("writes the offer's lot from its own template instead of the group's", () => {
     assert.equal(
       renderFacebookPostText(templates, "", [lot({ ownTemplate: "Mine: **{title}** from {startingPrice}" })]),
-      "Mine: **Austria 1850 Mercury** from 10.00 PLN"
+      "Mine: **Austria 1850 Mercury** from 10 zł"
     );
   });
 
@@ -562,6 +579,7 @@ describe("the post as published (#1800)", () => {
     layout: "text",
     postText: "",
     postTitle: "",
+    currencyStyle: "symbol",
   };
   function source(overrides: Partial<FacebookPostSourceLot> = {}): FacebookPostSourceLot {
     return {
@@ -586,26 +604,35 @@ describe("the post as published (#1800)", () => {
 
   it("draws a lot not yet published from the group's template and its figures now", () => {
     const s = facebookPostSource(group, [source()], closesAt);
-    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 PLN, ends at 2026-10-20T18:00:00.000Z\nNew note");
+    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 zł, ends at 2026-10-20T18:00:00.000Z\nNew note");
     assert.equal(s.frozenAt, null);
   });
 
   it("draws a published lot as it was posted — template, note and figures — whatever changed since", () => {
     const s = facebookPostSource(group, [source({ frozen, ownTemplate: "Own: {title}" })], closesAt);
-    assert.equal(text(s), "Then: Austria 1850 Mercury from 10 PLN, ends at 2026-10-18T18:00:00.000Z\nOld note");
+    assert.equal(text(s), "Then: Austria 1850 Mercury from 10 zł, ends at 2026-10-18T18:00:00.000Z\nOld note");
     assert.equal(s.frozenAt, frozen.frozenAt);
+  });
+
+  it("writes a lot frozen before currency symbols with the code it went up with (#2028)", () => {
+    const older: Record<string, unknown> = JSON.parse(JSON.stringify(frozen));
+    delete older.currencyStyle;
+    const read = readFacebookFrozenLot(older);
+    assert.equal(read?.currencyStyle, "code");
+    const s = facebookPostSource(group, [source({ frozen: read })], closesAt);
+    assert.equal(text(s), "Then: Austria 1850 Mercury from 10 PLN, ends at 2026-10-18T18:00:00.000Z\nOld note");
   });
 
   it("draws the lots a repost takes as they go up now", () => {
     const s = facebookPostSource(group, [source({ frozen })], closesAt, () => true);
-    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 PLN, ends at 2026-10-20T18:00:00.000Z\nNew note");
+    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 zł, ends at 2026-10-20T18:00:00.000Z\nNew note");
     assert.equal(s.frozenAt, null);
   });
 
   it("states a frozen quick buy's asking price as it was", () => {
     const quick = { ...frozen, listingType: "fixed" as const, template: "Buy {title} for {price}", price: "15.50" };
     const s = facebookPostSource(group, [source({ listingType: "fixed", price: "9.00", frozen: quick })], closesAt);
-    assert.equal(text(s), "Buy Austria 1850 Mercury for 15.50 PLN");
+    assert.equal(text(s), "Buy Austria 1850 Mercury for 15.50 zł");
   });
 
   it("states the last lot's note in a multi-lot post, frozen with it", () => {
@@ -632,7 +659,7 @@ describe("a captioned post (#1841)", () => {
     post: "Lots {offer}\n{terms}",
   };
   const lots = [
-    lot({ lotNo: 2, offerNo: 413, listingType: "fixed", price: "25 PLN", title: "Second" }),
+    lot({ lotNo: 2, offerNo: 413, listingType: "fixed", price: "25.00", title: "Second" }),
     lot({ lotNo: 1, offerNo: 412, title: "First" }),
   ];
   const texts = (post: ReturnType<typeof renderFacebookCaptionedPost>) => ({
@@ -644,8 +671,8 @@ describe("a captioned post (#1841)", () => {
     assert.deepEqual(texts(renderFacebookCaptionedPost(captions, " Shipping 7 PLN ", lots, { postNo: 1, title: null })), {
       post: "Lots 412, 413\nShipping 7 PLN",
       captions: [
-        [1, "1. First from 10.00 PLN"],
-        [2, "Second — 25 PLN"],
+        [1, "1. First from 10 zł"],
+        [2, "Second — 25 zł"],
       ],
     });
   });
@@ -663,7 +690,7 @@ describe("a captioned post (#1841)", () => {
   it("names what is missing: the shared text, a type's caption template, empty placeholders", () => {
     const gaps = facebookCaptionedPostGaps({ auction: "{title} {description}", quickBuy: "", post: "" }, "", [
       lot({ lotNo: 1, description: "" }),
-      lot({ lotNo: 2, listingType: "fixed", price: "5 PLN" }),
+      lot({ lotNo: 2, listingType: "fixed", price: "5.00" }),
     ], { postNo: 1, title: null });
     assert.equal(gaps.missingPostText, true);
     assert.deepEqual(gaps.missingTemplates, ["fixed"]);
@@ -690,6 +717,7 @@ describe("a captioned post (#1841)", () => {
       layout: "captions",
       postText: "Old lots {offer}\n{terms}",
       postTitle: "",
+      currencyStyle: "symbol",
     };
     const group = {
       postTemplate: "",
@@ -1002,6 +1030,7 @@ describe("a post's title (#1862)", () => {
       layout: "captions",
       postText: "{postTitle}",
       postTitle,
+      currencyStyle: "symbol",
     });
     const one = (snapshot: FacebookFrozenLot | null): FacebookPostSourceLot => ({
       offerId: "o1",

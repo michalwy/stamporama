@@ -14,12 +14,15 @@
 import { roundAmount } from "./decimal-input";
 import type { OfferListingType } from "./offer-rules";
 import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
+import { isKnownTemplateToken, templateTokens } from "./template-amount";
 
-/** One placeholder a post template may carry, with the label and example the editor shows. */
+/** One placeholder a post template may carry, with the label and example the editor shows. `amount`
+ *  marks one that writes an amount, and so takes the currency parameter (#2028). */
 export interface FacebookPostPlaceholder {
   token: string;
   label: string;
   example: string;
+  amount?: boolean;
 }
 
 /**
@@ -45,8 +48,8 @@ export const FACEBOOK_TERMS_PLACEHOLDER: FacebookPostPlaceholder = {
 export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
   { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
-  { token: "{startingPrice}", label: "Starting price", example: "10 PLN" },
-  { token: "{increment}", label: "Bid increment", example: "1.50 PLN" },
+  { token: "{startingPrice}", label: "Starting price", example: "10 zł", amount: true },
+  { token: "{increment}", label: "Bid increment", example: "1.50 zł", amount: true },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3" },
   { token: "{offer}", label: "Offer number", example: "412" },
@@ -60,7 +63,7 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
 export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
   { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
-  { token: "{price}", label: "Price", example: "25 PLN" },
+  { token: "{price}", label: "Price", example: "25 zł", amount: true },
   { token: "{lot}", label: "Lot number", example: "3" },
   { token: "{offer}", label: "Offer number", example: "412" },
   FACEBOOK_TERMS_PLACEHOLDER,
@@ -494,13 +497,10 @@ export function effectiveRefreshQuickBuysAfterDays(
     : platform.refreshQuickBuysAfterDays;
 }
 
-function templateTokens(template: string): string[] {
-  return [...new Set(template.match(/\{[A-Za-z]+\}/g) ?? [])];
-}
-
 /** The template tokens a text carries that are not placeholders of its type's post — said beside the
- *  field so a misspelt `{startprice}`, or an auction's `{increment}` in a quick buy's template, is
- *  seen while it is typed, not on the first post. A retired placeholder is not unknown in a post
+ *  field so a misspelt `{startprice}`, an auction's `{increment}` in a quick buy's template, or a
+ *  currency parameter that is not one (`{price:cod}`, or one on `{title}`; #2028), is seen while it is
+ *  typed, not on the first post. A retired placeholder is not unknown in a post
  *  template: it is {@link retiredPostPlaceholders}' to name. The caption and captioned-post templates
  *  (#1841) were written after `{catalog}` was retired, so there it is simply unknown. */
 export function unknownPostPlaceholders(
@@ -508,11 +508,11 @@ export function unknownPostPlaceholders(
   listingType: OfferListingType,
   role: FacebookTemplateRole = "post"
 ): string[] {
-  const known = new Set<string>([
-    ...facebookTemplatePlaceholders(role, listingType).map((p) => p.token),
-    ...(role === "post" ? FACEBOOK_RETIRED_PLACEHOLDERS : []),
-  ]);
-  return templateTokens(template).filter((token) => !known.has(token));
+  const known = [
+    ...facebookTemplatePlaceholders(role, listingType),
+    ...(role === "post" ? FACEBOOK_RETIRED_PLACEHOLDERS.map((token) => ({ token })) : []),
+  ];
+  return templateTokens(template).filter((token) => !isKnownTemplateToken(token, known));
 }
 
 /** The retired placeholders a template still carries (#1671) — flagged so the collector removes them,

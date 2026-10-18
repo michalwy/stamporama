@@ -20,10 +20,11 @@ function lot(overrides: Partial<FacebookPostLotText> = {}): FacebookPostLotText 
     title: "Austria 1850 Mercury",
     description: "Mercury, 1850, unused",
     catalog: "",
-    startingPrice: "10.00 PLN",
-    increment: "1.00 PLN",
+    startingPrice: "10.00",
+    increment: "1.00",
     closesAt: "Sun 5 Oct, 20:00",
-    price: "",
+    price: null,
+    currency: "PLN",
     ...overrides,
   };
 }
@@ -102,8 +103,8 @@ describe("formatFacebookPost — anything else stays as typed (#1772)", () => {
 describe("formatFacebookPost — a placeholder's value is text (#1772)", () => {
   it("formats a placeholder the template formats", () => {
     const post = format("**{title}**\n# {startingPrice}");
-    assert.equal(post.html, "<p><strong>Austria 1850 Mercury</strong></p><h1>10.00 PLN</h1>");
-    assert.equal(post.plain, "Austria 1850 Mercury\n10.00 PLN");
+    assert.equal(post.html, "<p><strong>Austria 1850 Mercury</strong></p><h1>10 zł</h1>");
+    assert.equal(post.plain, "Austria 1850 Mercury\n10 zł");
   });
 
   it("never reads a value as formatting", () => {
@@ -119,7 +120,7 @@ describe("formatFacebookPost — a placeholder's value is text (#1772)", () => {
   });
 
   it("keeps an empty value's formatting harmless", () => {
-    const post = format("Start: **{startingPrice}**", { startingPrice: "" });
+    const post = format("Start: **{startingPrice}**", { startingPrice: null });
     assert.equal(post.html, "<p>Start: <strong></strong></p>");
     assert.equal(post.plain, "Start: ");
   });
@@ -130,11 +131,11 @@ describe("formatFacebookPost — a placeholder's value is text (#1772)", () => {
   });
 
   it("formats a post of several lots, each from its own template", () => {
-    const lots = [lot({ lotNo: 1, title: "One" }), lot({ lotNo: 2, title: "Two", listingType: "fixed", price: "5.00 PLN" })];
+    const lots = [lot({ lotNo: 1, title: "One" }), lot({ lotNo: 2, title: "Two", listingType: "fixed", price: "5.00" })];
     const templates = { auction: "## Lot {lot}: {title}", quickBuy: "**{title}** for {price}" };
     const post = formatFacebookPost(renderFacebookPostParts(templates, "", lots));
-    assert.equal(post.html, "<h2>Lot 1: One</h2><p><strong>Two</strong> for 5.00 PLN</p>");
-    assert.equal(post.plain, "Lot 1: One\n\nTwo for 5.00 PLN");
+    assert.equal(post.html, "<h2>Lot 1: One</h2><p><strong>Two</strong> for 5 zł</p>");
+    assert.equal(post.plain, "Lot 1: One\n\nTwo for 5 zł");
   });
 
   it("leaves the source as typed — the post's text, markup and values together", () => {

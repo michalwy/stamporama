@@ -134,9 +134,24 @@ How a quick buy's post reads:
   and wants posting again. Past it, the offer carries **Up N days · refresh** and is listed under
   **Needs refresh** (see [Refreshing a quick buy](#refreshing-a-quick-buy)). Empty means never.
 
-**An amount in a post is written the way a person writes it**: a whole amount without decimals —
-`15 PLN`, not `15.00 PLN` — and any other with both, `15.50 PLN`. This holds for `{startingPrice}`,
-`{increment}` and `{price}`. The app's own screens still show `15.00`.
+**An amount in a post is written the way a person writes it**: with the currency's symbol, and a
+whole amount without decimals — `15 zł`, not `15.00 PLN` — any other with both, `15.50 zł`. A symbol
+goes where that currency puts it: `$10`, `£10`, `15 €`, `15 zł`. This holds for `{startingPrice}`,
+`{increment}` and `{price}`, in post templates and captions alike.
+
+**Each of them can say how the currency is written**, after a colon:
+
+| Written | Becomes |
+| --- | --- |
+| `{price}` or `{price:symbol}` | `15 zł` — the symbol, the default |
+| `{price:code}` | `15 PLN` — the currency's code |
+| `{price:none}` | `15` — the number alone |
+
+The same goes for `{startingPrice:code}`, `{increment:none}` and so on. A template written before
+this, with a bare `{price}`, now writes the symbol; add `:code` where you want `PLN` back. A post
+already up keeps the words it went up with. Anything else after the colon — `{price:cod}`, or a
+colon on a placeholder that is not an amount — is not a placeholder: it stays as typed and is named
+under the field. The app's own screens still show `15.00` with the code.
 
 A post is always written from the template of its own type — an auction's from the auction
 template, a quick buy's from the quick-buy one, never the other. In either template, anything else

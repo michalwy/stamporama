@@ -10,26 +10,42 @@
 // fallen back to (#1692). A placeholder with nothing to say is empty, and a platform with no template
 // has no message at all.
 
-import { generatedAmount } from "./decimal-input";
+import {
+  isKnownTemplateToken,
+  resolveTemplateToken,
+  TEMPLATE_TOKEN,
+  templateTokens,
+  writtenAmount,
+  type CurrencyStyle,
+  type TemplateValue,
+} from "./template-amount";
 
-/** One placeholder a buyer message may carry, with the label and example its editor shows. */
+/** One placeholder a buyer message may carry, with the label and example its editor shows. `amount`
+ *  marks one that writes amounts, and so takes the currency parameter (#2028). */
 export interface BuyerMessagePlaceholder {
   token: string;
   label: string;
   example: string;
+  amount?: boolean;
 }
 
 /**
  * The placeholders a buyer message may carry, settled in writing the issue (#1815). Amounts are
- * `generatedAmount`'s (#1787), each with its currency.
+ * `generatedAmount`'s (#1787), each with its currency written as `{total:symbol}`, `{total:code}` or
+ * `{total:none}` asks — the symbol with no parameter (#2028); a list applies it to each of its amounts.
  */
 export const BUYER_MESSAGE_PLACEHOLDERS: readonly BuyerMessagePlaceholder[] = [
   { token: "{buyer}", label: "Buyer's name", example: "Jan Kowalski" },
   { token: "{items}", label: "Items sold, one per line", example: "#412 Austria 1850 Mercury" },
-  { token: "{itemsTotal}", label: "Items' total", example: "25 PLN" },
-  { token: "{shipping}", label: "Chosen shipping and its price", example: "Registered letter — 12 PLN" },
-  { token: "{total}", label: "Total to pay", example: "37 PLN" },
-  { token: "{shippingOptions}", label: "Shipping options at the buyer's price, one per line", example: "Registered letter — 12 PLN" },
+  { token: "{itemsTotal}", label: "Items' total", example: "25 zł", amount: true },
+  { token: "{shipping}", label: "Chosen shipping and its price", example: "Registered letter — 12 zł", amount: true },
+  { token: "{total}", label: "Total to pay", example: "37 zł", amount: true },
+  {
+    token: "{shippingOptions}",
+    label: "Shipping options at the buyer's price, one per line",
+    example: "Registered letter — 12 zł",
+    amount: true,
+  },
   { token: "{sale}", label: "Sale number", example: "57" },
 ];
 
@@ -64,10 +80,6 @@ export interface BuyerMessageSale {
   shippingOptions: readonly BuyerMessageShippingOption[];
 }
 
-function money(amount: string, currency: string): string {
-  return `${generatedAmount(amount)} ${currency}`;
-}
-
 /** The two halves of a listed line, the way a post's template examples join them. */
 function priced(name: string, price: string | null): string {
   return price === null ? name : `${name} — ${price}`;
@@ -81,7 +93,7 @@ function priced(name: string, price: string | null): string {
  * each one's buyer price from the platform's options (the collector's choice, the same day; the
  * buyer's price rather than the collector's cost since #1909).
  */
-export function buyerMessageValues(sale: BuyerMessageSale): Record<string, string> {
+export function buyerMessageValues(sale: BuyerMessageSale): Record<string, TemplateValue> {
   // Summed in cents: the prices are 2-dp strings, and a float sum of them can land a cent off.
   const cents = (amount: string) => Math.round(Number(amount) * 100);
   const itemsCents = sale.items.reduce((sum, item) => sum + cents(item.price), 0);
@@ -92,33 +104,36 @@ export function buyerMessageValues(sale: BuyerMessageSale): Record<string, strin
     "{items}": sale.items
       .map((item) => (item.offerNo === null ? item.title : `#${item.offerNo} ${item.title}`))
       .join("\n"),
-    "{itemsTotal}": money((itemsCents / 100).toFixed(2), sale.currency),
-    "{shipping}":
+    "{itemsTotal}": (style: CurrencyStyle) => writtenAmount((itemsCents / 100).toFixed(2), sale.currency, style),
+    "{shipping}": (style: CurrencyStyle) =>
       chosen === null
         ? ""
-        : priced(chosen, sale.buyerHandling === null ? null : money(sale.buyerHandling, sale.currency)),
-    "{total}": money(((itemsCents + postageCents) / 100).toFixed(2), sale.currency),
-    "{shippingOptions}": sale.shippingOptions
-      .map((option) => priced(option.name, money(option.price, option.currency)))
-      .join("\n"),
+        : priced(
+            chosen,
+            sale.buyerHandling === null ? null : writtenAmount(sale.buyerHandling, sale.currency, style)
+          ),
+    "{total}": (style: CurrencyStyle) =>
+      writtenAmount(((itemsCents + postageCents) / 100).toFixed(2), sale.currency, style),
+    "{shippingOptions}": (style: CurrencyStyle) =>
+      sale.shippingOptions
+        .map((option) => priced(option.name, writtenAmount(option.price, option.currency, style)))
+        .join("\n"),
     "{sale}": String(sale.saleNo),
   };
 }
 
-const TOKEN = /\{[A-Za-z]+\}/g;
-
 /**
- * The message for this sale. A token that is not a placeholder stays as typed — the rule of every
- * template here — and nothing else is touched: the template's own lines and spacing are the message's.
+ * The message for this sale. A token that is not a placeholder — a misspelt currency parameter
+ * included (#2028) — stays as typed, the rule of every template here, and nothing else is touched: the
+ * template's own lines and spacing are the message's.
  */
 export function renderBuyerMessage(template: string, sale: BuyerMessageSale): string {
   const values = buyerMessageValues(sale);
-  return template.replace(TOKEN, (token) => values[token] ?? token);
+  return template.replace(TEMPLATE_TOKEN, (token) => resolveTemplateToken(token, values) ?? token);
 }
 
 /** The tokens a template carries that are not placeholders — named beside the field while it is typed,
- *  so a misspelt `{totl}` is seen there rather than in the buyer's chat. */
+ *  so a misspelt `{totl}` or `{total:cod}` is seen there rather than in the buyer's chat. */
 export function unknownBuyerMessagePlaceholders(template: string): string[] {
-  const known = new Set(BUYER_MESSAGE_PLACEHOLDERS.map((p) => p.token));
-  return [...new Set(template.match(TOKEN) ?? [])].filter((token) => !known.has(token));
+  return templateTokens(template).filter((token) => !isKnownTemplateToken(token, BUYER_MESSAGE_PLACEHOLDERS));
 }

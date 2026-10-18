@@ -415,6 +415,19 @@ describe("post template placeholders", () => {
     assert.deepEqual(unknownPostPlaceholders("{title} {price} {closesAt}", "auction"), ["{price}"]);
   });
 
+  it("takes a currency parameter on an amount placeholder only, and names one that is not a choice (#2028)", () => {
+    assert.deepEqual(
+      unknownPostPlaceholders("{startingPrice:code} {increment:none} {startingPrice:symbol} {startingPrice:cod}", "auction"),
+      ["{startingPrice:cod}"]
+    );
+    assert.deepEqual(unknownPostPlaceholders("{price:none} {title:code} {price:} {catalog:code}", "fixed"), [
+      "{title:code}",
+      "{price:}",
+      "{catalog:code}",
+    ]);
+    assert.deepEqual(unknownPostPlaceholders("{price:code} {lot:none}", "fixed", "caption"), ["{lot:none}"]);
+  });
+
   it("flags a template still carrying {catalog} (#1671)", () => {
     assert.deepEqual(retiredPostPlaceholders("{catalog} {title} {catalog}"), ["{catalog}"]);
     assert.deepEqual(retiredPostPlaceholders("{title}"), []);

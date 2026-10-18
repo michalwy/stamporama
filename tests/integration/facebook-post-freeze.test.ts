@@ -7,7 +7,7 @@ import { createFacebookGroup, updateFacebookGroup } from "../../src/lib/facebook
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
 import { freezeUnfrozenFacebookPosts, getFacebookOfferKit } from "../../src/lib/facebook-auctions";
 import { createFacebookPost, publishOfferOrPost, rejectOfferOrPost } from "../../src/lib/facebook-posts";
-import { facebookPostSource, renderFacebookPostText } from "../../src/lib/facebook-post-rules";
+import { facebookPostSource, readFacebookFrozenLot, renderFacebookPostText } from "../../src/lib/facebook-post-rules";
 
 // A published Facebook offer's post text is frozen (#1800): it follows the template until the offer
 // first goes up — Pending or Active — and from then on reads as it was posted, whatever the template,
@@ -125,7 +125,12 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
     assert.equal(await snapshot(posted), null, "nothing is frozen before the offer goes up");
     await publishOfferOrPost(userId, posted, "https://www.facebook.com/groups/180000/posts/1");
     const asPosted = await postText(posted);
-    assert.match(asPosted, /from 3 PLN/);
+    assert.match(asPosted, /from 3 zł/);
+    assert.equal(
+      readFacebookFrozenLot(await snapshot(posted))?.currencyStyle,
+      "symbol",
+      "frozen with the symbol as its default (#2028)"
+    );
     assert.match(asPosted, /Shipping 5 PLN\./);
 
     await editTemplates({ postTemplate: "NEW {title}\n{terms}", standingNote: "Shipping 9 PLN." });
@@ -186,14 +191,14 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
     await editTemplates({});
     const id = await offer("ready", { listingType: "fixed", price: "9.00", startingPrice: null });
     await publishOfferOrPost(userId, id, "https://www.facebook.com/groups/180000/posts/6");
-    assert.match(await postText(id), /for 9 PLN$/);
+    assert.match(await postText(id), /for 9 zł$/);
 
     await editTemplates({ quickBuyTemplate: "{title} now only {price}" });
     await prisma.offer.update({ where: { id }, data: { price: "7.50" } });
-    assert.match(await postText(id), /for 9 PLN$/, "up, it reads as posted");
+    assert.match(await postText(id), /for 9 zł$/, "up, it reads as posted");
 
     await repostOffer(userId, id, "https://www.facebook.com/groups/180000/posts/7");
-    assert.match(await postText(id), /now only 7\.50 PLN$/, "reposted, it reads as posted again");
+    assert.match(await postText(id), /now only 7\.50 zł$/, "reposted, it reads as posted again");
   });
 
   it("freezes an offer created already up", async () => {

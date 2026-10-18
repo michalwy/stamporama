@@ -213,7 +213,7 @@ describe("a captioned Facebook post (#1841)", () => {
     assert.deepEqual(await captioned(a), {
       layout: "captions",
       post: `Series, lots ${noA}, ${noB}\nShipping 5 PLN.`,
-      captions: ["1. Mercury from 3 PLN", "2. Mercury from 3 PLN"],
+      captions: ["1. Mercury from 3 zł", "2. Mercury from 3 zł"],
     });
 
     await setFacebookPostLayout(userId, postId, "text");

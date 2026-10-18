@@ -25,6 +25,7 @@ import { offerDisplayLabel } from "./offer-set-rules";
 import { compactCatalogNumberGroups, type CatalogNumberGroupEntry } from "./offer-title-template";
 import { catalogSortKeyOf, compareCatalogSortKeys } from "./catalog-sort-key";
 import { isAuctionListing, normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
+import { DEFAULT_CURRENCY_STYLE } from "./template-amount";
 
 // A Facebook offer (#1544; ADR-0061 §2, §3, §5) — the half the offers domain reads.
 //
@@ -641,6 +642,7 @@ export async function freezeFacebookPostText(
         layout,
         postText: layout === "captions" ? settings.captionPostTemplate : "",
         postTitle: target.facebookPost?.title ?? "",
+        currencyStyle: DEFAULT_CURRENCY_STYLE,
       };
       await prisma.offer.update({
         where: { id: lot.offerId },

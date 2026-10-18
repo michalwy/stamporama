@@ -59,7 +59,9 @@ export function BuyerMessageTemplateField({
             <code>{p.token}</code> {p.label.toLowerCase()}
           </span>
         ))}
-        . The total includes the shipping once a method is on the sale. Empty: no message.
+        . The total includes the shipping once a method is on the sale. An amount reads{" "}
+        <code>15 zł</code>; add <code>:code</code> for <code>15 PLN</code> or <code>:none</code> for{" "}
+        <code>15</code>, as in <code>{"{total:code}"}</code>. Empty: no message.
       </TemplateNote>
       {unknown.length > 0 && (
         <TemplateNote>
