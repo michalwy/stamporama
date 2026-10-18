@@ -1117,9 +1117,7 @@ function RegionRect({
         top: box.y * scale,
         width: box.w * scale,
         height: box.h * scale,
-        border: `${selected ? 2 : 1}px solid ${
-          selected ? "var(--color-action-primary)" : "rgb(255 255 255 / 0.85)"
-        }`,
+        boxShadow: regionOutline(selected),
         background: selected ? "rgb(59 130 246 / 0.16)" : "transparent",
         pointerEvents: "none",
       }}
@@ -1169,6 +1167,21 @@ function RegionRect({
         ))}
     </div>
   );
+}
+
+/**
+ * A box's outline (#2054): a bright line between two dark edges, so it shows on a black stockbook
+ * card, on a light album page and over a stamp of any colour — one tone always contrasts. It is
+ * drawn as rings **outside** the box, never over it: the line's inner edge is the cut, and
+ * everything inside it is exactly the tile, perforation tips included. Its widths are screen
+ * pixels — the box is placed by `scale` but the rings are not — so zooming in does not thin it and
+ * zooming out does not let it cover the stamp. Screen only: the cut reads the box, not this.
+ */
+function regionOutline(selected: boolean): string {
+  const dark = "rgb(0 0 0 / 0.85)";
+  const line = selected ? 3 : 2;
+  const bright = selected ? "var(--color-action-primary)" : "#fff";
+  return `0 0 0 1px ${dark}, 0 0 0 ${1 + line}px ${bright}, 0 0 0 ${2 + line}px ${dark}`;
 }
 
 function handleOffset(h: Handle): React.CSSProperties {
