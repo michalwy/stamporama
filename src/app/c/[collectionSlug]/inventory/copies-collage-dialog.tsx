@@ -15,6 +15,7 @@ import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
 import { formControl } from "@/app/control-style";
 import { useToast } from "@/app/toast-provider";
 import { PhotoSettingsDialog } from "../offers/[offerId]/photo-settings-dialog";
+import { PhotoScaleListDialog } from "../shared/photo-scale-list-dialog";
 import { usePersistedCollectionValue } from "../shared/use-persisted-collection-value";
 import type { CollagePlatformSeed, CopiesCollageImage, CopiesCollageResult } from "@/lib/copies-collage";
 import {
@@ -54,6 +55,17 @@ const NOTE: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-secondary)",
   margin: "0 0 0.5rem",
+};
+
+/** An inline action inside a sentence of the preview's notes. */
+const LINK_BTN: React.CSSProperties = {
+  padding: 0,
+  border: "none",
+  background: "none",
+  color: "var(--color-accent)",
+  cursor: "pointer",
+  fontSize: "inherit",
+  textDecoration: "underline",
 };
 
 interface PlatformChoice {
@@ -126,6 +138,9 @@ export function CopiesCollageDialog({ collectionId, itemIds, platforms, lastPlat
   const seed = loadedSeed?.platformId === platformId ? loadedSeed : null;
   const [error, setError] = useState<string | undefined>();
   const [result, setResult] = useState<{ made: CopiesCollageResult; at: Date } | null>(null);
+  // The form the shown collage was made from, so it can be made again once its photos were given a
+  // scale (#2067) without going back through the settings.
+  const [madeFrom, setMadeFrom] = useState<FormData | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // The platform's seed: its limits and name are shown whatever the settings, and its settings are
@@ -165,6 +180,7 @@ export function CopiesCollageDialog({ collectionId, itemIds, platforms, lastPlat
     for (const id of itemIds) formData.append("itemId", id);
     formData.set("platformId", seed.platformId);
     formData.set("packaging", packaging);
+    setMadeFrom(formData);
     startTransition(async () => {
       const { makeCopiesCollageAction } = await import("@/app/actions/copies-collage");
       const answer = await makeCopiesCollageAction(collectionId, formData);
@@ -183,11 +199,33 @@ export function CopiesCollageDialog({ collectionId, itemIds, platforms, lastPlat
     });
   }
 
+  /** The same collage again, from the form it was made from — its photos' scales read afresh. */
+  function remake() {
+    if (!madeFrom) return;
+    startTransition(async () => {
+      const { makeCopiesCollageAction } = await import("@/app/actions/copies-collage");
+      const answer = await makeCopiesCollageAction(collectionId, madeFrom);
+      if (answer.status === "error") {
+        toast({ message: answer.message, tone: "error" });
+        return;
+      }
+      setResult({ made: answer.result, at: new Date() });
+    });
+  }
+
   if (result) {
     return (
       <CollagePreview
+        collectionId={collectionId}
         made={result.made}
         at={result.at}
+        remaking={isPending}
+        onScalesSaved={(count) =>
+          toast({
+            message: count === 1 ? "Scale saved" : `${count} scales saved`,
+            action: { label: "Make it again", onSelect: remake },
+          })
+        }
         onBack={() => setResult(null)}
         onClose={onClose}
         notify={(message, ok) => toast({ message, tone: ok ? "success" : "error" })}
@@ -291,20 +329,29 @@ export function CopiesCollageDialog({ collectionId, itemIds, platforms, lastPlat
 
 /** The made images: every one shown, each copied on its own, all of them downloaded at once. */
 function CollagePreview({
+  collectionId,
   made,
   at,
+  remaking,
+  onScalesSaved,
   onBack,
   onClose,
   notify,
 }: {
+  collectionId: string;
   made: CopiesCollageResult;
   at: Date;
+  /** While the collage is being made again, after its photos were given a scale (#2067). */
+  remaking: boolean;
+  onScalesSaved: (count: number) => void;
   onBack: () => void;
   onClose: () => void;
   notify: (message: string, ok: boolean) => void;
 }) {
   const count = made.images.length;
   const blobs = useMemo(() => made.images.map(decode), [made]);
+  const [scaling, setScaling] = useState(false);
+  const unscaled = made.unscaledPhotoIds.length;
 
   function copy(index: number) {
     const clipboard = navigator.clipboard;
@@ -368,12 +415,26 @@ function CollagePreview({
             been checked for symbols to cover; it is drawn as it is.
           </p>
         )}
-        {made.unscaledPhotoCount > 0 && (
+        {unscaled > 0 && (
           <p style={NOTE}>
-            {made.unscaledPhotoCount === 1 ? "1 photo has" : `${made.unscaledPhotoCount} photos have`} no
-            scale, so the images holding {made.unscaledPhotoCount === 1 ? "it are" : "them are"} not drawn
-            at one scale.
+            <Tooltip content="List these photos and give them a scale here, then make the collage again.">
+              <button type="button" disabled={remaking} onClick={() => setScaling(true)} style={LINK_BTN}>
+                {unscaled === 1 ? "1 photo has no scale" : `${unscaled} photos have no scale`}
+              </button>
+            </Tooltip>
+            , so the images holding {unscaled === 1 ? "it are" : "them are"} not drawn at one scale.
           </p>
+        )}
+        {remaking && <p style={NOTE}>Making the collage again…</p>}
+        {scaling && (
+          <PhotoScaleListDialog
+            collectionId={collectionId}
+            photoIds={made.unscaledPhotoIds}
+            onSaved={onScalesSaved}
+            onClose={() => setScaling(false)}
+            // Over the preview, which is a dialog itself.
+            zIndexBase={110}
+          />
         )}
         {overLimit > 0 && (
           <p style={NOTE}>

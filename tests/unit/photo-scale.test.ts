@@ -4,7 +4,10 @@ import {
   SCALE_CHOICE_NONE,
   SCALE_CHOICE_TYPED,
   defaultPhotoScale,
+  defaultProfileIdOf,
   draftFromScale,
+  lacksPhotoScale,
+  resolvePhotoScale,
   parsePhotoScaleInput,
   photoScaleColumns,
   photoScaleLabel,
@@ -21,7 +24,8 @@ import {
 } from "../../src/app/c/[collectionSlug]/inventory/photo-change-set";
 
 // A copy photo's scale (#2061): what it was scanned with, and the resolution that makes of the
-// stored, possibly downscaled, picture.
+// stored, possibly downscaled, picture — and a photo never given one taking the collection's default,
+// apart from one marked *No scale* (#2066).
 
 const setup: ScanningSetup = {
   profiles: [
@@ -32,16 +36,48 @@ const setup: ScanningSetup = {
 };
 
 describe("photo scale columns", () => {
-  it("round-trips the three kinds through the two columns, at most one set", () => {
+  it("round-trips the four kinds through the three columns, at most one set", () => {
     for (const scale of [
       { kind: "profile", profileId: "p1" },
       { kind: "typed", dpi: 800 },
       { kind: "none" },
+      { kind: "default" },
     ] as const) {
       const columns = photoScaleColumns(scale);
-      assert.ok(columns.scanningProfileId === null || columns.scanDpi === null);
+      const set = [columns.scanningProfileId !== null, columns.scanDpi !== null, columns.noScale];
+      assert.ok(set.filter(Boolean).length <= 1);
       assert.deepEqual(photoScaleOf(columns), scale);
     }
+  });
+
+  it("reads all three empty as never given a scale, not as No scale (#2066)", () => {
+    assert.deepEqual(photoScaleOf({ scanningProfileId: null, scanDpi: null, noScale: false }), { kind: "default" });
+    assert.deepEqual(photoScaleOf({ scanningProfileId: null, scanDpi: null, noScale: true }), { kind: "none" });
+  });
+});
+
+describe("resolvePhotoScale (#2066)", () => {
+  it("gives a photo never given a scale the default profile, and says so", () => {
+    assert.deepEqual(resolvePhotoScale({ kind: "default" }, "p2"), {
+      scale: { kind: "profile", profileId: "p2" },
+      fromDefault: true,
+    });
+    assert.deepEqual(resolvePhotoScale({ kind: "profile", profileId: "p2" }, "p2"), {
+      scale: { kind: "profile", profileId: "p2" },
+      fromDefault: false,
+    });
+  });
+
+  it("leaves No scale without one, and the default without one where there is no default", () => {
+    assert.equal(lacksPhotoScale({ kind: "none" }, "p2"), true);
+    assert.equal(lacksPhotoScale({ kind: "default" }, "p2"), false);
+    assert.equal(lacksPhotoScale({ kind: "default" }, null), true);
+    assert.equal(lacksPhotoScale({ kind: "typed", dpi: 600 }, null), false);
+  });
+
+  it("reads the setup's default only while it is one of its profiles", () => {
+    assert.equal(defaultProfileIdOf(setup), "p2");
+    assert.equal(defaultProfileIdOf({ ...setup, defaultProfileId: "gone" }), null);
   });
 });
 
@@ -53,6 +89,7 @@ describe("parsePhotoScaleInput", () => {
     });
     assert.deepEqual(parsePhotoScaleInput({ kind: "typed", dpi: 600 }), { kind: "typed", dpi: 600 });
     assert.deepEqual(parsePhotoScaleInput({ kind: "none" }), { kind: "none" });
+    assert.deepEqual(parsePhotoScaleInput({ kind: "default" }), { kind: "default" });
   });
 
   it("refuses anything else", () => {
@@ -88,6 +125,11 @@ describe("photoScaleLabel", () => {
     assert.equal(photoScaleLabel({ kind: "typed", dpi: 800 }, setup), "800 dpi (typed)");
     assert.equal(photoScaleLabel({ kind: "none" }, setup), "No scale");
   });
+
+  it("names a default as the default, never as a choice (#2066)", () => {
+    assert.equal(photoScaleLabel({ kind: "default" }, setup), "Canon, 600 dpi (uncalibrated) (default)");
+    assert.equal(photoScaleLabel({ kind: "default" }, { ...setup, defaultProfileId: null }), "No scale");
+  });
 });
 
 describe("the picker's draft", () => {
@@ -96,6 +138,7 @@ describe("the picker's draft", () => {
       { kind: "profile", profileId: "p1" },
       { kind: "typed", dpi: 800 },
       { kind: "none" },
+      { kind: "default" },
     ] as const) {
       assert.deepEqual(scaleFromDraft(draftFromScale(scale)), scale);
     }

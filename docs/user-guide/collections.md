@@ -1691,7 +1691,10 @@ perforation gauge in the [tile viewer](purchases.md#measuring-on-the-scan) conve
 collection starts with one, called *Scanner*, at **1200 dpi**, and it is the **default**: what a new
 scan is offered, what a photo is measured with when it does not say what it was scanned with, and what
 photos you add to a copy are [given as their scale](inventory.md#a-photos-scale) unless you choose
-another — which is what lets offer collages draw every stamp at the same scale. On the one scanner you always use, you can leave
+another — which is what lets offer collages draw every stamp at the same scale. A photo that was
+**never given a scale** — every photo added before scales existed — is taken at the default profile
+whenever a collage is drawn, so **changing the default changes their scale too**, and marks the offer
+images it affects **Out of date**. A photo marked **No scale** is not. On the one scanner you always use, you can leave
 it alone. A collection that measured at another resolution before profiles existed has that
 resolution as its first profile instead, so nothing measures differently until you calibrate.
 

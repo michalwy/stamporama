@@ -16,6 +16,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PhotoScaleListDialog } from "@/app/c/[collectionSlug]/shared/photo-scale-list-dialog";
+import { useToast } from "@/app/toast-provider";
 import type { OfferPhotoImage, OfferPhotoPlannedImage } from "@/lib/offer-photo-generation";
 import type { BulkCopyPhotoAttachResult } from "@/lib/offer-photo-attachments";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
@@ -814,7 +816,10 @@ export function OfferPhotosCard({
 }) {
   const { data: plan, isLoading, refetch } = useOfferPhotoPlan(collectionId, offerId);
   const { invalidateAll, invalidateDetail } = useInvalidateOffers();
+  const { toast } = useToast();
   const [error, setError] = useState<string | undefined>();
+  // The photos without a scale (#2067), listed and given one from the count of them.
+  const [scalingPhotos, setScalingPhotos] = useState(false);
   // Whether the card is open is remembered across visits: a collector working through a batch of
   // listings opens it on every one of them. One key for the card, not one per offer — the habit is
   // about the step, not about the listing — but a separate key, open by default, while the offer is
@@ -980,6 +985,32 @@ export function OfferPhotosCard({
           return attachOfferPhotoCollageAction(offerId, { tiles, columns, title });
         }, () => setAttachOpen(false))
       }
+    />
+  );
+
+  /**
+   * After photos were given a scale (#2067): the plan is read again — its images are out of date now
+   * if any were stored — and the regeneration that calls for is offered at once, rather than left to
+   * be found in the header.
+   */
+  const scalesSaved = (count: number) => {
+    void refetch().then(({ data: next }) => {
+      const canGenerate =
+        next != null && next.plan.configured && next.plan.imageCount > 0 && next.status !== "queued" && next.status !== "running";
+      const label = next && next.images.length > 0 ? "Regenerate" : "Generate";
+      toast({
+        message: count === 1 ? "Scale saved" : `${count} scales saved`,
+        ...(canGenerate ? { action: { label, onSelect: generate } } : {}),
+      });
+    });
+  };
+
+  const scaleListDialog = scalingPhotos && plan && (
+    <PhotoScaleListDialog
+      collectionId={collectionId}
+      photoIds={plan.plan.unscaledPhotoIds}
+      onSaved={scalesSaved}
+      onClose={() => setScalingPhotos(false)}
     />
   );
 
@@ -1236,16 +1267,20 @@ export function OfferPhotosCard({
           {/* Pictures that say nothing of what they were scanned with (#2061): while one is on an
               image beside others, that image is drawn as its pixels fall rather than at one scale.
               Named, because the stamps then come out the wrong size against each other silently. */}
-          {plan.plan.unscaledPhotoCount > 0 && (
-            <Tooltip content="A collage draws every stamp at the same scale only when each of its photos says what it was scanned with. Give them one on the copy's Photos card, or for many copies at once with Photo scale on the Copies list.">
-              <p style={NOTE}>
-                {plan.plan.unscaledPhotoCount === 1
-                  ? "1 photo has no scale"
-                  : `${plan.plan.unscaledPhotoCount} photos have no scale`}
-                , so the collages holding {plan.plan.unscaledPhotoCount === 1 ? "it" : "them"} are not
-                drawn at one scale.
-              </p>
-            </Tooltip>
+          {/* Since #2066 these are the photos marked *No scale*; the count opens them, to be given a
+              scale here (#2067). */}
+          {plan.plan.unscaledPhotoIds.length > 0 && (
+            <p style={NOTE}>
+              <Tooltip content="A collage draws every stamp at the same scale only when each of its photos has one. List these photos and give them a scale here.">
+                <button type="button" disabled={isPending} onClick={() => setScalingPhotos(true)} style={LINK_BTN}>
+                  {plan.plan.unscaledPhotoIds.length === 1
+                    ? "1 photo has no scale"
+                    : `${plan.plan.unscaledPhotoIds.length} photos have no scale`}
+                </button>
+              </Tooltip>
+              , so the collages holding {plan.plan.unscaledPhotoIds.length === 1 ? "it" : "them"} are not
+              drawn at one scale.
+            </p>
           )}
 
           {/* The plan first — it is what Generate would produce, and the only place the upload order
@@ -1340,6 +1375,7 @@ export function OfferPhotosCard({
 
       {settingsDialog}
       {attachDialog}
+      {scaleListDialog}
       {coverWalk && (
         <OfferCoverWalk
           includeOtherAreas={plan?.covers.photoCount === 0}

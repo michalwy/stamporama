@@ -9,11 +9,15 @@ import {
   countUnscaledCopyPhotos,
   giveUnscaledCopyPhotosScale,
   PhotoScaleError,
+  readScaleListPhotos,
+  setCollectionPhotoScales,
   setCopyPhotoScales,
+  type ScaleListPhotos,
 } from "@/lib/photo-scales";
 
-// The writes of a copy photo's scale (#2061): one copy's photos from its Photos card, and the
-// ticked copies' photos that have none from the Copies list.
+// The writes of a copy photo's scale (#2061): one copy's photos from its Photos card, the ticked
+// copies' photos never given one from the Copies list, and the photos an offer's images lack a scale
+// for from its Photos card or a one-off collage (#2067).
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -69,5 +73,29 @@ export async function giveUnscaledCopyPhotosScaleAction(
     };
   } catch (err) {
     return failure(err, "Failed to give the photos a scale. Please try again.");
+  }
+}
+
+export async function readScaleListPhotosAction(
+  collectionId: string,
+  photoIds: string[]
+): Promise<{ status: "success"; result: ScaleListPhotos } | Failure> {
+  const session = await getSession();
+  try {
+    return { status: "success", result: await readScaleListPhotos(session.user.id, collectionId, photoIds) };
+  } catch (err) {
+    return failure(err, "Failed to read the photos.");
+  }
+}
+
+export async function setCollectionPhotoScalesAction(
+  collectionId: string,
+  changes: { photoId: string; scale: unknown }[]
+): Promise<{ status: "success"; count: number } | Failure> {
+  const session = await getSession();
+  try {
+    return { status: "success", count: await setCollectionPhotoScales(session.user.id, collectionId, changes) };
+  } catch (err) {
+    return failure(err, "Failed to save the scales. Please try again.");
   }
 }

@@ -1638,7 +1638,9 @@ clipboard to paste into a conversation, and **Download** saves the image — or,
 of them all. Covers already drawn on a copy's photos are used when the platform (or the dialog)
 covers symbols; a photo never checked for symbols is drawn as it is, and the preview says how many.
 The stamps are drawn [at the same scale](offers.md#every-stamp-at-the-same-scale) as on an offer, and
-the preview says how many photos have no [scale](#a-photos-scale) when some do.
+the preview names the photos with no [scale](#a-photos-scale) when some are on an image with others —
+click the count to [give them one](offers.md#giving-photos-a-scale-from-the-offer), then **Make it
+again** in the confirmation to see the collage redrawn.
 A side the copies have no scan of, and an image past the platform's photo limit, are named there as
 on an offer.
 
@@ -1944,11 +1946,19 @@ never read out of the file. The scale is the scan's as you uploaded it, so makin
 for storage does not change what it measures. Tiles cut from a [card
 scan](purchases.md#working-through-the-tiles) carry their card's profile and need nothing.
 
-To change it afterwards, or give one to photos added before scales existed, press **Scale** on the
-Photos card of the copy's page — it reads *Scale (2 without)* while some photos have none — and pick
-one for each photo. For many copies at once, tick them on the list and choose **Photo scale…** in the
-selection bar: the photos of those copies that have **no scale** are all given the one you pick, and a
-photo that already has one is left as it is. Opening a photo to measure it starts on its own profile.
+A photo that was **never given a scale** — every photo added before scales existed, and any added
+somewhere that does not ask — is taken at the collection's **default** [scanning
+profile](collections.md#scanning-profiles), whatever the default is when a collage is drawn. Only a
+photo marked **No scale** has none.
+
+The Photos card of the copy's page names each photo's scale under the strip — *Front: Epson V600, 1200
+dpi* — and one taken from the default says so: *Back: Epson V600, 1200 dpi (default)*. To change one,
+press **Scale** — it reads *Scale (2 without)* while some photos are marked No scale — and pick one for
+each photo; **Collection default** puts a photo back to taking the default. For many copies at once,
+tick them on the list and choose **Photo scale…** in the selection bar: the photos of those copies
+that were **never given a scale** are all given the one you pick, and a photo with a scale of its own,
+or marked No scale, is left as it is. Opening a photo to measure it starts on the profile its scale
+comes from.
 
 **A scan that came out sideways is put right as you add it.** A photo you have just dropped carries
 a turn button beside its **✕**: each press turns it a quarter to the right, and the card shows it the

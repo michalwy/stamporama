@@ -6,6 +6,7 @@ import type { PhotoSummary } from "@/lib/photos";
 import type { PhotoCoverState } from "@/lib/photo-covers";
 import { DEFAULT_PHOTO_COVER_STYLE } from "@/lib/photo-cover-rules";
 import type { CopyPhotoScales } from "@/lib/photo-scales";
+import { defaultProfileIdOf, lacksPhotoScale, photoScaleLabel } from "@/lib/photo-scale";
 import { DETAIL_BUTTON, DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { PhotoStrip, photoFullUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { CoveredPhoto } from "@/app/c/[collectionSlug]/shared/photo-cover-editor";
@@ -20,7 +21,8 @@ import { CopyPhotoScalesDialog } from "./copy-photo-scales-dialog";
 //
 // What each photo was scanned with (#2061) is set here too, one copy at a time: the button says how
 // many of its photos have no scale, which is what keeps an offer collage from drawing them at the
-// same scale as the rest.
+// same scale as the rest. Each photo's scale is named under the strip, a photo never given one with
+// *(default)* after the default profile's name, so a default is never mistaken for a choice (#2066).
 
 const TOGGLE: React.CSSProperties = {
   display: "inline-flex",
@@ -71,7 +73,9 @@ export function CopyPhotosCard({
     enabled: photos.length > 0,
   });
   const [editingScales, setEditingScales] = useState(false);
-  const unscaled = (scales?.photos ?? []).filter((p) => p.scale.kind === "none").length;
+  const defaultProfileId = scales ? defaultProfileIdOf(scales.scanning) : null;
+  const unscaled = (scales?.photos ?? []).filter((p) => lacksPhotoScale(p.scale, defaultProfileId)).length;
+  const scaleOf = new Map((scales?.photos ?? []).map((p) => [p.photoId, p.scale]));
 
   const byPhoto = new Map((covers ?? []).map((c) => [c.photoId, c]));
   const anyChecked = (covers ?? []).some((c) => c.checked);
@@ -136,6 +140,14 @@ export function CopyPhotosCard({
         </div>
       ) : (
         <PhotoStrip collectionId={collectionId} photos={photos} size="7rem" />
+      )}
+      {scales && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          {photos
+            .filter((photo) => scaleOf.has(photo.id))
+            .map((photo) => `${sideLabel(photo)}: ${photoScaleLabel(scaleOf.get(photo.id)!, scales.scanning)}`)
+            .join(" · ")}
+        </p>
       )}
       {editingScales && scales && (
         <CopyPhotoScalesDialog

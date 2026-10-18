@@ -14,7 +14,9 @@ import {
   readTileLabels,
   renderPlannedCollageBytes,
   SOURCE_PHOTO_SELECT,
-  unscaledPhotoCount,
+  SOURCE_SCANNING_PROFILE_SELECT,
+  unscaledPhotoIds,
+  withDefaultScales,
   type CollageRenderContext,
   type SourcePhoto,
 } from "./offer-photo-generation";
@@ -128,9 +130,9 @@ export interface CopiesCollageResult {
   /** Photos drawn that were never checked for symbols though the platform needs them covered and
    *  their stamps come from an area that may carry them (#1665, #1891). */
   uncheckedCoverCount: number;
-  /** Photos drawn beside others with nothing said of what they were scanned with (#2061): while any
-   *  is, its image is drawn as its pixels fall rather than at one scale. */
-  unscaledPhotoCount: number;
+  /** Photos drawn beside others with no scale (#2061): while any is, its image is drawn as its pixels
+   *  fall rather than at one scale. Listed, so the preview can give them one (#2067). */
+  unscaledPhotoIds: string[];
   /** The ticked copies the collage was made of — those still in the collection. */
   copyCount: number;
 }
@@ -186,6 +188,12 @@ export async function makeCopiesCollage(
     }),
     request.packaging
   );
+  // What a photo never given a scale is taken at (#2066), as for an offer.
+  const collection = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { defaultScanningProfile: { select: SOURCE_SCANNING_PROFILE_SELECT } },
+  });
+  withDefaultScales(sourceById, collection.defaultScanningProfile);
 
   const plan = planOfferPhotos({
     sets,
@@ -263,7 +271,7 @@ export async function makeCopiesCollage(
       .filter((id) => !drawn.has(id))
       .map((id) => labelOf.get(id) ?? id),
     uncheckedCoverCount,
-    unscaledPhotoCount: unscaledPhotoCount(images, sourceById),
+    unscaledPhotoIds: unscaledPhotoIds(images, sourceById),
     copyCount: items.length,
   };
 }

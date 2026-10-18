@@ -18,8 +18,9 @@ import { THUMB_OBJECT_FIT, photoThumbUrl } from "@/app/c/[collectionSlug]/invent
 
 // What each of a copy's photos was scanned with (#2061), one row per photo, saved together. Offer
 // collages draw every stamp at one scale only when every picture on the image says what it was
-// scanned with, so this is where a photo added before scales existed — or added with the wrong one —
-// is put right, one copy at a time; the Copies list does the photos with none in bulk.
+// scanned with, so this is where a photo added with the wrong one — or one never given a scale, taking
+// the collection's default (#2066) — is put right, one copy at a time; the Copies list does the photos
+// never given one in bulk. *Collection default* puts a photo back to never having been given one.
 
 const MUTED = "var(--color-text-muted)";
 
@@ -75,8 +76,9 @@ export function CopyPhotoScalesDialog({
     <DialogShell title="Scanned with" onClose={pending ? () => {} : onClose} maxWidth="40rem">
       <DialogBody>
         <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-          Offer collages draw every stamp at the same scale when each photo on the picture says what it
-          was scanned with. Choose <strong>No scale</strong> for a photo that is not a flat scan.
+          Offer collages draw every stamp at the same scale when each photo on the picture has one. A
+          photo never given a scale takes the collection&rsquo;s default. Choose <strong>No scale</strong>{" "}
+          for a photo that is not a flat scan.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
           {rows.map((photo) => (
@@ -109,6 +111,7 @@ export function CopyPhotoScalesDialog({
                   draft={drafts.get(photo.id)!}
                   onChange={(draft) => setDrafts((d) => new Map(d).set(photo.id, draft))}
                   allowNone
+                  allowDefault
                   disabled={pending}
                 />
                 {!byPhoto.get(photo.id)!.reckonable && (
