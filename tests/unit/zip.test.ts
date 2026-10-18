@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { inflateRawSync } from "node:zlib";
 import { crc32, zip } from "../../src/lib/zip";
+import { writeZip } from "../../src/lib/zip-format";
 
 // The photo-plan archive (#314) is a hand-written ZIP, and a malformed one fails opaquely — in the
 // collector's file manager, after the download. So these tests read the bytes back out of it.
@@ -101,5 +102,17 @@ describe("zip", () => {
     assert.equal(archive.length, 22);
     assert.equal(readEnd(archive).count, 0);
     assert.deepEqual(readEntries(archive), []);
+  });
+});
+
+describe("writeZip without a deflate (#2052)", () => {
+  it("stores every entry verbatim — what the browser writes — and reads back the same", () => {
+    const text = Buffer.from("plan".repeat(200), "utf8");
+    const archive = Buffer.from(writeZip([{ name: "collage-01.jpg", contents: new Uint8Array(text) }]));
+    assert.equal(archive.readUInt16LE(8), 0, "stored, not deflated");
+    const entries = readEntries(archive);
+    assert.deepEqual(entries.map((e) => e.name), ["collage-01.jpg"]);
+    assert.deepEqual(entries[0].contents, text);
+    assert.equal(readEnd(archive).count, 1);
   });
 });

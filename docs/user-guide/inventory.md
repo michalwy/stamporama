@@ -1354,7 +1354,8 @@ The bar's buttons sit at the far end of the bar, a long way from the checkboxes 
 ticking. So while copies are ticked, **resting the pointer on a ticked row** shows a small checklist
 button just under that row's checkbox. It opens a menu of **everything the bar can do** — for the
 whole selection, not for that one row — and every entry says how many copies it reaches:
-*Bulk edit 5 copies…*, *Sell 5 copies…*, *New offer · 5 sets*, *Add 5 to offer*.
+*Bulk edit 5 copies…*, *Make a collage of 5 copies…*, *Sell 5 copies…*, *New offer · 5 sets*,
+*Add 5 to offer*.
 
 It is a shortcut, not a second place to look things up: the bar is still where you see what is
 ticked, how many are hidden by a filter, and whether the selection is already offered. When it is,
@@ -1613,6 +1614,35 @@ A ticked copy that is also in an offer can be sold this way; that offer is then 
 action**, as when a copy sells under another listing. Removing the set from the sale puts its copies
 back in stock. The same can be done from the sale's own screen with **Add copies** — see [selling
 copies that are on no offer](sales.md#selling-copies-that-are-on-no-offer).
+
+## A collage of copies for a buyer
+
+A buyer asks whether a series or a few stamps are still there, and there is no offer to show them.
+Tick the copies and choose **Make collage…** in the selection bar (or in the [selection
+menu](#the-selection-menu-on-a-ticked-row) on a ticked row). It reaches every ticked copy in view.
+
+The dialog holds an offer's [photo settings](offers.md#photo-settings) — sides to photograph, tile
+labels, single photos, series on their own photos, covering symbols and the collage numbers with
+**Copy from template** — and makes the pictures by the same rules an offer's photos follow. Two
+choices head it:
+
+- **Settings from** — the platform the settings start from, as a new offer there would start. Its
+  photo limits apply too: the longest edge and file size, and how many photos it takes, which is
+  what *single photos* spends. The platform last used is offered.
+- **The N copies** — **as one set** (a series or a lot: *group series on their own photos* is what
+  applies) or **each copy on its own** (*single photos while the limit allows* is what applies) —
+  the same two ways the *New offer* buttons make an offer of ticked copies.
+
+**Make collage** shows every image it made, each with a **Copy** button that puts it on the
+clipboard to paste into a conversation, and **Download** saves the image — or, for several, one ZIP
+of them all. Covers already drawn on a copy's photos are used when the platform (or the dialog)
+covers symbols; a photo never checked for symbols is drawn as it is, and the preview says how many.
+A side the copies have no scan of, and an image past the platform's photo limit, are named there as
+on an offer.
+
+**Nothing is kept**: no offer is made and no picture is stored — closing the dialog lets them go.
+The settings you last made a collage with are remembered in this browser, so the next one starts
+from them; **Back to settings** returns to them to try again.
 
 ## Grouping the list
 

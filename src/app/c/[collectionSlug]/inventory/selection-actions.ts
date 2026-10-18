@@ -70,6 +70,7 @@ export interface SelectionActionInput {
     addToOffer: () => void;
     addToCollisionOffer: () => void;
     sell: () => void;
+    collage: () => void;
   };
 }
 
@@ -169,6 +170,19 @@ export function buildSelectionActions(input: SelectionActionInput): SelectionAct
       onSelect: () => on.setExclusion(!excluded),
     });
   }
+
+  // A collage of the copies for a buyer (#2052), by the offer photo rules — nothing is made or kept.
+  // Every ticked copy in view: a copy with no scan is reported by the collage, not kept out of it.
+  actions.push({
+    key: "collage",
+    barLabel: "Make collage…",
+    menuLabel: `Make a collage of ${copies(inView)}…`,
+    icon: "collage",
+    description:
+      "Lay these copies out on one or more pictures by an offer's photo rules, to download or copy for a buyer. No offer is made and nothing is kept.",
+    tone: "neutral",
+    onSelect: on.collage,
+  });
 
   // Selling the copies without listing them (#2021): one set on an open sale or a new one, at a price
   // typed for all of them. Absent when nothing in view is in stock, as the listing half is when

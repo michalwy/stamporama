@@ -365,7 +365,7 @@ interface PlatformDescriptionFormat {
  * include, the per-tile label template (#312), and the collage template (#307) whose render numbers
  * are copied in. The platform's *limits* are deliberately not here — they describe what the platform
  * accepts and are read live at render time (#310). */
-interface PlatformPhotoDefaults {
+export interface PlatformPhotoDefaults {
   photoSides: string;
   /** #521: photograph single-copy sets on their own while this platform's photo limit has room. */
   photoPreferSingles: boolean;
@@ -391,8 +391,9 @@ const SEED_TEMPLATE_SELECT = {
 /** The offer photo columns a newly created offer starts with (#308) — the platform's sides and label
  * template, plus the collage numbers copied from its default template. A platform with no default
  * template (or one deleted since) leaves the collage numbers null: there is nothing to render until
- * a template is picked on the offer itself. */
-async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
+ * a template is picked on the offer itself. The one-off collage of ticked copies (#2052) starts from
+ * the same seed. */
+export async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
   const [template, groupTemplate] = await Promise.all([
     platform.defaultCollageTemplateId
       ? prisma.collageTemplate.findUnique({

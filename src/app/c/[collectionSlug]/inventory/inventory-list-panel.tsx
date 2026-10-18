@@ -109,6 +109,7 @@ import { IdentifyVariantDialog } from "./identify-variant-dialog";
 import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
 import { SellCopiesDialog } from "./sell-copies-dialog";
+import { CopiesCollageDialog } from "./copies-collage-dialog";
 import { isInStockForSale } from "@/lib/sale-rules";
 import { BulkEditCopiesDialog } from "./bulk-edit-copies-dialog";
 import {
@@ -155,6 +156,8 @@ type DialogState =
   | { kind: "bulkEdit"; items: ItemListItem[] }
   // Sold straight onto a sale as one set, on no offer (#2021) — the ticked copies in stock.
   | { kind: "sell"; items: ItemListItem[] }
+  // A one-off collage of the ticked copies in view, for a buyer (#2052) — nothing is made or kept.
+  | { kind: "collage"; itemIds: string[] }
   // Quick offer mode's platform and status over many copies at once (#1287).
   | {
       kind: "generateOffers";
@@ -1099,6 +1102,7 @@ export function InventoryListPanel({
               : setDialog({ kind: "addToNewOffer", items: listableCopies, packaging }),
           addToOffer: () => setDialog({ kind: "addToOffer", items: listableCopies }),
           sell: () => setDialog({ kind: "sell", items: sellableCopies }),
+          collage: () => setDialog({ kind: "collage", itemIds: selectedInView.map((c) => c.id) }),
           addToCollisionOffer: () => {
             if (collisionOffer)
               setDialog({
@@ -2111,6 +2115,16 @@ export function InventoryListPanel({
         <VariantHistoryDialog
           collectionId={collectionId}
           item={dialog.item}
+          onClose={closeDialog}
+        />
+      )}
+
+      {dialog.kind === "collage" && (
+        <CopiesCollageDialog
+          collectionId={collectionId}
+          itemIds={dialog.itemIds}
+          platforms={offerPlatforms}
+          lastPlatformId={lastPlatformId}
           onClose={closeDialog}
         />
       )}
