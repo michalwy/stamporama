@@ -82,8 +82,9 @@ export type { IssueRunIdentification } from "./issue-run";
  *   (ADR-0033 §2), so handing them to a copy is `tileId → itemId` on the same row. No second row,
  *   no second bytes, and nothing for a cleanup to disagree about later.
  * - **The batch is stamped when its last outstanding tile reaches an end** — `unidentified` and,
- *   since #597, `parked`. From that moment it can never be re-cut, so its retained original has no
- *   remaining function. Nothing here reads the stamp; #578's retention sweep does.
+ *   since #597, `parked` — and no sheet of it is waiting to be cut again around copies (#2055).
+ *   From that moment nothing on it is still to be worked, so its retained original has no remaining
+ *   function. Nothing here reads the stamp; #578's retention sweep does.
  *
  * Since #586 a tile belongs to the **purchase**, so this module carries the one question that move
  * left behind: **a copy still belongs to a lot**, and it is identification — not scanning — that
@@ -1181,9 +1182,9 @@ async function seedStampImage(ownerId: string, itemId: string): Promise<void> {
 /**
  * Stamp the batch when its **last** tile leaves `unidentified`.
  *
- * From that moment the batch can never be re-cut — a consumed tile refuses it (#566), because
- * re-cutting would delete `Photo` rows a copy now owns — so the retained original, the largest
- * object the app stores, has no remaining function. Nothing in #567 reads this; #578's retention
+ * From that moment there is nothing left on the batch to re-cut — a re-cut keeps every tile that
+ * became a copy (#2055), because those tiles' `Photo` rows are the copies' now — so the retained
+ * original, the largest object the app stores, has no remaining function. Nothing in #567 reads this; #578's retention
  * sweep does, on the closed-offer photos' TTL-after-a-terminal-state pattern (#512).
  *
  * Written on the batch's **sheets** because that is what the sweep will delete, and only where it
@@ -1198,6 +1199,12 @@ async function stampBatchIfFinished(owner: ScanOwner, batchNo: number): Promise<
     where: { ...scanOwnerWhere(owner), batchNo, state: { in: [...OPEN_TILE_STATES] } },
   });
   if (waiting > 0) return;
+  // **Nor is one with a sheet waiting to be cut again** (#2055): a re-cut around copies leaves the
+  // rest of the card to be drawn, and the sweep must not take the scan it is drawn on.
+  const pendingCut = await prisma.scanSheet.count({
+    where: { ...scanOwnerWhere(owner), batchNo, recutPending: true },
+  });
+  if (pendingCut > 0) return;
   await prisma.scanSheet.updateMany({
     where: { ...scanOwnerWhere(owner), batchNo, batchDoneAt: null },
     data: { batchDoneAt: new Date() },

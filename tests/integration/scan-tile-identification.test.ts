@@ -58,8 +58,8 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //
 //   - **the images move, they are never copied** — the copy gets the tile's very `Photo` rows, so
 //     a byte-copying regression would show up as two rows with two storage keys;
-//   - **the re-cut guard now fires in anger** — #566 wrote it before the state existed, and this is
-//     the first test where a real identification is what makes it refuse;
+//   - **a re-cut keeps the copy** — #566 wrote a guard before the state existed, a real
+//     identification first armed it here, and since #2055 the re-cut goes around the copy instead;
 //
 // plus the batch stamp #578 will read, the discard that survives as evidence, and a tile whose
 // stamp is on none of a settled auction sale's lines.
@@ -400,15 +400,24 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), copiesBefore);
   });
 
-  it("refuses a re-cut once a tile has become a copy — for real, this time", async () => {
+  it("re-cuts around a tile that has become a copy, and keeps the copy's image", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
-    await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    const copy = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });
+    const photo = await prisma.photo.findFirstOrThrow({ where: { itemId: copy.itemId } });
 
-    // #566 wrote this guard before the state that triggers it existed. Here it is a genuine
-    // identification that arms it, and what it protects is a copy's front image: re-cutting
-    // deletes the tiles, and the copy's `Photo` row would go with the tile that no longer owns it.
+    // Until #2055 a genuine identification refused the whole re-cut. Now the copy's tile stays —
+    // its `Photo` row is the copy's front — and only the tile still waiting goes.
+    await recutBatch(userId, { purchaseId }, 1);
+    const left = await prisma.scanTile.findMany({ where: { purchaseId } });
+    assert.deepEqual(
+      left.map((t) => t.id),
+      [tileIds[0]]
+    );
+    const kept = await prisma.photo.findUniqueOrThrow({ where: { id: photo.id } });
+    assert.equal(kept.itemId, copy.itemId);
+
+    // With every tile a copy, there is nothing left to re-cut.
     await assert.rejects(() => recutBatch(userId, { purchaseId }, 1), ScanValidationError);
-    assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 2);
   });
 
   it("gives a tile's images to a copy that already exists, and refuses an occupied slot", async () => {

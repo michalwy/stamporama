@@ -626,21 +626,23 @@ describe("scan sheet ingest (#566)", () => {
     await deletePurchase(userId, purchaseId);
   });
 
-  it("refuses to re-cut past a tile that has become a copy", async () => {
+  it("refuses to re-cut a card on which every tile has become a copy", async () => {
     const purchaseId = await newOrder();
     const sheet = await uploadFront(purchaseId);
     await commitCut(userId, sheet.id, FRONT_BOXES);
 
-    // #567 is what sets this; forced here so the guard it exists for is tested before it can fire
-    // in anger, since by then a copy's images would be what is at stake.
+    // #567 is what sets this; forced here. One copy among waiting tiles blocks the delete, and is
+    // re-cut around since #2055 (`scan-recut-around-copies.test.ts`); a card of nothing but copies
+    // has nothing left to re-cut.
     const tile = await prisma.scanTile.findFirstOrThrow({ where: { purchaseId } });
     await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "consumed" } });
-
-    await assert.rejects(() => recutBatch(userId, { purchaseId }, 1), ScanValidationError);
     await assert.rejects(() => deleteBatch(userId, { purchaseId }, 1), ScanValidationError);
+
+    await prisma.scanTile.updateMany({ where: { purchaseId }, data: { state: "consumed" } });
+    await assert.rejects(() => recutBatch(userId, { purchaseId }, 1), ScanValidationError);
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 3);
 
-    await prisma.scanTile.update({ where: { id: tile.id }, data: { state: "unidentified" } });
+    await prisma.scanTile.updateMany({ where: { purchaseId }, data: { state: "unidentified" } });
     await deletePurchase(userId, purchaseId);
   });
 

@@ -967,10 +967,28 @@ Deleting one of the order's **lots** leaves the cards alone: they belong to the 
 lots still have pieces on them. A tile that had already become a copy on that lot keeps its square
 and says the copy was deleted. Deleting the whole **order** is what takes the scans.
 
-Re-cutting is **refused once a tile has become a copy**: that copy holds the tile's very images, so
-throwing the tile away would take the copy's front and back with it. Discarded tiles have no such
-protection — the card is being drawn again, discards included — so the confirmation tells you how
-many discards and notes are about to go with them.
+**A card can be re-cut after some of its tiles have become copies** — a cutting mistake is often
+found only while identifying: two stamps in one box, a stamp missed, a box cutting into the design.
+A copy holds its tile's very images, so a re-cut **keeps every tile that became a copy exactly as it
+is** — its images, its number, its copy — and cuts the rest of the card again:
+
+- The editor opens with every box. **A copy's box is locked**: dimmed, dashed, marked with a lock
+  and **copy** beside its number, and it cannot be moved, resized, merged, split or deleted. Every
+  other box can be corrected as usual, and new boxes can be drawn; **Pick** inside a copy's stamp
+  adds nothing.
+- The new tiles take **the numbers no copy holds**, in reading order — a copy keeps showing its tile
+  number, so two pieces never share one. The editor draws those numbers before you press Cut.
+- Deleting every box but the copies' is a real cut too: the boxes you deleted were the mistake.
+- **The back is cut again as well.** A copy keeps its back; the other back boxes go with their tiles,
+  and the card offers **Review the back cut** again, with the copies' back boxes locked. The new back
+  boxes pair with the new tiles by the usual rules.
+- Until both sides are cut again the card counts as unfinished, so its scan is not deleted under you.
+- A card on which **every** tile has become a copy has nothing left to re-cut, and **Re-cut** is not
+  offered on it.
+
+Discarded and parked tiles have no such protection — the card is being drawn again, discards
+included — so the confirmation tells you how many discards and notes are about to go with them, and
+how many copies stay.
 
 #### Marking the condition before identifying
 

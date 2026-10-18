@@ -246,8 +246,9 @@ describe("retained-scan retention (#578)", () => {
   });
 
   it("refuses a re-cut with the scan being gone, rather than failing on a missing file", async () => {
-    // The all-discarded batch is the case that matters: consumed tiles refuse a re-cut on their own,
-    // so this is the only batch that would otherwise still be re-cuttable after the sweep.
+    // The all-discarded batch is the case that matters: a card of nothing but copies refuses a
+    // re-cut on its own, so this is the only batch that would otherwise still be re-cuttable after
+    // the sweep.
     const { purchaseId, sheetId, tileIds } = await orderWithTiles();
     await setCollectionScanSheetTtl(userId, collectionId, "0");
     for (const id of tileIds) await discardTile(userId, id);

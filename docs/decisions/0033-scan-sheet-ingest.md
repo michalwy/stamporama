@@ -235,7 +235,8 @@ between correcting a cut and drawing one again.
 - Re-cutting is **refused once a tile has been consumed**. #567 gives a copy the tile's very `Photo`
   rows, so deleting the tile would take a copy's front and back with it. The guard is written now,
   before the state that triggers it exists, because a guard added afterwards is one that was once
-  missing.
+  missing. *Since #2055 the re-cut keeps the consumed tiles and cuts around them instead — see the
+  last section.*
 - Replacing a scan is allowed only while nothing has been cut from it: the tiles' boxes were drawn
   over those pixels, and a replacement would leave them describing an image that is no longer there.
 - A back scan of the **wrong card** with the same number of stamps in roughly the same places will
@@ -746,3 +747,33 @@ position (#1555).
 **Cards already cut keep their numbers.** A tile's position is written when it is cut, and a copy
 made from it now shows that number; renumbering an old cut would point those numbers at the wrong
 stamps. Only a *Re-cut* takes the new order.
+
+## What #2055 changed: a re-cut goes around the copies instead of refusing
+
+The first consequence above — *re-cutting is refused once a tile has been consumed* — protected the
+right thing and cost the wrong one. A cutting mistake is usually found **while identifying** — two
+stamps in one box, a stamp missed, a box cutting into the design — and by then some tiles on the card
+are copies, so the rest of the card could never be corrected, though only the tiles still waiting
+were affected.
+
+**A re-cut now keeps every consumed tile exactly as it is** — its images, its position, its copy —
+and deletes every other tile, waiting, parked or discarded, as before. What the guard protected is
+still protected: nothing that a copy owns is touched. A card on which every tile is consumed has
+nothing left to re-cut, and that is the one refusal left besides the purged scan's.
+
+**A sheet can now hold tiles and still be uncut**, which `isSheetCut` could not say: the copies'
+tiles go on naming both sheets. `ScanSheet.recutPending` says it — set by the re-cut on the batch's
+sheets when it kept anything, cleared by that sheet's next commit — and `isSheetCut` /
+`UNCUT_SHEET_WHERE` read it, so the card offers *Review the cut* on each side again and the
+dashboard lists it. While it stands the batch is not finished with (`settleBatchDone`,
+`stampBatchIfFinished`), or the sweep could take the scan mid-correction.
+
+- **The editor draws the copies' boxes locked** — outside its regions altogether, so nothing in it can
+  reach them — and a proposal leaves out any box whose centre lies in one.
+- **New tiles take the positions no copy holds**, in reading order (`scan-recut.ts`, shared by the
+  commit and the editor's numbers). A copy shows its tile's number (#1924), so reusing one would put
+  two pieces under it.
+- **The back is cut again too**, chosen by the collector over re-pairing the old back boxes: a front
+  mistake is usually on the back as well, and old back boxes could not be corrected. The back commit
+  is unchanged — it already pairs with the fronts still without a back, a copy without one included
+  (#1995) — so a copy that has a back keeps it and its back box is locked like its front's.

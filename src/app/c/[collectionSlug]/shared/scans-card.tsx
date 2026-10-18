@@ -38,7 +38,12 @@ import {
 } from "@/lib/back-turnover";
 import { formatItemNo } from "@/lib/item-number";
 import { batchDeletion, batchDeletionRefusal } from "@/lib/scan-batch-deletion";
-import { MAX_BATCH_LABEL_LENGTH, batchLabelsForFiles } from "@/lib/scan-batch-label";
+import {
+  MAX_BATCH_LABEL_LENGTH,
+  batchLabelsForFiles,
+  scanTileNumber,
+} from "@/lib/scan-batch-label";
+import { isLockedTile } from "@/lib/scan-recut";
 import type {
   BackTurnoverReport,
   CutBox,
@@ -77,7 +82,11 @@ import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-i
 import type { CollectionAreaData } from "@/lib/areas";
 import { candidateLabel, candidateShortLabel } from "@/lib/tile-candidates";
 import { identifyHistory, type IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
-import { ScanCutEditor, type ScanCutEditorSheet } from "./scan-cut-editor";
+import {
+  ScanCutEditor,
+  type ScanCutEditorSheet,
+  type ScanCutLockedBox,
+} from "./scan-cut-editor";
 import {
   TileIdentifyDialog,
   type SelectedTile,
@@ -742,7 +751,7 @@ export function ScansCard({
       if (!batch || !sheet || sheet.cut) continue;
       void openProposed(
         editorSheetOf(batch, sheet),
-        sheet.side === "back" ? batch.tiles.filter((t) => t.frontBox).length : null
+        sheet.side === "back" ? frontsAwaitingBack(batch) : null
       );
       return;
     }
@@ -1499,6 +1508,10 @@ export function ScansCard({
           key={`${editor.sheet.id}:${editor.initialBoxes.length}`}
           collectionId={collectionId}
           sheet={editor.sheet}
+          lockedBoxes={lockedBoxesOf(
+            batches.find((b) => b.batchNo === editor.sheet.batchNo) ?? null,
+            editor.sheet.side
+          )}
           initialBoxes={editor.initialBoxes}
           frontTileCount={editor.frontTileCount}
           committing={pending}
@@ -1559,6 +1572,19 @@ export function ScansCard({
               <>
                 The batch&rsquo;s tiles and their images are thrown away. The scans themselves are
                 kept, so the cut can be drawn again over the same card.
+                {/* The copies stay (#2055): said, because "the tiles are thrown away" would
+                    otherwise read as taking them too. */}
+                {copiesInBatch(batches, confirm.batchNo) > 0 && (
+                  <>
+                    {" "}
+                    The{" "}
+                    <strong>
+                      {copiesInBatch(batches, confirm.batchNo)} tile
+                      {copiesInBatch(batches, confirm.batchNo) === 1 ? "" : "s"} that became copies
+                    </strong>{" "}
+                    stay as they are, with their images and numbers; their boxes are locked.
+                  </>
+                )}
                 {/* Named rather than assumed: a discarded tile is the record of something the
                     parcel held and nothing else keeps it (#567). Re-cutting is still allowed —
                     the card is being drawn again, discards included — but not silently. */}
@@ -1952,6 +1978,25 @@ const KIND_LABEL: Record<SheetKind, string> = {
   album: "Album page",
 };
 
+/** How many of a batch's tiles became copies — what a re-cut keeps (#2055). */
+function copiesInBatch(batches: ScanBatchData[], batchNo: number): number {
+  return batches.find((b) => b.batchNo === batchNo)?.tiles.filter(isLockedTile).length ?? 0;
+}
+
+/** The copies' boxes on one side of a batch (#2055) — locked in the cut editor, never edited. */
+function lockedBoxesOf(batch: ScanBatchData | null, side: "front" | "back"): ScanCutLockedBox[] {
+  return (batch?.tiles ?? []).filter(isLockedTile).flatMap((t) => {
+    const box = side === "back" ? t.backBox : t.frontBox;
+    return box ? [{ box, number: scanTileNumber(t.position) }] : [];
+  });
+}
+
+/** How many front tiles a back cut pairs with: those still without a back. On a fresh card that is
+ * every one; after a re-cut around copies (#2055) the copies that kept a back are not looking. */
+function frontsAwaitingBack(batch: ScanBatchData): number {
+  return batch.tiles.filter((t) => t.frontBox != null && t.backBox == null).length;
+}
+
 /** How many of a batch's tiles were discarded — what a re-cut is about to take with it. */
 function discardedInBatch(batches: ScanBatchData[], batchNo: number): number {
   return (
@@ -2274,14 +2319,18 @@ function BatchSection({
             // How many pieces the **front of the card** holds, never how many of them are on
             // screen (#863): since #647 this count is not a report but the thing that decides
             // whether the commit pairs by position at all, so a chip narrowing it would hand a
-            // perfectly ordinary card to manual pairing and say *front 3, back 12* about it.
-            onClick={() => onReview(editorSheet(batch.back!), frontTilesHeld.length)}
+            // perfectly ordinary card to manual pairing and say *front 3, back 12* about it. Only
+            // the fronts still without a back, which is every front on a fresh card and leaves out
+            // the copies a re-cut kept with their backs (#2055) — the ones the commit pairs with.
+            onClick={() => onReview(editorSheet(batch.back!), frontsAwaitingBack(batch))}
             disabled={busy}
           >
             {detecting ? "Finding the stamps…" : "Review the back cut"}
           </SmallButton>
         )}
-        {open && batch.tiles.length > 0 && !scansPurged && (
+        {/* Not on a card where every tile is a copy (#2055): a re-cut keeps those, so there is
+            nothing left for it to cut. */}
+        {open && batch.tiles.some((t) => !isLockedTile(t)) && !scansPurged && (
           <SmallButton
             onClick={() =>
               onRecut(
@@ -2295,8 +2344,10 @@ function BatchSection({
                       // …with their marks (#1550): a box kept through the re-cut keeps its tile's
                       // mark, and the time it was given, so a later pairing can still tell which
                       // of two marks came last.
+                      // The copies' boxes are not among them (#2055): those are locked, drawn by
+                      // the editor from the batch itself.
                       initialBoxes: frontTilesHeld.flatMap((t) =>
-                        t.frontBox
+                        t.frontBox && !isLockedTile(t)
                           ? [{ ...t.frontBox, mark: t.mark, markedAt: t.markedAt }]
                           : []
                       ),
