@@ -117,7 +117,7 @@ describe("selling an offer from the phone (#2009)", () => {
         platformId: true,
         currency: true,
         soldAt: true,
-        buyer: { select: { id: true, name: true, facebookProfileUrl: true } },
+        buyer: { select: { id: true, name: true, facebookProfiles: { select: { url: true } } } },
         lines: { select: { offerId: true, offerSetId: true, price: true, setChoicePending: true } },
       },
     });
@@ -192,7 +192,7 @@ describe("selling an offer from the phone (#2009)", () => {
     const sale = await sold(result.saleId);
     assert.equal(sale.currency, "PLN");
     assert.equal(sale.buyer?.name, "Ola Kot");
-    assert.equal(sale.buyer?.facebookProfileUrl, "https://www.facebook.com/ola.kot");
+    assert.deepEqual(sale.buyer?.facebookProfiles.map((p) => p.url), ["https://www.facebook.com/ola.kot"]);
   });
 
   it("refuses a price it cannot read and records nothing", async () => {

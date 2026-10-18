@@ -1,8 +1,9 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
+import { FACEBOOK_PROFILES_SELECT } from "./facebook-sales";
 import { normalizeMarketCode } from "./market-anchoring";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
@@ -54,8 +55,9 @@ export class ContactNameTakenError extends Error {
   }
 }
 
-/** Raised when a field's value is refused by its own rule — the Facebook profile link (#1545) — so
- * the form can say which and why rather than failing generically. */
+/** Raised when a field's value is refused by its own rule — a Facebook profile link (#1545), or one
+ * another contact already holds (#2042) — so the form can say which and why rather than failing
+ * generically. */
 export class ContactFieldError extends Error {
   constructor(message: string) {
     super(message);
@@ -63,13 +65,44 @@ export class ContactFieldError extends Error {
   }
 }
 
-/** The profile link as stored: normalised, so a winner's lookup is an equality (#1545). Undefined
- * stays undefined — an update that never showed the field leaves it alone. */
-function profileUrlData(raw: string | null | undefined): string | null | undefined {
+/** The profile links as stored: each normalised, so a buyer's lookup is an equality (#1545), blanks
+ * dropped and repeats folded into one, in the order typed (#2042). Undefined stays undefined — an
+ * update that never showed the field leaves the profiles alone. */
+function profileUrlsData(raw: readonly string[] | undefined): string[] | undefined {
   if (raw === undefined) return undefined;
-  const result = normalizeFacebookProfileUrl(raw);
-  if (!result.ok) throw new ContactFieldError(result.message);
-  return result.value;
+  const urls: string[] = [];
+  for (const typed of raw) {
+    const result = normalizeFacebookProfileUrl(typed);
+    if (!result.ok) throw new ContactFieldError(result.message);
+    if (result.value && !urls.includes(result.value)) urls.push(result.value);
+  }
+  return urls;
+}
+
+/**
+ * Give a contact exactly these Facebook profiles (#2042): the ones no longer listed go, the new ones
+ * are added, the ones kept keep their row (and so their place in the order). A profile is one
+ * person's, so one another contact of the collection already holds is refused, naming that contact —
+ * the unique index would refuse it anyway, but only as a bare violation.
+ */
+async function writeFacebookProfiles(
+  tx: DbTransaction,
+  collectionId: string,
+  contactId: string,
+  urls: string[]
+): Promise<void> {
+  const taken = await tx.contactFacebookProfile.findFirst({
+    where: { collectionId, url: { in: urls }, contactId: { not: contactId } },
+    select: { url: true, contact: { select: { name: true } } },
+  });
+  if (taken) {
+    throw new ContactFieldError(`The Facebook profile ${taken.url} is already on the contact ${taken.contact.name}.`);
+  }
+  await tx.contactFacebookProfile.deleteMany({ where: { contactId, url: { notIn: urls } } });
+  await tx.contactFacebookProfile.createMany({
+    data: urls.map((url) => ({ collectionId, contactId, url })),
+    skipDuplicates: true,
+  });
 }
 
 /** A market as written (#1634): blank is none, anything else must be a two-letter country code.
@@ -115,9 +148,9 @@ export interface ContactData extends ContactRoles {
   fullName: string | null;
   email: string | null;
   phone: string | null;
-  /** The person's Facebook profile link, normalised (#1545) — what a Facebook auction's winner is
-   * recognised by. Null on nearly every contact. */
-  facebookProfileUrl: string | null;
+  /** The person's Facebook profile links, normalised (#1545), in the order they were added — what a
+   * Facebook buyer is recognised by, any of them (#2042). Empty on nearly every contact. */
+  facebookProfileUrls: string[];
   /** The country this contact sells in (#1634; ADR-0064), ISO 3166-1 alpha-2 — where its auction
    * results count. Null is *not known*: the platform's market then answers, and failing that the
    * collection's home market. */
@@ -142,7 +175,7 @@ const CONTACT_SELECT = {
   fullName: true,
   email: true,
   phone: true,
-  facebookProfileUrl: true,
+  facebookProfiles: FACEBOOK_PROFILES_SELECT,
   market: true,
   buyer: true,
   seller: true,
@@ -157,23 +190,27 @@ const CONTACT_SELECT = {
 } as const;
 
 /** A contact row as Prisma returns it under {@link CONTACT_SELECT} — identical to
- * {@link ContactData} except that the seller defaults are still `Decimal`s. */
+ * {@link ContactData} except that the seller defaults are still `Decimal`s and the profiles are
+ * still rows. */
 type ContactRow = Omit<
   ContactData,
   | "defaultShippingCost"
   | "buyerPremiumPercent"
   | "buyerPremiumFixed"
+  | "facebookProfileUrls"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
+  facebookProfiles: { url: string }[];
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
  * (`offers.ts`, `valuation.ts`) — a `Decimal` does not survive the server/client boundary. */
-function toContactData(row: ContactRow): ContactData {
+function toContactData({ facebookProfiles, ...row }: ContactRow): ContactData {
   return {
     ...row,
+    facebookProfileUrls: facebookProfiles.map((profile) => profile.url),
     defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
@@ -209,9 +246,10 @@ export interface ContactCreateInput {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
-  /** The Facebook profile link (#1545), as typed — normalised on write, refused when it is not one.
-   * Omitted on an update leaves it as it is. */
-  facebookProfileUrl?: string | null;
+  /** The Facebook profile links (#1545, several since #2042), as typed — each normalised on write,
+   * refused when it is not one or another contact holds it; blanks are dropped. The list replaces the
+   * contact's profiles; omitted on an update leaves them as they are. */
+  facebookProfileUrls?: readonly string[];
   /** The market (#1634), as typed — normalised on write, refused when it is not a two-letter code.
    * Omitted on an update leaves it as it is. */
   market?: string | null;
@@ -375,29 +413,33 @@ export async function createContact(
   await assertCollectionOwner(ownerId, collectionId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
+  const profileUrls = profileUrlsData(data.facebookProfileUrls) ?? [];
+  const market = marketData(data.market) ?? null;
   try {
-    return toContactData(await prisma.contact.create({
-      data: {
-        collectionId,
-        name,
-        ...sellerDefaults(data),
-        notes: data.notes ?? null,
-        fullName: data.fullName ?? null,
-        email: data.email ?? null,
-        phone: data.phone ?? null,
-        facebookProfileUrl: profileUrlData(data.facebookProfileUrl) ?? null,
-        market: marketData(data.market) ?? null,
-        buyer: data.buyer ?? false,
-        seller: data.seller ?? false,
-        exchangePartner: data.exchangePartner ?? false,
-        auctionHouse: data.auctionHouse ?? false,
-        other: data.other ?? false,
-      },
-      select: CONTACT_SELECT,
+    return toContactData(await prisma.$transaction(async (tx) => {
+      const { id } = await tx.contact.create({
+        data: {
+          collectionId,
+          name,
+          ...sellerDefaults(data),
+          notes: data.notes ?? null,
+          fullName: data.fullName ?? null,
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+          market,
+          buyer: data.buyer ?? false,
+          seller: data.seller ?? false,
+          exchangePartner: data.exchangePartner ?? false,
+          auctionHouse: data.auctionHouse ?? false,
+          other: data.other ?? false,
+        },
+        select: { id: true },
+      });
+      await writeFacebookProfiles(tx, collectionId, id, profileUrls);
+      return tx.contact.findUniqueOrThrow({ where: { id }, select: CONTACT_SELECT });
     }));
   } catch (err) {
-    if (isUniqueViolation(err)) throw new ContactNameTakenError(name);
-    throw err;
+    throw uniqueViolationError(err, name);
   }
 }
 
@@ -412,32 +454,36 @@ export async function updateContact(
   contactId: string,
   data: ContactUpdateInput
 ): Promise<ContactData> {
-  await assertContactOwner(ownerId, contactId);
+  const { collectionId } = await assertContactOwner(ownerId, contactId);
   const name = data.name.trim();
   if (!name) throw new Error("Contact name is required.");
+  const profileUrls = profileUrlsData(data.facebookProfileUrls);
+  const market = marketData(data.market);
   try {
-    return toContactData(await prisma.contact.update({
-      where: { id: contactId },
-      data: {
-        name,
-        ...sellerDefaults(data),
-        notes: data.notes ?? null,
-        fullName: data.fullName ?? null,
-        email: data.email ?? null,
-        phone: data.phone ?? null,
-        facebookProfileUrl: profileUrlData(data.facebookProfileUrl),
-        market: marketData(data.market),
-        buyer: data.buyer ?? false,
-        seller: data.seller ?? false,
-        exchangePartner: data.exchangePartner ?? false,
-        auctionHouse: data.auctionHouse ?? false,
-        other: data.other ?? false,
-      },
-      select: CONTACT_SELECT,
+    return toContactData(await prisma.$transaction(async (tx) => {
+      await tx.contact.update({
+        where: { id: contactId },
+        data: {
+          name,
+          ...sellerDefaults(data),
+          notes: data.notes ?? null,
+          fullName: data.fullName ?? null,
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+          market,
+          buyer: data.buyer ?? false,
+          seller: data.seller ?? false,
+          exchangePartner: data.exchangePartner ?? false,
+          auctionHouse: data.auctionHouse ?? false,
+          other: data.other ?? false,
+        },
+        select: { id: true },
+      });
+      if (profileUrls) await writeFacebookProfiles(tx, collectionId, contactId, profileUrls);
+      return tx.contact.findUniqueOrThrow({ where: { id: contactId }, select: CONTACT_SELECT });
     }));
   } catch (err) {
-    if (isUniqueViolation(err)) throw new ContactNameTakenError(name);
-    throw err;
+    throw uniqueViolationError(err, name);
   }
 }
 
@@ -531,6 +577,18 @@ export async function deleteContact(
 
 /** Prisma unique-constraint violation (P2002) narrowing without importing the
  * Prisma error class into this server-only module's public surface. */
+/** What a create or an update of a contact throws for a unique violation: the name's own error, or —
+ * when the index hit was a profile's, a second contact having taken the link between the check and
+ * the write — the profile's. Anything else is thrown as it came. */
+function uniqueViolationError(err: unknown, name: string): unknown {
+  if (!isUniqueViolation(err)) return err;
+  const target = JSON.stringify((err as { meta?: unknown }).meta ?? "");
+  if (target.includes("url")) {
+    return new ContactFieldError("That Facebook profile is already on another contact.");
+  }
+  return new ContactNameTakenError(name);
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&

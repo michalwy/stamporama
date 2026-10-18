@@ -266,6 +266,16 @@ has, and the collector asked why Facebook was different. What Facebook's dialog 
 - **A closed Facebook auction still asks for its result**, bid or not; *Sell* or *Withdraw* answers it.
 - Sales recorded through the old dialog are untouched.
 
+**Amended by #2042 (decided with the collector on 2026-10-18): a contact holds several Facebook
+profiles.** Some buyers bid from two accounts, and with one link per contact the second account was a
+stranger — selling to it made a second contact for the same person. The links moved from
+`Contact.facebookProfileUrl` to `ContactFacebookProfile`, one row per profile, and a sale to **any** of
+them finds the contact. A profile belongs to **one** contact: unique per collection, so the lookup by
+link answers with one person, and the contact form refuses a link another contact holds, naming it.
+*Sell* still adds a link only to a contact that has none; a name match whose contact has other links
+is refused as before, the message now saying to add the profile to the contact when it is the same
+person.
+
 ### 5. A copy is in one active Facebook auction at a time
 
 Listing the same copies in several groups at once is a later, separate decision (#1547): what the

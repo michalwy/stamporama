@@ -117,7 +117,12 @@ describe("the sale operations (#1949)", () => {
     });
     // Somebody known on Facebook under a different profile than the one a namesake will arrive with.
     await prisma.contact.create({
-      data: { collectionId, name: "Piotr Wiśniewski", buyer: true, facebookProfileUrl: "https://www.facebook.com/piotr.w.1" },
+      data: {
+        collectionId,
+        name: "Piotr Wiśniewski",
+        buyer: true,
+        facebookProfiles: { create: { collectionId, url: "https://www.facebook.com/piotr.w.1" } },
+      },
     });
     token = (await createAssistantToken(userId, collectionId, { label: "sale agent", scope: "read_write", kind: "agent" })).token;
     readOnlyToken = (
@@ -209,8 +214,32 @@ describe("the sale operations (#1949)", () => {
       });
       assert.equal(found.found, "name");
       assert.equal(found.facebookProfile, "https://www.facebook.com/anna.z");
-      assert.deepEqual(Object.keys(found).sort(), ["facebookProfile", "found", "id", "name"]);
+      assert.deepEqual(found.facebookProfiles, ["https://www.facebook.com/anna.z"]);
+      assert.deepEqual(Object.keys(found).sort(), ["facebookProfile", "facebookProfiles", "found", "id", "name"]);
       assert.doesNotMatch(JSON.stringify(found), /example\.com|\+48/);
+    });
+
+    it("finds a buyer by any of their profiles, answering with the one it was asked by (#2042)", async () => {
+      const ola = await prisma.contact.create({
+        data: {
+          collectionId,
+          name: "Ola Kot",
+          facebookProfiles: {
+            create: [
+              { collectionId, url: "https://www.facebook.com/ola.kot", createdAt: new Date("2026-01-01") },
+              { collectionId, url: "https://www.facebook.com/ola.kot.2", createdAt: new Date("2026-02-01") },
+            ],
+          },
+        },
+      });
+      const second = await ok<AgentBuyer>(token, "POST", "/buyers", {
+        name: "Aleksandra",
+        facebook_profile: "https://m.facebook.com/ola.kot.2/",
+      });
+      assert.deepEqual([second.id, second.found, second.facebookProfile], [ola.id, "profile", "https://www.facebook.com/ola.kot.2"]);
+      assert.deepEqual(second.facebookProfiles, ["https://www.facebook.com/ola.kot", "https://www.facebook.com/ola.kot.2"]);
+      const byName = await ok<AgentBuyer>(token, "POST", "/buyers", { name: "Ola Kot" });
+      assert.equal(byName.facebookProfile, "https://www.facebook.com/ola.kot", "the first, when none was asked");
     });
 
     it("refuses a name held by somebody with a different profile, a close name, and an empty call", async () => {

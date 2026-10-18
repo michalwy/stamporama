@@ -679,10 +679,12 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (the offer has a `facebookGroupId`) to `SaleFormDialog`, which swaps the buyer picker for a name and
   a profile link, asks `lookupFacebookBuyerAction` while it is typed, and submits
   `buyerFacebookProfileUrl` — whose presence routes `resolveSaleHeader` to `resolveFacebookBuyer`
-  instead of `resolvePurchaseContact`. Both go through `findFacebookBuyer`: by `facebookProfileUrl`
-  first, then by name (case-insensitive, any role); a name match carrying a **different** link is
-  refused as somebody else, since `Contact.name` is unique. A found contact gets the buyer role and,
-  where it has none, the link; otherwise a buyer is created with both — a link alone that matches
+  instead of `resolvePurchaseContact`. Both go through `findFacebookBuyer`: by profile link first —
+  any of the contact's `ContactFacebookProfile` rows (#2042) — then by name (case-insensitive, any
+  role); a name match whose contact has links, none of them this one, is refused as somebody else (or
+  the same person on an account not yet on the contact — only the collector can tell), since
+  `Contact.name` is unique. A found contact gets the buyer role and, where it has no link at all, the
+  link; otherwise a buyer is created with both — a link alone that matches
   nobody is refused, a contact needing a name, and nothing typed is no buyer. It refuses a platform
   that is not Facebook's — the one check `resolveFacebookBuyer` adds to `findOrCreateBuyer`, which the
   agent API's `find_or_create_buyer` reaches directly, with or without a link (#1949). `createSaleAction` checks the collection before that write, since
@@ -750,6 +752,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   query except `profile.php`'s `id`, the phone and desktop hosts folded together — so the lookup is an
   equality. `contacts.ts` normalises on every write and refuses a non-Facebook address with
   `ContactFieldError`; an update that omits the field leaves it alone.
+
+- **A contact holds several profiles, and a profile is one contact's** (#2042, decided with the
+  collector on 2026-10-18; ADR-0061 §4 as amended). `ContactFacebookProfile` (`collectionId`,
+  `contactId`, `url`), **unique on `(collectionId, url)`**, replaced `Contact.facebookProfileUrl`; the
+  migration kept a link that stood on two contacts on the **oldest**, the one the old
+  `findFirst … orderBy createdAt` lookup answered with. Every reader selects them through
+  `FACEBOOK_PROFILES_SELECT` (`facebook-sales.ts`; added order, the id breaking a tie within one save),
+  and `ContactData.facebookProfileUrls` is that list. The contact form submits one `facebookProfileUrl`
+  field per row and the action reads them with `getAll`: the list submitted **is** the contact's set,
+  and `writeFacebookProfiles` (in the create/update transaction) deletes what is gone, adds what is new
+  and refuses — naming the holder — a link another contact has, before the unique index would say so
+  bare. The row and the page show each by `facebookProfileLabel` (the path after the host). The agent
+  API's buyer keeps `facebookProfile` — the link the request named when it is theirs, else their first —
+  and adds `facebookProfiles` (an added key, not a version: ADR-0050). Merging two contacts (#2043)
+  builds on this.
 
 - **Where it is seen.** Settings → Facebook (`facebook-settings-page.tsx`): the platform choice in the
   header (`MarketplacePlatformSelect`, *Facebook platform*), then list beside detail (#1471) with no

@@ -67,8 +67,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     fullName: str(formData, "fullName") || null,
     email: str(formData, "email") || null,
     phone: str(formData, "phone") || null,
-    // The Facebook profile link (#1545), normalised — or refused — by the domain on write.
-    facebookProfileUrl: str(formData, "facebookProfileUrl") || null,
+    // The Facebook profile links (#1545), one field each since #2042 — the list the form shows is the
+    // contact's whole set, normalised, deduplicated or refused by the domain on write.
+    facebookProfileUrls: formData.getAll("facebookProfileUrl").map((value) => String(value)),
     // The market (#1634) means something only for a contact that sells — a seller or a house — so
     // a contact that is neither keeps none.
     market: isSeller ? str(formData, "market") || null : null,

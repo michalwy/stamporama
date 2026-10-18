@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
@@ -8,7 +9,8 @@ import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 // A Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*
 // (decided with the collector on 2026-10-11). Facebook adds two things. **Who the buyer is**: names
 // repeat on Facebook, so a buyer is recognised by their **profile link** first and their name second,
-// and the link is kept on the contact (`Contact.facebookProfileUrl`). The sale form asks
+// and the links are kept on the contact (`ContactFacebookProfile` — several since #2042, since some
+// buyers bid from more than one account, and any of them finds the contact). The sale form asks
 // `lookupFacebookBuyer` while it is filled in and the save goes through `resolveFacebookBuyer`, both
 // over `findFacebookBuyer` — so what the form says and what the save does cannot disagree. And **the
 // sale's currency**: a group may have a currency of its own, so a new sale for the offer is in the
@@ -21,7 +23,8 @@ import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 export interface FacebookBuyerMatch {
   id: string;
   name: string;
-  facebookProfileUrl: string | null;
+  /** Every profile the contact has (#2042), in the order they were added. */
+  facebookProfileUrls: string[];
   /** How they were found: by the profile link, or by name alone. */
   matchedBy: "profile" | "name";
 }
@@ -33,40 +36,55 @@ export interface FacebookBuyerLookup {
   conflict: string | null;
 }
 
+/** A contact's Facebook profiles as every reader selects them (#2042): the links, in the order they
+ *  were added — the id breaks the tie between profiles added in one save. */
+export const FACEBOOK_PROFILES_SELECT = {
+  select: { url: true },
+  orderBy: [{ createdAt: "asc" }, { id: "asc" }] as Prisma.ContactFacebookProfileOrderByWithRelationInput[],
+} satisfies Prisma.Contact$facebookProfilesArgs;
+
+const BUYER_SELECT = { id: true, name: true, facebookProfiles: FACEBOOK_PROFILES_SELECT } as const;
+
+function toMatch(
+  row: { id: string; name: string; facebookProfiles: { url: string }[] },
+  matchedBy: FacebookBuyerMatch["matchedBy"]
+): FacebookBuyerMatch {
+  return { id: row.id, name: row.name, facebookProfileUrls: row.facebookProfiles.map((p) => p.url), matchedBy };
+}
+
 /**
- * The contact a buyer is, found by the profile link first and the name second (case-insensitive, any
- * role — someone who has only sold to the collector is still the same person). A name match whose
- * contact carries a **different** profile link is somebody else with the same name: it is reported
- * as a conflict rather than merged, and the contact name, unique per collection, cannot be taken by a
- * second one either.
+ * The contact a buyer is, found by the profile link first — **any** of a contact's profiles (#2042),
+ * and a profile is one contact's only — and the name second (case-insensitive, any role — someone who
+ * has only sold to the collector is still the same person). A name match whose contact has profiles,
+ * none of them this one, is reported as a conflict rather than merged: it is somebody else with the
+ * same name, or the same person on an account not yet on their contact, and only the collector can
+ * tell which. The contact name, unique per collection, cannot be taken by a second one either.
  */
 async function findFacebookBuyer(
   collectionId: string,
   name: string,
   profileUrl: string | null
 ): Promise<FacebookBuyerLookup> {
-  const select = { id: true, name: true, facebookProfileUrl: true } as const;
   if (profileUrl) {
     const byProfile = await prisma.contact.findFirst({
-      where: { collectionId, facebookProfileUrl: profileUrl },
-      orderBy: { createdAt: "asc" },
-      select,
+      where: { collectionId, facebookProfiles: { some: { url: profileUrl } } },
+      select: BUYER_SELECT,
     });
-    if (byProfile) return { contact: { ...byProfile, matchedBy: "profile" }, conflict: null };
+    if (byProfile) return { contact: toMatch(byProfile, "profile"), conflict: null };
   }
   if (!name) return { contact: null, conflict: null };
   const byName = await prisma.contact.findFirst({
     where: { collectionId, name: { equals: name, mode: "insensitive" } },
-    select,
+    select: BUYER_SELECT,
   });
   if (!byName) return { contact: null, conflict: null };
-  if (profileUrl && byName.facebookProfileUrl && byName.facebookProfileUrl !== profileUrl) {
+  if (profileUrl && byName.facebookProfiles.length > 0) {
     return {
       contact: null,
-      conflict: `The contact ${byName.name} has a different Facebook profile — if the buyer is somebody else, give them a name of their own.`,
+      conflict: `The contact ${byName.name} has a different Facebook profile — if the buyer is the same person on another account, add this profile to the contact first; if somebody else, give them a name of their own.`,
     };
   }
-  return { contact: { ...byName, matchedBy: "name" }, conflict: null };
+  return { contact: toMatch(byName, "name"), conflict: null };
 }
 
 /** Who the typed buyer is — what the sale form shows while it is filled in. The caller has checked
@@ -112,9 +130,9 @@ export interface BuyerResolved {
 }
 
 /**
- * A buyer found by their profile link first and their name second, or created: an existing contact
- * takes the buyer role and, where it has none, the profile link; otherwise a buyer is created with
- * both. Nothing typed is no buyer. Refuses a link that is not a profile, a name held by somebody with
+ * A buyer found by any of their profile links first and their name second, or created: an existing
+ * contact takes the buyer role and, where it has no profile yet, the profile link; otherwise a buyer
+ * is created with both. Nothing typed is no buyer. Refuses a link that is not a profile, a name held by somebody with
  * a different link, and a link alone that matches nobody — a contact needs a name. *Sell*'s rule on
  * Facebook (#1777), and the agent API's `find_or_create_buyer` (#1949), which reaches it with or
  * without a link. The caller has checked the collection is the collector's.
@@ -135,14 +153,21 @@ export async function findOrCreateBuyer(
       where: { id: contact.id },
       data: {
         buyer: true,
-        ...(profile.value && !contact.facebookProfileUrl ? { facebookProfileUrl: profile.value } : {}),
+        ...(profile.value && contact.facebookProfileUrls.length === 0
+          ? { facebookProfiles: { create: { collectionId, url: profile.value } } }
+          : {}),
       },
     });
     return { ok: true, buyerId: contact.id, created: false, matchedBy: contact.matchedBy };
   }
   if (!name) return { ok: false, message: "Nobody has that profile yet — name the buyer as their profile shows it." };
   const created = await prisma.contact.create({
-    data: { collectionId, name, buyer: true, facebookProfileUrl: profile.value },
+    data: {
+      collectionId,
+      name,
+      buyer: true,
+      ...(profile.value ? { facebookProfiles: { create: { collectionId, url: profile.value } } } : {}),
+    },
     select: { id: true },
   });
   return { ok: true, buyerId: created.id, created: true, matchedBy: null };

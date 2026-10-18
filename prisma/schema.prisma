@@ -169,6 +169,7 @@ model Collection {
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
   contacts        Contact[]
+  contactFacebookProfiles ContactFacebookProfile[]
   // The marketplaces it sells and buys on (#1955; ADR-0071) — the five module platforms and the
   // collector's own generic ones.
   platforms       Platform[]
@@ -6828,11 +6829,6 @@ model Contact {
   fullName         String?
   email            String?
   phone            String?
-  // The person's Facebook profile link (#1545; ADR-0061 §4). A Facebook group auction is won by a
-  // profile, and names repeat there, so the link is what recognises a repeat buyer: the result dialog
-  // looks a winner up by it first and by name second, and fills it in on a contact that has none.
-  // Optional, and stored normalised (`normalizeFacebookProfileUrl`) so the comparison is an equality.
-  facebookProfileUrl String?
   // The market this contact sells on — a country, as its ISO 3166-1 alpha-2 code (#1634; ADR-0064).
   // An observation's market comes from its house, else from its platform (`Platform.market`); one
   // of the collector's own lots from its sale's seller, else the sale's platform. Never copied onto
@@ -6888,13 +6884,36 @@ model Contact {
   // record of something that happened *with a person*, and a nameless one records half of it.
   trades               Trade[]       @relation("TradePartner")
   defaultAuctionPlatform    Platform? @relation("ContactAuctionPlatform", fields: [defaultAuctionPlatformId], references: [id], onDelete: SetNull)
+  // The person's Facebook profiles (#1545, several since #2042; ADR-0061 §4) — see
+  // `ContactFacebookProfile`.
+  facebookProfiles          ContactFacebookProfile[]
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])
   @@index([collectionId])
-  @@index([collectionId, facebookProfileUrl])
   @@index([defaultAuctionPlatformId])
   @@map("contact")
+}
+
+// One Facebook profile of a contact (#1545; several per contact since #2042; ADR-0061 §4). Names
+// repeat on Facebook, so the profile link is what recognises a repeat buyer: *Sell* on a Facebook
+// offer looks the buyer up by it first and by name second. Some buyers bid from more than one
+// account, so a contact holds as many as it needs, and a sale to any of them finds the same person.
+// Stored normalised (`normalizeFacebookProfileUrl`) so the lookup is an equality, and **unique per
+// collection**: a profile is one person's, and the contact form refuses one another contact holds.
+model ContactFacebookProfile {
+  id           String   @id @default(cuid())
+  collectionId String
+  contactId    String
+  url          String
+  createdAt    DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, url])
+  @@index([contactId])
+  @@map("contact_facebook_profile")
 }
 
 // A marketplace the collection sells or buys on (#1955; ADR-0071) — Allegro, a forum, an auction
