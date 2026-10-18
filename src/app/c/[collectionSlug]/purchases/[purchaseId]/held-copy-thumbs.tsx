@@ -20,6 +20,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-counts";
+import { HeldCopyPageLink } from "./held-copy-page-link";
 
 /** How many thumbnails the line draws before *+N more* takes over. */
 const SHOWN = 6;
@@ -48,10 +49,13 @@ const THUMB_SIZE = "3.5rem";
  * condition order is display order and not a quality scale (ADR-0032), so the first is the
  * collection's first condition rather than a claim that it is the best copy. A copy with no photo
  * draws the usual placeholder, so the number of thumbnails is the number of copies. Each opens the
- * comparison on itself; *+N more* opens it on the whole list.
+ * comparison on itself; *+N more* opens it on the whole list. Under each, its copy number opens the
+ * copy's own page in a new tab (#2072) — the thumbnail stays the way into the comparison, the number
+ * is the way out to the copy.
  *
- * Out of the Tab order: *Compare with it…* on the line above is the keyboard's way into the same
- * window, and six more stops between the pick and the condition would be six more Tabs per piece.
+ * Out of the Tab order, the numbers too: *Compare with it…* on the line above is the keyboard's way
+ * into the same window — whose copy number is reachable by Tab — and six more stops between the pick
+ * and the condition would be six more Tabs per piece.
  */
 export function HeldCopyThumbs({
   collectionId,
@@ -161,6 +165,7 @@ export function HeldCopyThumbs({
                 )}
               </button>
             </ThumbPreview>
+            <HeldCopyPageLink itemId={copy.id} itemNo={itemNo} />
             <div
               style={{
                 display: "flex",

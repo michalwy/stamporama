@@ -1607,7 +1607,8 @@ stamps first, then the other stamps of its issue — and **its own details**.
   single tile's line is — *You hold 2: 1 in collection (MNH) · 1 for sale (MH)*, with copies on their
   way or being sorted in clauses of their own, and *You hold none of this yet* when there is none.
   *Compare with it…* opens the same comparison as for a single tile, with that row's tile on the
-  left. The line follows the row's stamp: a correction reads the new stamp at once, and a row cleared
+  left — and from there, the copy number above the right-hand viewer opens a held copy's own page in
+  a new tab. The line follows the row's stamp: a correction reads the new stamp at once, and a row cleared
   to *No stamp* has no line. Copies this run is about to create are not counted until you confirm it,
   so two tiles of one stamp each show the same holdings, under the *Same stamp as* mark.
 - **The tile's disposition is on the same line**, as the chips *In collection*, *For sale* and *For
@@ -2205,7 +2206,9 @@ large as your browser window, split into two equal halves:
   for trade and with no disposition, then any not filed yet (*being sorted*, *in the post*, *on its
   way*), each with its copy number, condition and certificate chips, and its disposition — or, for a
   copy not filed yet, where it is. A copy with more pictures than a front and a back has **All N
-  pictures of this copy…** under the viewer.
+  pictures of this copy…** under the viewer. **Copy 0012**, above the viewer on the right, opens the
+  copy shown there on its own page **in a new tab** — where it is filed, its faults, its offers, its
+  history — so this window and the step under it stay exactly as they are.
 - **Both are drawn at the same scale when both scan resolutions are known**, so a stamp that looks
   larger on screen is larger on paper, and **Fit** fits the larger of the two. The piece's resolution
   is its scan's; a copy's is known while its picture is still the crop of the scan it was identified
@@ -2226,7 +2229,9 @@ copy from the same stockbook, the one the piece in hand most needs comparing wit
 disposition, in the post or on their way are left to the line and the comparison, and the piece you
 are identifying is never one of the thumbnails. Each carries its condition chip, and its
 certificate chip when it has one; hover one to enlarge it, click it to open the comparison above
-**on that copy**, with the others still in its strip. Up to six are drawn, your
+**on that copy**, with the others still in its strip. The **copy number** under each thumbnail opens
+that copy's own page **in a new tab**, leaving the step as it is — the pick, the choices made so far
+and the tile all wait for you here. Up to six are drawn, your
 collection's first and each group in your conditions' own order; beyond that **+N more** opens the comparison on all of them. A copy with no
 photo shows the usual empty frame, so the number of thumbnails is the number of copies. With nothing
 in your collection and nothing being sorted, no thumbnails are drawn and the line reads as before.
