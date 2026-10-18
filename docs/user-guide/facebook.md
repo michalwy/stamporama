@@ -560,6 +560,10 @@ show, and from the
   ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking
   the photo. Everything a post needs is here — its text, its photos and, captioned, its captions — so
   posting needs no lot opened.
+- **Pricing and readying the lots** — until the post is up, each row also prices its lot and says what
+  still stops it from being marked ready, as the **Prepare** screen does for offers, and above the lots
+  the whole post is priced and readied at once
+  ([Pricing the lots and marking them ready](#pricing-the-lots-and-marking-them-ready)).
 
 ### The list of posts
 
@@ -605,6 +609,41 @@ together** — a Facebook offer in the post's group, not yet posted, in no other
 post's listing type unless the group's posts may mix them. One that does not qualify is named with
 the reason and the others are added; on the **Offers** screen it stays ticked. A post waiting for
 approval or up in the group takes no new lots.
+
+#### Pricing the lots and marking them ready
+
+Until a post is up — while it is being prepared or Ready — its screen does for its lots what the
+**Prepare** screen does for offers, so a post being prepared is worked through on its own screen
+without opening an offer. Each lot's row carries:
+
+- **Its title**, edited in place: click it to change it, as on the offer's own screen. Emptying it
+  gives the offer back its generated title. The offer's number beside it opens the offer.
+- **Its price table**, compact: *Minimum*, *Catalogue*, *Estimated*, *Market* and *Cost*, with the
+  profit each would make, and the lot's own price — an auction's **Starting price**, a quick buy's
+  **Your price** — typed in the last column. **Enter** saves the price and moves to the next lot's,
+  so a post is priced from top to bottom with the keyboard; **Tab** or a click elsewhere saves it too,
+  **Esc** puts back what was saved, and a figure in the table clicked becomes the price. The post's
+  text follows the new price at once.
+- **What still stops it from being marked ready**, for a lot still being prepared: no price yet, a
+  title or description too long for Facebook, a copy sold elsewhere, and so on, each named — or *Can
+  be marked ready*. Photos still to be checked for symbols are **Check covers (N)**, which goes through
+  them there and then. Missing or out-of-date listing photos are not a reason: *Mark ready* makes them
+  first (*Photos generated on Mark ready*).
+
+Above the lots, three buttons act on **every lot of the post**:
+
+- **Use estimated price** gives each lot that has no price yet its estimated value; lots with a price
+  keep it.
+- **Check covers** goes through every lot's photos not yet checked for symbols, lot after lot, in one
+  walk.
+- **Mark ready** marks every lot still being prepared ready. A lot whose listing photos are missing or
+  out of date has them made first and turns Ready once they are done (*Generating photos — Ready when
+  done*). A lot that cannot be made ready is named under the buttons by its lot number, with its
+  reason, and the others are marked ready.
+
+Once the post is up — waiting for approval or in the group — the rows show its price, state and link
+as before: pricing and readying belong to before it goes up. The **Prepare** screen itself stays as it
+is, for offers on every platform, these lots included.
 
 #### Changing the order of the lots
 
