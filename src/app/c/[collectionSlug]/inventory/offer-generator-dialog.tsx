@@ -586,6 +586,8 @@ function Line({
   const targetId = line.target.kind === "existing" ? line.target.offerId : null;
   const target = line.matches.find((offer) => offer.offerId === targetId) ?? null;
   const name = line.subtitle ? `${line.title} — ${line.subtitle}` : line.title;
+  // A line with no name (#2046) is spoken of by its catalogue numbers.
+  const subject = line.title || line.catalog;
   const catalog = line.variantLabels.length > 0 ? `${line.catalog}, with ${line.variantLabels.join(", ")}` : line.catalog;
   return (
     <div style={{ borderTop: "1px solid var(--color-border)" }}>
@@ -598,14 +600,14 @@ function Line({
             checked={ticked}
             onChange={onToggleTick}
             disabled={disabled}
-            aria-label={`Create the offer of ${line.title}`}
+            aria-label={`Create the offer of ${subject}`}
             style={{ cursor: disabled ? "default" : "pointer" }}
           />
         </CheckCell>
         <button
           type="button"
           aria-expanded={open}
-          aria-label={`${open ? "Hide" : "Show"} the copies of ${line.title}`}
+          aria-label={`${open ? "Hide" : "Show"} the copies of ${subject}`}
           onClick={(e) => {
             e.stopPropagation();
             setOpen((o) => !o);
@@ -643,7 +645,7 @@ function Line({
                   value={target.offerId}
                   onChange={(e) => onChooseTarget(e.target.value)}
                   disabled={disabled}
-                  aria-label={`Offer receiving ${line.title}`}
+                  aria-label={`Offer receiving ${subject}`}
                   style={{ ...SELECT, flex: 1, minWidth: 0 }}
                 >
                   {line.matches.map((offer) => (

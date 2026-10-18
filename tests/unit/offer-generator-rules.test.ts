@@ -17,6 +17,7 @@ import {
   parsePlanFingerprint,
   planOffers,
   seriesSubtitle,
+  singleLineTitle,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -506,5 +507,15 @@ describe("how the preview states a line (#1368)", () => {
     assert.equal(seriesSubtitle("Low values", "Polish Castles"), "Polish Castles");
     assert.equal(seriesSubtitle("Low values", null), null);
     assert.equal(seriesSubtitle("Low values", "  "), null);
+  });
+
+  it("names a single by its issue, then its stamp, and never by a stand-in (#2046)", () => {
+    assert.equal(singleLineTitle("Polish Castles", "Malbork"), "Polish Castles · Malbork");
+    assert.equal(singleLineTitle("Polish Castles", null), "Polish Castles");
+    assert.equal(singleLineTitle("Polish Castles", "  "), "Polish Castles");
+    assert.equal(singleLineTitle(null, "Malbork"), "Malbork");
+    assert.equal(singleLineTitle(" polish castles ", "Polish Castles"), "polish castles");
+    assert.equal(singleLineTitle(null, null), "");
+    assert.equal(singleLineTitle(undefined, ""), "");
   });
 });
