@@ -19,8 +19,8 @@ import { facebookOfferSaleCurrency, lookupFacebookBuyer } from "../../src/lib/fa
 // A Facebook offer is sold and withdrawn like any other (#1777; ADR-0061 §4, amending #1545/#1671).
 // The rules worth a database: a closed Facebook auction asks for its result with or without a bid
 // typed, until it is sold or withdrawn; *Sell*'s new sale finds its buyer by the Facebook profile link
-// first and the name second, refuses a name held by somebody with another link, and keeps the link on
-// the contact; and the sale is in the offer's own currency, a group's currency surviving the
+// — any of the contact's, since #2042 — first and the name second, refuses a name held by somebody
+// with other links, and keeps the link on the contact; and the sale is in the offer's own currency, a group's currency surviving the
 // platform's. The sale itself is the ordinary `createSale` + `addSaleLines` the *Sell* flow calls. The
 // pure half is `tests/unit/facebook-profile-rules.test.ts`.
 
@@ -141,6 +141,16 @@ describe("Selling a Facebook offer (#1777)", () => {
     return resolved.buyerId;
   }
 
+  /** A contact's profile links, in the order they were added. */
+  const profilesOf = async (contactId: string) =>
+    (
+      await prisma.contactFacebookProfile.findMany({
+        where: { contactId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { url: true },
+      })
+    ).map((p) => p.url);
+
   async function refusal(raw: SaleHeaderRaw): Promise<string> {
     const resolved = await resolveSaleHeader(collectionId, raw);
     assert.equal(resolved.ok, false);
@@ -200,11 +210,8 @@ describe("Selling a Facebook offer (#1777)", () => {
 
     const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, include: { lines: true } });
     const buyer = await prisma.contact.findUniqueOrThrow({ where: { id: sale.buyerId! } });
-    assert.deepEqual([buyer.name, buyer.buyer, buyer.facebookProfileUrl], [
-      "Jan Kowalski",
-      true,
-      "https://www.facebook.com/jan.kowalski",
-    ]);
+    assert.deepEqual([buyer.name, buyer.buyer], ["Jan Kowalski", true]);
+    assert.deepEqual(await profilesOf(buyer.id), ["https://www.facebook.com/jan.kowalski"]);
     assert.equal(sale.platformId, facebookId);
     assert.equal(sale.currency, "EUR", "the group's currency, not the platform's PLN");
     assert.deepEqual(sale.lines.map((l) => l.price.toFixed(2)), ["5.00", "5.00"], "each set at its current price");
@@ -233,7 +240,7 @@ describe("Selling a Facebook offer (#1777)", () => {
     const known = await prisma.contact.create({ data: { collectionId, name: "Piotr Zieliński" } });
     assert.equal(await buyerOf(header("piotr zieliński", "https://www.facebook.com/piotr.z")), known.id);
     const filled = await prisma.contact.findUniqueOrThrow({ where: { id: known.id } });
-    assert.equal(filled.facebookProfileUrl, "https://www.facebook.com/piotr.z");
+    assert.deepEqual(await profilesOf(known.id), ["https://www.facebook.com/piotr.z"]);
     assert.equal(filled.buyer, true);
 
     const before = await prisma.contact.count({ where: { collectionId } });
@@ -249,9 +256,39 @@ describe("Selling a Facebook offer (#1777)", () => {
     assert.equal(await prisma.contact.count({ where: { collectionId } }), before, "nothing written");
   });
 
+  it("recognises a buyer by any of the contact's profiles, and adds none on a sale (#2042)", async () => {
+    const tomek = await prisma.contact.create({
+      data: {
+        collectionId,
+        name: "Tomek Mazur",
+        facebookProfiles: {
+          create: [
+            { collectionId, url: "https://www.facebook.com/tomek.mazur" },
+            { collectionId, url: "https://www.facebook.com/profile.php?id=4242" },
+          ],
+        },
+      },
+    });
+    const lookup = await lookupFacebookBuyer(collectionId, {
+      name: "T. M.",
+      profileUrl: "https://m.facebook.com/profile.php?id=4242",
+    });
+    assert.deepEqual([lookup.contact?.id, lookup.contact?.matchedBy], [tomek.id, "profile"]);
+    assert.equal(lookup.contact?.facebookProfileUrls.length, 2);
+    assert.equal(await buyerOf(header("T. M.", "https://www.facebook.com/profile.php?id=4242")), tomek.id);
+    assert.equal(await buyerOf(header("Tomek", "https://www.facebook.com/tomek.mazur")), tomek.id);
+    assert.equal((await profilesOf(tomek.id)).length, 2, "a sale adds no profile to a contact that has some");
+
+    // A third account not yet on the contact: refused by name, pointing at the contact.
+    assert.match(
+      await refusal(header("Tomek Mazur", "https://www.facebook.com/tomek.3")),
+      /add this profile to the contact first/
+    );
+  });
+
   it("takes a name alone or nobody, and refuses a link nobody has with no name, a non-profile link, another platform", async () => {
     const named = await buyerOf(header("Ewa Wiśniewska", ""));
-    assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: named! } })).facebookProfileUrl, null);
+    assert.deepEqual(await profilesOf(named!), []);
     assert.equal(await buyerOf(header("", "")), null, "no buyer, as on any sale");
     assert.match(await refusal(header("", "https://www.facebook.com/nobody.yet")), /name the buyer/);
     assert.match(await refusal(header("X", "https://allegro.pl/uzytkownik/x")), /not a Facebook link/);

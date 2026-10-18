@@ -157,11 +157,11 @@ describe("the sale record (#1949)", () => {
 });
 
 describe("the buyer (#1949)", () => {
-  it("is three fields and how it was found — nothing personal rides along", () => {
+  it("is who it is, its profiles and how it was found — nothing personal rides along", () => {
     const contact = {
       id: "c1",
       name: "Jan Nowak",
-      facebookProfileUrl: "https://www.facebook.com/jan.nowak",
+      facebookProfileUrls: ["https://www.facebook.com/jan.nowak"],
       email: "jan@example.com",
       phone: "+48 600 700 800",
     };
@@ -169,8 +169,20 @@ describe("the buyer (#1949)", () => {
       id: "c1",
       name: "Jan Nowak",
       facebookProfile: "https://www.facebook.com/jan.nowak",
+      facebookProfiles: ["https://www.facebook.com/jan.nowak"],
       found: "profile",
     });
+  });
+
+  it("names the profile it was asked by when the buyer has several, else the first (#2042)", () => {
+    const contact = {
+      id: "c1",
+      name: "Jan Nowak",
+      facebookProfileUrls: ["https://www.facebook.com/jan.nowak", "https://www.facebook.com/jan.2"],
+    };
+    assert.equal(buyer(contact, "profile", "https://www.facebook.com/jan.2").facebookProfile, "https://www.facebook.com/jan.2");
+    assert.equal(buyer(contact, "name", "https://www.facebook.com/other").facebookProfile, "https://www.facebook.com/jan.nowak");
+    assert.equal(buyer({ ...contact, facebookProfileUrls: [] }, "name").facebookProfile, null);
   });
 
   it("is refused, when unknown, with the operation that adds a buyer rather than a seller", () => {

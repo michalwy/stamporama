@@ -93,7 +93,10 @@ export interface AgentSale {
 export interface AgentBuyer {
   readonly id: string;
   readonly name: string;
+  /** The profile the buyer was asked for by, when it is theirs; else their first; null with none. */
   readonly facebookProfile: string | null;
+  /** Every Facebook profile the contact has (#2042) — a buyer may bid from more than one account. */
+  readonly facebookProfiles: readonly string[];
   /** How the buyer was settled on: found by their profile link, found by name, or created. */
   readonly found: "profile" | "name" | "created";
 }
@@ -221,15 +224,20 @@ export function saleRecord(
   };
 }
 
-/** The buyer. Three fields and how they were found — nothing personal. */
+/** The buyer. Who they are, their profiles and how they were found — nothing personal. `asked` is
+ *  the profile link the request named, normalised: it is the one `facebookProfile` shows when the
+ *  contact has it, since several are possible since #2042 and that one is what the agent knows. */
 export function buyer(
-  contact: { id: string; name: string; facebookProfileUrl: string | null },
-  found: AgentBuyer["found"]
+  contact: { id: string; name: string; facebookProfileUrls: readonly string[] },
+  found: AgentBuyer["found"],
+  asked: string | null = null
 ): AgentBuyer {
+  const profiles = contact.facebookProfileUrls;
   return {
     id: contact.id,
     name: contact.name,
-    facebookProfile: contact.facebookProfileUrl,
+    facebookProfile: asked && profiles.includes(asked) ? asked : (profiles[0] ?? null),
+    facebookProfiles: [...profiles],
     found,
   };
 }

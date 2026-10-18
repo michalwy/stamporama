@@ -37,7 +37,7 @@ export function useFacebookBuyerLookup(
     ? lookup.contact.matchedBy === "profile"
       ? `${lookup.contact.name} — found by their profile link.`
       : `${lookup.contact.name} — an existing contact${
-          lookup.contact.facebookProfileUrl || !profileUrl.trim() ? "" : "; the link will be added to it"
+          lookup.contact.facebookProfileUrls.length > 0 || !profileUrl.trim() ? "" : "; the link will be added to it"
         }.`
     : lookup && name.trim()
       ? `A new buyer, ${name.trim()}, will be created.`

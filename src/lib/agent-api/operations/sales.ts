@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "../../db";
+import { normalizeFacebookProfileUrl } from "../../facebook-profile-rules";
 import {
   SaleActionBlockedError,
   countSales,
@@ -13,6 +14,7 @@ import {
 import { SELLABLE_OFFER_STATES } from "../../sale-rules";
 import { saleLineAddedAction } from "../../sale-review";
 import {
+  FACEBOOK_PROFILES_SELECT,
   facebookOfferSaleCurrency,
   findOrCreateBuyer,
   lookupFacebookBuyer,
@@ -366,9 +368,18 @@ export async function findOrCreateBuyerFor(
   if (!resolved.ok) throw invalidRequest(`${resolved.message} Nobody was found or created.`);
   const contact = await prisma.contact.findUniqueOrThrow({
     where: { id: resolved.buyerId! },
-    select: { id: true, name: true, facebookProfileUrl: true },
+    select: {
+      id: true,
+      name: true,
+      facebookProfiles: FACEBOOK_PROFILES_SELECT,
+    },
   });
-  return buyerProjection(contact, resolved.created ? "created" : (resolved.matchedBy ?? "name"));
+  const asked = normalizeFacebookProfileUrl(profile);
+  return buyerProjection(
+    { id: contact.id, name: contact.name, facebookProfileUrls: contact.facebookProfiles.map((p) => p.url) },
+    resolved.created ? "created" : (resolved.matchedBy ?? "name"),
+    asked.ok ? asked.value : null
+  );
 }
 
 export const findOrCreateBuyerOperation: Operation = {
@@ -376,13 +387,13 @@ export const findOrCreateBuyerOperation: Operation = {
   method: "POST",
   path: "/buyers",
   description:
-    "Find the contact a buyer is, or add them — before recording a sale to them. On Facebook send their profile link: a buyer is found by it first and by name second, the way the app's own Sell dialog finds them, and a name held by somebody with a different link is refused as somebody else. A new buyer whose name is close to a contact already here is refused with the candidates until you state it is a different person. A contact found is made a buyer and given the profile link if it had none; nothing else about it changes.",
+    "Find the contact a buyer is, or add them — before recording a sale to them. On Facebook send their profile link: a buyer is found by it — any of the profiles their contact holds — first and by name second, the way the app's own Sell dialog finds them, and a name held by somebody with other links but not this one is refused as somebody else. A new buyer whose name is close to a contact already here is refused with the candidates until you state it is a different person. A contact found is made a buyer and given the profile link if it had none at all; nothing else about it changes.",
   writes: true,
   parameters: FIND_OR_CREATE_BUYER_PARAMETERS,
   result: {
     kind: "object",
     description:
-      "The buyer: its id, to send as `buyer`, the name it is filed under, its Facebook profile link, and `found` — `profile` or `name` for a contact already here, `created` for a new one. It cannot be edited or deleted from here.",
+      "The buyer: its id, to send as `buyer`, the name it is filed under, its Facebook profile link (`facebookProfile` — the one sent when it is theirs, else their first) and all of them (`facebookProfiles`; a buyer may bid from more than one account, and any of them finds the contact), and `found` — `profile` or `name` for a contact already here, `created` for a new one. It cannot be edited or deleted from here.",
   },
   handler: async (context, params) => findOrCreateBuyerFor(context, params),
 };

@@ -787,11 +787,13 @@ on Facebook:
 - **Buyer** — the name their profile shows;
 - **Buyer's Facebook profile** — the link to their profile, if you have it.
 
-While you type, the form says who that is: a contact found by the profile link, or by name, or a new
-buyer it will create. The profile link is kept on the contact (see [Contacts](contacts.md)), so the
-same person is recognised next time even under another name. A contact with the same name but a
-different profile link is somebody else, and the form says so — give the new buyer a name of their
-own. A link nobody has yet needs a name to go with it.
+While you type, the form says who that is: a contact found by the profile link — any of the profiles
+the contact has — or by name, or a new buyer it will create. The profile link is kept on the contact
+(see [Contacts](contacts.md)), so the same person is recognised next time even under another name. A
+contact with the same name but other profile links, none of them this one, may be somebody else, and
+the form says so: if it is the same person bidding from another account, add the profile to their
+contact first; if not, give the new buyer a name of their own. A link nobody has yet needs a name to go
+with it.
 
 The new sale is in the offer's own currency — a group's currency, where it has one — even when the
 Facebook platform uses another.

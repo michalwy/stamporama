@@ -24,7 +24,7 @@ and tick the ones that apply.
 ## Adding and editing
 
 Click **Add contact** and fill in the **name** (required), optional **full name**, **email**,
-**phone**, **Facebook profile**, **notes**, and the **roles**. Names must be unique within the
+**phone**, **Facebook profiles**, **notes**, and the **roles**. Names must be unique within the
 collection.
 
 **Name** is who they are *to you* — what you file them under and what every picker searches.
@@ -33,11 +33,14 @@ ordinary case for a marketplace buyer: you know them as `bronek_1980`, and the p
 *Bronisław Włoch*. Recording a sale from an [Allegro order](allegro.md) fills it in for you, on a
 contact that has none.
 
-**Facebook profile** is the link to the person's profile. It is how the buyer of a
+**Facebook profiles** are the links to the person's profiles. They are how the buyer of a
 [Facebook offer](facebook.md#selling-a-facebook-offer) — an auction's winner or a quick buy's buyer —
-is recognised next time, since names repeat on Facebook; selling one to them fills it in on a contact
-that has none. Any form of the link works — the phone's,
-the desktop's — and it is kept in one form. The contact's row links to the profile.
+is recognised next time, since names repeat on Facebook; selling one to them fills the link in on a
+contact that has none. Some buyers bid from more than one account: **Add profile** gives the contact
+another, and a sale to any of them finds the same person. The **×** beside a link takes it off. Any
+form of the link works — the phone's, the desktop's — and it is kept in one form. A profile belongs to
+one contact only: a link another contact already has is refused, naming that contact. The contact's
+row and its page link to every profile.
 
 ### Market
 
@@ -55,7 +58,7 @@ re-judges every result already recorded — nothing is stored on the results.
 A plain address-book contact is one short form. Tick **Seller** or **Auction house** and the dialog
 grows a second **tab** for what that role brings with it:
 
-- **Contact** — name, full name, email, phone, Facebook profile, roles, market and notes. Always there, and where you land.
+- **Contact** — name, full name, email, phone, Facebook profiles, roles, market and notes. Always there, and where you land.
 - **Auction defaults** — the currency and fee terms a seller trades on.
 
 The tabs are **grouping only**: it is still one record with one **Save changes**, and what you typed
@@ -83,7 +86,7 @@ Click a contact's row to open its **page** — what you have done with that pers
 Ctrl-click, or the middle button, opens it in a new tab.
 
 The top of the page says **who** the contact is: the name, full name, roles, email, phone,
-Facebook profile, market and notes. **Edit** opens the same dialog as the row's pencil.
+Facebook profiles, market and notes. **Edit** opens the same dialog as the row's pencil.
 
 Below it, a **period switch** — **This year**, **Last 12 months** or **All time** — narrows every
 figure on the page. *All time* is where a page starts; the period you pick is remembered for the

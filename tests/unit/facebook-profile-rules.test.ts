@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFacebookProfileUrl } from "../../src/lib/facebook-profile-rules";
+import { facebookProfileLabel, normalizeFacebookProfileUrl } from "../../src/lib/facebook-profile-rules";
 
 // A Facebook buyer's profile link (#1545; ADR-0061 §4): the one identity a repeat buyer is recognised
 // by. The database half — finding the buyer by it when a Facebook offer is sold (#1777) — is
@@ -36,5 +36,12 @@ describe("normalizeFacebookProfileUrl", () => {
     assert.equal(normalizeFacebookProfileUrl("https://allegro.pl/uzytkownik/jan").ok, false);
     assert.equal(normalizeFacebookProfileUrl("https://www.facebook.com/").ok, false);
     assert.equal(normalizeFacebookProfileUrl("not a link at all").ok, false);
+  });
+});
+
+describe("facebookProfileLabel (#2042)", () => {
+  it("shows a stored link by what follows the host, so two profiles are told apart", () => {
+    assert.equal(facebookProfileLabel("https://www.facebook.com/jan.nowak"), "jan.nowak");
+    assert.equal(facebookProfileLabel("https://www.facebook.com/profile.php?id=100012345678"), "profile.php?id=100012345678");
   });
 });

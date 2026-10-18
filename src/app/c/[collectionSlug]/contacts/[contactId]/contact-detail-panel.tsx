@@ -47,6 +47,7 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import { statusChip as tradeStatusChip } from "@/app/c/[collectionSlug]/trades/trade-row";
+import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { CONTACT_ROLES } from "../contact-roles";
 import { ContactFormDialog } from "../contact-form-dialog";
 import { useContactPage, useInvalidateContacts } from "../use-contacts-query";
@@ -268,10 +269,14 @@ function ContactCard({ data }: { data: ContactPage }) {
         </Field>
         <Field label="Phone">{c.phone}</Field>
         <Field label="Facebook">
-          {c.facebookProfileUrl && (
-            <a href={c.facebookProfileUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
-              Profile ↗
-            </a>
+          {c.facebookProfileUrls.length > 0 && (
+            <span style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
+              {c.facebookProfileUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={LINK}>
+                  {facebookProfileLabel(url)} ↗
+                </a>
+              ))}
+            </span>
           )}
         </Field>
         <Field label="Market">{market}</Field>

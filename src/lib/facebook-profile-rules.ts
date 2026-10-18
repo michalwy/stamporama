@@ -43,3 +43,9 @@ export function normalizeFacebookProfileUrl(raw: string | null | undefined): Pro
   }
   return { ok: true, value: `https://www.facebook.com${path}${id ? `?id=${id}` : ""}` };
 }
+
+/** A stored profile link as a contact shows it (#2042): what follows the host — the handle, or
+ *  `profile.php?id=…` — so two profiles of one contact can be told apart without a full address. */
+export function facebookProfileLabel(url: string): string {
+  return url.replace(/^https:\/\/www\.facebook\.com\//, "") || url;
+}

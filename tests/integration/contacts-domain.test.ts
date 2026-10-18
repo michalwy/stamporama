@@ -5,6 +5,8 @@ import {
   listContacts,
   searchContacts,
   createContact,
+  updateContact,
+  ContactFieldError,
   ContactNameTakenError,
 } from "../../src/lib/contacts";
 
@@ -194,5 +196,91 @@ describe("contact referenced by a purchase (onDelete: Restrict)", () => {
 
     // The Restrict FK rejects the delete at the database level.
     await assert.rejects(() => prisma.contact.delete({ where: { id: contact.id } }));
+  });
+});
+
+// A contact holds several Facebook profiles, and a profile is one contact's (#2042).
+describe("a contact's Facebook profiles (#2042)", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`fbp-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `fbp-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  const base = { name: "Ola Kot", buyer: true };
+
+  it("keeps several, normalised, in the order given, blanks and repeats folded away", async () => {
+    const contact = await createContact(userId, collectionId, {
+      ...base,
+      facebookProfileUrls: ["https://m.facebook.com/ola.kot/", "", "facebook.com/ola.kot", "https://www.facebook.com/ola.second"],
+    });
+    assert.deepEqual(contact.facebookProfileUrls, [
+      "https://www.facebook.com/ola.kot",
+      "https://www.facebook.com/ola.second",
+    ]);
+  });
+
+  it("adds a further profile without losing any, leaves them alone when omitted, and takes off one removed", async () => {
+    const contact = await createContact(userId, collectionId, {
+      name: "Marek Lis",
+      facebookProfileUrls: ["https://www.facebook.com/marek.lis"],
+    });
+    const added = await updateContact(userId, contact.id, {
+      name: "Marek Lis",
+      facebookProfileUrls: ["https://www.facebook.com/marek.lis", "https://www.facebook.com/marek.lis.2"],
+    });
+    assert.deepEqual(added.facebookProfileUrls, [
+      "https://www.facebook.com/marek.lis",
+      "https://www.facebook.com/marek.lis.2",
+    ]);
+    const untouched = await updateContact(userId, contact.id, { name: "Marek Lis", notes: "bids late" });
+    assert.equal(untouched.facebookProfileUrls.length, 2, "an update that does not mention them keeps them");
+    const removed = await updateContact(userId, contact.id, {
+      name: "Marek Lis",
+      facebookProfileUrls: ["https://www.facebook.com/marek.lis.2"],
+    });
+    assert.deepEqual(removed.facebookProfileUrls, ["https://www.facebook.com/marek.lis.2"]);
+  });
+
+  it("refuses a profile another contact holds, naming that contact, and writes nothing", async () => {
+    const holder = await createContact(userId, collectionId, {
+      name: "Ewa Nowak",
+      facebookProfileUrls: ["https://www.facebook.com/ewa.nowak"],
+    });
+    await assert.rejects(
+      createContact(userId, collectionId, {
+        name: "Ewa N.",
+        facebookProfileUrls: ["https://m.facebook.com/ewa.nowak"],
+      }),
+      (err: unknown) => err instanceof ContactFieldError && /already on the contact Ewa Nowak/.test(err.message)
+    );
+    assert.equal(await prisma.contact.count({ where: { collectionId, name: "Ewa N." } }), 0, "no contact half-made");
+
+    const other = await createContact(userId, collectionId, { name: "Jan Kot" });
+    await assert.rejects(
+      updateContact(userId, other.id, {
+        name: "Jan Kot (renamed)",
+        facebookProfileUrls: ["https://www.facebook.com/ewa.nowak"],
+      }),
+      ContactFieldError
+    );
+    const after = await prisma.contact.findUniqueOrThrow({ where: { id: other.id } });
+    assert.equal(after.name, "Jan Kot", "the refused save changed nothing");
+    assert.equal(await prisma.contactFacebookProfile.count({ where: { contactId: holder.id } }), 1);
+  });
+
+  it("refuses a link that is not a profile", async () => {
+    await assert.rejects(
+      createContact(userId, collectionId, { name: "X", facebookProfileUrls: ["https://allegro.pl/uzytkownik/x"] }),
+      ContactFieldError
+    );
   });
 });

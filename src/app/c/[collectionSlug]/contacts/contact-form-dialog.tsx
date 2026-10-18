@@ -6,9 +6,11 @@ import {
   DialogBody,
   DialogActions,
   DialogFormColumns,
+  DialogSecondaryButton,
   FORM_DIALOG_COLUMNS_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
+import { Icon } from "@/app/icons";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
 import type { ContactListItem } from "@/lib/contacts";
@@ -64,6 +66,60 @@ function TabPanel({ show, children }: { show: boolean; children: React.ReactNode
       }}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * The contact's Facebook profiles (#1545, several since #2042): one field each, every field named
+ * `facebookProfileUrl`, so the action reads the whole list with `getAll` and the list submitted is
+ * the contact's set — a field removed here is a profile taken off. Fields are uncontrolled and keyed,
+ * so removing one leaves what is typed in the others where it was. A contact with none starts on one
+ * blank field, the single field it had before.
+ */
+function FacebookProfileFields({ initial, disabled }: { initial: readonly string[]; disabled: boolean }) {
+  const [rows, setRows] = useState(() =>
+    (initial.length > 0 ? initial : [""]).map((url, key) => ({ key, url }))
+  );
+  const [nextKey, setNextKey] = useState(rows.length);
+  return (
+    <div style={FIELD_GAP}>
+      <LabelWithError htmlFor="contact-facebook-profile-0">Facebook profiles</LabelWithError>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {rows.map((row, i) => (
+          <div key={row.key} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <TextInput
+              id={`contact-facebook-profile-${i}`}
+              name="facebookProfileUrl"
+              type="url"
+              defaultValue={row.url}
+              placeholder="https://www.facebook.com/…"
+              aria-label={`Facebook profile ${i + 1}`}
+              disabled={disabled}
+              style={INPUT_STYLE}
+            />
+            <DialogSecondaryButton
+              aria-label="Remove this profile"
+              disabled={disabled}
+              onClick={() => setRows(rows.filter((r) => r.key !== row.key))}
+            >
+              <Icon name="close" size="sm" />
+            </DialogSecondaryButton>
+          </div>
+        ))}
+        <div>
+          <DialogSecondaryButton
+            disabled={disabled}
+            onClick={() => {
+              setRows([...rows, { key: nextKey, url: "" }]);
+              setNextKey(nextKey + 1);
+            }}
+          >
+            <Icon name="add" size="sm" />
+            &nbsp;Add profile
+          </DialogSecondaryButton>
+        </div>
+      </div>
     </div>
   );
 }
@@ -228,19 +284,9 @@ export function ContactFormDialog({
                     </div>
                   </div>
 
-                  {/* What a Facebook auction's winner is recognised by (#1545): names repeat there. */}
-                  <div style={FIELD_GAP}>
-                    <LabelWithError htmlFor="contact-facebook-profile">Facebook profile</LabelWithError>
-                    <TextInput
-                      id="contact-facebook-profile"
-                      name="facebookProfileUrl"
-                      type="url"
-                      defaultValue={contact?.facebookProfileUrl ?? ""}
-                      placeholder="https://www.facebook.com/…"
-                      disabled={isPending}
-                      style={INPUT_STYLE}
-                    />
-                  </div>
+                  {/* What a Facebook buyer is recognised by (#1545): names repeat there, and some buyers
+                      bid from more than one account (#2042). */}
+                  <FacebookProfileFields initial={contact?.facebookProfileUrls ?? []} disabled={isPending} />
                 </div>
 
                 <div>

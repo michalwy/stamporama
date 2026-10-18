@@ -8,6 +8,7 @@ import {
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
+import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { CONTACT_ROLES } from "./contact-roles";
 
 const CHIP: React.CSSProperties = {
@@ -99,24 +100,27 @@ export function ContactRow({ contact: c, collectionSlug, isLast, onEdit, onDelet
           <RowActionsMenu actions={menuActions} ariaLabel="Contact actions" />
         </div>
 
-        {/* Line 2: full name · email · phone · Facebook profile (only when present). The full name leads because it
+        {/* Line 2: full name · email · phone · Facebook profiles (only when present). The full name leads because it
             says *who* the row is — a buyer filed under their marketplace login (#463) is otherwise
             a handle with no person attached. */}
-        {(c.fullName || c.email || c.phone || c.facebookProfileUrl) && (
+        {(c.fullName || c.email || c.phone || c.facebookProfileUrls.length > 0) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.3rem" }}>
             {c.fullName && <span style={META_INLINE}>{c.fullName}</span>}
             {c.email && <span style={META_INLINE}>{c.email}</span>}
             {c.phone && <span style={META_INLINE}>{c.phone}</span>}
-            {c.facebookProfileUrl && (
+            {/* Every profile the contact has (#2042), each by its handle — two accounts of one buyer
+                are told apart by it. */}
+            {c.facebookProfileUrls.map((url) => (
               <a
-                href={c.facebookProfileUrl}
+                key={url}
+                href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ ...META_INLINE, color: "var(--color-accent)", textDecoration: "none" }}
               >
-                Facebook ↗
+                Facebook: {facebookProfileLabel(url)} ↗
               </a>
-            )}
+            ))}
           </div>
         )}
       </div>
