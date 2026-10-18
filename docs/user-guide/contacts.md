@@ -86,7 +86,8 @@ Click a contact's row to open its **page** — what you have done with that pers
 Ctrl-click, or the middle button, opens it in a new tab.
 
 The top of the page says **who** the contact is: the name, full name, roles, email, phone,
-Facebook profiles, market and notes. **Edit** opens the same dialog as the row's pencil.
+Facebook profiles, market and notes. **Edit** opens the same dialog as the row's pencil, and
+**Merge with…** makes this contact and another one into one (see [Merging two contacts](#merging-two-contacts)).
 
 Below it, a **period switch** — **This year**, **Last 12 months** or **All time** — narrows every
 figure on the page. *All time* is where a page starts; the period you pick is remembered for the
@@ -169,6 +170,31 @@ only sellers whose name contains "Jan".
 
 The search reads the **full name** as well as the name, so a buyer filed under their marketplace
 login is still found by the name you remember them by.
+
+## Merging two contacts
+
+The same person sometimes ends up as two contacts — a buyer bidding on Facebook from a second
+account, or a contact made twice by mistake. **Merge with…** on a contact's page makes them one.
+
+Search for the other contact by name or full name. The dialog then shows the two side by side, with
+the merged contact beside them, and you choose **which one remains**. The merged contact:
+
+- keeps the remaining contact's **name** and every detail it already has — **full name**, **email**,
+  **phone**, **market** — and takes the ones it lacks from the other;
+- holds **both contacts' Facebook profiles**, so a later sale to either account finds it;
+- carries **both sets of roles**;
+- keeps its own **notes**, with the other's added under them;
+- takes the other's **auction defaults** only if it has none of its own — a currency and its fees are
+  one seller's terms, so they are never mixed from two.
+
+Before you merge, the dialog says how many **purchases**, **sales** and **trades** — and any tracked
+**auction sales** and **price observations** — of the other contact will move. **Merge** moves every
+one of them to the remaining contact and deletes the other; its name is not kept, since buyers are
+recognised by their profile, not by name. The contact's page then counts them all together. There is
+no undoing a merge.
+
+You can merge from either contact's page: if the one whose page you are on is the one that goes, you
+land on the merged contact's page.
 
 ## Deleting
 
