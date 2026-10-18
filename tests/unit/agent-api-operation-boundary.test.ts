@@ -945,7 +945,7 @@ describe("the agent API's operation modules (#1949)", () => {
   const domain = readFileSync(path.join(ROOT, "src/lib/sales.ts"), "utf8");
   const salesWriters = [
     ...domain.matchAll(
-      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle)[A-Za-z]*)\(/g
+      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle|merge)[A-Za-z]*)\(/g
     ),
   ].map((match) => match[1]);
 
@@ -975,6 +975,8 @@ describe("the agent API's operation modules (#1949)", () => {
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
     assert.ok(salesWriters.length >= 10, `found only ${salesWriters.length} writers in sales.ts`);
     assert.ok(salesWriters.includes("deleteSale") && salesWriters.includes("setSaleStatus"));
+    // Merging two sales (#2041) deletes one of them, so it is the collector's, like deleting.
+    assert.ok(salesWriters.includes("mergeSales"));
     const closed = new Set([
       ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
       ...SALE_SHARE_WRITES,

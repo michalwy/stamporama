@@ -676,6 +676,33 @@ writes before you confirm add up, so a sale it recorded and then added a second 
 - **Nothing else changes.** A marked sale counts in your figures, retires its copies and moves
   through its statuses exactly like any other.
 
+## Merging two sales
+
+Sometimes two sales have to become one — two were recorded by mistake for the same buyer, or one
+buyer bid from two accounts and asked for everything to go together, in one parcel and one payment.
+**Merge with…** in the header of a sale's screen does it.
+
+1. **Choose the other sale.** Only sales on the **same platform**, in the **same currency** and
+   **not yet sent** are offered; a sale already *Sent* or *Delivered* has no **Merge with…** at all.
+2. **Choose which one remains.** It keeps its own buyer, date, order number, transaction link,
+   shipping option and status. The other is deleted once everything has moved; its number is never
+   given to another sale, and its buyer's contact stays as it is. The dialog names the other sale's
+   order number and buyer before you merge. On Allegro, an order whose sale is merged away loses
+   its order number, so the Allegro worklist offers that order again.
+3. **Choose each amount** — buyer handling (or the total paid), commission and postage — from either
+   sale, or their **Sum**. The last column shows the merged sale as it will be: its gross, each
+   amount, and what the buyer pays, with a warning when a total paid would be below the gross.
+   Picking one sale's *total paid* suits a buyer who paid once for everything; the sum of two totals
+   is what both payments came to. Postages paid in two different currencies can't be summed — take
+   one of them.
+
+**Merge** then moves every sold set — with its price, its packed marks and any set still to be
+chosen — and every packing supply the other sale used. Nothing is sold or withdrawn twice: the
+copies stay sold and the offers stay *Sold*. The totals, profit and [message to the
+buyer](#message-to-the-buyer) follow at once. If the other sale was recorded by an assistant and you
+had not [confirmed](#what-the-assistant-recorded--to-review--api) it, the merged sale is marked *To
+review* too.
+
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
