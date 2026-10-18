@@ -48,6 +48,7 @@ import {
   type ViewerPairing,
   type ZoomSide,
 } from "@/app/c/[collectionSlug]/shared/tile-zoom-view";
+import { HeldCopyPageLink } from "./held-copy-page-link";
 
 /** Edge of each photo of the piece when there is no tile — the photos added in the step, which are
  * not saved yet and so are not a picture the viewer can open. A click opens the lightbox. */
@@ -92,6 +93,9 @@ const STRIP_THUMB = "3rem";
  *
  * With no tile the piece is the photos added in the step, unsaved and so outside the viewer; with no
  * picture at all the held copies are still shown — the collector may have the stamp in hand.
+ *
+ * The copy in the held viewer is named by its number above it, which opens its own page in a new tab
+ * (#2072): where it is filed, its faults, its offers — what a picture does not say.
  *
  * Not the reference comparison (#1004/#1005), which aligns a stamp against a reference for
  * screening forgeries. This compares the collector's own copies, and measures nothing it writes.
@@ -224,6 +228,20 @@ export function HeldCopiesCompareDialog({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
             {stampLabel}
           </span>
+          {/* The copy in the viewer on its own page, in a new tab so this window and the step under
+              it stay as they are (#2072). The strip's cards are buttons choosing a copy, so the
+              link is the chosen one's, here, rather than a link inside each card. */}
+          {chosen && !isLoading && !isError && (
+            <span style={{ marginLeft: "auto" }}>
+              <HeldCopyPageLink
+                itemId={chosen.id}
+                itemNo={formatItemNo(chosen.itemNo, pad)}
+                named
+                focusable
+                fontSize="0.8125rem"
+              />
+            </span>
+          )}
         </div>
         {isLoading ? (
           <p style={MUTED}>Loading the copies you hold…</p>
