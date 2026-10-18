@@ -16,6 +16,7 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { formatEntityNo } from "@/lib/quick-jump";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
+import { isTerminalState } from "@/lib/offer-rules";
 import {
   assistantRunSummary,
   planAssistantRuns,
@@ -78,6 +79,8 @@ type DialogState =
   | { kind: "delete"; offer: OfferListItem }
   | { kind: "bulkWithdraw" }
   | { kind: "bulkDelete" }
+  /** The ticked offers sold into one sale (#2050) — those in view when it was asked. */
+  | { kind: "bulkSell"; offers: OfferListItem[] }
   /** Several ticked Facebook offers becoming one post, which asks for its title (#1862). */
   | { kind: "postTogether" }
   /** Ticked Facebook offers joining a post not yet up as its next lots (#1870). */
@@ -1165,6 +1168,22 @@ export function OffersListPanel({
                           </button>
                         </Tooltip>
                       )}
+                      {/* Sell the ticked offers into one sale (#2050). Offered for any selection: the
+                          dialog names what one sale cannot take and sells the rest. */}
+                      <Tooltip content="Sell the ticked offers into one sale — an open one or a new one — each with every set it still has, at its own price.">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBulkSkips([]);
+                            setDialog({ kind: "bulkSell", offers: selectedInView });
+                          }}
+                          disabled={isPending}
+                          style={BULK_BTN}
+                        >
+                          <Icon name="sell" size="sm" />{" "}
+                          {hiddenSelectedCount > 0 ? `Sell ${selectedInView.length}…` : "Sell…"}
+                        </button>
+                      </Tooltip>
                       {/* Mark ready (#1893), offered while a ticked offer in view is Preparing; it
                           runs on those alone, and says how many when the others are ticked too. */}
                       {(() => {
@@ -1249,7 +1268,7 @@ export function OffersListPanel({
                 </>
               ) : (
                 <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                  Select offers to mark ready, withdraw or delete them together
+                  Select offers to sell, mark ready, withdraw or delete them together
                 </span>
               )}
             </div>
@@ -1384,7 +1403,21 @@ export function OffersListPanel({
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           today={today}
-          offer={dialog.offer}
+          offers={[dialog.offer]}
+          onClose={closeDialog}
+        />
+      )}
+
+      {/* Several ticked offers sold into one sale (#2050); those sold are unticked, the ones it left
+          out stay ticked — they are what is left to deal with. */}
+      {dialog.kind === "bulkSell" && (
+        <SellOfferFlowDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          baseCurrency={baseCurrency}
+          today={today}
+          offers={dialog.offers.map((o) => ({ ...o, closed: isTerminalState(o.state) || o.setCount === 0 }))}
+          onSold={(ids) => setSelection((prev) => keptAfterBulkRun(prev, ids, []))}
           onClose={closeDialog}
         />
       )}

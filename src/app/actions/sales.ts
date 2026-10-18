@@ -12,6 +12,7 @@ import {
   updateSaleShipment,
   updateSaleShipping,
   addSaleLines,
+  readSaleHeadline,
   addSaleCopySet,
   updateSaleLinePrice,
   removeSaleLine,
@@ -249,11 +250,17 @@ export interface SaleLineRaw {
   itemIds: string[];
 }
 
+/** Sold sets added, and the sale they went into named — *Sell* says so in a toast rather than opening
+ *  the sale (#2049). */
+export type AddSaleLinesActionState =
+  | { status: "success"; saleNo: number; buyerName: string | null }
+  | { status: "error"; message: string };
+
 export async function addSaleLinesAction(
   saleId: string,
   raw: SaleLineRaw[],
   opts: { toSentSale?: boolean } = {}
-): Promise<SaleActionState> {
+): Promise<AddSaleLinesActionState> {
   const session = await getSession();
   if (raw.length === 0) {
     return { status: "error", message: "Choose at least one set to add." };
@@ -274,7 +281,7 @@ export async function addSaleLinesAction(
   }
   try {
     await addSaleLines(session.user.id, saleId, lines, { toSentSale: opts.toSentSale === true });
-    return { status: "success" };
+    return { status: "success", ...(await readSaleHeadline(session.user.id, saleId)) };
   } catch (e) {
     return fail(e, "Failed to add the sold sets.");
   }

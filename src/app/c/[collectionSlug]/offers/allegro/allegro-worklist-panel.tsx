@@ -131,6 +131,7 @@ function useAllegroWorklist(collectionId: string) {
 function subjectOf(offer: WorklistOffer): SellableOfferSubject {
   return {
     id: offer.id,
+    offerNo: offer.offerNo,
     name: offer.name,
     label: offer.label,
     platformId: offer.platformId,
@@ -623,7 +624,7 @@ export function AllegroWorklistPanel({
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           today={today}
-          offer={subjectOf(selling)}
+          offers={[subjectOf(selling)]}
           onClose={() => {
             setSelling(null);
             void queryClient.invalidateQueries({ queryKey: ["allegro-worklist", collectionId] });

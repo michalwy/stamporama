@@ -2540,12 +2540,31 @@ first. Choose where the sold sets go:
   sale is single-platform); fill in the buyer and date and continue.
 
 Either way, every set the offer still has left to sell is added at its current asking price, and
-you land on the sale's detail screen to review or adjust it. An offer with nothing left to sell (
-every set already sold) has no **Sell** action to offer.
+**you stay where you were** — on the list, the offer's screen or a Facebook post — so you can go on
+to the next offer. The offer shows its new state straight away, and a message in the corner says what
+went where — *Offer #412 added to sale #12 · Jan Kowalski* — with **Open sale** to review or adjust
+the sale. An offer with nothing left to sell (every set already sold) has no **Sell** action to offer.
 
 A **Facebook** offer is sold the same way, auction or quick buy. Its new sale asks for the buyer as
 Facebook shows them — their name and their profile link — and finds or creates the contact by the
 link first; the sale is in the offer's own currency. See
+[Facebook](facebook.md#selling-a-facebook-offer).
+
+### Selling several offers together
+
+A buyer often takes several offers at once. Tick them and choose **Sell…** in the selection bar: the
+same dialog opens for all of them, and they go into **one** sale — an open one or a new one, as above.
+Each offer adds every set it still has left, at its own current price — a Facebook auction's at its
+highest recorded bid — exactly as its own **Sell** would.
+
+One sale is on one platform and in one currency, so the ticked offers must share both. Where they do
+not, the dialog sells the offers most of them agree on and names each one it leaves out, with why —
+another platform, another currency, or nothing left to sell; when none is left it says so and sells
+nothing. As with every action on ticked offers, only the ones in view are sold. Afterwards the offers
+sold are unticked, the ones left out stay ticked, and the message names the sale and how many offers
+went into it.
+
+On a Facebook post's screen the lots can be ticked the same way — see
 [Facebook](facebook.md#selling-a-facebook-offer).
 
 ### Selling a single set
@@ -2554,7 +2573,8 @@ An offer holding several sets — a [quantity](#sets--what-an-offer-is-made-of) 
 a mixed listing — is often sold a piece at a time. Each set's own **⋮** menu on the offer's detail
 screen therefore carries **Sell this set**, which opens the same dialog scoped to that one set: pick
 an open sale on the platform or start a new one, and only that set is added, at the offer's
-current asking price. Everything else in the offer stays exactly as it was and remains for sale.
+current asking price. Everything else in the offer stays exactly as it was and remains for sale, and,
+as with the offer's own **Sell**, you stay on the offer's screen.
 
 The offer-level **Sell** is unchanged — it still takes *every* set the offer has left, in one go.
 Use the set's own action when you are selling part of the listing, the offer's when the whole thing

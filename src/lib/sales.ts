@@ -1002,6 +1002,20 @@ export async function addSaleLines(
   );
 }
 
+/** What names a sale in a sentence — its number and its buyer — for the toast *Sell* leaves behind
+ *  once it no longer opens the sale (#2049). */
+export async function readSaleHeadline(
+  ownerId: string,
+  saleId: string
+): Promise<{ saleNo: number; buyerName: string | null }> {
+  await assertSaleOwner(ownerId, saleId);
+  const sale = await prisma.sale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: { saleNo: true, buyer: { select: { name: true } } },
+  });
+  return { saleNo: sale.saleNo, buyerName: sale.buyer?.name ?? null };
+}
+
 /** The two refusals about the sale itself rather than its lines: nothing to add, and a sale already
  *  sent that the caller did not say it meant (#1950). */
 function assertSaleTakesLines(

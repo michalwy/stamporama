@@ -21,7 +21,7 @@ import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
-import { manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
+import { isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
 import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -43,7 +43,7 @@ import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
 import { BackToReadyDialog, backToReadyDone } from "../../back-to-ready-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
-import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
+import { SellOfferFlowDialog, type SellableOfferSubject } from "../../sell-offer-flow-dialog";
 import { useFacebookPostLotsPrepare, useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-walk";
@@ -173,7 +173,7 @@ type Dialog =
   | { kind: "regenerate"; scope: RegenerateScope }
   | { kind: "titleTemplate" }
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
-  | { kind: "sell"; lot: FacebookKitLot };
+  | { kind: "sell"; lots: FacebookKitLot[] };
 
 /** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
 interface LotSkip {
@@ -232,11 +232,15 @@ export function FacebookPostPanel({
   // The order just asked for (#1986), drawn until the screen is read again — so a dragged row stays
   // where it was dropped rather than jumping back for the round trip.
   const [movedOrder, setMovedOrder] = useState<string[] | null>(null);
+  // The lots ticked to be sold together (#2050), by offer id. Only a lot that can still be sold has a
+  // box; one that has sold since it was ticked simply drops out of `tickedLots`.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
 
   const serverLots = screen?.kit.lots ?? [];
   const lots = movedOrder
     ? movedOrder.flatMap((id) => serverLots.find((l) => l.offerId === id) ?? [])
     : serverLots;
+  const tickedLots = lots.filter((l) => ticked.has(l.offerId) && !isTerminalState(l.state));
   const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
 
   // The lots in their new order, numbered from it (#1986); the server writes the numbers.
@@ -549,12 +553,21 @@ export function FacebookPostPanel({
     });
   }
 
+  function toggleTicked(offerId: string) {
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(offerId)) next.delete(offerId);
+      else next.add(offerId);
+      return next;
+    });
+  }
+
   function lotActions(lot: FacebookKitLot): RowAction[] {
     const terminal = lot.state === "sold" || lot.state === "withdrawn";
     return [
       { key: "open", label: "Open offer", icon: "externalLink", href: `/c/${collectionSlug}/offers/${lot.offerId}` },
       ...(!terminal
-        ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => setDialog({ kind: "sell", lot }) } as RowAction]
+        ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => setDialog({ kind: "sell", lots: [lot] }) } as RowAction]
         : []),
       // Withdrawing one lot is the lot's own once the post is up (#1779); a pending post is withdrawn
       // whole, from the post's own moves.
@@ -888,6 +901,26 @@ export function FacebookPostPanel({
                   .
                 </p>
               )}
+              {/* Lots ticked to be sold to one buyer (#2050), one sale for all of them. */}
+              {tickedLots.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.75rem 0 0", fontSize: "0.8125rem" }}>
+                  <span style={{ color: "var(--color-text-secondary)" }}>
+                    {tickedLots.length} lot{tickedLots.length === 1 ? "" : "s"} ticked
+                  </span>
+                  <Tooltip content="Sell the ticked lots into one sale — an open one or a new one — each at its own price.">
+                    <DialogSecondaryButton
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => setDialog({ kind: "sell", lots: tickedLots })}
+                    >
+                      <Icon name="sell" size="sm" /> Sell…
+                    </DialogSecondaryButton>
+                  </Tooltip>
+                  <button type="button" style={STEP_LINK} onClick={() => setTicked(new Set())}>
+                    Clear
+                  </button>
+                </div>
+              )}
               <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
                 {lots.map((lot, index) => {
                   const { photos, caption } = lotKit(lot);
@@ -913,6 +946,8 @@ export function FacebookPostPanel({
                         onTranslated={refreshTexts}
                         text={lotTexts?.[lot.offerId] ?? null}
                         actions={lotActions(lot)}
+                        ticked={isTerminalState(lot.state) ? null : ticked.has(lot.offerId)}
+                        onToggleTicked={() => toggleTicked(lot.offerId)}
                         prepare={prepareRows?.[lot.offerId] ?? null}
                         priceRef={(el) => {
                           if (el) priceInputs.current.set(lot.offerId, el);
@@ -1100,22 +1135,30 @@ export function FacebookPostPanel({
         />
       )}
 
+      {/* One lot's Sell, or the ticked lots' (#2050) — one sale either way, and the screen stays (#2049). */}
       {dialog.kind === "sell" && (
         <SellOfferFlowDialog
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           today={today}
-          offer={{
-            id: dialog.lot.offerId,
-            name: null,
-            label: dialog.lot.title,
-            platformId: screen.platform.id,
-            platformName: screen.platform.name,
-            price: dialog.lot.price,
-            currency: dialog.lot.currency,
-            facebookGroupId: kit.group.id,
-          }}
+          offers={dialog.lots.map(
+            (lot): SellableOfferSubject => ({
+              id: lot.offerId,
+              offerNo: lot.offerNo,
+              name: null,
+              label: lot.title,
+              platformId: screen.platform.id,
+              platformName: screen.platform.name,
+              price: lot.price,
+              currency: lot.currency,
+              facebookGroupId: kit.group.id,
+              closed: isTerminalState(lot.state),
+            })
+          )}
+          onSold={(ids) =>
+            setTicked((prev) => new Set([...prev].filter((id) => !ids.includes(id))))
+          }
           onClose={() => setDialog({ kind: "none" })}
         />
       )}
@@ -1149,6 +1192,8 @@ function LotRow({
   onTranslated,
   text,
   actions,
+  ticked,
+  onToggleTicked,
   prepare,
   priceRef,
   onPriceEnter,
@@ -1177,6 +1222,9 @@ function LotRow({
   /** Where its title and description stand against their templates (#1983); null once the post is up. */
   text: OfferTextStatus | null;
   actions: RowAction[];
+  /** Whether the lot is ticked to be sold with others (#2050); null when it can no longer be sold. */
+  ticked: boolean | null;
+  onToggleTicked: () => void;
   /** The lot as a Prepare row (#2031) while the post is not up — its price, title and readiness are then
    *  edited here; null once the post is up, or until the rows are read. */
   prepare: PrepareOffer | null;
@@ -1212,6 +1260,15 @@ function LotRow({
               >
                 <DragGrip label="Drag to move this lot" />
               </span>
+            )}
+            {ticked !== null && (
+              <input
+                type="checkbox"
+                checked={ticked}
+                onChange={onToggleTicked}
+                aria-label={`Tick lot ${lotNo}`}
+                style={{ verticalAlign: "middle", margin: "0 0.375rem 0 0" }}
+              />
             )}
             <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
             {!prepare && (
