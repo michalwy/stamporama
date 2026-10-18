@@ -20,6 +20,7 @@ import {
   facebookPostSource,
   facebookPostStage,
   facebookPostTitleRefusal,
+  facebookTitleWithWords,
   FACEBOOK_POST_STAGES,
   FACEBOOK_POST_STAGE_LABEL,
   isFacebookPostStage,
@@ -1146,5 +1147,33 @@ describe("the order of a post's lots (#1986)", () => {
     for (const order of [["a", "b"], ["a", "b", "c", "c"], ["a", "b", "x"], ["a", "a", "b"]]) {
       assert.match(facebookLotOrderRefusal(["a", "b", "c"], order) ?? "", /lots have changed/);
     }
+  });
+});
+
+describe("words added to or removed from every lot's title (#2033)", () => {
+  it("adds the words at the start or the end, joined by one space", () => {
+    assert.equal(facebookTitleWithWords("Mercury 1950", "RARE", "start", "add"), "RARE Mercury 1950");
+    assert.equal(facebookTitleWithWords("Mercury 1950", "– mint", "end", "add"), "Mercury 1950 – mint");
+    assert.equal(facebookTitleWithWords("  Mercury ", " RARE ", "start", "add"), "RARE Mercury");
+    assert.equal(facebookTitleWithWords("", "RARE", "end", "add"), "RARE");
+  });
+
+  it("removes the words only where the title starts or ends with them exactly", () => {
+    assert.equal(facebookTitleWithWords("RARE Mercury 1950", "RARE", "start", "remove"), "Mercury 1950");
+    assert.equal(facebookTitleWithWords("Mercury 1950 – mint", "– mint", "end", "remove"), "Mercury 1950");
+    assert.equal(facebookTitleWithWords("Mercury RARE", "RARE", "start", "remove"), null);
+    assert.equal(facebookTitleWithWords("rare Mercury", "RARE", "start", "remove"), null);
+    assert.equal(facebookTitleWithWords("[NEW]Mercury", "[NEW]", "start", "remove"), "Mercury");
+  });
+
+  it("never cuts a word in two, and never leaves a title empty", () => {
+    assert.equal(facebookTitleWithWords("Rarest Mercury", "Rare", "start", "remove"), null);
+    assert.equal(facebookTitleWithWords("Mercury 19501", "1950", "end", "remove"), null);
+    assert.equal(facebookTitleWithWords("RARE", "RARE", "start", "remove"), null);
+  });
+
+  it("changes nothing for blank words", () => {
+    assert.equal(facebookTitleWithWords("Mercury", "  ", "start", "add"), null);
+    assert.equal(facebookTitleWithWords("Mercury", "", "end", "remove"), null);
   });
 });

@@ -513,6 +513,19 @@ keeps the title it went up with, as it keeps everything else.
   row, a line above the lots counts them, and its **Regenerate them…** offers just those. A lot written
   by hand is marked **Written by hand** instead: its words were never the template's. Once the post is
   up its text stays as posted, so the action is not offered.
+- **Title template for all lots…** — beside the *Lots* heading until the post is up: one title
+  template, with the same placeholders as the platform's title template in Settings, given to every lot
+  of the post as that offer's own title template, and every lot's title written again from it. It opens
+  on the template the lots were last given here, or else the Facebook platform's. A lot whose title you
+  wrote by hand is listed and keeps your words unless you tick it. Lots added to the post later keep
+  their own titles.
+- **Add to titles…** / **Remove from titles…** — beside it: the same words put at the **start** or the
+  **end** of every lot's title, or taken off it — titles you wrote by hand included. The dialog lists
+  the titles as they will read before you save. Removing takes the words off only a title that starts
+  or ends with them exactly, as whole words — removing *Rare* leaves *Rarest stamp* alone. A title
+  changed this way counts as written by hand from then on, as one edited on the offer's screen does;
+  the title template above writes it from the template again. Neither is offered once the post is up:
+  its text stays as posted.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,

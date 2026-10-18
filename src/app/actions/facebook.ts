@@ -19,6 +19,7 @@ import {
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import {
   addFacebookLots,
+  changeFacebookLotTitleWords,
   createFacebookPost,
   refreshFacebookPostTexts,
   regenerateFacebookLotTexts,
@@ -26,10 +27,12 @@ import {
   reorderFacebookLots,
   setFacebookPostLayout,
   setFacebookPostTitle,
+  setFacebookPostTitleTemplate,
   takeFacebookPostBackToReady,
   type FacebookBackToReady,
   type FacebookLotsAdded,
 } from "@/lib/facebook-posts";
+import type { FacebookTitleEdge, FacebookTitleWordsMode } from "@/lib/facebook-post-rules";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
@@ -249,6 +252,41 @@ export async function regenerateFacebookLotTextsAction(
     return { status: "success", count };
   } catch (err) {
     return failure(err, "Failed to regenerate the lots' texts.");
+  }
+}
+
+/** *Title template for all lots…* on a post's screen (#2033): every lot's own title template, and
+ *  their titles regenerated from it — the ticked hand-written ones too. */
+export async function setFacebookPostTitleTemplateAction(
+  postId: string,
+  template: string,
+  overwrite: string[]
+): Promise<{ status: "success"; count: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const count = await setFacebookPostTitleTemplate(session.user.id, postId, template, overwrite);
+    return { status: "success", count };
+  } catch (err) {
+    return failure(err, "Failed to give the lots the title template.");
+  }
+}
+
+/** *Add to titles…* / *Remove from titles…* on a post's screen (#2033). */
+export async function changeFacebookLotTitleWordsAction(
+  postId: string,
+  words: string,
+  edge: FacebookTitleEdge,
+  mode: FacebookTitleWordsMode
+): Promise<{ status: "success"; count: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    if ((edge !== "start" && edge !== "end") || (mode !== "add" && mode !== "remove")) {
+      return { status: "error", message: "Choose where the words go." };
+    }
+    const count = await changeFacebookLotTitleWords(session.user.id, postId, words, edge, mode);
+    return { status: "success", count };
+  } catch (err) {
+    return failure(err, "Failed to change the lots' titles.");
   }
 }
 

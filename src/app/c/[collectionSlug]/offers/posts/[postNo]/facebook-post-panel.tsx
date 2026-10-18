@@ -14,6 +14,8 @@ import {
   isFacebookLotPosted,
   sortFacebookLots,
   type FacebookLotSort,
+  type FacebookTitleEdge,
+  type FacebookTitleWordsMode,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
@@ -43,6 +45,7 @@ import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-que
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
+import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -77,6 +80,10 @@ import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot
 //   and description from its templates in one go, instead of each offer's ↻ one by one. A row whose
 //   text reads otherwise than its templates now give is marked *Out of date*, and the action then
 //   offers just those; a row written by hand is marked so, and is replaced only when ticked.
+// - **The lots' titles, all at once** (#2033), beside it while the post is not up: *Title template for
+//   all lots…* gives every lot one title template and writes the titles again from it, a hand-written
+//   one only when ticked; *Add to titles…* / *Remove from titles…* put the same words on, or take them
+//   off, the start or end of every title, showing the titles that change before saving.
 // - **The lots' order** (#1986), while the post is not up: a row is dragged by its grip to a new place,
 //   or the whole post sorted by catalogue number or price from the lots' heading. The lot numbers are
 //   the order, so the text, the captions and the photos' download follow; the rows show the new order
@@ -148,6 +155,8 @@ type Dialog =
   | { kind: "takeOut"; lot: FacebookKitLot }
   | { kind: "addLots" }
   | { kind: "regenerate"; scope: RegenerateScope }
+  | { kind: "titleTemplate" }
+  | { kind: "titleWords"; mode: FacebookTitleWordsMode }
   | { kind: "sell"; lot: FacebookKitLot };
 
 export function FacebookPostPanel({
@@ -231,7 +240,7 @@ export function FacebookPostPanel({
     );
   }
 
-  const { kit, postNo, title, translations, lotTexts } = screen;
+  const { kit, postNo, title, translations, lotTexts, lotTitles } = screen;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
   const pendingLot = lots.find((l) => l.state === "pending");
@@ -302,6 +311,38 @@ export function FacebookPostPanel({
       setDialog({ kind: "none" });
       invalidateAll(collectionId);
       toast({ message: result.count === 1 ? "1 lot's texts regenerated" : `${result.count} lots' texts regenerated` });
+    });
+  }
+
+  // Every lot's title from one template (#2033); the ticked hand-written ones too.
+  function retitle(template: string, overwrite: string[]) {
+    setError(undefined);
+    startTransition(async () => {
+      const { setFacebookPostTitleTemplateAction } = await import("@/app/actions/facebook");
+      const result = await setFacebookPostTitleTemplateAction(postId, template, overwrite);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      toast({ message: result.count === 1 ? "1 lot's title written from the template" : `${result.count} lots' titles written from the template` });
+    });
+  }
+
+  // The same words on, or off, the start or end of every lot's title (#2033).
+  function changeTitleWords(mode: FacebookTitleWordsMode, words: string, edge: FacebookTitleEdge) {
+    setError(undefined);
+    startTransition(async () => {
+      const { changeFacebookLotTitleWordsAction } = await import("@/app/actions/facebook");
+      const result = await changeFacebookLotTitleWordsAction(postId, words, edge, mode);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog({ kind: "none" });
+      invalidateAll(collectionId);
+      toast({ message: result.count === 1 ? "1 title changed" : `${result.count} titles changed` });
     });
   }
 
@@ -592,7 +633,41 @@ export function FacebookPostPanel({
                 }}
               >
                 <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
+                  {lotTitles && (
+                    <>
+                      <DialogSecondaryButton
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          setError(undefined);
+                          setDialog({ kind: "titleTemplate" });
+                        }}
+                      >
+                        Title template for all lots…
+                      </DialogSecondaryButton>
+                      <DialogSecondaryButton
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          setError(undefined);
+                          setDialog({ kind: "titleWords", mode: "add" });
+                        }}
+                      >
+                        Add to titles…
+                      </DialogSecondaryButton>
+                      <DialogSecondaryButton
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          setError(undefined);
+                          setDialog({ kind: "titleWords", mode: "remove" });
+                        }}
+                      >
+                        Remove from titles…
+                      </DialogSecondaryButton>
+                    </>
+                  )}
                   {lotTexts && (
                     <DialogSecondaryButton
                       type="button"
@@ -791,6 +866,33 @@ export function FacebookPostPanel({
           error={error}
           onCancel={close}
           onSubmit={regenerate}
+        />
+      )}
+
+      {dialog.kind === "titleTemplate" && lotTitles && (
+        <LotTitleTemplateDialog
+          collectionId={collectionId}
+          language={translations?.language ?? null}
+          postNo={postNo}
+          lots={lots}
+          initialTemplate={lotTitles.template}
+          handWritten={lotTitles.handWritten}
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSubmit={retitle}
+        />
+      )}
+
+      {dialog.kind === "titleWords" && lotTitles && (
+        <LotTitleWordsDialog
+          postNo={postNo}
+          lots={lots}
+          mode={dialog.mode}
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSubmit={(words, edge) => changeTitleWords(dialog.mode, words, edge)}
         />
       )}
 

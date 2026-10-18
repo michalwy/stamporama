@@ -530,6 +530,25 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `tests/integration/facebook-post-regenerate.test.ts` (checked when written to fail with the overwrite,
   the posted gate, the edited filter or the own-lots check removed).
 
+- **A post's lot titles are changed all at once** (#2033, settled with the collector on 2026-10-18 as
+  one of #2030–#2033: the post is the one workspace until it is up). Two actions beside *Regenerate lot
+  texts…*, offered while `FacebookPostScreen.lotTitles` is non-null — null once any lot is up (#1800).
+  **Nothing is kept on the post**: `setFacebookPostTitleTemplate` (`facebook-posts.ts`) writes the
+  template into every lot's own `Offer.nameTemplate` (#774's column, preferred over the platform's by
+  `effectiveTemplate`), then `regenerateOfferText(name)` for each lot not `nameEdited`, plus the ticked
+  hand-written ones — so a lot added later keeps its own title by construction, and the template
+  follows each lot through a composition change like any offer-own template. A blank template is
+  refused: an own template of `""` would render no title. The issue said the dialog starts *from the
+  group's* template, but **a group has no title template** (the title template is the platform's,
+  `Platform.titleTemplate`); `lotTitles.template` is the lots' own when they all share one — the one
+  given here before — else the platform's. `changeFacebookLotTitleWords` adds or removes words at the
+  start or end of each lot's **display** title (`readKitLots`, so a lot with no name of its own starts
+  from its derived label) through `facebookTitleWithWords` (`facebook-post-rules.ts`, pure, which the
+  dialog also uses for its preview) and writes through `patchOffer({ name })`, which sets `nameEdited`
+  — the issue's rule that added words make the title hand-written. Removing matches exactly and only on
+  a word boundary (a cut between two letters or digits is refused), and never empties a title. The
+  integration test is `tests/integration/facebook-post-lot-titles.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports
