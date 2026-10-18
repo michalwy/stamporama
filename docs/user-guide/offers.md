@@ -701,12 +701,26 @@ typed for it. Tiles cut from a [card scan](purchases.md#working-through-the-tile
 profile already; a photo you added to a copy yourself is given one when you add it, or afterwards on
 the copy's page — see [a photo's scale](inventory.md#a-photos-scale).
 
+A photo that was **never given a scale** — a photo added before scales existed, say — is taken at
+the collection's [default profile](collections.md#scanning-profiles), so it needs nothing either.
+
 When **every** photo on a collage has a scale, the collage draws them all at one scale — the coarsest
 of them, so no photo is enlarged — even when they came from different scanners, different resolutions,
-or were made smaller for storage. When one photo on it has **no scale** (a phone picture, or a photo
-added before scales existed), that collage is drawn as before, by its pixels, and the Photos card says
-how many photos have no scale. A photo alone on its image needs none. Giving a photo a scale, or
-another one, marks the images it is on **Out of date**.
+or were made smaller for storage. When one photo on it is marked **No scale** (a phone picture), that
+collage is drawn as before, by its pixels, and the Photos card says how many photos have no scale. A
+photo alone on its image needs none. Giving a photo a scale, or another one — or changing the default
+profile the photos never given one are taken at — marks the images it is on **Out of date**.
+
+#### Giving photos a scale from the offer
+
+The count on the Photos card — *2 photos have no scale* — is a link. It lists those photos, each with
+its copy's number, its catalogue number, the side and a thumbnail, and a scale picker for each: a
+[scanning profile](collections.md#scanning-profiles), **Another resolution…**, or the collection's
+default. **All of them** at the top fills every row with one choice at once (**Give to all**), and you
+can still change a single row before you **Save**. The scale is the **photo's**, so it holds in every
+offer the photo is in, and on the copy's own page. The offer's images go **Out of date**, and the
+confirmation offers **Regenerate** straight away. The same link is in the preview of a [one-off
+collage](inventory.md#a-collage-of-copies-for-a-buyer), whose confirmation offers **Make it again**.
 
 ### Paired front and back
 

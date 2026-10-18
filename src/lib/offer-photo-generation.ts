@@ -285,9 +285,9 @@ export interface OfferPhotoPlanPreview {
   skipped: OfferPhotoSkippedSide[];
   /** Sets the plan leaves out because they have sold or are committed elsewhere (#315). */
   excludedSets: OfferPhotoExcludedSet[];
-  /** Pictures composited with others that say nothing of what they were scanned with (#2061) — each
-   *  keeps its image from being drawn at one scale, so the card names how many. */
-  unscaledPhotoCount: number;
+  /** Pictures composited with others that have no scale (#2061) — each keeps its image from being
+   *  drawn at one scale, so the card names them and gives them one (#2067). */
+  unscaledPhotoIds: string[];
 }
 
 export interface OfferPhotoPlanState {
@@ -342,14 +342,28 @@ export interface SourcePhoto {
   /** Whether the collector has gone over it for symbols (#1665), and what they covered. */
   coversCheckedAt: Date | null;
   covers: { shape: string; style: string; color: string | null; x: number; y: number; width: number; height: number }[];
-  /** What it was scanned with (#2061): a profile, or a resolution typed for it, or neither. */
+  /** What it was scanned with (#2061): a profile, or a resolution typed for it, or neither. Neither
+   *  and not `noScale` is a picture never given a scale, which {@link withDefaultScales} hands the
+   *  collection's default profile before anything reads it (#2066). */
   scanDpi: number | null;
-  scanningProfile: {
-    nominalDpi: number;
-    calibratedDpiX: { toNumber(): number } | null;
-    calibratedDpiY: { toNumber(): number } | null;
-  } | null;
+  scanningProfile: SourceScanningProfile | null;
+  /** Marked *No scale* (#2066) — the one picture that keeps its image from one scale. */
+  noScale: boolean;
 }
+
+/** A scanning profile as the scale of a source photo reads it. */
+export interface SourceScanningProfile {
+  nominalDpi: number;
+  calibratedDpiX: { toNumber(): number } | null;
+  calibratedDpiY: { toNumber(): number } | null;
+}
+
+/** What {@link SourceScanningProfile} is read with — the collection's default profile included. */
+export const SOURCE_SCANNING_PROFILE_SELECT = {
+  nominalDpi: true,
+  calibratedDpiX: true,
+  calibratedDpiY: true,
+} as const;
 
 /** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
  * whether a tile arrives from a copy's scan, an attachment's photo or a manual collage's tile. */
@@ -371,8 +385,27 @@ export const SOURCE_PHOTO_SELECT = {
     select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
   },
   scanDpi: true,
-  scanningProfile: { select: { nominalDpi: true, calibratedDpiX: true, calibratedDpiY: true } },
+  scanningProfile: { select: SOURCE_SCANNING_PROFILE_SELECT },
+  noScale: true,
 } as const;
+
+/**
+ * Every source photo **never given a scale** takes the collection's default profile (#2066) — read
+ * here, when the images are drawn, so changing the default changes the scale of every photo taking
+ * it, and the fingerprint's `oneScale` rows put the images it moves out of date. A photo marked *No
+ * scale* is left without one; so is every photo in a collection with no default. Done once on the
+ * source map, so the plan preview, the fingerprint and the renderer cannot read a scale differently.
+ */
+export function withDefaultScales(
+  sourceById: Map<string, SourcePhoto>,
+  defaultProfile: SourceScanningProfile | null
+): void {
+  if (!defaultProfile) return;
+  for (const [id, source] of sourceById) {
+    if (source.scanningProfile || source.scanDpi != null || source.noScale) continue;
+    sourceById.set(id, { ...source, scanningProfile: defaultProfile });
+  }
+}
 
 /**
  * The stored picture's resolution (#2061) — what its pixels measure, in dots per inch — or null for a
@@ -418,14 +451,16 @@ function trueSizeOf(source: SourcePhoto | undefined): CollageTileTrueSize {
 }
 
 /**
- * How many pictures the plan's images composite with others **without a scale** (#2061), each once —
- * the ones that keep their image from being drawn at one scale. A picture alone on its image is not
- * counted: one picture has nothing to be out of scale with.
+ * The pictures the plan's images composite with others **without a scale** (#2061), each once and in
+ * drawing order — the ones that keep their image from being drawn at one scale, which the offer's
+ * Photos card lists to give them one (#2067). A picture alone on its image is not one: it has nothing
+ * to be out of scale with. Since #2066 a picture never given a scale has the default's, so these are
+ * the pictures marked *No scale* — and any whose size before storing was never recorded.
  */
-export function unscaledPhotoCount(
+export function unscaledPhotoIds(
   images: readonly PlannedImage[],
   sourceById: ReadonlyMap<string, SourcePhoto>
-): number {
+): string[] {
   const unscaled = new Set<string>();
   for (const image of images) {
     const ids = imageScanIds(image);
@@ -435,7 +470,7 @@ export function unscaledPhotoCount(
       if (source && sourcePhotoDpi(source) == null) unscaled.add(id);
     }
   }
-  return unscaled.size;
+  return [...unscaled];
 }
 
 /**
@@ -684,7 +719,13 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       photoPlanOrder: true,
       photoPlanUnpublished: true,
       coverSymbols: true,
-      collection: { select: { ownerId: true } },
+      collection: {
+        select: {
+          ownerId: true,
+          // What a photo never given a scale is taken at (#2066).
+          defaultScanningProfile: { select: SOURCE_SCANNING_PROFILE_SELECT },
+        },
+      },
       // Limits are read **live** from the platform (#308): they say what it accepts today. The
       // listing language comes along so a tile label reads the way the listing does (#293).
       platform: {
@@ -865,6 +906,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       sourceById.set(photo.id, photo);
     }
   }
+  withDefaultScales(sourceById, offer.collection.defaultScanningProfile);
 
   const labelSubjects = [
     ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
@@ -1281,7 +1323,7 @@ export async function getOfferPhotoPlanState(
       overLimitCount: plan.overLimitCount,
       uploadCount: plan.uploaded.length,
       excludedSets: inputs.excludedSets,
-      unscaledPhotoCount: unscaledPhotoCount(plan.images, inputs.sourceById),
+      unscaledPhotoIds: unscaledPhotoIds(plan.images, inputs.sourceById),
       skipped: plan.skipped.map((s) => ({
         side: s.side,
         setLabels: s.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),

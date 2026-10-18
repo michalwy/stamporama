@@ -20,10 +20,11 @@ import {
   useScanningSetup,
 } from "@/app/c/[collectionSlug]/shared/photo-scale-picker";
 
-// The ticked copies' photos that say nothing of what they were scanned with, given one scale in one
-// write (#2061) — the photos added before scales existed are the case it is for. A photo that already
-// names a profile or a resolution is never touched, so there is no *No scale* to choose here: undoing
-// a scale is a copy-at-a-time act, on the copy's Photos card.
+// The ticked copies' photos never given a scale, given one in one write (#2061) — the photos added
+// before scales existed are the case it is for, taking the collection's default since #2066 until
+// they are given their own. A photo that names a profile or a resolution, or is marked *No scale*, is
+// never touched, so there is no *No scale* to choose here: undoing a scale is a copy-at-a-time act,
+// on the copy's Photos card.
 
 const MUTED = "var(--color-text-muted)";
 
@@ -73,7 +74,7 @@ export function CopiesPhotoScaleDialog({
       toast({
         message:
           result.count === 0
-            ? "No photo needed a scale"
+            ? "No photo was taking the default"
             : `Gave ${result.count} ${result.count === 1 ? "photo" : "photos"} a scale`,
       });
       onClose();
@@ -86,7 +87,8 @@ export function CopiesPhotoScaleDialog({
       <DialogBody>
         <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
           Say what the photos of the {copies} were scanned with, so offer collages draw every stamp at
-          the same scale. Only photos that have no scale yet are changed.
+          the same scale. Only photos never given a scale — those taking the collection&rsquo;s default —
+          are changed.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
           <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>Scanned with</span>
@@ -106,8 +108,8 @@ export function CopiesPhotoScaleDialog({
           {count === null
             ? "Counting the photos…"
             : count === 0
-              ? "Every photo of these copies already has a scale."
-              : `${count} ${count === 1 ? "photo has" : "photos have"} no scale and will be given this one.`}
+              ? "Every photo of these copies already has a scale of its own."
+              : `${count} ${count === 1 ? "photo takes" : "photos take"} the default and will be given this one.`}
         </p>
       </DialogBody>
       <DialogActions

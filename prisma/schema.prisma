@@ -3844,12 +3844,17 @@ model Photo {
    * every photo that existed before covers did. Meaningful on a copy's photo only. */
   coversCheckedAt DateTime? @map("covers_checked_at")
   /** What the picture was scanned with (#2061) — the profile, or a resolution typed for it, never
-   * both and never read out of the file. Neither is *no scale*, and an offer collage holding such a
-   * picture is drawn as its pixels fall. A tile cut from a card is given the card's profile as it is
-   * cut, so the scale outlives the scan. The resolution is the upload's; the stored picture's is
-   * reckoned from `originalWidth`. See `photo-scale.ts`. */
+   * both and never read out of the file. Neither, and not `noScale`, is a picture **never given a
+   * scale**, which is taken at the collection's default profile when it is drawn (#2066). A tile cut
+   * from a card is given the card's profile as it is cut, so the scale outlives the scan. The
+   * resolution is the upload's; the stored picture's is reckoned from `originalWidth`. See
+   * `photo-scale.ts`. */
   scanningProfileId String? @map("scanning_profile_id")
   scanDpi           Int?    @map("scan_dpi")
+  /** Marked *No scale* (#2066) — a picture that is not a flat scan, such as a phone photo. Recorded
+   * as a choice, apart from never having been given a scale; set only with the other two empty. An
+   * offer collage holding such a picture beside others is drawn as its pixels fall. */
+  noScale           Boolean @default(false) @map("no_scale")
   /** Areas hidden on the **offer** images rendered from this photo (#1665); the photo itself, and
    * whatever shows it as the copy's or the stamp's photo, never changes. */
   covers PhotoCover[]

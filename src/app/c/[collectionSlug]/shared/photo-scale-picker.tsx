@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import { profileLabel, type ScanningSetup } from "@/lib/scanning-profile";
 import {
+  defaultProfileIdOf,
+  SCALE_CHOICE_DEFAULT,
   SCALE_CHOICE_NONE,
   SCALE_CHOICE_TYPED,
   scaleFromDraft,
@@ -14,7 +16,8 @@ import { TextInput } from "./text-input";
 
 // What a picture was scanned with (#2061): one of the collection's scanning profiles, a resolution
 // typed for it — the measuring bar's *Another resolution…* — or, where it is offered, *No scale* for
-// a picture that is not a flat scan. The draft and what it means are `photo-scale.ts`.
+// a picture that is not a flat scan, and *the collection's default* for a saved picture to take
+// whatever the default is when it is drawn (#2066). The draft and what it means are `photo-scale.ts`.
 
 const FIELD: CSSProperties = {
   ...formControl,
@@ -45,6 +48,7 @@ export function PhotoScalePicker({
   draft,
   onChange,
   allowNone,
+  allowDefault = false,
   disabled,
   label = "Scanned with",
 }: {
@@ -53,11 +57,17 @@ export function PhotoScalePicker({
   onChange: (draft: PhotoScaleDraft) => void;
   /** Offer *No scale* — for a picture added or edited one at a time, not for the bulk write. */
   allowNone: boolean;
+  /** Offer *the collection's default* — for a saved picture, which may be put back to never having
+   *  been given a scale; a picture being added is given its scale outright. */
+  allowDefault?: boolean;
   disabled?: boolean;
   label?: string;
 }) {
   const typing = draft.choice === SCALE_CHOICE_TYPED;
   const invalid = typing && scaleFromDraft(draft) === null;
+  const defaultProfile = allowDefault
+    ? setup.profiles.find((p) => p.id === defaultProfileIdOf(setup))
+    : undefined;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "nowrap" }}>
       <select
@@ -67,6 +77,9 @@ export function PhotoScalePicker({
         aria-label={label}
         style={{ ...FIELD, maxWidth: "18rem" }}
       >
+        {defaultProfile && (
+          <option value={SCALE_CHOICE_DEFAULT}>Collection default — {profileLabel(defaultProfile)}</option>
+        )}
         {setup.profiles.map((p) => (
           <option key={p.id} value={p.id}>
             {profileLabel(p)}
