@@ -6772,11 +6772,13 @@ async function freezeIfPublished(offerId: string, state: OfferState): Promise<vo
  * Give a Facebook offer that is going up in no post its post of one lot (#1989, amending ADR-0061 §2):
  * every Facebook offer that has gone up is in a post, as it is on Facebook, so the list of posts shows
  * everything up there. Made at publication, never at creation — an offer meant for a post of several
- * lots never passes through a throwaway post, and post numbers go only to what went up. Untitled: a
- * title is the collector's words (#1692), asked for by *Publish…*, and a post without one is flagged.
+ * lots never passes through a throwaway post, and post numbers go only to what went up. Titled with
+ * the offer's own title (#2068), copied once: the post's title from then on, renamed like any post's,
+ * and untouched by a later rename of the offer. A title typed in *Publish…* replaces it afterwards.
  * A no-op for an offer already in a post and off Facebook.
  */
 async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
+  const titles = await readOfferPostTitles([offerId]);
   await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.findUnique({
       where: { id: offerId },
@@ -6785,11 +6787,53 @@ async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
     if (!offer?.facebookGroupId || offer.facebookPostId) return;
     const postNo = await allocateEntityNumber(tx, offer.collectionId, "facebookPost");
     const post = await tx.facebookPost.create({
-      data: { collectionId: offer.collectionId, postNo, groupId: offer.facebookGroupId },
+      data: {
+        collectionId: offer.collectionId,
+        postNo,
+        groupId: offer.facebookGroupId,
+        title: titles.get(offerId) ?? null,
+      },
       select: { id: true },
     });
     await tx.offer.update({ where: { id: offerId }, data: { facebookPostId: post.id, facebookLotNo: 1 } });
   });
+}
+
+/**
+ * The title a post of one offer takes from it (#2068): the offer's display title — its stored title,
+ * else the label derived from its sets — the reading the post's kit names the lot by. Keyed by offer
+ * id; an offer with neither is left out, so its post stays untitled rather than take a stand-in
+ * (#1692). The area tree is read only for a collection holding an offer with no stored title.
+ */
+export async function readOfferPostTitles(offerIds: readonly string[]): Promise<Map<string, string>> {
+  const titles = new Map<string, string>();
+  if (offerIds.length === 0) return titles;
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] } },
+    select: {
+      id: true,
+      collectionId: true,
+      name: true,
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const labellers = new Map<string, OfferLabeller>();
+  for (const row of rows) {
+    const name = row.name?.trim();
+    if (name) {
+      titles.set(row.id, name);
+      continue;
+    }
+    if (row.sets.length === 0) continue;
+    let labeller = labellers.get(row.collectionId);
+    if (!labeller) {
+      labeller = await makeOfferLabeller(row.collectionId);
+      labellers.set(row.collectionId, labeller);
+    }
+    const label = labeller.offer(row.sets).trim();
+    if (label) titles.set(row.id, label);
+  }
+  return titles;
 }
 
 /** Render the listing texts once more, now that the offer has an id (#415). A no-op for every

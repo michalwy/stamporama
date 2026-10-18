@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, deleteOffer, getOfferDetail, setOfferState } from "../../src/lib/offers";
+import { createOffer, deleteOffer, getOfferDetail, patchOffer, readOfferPostTitles, setOfferState } from "../../src/lib/offers";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { getFacebookOfferKit } from "../../src/lib/facebook-auctions";
@@ -16,11 +16,12 @@ import {
   publishOfferOrPost,
   rejectOfferOrPost,
   removeFacebookLot,
+  titleUntitledFacebookPostsOfOne,
 } from "../../src/lib/facebook-posts";
 
 // Every Facebook offer that has gone up is in a post (#1989): an offer published in no post gets its
-// post of one lot then — numbered, titled as *Publish…* was told or left untitled — and never when it
-// is created. A post of one lot reads as an offer posted alone always did (no lot number, laid out as
+// post of one lot then — numbered, titled as *Publish…* was told or with the offer's own title (#2068)
+// — and never when it is created. A post of one lot reads as an offer posted alone always did (no lot number, laid out as
 // text), is listed beside the posts of several, and survives as long as its lot has gone up; the
 // Facebook offers not yet in a post are listed as *Not in a post yet*. The migration's backfill is the
 // same shape, written in SQL.
@@ -140,13 +141,6 @@ describe("every Facebook offer that goes up is in a post (#1989)", () => {
     assert.notEqual(row.facebookPostSnapshot, null, "its text is frozen as it went up");
   });
 
-  it("leaves the post untitled when Publish… was given no title", async () => {
-    const id = await offer();
-    await publishOfferOrPost(userId, id, null, "active", undefined, "   ");
-    const { facebookPostId } = await postOf(id);
-    assert.ok(facebookPostId);
-    assert.equal((await prisma.facebookPost.findUniqueOrThrow({ where: { id: facebookPostId } })).title, null);
-  });
 
   it("reads a post of one lot as an offer posted alone: no lot number, laid out as text, the offer's own ZIP", async () => {
     await prisma.facebookGroup.update({
@@ -283,8 +277,83 @@ describe("every Facebook offer that goes up is in a post (#1989)", () => {
     const page = await listOffersPaginated(userId, collectionId, { facebookPostNo: post.postNo });
     assert.deepEqual(
       page.items.map((o) => o.facebookPost),
-      [{ postNo: post.postNo, title: null, lotNo: null }]
+      [{ postNo: post.postNo, title: post.title, lotNo: null }]
     );
+  });
+
+  describe("its title (#2068)", () => {
+    const titleOf = async (offerId: string) => {
+      const { facebookPostId } = await postOf(offerId);
+      assert.ok(facebookPostId, "the offer is in a post");
+      return (await prisma.facebookPost.findUniqueOrThrow({ where: { id: facebookPostId } })).title;
+    };
+    const named = async (name: string) => {
+      const id = await offer();
+      await prisma.offer.update({ where: { id }, data: { name, nameEdited: true } });
+      return id;
+    };
+
+    it("takes the offer's title when Publish… is left as offered", async () => {
+      const id = await named("Polska 1950 — Odbudowa Warszawy");
+      await publishOfferOrPost(userId, id, null, "active", undefined, "Polska 1950 — Odbudowa Warszawy");
+      assert.equal(await titleOf(id), "Polska 1950 — Odbudowa Warszawy");
+    });
+
+    it("takes the offer's title when the field was emptied, or not asked at all", async () => {
+      const cleared = await named("Polska 1951 — Plan 6-letni");
+      await publishOfferOrPost(userId, cleared, null, "active", undefined, "   ");
+      assert.equal(await titleOf(cleared), "Polska 1951 — Plan 6-letni");
+
+      const unasked = await named("Polska 1952 — Konstytucja");
+      await setOfferState(userId, unasked, "active");
+      assert.equal(await titleOf(unasked), "Polska 1952 — Konstytucja", "any path that puts it up");
+    });
+
+    it("uses a title typed in the dialog instead", async () => {
+      const id = await named("Polska 1953");
+      await publishOfferOrPost(userId, id, null, "active", undefined, "Na wymianę");
+      assert.equal(await titleOf(id), "Na wymianę");
+    });
+
+    it("takes the label derived from the offer's sets when the offer has no stored title", async () => {
+      const id = await offer();
+      await prisma.offer.update({ where: { id }, data: { name: null, nameEdited: true } });
+      const expected = (await readOfferPostTitles([id])).get(id);
+      assert.ok(expected, "an offer with copies has a derived label");
+      await publishOfferOrPost(userId, id, null);
+      assert.equal(await titleOf(id), expected);
+    });
+
+    it("copies it once: renaming the offer later leaves the post's title as it was", async () => {
+      const id = await named("Polska 1954");
+      await publishOfferOrPost(userId, id, null);
+      await patchOffer(userId, id, { name: "Polska 1954 — po zmianie" });
+      assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id } })).name, "Polska 1954 — po zmianie");
+      assert.equal(await titleOf(id), "Polska 1954");
+    });
+
+    it("gives existing untitled posts of one offer their offer's title, and leaves the rest (the boot pass)", async () => {
+      const alone = await named("Polska 1955");
+      await publishOfferOrPost(userId, alone, null);
+      const titled = await named("Polska 1956");
+      await publishOfferOrPost(userId, titled, null, "active", undefined, "Własny tytuł");
+      const lotA = await offer();
+      const lotB = await offer();
+      const several = await createFacebookPost(userId, collectionId, [lotA, lotB], "Several");
+      // As the data stood before: a post of one went up untitled, as did a post of several made
+      // before posts had titles.
+      const aloneId = (await postOf(alone)).facebookPostId!;
+      await prisma.facebookPost.updateMany({ where: { id: { in: [aloneId, several.postId] } }, data: { title: null } });
+
+      assert.ok((await titleUntitledFacebookPostsOfOne()) >= 1);
+      assert.equal(await titleOf(alone), "Polska 1955");
+      assert.equal(await titleOf(titled), "Własny tytuł", "a post with a title is not touched");
+      assert.equal(await titleOf(lotA), null, "a post of several keeps asking for its own");
+
+      await prisma.offer.update({ where: { id: alone }, data: { name: "Polska 1955 — inna" } });
+      await titleUntitledFacebookPostsOfOne();
+      assert.equal(await titleOf(alone), "Polska 1955", "and a second pass changes nothing");
+    });
   });
 
   it("backfills a post of one lot for every Facebook offer up in no post, in creation order (the migration)", async () => {
