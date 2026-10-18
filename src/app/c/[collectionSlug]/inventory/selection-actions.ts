@@ -71,6 +71,7 @@ export interface SelectionActionInput {
     addToCollisionOffer: () => void;
     sell: () => void;
     collage: () => void;
+    photoScale: () => void;
   };
 }
 
@@ -182,6 +183,19 @@ export function buildSelectionActions(input: SelectionActionInput): SelectionAct
       "Lay these copies out on one or more pictures by an offer's photo rules, to download or copy for a buyer. No offer is made and nothing is kept.",
     tone: "neutral",
     onSelect: on.collage,
+  });
+
+  // What the copies' photos were scanned with (#2061), for the photos that say nothing of it — so
+  // offer collages can draw them at one scale with the rest. Never replaces a scale already given.
+  actions.push({
+    key: "photo-scale",
+    barLabel: "Photo scale…",
+    menuLabel: `Give the photos of ${copies(inView)} a scale…`,
+    icon: "scan",
+    description:
+      "Say what the photos of these copies were scanned with, so offer collages draw every stamp at the same scale. Only photos that have no scale yet are changed.",
+    tone: "neutral",
+    onSelect: on.photoScale,
   });
 
   // Selling the copies without listing them (#2021): one set on an open sale or a new one, at a price

@@ -26,6 +26,7 @@ import {
   photoSourceTooLong,
 } from "./photo-source";
 import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
+import { parsePhotoScaleInput, photoScaleColumns, type PhotoScaleColumns } from "./photo-scale";
 
 // Server-side photo domain for inventory copies (#112) and catalog stamps (#137, ADR-0011).
 // Collection-scoped throughout; owner checks live here, never in UI. Bytes are handled via the
@@ -145,6 +146,9 @@ export interface PhotoChangeSet {
     turn?: number;
     /** Where the picture came from (#1001). Absent and blank both mean none. */
     sourceUrl?: string | null;
+    /** What it was scanned with (#2061) — a profile, a typed resolution, or none. Only the copy's
+     * editor sends it; absent is none. See `photo-scale.ts`. */
+    scale?: unknown;
   }[];
   update: {
     photoId: string;
@@ -247,6 +251,19 @@ async function assertCollectionOwner(
   });
   if (!col || col.ownerId !== ownerId) {
     throw new PhotoAuthError("Collection not found or access denied.");
+  }
+}
+
+/** Every profile named must be one of this collection's scanning profiles (#2061). */
+export async function assertCollectionProfiles(
+  collectionId: string,
+  profileIds: readonly string[]
+): Promise<void> {
+  const ids = [...new Set(profileIds)];
+  if (ids.length === 0) return;
+  const found = await prisma.scanningProfile.count({ where: { id: { in: ids }, collectionId } });
+  if (found !== ids.length) {
+    throw new PhotoValidationError("That scanning profile is not one of this collection's.");
   }
 }
 
@@ -514,6 +531,20 @@ async function applyPhotoChangeSetForOwner(
     }
   }
 
+  // The scale each add is written with (#2061), checked with the rest: a profile must be this
+  // collection's, or the write would record another collection's scanner.
+  const scaleByUpload = new Map<string, PhotoScaleColumns>();
+  for (const a of changeSet.add) {
+    if (a.scale === undefined || a.scale === null) continue;
+    const scale = parsePhotoScaleInput(a.scale);
+    if (!scale) throw new PhotoValidationError("That is not a scale a photo can be given.");
+    scaleByUpload.set(a.uploadId, photoScaleColumns(scale));
+  }
+  await assertCollectionProfiles(
+    collectionId,
+    [...scaleByUpload.values()].flatMap((c) => (c.scanningProfileId ? [c.scanningProfileId] : []))
+  );
+
   // Removals: explicit list plus any front/back incumbent displaced by an add into its slot
   // (replace semantics) that the client did not already remove.
   const removeIds = new Set(changeSet.remove);
@@ -651,6 +682,7 @@ async function applyPhotoChangeSetForOwner(
           originalHeight: p.originalHeight,
           sizeBytes: p.sizeBytes,
           sortOrder: p.add.sortOrder,
+          ...(scaleByUpload.get(p.upload.id) ?? {}),
         },
       });
     }

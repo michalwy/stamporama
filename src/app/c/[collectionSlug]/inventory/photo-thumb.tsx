@@ -375,8 +375,11 @@ export function PhotoLightbox({
         setError(state.message);
         return;
       }
-      const { frame, stampId, scanning } = state.target;
-      setMeasuring({ photo: { ...photo, measureFrame: frame }, context: { scanning, stampId } });
+      const { frame, stampId, scanning, scanningProfileId } = state.target;
+      setMeasuring({
+        photo: { ...photo, measureFrame: frame },
+        context: { scanning, stampId, scanningProfileId },
+      });
     });
   }
 

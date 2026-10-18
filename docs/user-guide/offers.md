@@ -692,6 +692,22 @@ the background every image is drawn with.
 The images are **stored**, not made again on demand: what you download tomorrow is the same file you
 uploaded to the platform today.
 
+### Every stamp at the same scale
+
+A collage keeps stamps in their true proportions: a stamp twice the size of its neighbour comes out
+twice the size. For that it has to know what each photo's pixels measure, and a photo says so by
+**what it was scanned with** — a [scanning profile](collections.md#scanning-profiles), or a resolution
+typed for it. Tiles cut from a [card scan](purchases.md#working-through-the-tiles) carry their card's
+profile already; a photo you added to a copy yourself is given one when you add it, or afterwards on
+the copy's page — see [a photo's scale](inventory.md#a-photos-scale).
+
+When **every** photo on a collage has a scale, the collage draws them all at one scale — the coarsest
+of them, so no photo is enlarged — even when they came from different scanners, different resolutions,
+or were made smaller for storage. When one photo on it has **no scale** (a phone picture, or a photo
+added before scales existed), that collage is drawn as before, by its pixels, and the Photos card says
+how many photos have no scale. A photo alone on its image needs none. Giving a photo a scale, or
+another one, marks the images it is on **Out of date**.
+
 ### Paired front and back
 
 *Front and back, paired* shows every stamp from both sides **in one cell**: front and back beside

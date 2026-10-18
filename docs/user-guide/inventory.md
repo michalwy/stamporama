@@ -1637,6 +1637,8 @@ choices head it:
 clipboard to paste into a conversation, and **Download** saves the image — or, for several, one ZIP
 of them all. Covers already drawn on a copy's photos are used when the platform (or the dialog)
 covers symbols; a photo never checked for symbols is drawn as it is, and the preview says how many.
+The stamps are drawn [at the same scale](offers.md#every-stamp-at-the-same-scale) as on an offer, and
+the preview says how many photos have no [scale](#a-photos-scale) when some do.
 A side the copies have no scan of, and an image past the platform's photo limit, are named there as
 on an offer.
 
@@ -1930,6 +1932,23 @@ a photo to change them. The photo itself never changes — covers are only drawn
 
 Accepted formats are **JPEG, PNG, and WebP**, up to **200 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
+
+### A photo's scale
+
+While you are adding photos, **Scanned with** under the strip says what they were scanned with — one
+of your [scanning profiles](collections.md#scanning-profiles), the default one to start with,
+**Another resolution…** to type the dots per inch, or **No scale** for a picture that is not a flat
+scan, such as a phone photo. It applies to every photo added in that sitting, and is what lets
+[offer collages](offers.md#every-stamp-at-the-same-scale) draw every stamp at the same scale. It is
+never read out of the file. The scale is the scan's as you uploaded it, so making the photo smaller
+for storage does not change what it measures. Tiles cut from a [card
+scan](purchases.md#working-through-the-tiles) carry their card's profile and need nothing.
+
+To change it afterwards, or give one to photos added before scales existed, press **Scale** on the
+Photos card of the copy's page — it reads *Scale (2 without)* while some photos have none — and pick
+one for each photo. For many copies at once, tick them on the list and choose **Photo scale…** in the
+selection bar: the photos of those copies that have **no scale** are all given the one you pick, and a
+photo that already has one is left as it is. Opening a photo to measure it starts on its own profile.
 
 **A scan that came out sideways is put right as you add it.** A photo you have just dropped carries
 a turn button beside its **✕**: each press turns it a quarter to the right, and the card shows it the

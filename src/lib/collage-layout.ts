@@ -66,6 +66,9 @@ export interface CollageTileTrueSize {
   stored: CollageTileSize;
   /** Null for a photo predating the recorded originals — read as "never downscaled". */
   original: CollageTileSize | null;
+  /** The stored picture's resolution in dots per inch (#2061, `photo-scale.ts`), or null/absent for
+   * a picture with no scale. Read only when **every** tile on the image has one. */
+  dpi?: number | null;
 }
 
 /**
@@ -83,8 +86,39 @@ export interface CollageTileTrueSize {
  *
  * Returns all-1 when nothing was downscaled, which is both the common case and what every photo
  * predating the recorded originals falls back to.
+ *
+ * All of that assumes one scanner resolution. When every tile says what its pixels measure (#2061),
+ * that is known rather than assumed, and {@link oneScaleFactors} answers instead.
  */
 export function trueSizeScales(tiles: readonly CollageTileTrueSize[]): number[] {
+  return oneScaleFactors(tiles) ?? shrinkScales(tiles);
+}
+
+/**
+ * The factors that put every tile on **one scale** (#2061), or null when some tile's scale is not
+ * known and the image is drawn as before.
+ *
+ * Pixels stand for millimetres only among pictures scanned at one resolution, and a picture added to
+ * a copy by hand may come from another scanner, another resolution, or have been downscaled for
+ * storage. Where every tile says what its stored pixels measure, each is brought to the **coarsest**
+ * of them — a factor of `coarsest / own`, in `(0, 1]` — so nothing is enlarged, for the reason
+ * {@link shrinkScales} gives. A tile's resolution already allows for its downscale, so this replaces
+ * that correction rather than adding to it. One tile with no scale and the rule cannot hold for the
+ * image: it is drawn as its pixels fall, exactly as it was before scales existed.
+ */
+export function oneScaleFactors(tiles: readonly CollageTileTrueSize[]): number[] | null {
+  if (tiles.length === 0) return null;
+  const dpis: number[] = [];
+  for (const tile of tiles) {
+    if (tile.dpi == null || !(tile.dpi > 0) || !Number.isFinite(tile.dpi)) return null;
+    dpis.push(tile.dpi);
+  }
+  const coarsest = Math.min(...dpis);
+  return dpis.map((dpi) => coarsest / dpi);
+}
+
+/** The correction for `FULL_MAX_EDGE` alone, for an image whose scales are not all known. */
+export function shrinkScales(tiles: readonly CollageTileTrueSize[]): number[] {
   const shrink = tiles.map((tile) => {
     const stored = Math.max(tile.stored.width, tile.stored.height);
     const original = tile.original

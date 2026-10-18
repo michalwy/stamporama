@@ -25,6 +25,7 @@ function input(overrides: Partial<SelectionActionInput> = {}): SelectionActionIn
       addToCollisionOffer: noop,
       sell: noop,
       collage: noop,
+      photoScale: noop,
     },
     ...overrides,
   };
@@ -54,6 +55,7 @@ describe("selection actions", () => {
         "bulk-edit",
         "platform-exclusion",
         "collage",
+        "photo-scale",
         "sell",
         "new-offer-one-set",
         "new-offer-per-copy",
@@ -81,6 +83,7 @@ describe("selection actions", () => {
         "Bulk edit 5 copies…",
         "Never list 5 on Delcampe",
         "Make a collage of 5 copies…",
+        "Give the photos of 5 copies a scale…",
         "Sell 4 copies…",
         "New offer · one set of 3",
         "New offer · 3 sets",
@@ -98,6 +101,7 @@ describe("selection actions", () => {
       [
         "Bulk edit 1 copy…",
         "Make a collage of 1 copy…",
+        "Give the photos of 1 copy a scale…",
         "Sell 1 copy…",
         "New offer · 1 copy",
         "Add 1 to offer",
@@ -107,13 +111,13 @@ describe("selection actions", () => {
 
   it("leaves the listing entries out when nothing in view can be listed", () => {
     const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 0 }));
-    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage"]);
+    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage", "photo-scale"]);
   });
 
   it("offers Sell… for copies in stock that are not for sale (#2021)", () => {
     const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 4 }));
-    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage", "sell"]);
-    assert.equal(actions[2].barLabel, "Sell…");
+    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage", "photo-scale", "sell"]);
+    assert.equal(actions[3].barLabel, "Sell…");
   });
 
   it("offers a collage of every ticked copy in view, listable or not (#2052)", () => {
@@ -142,12 +146,20 @@ describe("selection actions", () => {
     assert.equal(hints["bulk-edit"], undefined);
     assert.equal(hints["sell"], undefined);
     assert.equal(hints["collage"], undefined);
+    assert.equal(hints["photo-scale"], undefined);
     assert.equal(hints["new-offer-one-set"], warning);
     assert.equal(hints["new-offer-per-copy"], warning);
     assert.equal(hints["add-to-offer"], warning);
     assert.ok(
       actions
-        .filter((a) => a.tone !== "link" && a.key !== "bulk-edit" && a.key !== "sell" && a.key !== "collage")
+        .filter(
+          (a) =>
+            a.tone !== "link" &&
+            a.key !== "bulk-edit" &&
+            a.key !== "sell" &&
+            a.key !== "collage" &&
+            a.key !== "photo-scale"
+        )
         .every((a) => a.colliding)
     );
   });
@@ -174,6 +186,7 @@ describe("selection actions", () => {
           addToCollisionOffer: () => calls.push("addToCollisionOffer"),
           sell: () => calls.push("sell"),
           collage: () => calls.push("collage"),
+          photoScale: () => calls.push("photoScale"),
         },
       })
     );
@@ -183,6 +196,7 @@ describe("selection actions", () => {
       "bulkEdit",
       "setExclusion:false",
       "collage",
+      "photoScale",
       "sell",
       "newOffer:one-set",
       "newOffer:per-copy",

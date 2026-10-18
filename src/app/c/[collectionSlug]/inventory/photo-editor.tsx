@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 import {
@@ -19,6 +19,16 @@ import { turnBy, type QuarterTurn } from "@/lib/tile-turn";
 import { PHOTO_SOURCE_MAX_LENGTH } from "@/lib/photo-source";
 import { derivePhotoChangeSet } from "./photo-change-set";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import {
+  PhotoScalePicker,
+  useScanningSetup,
+} from "@/app/c/[collectionSlug]/shared/photo-scale-picker";
+import {
+  defaultPhotoScale,
+  draftFromScale,
+  scaleFromDraft,
+  type PhotoScaleDraft,
+} from "@/lib/photo-scale";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -76,6 +86,9 @@ export interface PhotoEditorValue {
   changeSet: PhotoChangeSet;
   /** True while any staged upload is still in flight — Save should wait. */
   uploading: boolean;
+  /** True while the photos being added are given a typed resolution that is not one (#2061) — Save
+   *  should wait for it rather than add them with no scale. */
+  invalidScale?: boolean;
 }
 
 /** One picture on the strip, addressed for looking at (#1207). `src` is the local preview for an
@@ -104,6 +117,9 @@ interface PhotoEditorProps {
    * sets it, since that is where reference photos live; without it the source is neither shown nor
    * sent. */
   recordSource?: boolean;
+  /** Ask what the photos being added were scanned with (#2061) — a copy's editor, whose photos go
+   * into offer collages. Prefilled with the collection's default profile. */
+  recordScale?: boolean;
   onChange: (value: PhotoEditorValue) => void;
   /** The pictures on the strip as the shared viewer takes them, in strip order and with any turn
    * still to be saved (#1207) — for the intake step, which shows the photos just added beside the
@@ -188,6 +204,7 @@ export function PhotoEditor({
   disabled = false,
   roleMode = "front-back",
   recordSource = false,
+  recordScale = false,
   onChange,
   onPreviewsChange,
   onPromotePhoto,
@@ -209,12 +226,27 @@ export function PhotoEditor({
     };
   }, []);
 
+  // --- What the photos being added were scanned with (#2061) ---
+  // One choice for everything added in this sitting, opened on the collection's default profile once
+  // the profiles have loaded. Until then nothing is sent, which the save reads as no scale — but the
+  // picker shows only once they have loaded, so a Save cannot get ahead of it unseen.
+  const scanning = useScanningSetup(collectionId, recordScale);
+  const [scaleDraft, setScaleDraft] = useState<PhotoScaleDraft | null>(null);
+  const scaleSetup = recordScale ? scanning.data : undefined;
+  if (scaleSetup && scaleDraft === null) setScaleDraft(draftFromScale(defaultPhotoScale(scaleSetup)));
+  const addScale = useMemo(
+    () => (recordScale && scaleDraft ? scaleFromDraft(scaleDraft) : null),
+    [recordScale, scaleDraft]
+  );
+  const invalidScale = recordScale && scaleDraft !== null && addScale === null;
+
   // --- Derive + report the change-set whenever the strip changes ---
   useEffect(() => {
-    const changeSet = derivePhotoChangeSet(entries, initialPhotos, slots, recordSource);
+    const changeSet = derivePhotoChangeSet(entries, initialPhotos, slots, recordSource, addScale);
     const uploading = entries.some((e) => e.status === "uploading");
-    onChange({ changeSet, uploading });
-  }, [entries, initialPhotos, onChange, slots, recordSource]);
+    const adding = entries.some((e) => e.source === "staged" && e.status !== "error");
+    onChange({ changeSet, uploading, invalidScale: invalidScale && adding });
+  }, [entries, initialPhotos, onChange, slots, recordSource, addScale, invalidScale]);
 
   // --- Report the pictures themselves, for a caller that shows them elsewhere (#1207) ---
   // A failed upload is left out: it will not be saved, so it is not a picture of the copy.
@@ -505,6 +537,31 @@ export function PhotoEditor({
           </div>
 
           <Dropzone disabled={disabled} onFiles={addFiles} />
+          {/* Only while photos are being added: a saved photo's scale is set on the copy's page,
+              and asking here about pictures nobody is adding would be asking the wrong question. */}
+          {scaleSetup && scaleDraft && entries.some((e) => e.source === "staged") && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                marginTop: "0.5rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              <Tooltip content="What the photos being added were scanned with, so offer collages can draw every stamp at the same scale. Choose No scale for a picture that is not a flat scan, such as a phone photo.">
+                <span>Scanned with</span>
+              </Tooltip>
+              <PhotoScalePicker
+                setup={scaleSetup}
+                draft={scaleDraft}
+                onChange={setScaleDraft}
+                allowNone
+                disabled={disabled}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

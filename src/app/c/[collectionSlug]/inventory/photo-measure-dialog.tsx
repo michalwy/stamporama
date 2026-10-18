@@ -38,6 +38,8 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 export interface PhotoMeasureContext {
   scanning: ScanningSetup;
   stampId: string | null;
+  /** The profile the picture says it was scanned with (#2061), opened on in place of the default. */
+  scanningProfileId?: string | null;
 }
 
 /** Above any dialog a lightbox can be opened from (the intake step's comparison is at 110, a picker
@@ -178,9 +180,9 @@ export function PhotoMeasureDialog({
               frame: photo.measureFrame ?? null,
               turn: 0,
               sheetId: null,
-              // A photo was not scanned through this app, so nothing says what with: the viewer
-              // opens on the collection's default profile (#1443).
-              scanningProfileId: null,
+              // What the picture says it was scanned with (#2061), else the collection's default
+              // profile (#1443) — a photo added before scales, or with none, says nothing.
+              scanningProfileId: context.scanningProfileId ?? null,
             },
           ]}
           position={0}

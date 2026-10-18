@@ -1689,7 +1689,9 @@ Two things about it are worth knowing, and the card says both — the second on 
 at one resolution — *Epson V600, 1200 dpi* — and it is what the ruler, the size tool and the
 perforation gauge in the [tile viewer](purchases.md#measuring-on-the-scan) convert with. Every
 collection starts with one, called *Scanner*, at **1200 dpi**, and it is the **default**: what a new
-scan is offered and what a photo is measured with. On the one scanner you always use, you can leave
+scan is offered, what a photo is measured with when it does not say what it was scanned with, and what
+photos you add to a copy are [given as their scale](inventory.md#a-photos-scale) unless you choose
+another — which is what lets offer collages draw every stamp at the same scale. On the one scanner you always use, you can leave
 it alone. A collection that measured at another resolution before profiles existed has that
 resolution as its first profile instead, so nothing measures differently until you calibrate.
 
@@ -1732,8 +1734,8 @@ the wrong tick. Clicking a stretch that already has both ends moves the nearer o
 is off by a different amount — the pane says so under the field; **Remove calibration**, beside
 **Calibrate again…**, does the same on purpose. Renaming keeps it.
 
-**A profile in use cannot be deleted** — the default, one a scan was taken with, or one a stamp's
-size was measured with. The top of the scanner's pane says what uses it, and **Delete** stays
+**A profile in use cannot be deleted** — the default, one a scan was taken with, one a stamp's
+size was measured with, or one a photo was [given as its scale](inventory.md#a-photos-scale). The top of the scanner's pane says what uses it, and **Delete** stays
 unavailable — its tooltip says why — until nothing does.
 
 Nothing reads a resolution out of a scan's own file, deliberately: an image's stated resolution is

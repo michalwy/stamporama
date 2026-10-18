@@ -3843,6 +3843,13 @@ model Photo {
    * or marked *nothing to cover*, both of which count as checked. Null is *never checked*, which is
    * every photo that existed before covers did. Meaningful on a copy's photo only. */
   coversCheckedAt DateTime? @map("covers_checked_at")
+  /** What the picture was scanned with (#2061) — the profile, or a resolution typed for it, never
+   * both and never read out of the file. Neither is *no scale*, and an offer collage holding such a
+   * picture is drawn as its pixels fall. A tile cut from a card is given the card's profile as it is
+   * cut, so the scale outlives the scan. The resolution is the upload's; the stored picture's is
+   * reckoned from `originalWidth`. See `photo-scale.ts`. */
+  scanningProfileId String? @map("scanning_profile_id")
+  scanDpi           Int?    @map("scan_dpi")
   /** Areas hidden on the **offer** images rendered from this photo (#1665); the photo itself, and
    * whatever shows it as the copy's or the stamp's photo, never changes. */
   covers PhotoCover[]
@@ -3852,6 +3859,8 @@ model Photo {
   offer Offer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
   tile  ScanTile? @relation(fields: [tileId], references: [id], onDelete: Cascade)
   purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  /** `NoAction`, as on the other references to a profile: one in use is refused deletion (#2061). */
+  scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: NoAction)
   /** `SetNull`: deleting a batch leaves its copies' pictures exactly as they are (#1218), and only
    * the record of where they were cut from goes with the scan. */
   scanSheet ScanSheet? @relation(fields: [scanSheetId], references: [id], onDelete: SetNull)
@@ -3873,6 +3882,7 @@ model Photo {
   @@index([tileId])
   @@index([purchaseId])
   @@index([scanSheetId])
+  @@index([scanningProfileId])
   @@map("photo")
 }
 
@@ -4147,6 +4157,8 @@ model ScanningProfile {
   scanSheets  ScanSheet[]
   scanUploads ScanUpload[]
   stampSizes  Stamp[]     @relation("StampSizeScanningProfile")
+  /** Pictures scanned with it (#2061) — a copy's photo, and a tile cut from a card. */
+  photos      Photo[]
 
   @@unique([collectionId, name])
   @@index([collectionId])

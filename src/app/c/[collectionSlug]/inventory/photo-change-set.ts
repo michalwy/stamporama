@@ -3,6 +3,7 @@
 // component state, the change-set is a function of it.
 
 import type { PhotoChangeSet, PhotoRole } from "@/lib/photos";
+import type { PhotoScaleInput } from "@/lib/photo-scale";
 import type { QuarterTurn } from "@/lib/tile-turn";
 
 type SlotRole = Exclude<PhotoRole, null>;
@@ -36,12 +37,16 @@ export interface CommittedOriginal {
  * of committed photos no longer on the strip. A strip position is the sort order.
  *
  * Without `recordSource` the source is never sent, so an editor that does not show it (a copy's)
- * cannot clear one by saving (#1001). */
+ * cannot clear one by saving (#1001).
+ *
+ * `addScale` is what every photo being added was scanned with (#2061), sent on each add; null sends
+ * none, which the save reads as no scale. */
 export function derivePhotoChangeSet(
   entries: readonly ChangeSetEntry[],
   initialPhotos: readonly CommittedOriginal[],
   slots: readonly SlotRole[],
-  recordSource: boolean
+  recordSource: boolean,
+  addScale: PhotoScaleInput | null = null
 ): PhotoChangeSet {
   const initialById = new Map(initialPhotos.map((p) => [p.id, p]));
   const presentCommittedIds = new Set(
@@ -66,6 +71,7 @@ export function derivePhotoChangeSet(
           sortOrder,
           turn: e.turn,
           ...(recordSource ? { sourceUrl } : {}),
+          ...(addScale ? { scale: addScale } : {}),
         });
       }
       return;

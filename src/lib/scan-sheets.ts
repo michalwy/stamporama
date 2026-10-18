@@ -796,6 +796,7 @@ async function commitFrontCut(args: {
   const written = await writeCropBytes(collectionId, rows);
   try {
     await prisma.$transaction(async (tx) => {
+      const profileId = await sheetScaleProfileId(tx, sheetId);
       for (const r of rows) {
         await tx.scanTile.create({
           data: {
@@ -812,7 +813,7 @@ async function commitFrontCut(args: {
             ...r.marks,
           },
         });
-        await tx.photo.create({ data: photoData(r, collectionId, "front", sheetId) });
+        await tx.photo.create({ data: photoData(r, collectionId, "front", sheetId, profileId) });
       }
       // The sheet is cut again (#2055) — and a re-cut that kept only copies, with nothing new
       // drawn, may have been the card's last open work.
@@ -946,6 +947,7 @@ async function commitBackCut(args: {
   const written = await writeCropBytes(collectionId, rows);
   try {
     await prisma.$transaction(async (tx) => {
+      const profileId = await sheetScaleProfileId(tx, sheetId);
       for (const r of rows) {
         if (r.isNewTile) {
           await tx.scanTile.create({
@@ -981,8 +983,8 @@ async function commitBackCut(args: {
         }
         await tx.photo.create({
           data: r.toCopy
-            ? copyBackPhoto(photoData(r, collectionId, "back", sheetId), r.toCopy)
-            : photoData(r, collectionId, "back", sheetId),
+            ? copyBackPhoto(photoData(r, collectionId, "back", sheetId, profileId), r.toCopy)
+            : photoData(r, collectionId, "back", sheetId, profileId),
         });
       }
       await tx.scanSheet.update({ where: { id: sheetId }, data: { recutPending: false } });
@@ -1083,12 +1085,16 @@ function photoData(
   role: "front" | "back",
   /** The sheet the crop was cut from (#1915) — what a removed back scan finds its pictures by, on
    * the tile or on the copy it became. Null only for a turned picture whose side has no sheet. */
-  scanSheetId: string | null
+  scanSheetId: string | null,
+  /** What the card was scanned with (#2061, {@link sheetScaleProfileId}), written onto the picture
+   * so its scale outlives the scan: a deleted batch keeps its copies' pictures (#1218). */
+  scanningProfileId: string | null
 ) {
   return {
     id: r.photoId,
     tileId: r.tileId,
     scanSheetId,
+    scanningProfileId,
     role,
     storageBackend: getActiveStorage().backend,
     storageKey: permanentPrefix(collectionId, r.photoId),
@@ -1099,6 +1105,18 @@ function photoData(
     originalHeight: r.crop.original.height,
     sizeBytes: r.crop.full.buffer.byteLength,
   };
+}
+
+/** The profile a picture cut from this sheet is given (#2061): the one the card was scanned with,
+ * or the collection's default for a card from before profiles — what it has always measured with.
+ * Null only for no sheet, or a collection with no default. */
+async function sheetScaleProfileId(tx: DbTransaction, sheetId: string | null): Promise<string | null> {
+  if (!sheetId) return null;
+  const sheet = await tx.scanSheet.findUnique({
+    where: { id: sheetId },
+    select: { scanningProfileId: true, collection: { select: { defaultScanningProfileId: true } } },
+  });
+  return sheet ? sheet.scanningProfileId ?? sheet.collection.defaultScanningProfileId : null;
 }
 
 /** Bytes go down before any row does, so a committed row never references bytes that are not
@@ -1841,6 +1859,7 @@ export async function setBackTurnover(
   try {
     await prisma.$transaction(async (tx) => {
       // The pictures first, each on the tile it is on now; the moves below carry them by owner.
+      const profileId = await sheetScaleProfileId(tx, backSheet.id);
       for (const [tileId, t] of turned) {
         const tile = backs.find((b) => b.id === tileId)!;
         await tx.photo.delete({ where: { id: tile.photos[0].id } });
@@ -1849,7 +1868,8 @@ export async function setBackTurnover(
             { tileId, photoId: t.photoId, crop: t.crop },
             collectionId,
             "back",
-            backSheet.id
+            backSheet.id,
+            profileId
           ),
         });
         await tx.scanTile.update({ where: { id: tileId }, data: { backTurn: t.turn } });
@@ -2119,12 +2139,14 @@ export async function turnTileSide(
     await prisma.$transaction(async (tx) => {
       // Deleted first: `(tileId, role)` is unique, and the new row takes the same slot.
       await tx.photo.delete({ where: { id: photo.id } });
+      const sheetId = side === "front" ? tile.frontSheetId : tile.backSheetId;
       await tx.photo.create({
         data: photoData(
           { tileId, photoId, crop },
           tile.collectionId,
           side,
-          side === "front" ? tile.frontSheetId : tile.backSheetId
+          sheetId,
+          await sheetScaleProfileId(tx, sheetId)
         ),
       });
       await tx.scanTile.update({

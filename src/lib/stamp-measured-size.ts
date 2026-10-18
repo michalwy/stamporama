@@ -188,6 +188,9 @@ export interface PhotoMeasureTarget {
   /** Null where the picture is of no one stamp: it measures, and sets nothing. */
   stampId: string | null;
   scanning: ScanningSetup;
+  /** The profile the picture says it was scanned with (#2061) — what the viewer opens on — or null,
+   *  where it opens on the collection's default. */
+  scanningProfileId: string | null;
 }
 
 export async function getPhotoMeasureTarget(
@@ -200,6 +203,7 @@ export async function getPhotoMeasureTarget(
     select: {
       ...PHOTO_FRAME_SELECT,
       stampId: true,
+      scanningProfileId: true,
       // Exactly one owner is set (#137, #311, #566) — any of them answers which collection it is in.
       item: { select: { collectionId: true, stampId: true, stampCount: true } },
       stamp: { select: { collectionId: true } },
@@ -222,5 +226,6 @@ export async function getPhotoMeasureTarget(
     frame: measureFrameOf(photo),
     stampId: photoMeasureStampId({ stampId: photo.stampId, item: photo.item }),
     scanning: toScanningSetup(collection),
+    scanningProfileId: photo.scanningProfileId,
   };
 }

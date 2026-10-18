@@ -82,6 +82,38 @@ describe("renderCollage", () => {
     assert.equal(small.height, 100);
   });
 
+  it("draws photos of different resolutions at one scale (#2061)", async () => {
+    // The same 25 mm stamp, as a 1200 dpi card tile and a 600 dpi photo: 1181 and 590 px wide by
+    // their pixels, equal on paper. Both say what they measure, so the finer one comes down.
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(1200, 1200)), dpi: 1200 },
+        { ...(await scan(600, 600)), dpi: 600 },
+      ],
+      style,
+      noLimits
+    );
+
+    const [card, photo] = rendered.layout.tiles;
+    assert.equal(card.width, 600);
+    assert.equal(photo.width, 600);
+  });
+
+  it("draws by pixels when one photo has no scale (#2061)", async () => {
+    const rendered = await renderCollage(
+      [
+        { ...(await scan(400, 400)), dpi: 1200 },
+        { ...(await scan(200, 200)), dpi: null },
+      ],
+      style,
+      noLimits
+    );
+
+    const [first, second] = rendered.layout.tiles;
+    assert.equal(first.width, 400);
+    assert.equal(second.width, 200);
+  });
+
   it("leaves tiles untouched when no scan carries a recorded original", async () => {
     // Pre-migration photos: nothing to correct against, so the render is the one it always was.
     const rendered = await renderCollage(
