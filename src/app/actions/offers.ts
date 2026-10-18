@@ -41,7 +41,7 @@ import {
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import type { PlanChecklistSlot } from "@/lib/offer-photo-plan";
-import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
+import { parseOfferPhotoConfigInput, readPhotoConfigFields } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
 import {
   publishOfferOrPost,
@@ -759,31 +759,7 @@ export async function updateOfferPhotoConfigAction(
   formData: FormData
 ): Promise<OfferActionState> {
   const session = await getSession();
-  const parsed = parseOfferPhotoConfigInput({
-    photoSides: str(formData, "photoSides"),
-    preferSingles: str(formData, "preferSingles"),
-    photoLabelLeftTemplate: str(formData, "photoLabelLeftTemplate"),
-    photoLabelRightTemplate: str(formData, "photoLabelRightTemplate"),
-    collageGridMode: str(formData, "collageGridMode"),
-    collageGridShape: str(formData, "collageGridShape"),
-    collageRows: str(formData, "collageRows"),
-    collageColumns: str(formData, "collageColumns"),
-    collageGapPercent: str(formData, "collageGapPercent"),
-    collageBackground: str(formData, "collageBackground"),
-    collageLabelPercent: str(formData, "collageLabelPercent"),
-    coverSymbols: str(formData, "coverSymbols"),
-    // #1673: the switch, and the group template's numbers as the dialog's hidden fields.
-    groupByChecklist: str(formData, "groupByChecklist"),
-    groupCollage: {
-      collageGridMode: str(formData, "groupCollageGridMode"),
-      collageGridShape: str(formData, "groupCollageGridShape"),
-      collageRows: str(formData, "groupCollageRows"),
-      collageColumns: str(formData, "groupCollageColumns"),
-      collageGapPercent: str(formData, "groupCollageGapPercent"),
-      collageBackground: str(formData, "groupCollageBackground"),
-      collageLabelPercent: str(formData, "groupCollageLabelPercent"),
-    },
-  });
+  const parsed = parseOfferPhotoConfigInput(readPhotoConfigFields((name) => str(formData, name)));
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
     await updateOfferPhotoConfig(session.user.id, offerId, parsed.value);

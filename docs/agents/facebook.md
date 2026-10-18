@@ -564,6 +564,31 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   a word boundary (a cut between two letters or digits is refused), and never empties a title. The
   integration test is `tests/integration/facebook-post-lot-titles.test.ts`.
 
+- **A post's screen changes every lot's photo settings at once** (#2032, one of #2030–#2033 — the post
+  as the one workspace, settled with the collector on 2026-10-18). **The post holds no settings of its
+  own**: each lot is an offer keeping its own, written through `updateOfferPhotoConfig` exactly as its
+  own dialog writes them, so a lot added later keeps what it had. The dialog **is** the offer's
+  `PhotoSettingsDialog`, given `bulk` (`lotCount`, `differing`) — one set of controls, so the two cannot
+  drift; `readPhotoConfigFields` and `offerPhotoConfigFromRow` (`offer-photo-config.ts`) were split out
+  for the same reason, the row mapping out of `getOfferDetail`. A **setting** is what the offer dialog
+  writes as one — each select, label and switch, and **each collage group whole** (#307's
+  all-or-nothing numbers: a lot cannot be given one number of a collage it lacks). `sharedPhotoSettings`
+  (`facebook-post-photo-settings-rules.ts`, pure) says per setting whether every lot shares it; a
+  differing one opens as *Differs by lot* — a select's extra option, an indeterminate checkbox, a blank
+  label with that placeholder, a collage with its numbers hidden until a template is picked — and the
+  form posts `changed` once per setting changed, of which `parsePostPhotoSettingsPatch` keeps only those
+  (a differing collage travels blank, which the offer's parser already reads as valid). **A template
+  picked while the sides differ** posts `collagePairSides`, and `applyPostPhotoSettingsPatch` runs
+  `applyCollagePairing` on each lot's own sides, as the offer dialog does on its one; while the sides are
+  shared the dialog pairs them itself. `updateFacebookPostPhotoSettings`
+  (`facebook-post-photo-settings.ts`) writes a lot only when the patch changes it and answers those
+  lots, which the dialog's *Regenerate photos after saving* (ticked, #328) hands to
+  `generateOffersPhotosAction` — refusals collected, the rest queued. Both read and write are refused
+  once any lot is posted. The actions are in `actions/facebook-post-photos.ts`; the button is
+  `PostPhotoSettingsButton` beside *Regenerate lot texts…*, reading the lots' settings when opened rather
+  than with the screen. Tests: `tests/unit/facebook-post-photo-settings-rules.test.ts`,
+  `tests/integration/facebook-post-photo-settings.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

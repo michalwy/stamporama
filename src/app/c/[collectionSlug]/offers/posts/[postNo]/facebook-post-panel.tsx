@@ -44,6 +44,7 @@ import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
 import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { AddLotsDialog } from "./add-lots-dialog";
+import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
 
@@ -88,6 +89,8 @@ import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialog
 //   or the whole post sorted by catalogue number or price from the lots' heading. The lot numbers are
 //   the order, so the text, the captions and the photos' download follow; the rows show the new order
 //   at once and the server's answer replaces it.
+// - **Photo settings…** (#2032), beside them while the post is not up: every lot's photo settings in
+//   one dialog — the sides to photograph, say — and their photos regenerated, instead of each offer's.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -634,6 +637,9 @@ export function FacebookPostPanel({
               >
                 <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
+                  {!lots.some((l) => isFacebookLotPosted(l.state)) && (
+                    <PostPhotoSettingsButton collectionId={collectionId} postId={postId} disabled={isPending} />
+                  )}
                   {lotTitles && (
                     <>
                       <DialogSecondaryButton
