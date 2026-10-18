@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -247,6 +247,11 @@ export interface PhotoSettingsDialogProps {
    *  changed. The form then also posts `changed` once per setting changed — only those are written —
    *  and, while the sides still differ, `collagePairSides` for a template picked (#694). */
   bulk?: { lotCount: number; differing: ReadonlySet<PostPhotoSetting> };
+  /** A one-off collage of ticked copies (#2052): the same settings, made into pictures rather than
+   *  saved. `lead` heads the form (the platform they are seeded from, how the copies are composed),
+   *  the footer is `actionLabel` alone, and `packaging` hides the one composition switch that does
+   *  nothing for it — kept in a hidden field, so switching back finds it as it was. */
+  collage?: { lead: ReactNode; actionLabel: string; packaging: "one-set" | "per-copy" };
 }
 
 /**
@@ -267,7 +272,10 @@ export function PhotoSettingsDialog({
   onClose,
   onSubmit,
   bulk,
+  collage: collageMode,
 }: PhotoSettingsDialogProps) {
+  /** What these settings are of, in the dialog's sentences. */
+  const subject = bulk ? "post" : collageMode ? "collage" : "offer";
   // A post's dialog (#2032): a setting the lots do not share starts as *differs* — blank, or null for
   // a switch — and stays out of the save until the collector changes it.
   const differs = (setting: PostPhotoSetting) => bulk?.differing.has(setting) ?? false;
@@ -397,7 +405,9 @@ export function PhotoSettingsDialog({
 
   return (
     <DialogShell
-      title={bulk ? `Photo settings — all ${bulk.lotCount} lots` : "Photo settings"}
+      title={
+        bulk ? `Photo settings — all ${bulk.lotCount} lots` : collageMode ? "Make a collage" : "Photo settings"
+      }
       onClose={onClose}
       maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
       minHeight="20rem"
@@ -421,6 +431,7 @@ export function PhotoSettingsDialog({
               how the tiles are gathered into collages on the right. */}
           <DialogFormColumns>
             <div>
+              {collageMode?.lead}
               {/* The platform's own limits, stated not editable here: they describe what the platform
                   accepts, are read when photos are generated, and are changed on the platform itself. */}
               <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0 0 1.25rem" }}>
@@ -447,8 +458,8 @@ export function PhotoSettingsDialog({
                   <option value="">
                     As {platformName} ({platformCoverSymbols ? "covered" : "not covered"})
                   </option>
-                  <option value="on">Covered on this {bulk ? "post" : "offer"}</option>
-                  <option value="off">Not covered on this {bulk ? "post" : "offer"}</option>
+                  <option value="on">Covered on this {subject}</option>
+                  <option value="off">Not covered on this {subject}</option>
                 </select>
               </div>
 
@@ -535,59 +546,69 @@ export function PhotoSettingsDialog({
                   the tail is grouped — and the first photo, the listing's thumbnail, is a single stamp
                   whenever this offer has one to show. Sets of several stamps are one collage either
                   way: a set is one thing being sold. */}
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.4375rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-secondary)",
-                  cursor: isPending ? "default" : "pointer",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                <TriStateCheckbox
-                  name="preferSingles"
-                  checked={preferSingles}
-                  isPending={isPending}
-                  onChange={setPreferSingles}
-                />
-                Single photos while {platformName}&rsquo;s limit allows
-                {preferSingles === null && ` (${DIFFERS.toLowerCase()})`}
-              </label>
-              <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
-                {limits.maxPhotos == null
-                  ? `${platformName} states no photo limit, so every single-stamp set gets its own photo.`
-                  : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
-              </span>
+              {collageMode?.packaging === "one-set" ? (
+                preferSingles && <input type="hidden" name="preferSingles" value="on" />
+              ) : (
+                <>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4375rem",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      cursor: isPending ? "default" : "pointer",
+                      marginBottom: "0.25rem",
+                    }}
+                  >
+                    <TriStateCheckbox
+                      name="preferSingles"
+                      checked={preferSingles}
+                      isPending={isPending}
+                      onChange={setPreferSingles}
+                    />
+                    Single photos while {platformName}&rsquo;s limit allows
+                    {preferSingles === null && ` (${DIFFERS.toLowerCase()})`}
+                  </label>
+                  <span style={{ ...HINT, display: "block", margin: "0 0 1.25rem" }}>
+                    {limits.maxPhotos == null
+                      ? `${platformName} states no photo limit, so every single-stamp set gets its own photo.`
+                      : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
+                  </span>
+                </>
+              )}
 
               {/* Series on photos of their own (#1673): a set's copies grouped by checklist, each group
                   on its own images in the checklist's order, the rest after them. The rules — two
                   copies make a group, a copy on several checklists joins the largest — are in the user
                   guide; the tooltip says the one thing worth knowing before ticking it. */}
-              <Tooltip content="Every series this offer's set holds two or more stamps of gets photos of its own, in the series' order; the other stamps follow on photos of their own.">
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4375rem",
-                    fontSize: "0.8125rem",
-                    color: "var(--color-text-secondary)",
-                    cursor: isPending ? "default" : "pointer",
-                    marginBottom: "0.25rem",
-                    width: "fit-content",
-                  }}
-                >
-                  <TriStateCheckbox
-                    name="groupByChecklist"
-                    checked={groupByChecklist}
-                    isPending={isPending}
-                    onChange={setGroupByChecklist}
-                  />
-                  Group series on their own photos
-                  {groupByChecklist === null && ` (${DIFFERS.toLowerCase()})`}
-                </label>
-              </Tooltip>
+              {collageMode?.packaging === "per-copy" ? (
+                groupByChecklist && <input type="hidden" name="groupByChecklist" value="on" />
+              ) : (
+                <Tooltip content={`Every series this ${subject}'s set holds two or more stamps of gets photos of its own, in the series' order; the other stamps follow on photos of their own.`}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4375rem",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      cursor: isPending ? "default" : "pointer",
+                      marginBottom: "0.25rem",
+                      width: "fit-content",
+                    }}
+                  >
+                    <TriStateCheckbox
+                      name="groupByChecklist"
+                      checked={groupByChecklist}
+                      isPending={isPending}
+                      onChange={setGroupByChecklist}
+                    />
+                    Group series on their own photos
+                    {groupByChecklist === null && ` (${DIFFERS.toLowerCase()})`}
+                  </label>
+                </Tooltip>
+              )}
               {/* The group template's numbers travel in hidden fields whether or not the box is
                   ticked, so turning grouping off and on again keeps the template. */}
               <input type="hidden" name="groupCollageGridMode" value={groupCollage.collageGridMode} />
@@ -601,7 +622,7 @@ export function PhotoSettingsDialog({
                 name="groupCollageLabelPercent"
                 value={groupCollage.collageLabelPercent}
               />
-              {groupByChecklist ? (
+              {groupByChecklist && collageMode?.packaging !== "per-copy" ? (
                 <div style={{ margin: "0.5rem 0 1.25rem" }}>
                   <LabelWithError htmlFor="offer-group-collage-template">Series template</LabelWithError>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -702,7 +723,9 @@ export function PhotoSettingsDialog({
                 <span style={HINT}>
                   {bulk
                     ? "Copies the template's numbers into the fields below, for every lot. Editing the template later leaves the lots alone."
-                    : "Copies the template's numbers into the fields below, where you can adjust them for this listing. Editing the template later leaves this offer alone."}
+                    : collageMode
+                      ? "Copies the template's numbers into the fields below, where you can adjust them for this collage."
+                      : "Copies the template's numbers into the fields below, where you can adjust them for this listing. Editing the template later leaves this offer alone."}
                 </span>
               </div>
 
@@ -822,8 +845,9 @@ export function PhotoSettingsDialog({
                       ? "The two numbers are limits only — each image is arranged from the stamps it actually holds, so a listing of four and one of nine both come out evenly."
                       : "Every row is filled to the number of columns, and the last row is as short as it needs to be."}{" "}
                     Their product is how many stamps go on one image either way, and it is a maximum rather
-                    than a frame — fewer stamps make a smaller collage. Leave the numbers blank for no collage
-                    on this {bulk ? "post" : "offer"} yet.
+                    than a frame — fewer stamps make a smaller collage. {collageMode
+                      ? "A collage needs them filled in."
+                      : `Leave the numbers blank for no collage on this ${subject} yet.`}
                   </p>
                 </>
               )}
@@ -836,42 +860,51 @@ export function PhotoSettingsDialog({
             default: the settings exist to change what the images look like, and photos that do not
             match the settings that produced them are the exception, not the norm. Unchecking keeps
             the old files exactly as they are — they may already be live on the platform (#312). */}
-        <DialogActions
-          actionLabel={isPending ? "Saving…" : regenerate ? "Save & regenerate" : "Save settings"}
-          onCancel={onClose}
-          disabled={isPending}
-          error={error}
-          leading={
-            <Tooltip
-              content={
-                bulk
-                  ? "Render the images of every lot whose settings changed again once saved, replacing the stored ones"
-                  : "Render this offer's images again once the settings are saved, replacing the stored ones"
-              }
-            >
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.4375rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-secondary)",
-                  cursor: isPending ? "default" : "pointer",
-                }}
+        {collageMode ? (
+          <DialogActions
+            actionLabel={collageMode.actionLabel}
+            onCancel={onClose}
+            disabled={isPending}
+            error={error}
+          />
+        ) : (
+          <DialogActions
+            actionLabel={isPending ? "Saving…" : regenerate ? "Save & regenerate" : "Save settings"}
+            onCancel={onClose}
+            disabled={isPending}
+            error={error}
+            leading={
+              <Tooltip
+                content={
+                  bulk
+                    ? "Render the images of every lot whose settings changed again once saved, replacing the stored ones"
+                    : "Render this offer's images again once the settings are saved, replacing the stored ones"
+                }
               >
-                <input
-                  type="checkbox"
-                  name="regeneratePhotos"
-                  checked={regenerate}
-                  onChange={(e) => setRegenerate(e.target.checked)}
-                  disabled={isPending}
-                  style={{ cursor: isPending ? "default" : "pointer" }}
-                />
-                Regenerate photos after saving
-              </label>
-            </Tooltip>
-          }
-        />
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.4375rem",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-secondary)",
+                    cursor: isPending ? "default" : "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    name="regeneratePhotos"
+                    checked={regenerate}
+                    onChange={(e) => setRegenerate(e.target.checked)}
+                    disabled={isPending}
+                    style={{ cursor: isPending ? "default" : "pointer" }}
+                  />
+                  Regenerate photos after saving
+                </label>
+              </Tooltip>
+            }
+          />
+        )}
       </form>
     </DialogShell>
   );

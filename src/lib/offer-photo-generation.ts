@@ -16,7 +16,12 @@ import { closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
 import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
 import { facebookLotPhotoFileName, facebookPostPhotoArchiveName } from "./facebook-post-rules";
-import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
+import {
+  COLLAGE_MIME,
+  renderCollage,
+  type CollageTileSource,
+  type RenderedCollage,
+} from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import {
   collageColumnsFor,
@@ -311,7 +316,7 @@ export interface OfferPhotoCoverState {
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
 /** A source scan: the plan references it by id, the renderer needs its bytes. */
-interface SourcePhoto {
+export interface SourcePhoto {
   id: string;
   storageBackend: string;
   storageKey: string;
@@ -335,7 +340,7 @@ interface SourcePhoto {
 
 /** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
  * whether a tile arrives from a copy's scan, an attachment's photo or a manual collage's tile. */
-const SOURCE_PHOTO_SELECT = {
+export const SOURCE_PHOTO_SELECT = {
   id: true,
   storageBackend: true,
   storageKey: true,
@@ -376,7 +381,7 @@ interface PlanLabels {
  * Resolved per copy rather than per group, because a token resolved across the copies of a collage
  * would render the same joined value under every stamp — the opposite of identifying one of them.
  */
-async function readTileLabels(
+export async function readTileLabels(
   ownerId: string,
   collectionId: string,
   itemIds: readonly string[],
@@ -406,8 +411,28 @@ async function readTileLabels(
   return labels;
 }
 
+/**
+ * What rendering a planned image reads — an offer's run (#311) and a one-off collage of ticked copies
+ * (#2052) alike, so the two cannot draw a tile differently. The offer's inputs are a superset.
+ */
+export interface CollageRenderContext {
+  /** Names the run in a log line: `offer <id>`, or what the one-off collage was made of. */
+  logLabel: string;
+  sourceById: Map<string, SourcePhoto>;
+  /** The rendered tile annotations per copy id (#312) — what is actually drawn, not the template. */
+  tileLabels: Map<string, TileLabelTexts>;
+  /** The annotation a tile with no copy is drawn with (#313 mode b); null for an unlabelled tile. */
+  uploadTileLabel: TileLabelTexts | null;
+  collage: OfferCollageValues | null;
+  /** The collage a checklist group (#1673) is laid out with; null for the ordinary one. */
+  groupCollage: OfferCollageValues | null;
+  limits: PlatformPhotoLimits;
+  /** Whether the covers drawn on the copies' photos are applied (#1665). */
+  needsCovers: boolean;
+}
+
 /** Everything one run reads, gathered once so the plan and the fingerprint cannot disagree. */
-interface GenerationInputs {
+interface GenerationInputs extends CollageRenderContext {
   offerId: string;
   offerName: string | null;
   /** The offer's short per-collection number (#416) — the head of every file name (#1754). */
@@ -762,6 +787,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
 
   return {
     offerId: offer.id,
+    logLabel: `offer ${offer.id}`,
     offerName: offer.name,
     offerNo: offer.offerNo,
     collectionId: offer.collectionId,
@@ -827,7 +853,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
  * (#744) filed under an area that may carry forbidden symbols, the flag resolved down the area tree.
  * Two reads — the collection's area tree, light, and the copies' stamps' area links.
  */
-async function readCoverAskedItemIds(
+export async function readCoverAskedItemIds(
   collectionId: string,
   itemIds: readonly string[]
 ): Promise<Set<string>> {
@@ -914,7 +940,7 @@ function planFor(inputs: GenerationInputs) {
 
 /** The collage an image is laid out with: the group template's for a checklist group (#1673), with
  *  the ordinary numbers standing in when the offer has none, and the ordinary ones otherwise. */
-function collageFor(image: PlannedImage, inputs: GenerationInputs): OfferCollageValues {
+function collageFor(image: PlannedImage, inputs: CollageRenderContext): OfferCollageValues {
   return image.kind === "collage" && image.checklistId
     ? inputs.groupCollage ?? inputs.collage!
     : inputs.collage!;
@@ -1860,7 +1886,7 @@ interface RenderedImage {
 async function tileSource(
   photoId: string,
   labels: TileLabelTexts | null,
-  inputs: GenerationInputs,
+  inputs: CollageRenderContext,
   /** The reverse sharing this cell in paired mode (#694); null for every other tile. */
   pairedPhotoId?: string | null
 ): Promise<CollageTileSource> {
@@ -1874,7 +1900,7 @@ async function tileSource(
 /** One scan's bytes and the size it was uploaded at — a tile's own, or its cell-mate's (#694). */
 async function scanSource(
   photoId: string,
-  inputs: GenerationInputs
+  inputs: CollageRenderContext
 ): Promise<{ buffer: Buffer; originalSize: { width: number; height: number } | null }> {
   const source = inputs.sourceById.get(photoId);
   if (!source) {
@@ -1901,19 +1927,19 @@ async function scanSource(
 }
 
 /**
- * Render one image from its tiles and store it. `columns` is the collage's own width for a group and
- * 1 for an attachment; everything else — gap, label strip, background, the platform's output limits
- * — is identical, so an attachment looks like the images around it rather than like a pass-through.
+ * Render one image from its tiles, in memory. `columns` is the collage's own width for a group and 1
+ * for an attachment; everything else — gap, label strip, background, the platform's output limits —
+ * is identical, so an attachment looks like the images around it rather than like a pass-through.
  * `collage` is the one the image is laid out with (`collageFor`): a checklist group's (#1673) may
- * differ from the rest.
+ * differ from the rest. An offer's run stores the result; a one-off collage (#2052) hands it over.
  */
-async function renderTiles(
+async function renderTileBytes(
   sources: CollageTileSource[],
   columns: number,
   index: number,
-  inputs: GenerationInputs,
+  inputs: CollageRenderContext,
   collage: OfferCollageValues
-): Promise<Omit<RenderedImage, "token" | "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
+): Promise<RenderedCollage> {
   const rendered = await renderCollage(
     sources,
     {
@@ -1934,9 +1960,21 @@ async function renderTiles(
     // The renderer returns its best attempt rather than throwing (#310). Worth a log line, not a
     // failed run: the collector can lower the collage size or accept a bigger file.
     console.warn(
-      `[offer-photos] image ${index} of offer ${inputs.offerId} is ${rendered.buffer.byteLength} B, over the platform's limit`
+      `[offer-photos] image ${index} of ${inputs.logLabel} is ${rendered.buffer.byteLength} B, over the platform's limit`
     );
   }
+  return rendered;
+}
+
+/** Render one image from its tiles ({@link renderTileBytes}) and store it as an offer's image. */
+async function renderTiles(
+  sources: CollageTileSource[],
+  columns: number,
+  index: number,
+  inputs: GenerationInputs,
+  collage: OfferCollageValues
+): Promise<Omit<RenderedImage, "token" | "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
+  const rendered = await renderTileBytes(sources, columns, index, inputs, collage);
 
   const thumb = await thumbnailFor(rendered.buffer, COLLAGE_MIME);
   const photoId = randomUUID();
@@ -1982,7 +2020,7 @@ async function renderTiles(
  */
 function plannedTileSizes(
   image: PlannedCollage,
-  inputs: GenerationInputs
+  inputs: CollageRenderContext
 ): CollagePlannedTileSize[] {
   const sizeOf = (photoId: string): CollageTileTrueSize => {
     const source = inputs.sourceById.get(photoId);
@@ -2002,13 +2040,13 @@ function plannedTileSizes(
   }));
 }
 
-/** A planned collage group: every tile is a copy's scan — or, in paired mode (#694), the copy's two
- * scans joined into one cell — annotated from that copy's own data. */
-async function renderPlannedCollage(
+/** A planned collage group's tiles, and the width it is laid out at. Every tile is a copy's scan —
+ * or, in paired mode (#694), the copy's two scans joined into one cell — annotated from that copy's
+ * own data. */
+async function plannedCollageTiles(
   image: PlannedCollage,
-  index: number,
-  inputs: GenerationInputs
-): Promise<RenderedImage> {
+  inputs: CollageRenderContext
+): Promise<{ sources: CollageTileSource[]; columns: number; collage: OfferCollageValues }> {
   const sources: CollageTileSource[] = [];
   for (const tile of image.tiles) {
     sources.push(
@@ -2021,22 +2059,40 @@ async function renderPlannedCollage(
     );
   }
   const collage = collageFor(image, inputs);
+  // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`, in
+  // `auto` it is solved from the tiles this group actually holds — from their sizes (#514), read off
+  // the photo rows, so the grid is chosen before any scan is decoded.
+  const columns = collageColumnsFor(plannedTileSizes(image, inputs), {
+    gridMode: collage.collageGridMode,
+    gridShape: collage.collageGridShape,
+    rows: collage.collageRows,
+    columns: collage.collageColumns,
+  });
+  return { sources, columns, collage };
+}
+
+/**
+ * One planned collage rendered in memory and never stored — the one-off collage of ticked copies
+ * (#2052) draws its images through exactly the path an offer's run does, and keeps none of them.
+ */
+export async function renderPlannedCollageBytes(
+  image: PlannedCollage,
+  index: number,
+  inputs: CollageRenderContext
+): Promise<RenderedCollage> {
+  const { sources, columns, collage } = await plannedCollageTiles(image, inputs);
+  return renderTileBytes(sources, columns, index, inputs, collage);
+}
+
+/** A planned collage group, rendered and stored as one of the offer's images. */
+async function renderPlannedCollage(
+  image: PlannedCollage,
+  index: number,
+  inputs: GenerationInputs
+): Promise<RenderedImage> {
+  const { sources, columns, collage } = await plannedCollageTiles(image, inputs);
   return {
-    // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`,
-    // in `auto` it is solved from the tiles this group actually holds — from their sizes (#514),
-    // read off the photo rows, so the grid is chosen before any scan is decoded.
-    ...(await renderTiles(
-      sources,
-      collageColumnsFor(plannedTileSizes(image, inputs), {
-        gridMode: collage.collageGridMode,
-        gridShape: collage.collageGridShape,
-        rows: collage.collageRows,
-        columns: collage.collageColumns,
-      }),
-      index,
-      inputs,
-      collage
-    )),
+    ...(await renderTiles(sources, columns, index, inputs, collage)),
     token: image.token,
     source: "collage",
     side: image.side,

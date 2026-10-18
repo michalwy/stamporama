@@ -24,6 +24,7 @@ function input(overrides: Partial<SelectionActionInput> = {}): SelectionActionIn
       addToOffer: noop,
       addToCollisionOffer: noop,
       sell: noop,
+      collage: noop,
     },
     ...overrides,
   };
@@ -52,6 +53,7 @@ describe("selection actions", () => {
         "add-to-collision-offer",
         "bulk-edit",
         "platform-exclusion",
+        "collage",
         "sell",
         "new-offer-one-set",
         "new-offer-per-copy",
@@ -78,6 +80,7 @@ describe("selection actions", () => {
         "Add 3 to #12 instead",
         "Bulk edit 5 copies…",
         "Never list 5 on Delcampe",
+        "Make a collage of 5 copies…",
         "Sell 4 copies…",
         "New offer · one set of 3",
         "New offer · 3 sets",
@@ -92,19 +95,33 @@ describe("selection actions", () => {
     );
     assert.deepEqual(
       menu.map((a) => a.label),
-      ["Bulk edit 1 copy…", "Sell 1 copy…", "New offer · 1 copy", "Add 1 to offer"]
+      [
+        "Bulk edit 1 copy…",
+        "Make a collage of 1 copy…",
+        "Sell 1 copy…",
+        "New offer · 1 copy",
+        "Add 1 to offer",
+      ]
     );
   });
 
   it("leaves the listing entries out when nothing in view can be listed", () => {
     const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 0 }));
-    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit"]);
+    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage"]);
   });
 
   it("offers Sell… for copies in stock that are not for sale (#2021)", () => {
     const actions = buildSelectionActions(input({ inView: 4, listable: 0, sellable: 4 }));
-    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "sell"]);
-    assert.equal(actions[1].barLabel, "Sell…");
+    assert.deepEqual(actions.map((a) => a.key), ["bulk-edit", "collage", "sell"]);
+    assert.equal(actions[2].barLabel, "Sell…");
+  });
+
+  it("offers a collage of every ticked copy in view, listable or not (#2052)", () => {
+    const collage = buildSelectionActions(input({ inView: 3, listable: 0, sellable: 0 })).find(
+      (a) => a.key === "collage"
+    );
+    assert.equal(collage?.barLabel, "Make collage…");
+    assert.equal(collage?.menuLabel, "Make a collage of 3 copies…");
   });
 
   it("names how many copies Sell… reaches when only some are in stock (#2021)", () => {
@@ -124,12 +141,13 @@ describe("selection actions", () => {
     const warning = "Already offered on Colnect in this condition.";
     assert.equal(hints["bulk-edit"], undefined);
     assert.equal(hints["sell"], undefined);
+    assert.equal(hints["collage"], undefined);
     assert.equal(hints["new-offer-one-set"], warning);
     assert.equal(hints["new-offer-per-copy"], warning);
     assert.equal(hints["add-to-offer"], warning);
     assert.ok(
       actions
-        .filter((a) => a.tone !== "link" && a.key !== "bulk-edit" && a.key !== "sell")
+        .filter((a) => a.tone !== "link" && a.key !== "bulk-edit" && a.key !== "sell" && a.key !== "collage")
         .every((a) => a.colliding)
     );
   });
@@ -155,6 +173,7 @@ describe("selection actions", () => {
           addToOffer: () => calls.push("addToOffer"),
           addToCollisionOffer: () => calls.push("addToCollisionOffer"),
           sell: () => calls.push("sell"),
+          collage: () => calls.push("collage"),
         },
       })
     );
@@ -163,6 +182,7 @@ describe("selection actions", () => {
       "addToCollisionOffer",
       "bulkEdit",
       "setExclusion:false",
+      "collage",
       "sell",
       "newOffer:one-set",
       "newOffer:per-copy",

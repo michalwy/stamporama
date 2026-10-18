@@ -79,6 +79,7 @@ import {
   Hash,
   House,
   LayoutDashboard,
+  LayoutGrid,
   ImageOff,
   Images,
   Info,
@@ -209,6 +210,8 @@ const GLYPHS = {
   camera: Camera,
   /** A purchase's photos (#2011) — pictures of what was bought, as a whole. */
   purchasePhotos: Images,
+  /** A one-off collage of ticked copies (#2052): stamps laid out on one picture for a buyer. */
+  collage: LayoutGrid,
   notifications: Bell,
 
   // The everyday verbs.
