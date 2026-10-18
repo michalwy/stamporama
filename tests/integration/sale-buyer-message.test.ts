@@ -161,7 +161,7 @@ describe("The message to a buyer (#1815)", () => {
     const id = await sale(delcampeId, [a]);
     const message = await readSaleBuyerMessage(userId, id);
     assert.deepEqual(message, {
-      text: `Sale ${saleNo} for Jan Kowalski: 15 EUR\nLetter — 2.50 EUR`,
+      text: `Sale ${saleNo} for Jan Kowalski: 15 €\nLetter — 2.50 €`,
       source: "Delcampe",
     });
   });
@@ -178,7 +178,7 @@ describe("The message to a buyer (#1815)", () => {
     const b = await offer("Eagle", "10.50", facebookId, ownGroupId);
     const before = await readSaleBuyerMessage(userId, await sale(facebookId, [a, b]));
     assert.deepEqual(before, {
-      text: `Own group: #${a.offerNo} Mercury\n#${b.offerNo} Eagle\n\nTotal 30.50 PLN`,
+      text: `Own group: #${a.offerNo} Mercury\n#${b.offerNo} Eagle\n\nTotal 30.50 zł`,
       source: "own",
     });
     // An option chosen, and the postage worked out from the total the buyer paid (#205).
@@ -188,7 +188,7 @@ describe("The message to a buyer (#1815)", () => {
     );
     assert.equal(
       chosen?.text,
-      `Own group: #${a.offerNo} Mercury\n#${b.offerNo} Eagle\nRegistered letter — 12 PLN\nTotal 42.50 PLN`
+      `Own group: #${a.offerNo} Mercury\n#${b.offerNo} Eagle\nRegistered letter — 12 zł\nTotal 42.50 zł`
     );
   });
 
@@ -199,10 +199,10 @@ describe("The message to a buyer (#1815)", () => {
       userId,
       await sale(facebookId, [following], { shippingOptionName: "Registered letter", buyerHandling: "12.00" })
     );
-    assert.deepEqual(followed, { text: `Facebook: #${following.offerNo} Eagle\nTotal 22 PLN`, source: "Facebook" });
+    assert.deepEqual(followed, { text: `Facebook: #${following.offerNo} Eagle\nTotal 22 zł`, source: "Facebook" });
     const across = await readSaleBuyerMessage(userId, await sale(facebookId, [own, following]));
     assert.equal(across?.source, "Facebook");
-    assert.equal(across?.text, `Facebook: #${own.offerNo} Mercury\n#${following.offerNo} Eagle\nTotal 30 PLN`);
+    assert.equal(across?.text, `Facebook: #${own.offerNo} Mercury\n#${following.offerNo} Eagle\nTotal 30 zł`);
   });
 
   it("has no message on Facebook once the template it would use is blank", async () => {

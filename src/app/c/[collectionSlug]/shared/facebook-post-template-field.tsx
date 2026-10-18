@@ -84,7 +84,9 @@ export function FacebookPostTemplateField({
         {role !== "captionPost" && (
           <>
             {" "}
-            An amount reads <code>15 PLN</code>, or <code>15.50 PLN</code> when it is not whole.
+            An amount reads <code>15 zł</code>, or <code>15.50 zł</code> when it is not whole; add{" "}
+            <code>:code</code> for <code>15 PLN</code> or <code>:none</code> for <code>15</code>, as in{" "}
+            <code>{"{price:code}"}</code>.
           </>
         )}
       </TemplateNote>

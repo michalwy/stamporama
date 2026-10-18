@@ -15,7 +15,7 @@
 // or — the *captioned* layout — one photo per lot, the lot's text that photo's caption, and the post's
 // text a shared one of its own (`renderFacebookCaptionedPost`).
 
-import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
+import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
   FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_RETIRED_PLACEHOLDERS,
@@ -28,6 +28,16 @@ import {
 } from "./facebook-group-rules";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { isAuctionListing, offerFileSlug, type OfferListingType } from "./offer-rules";
+import {
+  DEFAULT_CURRENCY_STYLE,
+  isCurrencyStyle,
+  resolveTemplateToken,
+  splitTemplateToken,
+  TEMPLATE_TOKEN,
+  writtenAmount,
+  type CurrencyStyle,
+  type TemplateValue,
+} from "./template-amount";
 
 /**
  * When a new auction in a group closes, from the group's defaults: `days` after `now`, at the group's
@@ -151,12 +161,18 @@ export interface FacebookPostLotText {
   description: string;
   /** `{catalog}`, retired (#1671) and still filled in where a template carries it. */
   catalog: string;
-  /** An auction's figures — `10 PLN`, `10.50 PLN`, or empty when it states none. */
-  startingPrice: string;
-  increment: string;
+  /** An auction's figures as 2-dp strings, null where it states none — written out by the placeholder
+   *  in the currency style it asks for (#2028): `10 zł`, `10 PLN`, `10`. */
+  startingPrice: string | null;
+  increment: string | null;
   closesAt: string;
-  /** A quick buy's asking price (#1671), the same way. */
-  price: string;
+  /** A quick buy's asking price (#1671), the same way; null on an auction. */
+  price: string | null;
+  /** The currency the figures are in. */
+  currency: string;
+  /** What an amount placeholder with no parameter writes: the symbol (#2028), or the code for a lot
+   *  frozen before there were symbols (#1800). Absent is the symbol. */
+  currencyStyle?: CurrencyStyle;
   /** The offer's own post template (#1780), written for its type — null, or absent, follows the
    *  group's template for that type. */
   ownTemplate?: string | null;
@@ -178,7 +194,7 @@ export interface FacebookCaptionTemplates {
   post: string;
 }
 
-const TOKEN = /\{[A-Za-z]+\}/g;
+const TOKEN = TEMPLATE_TOKEN;
 
 /** The placeholders a lot of this type fills in: its type's own — its post's, or its caption's
  *  (#1841) — and, in a post template, the retired ones (#1671). */
@@ -224,15 +240,17 @@ function placeholderValues(
   lot: FacebookPostLotText,
   terms: string,
   post: FacebookPostName | null = null
-): Record<string, string> {
+): Record<string, TemplateValue> {
+  const money = (amount: string | null) => (style: CurrencyStyle) =>
+    amount ? writtenAmount(amount, lot.currency, style) : "";
   return {
     "{title}": lot.title,
     "{description}": lot.description,
     "{catalog}": lot.catalog,
-    "{startingPrice}": lot.startingPrice,
-    "{increment}": lot.increment,
+    "{startingPrice}": money(lot.startingPrice),
+    "{increment}": money(lot.increment),
     "{closesAt}": lot.closesAt,
-    "{price}": lot.price,
+    "{price}": money(lot.price),
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
     "{offer}": String(lot.offerNo),
     "{terms}": terms.trim(),
@@ -274,18 +292,44 @@ export function renderFacebookLotParts(
   role: "post" | "caption" = "post",
   post: FacebookPostName | null = null
 ): FacebookPostPart[] {
-  return fillTemplate(template, knownTokens(lot.listingType, role), placeholderValues(lot, terms, post));
+  return fillTemplate(
+    template,
+    knownTokens(lot.listingType, role),
+    placeholderValues(lot, terms, post),
+    lotCurrencyStyle(lot)
+  );
+}
+
+function lotCurrencyStyle(lot: FacebookPostLotText): CurrencyStyle {
+  return lot.currencyStyle ?? DEFAULT_CURRENCY_STYLE;
+}
+
+/** What `token` becomes among the `known` placeholders, or null when it is none of them — another
+ *  type's placeholder, or a currency parameter that is not one (#2028) — and so stays as typed. */
+function knownValue(
+  token: string,
+  known: Set<string>,
+  values: Record<string, TemplateValue>,
+  style: CurrencyStyle
+): string | null {
+  return known.has(splitTemplateToken(token).placeholder) ? resolveTemplateToken(token, values, style) : null;
 }
 
 /** A template with the known tokens replaced by their values, everything else kept as typed. */
-function fillTemplate(template: string, known: Set<string>, values: Record<string, string>): FacebookPostPart[] {
+function fillTemplate(
+  template: string,
+  known: Set<string>,
+  values: Record<string, TemplateValue>,
+  style: CurrencyStyle = DEFAULT_CURRENCY_STYLE
+): FacebookPostPart[] {
   const parts: FacebookPostPart[] = [];
   let from = 0;
   for (const match of template.matchAll(TOKEN)) {
     const token = match[0];
-    if (!known.has(token)) continue;
+    const value = knownValue(token, known, values, style);
+    if (value === null) continue;
     if (match.index > from) parts.push({ value: false, text: template.slice(from, match.index) });
-    parts.push({ value: true, text: values[token] });
+    parts.push({ value: true, text: value });
     from = match.index + token.length;
   }
   if (from < template.length) parts.push({ value: false, text: template.slice(from) });
@@ -438,12 +482,15 @@ export function facebookPostGaps(
     const last = i === sorted.length - 1;
     const values = placeholderValues(lot, last ? standingNote : "");
     const seen = new Set<string>();
-    for (const token of template.match(TOKEN) ?? []) {
-      if (seen.has(token) || !known.has(token)) continue;
+    for (const written of template.match(TOKEN) ?? []) {
+      const value = knownValue(written, known, values, lotCurrencyStyle(lot));
+      // Named by the placeholder, whatever currency parameter it was written with (#2028).
+      const token = splitTemplateToken(written).placeholder;
+      if (value === null || seen.has(token)) continue;
       seen.add(token);
       if (token === "{lot}" && lot.lotNo == null) continue;
       if (token === FACEBOOK_TERMS_PLACEHOLDER.token && !last) continue;
-      if (values[token].trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
+      if (value.trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
     }
   });
   return { missingTemplates, emptyOwnTemplates, emptyPlaceholders };
@@ -536,17 +583,23 @@ export function facebookCaptionedPostGaps(
   const postValues = captionPostValues(sorted, standingNote, post);
   const postKnown = knownTokens("auction", "captionPost");
   for (const token of new Set(captions.post.match(TOKEN) ?? [])) {
-    if (!postKnown.has(token) || postValues[token].trim() !== "") continue;
+    const value = knownValue(token, postKnown, postValues, DEFAULT_CURRENCY_STYLE);
+    if (value === null || value.trim() !== "") continue;
     if (token === title) missingPostTitle = true;
     else emptyPlaceholders.push({ lotNo: null, token });
   }
   for (const lot of sorted) {
     const known = knownTokens(lot.listingType, "caption");
     const values = placeholderValues(lot, "", post);
-    for (const token of new Set(facebookCaptionLotTemplate(captions, lot).match(TOKEN) ?? [])) {
-      if (!known.has(token)) continue;
+    const seen = new Set<string>();
+    for (const written of facebookCaptionLotTemplate(captions, lot).match(TOKEN) ?? []) {
+      const value = knownValue(written, known, values, lotCurrencyStyle(lot));
+      // Named by the placeholder, whatever currency parameter it was written with (#2028).
+      const token = splitTemplateToken(written).placeholder;
+      if (value === null || seen.has(token)) continue;
+      seen.add(token);
       if (token === "{lot}" && lot.lotNo == null) continue;
-      if (values[token].trim() !== "") continue;
+      if (value.trim() !== "") continue;
       if (token === title) missingPostTitle = true;
       else emptyPlaceholders.push({ lotNo: lot.lotNo, token });
     }
@@ -595,6 +648,9 @@ export interface FacebookFrozenLot {
    *  afterwards leaves the posted text as it was; empty for a post with none, or an offer posted alone.
    *  Null on a snapshot older than titles, which could not have placed one: the post's title now. */
   postTitle: string | null;
+  /** What an amount placeholder with no parameter wrote when the lot was frozen (#2028): the symbol
+   *  since then. A snapshot older than symbols wrote the code, and is read back so. */
+  currencyStyle: CurrencyStyle;
 }
 
 /** A stored snapshot read back, or null when there is none or it is not one — a lot with no readable
@@ -624,6 +680,7 @@ export function readFacebookFrozenLot(value: unknown): FacebookFrozenLot | null 
     layout: toFacebookMultiLotLayout(text("layout")),
     postText: text("postText") ?? "",
     postTitle: text("postTitle"),
+    currencyStyle: isCurrencyStyle(v.currencyStyle) ? v.currencyStyle : "code",
   };
 }
 
@@ -702,10 +759,12 @@ export function facebookPostSource<L extends FacebookPostSourceLot>(
       title: figures.title,
       description: figures.description,
       catalog: figures.catalog,
-      startingPrice: facebookMoney(figures.startingPrice, figures.currency),
-      increment: facebookMoney(figures.bidIncrement, figures.currency),
+      startingPrice: figures.startingPrice,
+      increment: figures.bidIncrement,
       closesAt: closesAt(figures.endsAt),
-      price: isAuctionListing(figures.listingType) ? "" : facebookMoney(figures.price, figures.currency),
+      price: isAuctionListing(figures.listingType) ? null : figures.price,
+      currency: figures.currency,
+      currencyStyle: frozen ? frozen.currencyStyle : DEFAULT_CURRENCY_STYLE,
       ownTemplate: frozen ? frozen.template : lot.ownTemplate,
     };
   });
@@ -730,11 +789,6 @@ export function facebookPostSource<L extends FacebookPostSourceLot>(
       ? { postNo: group.post.postNo, title: lastFrozen?.postTitle ?? group.post.title }
       : null,
   };
-}
-
-/** A figure as a post states it: `10 PLN`, `10.50 PLN` (#1787), or empty when there is none. */
-export function facebookMoney(amount: string | null, currency: string): string {
-  return amount ? `${generatedAmount(amount)} ${currency}` : "";
 }
 
 /** Whether a lot has gone up with its post — anything past Ready. A post is up once one of its lots

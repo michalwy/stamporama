@@ -560,7 +560,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   has none (the kit's title stand-in is gone); `{title}` the display title; `{price}` a quick buy's
   asking price. **Every amount is `generatedAmount`'s** (#1787, `decimal-input.ts`, through
   `facebookMoney`): whole without decimals, otherwise both (`15`, `15.50`, never `15.5`) — the
-  collector's rule for every template that generates text; the card's own *Highest bid* keeps two; the retired `{catalog}` is every copy's leading number through
+  collector's rule for every template that generates text; the card's own *Highest bid* keeps two. **The
+  currency is the symbol by default** (#2028, settled with the collector on 2026-10-18): every amount
+  placeholder — here `{startingPrice}`, `{increment}`, `{price}`; in the buyer message `{itemsTotal}`,
+  `{shipping}`, `{total}`, `{shippingOptions}` — takes `:symbol`, `:code` or `:none`, the bare token
+  being `:symbol`. The table is `CURRENCY_SYMBOLS` (`currencies.ts`, typed over `COMMON_CURRENCIES` so a
+  currency added to the pickers without a symbol fails the typecheck; a stored code outside it writes
+  its code); `template-amount.ts` holds `writtenAmount`, the `TEMPLATE_TOKEN` that matches a parameter,
+  `resolveTemplateToken` and `isKnownTemplateToken`. A placeholder flagged `amount` in its list takes
+  the parameter; a parameter anywhere else, or one that is not a style, makes the token unknown — kept as
+  typed and named under the field, nothing new to learn. `FacebookPostLotText` therefore carries the
+  raw 2-dp figures and the currency rather than words, and `facebookPostGaps` names an empty amount by
+  its bare placeholder whatever parameter it was written with, so the card's reasons still match. **A
+  frozen lot keeps the default it went up with**: `FacebookFrozenLot.currencyStyle`, written `symbol`
+  by `freezeFacebookPostText`, and read back as `code` from a snapshot older than the field — those
+  posts said `PLN`, and the card says *As posted*. Screens are untouched. The retired `{catalog}` is every copy's leading number through
   `compactCatalogNumberGroups`; `{lot}` is empty on a single post; `{offer}` (#1694) is each lot's own offer number, bare as `{lot}` is,
   so the template writes any `#` itself. A type with **no template gives an
   empty lot** (the `{description}` fallback template is gone), and the lot's text is not trimmed, so

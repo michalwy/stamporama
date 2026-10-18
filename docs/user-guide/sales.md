@@ -570,8 +570,16 @@ template; the rest are placeholders:
 postage the buyer pays — the sale's **buyer handling**, or what is left of the **total paid by
 buyer** after the items. Before an option is chosen the total is the items alone, and
 `{shippingOptions}` lists what the buyer can choose from, at each option's **buyer price** — never
-what the service costs you. Amounts read `15 PLN`, or `15.50 PLN` when they are not whole. A placeholder the sale has
-nothing for — no buyer recorded, say — comes out empty; nothing is filled in in its place.
+what the service costs you. A placeholder the sale has nothing for — no buyer recorded, say — comes
+out empty; nothing is filled in in its place.
+
+**Amounts read the way a person writes them**: with the currency's symbol, where that currency puts
+it — `15 zł`, `$10` — and with decimals only when they are not whole, `15.50 zł`. `{itemsTotal}`,
+`{shipping}`, `{total}` and `{shippingOptions}` each say how the currency is written after a colon:
+`{total}` or `{total:symbol}` gives `15 zł`, `{total:code}` gives `15 PLN`, `{total:none}` gives
+`15`. On `{shipping}` and `{shippingOptions}` the choice applies to every price they list. A template
+written before this, with a bare `{total}`, now writes the symbol. Anything else after the colon is
+not a placeholder: it stays as typed, and the field says so under it.
 
 The message is written from the sale as it stands, so choose the shipping option or add a sold set
 and the message follows.
