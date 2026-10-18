@@ -11,7 +11,11 @@ import {
   ContactFieldError,
   ContactNameTakenError,
   ContactInUseError,
+  ContactMergeError,
   getCollectionTranslationContext,
+  getContactMergePair,
+  mergeContacts,
+  type ContactMergeCandidate,
   type ContactCreateInput,
   type ContactData,
   type CollectionTranslationContext,
@@ -27,6 +31,9 @@ export type ContactActionState =
 export type ContactDeleteState =
   | { status: "success" }
   | { status: "error"; message: string };
+
+/** A merge (#2043) has nothing to return either: the remaining contact is the one the caller named. */
+export type ContactMergeState = ContactDeleteState;
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -159,5 +166,40 @@ export async function deleteContactAction(
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to delete contact. Please try again." };
+  }
+}
+
+// ── Merge (#2043) ────────────────────────────────────────────────────────────────────────────────
+
+/** The two contacts the merge dialog compares, each with what moves when it is merged away. */
+export async function getContactMergePairAction(
+  contactId: string,
+  otherContactId: string
+): Promise<
+  | { status: "success"; contact: ContactMergeCandidate; other: ContactMergeCandidate }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const pair = await getContactMergePair(session.user.id, contactId, otherContactId);
+    return { status: "success", ...pair };
+  } catch (err) {
+    if (err instanceof ContactMergeError) return { status: "error", message: err.message };
+    return { status: "error", message: "Failed to load the contacts to merge." };
+  }
+}
+
+/** Merge `otherContactId` into `remainingContactId`, which is the one left. */
+export async function mergeContactsAction(
+  remainingContactId: string,
+  otherContactId: string
+): Promise<ContactMergeState> {
+  const session = await getSession();
+  try {
+    await mergeContacts(session.user.id, { remainingContactId, otherContactId });
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof ContactMergeError) return { status: "error", message: err.message };
+    return { status: "error", message: "Failed to merge the contacts. Please try again." };
   }
 }

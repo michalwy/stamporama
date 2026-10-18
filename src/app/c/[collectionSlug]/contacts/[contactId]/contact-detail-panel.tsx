@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import type {
   ContactAuctions,
@@ -50,6 +52,7 @@ import { statusChip as tradeStatusChip } from "@/app/c/[collectionSlug]/trades/t
 import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { CONTACT_ROLES } from "../contact-roles";
 import { ContactFormDialog } from "../contact-form-dialog";
+import { MergeContactsDialog } from "./merge-contacts-dialog";
 import { useContactPage, useInvalidateContacts } from "../use-contacts-query";
 
 // A contact's own page (#1708): who the contact is, and what the collector has done with them — one
@@ -100,6 +103,9 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
   const { data, isLoading, isError } = useContactPage(collectionId, contactId, period, hydrated);
 
   const [editing, setEditing] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const { invalidate } = useInvalidateContacts();
@@ -168,10 +174,23 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
             {label}
           </span>
         ))}
-        <span style={{ marginLeft: "auto" }}>
+        <span style={{ marginLeft: "auto", display: "flex", gap: "0.375rem" }}>
           <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
             <Icon name="edit" size="sm" /> Edit
           </button>
+          {/* **Merge with…** (#2043): the same person as two contacts becomes one. */}
+          <Tooltip content="Make this contact and another one into one contact">
+            <button
+              type="button"
+              style={DETAIL_BUTTON}
+              onClick={() => {
+                setError(undefined);
+                setMerging(true);
+              }}
+            >
+              <Icon name="merge" size="sm" /> Merge with…
+            </button>
+          </Tooltip>
         </span>
       </DetailFullRow>
 
@@ -244,6 +263,43 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
                 invalidate(collectionId);
                 toast({ message: `${(fd.get("name") as string) || "Contact"} saved` });
               } else if (result.status === "error") setError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {merging && (
+        <MergeContactsDialog
+          collectionId={collectionId}
+          contactId={contact.id}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setMerging(false);
+              setError(undefined);
+            }
+          }}
+          onSubmit={(remainingContactId, otherContactId) => {
+            setError(undefined);
+            startTransition(async () => {
+              const { mergeContactsAction } = await import("@/app/actions/contacts");
+              const result = await mergeContactsAction(remainingContactId, otherContactId);
+              if (result.status === "error") {
+                setError(result.message);
+                return;
+              }
+              setMerging(false);
+              toast({ message: "Contacts merged" });
+              // Purchases, sales, trades and lots all name a contact, so every list may be stale. This
+              // contact may be the one that went: then the merged one is the page to be on, and this
+              // page's own read is not repeated only to find the contact gone.
+              if (remainingContactId === contact.id) {
+                void queryClient.invalidateQueries();
+              } else {
+                void queryClient.invalidateQueries({ refetchType: "none" });
+                router.push(`/c/${collectionSlug}/contacts/${remainingContactId}`);
+              }
             });
           }}
         />

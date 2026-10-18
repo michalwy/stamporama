@@ -5,6 +5,7 @@ import { normalizeLanguage } from "./languages";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { FACEBOOK_PROFILES_SELECT } from "./facebook-sales";
 import { normalizeMarketCode } from "./market-anchoring";
+import { mergedContactDetails } from "./contact-merge-rules";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is a person or firm the collector deals with — sellers, buyers, exchange
@@ -573,6 +574,141 @@ export async function deleteContact(
   });
   if (referenceCount > 0) throw new ContactInUseError(referenceCount);
   await prisma.contact.delete({ where: { id: contactId } });
+}
+
+// ── Merge (#2043) ────────────────────────────────────────────────────────────────────────────────
+//
+// The same person sometimes ends up as two contacts — a buyer bidding from two Facebook accounts, a
+// contact made twice by mistake. Merging moves everything that names the other contact to the one
+// that remains, gives it the details it lacked (`contact-merge-rules.ts`), and deletes the other.
+
+/** A contact as the merge dialog shows it: its details, and how many records name it — what moves
+ * when it is the one merged away. */
+export interface ContactMergeCandidate extends ContactData {
+  purchaseCount: number;
+  saleCount: number;
+  tradeCount: number;
+  /** Auction sales tracked with it as the seller or house (ADR-0021). */
+  auctionSaleCount: number;
+  /** Realised prices recorded from it as the auction house (#1633). */
+  priceObservationCount: number;
+}
+
+const MERGE_COUNT_SELECT = {
+  _count: {
+    select: {
+      purchases: true,
+      salesBuyer: true,
+      trades: true,
+      auctionSalesSeller: true,
+      priceObservationsHouse: true,
+    },
+  },
+} as const;
+
+/** Raised when two contacts cannot be merged — one is missing, or they are the same contact. */
+export class ContactMergeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContactMergeError";
+  }
+}
+
+/** The two contacts the merge dialog compares, with what each would bring along. */
+export async function getContactMergePair(
+  ownerId: string,
+  contactId: string,
+  otherContactId: string
+): Promise<{ contact: ContactMergeCandidate; other: ContactMergeCandidate }> {
+  const { collectionId } = await assertContactOwner(ownerId, contactId);
+  if (contactId === otherContactId) throw new ContactMergeError("A contact cannot be merged with itself.");
+  const rows = await prisma.contact.findMany({
+    where: { collectionId, id: { in: [contactId, otherContactId] } },
+    select: { ...CONTACT_SELECT, ...MERGE_COUNT_SELECT },
+  });
+  const toCandidate = (id: string): ContactMergeCandidate => {
+    const row = rows.find((r) => r.id === id);
+    if (!row) throw new ContactMergeError("That contact is not in this collection any more.");
+    const { _count, ...contact } = row;
+    return {
+      ...toContactData(contact),
+      purchaseCount: _count.purchases,
+      saleCount: _count.salesBuyer,
+      tradeCount: _count.trades,
+      auctionSaleCount: _count.auctionSalesSeller,
+      priceObservationCount: _count.priceObservationsHouse,
+    };
+  };
+  return { contact: toCandidate(contactId), other: toCandidate(otherContactId) };
+}
+
+/**
+ * Merge `otherContactId` into `remainingContactId` (#2043): every purchase, sale, trade, auction sale
+ * and price observation naming the other moves to the remaining contact, and so do its Facebook
+ * profiles; the remaining one keeps its name and details, takes the ones it lacks, the union of the
+ * roles and the other's notes under its own (`mergedContactDetails`), and the other is deleted. One
+ * transaction, so a merge that fails half-way leaves both as they were.
+ */
+export async function mergeContacts(
+  ownerId: string,
+  input: { remainingContactId: string; otherContactId: string }
+): Promise<void> {
+  const { remainingContactId: remainingId, otherContactId: otherId } = input;
+  const { collectionId } = await assertContactOwner(ownerId, remainingId);
+  if (remainingId === otherId) throw new ContactMergeError("A contact cannot be merged with itself.");
+
+  await prisma.$transaction(async (tx) => {
+    const rows = await tx.contact.findMany({
+      where: { collectionId, id: { in: [remainingId, otherId] } },
+      select: { ...CONTACT_SELECT, defaultAuctionPlatformId: true },
+    });
+    const remainingRow = rows.find((r) => r.id === remainingId);
+    const otherRow = rows.find((r) => r.id === otherId);
+    if (!remainingRow || !otherRow) {
+      throw new ContactMergeError("That contact is not in this collection any more.");
+    }
+    const merged = mergedContactDetails(toContactData(remainingRow), toContactData(otherRow));
+
+    await tx.purchase.updateMany({ where: { contactId: otherId }, data: { contactId: remainingId } });
+    await tx.sale.updateMany({ where: { buyerId: otherId }, data: { buyerId: remainingId } });
+    await tx.trade.updateMany({ where: { partnerId: otherId }, data: { partnerId: remainingId } });
+    await tx.auctionSale.updateMany({ where: { sellerId: otherId }, data: { sellerId: remainingId } });
+    await tx.priceObservation.updateMany({
+      where: { auctionHouseId: otherId },
+      data: { auctionHouseId: remainingId },
+    });
+    // A profile is unique per collection, so the other's can never collide with the remaining's.
+    await tx.contactFacebookProfile.updateMany({
+      where: { contactId: otherId },
+      data: { contactId: remainingId },
+    });
+
+    await tx.contact.update({
+      where: { id: remainingId },
+      data: {
+        notes: merged.notes,
+        fullName: merged.fullName,
+        email: merged.email,
+        phone: merged.phone,
+        market: merged.market,
+        buyer: merged.buyer,
+        seller: merged.seller,
+        exchangePartner: merged.exchangePartner,
+        auctionHouse: merged.auctionHouse,
+        other: merged.other,
+        defaultCurrency: merged.defaultCurrency,
+        defaultShippingCost: merged.defaultShippingCost,
+        buyerPremiumPercent: merged.buyerPremiumPercent,
+        buyerPremiumFixed: merged.buyerPremiumFixed,
+        // A remembered value, not a detail on the form — still the other's memory is better than none.
+        defaultAuctionPlatformId: remainingRow.defaultAuctionPlatformId ?? otherRow.defaultAuctionPlatformId,
+      },
+      select: { id: true },
+    });
+    // Nothing names the other any more; were something to have appeared since, the `Restrict` keys
+    // refuse the delete and the whole merge with it.
+    await tx.contact.delete({ where: { id: otherId } });
+  });
 }
 
 /** Prisma unique-constraint violation (P2002) narrowing without importing the
