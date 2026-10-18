@@ -554,7 +554,9 @@ show, and from the
   photo's corner when you point at it, which saves it under the same name it has in the download (a lot
   with no photos to put up says so in its row) — then the lot number, the offer's number and title (linking to the
   offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
-  a quick buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the
+  a quick buy's price — its state, its listing link, and its sale once sold. A lot that can still be
+  sold has a tick box beside its number, to sell several lots to one buyer together
+  ([Selling a Facebook offer](#selling-a-facebook-offer)). Each row's **⋮** opens the
   offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
   takes the lot out of the post. Until the post is up, a row's **⠿** grip drags the lot to another place
   ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking
@@ -779,7 +781,14 @@ winning bid, or **Withdraw…**.
 A Facebook offer — an auction or a quick buy — is sold with the ordinary **Sell**, as on every
 platform (see [Offers](offers.md#selling-directly-from-the-list)): add it to an open sale on Facebook
 in the offer's currency — one not yet sent — or start a new one. Each set goes in at the offer's current price; change it on the sale's screen if the
-buyer paid something else. The offer becomes **Sold**.
+buyer paid something else. The offer becomes **Sold**. You stay where you were — on a post's screen,
+on the next lot — and a message names the sale and its buyer, with **Open sale** to go to it.
+
+A buyer who took several lots of a post is sold all of them at once: tick the lots on the post's
+screen and choose **Sell…** above them. They go into one sale, each lot at its own price — an
+auction's at its highest recorded bid — and the message says how many went in. Several Facebook
+offers ticked on the **Offers** list are sold together the same way (see
+[Offers](offers.md#selling-several-offers-together)).
 
 What is Facebook's own is the **buyer** of a new sale. Instead of picking a contact, you type them as
 on Facebook:

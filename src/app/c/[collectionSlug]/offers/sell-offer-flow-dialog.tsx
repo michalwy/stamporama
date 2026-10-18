@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -9,13 +8,14 @@ import {
   DialogFooter,
   DialogSecondaryButton,
 } from "@/app/dialog-shell";
-import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useInvalidateOffers } from "./use-offers-query";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import { UNSENT_SALE_STATUSES } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
+import { useToast } from "@/app/toast-provider";
+import { planOfferSale, saleTargetOf, soldIntoSaleMessage } from "@/lib/offer-sale-plan";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -42,6 +42,8 @@ const ROW_STYLE: React.CSSProperties = {
  */
 export interface SellableOfferSubject {
   id: string;
+  /** The offer's short number — what the toast and the list of offers left out name it by. */
+  offerNo: number;
   /** The stored listing title, or null — the derived `label` is what the dialog falls back to. */
   name: string | null;
   label: string;
@@ -52,6 +54,9 @@ export interface SellableOfferSubject {
   /** The offer's Facebook group, when it is a Facebook offer (#1777): its buyer is then named by their
    *  Facebook profile in the new-sale step. Absent off Facebook. */
   facebookGroupId?: string | null;
+  /** Known to have nothing to sell — withdrawn, sold, or no set — when it is one of several ticked
+   *  (#2050): named in the dialog as left out, and no part of choosing the sale's platform. */
+  closed?: boolean;
 }
 
 export interface SellOfferFlowDialogProps {
@@ -60,12 +65,16 @@ export interface SellOfferFlowDialogProps {
   baseCurrency: string;
   /** Server-computed "today" for the new-sale step's date field. */
   today: string;
-  offer: SellableOfferSubject;
+  /** The offer being sold — or, from a selection (#2050), the ticked offers, sold into one sale. */
+  offers: readonly SellableOfferSubject[];
   /** Sell **one set** of the offer rather than every set it still has (#473). The set is named by
    * its `OfferSet` id and by how it reads on the offer screen; everything else about the flow — the
-   * destination picker, the price, the landing screen — is identical, because selling one set and
-   * selling all of them are the same transaction with a different number of lines. */
+   * destination picker, the price, the toast — is identical, because selling one set and
+   * selling all of them are the same transaction with a different number of lines. Only with one
+   * offer. */
   set?: { id: string; label: string };
+  /** The offers that went into the sale, once they have — a selection unticks them (#2050). */
+  onSold?: (offerIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -81,6 +90,13 @@ export interface SellOfferFlowDialogProps {
  * named by their Facebook profile, found or created as `facebook-sales.ts` says, and the sale is in
  * the offer's own currency, which a group may set apart from the platform's.
  *
+ * Several ticked offers are sold the same way into **one** sale (#2050), each with every set it still
+ * has at its own price; those the sale cannot take — another platform or currency, or nothing left —
+ * are named and left out (`offer-sale-plan.ts`).
+ *
+ * **It never navigates** (#2049): the collector stays where *Sell* was pressed — selling a run of
+ * offers down a list, or lot after lot on a post — and a toast names the sale, linking to it.
+ *
  * Only sales **still open** are offered to add to (#1950) — *Ordered*, *Paid* or *Packed*, newest
  * first. A sale already sent is never what the collector means, and the old ones buried the open
  * ones; *Show sent sales too* brings them back for the rare correction, and is also what tells the
@@ -91,11 +107,12 @@ export function SellOfferFlowDialog({
   collectionSlug,
   baseCurrency,
   today,
-  offer,
+  offers,
   set,
+  onSold,
   onClose,
 }: SellOfferFlowDialogProps) {
-  const router = useRouter();
+  const { toast } = useToast();
   const [step, setStep] = useState<"pick" | "newSaleHeader">("pick");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
@@ -103,56 +120,69 @@ export function SellOfferFlowDialog({
   const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { invalidateAll: invalidateOffers } = useInvalidateOffers();
 
+  const target = useMemo(() => saleTargetOf(offers), [offers]);
   const { data: sellableOffers = [], isLoading: loadingSets } = useSellableOffers(
     collectionId,
-    offer.platformId,
-    true
+    target?.platformId,
+    target !== null
   );
   const { data: salesPages, isLoading: loadingSales } = useSalesInfinite(collectionId, {
-    platformId: offer.platformId,
+    platformId: target?.platformId,
     // The list's own order is newest first; with the switch off it holds only unsent sales.
     statuses: showSent ? undefined : [...UNSENT_SALE_STATUSES],
   });
   const existingSales = useMemo(
-    () => (salesPages?.pages.flatMap((p) => p.items) ?? []).filter((s) => s.currency === offer.currency),
-    [salesPages, offer.currency]
+    () => (salesPages?.pages.flatMap((p) => p.items) ?? []).filter((s) => s.currency === target?.currency),
+    [salesPages, target?.currency]
   );
 
-  const matched = sellableOffers.find((o) => o.offerId === offer.id);
   const setId = set?.id ?? null;
-  const lines: SaleLineRaw[] = useMemo(
+  // Scoped to one set when the flow was opened from a set (#473); otherwise every set each offer
+  // still has to sell, which is what the offer-level action has always meant.
+  const plan = useMemo(
     () =>
-      (matched?.sets ?? [])
-        // Scoped to one set when the flow was opened from a set (#473); otherwise every set the
-        // offer still has to sell, which is what the offer-level action has always meant.
-        .filter((s) => setId === null || s.offerSetId === setId)
-        .map((s) => ({
-          offerId: offer.id,
-          offerSetId: s.offerSetId,
-          price: offer.price,
-          itemIds: s.itemIds,
-        })),
-    [matched, offer.id, offer.price, setId]
+      planOfferSale(
+        offers,
+        target,
+        new Map(sellableOffers.map((o) => [o.offerId, o.sets])),
+        setId
+      ),
+    [offers, target, sellableOffers, setId]
   );
+  const { lines, sold, skipped } = plan;
+  const several = offers.length > 1;
+  const single = offers[0];
+  const platformName = target?.platformName ?? single?.platformName ?? "";
+  const currency = target?.currency ?? single?.currency ?? "";
 
-  function addLinesTo(saleId: string): Promise<{ status: "success" } | { status: "error"; message: string }> {
-    return import("@/app/actions/sales").then(({ addSaleLinesAction }) =>
-      addSaleLinesAction(saleId, lines, { toSentSale: showSent })
-    );
+  /** Add the lines, then stay: the offers redraw sold and a toast leads to the sale (#2049). Returns
+   *  why the sets could not be added, or null once they are. */
+  async function addLinesTo(saleId: string): Promise<string | null> {
+    const { addSaleLinesAction } = await import("@/app/actions/sales");
+    const result = await addSaleLinesAction(saleId, lines, { toSentSale: showSent });
+    invalidateSales(collectionId);
+    invalidateOffers(collectionId);
+    if (result.status !== "success") return result.message;
+    onSold?.(sold.map((o) => o.id));
+    toast({
+      message: soldIntoSaleMessage({
+        offerNos: sold.map((o) => o.offerNo),
+        oneSet: setId !== null,
+        saleNo: result.saleNo,
+        buyerName: result.buyerName,
+      }),
+      href: `/c/${collectionSlug}/sales/${saleId}`,
+      linkLabel: "Open sale",
+    });
+    onClose();
+    return null;
   }
 
   function sellToExisting(saleId: string) {
     setError(undefined);
     startTransition(async () => {
-      const result = await addLinesTo(saleId);
-      if (result.status === "success") {
-        invalidateSales(collectionId);
-        invalidateOffers(collectionId);
-        router.push(`/c/${collectionSlug}/sales/${saleId}`);
-        onClose();
-      } else {
-        setError(result.message);
-      }
+      const failed = await addLinesTo(saleId);
+      if (failed) setError(failed);
     });
   }
 
@@ -165,9 +195,9 @@ export function SellOfferFlowDialog({
         collectionId={collectionId}
         baseCurrency={baseCurrency}
         today={today}
-        initialPlatform={{ id: offer.platformId, name: offer.platformName, platformCurrency: offer.currency }}
+        initialPlatform={{ id: target?.platformId ?? "", name: platformName, platformCurrency: currency }}
         platformLocked
-        buyerByFacebookProfile={!!offer.facebookGroupId}
+        buyerByFacebookProfile={sold.some((o) => !!o.facebookGroupId)}
         isPending={isPending}
         error={error}
         onClose={() => {
@@ -177,22 +207,22 @@ export function SellOfferFlowDialog({
           setError(undefined);
           startTransition(async () => {
             const { createSaleAction } = await import("@/app/actions/sales");
-            const created = await createSaleAction(collectionId, raw, { forOfferId: offer.id });
+            // Every offer sold shares the sale's currency, so any of them says what it is (#1777).
+            const created = await createSaleAction(collectionId, raw, { forOfferId: sold[0]?.id });
             if (created.status !== "success") {
               setError(created.message);
               return;
             }
-            const result = await addLinesTo(created.id);
-            invalidateSales(collectionId);
-            invalidateOffers(collectionId);
-            if (result.status !== "success") {
-              // The sale header exists even though the line-add failed — land on its detail
-              // screen so the collector can add the sold sets manually from there.
-              router.push(`/c/${collectionSlug}/sales/${created.id}`);
-              onClose();
-              return;
-            }
-            router.push(`/c/${collectionSlug}/sales/${created.id}`);
+            const failed = await addLinesTo(created.id);
+            if (!failed) return;
+            // The sale header exists even though the line-add failed — the dialog has no form left
+            // that could fix it, so say so with a link to the sale, where the sets can be added.
+            toast({
+              message: `The sale was started, but its sets could not be added: ${failed}`,
+              tone: "error",
+              href: `/c/${collectionSlug}/sales/${created.id}`,
+              linkLabel: "Open sale",
+            });
             onClose();
           });
         }}
@@ -204,20 +234,56 @@ export function SellOfferFlowDialog({
   const noSets = !loadingSets && lines.length === 0;
 
   return createPortal(
-    <DialogShell title={set ? "Sell set" : "Sell"} onClose={onClose} minHeight="18rem" maxWidth="30rem">
+    <DialogShell
+      title={set ? "Sell set" : several ? `Sell ${offers.length} offers` : "Sell"}
+      onClose={onClose}
+      minHeight="18rem"
+      maxWidth="30rem"
+    >
       <DialogBody>
-        <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-          Record a sale for{" "}
-          <strong>{set ? set.label : (offer.name ?? offer.label)}</strong>
-          {set && <> from <strong>{offer.name ?? offer.label}</strong></>} — add it to an open
-          sale on {offer.platformName}, or start a new one.
-        </p>
+        {several ? (
+          <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+            Record one sale for the ticked offers — every set each still has, at its own price. Add
+            them to an open sale on {platformName}, or start a new one.
+          </p>
+        ) : (
+          <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+            Record a sale for{" "}
+            <strong>{set ? set.label : (single.name ?? single.label)}</strong>
+            {set && <> from <strong>{single.name ?? single.label}</strong></>} — add it to an open
+            sale on {platformName}, or start a new one.
+          </p>
+        )}
+
+        {/* What a selection cannot sell, named one per line (#2050) — a run reports its refusals per
+            offer. Only once the sets are read: until then every offer would look empty. */}
+        {several && !loadingSets && skipped.length > 0 && (
+          <div
+            role="status"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.25rem",
+              margin: "0 0 1rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-warning)",
+            }}
+          >
+            {skipped.map(({ offer, reason }) => (
+              <span key={offer.id}>
+                Offer #{offer.offerNo} {reason} — not sold.
+              </span>
+            ))}
+          </div>
+        )}
 
         {noSets ? (
           <p style={{ fontSize: "0.875rem", color: MUTED }}>
             {set
               ? "This set has already sold."
-              : "Nothing left to sell on this offer — every set has already sold."}
+              : several
+                ? "None of the ticked offers can be sold."
+                : "Nothing left to sell on this offer — every set has already sold."}
           </p>
         ) : (
           <>
@@ -246,8 +312,8 @@ export function SellOfferFlowDialog({
               ) : existingSales.length === 0 ? (
                 <p style={{ fontSize: "0.8125rem", color: MUTED, margin: 0 }}>
                   {showSent
-                    ? `No existing sale on ${offer.platformName} in ${offer.currency} yet.`
-                    : `No open sale on ${offer.platformName} in ${offer.currency}.`}
+                    ? `No existing sale on ${platformName} in ${currency} yet.`
+                    : `No open sale on ${platformName} in ${currency}.`}
                 </p>
               ) : (
                 existingSales.map((s) => {
@@ -256,7 +322,7 @@ export function SellOfferFlowDialog({
                     <button
                       key={s.id}
                       type="button"
-                      disabled={isPending}
+                      disabled={isPending || loadingSets}
                       onClick={() => sellToExisting(s.id)}
                       style={{ ...ROW_STYLE, opacity: isPending ? 0.6 : 1 }}
                     >

@@ -1680,8 +1680,9 @@ export function OfferDetailPanel({
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           today={today}
-          offer={{
+          offers={[{
             id: offerId,
+            offerNo: offer.offerNo,
             name: offer.name,
             label: offer.label,
             platformId: offer.platformId,
@@ -1689,7 +1690,7 @@ export function OfferDetailPanel({
             price: offer.price,
             currency: offer.currency,
             facebookGroupId: offer.facebookGroupId,
-          }}
+          }]}
           set={sellingSet ? { id: sellingSet.id, label: sellingSet.label } : undefined}
           onClose={() => {
             setSelling(false);
