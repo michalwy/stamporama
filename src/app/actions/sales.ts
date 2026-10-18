@@ -21,11 +21,15 @@ import {
   setSaleLineItemPacked,
   markSaleCopiesPacked,
   confirmSaleReview,
+  listSaleMergeCandidates,
+  mergeSales,
   isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
+  type SaleMergeCandidate,
   type SaleStatus,
 } from "@/lib/sales";
+import { isSaleMergePick, type SaleMergeChoices } from "@/lib/sale-merge-rules";
 import {
   createSaleShareToken,
   revokeSaleShareToken,
@@ -414,6 +418,42 @@ export async function deleteSaleAction(saleId: string): Promise<SaleActionState>
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the sale.");
+  }
+}
+
+// ── Merge (#2041) ────────────────────────────────────────────────────────────────────────────────
+
+/** This sale and the ones it can be merged with, for the merge dialog. */
+export async function getSaleMergeCandidatesAction(
+  saleId: string
+): Promise<
+  | { status: "success"; sale: SaleMergeCandidate; candidates: SaleMergeCandidate[] }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const { sale, candidates } = await listSaleMergeCandidates(session.user.id, saleId);
+    return { status: "success", sale, candidates };
+  } catch (e) {
+    return fail(e, "Failed to load the sales to merge with.");
+  }
+}
+
+/** Merge `otherSaleId` into `remainingSaleId`; the remaining sale's id comes back, to go to. */
+export async function mergeSalesAction(
+  remainingSaleId: string,
+  otherSaleId: string,
+  choices: SaleMergeChoices
+): Promise<CreateSaleActionState> {
+  const session = await getSession();
+  if (![choices.buyer, choices.commission, choices.postage].every(isSaleMergePick)) {
+    return { status: "error", message: "Choose which amount the merged sale takes." };
+  }
+  try {
+    const id = await mergeSales(session.user.id, { remainingSaleId, otherSaleId, choices });
+    return { status: "success", id };
+  } catch (e) {
+    return fail(e, "Failed to merge the sales.");
   }
 }
 

@@ -43,8 +43,9 @@ import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
+import { MergeSalesDialog } from "./merge-sales-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
-import { asksAboutUnpackedCopies, asksForShipment, isSaleStatus } from "@/lib/sale-status";
+import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -121,6 +122,7 @@ type Dialog =
   | { kind: "buyerMessage" }
   | { kind: "paidTotal" }
   | { kind: "shipment"; mode: "sent" | "edit" }
+  | { kind: "merge" }
   | { kind: "unpacked"; next: SaleStatus };
 
 interface SaleDetailPanelProps {
@@ -354,6 +356,23 @@ export function SaleDetailPanel({
           >
             Edit header
           </button>
+          {/* **Merge with…** (#2041): another open sale on this platform and currency becomes one
+              with this one. A sent parcel is merged with nothing. */}
+          {!isSaleSent(sale.status) && (
+            <Tooltip content="Make this sale and another open one on the same platform into one sale">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(undefined);
+                  setDialog({ kind: "merge" });
+                }}
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                <Icon name="merge" size="sm" /> Merge with…
+              </button>
+            </Tooltip>
+          )}
         </div>
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
           <span style={CHIP}>{soldDate}</span>
@@ -1028,6 +1047,32 @@ export function SaleDetailPanel({
         />
       )}
 
+      {dialog.kind === "merge" && (
+        <MergeSalesDialog
+          collectionId={collectionId}
+          saleId={sale.id}
+          isPending={isPending}
+          error={error}
+          onSubmit={(remainingSaleId, otherSaleId, choices) => {
+            setError(undefined);
+            startTransition(async () => {
+              const { mergeSalesAction } = await import("@/app/actions/sales");
+              const result = await mergeSalesAction(remainingSaleId, otherSaleId, choices);
+              if (result.status !== "success") {
+                setError(result.message);
+                return;
+              }
+              invalidateAll(collectionId);
+              setDialog({ kind: "none" });
+              toast({ message: "Sales merged" });
+              // This sale may be the one that went: the merged sale is the one to be on.
+              if (result.id === sale.id) router.refresh();
+              else router.push(`/c/${params.collectionSlug}/sales/${result.id}`);
+            });
+          }}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
       {dialog.kind === "buyerMessage" && buyerMessage && (
         <BuyerMessageDialog message={buyerMessage} onClose={() => setDialog({ kind: "none" })} />
       )}

@@ -57,6 +57,14 @@ import {
   type SaleApiReviewMark,
   type SaleApiReviewWrite,
 } from "./sale-review";
+import {
+  mergedSaleAmounts,
+  mergedSaleApiReview,
+  postageSumRefusal,
+  saleMergeRefusal,
+  type SaleMergeChoices,
+  type SaleMergeSide,
+} from "./sale-merge-rules";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -94,7 +102,10 @@ export type SaleBlockReason =
   | "no-offer"
   /** A copy picked for a set on no offer (#2021) that is not in stock — sold, traded away, disposed
    *  of, not yet in hand, or not this collection's. */
-  | "not-in-stock";
+  | "not-in-stock"
+  /** Two sales that cannot be merged (#2041): another platform or currency, or a parcel already
+   *  sent — or a sum of postages in two currencies. */
+  | "cannot-merge";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -111,7 +122,7 @@ export class SaleActionBlockedError extends Error {
 // The token set / order / validator live in the pure `./sale-status` module (no `server-only`), so
 // client UI can share them; re-exported here for existing server-side importers.
 export { SALE_STATUS_ORDER, isSaleStatus, type SaleStatus } from "./sale-status";
-import { isSaleSent, isSaleStatus, type SaleStatus } from "./sale-status";
+import { isSaleSent, isSaleStatus, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
@@ -2761,6 +2772,181 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
       // back out of `sold` is stamped as well.
       await markListingContentChanged(offerIds, tx);
     }
+  });
+}
+
+// ── Merge (#2041) ───────────────────────────────────────────────────────────
+
+/** A sale as the merge dialog shows it: who and what, and the amounts it would bring. */
+export interface SaleMergeCandidate extends SaleMergeSide {
+  id: string;
+  soldAt: string;
+  buyerName: string | null;
+  externalRef: string | null;
+  /** Sold sets on it. */
+  lineCount: number;
+  /** Packing-supply lines on it. */
+  supplyLineCount: number;
+  /** Carries the agent API's *to review* marker (#1948). */
+  toReview: boolean;
+}
+
+const SALE_MERGE_SELECT = {
+  id: true,
+  saleNo: true,
+  collectionId: true,
+  platformId: true,
+  currency: true,
+  status: true,
+  soldAt: true,
+  externalRef: true,
+  buyerHandling: true,
+  buyerPaidTotal: true,
+  commission: true,
+  shippingCost: true,
+  shippingCurrency: true,
+  shippingFxRateToBase: true,
+  apiReviewAt: true,
+  apiReviewCreated: true,
+  apiReviewActions: true,
+  buyer: { select: { name: true } },
+  lines: { select: { price: true } },
+  supplyLines: { select: { supplyId: true } },
+  collection: { select: { ownerId: true } },
+} as const;
+
+type SaleMergeRow = Prisma.SaleGetPayload<{ select: typeof SALE_MERGE_SELECT }>;
+
+function toSaleMergeCandidate(row: SaleMergeRow): SaleMergeCandidate {
+  return {
+    id: row.id,
+    saleNo: row.saleNo,
+    platformId: row.platformId,
+    currency: row.currency,
+    status: row.status,
+    soldAt: row.soldAt.toISOString().slice(0, 10),
+    buyerName: row.buyer?.name ?? null,
+    externalRef: row.externalRef,
+    gross: row.lines.reduce((s, l) => s + Number(l.price), 0).toFixed(2),
+    buyerHandling: money(row.buyerHandling),
+    buyerPaidTotal: money(row.buyerPaidTotal),
+    commission: money(row.commission),
+    shippingCost: money(row.shippingCost),
+    shippingCurrency: row.shippingCost == null ? null : row.shippingCurrency,
+    // The frozen rate at its full precision — it is written back as it is, never shown.
+    shippingFxRateToBase: row.shippingFxRateToBase == null ? null : row.shippingFxRateToBase.toString(),
+    lineCount: row.lines.length,
+    supplyLineCount: row.supplyLines.length,
+    toReview: row.apiReviewAt !== null,
+  };
+}
+
+/**
+ * The sales this one can be merged with (#2041), for the merge dialog: the collection's others on
+ * the same platform, in the same currency, not yet sent — latest first. Empty when this sale has
+ * been sent itself, since a sent sale is merged with nothing.
+ */
+export async function listSaleMergeCandidates(
+  ownerId: string,
+  saleId: string
+): Promise<{ sale: SaleMergeCandidate; candidates: SaleMergeCandidate[] }> {
+  const row = await prisma.sale.findUnique({ where: { id: saleId }, select: SALE_MERGE_SELECT });
+  if (!row || row.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const sale = toSaleMergeCandidate(row);
+  const rows = await prisma.sale.findMany({
+    where: {
+      collectionId: row.collectionId,
+      platformId: row.platformId,
+      currency: row.currency,
+      id: { not: row.id },
+      status: { in: [...UNSENT_SALE_STATUSES] },
+    },
+    orderBy: [{ soldAt: "desc" }, { saleNo: "desc" }],
+    select: SALE_MERGE_SELECT,
+  });
+  const candidates = rows
+    .map(toSaleMergeCandidate)
+    .filter((candidate) => saleMergeRefusal(sale, candidate) === null);
+  return { sale, candidates };
+}
+
+/** What {@link mergeSales} is asked: which sale remains, which goes, and whose amount is taken. */
+export interface SaleMergeInput {
+  remainingSaleId: string;
+  otherSaleId: string;
+  choices: SaleMergeChoices;
+}
+
+/**
+ * Merge one sale into another (#2041): **every sold set and every packing supply of the other sale
+ * moves to the remaining one, and the other is deleted**. Its number is never given again — sale
+ * numbers come from a counter, not from the rows there are.
+ *
+ * The remaining sale keeps its own buyer, date, order number, transaction link, shipping option and
+ * status; the other buyer's contact is left as it is. Each amount — buyer handling or total paid,
+ * commission, postage — is the remaining sale's, the other's or their sum, as `choices` says
+ * (`mergedSaleAmounts`). A sale the agent API wrote and nobody confirmed makes the merged sale
+ * *to review* too (`mergedSaleApiReview`).
+ *
+ * The lines move as they are — price, packed copies, a set still to be chosen — so nothing is sold
+ * twice and no offer changes state: every set that was sold is still sold, on the remaining sale. The
+ * supply lines move with the units they took, and are settled again because the remaining sale's
+ * date is the one their first-in-first-out order now reads. The other sale's buyer link (#699), if
+ * it had one, goes with it.
+ *
+ * Both sales are locked first and read again, so what is checked is what is merged.
+ */
+export async function mergeSales(ownerId: string, input: SaleMergeInput): Promise<string> {
+  const { remainingSaleId, otherSaleId, choices } = input;
+  if (remainingSaleId === otherSaleId) {
+    throw new SaleActionBlockedError("cannot-merge", "A sale cannot be merged with itself.");
+  }
+  return prisma.$transaction(async (tx) => {
+    // In one order, so two merges of overlapping sales queue rather than deadlock.
+    for (const id of [remainingSaleId, otherSaleId].sort()) {
+      await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${id} FOR UPDATE`;
+    }
+    const [remainingRow, otherRow] = await Promise.all(
+      [remainingSaleId, otherSaleId].map((id) =>
+        tx.sale.findUnique({ where: { id }, select: SALE_MERGE_SELECT })
+      )
+    );
+    if (
+      !remainingRow ||
+      !otherRow ||
+      remainingRow.collection.ownerId !== ownerId ||
+      otherRow.collectionId !== remainingRow.collectionId
+    ) {
+      throw new Error("Sale not found or access denied.");
+    }
+    const remaining = toSaleMergeCandidate(remainingRow);
+    const other = toSaleMergeCandidate(otherRow);
+    const refusal =
+      saleMergeRefusal(remaining, other) ??
+      (choices.postage === "sum" ? postageSumRefusal(remaining, other) : null);
+    if (refusal) throw new SaleActionBlockedError("cannot-merge", refusal);
+
+    await tx.saleLine.updateMany({ where: { saleId: otherSaleId }, data: { saleId: remainingSaleId } });
+    await tx.saleSupplyLine.updateMany({
+      where: { saleId: otherSaleId },
+      data: { saleId: remainingSaleId },
+    });
+    await tx.sale.update({
+      where: { id: remainingSaleId },
+      data: {
+        ...mergedSaleAmounts(remaining, other, choices),
+        ...mergedSaleApiReview(remainingRow, otherRow),
+      },
+    });
+    await tx.sale.delete({ where: { id: otherSaleId } });
+    // The moved lines now read the remaining sale's date (#1898).
+    await settleSupplies(
+      tx,
+      otherRow.supplyLines.map((l) => l.supplyId)
+    );
+    return remainingSaleId;
   });
 }
 
