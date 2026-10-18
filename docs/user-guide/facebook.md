@@ -342,10 +342,13 @@ of several lots, the same kit is on the post's own screen — see
 
 On Facebook what you put up is always a post — with one offer in it or many — and Stamporama keeps it
 that way. **Publish…** on a Facebook offer that is in no post makes it a **post of its own**, with a
-number — **Post #12** — and asks for the post's **title** beside the link. The title is optional: left
-empty, the post is listed as having no title, and nothing is filled in for it. Creating an offer makes
-no post — only publishing it alone does — so an offer you mean to put in a post with others never
-passes through one of its own.
+number — **Post #12** — and asks for the post's **title** beside the link. The field starts on the
+**offer's title**, so you see what the post will be called; type another to use that instead, and if
+you clear it the post takes the offer's title all the same. The title is copied once, when the post is
+made: from then on it is the post's own, renamed with the pencil like any post's, and renaming the
+offer later does not rename the post. Posts of one offer made before this was so were given their
+offer's title too. Creating an offer makes no post — only publishing it alone does — so an offer you
+mean to put in a post with others never passes through one of its own.
 
 A post of one offer reads exactly as a single post always did: its text comes from the auction or
 quick-buy post template, the layout for posts of several lots does not apply, and **↓ Photos** is the

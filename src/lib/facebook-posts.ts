@@ -47,6 +47,7 @@ import {
   regenerateOfferText,
   readPrepareOffers,
   regenerateOfferTitleAndDescription,
+  readOfferPostTitles,
   readSoldElsewhereRefusal,
   setOfferState,
   syncGeneratedTexts,
@@ -1025,11 +1026,35 @@ export async function setFacebookPostTitle(ownerId: string, postId: string, titl
 }
 
 /**
+ * Give every untitled post of one offer its offer's title (#2068) — the posts made before a post of
+ * one took the title as it went up. Once, at boot (`instrumentation-node.ts`): the title is the
+ * offer's display title, which only TypeScript builds, so a SQL migration could not. Idempotent — a
+ * post with a title is never touched, and a title cannot be cleared — so every later boot costs one
+ * query. Posts of several lots keep asking for their own (#1862). Returns how many it titled.
+ */
+export async function titleUntitledFacebookPostsOfOne(): Promise<number> {
+  const posts = await prisma.facebookPost.findMany({
+    where: { title: null },
+    select: { id: true, lots: { select: { id: true }, take: 2 } },
+  });
+  const ofOne = posts.filter((p) => p.lots.length === 1).map((p) => ({ postId: p.id, offerId: p.lots[0].id }));
+  const titles = await readOfferPostTitles(ofOne.map((p) => p.offerId));
+  let titled = 0;
+  for (const { postId, offerId } of ofOne) {
+    const title = titles.get(offerId);
+    if (!title) continue;
+    const { count } = await prisma.facebookPost.updateMany({ where: { id: postId, title: null }, data: { title } });
+    titled += count;
+  }
+  return titled;
+}
+
+/**
  * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook offer
  * that is the post's link. A lot of a post takes the whole post live with it. An offer in no post,
  * and every offer off Facebook, is the ordinary `publishOffer` — which, for a Facebook offer, makes
- * its post of one lot as it goes up (#1989); `postTitle` is that post's title, a blank one leaving it
- * untitled (#1692).
+ * its post of one lot as it goes up (#1989), titled with the offer's title (#2068); a `postTitle`
+ * typed in the dialog replaces it, a blank one leaves it as the offer's.
  *
  * `to` is `pending` when the post went to the group's administrator rather than straight up (#1778):
  * the link is then the pending post's. Approving a pending offer is this same call with `active`.

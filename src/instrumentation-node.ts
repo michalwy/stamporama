@@ -56,6 +56,9 @@
 //     carries no snapshot of its post text is frozen with the text it shows now. Those are the offers
 //     already up when #1800 landed — the text needs the display title and catalogue numbers, which a
 //     SQL migration cannot build — and, being idempotent, it costs one query on every later boot.
+//   - the Facebook post-of-one titles (#2068) — once, at boot: every untitled post holding one offer
+//     takes that offer's title, as a post of one now does when it goes up. The display title is
+//     built in TypeScript, so the same reasoning as the freeze; one query on every later boot.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -81,6 +84,7 @@ import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rul
 import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
 import { startAuctionReminderSweep } from "@/lib/auction-reminder-sweep";
 import { freezeUnfrozenFacebookPosts } from "@/lib/facebook-auctions";
+import { titleUntitledFacebookPostsOfOne } from "@/lib/facebook-posts";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -109,6 +113,12 @@ export async function start(): Promise<void> {
     if (frozen > 0) console.log(`[facebook] froze the post text of ${frozen} offer(s) already up`);
   } catch (err) {
     console.error("[facebook] freezing posted offers' text failed", err);
+  }
+  try {
+    const titled = await titleUntitledFacebookPostsOfOne();
+    if (titled > 0) console.log(`[facebook] titled ${titled} post(s) of one offer with the offer's title`);
+  } catch (err) {
+    console.error("[facebook] titling posts of one offer failed", err);
   }
 
   // Abandoned staging, both kinds, in one pass on one TTL: a dropped-but-unsaved photo (#112) and a

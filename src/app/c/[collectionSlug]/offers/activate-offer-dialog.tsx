@@ -109,7 +109,8 @@ export function ActivateOfferDialog({
   approving?: boolean;
   /** Approving, the offer whose Facebook auctions may be asked for a closing time (#1779). */
   offerId?: string;
-  /** A Facebook offer in no post: publishing makes its post of one lot (#1989), whose title is asked. */
+  /** A Facebook offer in no post: publishing makes its post of one lot (#1989), whose title is asked —
+   *  starting on the offer's title, which the post takes when the field is left empty (#2068). */
   askPostTitle?: boolean;
   isPending: boolean;
   error?: string;
@@ -119,7 +120,7 @@ export function ActivateOfferDialog({
   onConfirm: (url: string, target: PublishTarget, endsAt?: string, postTitle?: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
-  const [postTitle, setPostTitle] = useState("");
+  const [postTitle, setPostTitle] = useState(askPostTitle ? offerLabel : "");
   const asksTitle = askPostTitle && !approving;
   const [target, setTarget] = useState<PublishTarget>(
     approving || !canWait
@@ -234,7 +235,7 @@ export function ActivateOfferDialog({
               style={INPUT}
             />
             <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              It goes up as a post of its own, named by this on Facebook posts. Left empty, it is listed as untitled.
+              It goes up as a post of its own, named by this on Facebook posts. Left empty, it takes the offer&apos;s title.
             </p>
           </div>
         )}

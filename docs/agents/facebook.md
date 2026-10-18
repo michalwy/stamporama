@@ -253,11 +253,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   reads the post, in `freezeIfPublished` for an offer created or duplicated already up, and in
   `updateOffer` for an offer moved onto Facebook once already up — a no-op for an offer in a post or
   off Facebook. Every publish path reaches it through the transition, so `publishOfferOrPost` needs
-  no branch of its own beyond the title: `postTitle` (asked by `ActivateOfferDialog`'s `askPostTitle`,
-  a Facebook offer in no post and not approving) is written with `setFacebookPostTitle` after
-  `publishOffer`, and a blank one leaves the post untitled (#1692) — the list's *No title* filter
-  flags it. The snapshot is written before the title, so its `postTitle` is `""`; nothing a post of
-  one renders reads it, since `{postTitle}` is in no post template. **A post of one reads as an offer
+  no branch of its own beyond the title. **A post of one is titled with its offer's title** (#2068,
+  decided with the collector on 2026-10-18): `placeInOneLotFacebookPost` creates it with
+  `readOfferPostTitles` (`offers.ts` — the offer's display title, its `name` else the label derived
+  from its sets, as `readKitLots` names the lot; an offer with neither is left out rather than given
+  the *Untitled listing* stand-in, #1692). It is **stored once**, not a stand-in at display time:
+  renaming the offer later does not rename the post. `postTitle` (asked by `ActivateOfferDialog`'s
+  `askPostTitle`, a Facebook offer in no post and not approving; the field starts on `offerLabel`) is
+  written with `setFacebookPostTitle` after `publishOffer` when not blank, so a typed title replaces
+  the offer's and a cleared field keeps it. The snapshot is written before a typed title, so its
+  `postTitle` is the offer's; nothing a post of one renders reads it, since `{postTitle}` is in no
+  post template. **Existing untitled posts of one** were titled by `titleUntitledFacebookPostsOfOne`
+  (`facebook-posts.ts`), run once at boot beside the freeze (`instrumentation-node.ts`) — the display
+  title is built in TypeScript — and an idempotent no-op after; posts of several lots keep asking for
+  their own (#1862). The integration test is the *its title* suite of
+  `tests/integration/facebook-single-posts.test.ts`. **A post of one reads as an offer
   posted alone**: `facebookPostLayout` takes `{ layout, lotCount }` and is `text` under two lots;
   `getFacebookOfferKit` nulls the lone lot's `lotNo` (so `{lot}` and the gaps behave as on a single
   post) and gives the offer's own `photoZipPath`; `OfferListItem.facebookPost.lotNo` is null there
@@ -268,7 +278,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   up (after a rejection) removes the post. **The migration**
   (`20261016180000_facebook_every_offer_in_post`) gave every Facebook offer in no post in a state past
   Ready (`isFacebookLotPosted`'s reading — a withdrawn or sold offer included) a post of one, numbered
-  from `nextFacebookPostNo` in `createdAt` order, untitled; link, state and snapshot stay on the
+  from `nextFacebookPostNo` in `createdAt` order, untitled (titled since by #2068's boot pass); link, state and snapshot stay on the
   offer, where they already were. The integration test is
   `tests/integration/facebook-single-posts.test.ts`, which runs the migration's SQL in a rolled-back
   transaction over seeded rows; removing the transition's placement or restoring the old dissolve

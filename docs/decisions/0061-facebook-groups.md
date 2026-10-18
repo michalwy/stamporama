@@ -166,7 +166,10 @@ alone, not of what is up in the groups, and handled singles and albums through t
   makes its post and puts it in as lot 1. Until then it is just an offer, so offers meant for a post
   of several never pass through a throwaway post, and post numbers go only to what went up.
 - **A post of one lot is numbered and titled like any post** (#1862): *Publish…* asks for the title,
-  and one left empty is flagged as missing, never filled in (#1692).
+  and one left empty is flagged as missing, never filled in (#1692). *Amended by #2068 (decided with
+  the collector on 2026-10-18):* left empty, the post takes **the offer's title** — copied once when
+  the post is made and the post's own from then on, so a stored title, not a stand-in; the field
+  starts on it, and a title typed there is used instead. Posts of several lots still need their own.
 - **It reads as the single post it always was**: its text comes from the post templates, not the
   caption ones; the layout of several lots does not apply; `{lot}` stays empty; its photos are the
   offer's own download; and its screen is the post screen with one row. The offer's card keeps its
@@ -181,7 +184,8 @@ alone, not of what is up in the groups, and handled singles and albums through t
 - **The list of posts shows every post**, and adds *Not in a post yet*: the Facebook offers being
   prepared or Ready that are in no post, so it is a complete picture of Facebook, published or not.
 - **Existing data**: every Facebook offer in no post that had gone up became a post of one lot, its
-  link, state and frozen text as they were, numbered in the offers' creation order and untitled.
+  link, state and frozen text as they were, numbered in the offers' creation order and untitled —
+  since given their offer's title (#2068), as was every other untitled post of one.
 
 **Amended by #1998 (decided with the collector on 2026-10-17): a post that is up can be taken back to
 Ready.** The collector posts by hand, so a Publish can be a mistake — the post never went up, or the
