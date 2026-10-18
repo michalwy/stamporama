@@ -4282,13 +4282,16 @@ export async function listPreparingOffers(
   };
 }
 
-/** The given offers as Prepare rows, in the order asked — only those still `preparing` in the
- *  collection. What the bulk *Use estimated price* re-reads, so it writes the figure the server
- *  computes now rather than one a screen was holding. */
-async function readPrepareOffers(
+/** The given offers as Prepare rows, in the order asked — only those still in `states` (`preparing`
+ *  unless asked otherwise) in the collection. What the bulk *Use estimated price* re-reads, so it
+ *  writes the figure the server computes now rather than one a screen was holding; and what a
+ *  Facebook post's screen reads its lots through while the post is not up (#2031), Ready lots
+ *  included, since a Ready lot is still repriced there. */
+export async function readPrepareOffers(
   ownerId: string,
   collectionId: string,
-  offerIds: readonly string[]
+  offerIds: readonly string[],
+  states: readonly OfferState[] = ["preparing"]
 ): Promise<PrepareOffer[]> {
   if (offerIds.length === 0) return [];
   const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
@@ -4296,7 +4299,7 @@ async function readPrepareOffers(
     select: { baseCurrency: true },
   });
   const rows = await prisma.offer.findMany({
-    where: { id: { in: [...offerIds] }, collectionId, state: "preparing" },
+    where: { id: { in: [...offerIds] }, collectionId, state: { in: [...states] } },
     select: PREPARE_OFFER_SELECT,
   });
   const order = new Map(offerIds.map((id, i) => [id, i]));

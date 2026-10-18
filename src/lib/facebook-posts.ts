@@ -41,12 +41,14 @@ import {
   publishOffer,
   readOwnOfferState,
   regenerateOfferText,
+  readPrepareOffers,
   regenerateOfferTitleAndDescription,
   readSoldElsewhereRefusal,
   setOfferState,
   syncGeneratedTexts,
   takeFacebookOfferBackToReady,
   type OfferTextStatus,
+  type PrepareOffer,
 } from "./offers";
 import { titleFallbackKey, type TitleFallback } from "./offer-title-template";
 import {
@@ -301,6 +303,40 @@ export async function listFacebookLotCandidates(
     state: { in: OFFER_STATES.filter((s) => !isFacebookLotPosted(s)) },
   });
   return mixes ? offers : offers.filter((o) => types.includes(o.listingType));
+}
+
+/**
+ * A post's lots as the Prepare screen reads its offers (#2031), keyed by the lot's offer id — the price
+ * table's figures, the stated price, the title and what still stops the lot from being marked ready —
+ * so the post's screen prices and readies its own lots. Preparing and Ready lots alike: a Ready lot is
+ * repriced there too. Null once any lot is up: pricing and readying belong to before (#1800).
+ *
+ * Read apart from {@link getFacebookPostScreen}, because each row costs a valuation and a photo-plan
+ * read: a price typed and saved settles its own row in the browser and refreshes the screen's kit,
+ * without rebuilding every lot's figures for each Enter.
+ */
+export async function getFacebookPostLotsPrepare(
+  ownerId: string,
+  collectionId: string,
+  postId: string
+): Promise<Record<string, PrepareOffer> | null> {
+  const post = await prisma.facebookPost.findFirst({
+    where: { id: postId, collectionId },
+    select: {
+      collectionId: true,
+      lots: { select: { id: true, state: true }, orderBy: { facebookLotNo: "asc" } },
+    },
+  });
+  if (!post) throw new Error("Post not found.");
+  await assertCollectionOwner(ownerId, post.collectionId);
+  if (post.lots.some((l) => isFacebookLotPosted(l.state))) return null;
+  const rows = await readPrepareOffers(
+    ownerId,
+    post.collectionId,
+    post.lots.map((l) => l.id),
+    ["preparing", "ready"]
+  );
+  return Object.fromEntries(rows.map((row) => [row.id, row]));
 }
 
 /** What a post's own screen draws (#1842): the post's kit — the group, the lots in lot

@@ -19,9 +19,12 @@ import {
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
-import type { OfferTextStatus } from "@/lib/offers";
+import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
-import { manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
+import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { Icon } from "@/app/icons";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
@@ -41,8 +44,10 @@ import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-di
 import { BackToReadyDialog, backToReadyDone } from "../../back-to-ready-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
 import { SellOfferFlowDialog } from "../../sell-offer-flow-dialog";
-import { useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
+import { useFacebookPostLotsPrepare, useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
+import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-walk";
+import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../../prepare/prepare-offer-parts";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
@@ -91,6 +96,14 @@ import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialog
 //   at once and the server's answer replaces it.
 // - **Photo settings…** (#2032), beside them while the post is not up: every lot's photo settings in
 //   one dialog — the sides to photograph, say — and their photos regenerated, instead of each offer's.
+// - **Pricing and readying the lots** (#2031), while the post is not up — the Prepare screen's work, for
+//   this post's lots: each row carries the compact price table with the lot's own price typed in it
+//   (Enter saves it and moves down to the next lot's), its title edited in place, and what still stops
+//   it from being marked ready, covers checked from the row. Above the lots, *Use estimated price*,
+//   *Check covers* and *Mark ready* act on every lot of the post; a lot that cannot be readied is named
+//   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`), so a price
+//   saved settles its own row and refreshes only the kit. Once the post is up the rows show what they
+//   showed before: pricing and readying belong to before.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -162,6 +175,25 @@ type Dialog =
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
   | { kind: "sell"; lot: FacebookKitLot };
 
+/** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
+interface LotSkip {
+  offerId: string;
+  message: string;
+}
+
+/** Which covers walk is open (#2031): one lot's, from its row, or every lot's in one pass. */
+type CoverWalk = { kind: "lot"; offerId: string } | { kind: "post"; offers: { id: string; offerNo: number }[] };
+
+/** The lot has no stated price yet — the figure *Use estimated price* fills. */
+function unpriced(offer: PrepareOffer): boolean {
+  return !pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice);
+}
+
+/** How many of the lot's photos its ready gate still wants checked for symbols (#1665). */
+function uncheckedCovers(offer: PrepareOffer): number {
+  return offer.readyBlockers.find(isCoverReadinessBlocker)?.count ?? 0;
+}
+
 export function FacebookPostPanel({
   collectionId,
   collectionSlug,
@@ -178,7 +210,15 @@ export function FacebookPostPanel({
 }) {
   const router = useRouter();
   const { data: screen, isLoading, isError } = useFacebookPostScreen(collectionId, postId);
-  const { invalidateAll } = useInvalidateOffers();
+  const { invalidateAll, settlePostLotPrice } = useInvalidateOffers();
+  // The lots as Prepare rows (#2031), asked only while the post is not up.
+  const notUp = !!screen && !screen.kit.lots.some((l) => isFacebookLotPosted(l.state));
+  const { data: prepare } = useFacebookPostLotsPrepare(collectionId, postId, notUp);
+  const prepareRows = notUp ? (prepare ?? null) : null;
+  const [lotSkips, setLotSkips] = useState<LotSkip[]>([]);
+  const [coverWalk, setCoverWalk] = useState<CoverWalk | null>(null);
+  // The lots' price fields, by offer id — Enter moves down them in lot order (#2031).
+  const priceInputs = useRef(new Map<string, HTMLInputElement>());
   const { toast } = useToast();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
@@ -226,6 +266,19 @@ export function FacebookPostPanel({
 
   function sortLots(by: FacebookLotSort) {
     reorder(sortFacebookLots(lots, by));
+  }
+
+  // Enter in a lot's price field: the next lot's, in the order drawn; the last one is left, which saves it.
+  function focusAfter(offerId: string) {
+    const index = lots.findIndex((l) => l.offerId === offerId);
+    const next = lots.slice(index + 1).find((l) => priceInputs.current.has(l.offerId));
+    const el = next ? priceInputs.current.get(next.offerId) : undefined;
+    if (el) {
+      el.focus();
+      el.select();
+    } else {
+      priceInputs.current.get(offerId)?.blur();
+    }
   }
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
@@ -350,6 +403,55 @@ export function FacebookPostPanel({
   }
 
   const outOfDateCount = lotTexts ? lots.filter((l) => lotTexts[l.offerId]?.outOfDate).length : 0;
+
+  /* ── Pricing and readying every lot (#2031) — the Prepare screen's bulk actions, over the post ── */
+  const prepared = prepareRows ? lots.flatMap((l) => prepareRows[l.offerId] ?? []) : [];
+  const estimable = prepared.filter((o) => unpriced(o) && o.suggestedPrice !== null);
+  const toCover = prepared.filter((o) => uncheckedCovers(o) > 0);
+  const coverCount = toCover.reduce((sum, o) => sum + uncheckedCovers(o), 0);
+  const toReady = prepared.filter((o) => lots.find((l) => l.offerId === o.id)?.state === "preparing");
+  const lotNoOf = (offerId: string) => {
+    const lot = lots.find((l) => l.offerId === offerId);
+    return lot ? `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1}` : "A lot";
+  };
+
+  function applyEstimates() {
+    if (estimable.length === 0) return;
+    setLotSkips([]);
+    startTransition(async () => {
+      const { applyEstimatedPricesAction } = await import("@/app/actions/offers");
+      const result = await applyEstimatedPricesAction(
+        collectionId,
+        estimable.map((o) => o.id)
+      );
+      invalidateAll(collectionId);
+      setLotSkips(result.skipped);
+      const n = result.succeeded.length;
+      if (n > 0) toast({ message: `${n} lot${n === 1 ? "" : "s"} priced at ${n === 1 ? "its" : "their"} estimated value` });
+    });
+  }
+
+  // Every lot still being prepared (#1893): missing photos are generated first and the lot turns Ready
+  // once they are done; a lot that cannot be readied is named with its reason.
+  function markLotsReady() {
+    if (toReady.length === 0) return;
+    setLotSkips([]);
+    startTransition(async () => {
+      const { markOffersReadyAction } = await import("@/app/actions/offers");
+      const result = await markOffersReadyAction(toReady.map((o) => o.id));
+      invalidateAll(collectionId);
+      setLotSkips(result.skipped);
+      const waiting = result.awaitingPhotos.length;
+      const ready = result.succeeded.length - waiting;
+      const parts = [
+        ...(ready > 0 ? [`${ready} lot${ready === 1 ? "" : "s"} marked ready`] : []),
+        ...(waiting > 0
+          ? [`${waiting} ${waiting === 1 ? "turns" : "turn"} ready once ${waiting === 1 ? "its" : "their"} photos are done`]
+          : []),
+      ];
+      if (parts.length > 0) toast({ message: parts.join(" · ") });
+    });
+  }
 
   const gapsByKey = new Map((translations?.gaps ?? []).map((g) => [gapKey(g), g]));
   const untranslatedOf = (lot: FacebookKitLot): TitleFallback[] =>
@@ -705,6 +807,73 @@ export function FacebookPostPanel({
                   {notAdded}
                 </p>
               )}
+              {prepareRows && (
+                <div
+                  style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", margin: "0.75rem 0 0" }}
+                >
+                  <Tooltip
+                    content={
+                      estimable.length > 0
+                        ? "Give the lots that have no price yet their estimated value — catalogue × the learned realisation ratio. Lots with a price keep it."
+                        : "No lot is without a price and has an estimated value to take."
+                    }
+                  >
+                    <DialogSecondaryButton
+                      type="button"
+                      disabled={isPending || estimable.length === 0}
+                      onClick={applyEstimates}
+                    >
+                      Use estimated price{estimable.length > 0 ? ` (${estimable.length})` : ""}
+                    </DialogSecondaryButton>
+                  </Tooltip>
+                  <Tooltip
+                    content={
+                      toCover.length > 0
+                        ? "Go through the lots' photos not yet checked for symbols, lot after lot in one walk — covers carry on from photo to photo."
+                        : "No lot has photos left to check for symbols."
+                    }
+                  >
+                    <DialogSecondaryButton
+                      type="button"
+                      disabled={isPending || toCover.length === 0}
+                      onClick={() => setCoverWalk({ kind: "post", offers: toCover.map((o) => ({ id: o.id, offerNo: o.offerNo })) })}
+                    >
+                      Check covers{coverCount > 0 ? ` (${coverCount})` : ""}
+                    </DialogSecondaryButton>
+                  </Tooltip>
+                  <Tooltip
+                    content={
+                      toReady.length > 0
+                        ? "Mark every lot still being prepared ready. Missing or out-of-date photos are generated first, and the lot turns ready once they are done; a lot that cannot be readied is named below."
+                        : "Every lot is ready."
+                    }
+                  >
+                    <DialogSecondaryButton type="button" disabled={isPending || toReady.length === 0} onClick={markLotsReady}>
+                      <Icon name="check" size="sm" /> Mark ready{toReady.length > 0 ? ` (${toReady.length})` : ""}
+                    </DialogSecondaryButton>
+                  </Tooltip>
+                  <span style={MUTED}>Type each lot&apos;s price — Enter moves to the next.</span>
+                </div>
+              )}
+              {lotSkips.length > 0 && (
+                <div
+                  role="status"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.25rem",
+                    margin: "0.5rem 0 0",
+                    color: "var(--color-warning)",
+                    fontSize: "0.8125rem",
+                  }}
+                >
+                  {lotSkips.map((skip, i) => (
+                    <span key={`${skip.offerId}-${i}`}>
+                      <strong style={{ fontWeight: 600 }}>{lotNoOf(skip.offerId)}</strong> {skip.message}
+                    </span>
+                  ))}
+                </div>
+              )}
               {reorderable && (
                 <p style={{ ...MUTED, margin: "0.5rem 0 0" }}>
                   Drag a lot by its ⠿ to move it, or sort the post by{" "}
@@ -744,6 +913,17 @@ export function FacebookPostPanel({
                         onTranslated={refreshTexts}
                         text={lotTexts?.[lot.offerId] ?? null}
                         actions={lotActions(lot)}
+                        prepare={prepareRows?.[lot.offerId] ?? null}
+                        priceRef={(el) => {
+                          if (el) priceInputs.current.set(lot.offerId, el);
+                          else priceInputs.current.delete(lot.offerId);
+                        }}
+                        onPriceEnter={() => focusAfter(lot.offerId)}
+                        onPriceSaved={(field, value) =>
+                          void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
+                        }
+                        onPrepareChanged={() => void invalidateAll(collectionId)}
+                        onCheckCovers={() => setCoverWalk({ kind: "lot", offerId: lot.offerId })}
                       />
                     </Fragment>
                   );
@@ -902,6 +1082,24 @@ export function FacebookPostPanel({
         />
       )}
 
+      {coverWalk?.kind === "lot" && (
+        <OfferCoverWalk
+          collectionId={collectionId}
+          offerId={coverWalk.offerId}
+          mode="unchecked"
+          onClose={() => setCoverWalk(null)}
+          onChanged={() => void invalidateAll(collectionId)}
+        />
+      )}
+      {coverWalk?.kind === "post" && (
+        <OffersCoverWalk
+          collectionId={collectionId}
+          offers={coverWalk.offers}
+          onClose={() => setCoverWalk(null)}
+          onChanged={() => void invalidateAll(collectionId)}
+        />
+      )}
+
       {dialog.kind === "sell" && (
         <SellOfferFlowDialog
           collectionId={collectionId}
@@ -951,6 +1149,12 @@ function LotRow({
   onTranslated,
   text,
   actions,
+  prepare,
+  priceRef,
+  onPriceEnter,
+  onPriceSaved,
+  onPrepareChanged,
+  onCheckCovers,
 }: {
   /** The lot's number in the order drawn — its own, or the one a move just gave it (#1986). */
   lotNo: number;
@@ -973,6 +1177,15 @@ function LotRow({
   /** Where its title and description stand against their templates (#1983); null once the post is up. */
   text: OfferTextStatus | null;
   actions: RowAction[];
+  /** The lot as a Prepare row (#2031) while the post is not up — its price, title and readiness are then
+   *  edited here; null once the post is up, or until the rows are read. */
+  prepare: PrepareOffer | null;
+  priceRef: (el: HTMLInputElement | null) => void;
+  onPriceEnter: () => void;
+  onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
+  /** The title or the covers changed — the lots' rows are read again. */
+  onPrepareChanged: () => void;
+  onCheckCovers: () => void;
 }) {
   const price = facebookLotPrice(lot);
   const item = drag?.itemProps(index);
@@ -1001,28 +1214,51 @@ function LotRow({
               </span>
             )}
             <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
-            <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
-              <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-              <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
-                {lot.title}
-              </Link>
-            </span>
+            {!prepare && (
+              <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
+                <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
+                <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
+                  {lot.title}
+                </Link>
+              </span>
+            )}
           </p>
           <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
         </div>
+        {/* While the post is not up (#2031): the title edited in place — the offer's number is the link
+            then — the price table with the lot's own figure, and, while it is being prepared, what still
+            stops it from being marked ready. */}
+        {prepare && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", margin: "0.375rem 0 0" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", minWidth: 0 }}>
+              <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ ...LINK, flexShrink: 0 }}>
+                <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
+              </Link>
+              <PrepareTitleField offer={prepare} onChanged={onPrepareChanged} inputWidth="24rem" />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <PreparePriceField ref={priceRef} offer={prepare} onEnter={onPriceEnter} onSaved={onPriceSaved} />
+            </div>
+            {lot.state === "preparing" && <PrepareReadiness offer={prepare} onCheckCovers={onCheckCovers} />}
+          </div>
+        )}
         <dl style={LOT_FACTS}>
           <dt style={MUTED}>Type</dt>
           <dd style={{ margin: 0 }}>{OFFER_LISTING_TYPE_LABEL[lot.listingType]}</dd>
-          <dt style={MUTED}>{price.label}</dt>
-          <dd style={{ margin: 0 }}>
-            {price.amount ? (
-              <>
-                {price.amount} {lot.currency}
-              </>
-            ) : (
-              <span style={MUTED}>—</span>
-            )}
-          </dd>
+          {!prepare && (
+            <>
+              <dt style={MUTED}>{price.label}</dt>
+              <dd style={{ margin: 0 }}>
+                {price.amount ? (
+                  <>
+                    {price.amount} {lot.currency}
+                  </>
+                ) : (
+                  <span style={MUTED}>—</span>
+                )}
+              </dd>
+            </>
+          )}
           <dt style={MUTED}>State</dt>
           <dd style={{ margin: 0 }}>
             <OfferStateChip state={lot.state} />

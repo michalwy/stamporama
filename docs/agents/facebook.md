@@ -589,6 +589,31 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   than with the screen. Tests: `tests/unit/facebook-post-photo-settings-rules.test.ts`,
   `tests/integration/facebook-post-photo-settings.test.ts`.
 
+- **A post's screen prices its lots and marks them ready, as Prepare does — until it is up** (#2031,
+  settled with the collector on 2026-10-18; the issue's *to be confirmed* points implemented as
+  written). One of the four issues #2030–#2033 making the post the one workspace from generating the
+  offers to publishing them. **The rows are Prepare rows by construction**: `getFacebookPostLotsPrepare`
+  (`facebook-posts.ts`) reads the post's lots through `readPrepareOffers` (`offers.ts`, now exported
+  and given the states to read — `preparing` and `ready` here, since a Ready lot is still repriced) and
+  so through `buildPrepareOffers`, keyed by offer id; null once any lot is up (#1800). It is a read of
+  its own — `GET …/facebook-posts/[postId]/prepare`, `offerKeys.facebookPostPrepare`, polled while a lot
+  waits for its photos — and not a field of `FacebookPostScreen`, because each row costs a valuation and
+  a photo-plan read: a saved price goes through `settlePostLotPrice`, which writes the lot's row in the
+  cache and marks every *other* offer read stale, the post's own screen included, so the kit's text
+  follows the figure without every lot's figures being rebuilt per Enter (#1894's rule). **The row's
+  parts are one component each**, `prepare/prepare-offer-parts.tsx` — `PrepareTitleField`,
+  `PreparePriceField` (the compact `OfferPriceStrip` with the standing field), `PrepareReadiness` (the
+  blockers, the photo half said as *Photos generated on Mark ready*, the covers as *Check covers (N)*) —
+  which `PrepareOfferRow` draws too, so the two screens cannot price or ready an offer differently. The
+  post's `LotRow` draws them under its heading while the read has a row for the lot (the readiness only
+  on a Preparing lot), dropping its static title link and *Price* fact; the offer's number becomes the
+  link. Enter moves down the lots' price fields in the order drawn. **Above the lots**, *Use estimated
+  price* (`applyEstimatedPricesAction`, the unpriced lots with an estimate), *Check covers*
+  (`OffersCoverWalk` over every lot with unchecked photos) and *Mark ready* (`markOffersReadyAction`,
+  every Preparing lot) — Prepare's own actions over the lots' ids, so nothing new runs server-side; a
+  refusal is named by its lot number under the buttons. Prepare itself is unchanged. The integration
+  test is `tests/integration/facebook-post-prepare.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports

@@ -98,6 +98,10 @@ export const offerKeys = {
    *  any offer refreshes it. */
   facebookLotCandidates: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-lot-candidates", postId] as const,
+  /** A post's lots as Prepare rows (#2031), while the post is not up — under the offers key, so every
+   *  write to a lot refreshes its row. */
+  facebookPostPrepare: (collectionId: string, postId: string) =>
+    ["offers", collectionId, "facebook-post-prepare", postId] as const,
   /** The Prepare screen's pages (#1894) — under the offers key, so every write to an offer refreshes
    *  the row it is on. */
   prepare: (collectionId: string, filters: PrepareFilters) =>
@@ -225,6 +229,22 @@ export function useFacebookPostScreen(collectionId: string, postId: string) {
       return res.json();
     },
     refetchOnWindowFocus: true,
+  });
+}
+
+/** A post's lots as Prepare rows (#2031), keyed by the lot's offer id; null once the post is up. Polled
+ *  while a lot waits for its photos before turning Ready (#1893), as the Prepare screen is. */
+export function useFacebookPostLotsPrepare(collectionId: string, postId: string, enabled: boolean) {
+  return useQuery<Record<string, PrepareOffer> | null>({
+    queryKey: offerKeys.facebookPostPrepare(collectionId, postId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/prepare`);
+      if (!res.ok) throw new Error("Failed to load the post's lots");
+      return (await res.json()).lots;
+    },
+    enabled,
+    refetchInterval: (query) =>
+      Object.values(query.state.data ?? {}).some((o) => o.readyAfterPhotos) ? READY_WAIT_POLL_MS : false,
   });
 }
 
@@ -844,6 +864,30 @@ export function useInvalidateOffers() {
       return queryClient.invalidateQueries({
         queryKey: offerKeys.all(collectionId),
         predicate: (query) => query.queryKey[2] !== "prepare",
+      });
+    },
+    /** A price typed on a lot's row of a post's screen (#2031): {@link settlePreparePrice}'s rule over
+     *  the post's lots — written into the lot's row, every other offer read marked stale, the post's own
+     *  screen included, so its text reads the new figure. */
+    settlePostLotPrice: (
+      collectionId: string,
+      postId: string,
+      offerId: string,
+      field: "price" | "startingPrice",
+      value: string | null
+    ) => {
+      const key = offerKeys.facebookPostPrepare(collectionId, postId);
+      queryClient.setQueryData<Record<string, PrepareOffer> | null>(key, (data) => {
+        const offer = data?.[offerId];
+        if (!data || !offer) return data;
+        return {
+          ...data,
+          [offerId]: field === "price" ? { ...offer, price: value ?? "0.00" } : { ...offer, startingPrice: value },
+        };
+      });
+      return queryClient.invalidateQueries({
+        queryKey: offerKeys.all(collectionId),
+        predicate: (query) => query.queryKey[2] !== "facebook-post-prepare" || query.queryKey[3] !== postId,
       });
     },
   };
