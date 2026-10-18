@@ -34,7 +34,9 @@
  *   what gets rendered, so it is the same kind of change as any other. A manual collage (#331) adds
  *   its tiles and its column count, for the same reason: both are drawn into the image;
  * - the **set of images the plan renders** (#313), when the offer carries a manual order or a
- *   do-not-publish mark: either can change *which* images fit under the platform's photo limit.
+ *   do-not-publish mark: either can change *which* images fit under the platform's photo limit;
+ * - the **scale** an image is drawn at (#2061), where the pictures' own scales move a tile from where
+ *   the `FULL_MAX_EDGE` correction alone put it.
  *
  * What is deliberately **not** in it is the upload **order**. A reorder is applied to the stored
  * images themselves — their entries are renumbered, their bytes untouched — so it cannot leave them
@@ -118,6 +120,13 @@ export interface OfferPhotoFingerprintInput {
    * the hash of an image that is unchanged by a pixel.
    */
   covers?: readonly (readonly [string, readonly CoverFingerprintRow[]])[];
+  /**
+   * The images drawn at one scale (#2061) whose tiles that scale moves, as `[token, factors]` rows in
+   * any order: only those, so an image of pictures from one profile — drawn exactly as the
+   * `FULL_MAX_EDGE` correction drew it — hashes as it did, and giving a picture another scale puts
+   * the images it is on out of date.
+   */
+  oneScale?: readonly (readonly [string, readonly number[]])[];
   /**
    * #1673's grouping, passed **only when it is on**: the group collage's numbers (null when the
    * groups use the ordinary ones) and the checklist slots each copy fills, as `[itemId, [[checklistId,
@@ -244,6 +253,11 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
         .sort(byId),
     ]);
   }
+
+  // Appended only when a scale moves a tile (#2061), last and sorted: the order the images were read
+  // in is no change to them.
+  const oneScale = [...(input.oneScale ?? [])].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  if (oneScale.length > 0) payload.push(["oneScale", oneScale]);
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

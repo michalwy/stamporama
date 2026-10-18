@@ -1233,6 +1233,21 @@ export function OfferPhotosCard({
 
           <SkippedNotice skipped={plan.plan.skipped} />
 
+          {/* Pictures that say nothing of what they were scanned with (#2061): while one is on an
+              image beside others, that image is drawn as its pixels fall rather than at one scale.
+              Named, because the stamps then come out the wrong size against each other silently. */}
+          {plan.plan.unscaledPhotoCount > 0 && (
+            <Tooltip content="A collage draws every stamp at the same scale only when each of its photos says what it was scanned with. Give them one on the copy's Photos card, or for many copies at once with Photo scale on the Copies list.">
+              <p style={NOTE}>
+                {plan.plan.unscaledPhotoCount === 1
+                  ? "1 photo has no scale"
+                  : `${plan.plan.unscaledPhotoCount} photos have no scale`}
+                , so the collages holding {plan.plan.unscaledPhotoCount === 1 ? "it" : "them"} are not
+                drawn at one scale.
+              </p>
+            </Tooltip>
+          )}
+
           {/* The plan first — it is what Generate would produce, and the only place the upload order
               (collages and attachments) can be seen and changed (#313). Stored files follow below. */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>

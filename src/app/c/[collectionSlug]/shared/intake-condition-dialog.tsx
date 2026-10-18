@@ -676,9 +676,11 @@ function IntakeConditionDialog({
     uploading: false,
   });
   const [photosUploading, setPhotosUploading] = useState(false);
+  const [photoScaleInvalid, setPhotoScaleInvalid] = useState(false);
   const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
+    setPhotoScaleInvalid(!!value.invalidScale);
   }, []);
 
   // The comparison with the copies already held (#1207), opened from the holdings line. It opens
@@ -1287,6 +1289,7 @@ function IntakeConditionDialog({
                       collectionId={collectionId}
                       initialPhotos={[]}
                       disabled={isPending}
+                      recordScale
                       onChange={handlePhotoChange}
                       onPreviewsChange={setPhotoPreviews}
                     />
@@ -1306,7 +1309,7 @@ function IntakeConditionDialog({
           actionLabel={actionLabel}
           cancelLabel="Back"
           onCancel={onBack}
-          disabled={isPending || !conditionId || photosUploading || savingPrice}
+          disabled={isPending || !conditionId || photosUploading || photoScaleInvalid || savingPrice}
           // The caller's error and this dialog's own read the same way, and only one can be
           // standing: a failed catalogue write returns before the intake is attempted at all.
           error={priceError ?? error}

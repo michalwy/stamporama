@@ -19,7 +19,7 @@ import { sizeProfileAfterWrite, type StampSizeFields } from "./stamp-size";
 // A collection always has a default profile: `createCollection` writes one, and the migration gave
 // every existing collection one at its old `scanDpi`. **A profile in use cannot be deleted**
 // (collector's call, 2026-09-28) — the default, one a scan was taken with, one a stamp's size was
-// measured with — and the refusal says which, so the collector knows what to change first.
+// measured with, one a photo was given as its scale (#2061) — and the refusal says which, so the collector knows what to change first.
 
 export class ScanningProfileError extends Error {}
 
@@ -100,7 +100,7 @@ export async function listScanningProfiles(
     orderBy: [{ createdAt: "asc" }, { name: "asc" }],
     select: {
       ...SCANNING_PROFILE_SELECT,
-      _count: { select: { scanSheets: true, stampSizes: true } },
+      _count: { select: { scanSheets: true, stampSizes: true, photos: true } },
     },
   });
   return rows.map((row) => ({
@@ -108,6 +108,7 @@ export async function listScanningProfiles(
     isDefault: row.id === collection.defaultScanningProfileId,
     scanCount: row._count.scanSheets,
     stampSizeCount: row._count.stampSizes,
+    photoCount: row._count.photos,
   }));
 }
 
@@ -242,13 +243,17 @@ export async function deleteScanningProfile(ownerId: string, profileId: string):
       "This is the default profile. Make another one the default before deleting it."
     );
   }
-  const [scans, sizes] = await Promise.all([
+  const [scans, sizes, photos] = await Promise.all([
     prisma.scanSheet.count({ where: { scanningProfileId: profileId } }),
     prisma.stamp.count({ where: { sizeScanningProfileId: profileId } }),
+    prisma.photo.count({ where: { scanningProfileId: profileId } }),
   ]);
   const uses = [
     scans > 0 ? `${scans} ${scans === 1 ? "scan was" : "scans were"} taken with it` : null,
     sizes > 0 ? `${sizes} stamp ${sizes === 1 ? "size was" : "sizes were"} measured with it` : null,
+    // A picture's scale (#2061) is what draws it beside others in a collage; deleting the profile
+    // would quietly take that away.
+    photos > 0 ? `${photos} ${photos === 1 ? "photo was" : "photos were"} scanned with it` : null,
   ].filter(Boolean);
   if (uses.length > 0) {
     throw new ScanningProfileError(`This profile is in use: ${uses.join(", and ")}.`);

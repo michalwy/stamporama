@@ -342,3 +342,29 @@ describe("fingerprintOfferPhotoInputs single-first grouping (#521)", () => {
     assert.notEqual(fp({ ...base, preferSingles: true }), fp(base));
   });
 });
+
+describe("fingerprintOfferPhotoInputs one scale (#2061)", () => {
+  it("leaves an offer no scale moves hashing exactly as before", () => {
+    assert.equal(fingerprintOfferPhotoInputs({ ...base, oneScale: [] }), fingerprintOfferPhotoInputs(base));
+  });
+
+  it("changes when a scale moves a tile, and with how far", () => {
+    const moved = fingerprintOfferPhotoInputs({ ...base, oneScale: [["c:front:a,b", [0.5, 1]]] });
+    assert.notEqual(moved, fingerprintOfferPhotoInputs(base));
+    assert.notEqual(
+      moved,
+      fingerprintOfferPhotoInputs({ ...base, oneScale: [["c:front:a,b", [0.25, 1]]] })
+    );
+  });
+
+  it("ignores the order the images were read in", () => {
+    const rows: [string, number[]][] = [
+      ["c:front:a,b", [0.5, 1]],
+      ["c:back:a,b", [1, 0.5]],
+    ];
+    assert.equal(
+      fingerprintOfferPhotoInputs({ ...base, oneScale: rows }),
+      fingerprintOfferPhotoInputs({ ...base, oneScale: [...rows].reverse() })
+    );
+  });
+});

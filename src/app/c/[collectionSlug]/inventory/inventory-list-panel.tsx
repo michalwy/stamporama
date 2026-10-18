@@ -110,6 +110,7 @@ import { VariantHistoryDialog } from "./variant-history-dialog";
 import { AddToOfferDialog } from "./add-to-offer-dialog";
 import { SellCopiesDialog } from "./sell-copies-dialog";
 import { CopiesCollageDialog } from "./copies-collage-dialog";
+import { CopiesPhotoScaleDialog } from "./copies-photo-scale-dialog";
 import { isInStockForSale } from "@/lib/sale-rules";
 import { BulkEditCopiesDialog } from "./bulk-edit-copies-dialog";
 import {
@@ -158,6 +159,8 @@ type DialogState =
   | { kind: "sell"; items: ItemListItem[] }
   // A one-off collage of the ticked copies in view, for a buyer (#2052) — nothing is made or kept.
   | { kind: "collage"; itemIds: string[] }
+  // The ticked copies' photos with no scale given one (#2061).
+  | { kind: "photoScale"; itemIds: string[] }
   // Quick offer mode's platform and status over many copies at once (#1287).
   | {
       kind: "generateOffers";
@@ -1103,6 +1106,8 @@ export function InventoryListPanel({
           addToOffer: () => setDialog({ kind: "addToOffer", items: listableCopies }),
           sell: () => setDialog({ kind: "sell", items: sellableCopies }),
           collage: () => setDialog({ kind: "collage", itemIds: selectedInView.map((c) => c.id) }),
+          photoScale: () =>
+            setDialog({ kind: "photoScale", itemIds: selectedInView.map((c) => c.id) }),
           addToCollisionOffer: () => {
             if (collisionOffer)
               setDialog({
@@ -2125,6 +2130,14 @@ export function InventoryListPanel({
           itemIds={dialog.itemIds}
           platforms={offerPlatforms}
           lastPlatformId={lastPlatformId}
+          onClose={closeDialog}
+        />
+      )}
+
+      {dialog.kind === "photoScale" && (
+        <CopiesPhotoScaleDialog
+          collectionId={collectionId}
+          itemIds={dialog.itemIds}
           onClose={closeDialog}
         />
       )}

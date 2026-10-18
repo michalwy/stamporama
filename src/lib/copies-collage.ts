@@ -14,6 +14,7 @@ import {
   readTileLabels,
   renderPlannedCollageBytes,
   SOURCE_PHOTO_SELECT,
+  unscaledPhotoCount,
   type CollageRenderContext,
   type SourcePhoto,
 } from "./offer-photo-generation";
@@ -127,6 +128,9 @@ export interface CopiesCollageResult {
   /** Photos drawn that were never checked for symbols though the platform needs them covered and
    *  their stamps come from an area that may carry them (#1665, #1891). */
   uncheckedCoverCount: number;
+  /** Photos drawn beside others with nothing said of what they were scanned with (#2061): while any
+   *  is, its image is drawn as its pixels fall rather than at one scale. */
+  unscaledPhotoCount: number;
   /** The ticked copies the collage was made of — those still in the collection. */
   copyCount: number;
 }
@@ -259,6 +263,7 @@ export async function makeCopiesCollage(
       .filter((id) => !drawn.has(id))
       .map((id) => labelOf.get(id) ?? id),
     uncheckedCoverCount,
+    unscaledPhotoCount: unscaledPhotoCount(images, sourceById),
     copyCount: items.length,
   };
 }

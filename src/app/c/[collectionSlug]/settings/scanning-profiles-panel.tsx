@@ -62,6 +62,9 @@ function usesOf(profile: ScanningProfileListRow): string | null {
     profile.stampSizeCount > 0
       ? `${profile.stampSizeCount} stamp ${profile.stampSizeCount === 1 ? "size" : "sizes"}`
       : null,
+    profile.photoCount > 0
+      ? `${profile.photoCount} ${profile.photoCount === 1 ? "photo" : "photos"}`
+      : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : null;
 }

@@ -416,9 +416,11 @@ export function InventoryItemFormDialog({
   >(new Map());
   const heldPromotionIds = useMemo(() => new Set(heldPromotions.keys()), [heldPromotions]);
 
+  const [photoScaleInvalid, setPhotoScaleInvalid] = useState(false);
   const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
+    setPhotoScaleInvalid(!!value.invalidScale);
   }, []);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -457,7 +459,7 @@ export function InventoryItemFormDialog({
   // In edit mode the stamp comes from the entry list (or, while it loads, from the copy itself), so
   // the add-mode picker's own state says nothing about whether there is one.
   const haveStamp = mode === "edit" ? true : !!stampId || !!candidateSet;
-  const actionDisabled = isPending || !haveStamp || photosUploading;
+  const actionDisabled = isPending || !haveStamp || photosUploading || photoScaleInvalid;
 
   return (
     <>
@@ -837,6 +839,7 @@ export function InventoryItemFormDialog({
                 collectionId={collectionId}
                 initialPhotos={item?.photos ?? []}
                 disabled={isPending}
+                recordScale
                 onChange={handlePhotoChange}
                 onPromotePhoto={
                   mode === "edit"

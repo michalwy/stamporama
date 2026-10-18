@@ -25,11 +25,14 @@ import {
 import type { TileLabelTexts } from "./collage-label";
 import {
   collageColumnsFor,
+  oneScaleFactors,
+  shrinkScales,
   type CollagePlannedTileSize,
   type CollageTileTrueSize,
 } from "./collage-layout";
+import { storedPhotoDpi, uploadDpi } from "./photo-scale";
 import { normalizeCollageGridMode, normalizeCollageGridShape } from "./collage-template-rules";
-import { thumbnailFor } from "./photos/process";
+import { FULL_MAX_EDGE, thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
 import {
   planOfferPhotos,
@@ -282,6 +285,9 @@ export interface OfferPhotoPlanPreview {
   skipped: OfferPhotoSkippedSide[];
   /** Sets the plan leaves out because they have sold or are committed elsewhere (#315). */
   excludedSets: OfferPhotoExcludedSet[];
+  /** Pictures composited with others that say nothing of what they were scanned with (#2061) — each
+   *  keeps its image from being drawn at one scale, so the card names how many. */
+  unscaledPhotoCount: number;
 }
 
 export interface OfferPhotoPlanState {
@@ -336,6 +342,13 @@ export interface SourcePhoto {
   /** Whether the collector has gone over it for symbols (#1665), and what they covered. */
   coversCheckedAt: Date | null;
   covers: { shape: string; style: string; color: string | null; x: number; y: number; width: number; height: number }[];
+  /** What it was scanned with (#2061): a profile, or a resolution typed for it, or neither. */
+  scanDpi: number | null;
+  scanningProfile: {
+    nominalDpi: number;
+    calibratedDpiX: { toNumber(): number } | null;
+    calibratedDpiY: { toNumber(): number } | null;
+  } | null;
 }
 
 /** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
@@ -357,7 +370,95 @@ export const SOURCE_PHOTO_SELECT = {
     orderBy: { sortOrder: "asc" },
     select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
   },
+  scanDpi: true,
+  scanningProfile: { select: { nominalDpi: true, calibratedDpiX: true, calibratedDpiY: true } },
 } as const;
+
+/**
+ * The stored picture's resolution (#2061) — what its pixels measure, in dots per inch — or null for a
+ * picture with no scale (`photo-scale.ts`). A collage whose every scan has one is drawn at one scale.
+ */
+export function sourcePhotoDpi(source: SourcePhoto): number | null {
+  const profile = source.scanningProfile;
+  return storedPhotoDpi(
+    source,
+    uploadDpi({
+      profile: profile
+        ? {
+            nominalDpi: profile.nominalDpi,
+            calibration:
+              profile.calibratedDpiX && profile.calibratedDpiY
+                ? { x: profile.calibratedDpiX.toNumber(), y: profile.calibratedDpiY.toNumber() }
+                : null,
+          }
+        : null,
+      scanDpi: source.scanDpi,
+    }),
+    FULL_MAX_EDGE
+  );
+}
+
+/** Every scan an image is drawn from, in drawing order — a paired cell's two (#694) side by side. */
+function imageScanIds(image: PlannedImage): string[] {
+  return image.kind === "collage"
+    ? image.tiles.flatMap((tile) => (tile.pairedPhotoId ? [tile.photoId, tile.pairedPhotoId] : [tile.photoId]))
+    : image.tiles.map((tile) => tile.photoId);
+}
+
+/** One scan as the true-size correction reads it — stored size, upload size and resolution. */
+function trueSizeOf(source: SourcePhoto | undefined): CollageTileTrueSize {
+  return {
+    stored: { width: source?.width ?? 0, height: source?.height ?? 0 },
+    original:
+      source?.originalWidth != null && source.originalHeight != null
+        ? { width: source.originalWidth, height: source.originalHeight }
+        : null,
+    dpi: source ? sourcePhotoDpi(source) : null,
+  };
+}
+
+/**
+ * How many pictures the plan's images composite with others **without a scale** (#2061), each once —
+ * the ones that keep their image from being drawn at one scale. A picture alone on its image is not
+ * counted: one picture has nothing to be out of scale with.
+ */
+export function unscaledPhotoCount(
+  images: readonly PlannedImage[],
+  sourceById: ReadonlyMap<string, SourcePhoto>
+): number {
+  const unscaled = new Set<string>();
+  for (const image of images) {
+    const ids = imageScanIds(image);
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      const source = sourceById.get(id);
+      if (source && sourcePhotoDpi(source) == null) unscaled.add(id);
+    }
+  }
+  return unscaled.size;
+}
+
+/**
+ * The images a scale changes (#2061), for the fingerprint: each one drawn at one scale whose factors
+ * differ from the `FULL_MAX_EDGE` correction it was drawn with before — with those factors. An image
+ * of pictures from one profile comes out exactly as it did, so the upgrade alone puts nothing out of
+ * date; giving a picture another scale does.
+ */
+function oneScaleFingerprintRows(
+  images: readonly PlannedImage[],
+  sourceById: ReadonlyMap<string, SourcePhoto>
+): (readonly [string, readonly number[]])[] {
+  const rows: (readonly [string, readonly number[]])[] = [];
+  for (const image of images) {
+    const tiles = imageScanIds(image).map((id) => trueSizeOf(sourceById.get(id)));
+    const factors = oneScaleFactors(tiles);
+    if (!factors) continue;
+    const before = shrinkScales(tiles);
+    if (factors.every((f, i) => Math.abs(f - before[i]) < 1e-6)) continue;
+    rows.push([image.token, factors.map((f) => Math.round(f * 1e4) / 1e4)]);
+  }
+  return rows;
+}
 
 /** A photo's stored covers as the renderer reads them; a row naming a shape or style this code does
  *  not know is skipped rather than guessed at (the table's CHECK makes that unreachable). */
@@ -1004,6 +1105,8 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
           ),
         }
       : undefined,
+    // The images a scale draws differently from before (#2061), with how.
+    oneScale: oneScaleFingerprintRows(plan.images, inputs.sourceById),
     // The covers drawn on the photos the images are made from (#1665), when the offer applies them.
     covers: coverFingerprintRows(
       inputs.needsCovers,
@@ -1178,6 +1281,7 @@ export async function getOfferPhotoPlanState(
       overLimitCount: plan.overLimitCount,
       uploadCount: plan.uploaded.length,
       excludedSets: inputs.excludedSets,
+      unscaledPhotoCount: unscaledPhotoCount(plan.images, inputs.sourceById),
       skipped: plan.skipped.map((s) => ({
         side: s.side,
         setLabels: s.setIds.map((id) => inputs.labels.sets.get(id) ?? REMOVED_LABEL),
@@ -1901,7 +2005,11 @@ async function tileSource(
 async function scanSource(
   photoId: string,
   inputs: CollageRenderContext
-): Promise<{ buffer: Buffer; originalSize: { width: number; height: number } | null }> {
+): Promise<{
+  buffer: Buffer;
+  originalSize: { width: number; height: number } | null;
+  dpi: number | null;
+}> {
   const source = inputs.sourceById.get(photoId);
   if (!source) {
     // The plan was built from the same read, so a missing source is a bug, not a race.
@@ -1923,6 +2031,8 @@ async function scanSource(
       source.originalWidth != null && source.originalHeight != null
         ? { width: source.originalWidth, height: source.originalHeight }
         : null,
+    // What its pixels measure (#2061): with every scan's known, the image is drawn at one scale.
+    dpi: sourcePhotoDpi(source),
   };
 }
 
@@ -2022,16 +2132,7 @@ function plannedTileSizes(
   image: PlannedCollage,
   inputs: CollageRenderContext
 ): CollagePlannedTileSize[] {
-  const sizeOf = (photoId: string): CollageTileTrueSize => {
-    const source = inputs.sourceById.get(photoId);
-    return {
-      stored: { width: source?.width ?? 0, height: source?.height ?? 0 },
-      original:
-        source?.originalWidth != null && source.originalHeight != null
-          ? { width: source.originalWidth, height: source.originalHeight }
-          : null,
-    };
-  };
+  const sizeOf = (photoId: string): CollageTileTrueSize => trueSizeOf(inputs.sourceById.get(photoId));
   return image.tiles.map((tile) => ({
     main: sizeOf(tile.photoId),
     // A paired cell (#694) is scored as the one wide tile it composites to, so `auto` fits three

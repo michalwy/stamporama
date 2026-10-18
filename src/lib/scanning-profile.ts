@@ -62,6 +62,8 @@ export interface ScanningProfileListRow extends ScanningProfileView {
   isDefault: boolean;
   scanCount: number;
   stampSizeCount: number;
+  /** Pictures given it (#2061) — a copy's photo, a tile cut from a card. */
+  photoCount: number;
 }
 
 /** The scale a measurement is taken at, and what it was taken with. */

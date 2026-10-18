@@ -6,6 +6,7 @@ import {
   pairedCellGap,
   pairedTrueScaledSizes,
   resolveCollageColumns,
+  oneScaleFactors,
   trueScaledSizes,
   trueSizeScales,
   type CollageTileSize,
@@ -238,6 +239,39 @@ describe("trueSizeScales", () => {
 
   it("returns nothing for no tiles", () => {
     assert.deepEqual(trueSizeScales([]), []);
+  });
+
+  // #2061: a picture's own scale, where every picture on the image has one.
+  const scaled = (stored: [number, number], dpi: number | null): CollageTileTrueSize => ({
+    stored: size(stored[0], stored[1]),
+    original: null,
+    dpi,
+  });
+
+  it("brings every tile to the coarsest resolution when all of them are known", () => {
+    // A 1200 dpi card tile, a 600 dpi photo and a 300 dpi one of stamps the same size on paper: the
+    // pixels say 4:2:1, the scales say equal — so the two finer ones are brought down to 300.
+    const scales = trueSizeScales([scaled([1200, 1200], 1200), scaled([600, 600], 600), scaled([300, 300], 300)]);
+    assert.deepEqual(scales, [0.25, 0.5, 1]);
+  });
+
+  it("draws the image as before when one tile has no scale", () => {
+    const tiles = [scaled([1200, 1200], 1200), scaled([600, 600], null)];
+    assert.equal(oneScaleFactors(tiles), null);
+    assert.deepEqual(trueSizeScales(tiles), [1, 1]);
+  });
+
+  it("agrees with the downscale correction for tiles from one profile", () => {
+    // Both scanned at 1200 dpi; the second was stored at half its upload, so its stored pixels
+    // measure 600 dpi. The scale rule and the old correction must draw them identically.
+    const a: CollageTileTrueSize = { stored: size(2500, 2000), original: size(2500, 2000), dpi: 1200 };
+    const b: CollageTileTrueSize = { stored: size(2500, 2000), original: size(5000, 4000), dpi: 600 };
+    assert.deepEqual(oneScaleFactors([a, b]), [0.5, 1]);
+    assert.deepEqual(trueSizeScales([{ ...a, dpi: null }, { ...b, dpi: null }]), [0.5, 1]);
+  });
+
+  it("knows no scale for an image of no tiles", () => {
+    assert.equal(oneScaleFactors([]), null);
   });
 });
 

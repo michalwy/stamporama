@@ -17,6 +17,10 @@ import { collageLabelSvg, type TileLabelTexts } from "../collage-label";
  *
  * True proportions
  * ----------------
+ * When every scan on the image says what it was scanned with (#2061), they are brought to the
+ * coarsest resolution among them and drawn at one scale (`oneScaleFactors`); everything below is what
+ * happens when one of them does not.
+ *
  * Scans share a constant scanner DPI, so their pixel sizes already carry true relative sizes.
  * Tiles are composited at their native size (`src/lib/collage-layout.ts`) and the finished canvas is
  * scaled by **one shared factor** when the output limits are applied — never per tile, never per
@@ -84,6 +88,8 @@ export interface CollageScanSource {
   /** The dimensions this scan was uploaded at, before `FULL_MAX_EDGE` clamped the bytes. Absent
    * reads as "never downscaled". */
   originalSize?: CollageTileSize | null;
+  /** The stored picture's resolution (#2061), or absent for a picture with no scale. */
+  dpi?: number | null;
 }
 
 /** One tile's source bytes. `sharp` decodes and EXIF-rotates it before anything is measured. */
@@ -97,6 +103,9 @@ export interface CollageTileSource {
    * Absent — or absent on the photo row, for anything uploaded before they were recorded — reads
    * as "never downscaled", which is what the renderer assumed of everything until now. */
   originalSize?: CollageTileSize | null;
+  /** The stored picture's resolution (#2061) — when every scan on the image has one, the image is
+   * drawn at one scale (`oneScaleFactors`); absent for a picture with no scale. */
+  dpi?: number | null;
   /** The two annotations drawn on the tile's label strip (#312), already resolved from the offer's
    * left / right label templates against this copy. Blank or absent leaves that side undrawn — a
    * copy with no value for a template's tokens is not special-cased. */
@@ -282,6 +291,7 @@ export async function renderCollage(
       decoded.map<CollageTileTrueSize>((tile, index) => ({
         stored: { width: tile.width, height: tile.height },
         original: scans[index].source.originalSize ?? null,
+        dpi: scans[index].source.dpi ?? null,
       }))
     ).map((scale, index) => rescaleTile(decoded[index], scale))
   );

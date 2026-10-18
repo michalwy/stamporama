@@ -368,6 +368,13 @@ function CollagePreview({
             been checked for symbols to cover; it is drawn as it is.
           </p>
         )}
+        {made.unscaledPhotoCount > 0 && (
+          <p style={NOTE}>
+            {made.unscaledPhotoCount === 1 ? "1 photo has" : `${made.unscaledPhotoCount} photos have`} no
+            scale, so the images holding {made.unscaledPhotoCount === 1 ? "it are" : "them are"} not drawn
+            at one scale.
+          </p>
+        )}
         {overLimit > 0 && (
           <p style={NOTE}>
             {overLimit === 1 ? "1 image is" : `${overLimit} images are`} past the platform&rsquo;s photo
