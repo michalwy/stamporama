@@ -225,6 +225,44 @@ export function facebookPostTitleRefusal(title: string): string | null {
   return title.trim() ? null : "A post needs a title.";
 }
 
+/** Where *Add to titles…* / *Remove from titles…* work on every lot's title (#2033). */
+export type FacebookTitleEdge = "start" | "end";
+
+/** Whether the words go onto the titles or come off them (#2033). */
+export type FacebookTitleWordsMode = "add" | "remove";
+
+/**
+ * One lot's title with `words` added at, or removed from, its `edge` (#2033) — or null when it stays as
+ * it is. Added words are joined to the title by one space. Removing takes them away only where the
+ * title starts or ends with them exactly — as whole words, so *Rare* does not cut *Rarest* — together
+ * with the space that joined them, and never leaves a title empty: a title that is nothing but the
+ * words keeps them.
+ */
+export function facebookTitleWithWords(
+  title: string,
+  words: string,
+  edge: FacebookTitleEdge,
+  mode: FacebookTitleWordsMode
+): string | null {
+  const text = words.trim();
+  const base = title.trim();
+  if (!text) return null;
+  if (mode === "add") {
+    if (!base) return text;
+    return edge === "start" ? `${text} ${base}` : `${base} ${text}`;
+  }
+  if (edge === "start" ? !base.startsWith(text) : !base.endsWith(text)) return null;
+  const rest = edge === "start" ? base.slice(text.length) : base.slice(0, base.length - text.length);
+  // The words' own edge character and the title's character beside them: a cut between two letters or
+  // digits would split a word.
+  const inner = edge === "start" ? text[text.length - 1] : text[0];
+  const beside = edge === "start" ? rest[0] : rest[rest.length - 1];
+  if (beside !== undefined && WORD_CHAR.test(inner) && WORD_CHAR.test(beside)) return null;
+  return rest.trim() || null;
+}
+
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
 /** What `{post}` and `{postTitle}` become: the post's number and title, empty where there is none. */
 function postNameValues(post: FacebookPostName | null): Record<string, string> {
   return {
