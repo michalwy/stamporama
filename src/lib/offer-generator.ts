@@ -34,6 +34,7 @@ import {
   keptFingerprint,
   planOffers,
   seriesSubtitle,
+  singleLineTitle,
   SKIP_REASON_LABEL,
   SKIP_REASONS,
   generatorPostRefusal,
@@ -338,7 +339,8 @@ export interface GeneratorCombinationPart {
 export interface GeneratorLineView {
   id: string;
   kind: "series" | "single" | "carrier";
-  /** The checklist's name for a series; the stamp's name otherwise. */
+  /** The checklist's name for a series; `Issue · Stamp` for a single (#2046); the stamp's name for a
+   *  piece of several. Empty where there is no name — the catalogue numbers then say what it is. */
   title: string;
   /** The issue a series belongs to, only where it is not already the checklist's name (#1368). */
   subtitle: string | null;
@@ -504,7 +506,13 @@ async function nameLines(ownerId: string, collectionId: string, state: Generator
     const firstStamp = stampById.get(first.stampId);
     const checklist = line.checklistId ? checklistById.get(line.checklistId) : undefined;
     const members = line.checklistId ? membersOf.get(line.checklistId) : undefined;
-    const title = line.checklistId ? (checklist?.name ?? "A set") : (firstStamp?.name ?? "A stamp");
+    // A set keeps its checklist's name and a piece of several stamps its own; a single is named by its
+    // issue and stamp (#2046), read from the copy row the line expands to. No stand-in for either.
+    const title = line.checklistId
+      ? (checklist?.name ?? "A set")
+      : first.multiStamp
+        ? (firstStamp?.name ?? "")
+        : singleLineTitle(copyById.get(first.itemId)?.issueName, firstStamp?.name);
     return {
       id: line.id,
       kind: line.checklistId ? "series" : first.multiStamp ? "carrier" : "single",

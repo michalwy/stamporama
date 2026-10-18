@@ -1450,7 +1450,7 @@ Two choices:
     group is left alone and a new offer is made in the chosen group.
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
 
-The preview lists every offer on **one line**: the checklist's name (or the stamp's), the condition
+The preview lists every offer on **one line**: its name, the condition
 in its colour — with the certificate status and format only when there is one — the set by its
 catalogue numbers, run together as a range where they follow on (`Mi·PL 865-870`), any variant
 standing in for its parent, how many sets (`×3`), and whether it is a **new offer** or **added to
@@ -1458,6 +1458,11 @@ standing in for its parent, how many sets (`×3`), and whether it is a **new off
 open it: each set's copies as full copy rows — photo, catalogue numbers, condition, storage location
 and the rest, as the Copies list shows them — so a set can be checked against the stamps on the desk.
 The dialog takes the width of the window, so a long pass reads as a table.
+
+A line's name is the checklist's for a set. A single stamp is named by its issue, followed by the
+stamp's own name where it has one — `Polish Castles · Malbork`, or just `Polish Castles` — in the
+collection's default language. A piece with several stamps keeps its own name. A stamp with neither
+an issue name nor a name of its own shows no name: its catalogue numbers say what it is.
 
 **Every proposed offer has a tick box, and all of them start ticked.** Untick an offer to leave it
 out of this pass; the box at the top of the list ticks or unticks them all at once. Only the ticked

@@ -664,6 +664,19 @@ export function generatorCombinationParts(combination: {
 }
 
 /**
+ * A single's name on its preview line (#2046): its issue's name, then the stamp's own name where it
+ * has one — `Issue · Stamp`. Most stamps carry no name of their own, and a fallback to a stand-in
+ * made a long pass hundreds of identical lines. With neither name the line has none: its catalogue
+ * numbers already say what it is. A stamp named exactly as its issue is named once.
+ */
+export function singleLineTitle(issueName: string | null | undefined, stampName: string | null | undefined): string {
+  const issue = issueName?.trim() ?? "";
+  const stamp = stampName?.trim() ?? "";
+  if (!issue || !stamp) return issue || stamp;
+  return issue.localeCompare(stamp, undefined, { sensitivity: "base" }) === 0 ? issue : `${issue} · ${stamp}`;
+}
+
+/**
  * The issue a series belongs to, when it says something the checklist's name does not. A checklist
  * is usually named after its issue, and the preview printed the one name twice (#1368).
  */

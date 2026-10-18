@@ -408,6 +408,29 @@ describe("offer generator (#1287)", () => {
     assert.equal((await offersHolding(copies)).length, 0);
   });
 
+  it("names a single by its issue and stamp, and an unnamed one not at all (#2046)", async () => {
+    const [named, bare, nameless] = await stamps(3);
+    await prisma.stamp.update({ where: { id: bare }, data: { name: null } });
+    await prisma.stamp.update({ where: { id: nameless }, data: { name: null } });
+    const issue = await prisma.issue.create({
+      data: { collectionId, issueNo: ++nextIssueNo, collectionAreaId: areaId, name: "Polish Castles", year: 1960 },
+    });
+    await prisma.issueMember.createMany({ data: [named, bare].map((stampId) => ({ issueId: issue.id, stampId })) });
+    const copies = [await copy(named), await copy(bare), await copy(nameless)];
+    const preview = await previewOfferGeneration(userId, collectionId, ticked(copies, { mode: "singles" }));
+    const titleOf = async (stampId: string) => {
+      const name = (await prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { name: true } })).name;
+      const line = preview.lines.find((l) => l.sets[0][0].stampId === stampId);
+      assert.ok(line, `a line for ${name ?? stampId}`);
+      return { name, title: line.title };
+    };
+    const first = await titleOf(named);
+    assert.equal(first.title, `Polish Castles · ${first.name}`);
+    assert.equal((await titleOf(bare)).title, "Polish Castles");
+    assert.equal((await titleOf(nameless)).title, "", "no stand-in where there is no name");
+    assert.ok(preview.lines.every((line) => line.title !== "A stamp"));
+  });
+
   async function itemNo(itemId: string): Promise<number> {
     return (await prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { itemNo: true } })).itemNo;
   }
