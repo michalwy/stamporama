@@ -8,6 +8,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getItemListItem, listItemsPaginated } from "@/lib/items";
 import { getItemSaleRecord } from "@/lib/sales";
+import { countVariantDescendantCopies } from "@/lib/copy-counts";
 import { formatItemNo } from "@/lib/item-number";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { CopyDetailPanel } from "./copy-detail-panel";
@@ -52,10 +53,12 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
   const item = items[0];
   if (!item) notFound();
 
-  const [areas, locations, sale] = await Promise.all([
+  const [areas, locations, sale, variantCounts] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getItemSaleRecord(session.user.id, itemId),
+    // The stamp's variants' copies (#2090), counted as the stamp page counts them (#528).
+    countVariantDescendantCopies(collection.id, [item.stampId]),
   ]);
 
   return (
@@ -76,6 +79,7 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
         areas={areas}
         locations={locations}
         sale={sale}
+        variantCopies={variantCounts.get(item.stampId)?.total ?? 0}
       />
     </Screen>
   );

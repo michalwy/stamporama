@@ -37,6 +37,8 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { CopyPhotosCard } from "./copy-photos-card";
+import { OtherCopiesCard } from "./other-copies-card";
+import { isOneStampsCopy } from "@/lib/other-copies-rules";
 import {
   useCollectionCertificateStatuses,
   useCollectionItemNoPad,
@@ -115,6 +117,7 @@ export function CopyDetailPanel({
   areas,
   locations,
   sale,
+  variantCopies,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -123,6 +126,8 @@ export function CopyDetailPanel({
   areas: CollectionAreaData[];
   locations: LocationData[];
   sale: ItemSaleRecord | null;
+  /** Held copies of the stamp's variants (#528), for the Other copies card's line (#2090). */
+  variantCopies: number;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -456,6 +461,20 @@ export function CopyDetailPanel({
                 one stamp's wants beside it would say the opposite of the chip above. */}
             {!item.multiStamp && (
               <RelatedWantsCard collectionId={collectionId} stampId={item.stampId} />
+            )}
+
+            {/* The other copies of its stamp (#2090), next to the stamp's wants for the same reason:
+                reading a copy is when it is weighed against the rest — the better keeper, or the
+                duplicate to sell. Not on a piece that is no one stamp's copy. */}
+            {isOneStampsCopy(item) && (
+              <OtherCopiesCard
+                collectionId={collectionId}
+                areas={areas}
+                baseCurrency={baseCurrency}
+                itemId={item.id}
+                stampId={item.stampId}
+                variantCopies={variantCopies}
+              />
             )}
 
             {/* The copy's replacement pairs (#1936): what it replaces or is replaced by, and where
