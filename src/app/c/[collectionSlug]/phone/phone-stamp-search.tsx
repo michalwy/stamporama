@@ -7,28 +7,35 @@ import { Icon } from "@/app/icons";
 import { PHONE_TAP_TARGET, phoneButton, phoneRow } from "@/app/phone-screen";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { PhoneStampThumb } from "./phone-stamp-thumb";
 
 /**
  * The phone start screen's search (#2004, ADR-0072): one field, the desk's own *have I got this?*
  * search behind it (`searchCollection`), and its stamps as rows that say at once whether copies are
- * held and whether the stamp is wanted. A row opens the phone stamp screen.
+ * held and whether the stamp is wanted, each with its thumbnail at the start (#2075). A row opens
+ * the phone stamp screen.
  *
  * A plain GET form: the query is the page's `q`, so the phone's back gesture returns to the hits and
  * the page reads them on the server — no client state, nothing to keep in step.
  */
 export function PhoneStampSearch({
   action,
+  collectionId,
   collectionSlug,
   query,
   stamps,
+  thumbs,
   full,
 }: {
   /** Where the form goes — the phone start screen itself. */
   action: string;
+  collectionId: string;
   collectionSlug: string;
   /** What was searched for, trimmed; empty when nothing was. */
   query: string;
   stamps: readonly CollectionSearchStamp[];
+  /** Each hit's thumbnail photo by stamp id (`loadPhoneStampThumbs`); a stamp absent has none. */
+  thumbs: ReadonlyMap<string, string>;
   /** The search came back at its cap, so there may be more than these. */
   full: boolean;
 }) {
@@ -64,19 +71,22 @@ export function PhoneStampSearch({
                 <Link
                   key={stamp.stampId}
                   href={phoneStampPath(collectionSlug, stamp.stampId)}
-                  style={{ ...phoneRow, flexDirection: "column", alignItems: "stretch", gap: "0.25rem" }}
+                  style={{ ...phoneRow, alignItems: "flex-start" }}
                 >
-                  <span style={ELLIPSIS}>{hit.title}</span>
-                  <span style={{ ...SECONDARY, ...ELLIPSIS }}>{hit.numbers}</span>
-                  {hit.place && <span style={{ ...SECONDARY, ...ELLIPSIS }}>{hit.place}</span>}
-                  <span style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
-                    <span style={hit.isHeld ? HELD_CHIP : CHIP}>{hit.held}</span>
-                    {hit.wanted && (
-                      <span style={WANTED_CHIP}>
-                        <Icon name="wants" size="sm" />
-                        {hit.wanted}
-                      </span>
-                    )}
+                  <PhoneStampThumb collectionId={collectionId} photoId={thumbs.get(stamp.stampId) ?? null} />
+                  <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <span style={ELLIPSIS}>{hit.title}</span>
+                    <span style={{ ...SECONDARY, ...ELLIPSIS }}>{hit.numbers}</span>
+                    {hit.place && <span style={{ ...SECONDARY, ...ELLIPSIS }}>{hit.place}</span>}
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+                      <span style={hit.isHeld ? HELD_CHIP : CHIP}>{hit.held}</span>
+                      {hit.wanted && (
+                        <span style={WANTED_CHIP}>
+                          <Icon name="wants" size="sm" />
+                          {hit.wanted}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </Link>
               );

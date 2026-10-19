@@ -19,6 +19,9 @@ import {
 } from "./photos/process";
 import { photoMeasureFrame, type MeasureFrame, type PhotoPixels } from "./photo-measure-frame";
 import { formatItemNo } from "./item-number";
+import { normalizeRole, sortPhotos, type PhotoRole } from "./photo-order";
+// Moved to a pure module so the unit suite can hold the order (#2075); kept importable from here.
+export { normalizeRole, sortPhotos, type PhotoRole };
 import { asQuarterTurn, isSideways } from "./tile-turn";
 import {
   PHOTO_SOURCE_MAX_LENGTH,
@@ -56,19 +59,6 @@ export type PhotoOwner = { itemId: string } | { stampId: string } | { purchaseId
 
 function isItemOwner(o: PhotoOwner): o is { itemId: string } {
   return "itemId" in o;
-}
-
-/** Reserved single-image slots plus the null "extra" role. Copies use `front` / `back`; stamps
- * (#137) use a single `main` slot instead. Each is a singleton per owner (partial-unique on
- * `(owner, role)`); which slots an owner actually uses is a UI concern. */
-export type PhotoRole = "front" | "back" | "main" | null;
-
-const VALID_ROLES = new Set(["front", "back", "main"]);
-
-export function normalizeRole(role: unknown): PhotoRole {
-  return typeof role === "string" && VALID_ROLES.has(role)
-    ? (role as PhotoRole)
-    : null;
 }
 
 /** Display-facing photo metadata (no bytes). The serving route addresses variants by id. */
@@ -740,8 +730,6 @@ export async function autoSeedStampMainFromFront(
   await promoteCopyPhotoToStamp(ownerId, frontPhotoId, { role: "main", title: null });
 }
 
-const ROLE_ORDER: Record<string, number> = { main: 0, front: 0, back: 1 };
-
 /** Promote a copy photo to its stamp (#137). The source photo is a copy photo whose copy is
  * identified to a `Stamp`; a **new, independent** `Photo` is created on that stamp with its own
  * duplicated bytes (own `storageKey`) and lifecycle — deleting either never affects the other.
@@ -1133,17 +1121,6 @@ async function listOwnerPhotos(
       createdAt: r.createdAt,
     }))
     .sort(sortPhotos);
-}
-
-/** Shared front→back→extras(by sortOrder) ordering for photo lists. */
-export function sortPhotos(
-  a: { role: PhotoRole; sortOrder: number },
-  b: { role: PhotoRole; sortOrder: number }
-): number {
-  const ra = a.role ? ROLE_ORDER[a.role] : 2;
-  const rb = b.role ? ROLE_ORDER[b.role] : 2;
-  if (ra !== rb) return ra - rb;
-  return a.sortOrder - b.sortOrder;
 }
 
 /** Resolve a committed photo for the serving route: its owning collection + owner (for the

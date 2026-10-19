@@ -5,9 +5,12 @@ import {
   phoneCopiesSummary,
   phoneCopyLine,
   phoneMarketEvidence,
+  phoneStampPictures,
+  phoneStampThumbIds,
   phoneValueLabel,
   sortByValueAxes,
   type PhoneCopySource,
+  type PhoneThumbSource,
 } from "../../src/lib/phone-stamp-view";
 import { wantAxisTexts } from "../../src/lib/want-axes";
 
@@ -177,5 +180,62 @@ describe("wantAxisTexts", () => {
         format: "Single, Pair",
       }
     );
+  });
+});
+
+// #2075: a stamp row's thumbnail is the stamp screen's picture rule — its own, else its copies'.
+describe("phoneStampPictures", () => {
+  it("takes the stamp's own photos when it has any", () => {
+    assert.deepEqual(phoneStampPictures(["s"], ["c"]), { photos: ["s"], ofCopies: false });
+  });
+  it("falls back to its copies' photos, and says so", () => {
+    assert.deepEqual(phoneStampPictures([], ["c"]), { photos: ["c"], ofCopies: true });
+  });
+  it("has none when neither has a photo", () => {
+    assert.deepEqual(phoneStampPictures([], []), { photos: [], ofCopies: false });
+  });
+});
+
+describe("phoneStampThumbIds", () => {
+  const own = (id: string, stampId: string, role: string | null, sortOrder = 0): PhoneThumbSource => ({
+    id,
+    role,
+    sortOrder,
+    stampId,
+    copy: null,
+  });
+  const ofCopy = (
+    id: string,
+    stampId: string,
+    itemNo: number,
+    role: string | null,
+    sortOrder = 0
+  ): PhoneThumbSource => ({ id, role, sortOrder, stampId: null, copy: { stampId, itemNo } });
+
+  it("leads with the stamp's own photo, front before extras, even when a copy has one", () => {
+    const thumbs = phoneStampThumbIds([
+      ofCopy("c1", "s1", 1, "front"),
+      own("x", "s1", null, 0),
+      own("main", "s1", "main", 5),
+    ]);
+    assert.equal(thumbs.get("s1"), "main");
+  });
+
+  it("falls back to the lowest-numbered copy's photo, front before back", () => {
+    const thumbs = phoneStampThumbIds([
+      ofCopy("c2-front", "s1", 2, "front"),
+      ofCopy("c1-back", "s1", 1, "back"),
+      ofCopy("c1-front", "s1", 1, "front"),
+    ]);
+    assert.equal(thumbs.get("s1"), "c1-front");
+  });
+
+  it("keeps each stamp to its own photos and leaves a stamp with none out", () => {
+    const thumbs = phoneStampThumbIds([own("a", "s1", "main"), ofCopy("b", "s2", 3, null)]);
+    assert.deepEqual([...thumbs].sort(), [
+      ["s1", "a"],
+      ["s2", "b"],
+    ]);
+    assert.equal(thumbs.has("s3"), false);
   });
 });
