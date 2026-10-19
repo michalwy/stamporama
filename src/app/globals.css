@@ -434,11 +434,19 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 
   /* A printed sheet drops the screen padding — the page margin above is the paper margin. The
-     bottom padding is the strip the pinned footer sits in, so the last rows can't hide under it.
-     It is sized for the footer's two lines, which the rule below makes a constant. */
+     bottom padding is the strip the pinned footer sits in, so no row can hide under it. It is
+     sized for the footer's two lines, which the rule below makes a constant.
+
+     `box-decoration-break: clone` is what puts that strip on **every** page (#2079). A box broken
+     across pages gets its bottom padding once, at the end of its last piece — so the strip was
+     reserved on the last page only, and every earlier page ran its rows down to the foot of the
+     paper, under the footer that is printed on each one. Cloned, each page's piece of the sheet
+     ends with its own strip, and the list breaks above the footer. */
   .print-sheet {
     padding: 0 0 3rem !important;
     max-width: none !important;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
   /* Pinned to the foot of the printed page rather than trailing the content. A fixed element in
