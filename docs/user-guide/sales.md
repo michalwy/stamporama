@@ -643,8 +643,9 @@ Each printed page carries two lines at its foot. The first identifies the sale o
 the **status**. The second says where the printout came from: **Stamporama** and its version, the
 collection, and the date and time the sheet was **generated** — in your own timezone, not the
 server's, so it reads as the clock you printed it by. Each keeps to its own line and is shortened
-with an … when it runs past the paper, so the foot of the page is always the same depth and never
-climbs over the last row of the list.
+with an … when it runs past the paper, so the foot of the page is always the same depth. The list stops
+above it on **every** page — no row is hidden under it, a row is never split between two pages,
+and the column headings repeat at the top of each page the list continues on.
 So a page that slips out of the stack can still be matched back to its order, two printouts of the
 same sale can be told apart, and a sheet found weeks later says where it came from. The note about
 the tick boxes closes the document, after the last row.
