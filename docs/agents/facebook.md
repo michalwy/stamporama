@@ -371,7 +371,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   first. The screen is `/c/[slug]/offers/posts/[postNo]` (`findFacebookPostId` resolves the number;
   the static `posts` segment shadows no offer id), drawn by `facebook-post-panel.tsx` off
   `getFacebookPostScreen` (`facebook-posts.ts`: the kit read once off the first lot, the platform for
-  *Sell* — one lot, or the ticked lots together (#2050) — and each lot's sales from `SaleLine.offerId`) through `GET …/facebook-posts/[postId]`, under
+  *Sell* — one lot, or the ticked lots together (#2050), ticked in a `CheckCell` that is the row's first
+  cell, its whole height (#2082: the row does not wrap, its body after the cell does; an unsellable lot
+  keeps the cell empty) — and each lot's sales from `SaleLine.offerId`) through `GET …/facebook-posts/[postId]`, under
   `offerKeys.all` so `invalidateAll` refreshes it. **Which whole-post moves it offers is
   `facebookPostMoves`** (pure, `facebook-post-rules.ts`), written to match the gates of
   `publishFacebookPost`, `rejectOfferOrPost` and `withdrawOfferOrPost`; the moves themselves are the

@@ -558,7 +558,8 @@ show, and from the
   with no photos to put up says so in its row) — then the lot number, the offer's number and title (linking to the
   offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
   a quick buy's price — its state, its listing link, and its sale once sold. A lot that can still be
-  sold has a tick box beside its number, to sell several lots to one buyer together
+  sold has a tick box at the very start of its row, before the photo — click anywhere in that strip,
+  top to bottom — to sell several lots to one buyer together
   ([Selling a Facebook offer](#selling-a-facebook-offer)). Each row's **⋮** opens the
   offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
   takes the lot out of the post. Until the post is up, a row's **⠿** grip drags the lot to another place

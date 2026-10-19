@@ -29,6 +29,8 @@ import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import {
   DragGrip,
   dragStyle,
@@ -130,13 +132,24 @@ const CARD_TITLE: React.CSSProperties = {
 // photo — large enough to recognise the stamps — or the caption.
 const LOT_LIST: React.CSSProperties = { listStyle: "none", margin: 0, padding: 0 };
 
+const LOT_ROW_PAD = "0.875rem";
+
+// The tick cell comes first and runs the row's whole height (#2082, as on every list row, #1589), so
+// the row itself does not wrap: what follows the cell does, in `LOT_BODY`.
 const LOT_ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "stretch",
+  padding: `${LOT_ROW_PAD} 0`,
+  borderBottom: "1px solid var(--color-border)",
+};
+
+const LOT_BODY: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
   display: "flex",
   flexWrap: "wrap",
   alignItems: "flex-start",
   gap: "0.75rem 1.25rem",
-  padding: "0.875rem 0",
-  borderBottom: "1px solid var(--color-border)",
 };
 
 const LOT_FACTS: React.CSSProperties = {
@@ -1272,132 +1285,139 @@ function LotRow({
       }}
       style={{ ...LOT_ROW, ...dragStyle(drag, index) }}
     >
-
-      {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
-      <div style={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}>{photos}</div>
-      <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-          <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
-            {drag && (
-              <span
-                {...drag.handleProps(index)}
-                style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
-              >
-                <DragGrip label="Drag to move this lot" />
-              </span>
-            )}
-            {ticked !== null && (
-              <input
-                type="checkbox"
-                checked={ticked}
-                onChange={onToggleTicked}
-                aria-label={`Tick lot ${lotNo}`}
-                style={{ verticalAlign: "middle", margin: "0 0.375rem 0 0" }}
-              />
-            )}
-            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
-            {!prepare && (
-              <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
-                <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-                <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
-                  {lot.title}
-                </Link>
-              </span>
-            )}
-          </p>
-          <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
-        </div>
-        {/* While the post is not up (#2031): the title edited in place — the offer's number is the link
-            then — the price table with the lot's own figure, and, while it is being prepared, what still
-            stops it from being marked ready. */}
-        {prepare && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", margin: "0.375rem 0 0" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", minWidth: 0 }}>
-              <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ ...LINK, flexShrink: 0 }}>
-                <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-              </Link>
-              <PrepareTitleField offer={prepare} onChanged={onPrepareChanged} inputWidth="24rem" />
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
-              <PreparePriceField ref={priceRef} offer={prepare} onEnter={onPriceEnter} onSaved={onPriceSaved} />
-            </div>
-            {lot.state === "preparing" && <PrepareReadiness offer={prepare} onCheckCovers={onCheckCovers} />}
-          </div>
-        )}
-        <dl style={LOT_FACTS}>
-          <dt style={MUTED}>Type</dt>
-          <dd style={{ margin: 0 }}>{OFFER_LISTING_TYPE_LABEL[lot.listingType]}</dd>
-          {!prepare && (
-            <>
-              <dt style={MUTED}>{price.label}</dt>
-              <dd style={{ margin: 0 }}>
-                {price.amount ? (
-                  <>
-                    {price.amount} {lot.currency}
-                  </>
-                ) : (
-                  <span style={MUTED}>—</span>
-                )}
-              </dd>
-            </>
-          )}
-          <dt style={MUTED}>State</dt>
-          <dd style={{ margin: 0 }}>
-            <OfferStateChip state={lot.state} />
-          </dd>
-          <dt style={MUTED}>Link</dt>
-          <dd style={{ margin: 0 }}>
-            {lot.url ? (
-              <>
-                <a href={lot.url} target="_blank" rel="noreferrer" style={LINK}>
-                  link ↗
-                </a>
-                {lot.state === "pending" && <> <PendingLinkMark /></>}
-              </>
-            ) : (
-              <span style={MUTED}>—</span>
-            )}
-          </dd>
-          <dt style={MUTED}>Sale</dt>
-          <dd style={{ margin: 0 }}>
-            {sales.length > 0 ? (
-              sales.map((sale, i) => (
-                <span key={sale.id}>
-                  {i > 0 && ", "}
-                  <Link href={`/c/${collectionSlug}/sales/${sale.id}`} style={LINK}>
-                    Sale #{sale.saleNo}
+      {/* The tick, to the row's top and bottom edges (#2082); a lot that can no longer be sold keeps the
+          cell empty, so the photos stay in line. */}
+      {ticked !== null ? (
+        <CheckCell bleed={{ top: LOT_ROW_PAD, bottom: LOT_ROW_PAD }} style={SELECT_STRIP}>
+          <input
+            type="checkbox"
+            checked={ticked}
+            onChange={onToggleTicked}
+            aria-label={`Tick lot ${lotNo}`}
+            style={{ cursor: "pointer" }}
+          />
+        </CheckCell>
+      ) : (
+        <div aria-hidden style={SELECT_STRIP} />
+      )}
+      <div style={LOT_BODY}>
+        {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
+        <div style={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}>{photos}</div>
+        <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+            <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+              {drag && (
+                <span
+                  {...drag.handleProps(index)}
+                  style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
+                >
+                  <DragGrip label="Drag to move this lot" />
+                </span>
+              )}
+              <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
+              {!prepare && (
+                <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
+                  <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
+                  <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
+                    {lot.title}
                   </Link>
                 </span>
-              ))
-            ) : (
-              <span style={MUTED}>—</span>
+              )}
+            </p>
+            <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
+          </div>
+          {/* While the post is not up (#2031): the title edited in place — the offer's number is the link
+              then — the price table with the lot's own figure, and, while it is being prepared, what still
+              stops it from being marked ready. */}
+          {prepare && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", margin: "0.375rem 0 0" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", minWidth: 0 }}>
+                <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ ...LINK, flexShrink: 0 }}>
+                  <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
+                </Link>
+                <PrepareTitleField offer={prepare} onChanged={onPrepareChanged} inputWidth="24rem" />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <PreparePriceField ref={priceRef} offer={prepare} onEnter={onPriceEnter} onSaved={onPriceSaved} />
+              </div>
+              {lot.state === "preparing" && <PrepareReadiness offer={prepare} onCheckCovers={onCheckCovers} />}
+            </div>
+          )}
+          <dl style={LOT_FACTS}>
+            <dt style={MUTED}>Type</dt>
+            <dd style={{ margin: 0 }}>{OFFER_LISTING_TYPE_LABEL[lot.listingType]}</dd>
+            {!prepare && (
+              <>
+                <dt style={MUTED}>{price.label}</dt>
+                <dd style={{ margin: 0 }}>
+                  {price.amount ? (
+                    <>
+                      {price.amount} {lot.currency}
+                    </>
+                  ) : (
+                    <span style={MUTED}>—</span>
+                  )}
+                </dd>
+              </>
             )}
-          </dd>
-          {text && textMarks.length > 0 && (
-            <>
-              <dt style={MUTED}>Text</dt>
-              <dd style={{ margin: 0, color: text.outOfDate ? "var(--color-warning)" : "var(--color-text-secondary)" }}>
-                {textMarks.join(" · ")}
-              </dd>
-            </>
-          )}
-          {language && untranslated.length > 0 && (
-            <>
-              <dt style={MUTED}>Untranslated</dt>
-              <dd style={{ margin: 0, color: "var(--color-warning)" }}>
-                <TranslationGapLinks
-                  collectionId={collectionId}
-                  language={language}
-                  gaps={untranslated}
-                  withLanguage={false}
-                  onSaved={onTranslated}
-                />
-              </dd>
-            </>
-          )}
-        </dl>
+            <dt style={MUTED}>State</dt>
+            <dd style={{ margin: 0 }}>
+              <OfferStateChip state={lot.state} />
+            </dd>
+            <dt style={MUTED}>Link</dt>
+            <dd style={{ margin: 0 }}>
+              {lot.url ? (
+                <>
+                  <a href={lot.url} target="_blank" rel="noreferrer" style={LINK}>
+                    link ↗
+                  </a>
+                  {lot.state === "pending" && <> <PendingLinkMark /></>}
+                </>
+              ) : (
+                <span style={MUTED}>—</span>
+              )}
+            </dd>
+            <dt style={MUTED}>Sale</dt>
+            <dd style={{ margin: 0 }}>
+              {sales.length > 0 ? (
+                sales.map((sale, i) => (
+                  <span key={sale.id}>
+                    {i > 0 && ", "}
+                    <Link href={`/c/${collectionSlug}/sales/${sale.id}`} style={LINK}>
+                      Sale #{sale.saleNo}
+                    </Link>
+                  </span>
+                ))
+              ) : (
+                <span style={MUTED}>—</span>
+              )}
+            </dd>
+            {text && textMarks.length > 0 && (
+              <>
+                <dt style={MUTED}>Text</dt>
+                <dd style={{ margin: 0, color: text.outOfDate ? "var(--color-warning)" : "var(--color-text-secondary)" }}>
+                  {textMarks.join(" · ")}
+                </dd>
+              </>
+            )}
+            {language && untranslated.length > 0 && (
+              <>
+                <dt style={MUTED}>Untranslated</dt>
+                <dd style={{ margin: 0, color: "var(--color-warning)" }}>
+                  <TranslationGapLinks
+                    collectionId={collectionId}
+                    language={language}
+                    gaps={untranslated}
+                    withLanguage={false}
+                    onSaved={onTranslated}
+                  />
+                </dd>
+              </>
+            )}
+          </dl>
+        </div>
+        {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}
       </div>
-      {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}
     </li>
   );
 }
