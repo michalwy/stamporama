@@ -1,6 +1,7 @@
 "use client";
 
 import type { StampConditionData } from "@/lib/conditions";
+import { TOOLBAR_LABEL_STYLE, TOOLBAR_SELECT_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 
 interface ConditionPriceSwitcherProps {
   conditions: StampConditionData[];
@@ -21,28 +22,13 @@ export function ConditionPriceSwitcher({
 
   return (
     <label
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        fontSize: "0.8125rem",
-        color: "var(--color-text-muted)",
-        whiteSpace: "nowrap",
-      }}
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", whiteSpace: "nowrap" }}
     >
-      Price for
+      <span style={TOOLBAR_LABEL_STYLE}>Price for</span>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          padding: "0.25rem 0.5rem",
-          border: "1px solid var(--color-border-strong)",
-          borderRadius: "0.375rem",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-primary)",
-          background: "var(--color-bg-elevated)",
-          cursor: "pointer",
-        }}
+        style={TOOLBAR_SELECT_STYLE}
       >
         {conditions.map((c) => (
           <option key={c.id} value={c.id}>

@@ -10,17 +10,37 @@ import { TextInput } from "./text-input";
 
 const INPUT_STYLE = SEARCH_INPUT_STYLE;
 
-const SELECT_STYLE: React.CSSProperties = {
+/** A select on a list toolbar: the search box's box, so the two line up. Exported for the controls a
+ * screen hands the bar that carry a select of their own (the price and checklist switchers, #2086). */
+export const TOOLBAR_SELECT_STYLE: React.CSSProperties = {
   ...INPUT_STYLE,
   cursor: "pointer",
 };
+const SELECT_STYLE = TOOLBAR_SELECT_STYLE;
 
-const LABEL_STYLE: React.CSSProperties = {
+/** The one way a word naming a toolbar control is written — *Sort*, *Catalog*, *Price for* — small,
+ * muted capitals beside the control. The Copies list's bar has only this kind (its *Sort*), so the
+ * Issues list's labels took it too when they were made one style (#2086); a control handed to the
+ * bar labels itself with this rather than with plain text of its own. */
+export const TOOLBAR_LABEL_STYLE: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
   color: "var(--color-text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
+  whiteSpace: "nowrap",
+};
+const LABEL_STYLE = TOOLBAR_LABEL_STYLE;
+
+/** One group of a grouped bar (#2086): its controls stay together on one line, and the bar wraps
+ * between groups. It wraps inside itself only once the group alone is wider than the bar — a flex
+ * item is placed on a line at its full width, so a group moves down whole before it shrinks. */
+const TOOLBAR_GROUP_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  flexWrap: "wrap",
+  minWidth: 0,
 };
 
 // The ✕ that empties the field it sits in. Auxiliary to that input and therefore out of the tab
@@ -157,6 +177,14 @@ export interface ListToolbarProps {
    * is where it is shortened, and whether a search is a lookup or a standing question is a question
    * about the list, not about search boxes (#846; `ui-patterns.md`, #1028). */
   searchMaxWidth?: string;
+  /** The **grouped** bar (#2086), the Issues list's: given `filters` or `view`, the row is drawn as
+   * four groups in a fixed order — the search; the filters (the catalogue search first, then these);
+   * the view (the sort control first, then these); and `actions` at the right end. The bar wraps
+   * **between** groups, never inside one, so the catalogue search can no longer fall alone onto a
+   * line of its own. `children` and `sortLast` belong to the ungrouped bar and are ignored here. */
+  filters?: React.ReactNode;
+  /** The view group of a grouped bar — how the rows are shown rather than which. See `filters`. */
+  view?: React.ReactNode;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -178,6 +206,8 @@ export function ListToolbar({
   sortLast = false,
   searchMaxWidth = "20rem",
   actions,
+  filters,
+  view,
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
   // and push the settled value up, skipping the initial mount so it doesn't refetch.
@@ -215,8 +245,53 @@ export function ListToolbar({
     setLocalSearch(search);
   }, [search]);
 
-  const showCatalogSearch =
-    catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange;
+  const grouped = filters !== undefined || view !== undefined;
+  const catalogSearch =
+    catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange ? (
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexShrink: 0 }}>
+        <span style={LABEL_STYLE}>Catalog</span>
+        <select
+          value={catalogVendorId ?? ""}
+          onChange={(e) =>
+            onCatalogSearchChange(e.target.value, catalogNumber ?? "")
+          }
+          style={{ ...SELECT_STYLE, minWidth: "8rem" }}
+        >
+          <option value="">All vendors</option>
+          {catalogVendors.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name} ({v.abbreviation})
+            </option>
+          ))}
+        </select>
+        {/* Accepts a bare number or a prefixed one ("Mi PL 200", "MiPL200"); a
+            recognized vendor prefix overrides the dropdown (#146). Always enabled
+            so a number can be searched across all vendors without picking one. */}
+        <TextInput
+          placeholder="e.g. 200 or Mi PL 200"
+          value={catalogNumber ?? ""}
+          onChange={(e) =>
+            onCatalogSearchChange(catalogVendorId ?? "", e.target.value)
+          }
+          style={{ ...INPUT_STYLE, width: "10rem" }}
+        />
+        {/* Kept in place, hidden, while there is nothing to clear: typing a number must not move
+            the controls after it (#868) — on the grouped bar they share its line (#2086). */}
+        <span style={catalogVendorId || catalogNumber ? undefined : { visibility: "hidden" }}>
+          <Tooltip content="Clear catalog search">
+            <button
+              type="button"
+              onClick={() => onCatalogSearchChange("", "")}
+              aria-label="Clear catalog search"
+              tabIndex={-1}
+              style={CLEAR_BTN}
+            >
+              <Icon name="clear" size="sm" />
+            </button>
+          </Tooltip>
+        </span>
+      </div>
+    ) : null;
 
   // Still on the bar when it cannot be honoured, greyed and carrying the reason (#868) — see
   // `sortDisabledReason`. The reason is hung on the **whole group** rather than on the select: a
@@ -277,6 +352,52 @@ export function ListToolbar({
       sortGroup
     );
 
+  const searchBox = (
+    <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
+      <TextInput
+        placeholder="Search..."
+        value={localSearch}
+        onChange={(e) => setLocalSearch(e.target.value)}
+        style={{ ...INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
+      />
+      {localSearch && (
+        <Tooltip
+          content="Clear search"
+          style={{
+            position: "absolute",
+            right: "0.375rem",
+            top: "50%",
+            transform: "translateY(-50%)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setLocalSearch("")}
+            aria-label="Clear search"
+            tabIndex={-1}
+            style={CLEAR_BTN}
+          >
+            <Icon name="clear" size="sm" />
+          </button>
+        </Tooltip>
+      )}
+    </div>
+  );
+
+  const actionsGroup = actions && (
+    <div
+      style={{
+        marginLeft: "auto",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+      }}
+    >
+      {actions}
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -291,103 +412,50 @@ export function ListToolbar({
       }}
     >
       {/* Row 1: Search + Sort + the screen's filters and actions. Wraps, so a bar carrying a dozen
-          controls breaks where it must instead of overflowing the card. */}
-      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
-          <TextInput
-            placeholder="Search..."
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            style={{ ...INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
-          />
-          {localSearch && (
-            <Tooltip
-              content="Clear search"
-              style={{
-                position: "absolute",
-                right: "0.375rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setLocalSearch("")}
-                aria-label="Clear search"
-                tabIndex={-1}
-                style={CLEAR_BTN}
-              >
-                <Icon name="clear" size="sm" />
-              </button>
-            </Tooltip>
+          controls breaks where it must instead of overflowing the card. A grouped bar (#2086) puts
+          the same controls in four fixed groups and wraps between them — further apart than the
+          controls inside a group, so the groups read as groups. */}
+      {grouped ? (
+        <div
+          style={{
+            display: "flex",
+            columnGap: "1.5rem",
+            rowGap: "0.5rem",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {searchBox}
+          {(catalogSearch || filters) && (
+            <div style={TOOLBAR_GROUP_STYLE}>
+              {catalogSearch}
+              {filters}
+            </div>
           )}
+          {(sortControl || view) && (
+            <div style={TOOLBAR_GROUP_STYLE}>
+              {sortControl}
+              {view}
+            </div>
+          )}
+          {actionsGroup}
         </div>
+      ) : (
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          {searchBox}
 
-        {!sortLast && sortControl}
+          {!sortLast && sortControl}
 
-        {children}
+          {children}
 
-        {sortLast && sortControl}
+          {sortLast && sortControl}
 
-        {actions && (
-          <div
-            style={{
-              marginLeft: "auto",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-            }}
-          >
-            {actions}
-          </div>
-        )}
-      </div>
-
-      {/* Row 2: Catalog search (optional) */}
-      {showCatalogSearch && (
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <span style={LABEL_STYLE}>Catalog</span>
-          <select
-            value={catalogVendorId ?? ""}
-            onChange={(e) =>
-              onCatalogSearchChange(e.target.value, catalogNumber ?? "")
-            }
-            style={{ ...SELECT_STYLE, minWidth: "8rem" }}
-          >
-            <option value="">All vendors</option>
-            {catalogVendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name} ({v.abbreviation})
-              </option>
-            ))}
-          </select>
-          {/* Accepts a bare number or a prefixed one ("Mi PL 200", "MiPL200"); a
-              recognized vendor prefix overrides the dropdown (#146). Always enabled
-              so a number can be searched across all vendors without picking one. */}
-          <TextInput
-            placeholder="e.g. 200 or Mi PL 200"
-            value={catalogNumber ?? ""}
-            onChange={(e) =>
-              onCatalogSearchChange(catalogVendorId ?? "", e.target.value)
-            }
-            style={{ ...INPUT_STYLE, width: "10rem" }}
-          />
-          {(catalogVendorId || catalogNumber) && (
-            <Tooltip content="Clear catalog search">
-              <button
-                type="button"
-                onClick={() => onCatalogSearchChange("", "")}
-                aria-label="Clear catalog search"
-                tabIndex={-1}
-                style={CLEAR_BTN}
-              >
-                <Icon name="clear" size="sm" />
-              </button>
-            </Tooltip>
-          )}
+          {actionsGroup}
         </div>
       )}
+
+      {/* Row 2: Catalog search (optional) — on the grouped bar it leads the filters group instead. */}
+      {!grouped && catalogSearch}
 
       {/* Rows of the block like the ones above, so putting one up pushes the list down. That is
           the accepted behaviour on every list alike (#885) — read the prop's doc before reaching
