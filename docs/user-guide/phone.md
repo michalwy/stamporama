@@ -51,15 +51,17 @@ The field at the top of the start screen finds a stamp by what you have in front
 It is the same search the desk's stamp pickers and **Find in Stamporama** use, so it finds what they
 find. Type and press the search key.
 
-Each stamp found is one row: its name (or its catalog number when it has none), its catalog numbers
-and its own number, where it sits — area, issue year and name — and two marks you read without
+Each stamp found is one row: its picture at the start, its name (or its catalog number when it has
+none), its catalog numbers and its own number, where it sits — area, issue year and name — and two marks you read without
 opening it:
 
 - **3 held**, or **Not held** — the copies you hold of it. Copies filed under its variants are counted
   beside it (*2 under its variants*), so a stamp you hold only as variants does not read as missing.
 - **Wanted** — the stamp is on your wants, with the priority when it is high or low.
 
-Tap a row to open the stamp's phone screen. When nothing matches, the screen says so. The search
+The picture is the one the stamp's own screen leads with — the stamp's photo, else a photo of one of
+your copies of it; a stamp with neither keeps an empty frame, so the rows stay lined up. Tap
+anywhere on a row, picture included, to open the stamp's phone screen. When nothing matches, the screen says so. The search
 shows up to 20 stamps; when it is full, typing more narrows it.
 
 ## Starting a purchase
@@ -182,7 +184,8 @@ issued: area, then year, then issue, then the stamp.
    **No year** at the end.
 3. Tapping a year lists that year's issues in the area, with how many stamps each has.
 4. Tapping an issue lists its stamps in the issue's own order, each variant drawn under the stamp it
-   varies. Each stamp shows its catalogue numbers, its name (or its denomination and colour), and at a
+   varies. Each stamp shows its picture at the start of the row — the same one as in the search,
+   above — its catalogue numbers, its name (or its denomination and colour), and at a
    glance **how many copies you hold** — or *Not held* — and **Wanted** when it is on your open wants,
    in the colour of the most urgent want. Copies held under its variants are counted beside it.
 5. Tapping a stamp opens its phone screen (below).

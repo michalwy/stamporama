@@ -5,6 +5,58 @@
 import { buildLocationPath, type LocationPathNode } from "./location-path";
 import type { StampCopyCounts } from "./copy-counts";
 import type { MarketConfidenceBadge } from "./market-value";
+import { normalizeRole, sortPhotos } from "./photo-order";
+
+/**
+ * The stamp's picture on the phone (#2003): its own photos, else its copies' (#1290), else none —
+ * `ofCopies` says which, since a copy's photo is of one piece rather than the catalogue's specimen.
+ * **One rule for the stamp screen and every stamp row** (#2075): a row's thumbnail is the first of
+ * these, through {@link phoneStampThumbIds}.
+ */
+export function phoneStampPictures<T>(own: readonly T[], copies: readonly T[]): { photos: readonly T[]; ofCopies: boolean } {
+  return own.length > 0 ? { photos: own, ofCopies: false } : { photos: copies, ofCopies: copies.length > 0 };
+}
+
+/** A photo as the row thumbnails read it: the stamp's own (`stampId`), or one of its copies'. */
+export interface PhoneThumbSource {
+  id: string;
+  role: string | null;
+  sortOrder: number;
+  stampId: string | null;
+  copy: { stampId: string; itemNo: number } | null;
+}
+
+/**
+ * Each stamp's row thumbnail (#2075): the lead of {@link phoneStampPictures}, the photos ordered as
+ * the stamp screen draws them — the stamp's own front → back → extras, a copy's by copy number, then
+ * the same order within the copy. A stamp with no photo has no entry.
+ */
+export function phoneStampThumbIds(photos: readonly PhoneThumbSource[]): Map<string, string> {
+  const byStamp = new Map<string, { own: PhoneThumbSource[]; copies: PhoneThumbSource[] }>();
+  const slot = (stampId: string) => {
+    let entry = byStamp.get(stampId);
+    if (!entry) byStamp.set(stampId, (entry = { own: [], copies: [] }));
+    return entry;
+  };
+  for (const p of photos) {
+    if (p.stampId) slot(p.stampId).own.push(p);
+    else if (p.copy) slot(p.copy.stampId).copies.push(p);
+  }
+  const byRole = (a: PhoneThumbSource, b: PhoneThumbSource) =>
+    sortPhotos(
+      { role: normalizeRole(a.role), sortOrder: a.sortOrder },
+      { role: normalizeRole(b.role), sortOrder: b.sortOrder }
+    );
+  const thumbs = new Map<string, string>();
+  for (const [stampId, { own, copies }] of byStamp) {
+    const lead = phoneStampPictures(
+      [...own].sort(byRole),
+      [...copies].sort((a, b) => a.copy!.itemNo - b.copy!.itemNo || byRole(a, b))
+    ).photos[0];
+    if (lead) thumbs.set(stampId, lead.id);
+  }
+  return thumbs;
+}
 
 /**
  * How many copies are held, as the screen's first line about them, and the two figures the desk

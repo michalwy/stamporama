@@ -5,6 +5,7 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
 import { searchCollection } from "@/lib/collection-search";
+import { loadPhoneStampThumbs } from "@/lib/phone-stamp-thumbs";
 import { PICKER_LIMIT } from "@/lib/stamps";
 import { trimTextInput } from "@/lib/text-input";
 import { phoneHomePath, PHONE_START_PATH } from "@/lib/phone";
@@ -43,14 +44,17 @@ export default async function PhoneHomePage({ params, searchParams }: PhoneHomeP
   const stamps = query
     ? (await searchCollection(session.user.id, collection.id, query)).stamps
     : [];
+  const thumbs = await loadPhoneStampThumbs(collection.id, stamps.map((s) => s.stampId));
 
   return (
     <PhoneScreen title={collection.name} fullAppHref={`/c/${collectionSlug}`}>
       <PhoneStampSearch
         action={home}
+        collectionId={collection.id}
         collectionSlug={collectionSlug}
         query={query}
         stamps={stamps}
+        thumbs={thumbs}
         full={stamps.length >= PICKER_LIMIT}
       />
       {PHONE_ENTRIES.length === 0 ? (

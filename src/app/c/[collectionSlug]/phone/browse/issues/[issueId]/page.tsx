@@ -6,6 +6,7 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getPhoneBrowseIssue } from "@/lib/phone-browse";
+import { loadPhoneStampThumbs } from "@/lib/phone-stamp-thumbs";
 import { phoneStampPath } from "@/lib/phone";
 import {
   phoneIssueName,
@@ -17,6 +18,7 @@ import { WANT_PRIORITY_CHIP } from "@/lib/want-rules";
 import { Icon } from "@/app/icons";
 import { PhoneScreen, phoneRow } from "@/app/phone-screen";
 import { BROWSE_LIST, BROWSE_MUTED, BrowseTrail } from "../../phone-browse-parts";
+import { PhoneStampThumb } from "../../../phone-stamp-thumb";
 
 export const metadata = { title: "Issue" };
 
@@ -42,7 +44,7 @@ const VARIANT_INDENT_REM = 1;
 /**
  * One issue's stamps on the phone (#2005, ADR-0072 §5) — the last step of browsing, area → year →
  * issue → stamp. Each stamp says at a glance whether copies are held (how many) and whether it is
- * wanted, and a tap opens the phone stamp screen (#2003). The stamps are the issue screen's own
+ * wanted, with its thumbnail at the row's start (#2075), and a tap opens the phone stamp screen (#2003). The stamps are the issue screen's own
  * members, in its order, each variant drawn under the stamp it varies. *Full app* goes to the desk's
  * issue screen.
  */
@@ -59,6 +61,7 @@ export default async function PhoneBrowseIssuePage({ params }: PhoneBrowseIssueP
   if (!data) notFound();
   const { issue } = data;
   const rows = phoneIssueStampRows(data.stamps);
+  const thumbs = await loadPhoneStampThumbs(collection.id, data.stamps.map((s) => s.stampId));
 
   return (
     <PhoneScreen title={phoneIssueName(issue.name)} fullAppHref={`/c/${collectionSlug}/issues/${issue.id}`}>
@@ -91,6 +94,7 @@ export default async function PhoneBrowseIssuePage({ params }: PhoneBrowseIssueP
                   alignItems: "flex-start",
                 }}
               >
+                <PhoneStampThumb collectionId={collection.id} photoId={thumbs.get(stamp.stampId) ?? null} />
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
                     {numbers || "No catalogue number"}

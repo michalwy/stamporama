@@ -73,6 +73,23 @@ desktop-only.
   would have been a second notion of *match*. The numbered stamp is read on its own, beside the
   capped recall net, since `#901` also recalls every catalogue number containing 901.
 
+## Stamp row thumbnails (#2075)
+
+- **Every phone stamp row starts with the stamp's thumbnail** — an issue's stamps when browsing and
+  the search's hits; area, year and issue rows have none. Decided with the collector on 2026-10-19.
+- **One picture rule for the row and the stamp screen**: `phoneStampPictures` (`phone-stamp-view.ts`,
+  pure) — the stamp's own photos, else its copies' (#1290) — and a row's thumbnail is the lead of that
+  list, chosen by `phoneStampThumbIds` in the order the screen draws: own front → back → extras, else
+  the lowest copy number's, the same order within it. The search's own `photoId` is **not** used: it
+  is the stamp's photo only, with no copy fallback. One read per page, `loadPhoneStampThumbs`
+  (`phone-stamp-thumbs.ts`); copies disposed of are left out, as on the screen.
+- **`sortPhotos` moved to `photo-order.ts`** (pure) so the rule can be unit-tested; `photos.ts`
+  re-exports it.
+- **`PhoneStampThumb`** (`phone/phone-stamp-thumb.tsx`, a client module for the photo address and
+  `THUMB_OBJECT_FIT`): a 4rem square at the row's start, fitted never cropped; a stamp with no picture
+  keeps an empty frame of the same size so rows stay aligned. It is inside the row's link, not a
+  target of its own.
+
 ## Sales to do (#2007)
 
 - **`phone/sales`** lists the Dashboard's Sales section's three status groups — the same reader

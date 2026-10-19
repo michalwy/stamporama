@@ -11,6 +11,7 @@ import {
   phoneCopiesSummary,
   phoneCopyLine,
   phoneMarketEvidence,
+  phoneStampPictures,
   phoneValueLabel,
   sortByValueAxes,
 } from "@/lib/phone-stamp-view";
@@ -132,7 +133,8 @@ export default async function PhoneStampPage({ params }: PhoneStampPageProps) {
   const numbers = data.catalogNumbers.join(" · ");
   const issueLine = issue ? [issue.issueYear, issue.issueName].filter(Boolean).join(", ") : "";
 
-  const pictures = stamp.photos.length > 0 ? stamp.photos : data.copyPhotos.photos;
+  // One rule with the stamp rows' thumbnails (#2075): the stamp's own, else its copies'.
+  const pictures = phoneStampPictures(stamp.photos, data.copyPhotos.photos);
 
   const openWants = data.wants.filter((w) => w.closedAt === null);
   const price = stamp.mainCatalogPrice;
@@ -149,10 +151,10 @@ export default async function PhoneStampPage({ params }: PhoneStampPageProps) {
 
       {/* The picture: the stamp's own, else its copies' (#1290) — said which, since a copy's photo
           is of one piece rather than the catalogue's specimen. */}
-      {pictures.length > 0 ? (
+      {pictures.photos.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <PhoneStampPicture collectionId={collection.id} photos={pictures} />
-          {stamp.photos.length === 0 && (
+          <PhoneStampPicture collectionId={collection.id} photos={pictures.photos} />
+          {pictures.ofCopies && (
             <p style={MUTED}>Photos of your copies — the stamp has none of its own.</p>
           )}
         </div>
