@@ -565,6 +565,12 @@ show, and from the
   ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking
   the photo. Everything a post needs is here — its text, its photos and, captioned, its captions — so
   posting needs no lot opened.
+- **Still for sale** — once the post is up, a chip above the lots, with the number of lots neither sold
+  nor withdrawn. Click it to list only those — what is left to sell, to answer a buyer or sell them
+  several lots together — and a line beside it says how many of the post's lots it is showing; click it
+  again to see every lot. Each post remembers it: a post you narrowed opens narrowed next time, while
+  others still list every lot. Lots you have ticked stay ticked, and **Sell…** sells only the ticked
+  lots in view. The post's text, its photos and their download are always the whole post.
 - **Pricing and readying the lots** — until the post is up, each row also prices its lot and says what
   still stops it from being marked ready, as the **Prepare** screen does for offers, and above the lots
   the whole post is priced and readied at once
