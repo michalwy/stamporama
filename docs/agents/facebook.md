@@ -617,6 +617,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   than with the screen. Tests: `tests/unit/facebook-post-photo-settings-rules.test.ts`,
   `tests/integration/facebook-post-photo-settings.test.ts`.
 
+- **A post's screen narrows its lots to the ones still for sale** (#2081, raised on 2026-10-19). One
+  `FilterChip`, *Still for sale*, above the lots — drawn once the post is up and has more than one lot,
+  since before that no lot can be sold or withdrawn (a sold or withdrawn lot stays behind in the old post
+  on *Back to Ready*, #1998) and a post of one has nothing to narrow; that is also why it never meets the
+  drag-to-reorder, which is only before the post is up. On, the rows are `facebookLotsInView`
+  (`facebook-post-ui-state.ts`, pure): the lots `isFacebookLotForSale` — not sold or withdrawn, the
+  list of posts' `forSaleCount` reading — in lot order; its count is on the chip and a status line says
+  how many of the post's lots are shown. **Remembered per post** in `localStorage`, not the URL, as the
+  purchase order's chips are: one entry per post through `createRecordUiStore`
+  (`offers/posts/[postNo]/post-ui-state.ts`, `stamporama:fbpost:ui:`), stored only while on. **Ticks**:
+  the chip never touches the ticked set, and the bar and *Sell…* read the ticked lots **in view** —
+  which here changes nothing in practice, since the chip hides only lots that can no longer be sold and
+  those never counted. The kit, the photos' ZIP and the post text read `kit.lots`, the whole post.
+  The unit test is `tests/unit/facebook-post-ui-state.test.ts`.
+
 - **A post's screen prices its lots and marks them ready, as Prepare does — until it is up** (#2031,
   settled with the collector on 2026-10-18; the issue's *to be confirmed* points implemented as
   written). One of the four issues #2030–#2033 making the post the one workspace from generating the

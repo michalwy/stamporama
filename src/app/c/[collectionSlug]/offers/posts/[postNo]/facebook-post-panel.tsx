@@ -21,6 +21,7 @@ import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { languageLabel } from "@/lib/languages";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
+import { facebookLotsInView, isFacebookLotForSale } from "@/lib/facebook-post-ui-state";
 import { isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
 import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
@@ -28,6 +29,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -55,6 +57,7 @@ import { AddLotsDialog } from "./add-lots-dialog";
 import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
+import { useFacebookPostStillForSale } from "./post-ui-state";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -107,6 +110,10 @@ import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialog
 //   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`), so a price
 //   saved settles its own row and refreshes only the kit. Once the post is up the rows show what they
 //   showed before: pricing and readying belong to before.
+// - **Still for sale** (#2081), above the lots once the post is up: one chip narrowing the rows to the
+//   lots neither sold nor withdrawn, remembered per post. A filter never unticks anything — a ticked lot
+//   it hides stays ticked, and *Sell…* reaches only the ticked lots in view. The kit, the photos' ZIP
+//   and the post's text are the post's whole, not the list's view, so the chip leaves them alone.
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -255,7 +262,16 @@ export function FacebookPostPanel({
   const lots = movedOrder
     ? movedOrder.flatMap((id) => serverLots.find((l) => l.offerId === id) ?? [])
     : serverLots;
-  const tickedLots = lots.filter((l) => ticked.has(l.offerId) && !isTerminalState(l.state));
+  // *Still for sale* (#2081): offered once the post is up and has more than one lot — before that no
+  // lot can be sold or withdrawn, and a post of one has nothing to narrow. Remembered per post.
+  const [stillForSale, setStillForSale] = useFacebookPostStillForSale(collectionId, postId);
+  const narrowable = serverLots.length > 1 && serverLots.some((l) => isFacebookLotPosted(l.state));
+  const narrowed = narrowable && stillForSale;
+  const forSaleCount = serverLots.filter((l) => isFacebookLotForSale(l.state)).length;
+  const lotsInView = facebookLotsInView(lots, narrowed);
+  // Ticks outlive the chip — it never touches `ticked` — and what is counted and handed to *Sell…* is the
+  // ticked lots in view. The chip hides only lots that can no longer be sold, which never count anyway.
+  const tickedLots = lotsInView.filter((l) => ticked.has(l.offerId) && !isTerminalState(l.state));
   const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
 
   // The lots in their new order, numbered from it (#1986); the server writes the numbers.
@@ -927,6 +943,24 @@ export function FacebookPostPanel({
                   .
                 </p>
               )}
+              {narrowable && (
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 0.75rem", margin: "0.75rem 0 0" }}>
+                  <FilterChip
+                    label="Still for sale"
+                    count={forSaleCount}
+                    active={narrowed}
+                    toggle
+                    onClick={() => setStillForSale(!stillForSale)}
+                  />
+                  {narrowed && (
+                    <span role="status" style={MUTED}>
+                      {forSaleCount === 0
+                        ? `No lot is still for sale — all ${lots.length} are sold or withdrawn.`
+                        : `Showing ${forSaleCount} of ${lots.length} lots — the sold and withdrawn are hidden.`}
+                    </span>
+                  )}
+                </div>
+              )}
               {/* Lots ticked to be sold to one buyer (#2050), one sale for all of them. */}
               {tickedLots.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0.75rem 0 0", fontSize: "0.8125rem" }}>
@@ -948,7 +982,7 @@ export function FacebookPostPanel({
                 </div>
               )}
               <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
-                {lots.map((lot, index) => {
+                {lotsInView.map((lot, index) => {
                   const { photos, caption } = lotKit(lot);
                   return (
                     <Fragment key={lot.offerId}>
@@ -989,7 +1023,7 @@ export function FacebookPostPanel({
                     </Fragment>
                   );
                 })}
-                {showLineAt(drag, lots.length) && <DropLine />}
+                {showLineAt(drag, lotsInView.length) && <DropLine />}
               </ol>
             </>
           )}
