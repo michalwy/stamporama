@@ -70,6 +70,13 @@ import { loadRealizationRatios, type RealizationRatio } from "./realization-rati
 // catalogue figure by the time a line reaches here, so the catalogue side needing no conversion is
 // a statement about *this* module rather than about the pipeline.
 //
+// **The catalogue route is also stated on its own** (#2087), for every line whether or not it has
+// results: `LineAnchor.fromCatalogue` is rungs 2–4 above with the market rung skipped. It feeds the
+// second, catalogue-only set of figures the *What to bid* panel shows beside the first when a line
+// was priced from results — so one thin result does not hide what the catalogue says. It is the
+// same function rung 2 itself goes through (`catalogueRoute`), not a second spelling of it, and it
+// never changes which anchor the line's own figure uses.
+//
 // **Ownership is evidence, never arithmetic** (ADR-0029 §7). How many copies are already held is
 // reported and does not move a figure: duplicates are bought deliberately for trade and resale, so
 // a system-applied haircut would under-bid the material a collector most wants.
@@ -113,6 +120,26 @@ export interface AnchorResult {
   soldAt: Date;
   /** Where it can be read: an observation's address. */
   url: string | null;
+}
+
+/**
+ * A line priced the catalogue's way **whether or not it has results** (#2087): catalogue value × the
+ * learned ratio, with a certificate's derived figure where that applies — exactly what the line's
+ * own anchor is when no result is recorded. In {@link LineAnchor.currency}.
+ */
+export interface CatalogueAnchor {
+  /** What **one** of them is worth by the catalogue — null when the catalogue prices it at nothing
+   * or in a currency with no rate. The lowest over the possible conditions while unsettled (#1623). */
+  anchor: number | null;
+  /** The highest over the possible conditions; equal to {@link anchor} on a settled line. */
+  anchorHigh: number | null;
+  /** The catalogue prices it, in a currency with no rate to this one. */
+  unconvertible: boolean;
+  /** The catalogue figure {@link ratio} multiplies, 2-dp — the derived one where {@link derivation}
+   * says so. */
+  catalogueValue: string | null;
+  ratio: RealizationRatio | null;
+  derivation: AnchorableDerivation | null;
 }
 
 /** One line, resolved: what anchors it, in what currency, and what is known about it. Carries no
@@ -169,6 +196,9 @@ export interface LineAnchor {
    * × 120%* — or, with `percent` null, the reason the line is unanchored. Null for a line anchored on
    * the market or on a recorded price. */
   derivation: AnchorableDerivation | null;
+  /** The line priced from the catalogue alone (#2087) — the same as the fields above on a line the
+   * catalogue anchors, and the figure results took the place of on a line the market anchors. */
+  fromCatalogue: CatalogueAnchor;
   /** Copies already held of this `stamp × condition` — shown, never computed with. */
   owned: number;
 }
@@ -297,6 +327,7 @@ function rangeOf(line: AnchorableLine, each: LineAnchor[]): LineAnchor {
     owned,
     conditions: each,
   };
+  const fromCatalogue = catalogueRangeOf(each.map((answer) => answer.fromCatalogue));
   if (anchored.length === 0) {
     const unconvertible = each.some((answer) => answer.unconvertible);
     const lead = each.find((answer) => answer.unconvertible) ?? each[0];
@@ -307,12 +338,35 @@ function rangeOf(line: AnchorableLine, each: LineAnchor[]): LineAnchor {
       anchorHigh: null,
       source: unconvertible ? (lead?.source ?? null) : null,
       unconvertible,
+      fromCatalogue,
     };
   }
   const low = anchored.reduce((a, b) => (b.anchor < a.anchor ? b : a));
   const high = anchored.reduce((a, b) => (b.anchor > a.anchor ? b : a));
-  return { ...low, ...identity, anchorHigh: high.anchor };
+  return { ...low, ...identity, anchorHigh: high.anchor, fromCatalogue };
 }
+
+/** The catalogue route over an unsettled line's conditions (#2087), by the rule {@link rangeOf}
+ * follows: the lowest and the highest that could be priced, the rest read off the low one. */
+function catalogueRangeOf(each: CatalogueAnchor[]): CatalogueAnchor {
+  const anchored = each.filter((answer): answer is CatalogueAnchor & { anchor: number } => answer.anchor !== null);
+  if (anchored.length === 0) {
+    const lead = each.find((answer) => answer.unconvertible) ?? each[0];
+    return { ...(lead ?? NO_CATALOGUE), anchor: null, anchorHigh: null };
+  }
+  const low = anchored.reduce((a, b) => (b.anchor < a.anchor ? b : a));
+  const high = anchored.reduce((a, b) => (b.anchor > a.anchor ? b : a));
+  return { ...low, anchorHigh: high.anchor };
+}
+
+const NO_CATALOGUE: CatalogueAnchor = {
+  anchor: null,
+  anchorHigh: null,
+  unconvertible: false,
+  catalogueValue: null,
+  ratio: null,
+  derivation: null,
+};
 
 /** A line with no possible condition at all — a collection with no conditions configured. */
 function emptyAnswer(line: AnchorableLine): LineAnchor {
@@ -338,6 +392,7 @@ function emptyAnswer(line: AnchorableLine): LineAnchor {
     catalogueValue: null,
     ratio: null,
     derivation: null,
+    fromCatalogue: NO_CATALOGUE,
     owned: 0,
   };
 }
@@ -507,6 +562,10 @@ function resolveLineAt(
   // The catalogue side is the composition's own figure: already in the sale's currency, already
   // rolled up. `unpriced` and `unconvertible` are kept apart there and stay apart here.
   const catalogueValue = line.unpriced || line.unconvertible ? null : line.unitValue;
+  // Worked out for every line, results or none (#2087): it is the line's anchor when no result is
+  // recorded, and the figure results took the place of when one is.
+  const { source: catalogueSource, ...catalogue } = catalogueRoute(line, context);
+  const fromCatalogue: CatalogueAnchor = { ...catalogue, anchorHigh: catalogue.anchor };
 
   if (market) {
     // A key with any datapoint is anchored on it, whatever the catalogue says. The median is in the
@@ -522,6 +581,7 @@ function resolveLineAt(
         catalogueValue,
         ratio: null,
         derivation: null,
+        fromCatalogue,
       };
     }
     return {
@@ -533,8 +593,28 @@ function resolveLineAt(
       catalogueValue,
       ratio: null,
       derivation: null,
+      fromCatalogue,
     };
   }
+
+  return {
+    ...identity,
+    ...catalogue,
+    source: catalogueSource,
+    market: null,
+    fromCatalogue,
+  };
+}
+
+/**
+ * Rungs 2–4 of the rule — the line priced from the catalogue, with the market rung skipped. The
+ * line's own anchor when it has no result, and its {@link LineAnchor.fromCatalogue} either way.
+ */
+function catalogueRoute(
+  line: SettledLine,
+  context: LineContext
+): Omit<CatalogueAnchor, "anchorHigh"> & { source: "catalogue" | null } {
+  const catalogueValue = line.unpriced || line.unconvertible ? null : line.unitValue;
 
   // No price at the certificate, one without it (#1636): the derived figure stands in for the
   // catalogue's, marked as such. Only ever for an unpriced line — a recorded price, even one with no
@@ -545,11 +625,9 @@ function resolveLineAt(
     // Neither route: counted and reported, never treated as zero (ADR-0029 §1). A status with no
     // percentage is one of these, and the derivation stays on the line to say so.
     return {
-      ...identity,
       anchor: null,
       source: null,
       unconvertible: false,
-      market: null,
       catalogueValue: null,
       ratio: null,
       derivation,
@@ -568,11 +646,9 @@ function resolveLineAt(
     // it is what the figure *would* be multiplied by, and hiding it would make the line look
     // unpriceable rather than unconvertible.
     return {
-      ...identity,
       anchor: null,
       source: "catalogue",
       unconvertible: true,
-      market: null,
       catalogueValue: null,
       ratio,
       derivation,
@@ -580,11 +656,9 @@ function resolveLineAt(
   }
 
   return {
-    ...identity,
     anchor: Number(derivedValue) * ratio.ratio,
     source: "catalogue",
     unconvertible: false,
-    market: null,
     catalogueValue: derivedValue,
     ratio,
     derivation,
@@ -606,4 +680,24 @@ export function toBidLines(lines: LineAnchor[]): BidLine[] {
     source: line.source ?? "catalogue",
     unconvertible: line.unconvertible,
   }));
+}
+
+/**
+ * The resolved lines priced from the catalogue alone (#2087) — every line at its
+ * {@link LineAnchor.fromCatalogue}, for the second set of figures beside the first.
+ */
+export function toCatalogueBidLines(lines: LineAnchor[]): BidLine[] {
+  return lines.map((line) => ({
+    quantity: line.quantity,
+    anchor: line.fromCatalogue.anchor,
+    anchorHigh: line.fromCatalogue.anchorHigh,
+    source: "catalogue",
+    unconvertible: line.fromCatalogue.unconvertible,
+  }));
+}
+
+/** Whether a line — or, while its condition is unsettled, any condition it may be in — was priced
+ * from recorded results (#2087): what makes the catalogue's own set worth showing beside the first. */
+export function pricedFromResults(line: LineAnchor): boolean {
+  return line.source === "market" || (line.conditions?.some(pricedFromResults) ?? false);
 }
