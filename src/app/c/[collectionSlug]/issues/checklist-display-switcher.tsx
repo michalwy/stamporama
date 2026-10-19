@@ -2,6 +2,7 @@
 
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TOOLBAR_LABEL_STYLE, TOOLBAR_SELECT_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 
 /**
  * How an expanded issue with several checklists shows its stamps (#1520).
@@ -38,28 +39,13 @@ export function ChecklistDisplaySwitcher({
   return (
     <Tooltip content="How an issue with several checklists shows its stamps once opened: each checklist as a branch of its own, or all in one list with a chip per checklist to narrow it.">
       <label
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.375rem",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-muted)",
-          whiteSpace: "nowrap",
-        }}
+        style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", whiteSpace: "nowrap" }}
       >
-        Checklists
+        <span style={TOOLBAR_LABEL_STYLE}>Checklists</span>
         <select
           value={value}
           onChange={(e) => onChange(e.target.value === "flat" ? "flat" : "tree")}
-          style={{
-            padding: "0.25rem 0.5rem",
-            border: "1px solid var(--color-border-strong)",
-            borderRadius: "0.375rem",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-primary)",
-            background: "var(--color-bg-elevated)",
-            cursor: "pointer",
-          }}
+          style={TOOLBAR_SELECT_STYLE}
         >
           <option value="tree">Tree</option>
           <option value="flat">Flat</option>

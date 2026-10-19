@@ -1,6 +1,7 @@
 "use client";
 
 import type { StampFormatData } from "@/lib/stamp-formats";
+import { TOOLBAR_LABEL_STYLE, TOOLBAR_SELECT_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 
 interface FormatPriceSwitcherProps {
   formats: StampFormatData[];
@@ -24,28 +25,13 @@ export function FormatPriceSwitcher({ formats, value, onChange }: FormatPriceSwi
 
   return (
     <label
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        fontSize: "0.8125rem",
-        color: "var(--color-text-muted)",
-        whiteSpace: "nowrap",
-      }}
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", whiteSpace: "nowrap" }}
     >
-      as
+      <span style={TOOLBAR_LABEL_STYLE}>as</span>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        style={{
-          padding: "0.25rem 0.5rem",
-          border: "1px solid var(--color-border-strong)",
-          borderRadius: "0.375rem",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-primary)",
-          background: "var(--color-bg-elevated)",
-          cursor: "pointer",
-        }}
+        style={TOOLBAR_SELECT_STYLE}
       >
         <option value="">Single</option>
         {formats.map((f) => (

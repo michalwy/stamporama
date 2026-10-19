@@ -734,81 +734,98 @@ export function IssuesListPanel({
               </div>
             ) : undefined
           }
-        >
-          <button
-            type="button"
-            onClick={() => openDialog({ kind: "create-issue" })}
-            style={{
-              padding: "0.375rem 0.875rem",
-              background: "var(--color-action-primary)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "0.375rem",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            + Add issue
-          </button>
-          {/* The bulk door onto the same thing (#716–#718): a whole country's catalogue typed in a
-              spreadsheet, rather than one issue at a time in the dialog beside it. Secondary, since
-              it is the rarer of the two. */}
-          <button
-            type="button"
-            onClick={() => openDialog({ kind: "import-catalog" })}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-              padding: "0.375rem 0.875rem",
-              background: "var(--color-bg-elevated)",
-              color: "var(--color-text-primary)",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <Icon name="import" size="sm" />
-            Import CSV
-          </button>
-          <ConditionPriceSwitcher
-            conditions={conditions}
-            value={displayConditionId}
-            onChange={setDisplayConditionId}
-          />
-          {/* Condition and format together name one cell of the price grid (#343); the format
-              control renders nothing at all when the collection defines no formats. */}
-          <FormatPriceSwitcher
-            formats={formats}
-            value={displayFormatId}
-            onChange={setDisplayFormatId}
-          />
-          <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
-          {/* Specialised checklists (#1617): out of every chip, branch, badge and total until on. */}
-          <SpecialisedChecklistsToggle />
-          {/* The collector's own labels (#1182). The **issue's** tags: nothing is inherited, so an
-              issue matches on what is hung on it and never on what is hung on the stamps inside
-              it — and the expanded tree under a matching row is left exactly as it was, because a
-              filter about issues has nothing to say about which variants are worth showing. */}
-          <TagFilterControl
-            collectionId={collectionId}
-            tagIds={tagFilter.tagIds ?? []}
-            mode={tagFilter.tagMode ?? DEFAULT_TAG_FILTER_MODE}
-            onChange={({ tagIds, mode }) =>
-              updateParams({
-                tagIds: tagIds.join(","),
-                // The mode rides only with the ids: a cleared filter leaves no stale word behind,
-                // and *any* — the default — is never spelled out.
-                tagMode: tagIds.length > 0 && mode === "all" ? "all" : "",
-              })
-            }
-          />
-        </ListToolbar>
+          /* The bar in four groups, in the collector's order (#2086): search, then what narrows the
+             list — the catalogue search the toolbar draws first, the issue's tags, the specialised
+             switch — then how it is shown, then the actions at the right end, as on the Copies list
+             (#846/#847). It wraps between groups, never inside one. */
+          filters={
+            <>
+              {/* The collector's own labels (#1182). The **issue's** tags: nothing is inherited, so
+                  an issue matches on what is hung on it and never on what is hung on the stamps
+                  inside it — and the expanded tree under a matching row is left exactly as it was,
+                  because a filter about issues has nothing to say about which variants are worth
+                  showing. */}
+              <TagFilterControl
+                collectionId={collectionId}
+                tagIds={tagFilter.tagIds ?? []}
+                mode={tagFilter.tagMode ?? DEFAULT_TAG_FILTER_MODE}
+                onChange={({ tagIds, mode }) =>
+                  updateParams({
+                    tagIds: tagIds.join(","),
+                    // The mode rides only with the ids: a cleared filter leaves no stale word
+                    // behind, and *any* — the default — is never spelled out.
+                    tagMode: tagIds.length > 0 && mode === "all" ? "all" : "",
+                  })
+                }
+              />
+              {/* Specialised checklists (#1617): out of every chip, branch, badge and total until
+                  on. A toggle chip among the filters, where it reads as one, rather than beside the
+                  selects of the view (#2086). */}
+              <SpecialisedChecklistsToggle />
+            </>
+          }
+          view={
+            <>
+              <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
+              {/* Condition and format together name one cell of the price grid (#343), so they
+                  read as one phrase — *Price for … as …* — and stay on one line. The format control
+                  renders nothing at all when the collection defines no formats. */}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                <ConditionPriceSwitcher
+                  conditions={conditions}
+                  value={displayConditionId}
+                  onChange={setDisplayConditionId}
+                />
+                <FormatPriceSwitcher
+                  formats={formats}
+                  value={displayFormatId}
+                  onChange={setDisplayFormatId}
+                />
+              </span>
+            </>
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => openDialog({ kind: "create-issue" })}
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  color: "#fff",
+                  background: "var(--color-action-primary)",
+                  border: "none",
+                  padding: "0.375rem 0.875rem",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + Add issue
+              </button>
+              {/* The bulk door onto the same thing (#716–#718): a whole country's catalogue typed in
+                  a spreadsheet, rather than one issue at a time in the dialog beside it. Secondary,
+                  since it is the rarer of the two. */}
+              <button
+                type="button"
+                onClick={() => openDialog({ kind: "import-catalog" })}
+                style={{
+                  ...FILTER_CONTROL_STYLE,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  color: "var(--color-text-secondary)",
+                  padding: "0.375rem 0.875rem",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <Icon name="import" size="sm" />
+                Import CSV
+              </button>
+            </>
+          }
+        />
 
         {/* Issues list */}
         {isLoading && (
