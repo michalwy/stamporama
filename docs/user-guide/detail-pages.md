@@ -73,8 +73,8 @@ records you were last on are listed under it; see
 
 ## The copy page
 
-*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Wants, Purchase, Sale,
-Offers. Only Details is always there; the rest appear when the copy has them.
+*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Wants, Other copies of
+this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
   page), and its catalog numbers. At the end of the line, **Edit** opens the copy form — the same one
@@ -103,6 +103,15 @@ Offers. Only Details is always there; the rest appear when the copy has them.
   on the want list as closed) or **Delete** it (permanently, after a confirmation). Its terms are
   still edited on the want list. Not shown on a piece carrying several stamps. See
   [On the stamp's and the copy's own pages](wants.md#on-the-stamps-and-the-copys-own-pages).
+- **Other copies of this stamp** — the other copies you hold of the same stamp, in the same rows
+  as the stamp page's **Copies** card (photo, copy number, condition, certificate, format, faults,
+  disposition, location), so the better keeper or the duplicate to sell is found without leaving the
+  page. Click a row to open that copy's page. These are the copies the stamp's own count includes:
+  ones still on their way or waiting to be sorted are listed, each row saying so; sold, disposed,
+  lost and damaged copies are not. Copies of the stamp's **variants** are not listed — a line under
+  the card says how many there are and links to the stamp page, where they are. The card is not
+  shown when there is no other copy, nor on a piece carrying several stamps (or one whose possible
+  stamps lie in different variant trees), which is no one stamp's copy.
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
   the line price, the copy's share of the net proceeds, its cost basis and the profit or loss on it
