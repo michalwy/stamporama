@@ -32,6 +32,10 @@ import {
 //     was **derived** from the price without it × the status's percentage (#1636)
 //   - how many copies of each line are **already held** — evidence, never arithmetic (ADR-0029 §7)
 //   - the unanchored and unconvertible line counts, so a partial total never reads as complete
+//   - when some line was priced from results, **a second set of the three levels from the catalogue
+//     alone** beside the first (#2087), each as clickable, and under each such line what the
+//     catalogue would have made of it — so one thin result does not hide the catalogue's view. The
+//     first set stays the recommendation: the row's *Recommended*, *Bid this* and ⋮ entries read it.
 //
 // Portalled and fixed-positioned like `RowActionsMenu`, for the same reason: the lists it opens
 // over clip their overflow, and an ended row is drawn at `opacity: 0.6`, which would otherwise trap
@@ -102,6 +106,17 @@ function percent(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
 }
 
+/** One level as one set states it: the figure, its top while a condition is unsettled, and how to
+ * bid it. */
+interface LevelSet {
+  level: { allIn: string; bid: string | null } | null;
+  /** The top of the range while a line's condition is not settled (#1623) — stated, never bid. */
+  high?: { allIn: string; bid: string | null } | null;
+  onPick?: (level: { allIn: string; bid: string }) => void;
+  /** How the set is named in the button's label when there are two (#2087). */
+  name?: string;
+}
+
 /**
  * One of the three levels: what the lot is worth all-in, and the bid that fits inside it.
  *
@@ -110,36 +125,70 @@ function percent(ratio: number): string {
  * level whose fees alone eat the figure has **no** bid behind it, which is a real answer and reads
  * as one rather than as a zero.
  *
- * The whole row is **one button** that bids this level (#1515): the hammer price that fits inside
- * it, with the ceiling following that bid. Not the two figures separately — they are one figure
- * stated twice. `onPick` is absent on a settled or closed lot, where the figures are still worth
- * reading and nothing here may be written, and a level whose fees alone eat it has no bid to place.
+ * With one set, the whole row is **one button** that bids this level (#1515): the hammer price that
+ * fits inside it, with the ceiling following that bid. Not the two figures separately — they are one
+ * figure stated twice. With two (#2087) each set's pair is a button of its own beside the label.
+ * `onPick` is absent on a settled or closed lot, where the figures are still worth reading and
+ * nothing here may be written, and a level whose fees alone eat it has no bid to place.
  */
 function LevelRow({
   label,
   hint,
-  level,
-  high = null,
+  sets,
   emphasis,
-  onPick,
 }: {
   label: string;
   /** The percentage of `fair` this level was taken at; absent on `fair` itself. */
   hint?: string;
-  level: { allIn: string; bid: string | null } | null;
-  /** The top of the range while a line's condition is not settled (#1623) — stated, never bid. */
-  high?: { allIn: string; bid: string | null } | null;
+  sets: LevelSet[];
   emphasis?: boolean;
-  onPick?: (level: { allIn: string; bid: string }) => void;
+}) {
+  const labelCell = (
+    <span style={{ ...MUTED, justifySelf: "start", whiteSpace: "nowrap" }}>
+      {label}
+      {hint && <span style={{ marginLeft: "0.3rem", opacity: 0.75 }}>{hint}</span>}
+    </span>
+  );
+
+  if (sets.length === 1) {
+    return (
+      <LevelCells set={sets[0]} label={label} emphasis={emphasis} span="1 / -1">
+        {labelCell}
+      </LevelCells>
+    );
+  }
+  return (
+    <>
+      {labelCell}
+      {sets.map((set, i) => (
+        <LevelCells key={i} set={set} label={label} emphasis={emphasis} span="span 2" />
+      ))}
+    </>
+  );
+}
+
+/** One set's two figures for a level — a button over `span` of the grid's tracks when it can be
+ * bid, bare cells on the same tracks when it cannot. `children` leads it: the label, when the whole
+ * row is the one button. */
+function LevelCells({
+  set,
+  label,
+  emphasis,
+  span,
+  children,
+}: {
+  set: LevelSet;
+  label: string;
+  emphasis?: boolean;
+  span: string;
+  children?: React.ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { level, high = null, onPick } = set;
   const pickable = level !== null && level.bid !== null && onPick !== undefined;
   const cells = (
     <>
-      <span style={{ ...MUTED, justifySelf: "start", whiteSpace: "nowrap" }}>
-        {label}
-        {hint && <span style={{ marginLeft: "0.3rem", opacity: 0.75 }}>{hint}</span>}
-      </span>
+      {children}
       <span style={emphasis ? AMOUNT : { ...AMOUNT, fontWeight: 500 }}>
         {level?.allIn ?? "—"}
         {high && level ? <span style={{ fontWeight: 500, color: "var(--color-text-muted)" }}>–{high.allIn}</span> : null}
@@ -151,24 +200,24 @@ function LevelRow({
   );
 
   if (!pickable) {
-    // Laid out as a plain row, on the same three tracks. `display: contents` is what lets a level be
-    // a button in one state and three bare cells in the other without either drawing a grid of its
-    // own inside the panel's.
+    // Laid out as plain cells, on the same tracks. `display: contents` is what lets a level be a
+    // button in one state and bare cells in the other without either drawing a grid of its own
+    // inside the panel's.
     return <div style={{ display: "contents" }}>{cells}</div>;
   }
   // No `Tooltip` here, deliberately: it wraps its trigger in a span of its own, which would become
   // the grid item and take the subgrid alignment with it. The invitation to click is stated once
-  // under the three of them instead, which is where it belongs anyway.
+  // under the levels instead, which is where it belongs anyway.
   return (
     <button
       type="button"
-      aria-label={`Bid the ${label} figure, ${level.bid}`}
+      aria-label={`Bid the ${label} figure${set.name ? ` ${set.name}` : ""}, ${level.bid}`}
       onClick={() => onPick({ allIn: level.allIn, bid: level.bid! })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "grid",
-        gridColumn: "1 / -1",
+        gridColumn: span,
         gridTemplateColumns: "subgrid",
         alignItems: "baseline",
         justifyItems: "end",
@@ -201,12 +250,63 @@ function LineEvidence({
   // Results from markets that do not anchor the stamp's area (#1634): never in the figure, and said
   // so, so a line anchored on the catalogue does not hide that something was sold abroad.
   const hints = line.hintMarkets;
-  if (hints.length === 0) return <AnchorEvidence line={line} baseCurrency={baseCurrency} />;
+  // A line priced from results says what the catalogue would have made of it (#2087) — the figure
+  // the catalogue set counts it at — so a gap between the two sets can be traced to a line.
+  const fromCatalogue = line.source === "market";
+  if (hints.length === 0 && !fromCatalogue) return <AnchorEvidence line={line} baseCurrency={baseCurrency} />;
   return (
     <span style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
       <AnchorEvidence line={line} baseCurrency={baseCurrency} />
-      <span style={MUTED}>not counted, other markets: {formatMarketCounts(hints)}</span>
+      {fromCatalogue && <CatalogueRouteEvidence line={line} />}
+      {hints.length > 0 && (
+        <span style={MUTED}>not counted, other markets: {formatMarketCounts(hints)}</span>
+      )}
     </span>
+  );
+}
+
+/** What the catalogue makes of a line that results priced (#2087), with its total — or why the
+ * catalogue set leaves it out. */
+function CatalogueRouteEvidence({ line }: { line: LineAnchorView }) {
+  const route = line.fromCatalogue;
+  if (route.unconvertible) {
+    return <span style={MUTED}>from the catalogue: no {line.currency} rate — not in the catalogue figures</span>;
+  }
+  if (route.anchor === null || route.ratio === null) {
+    return (
+      <span style={MUTED}>
+        from the catalogue: {route.derivation ? `no ${route.derivation.certificate} price` : "no catalogue price"}{" "}
+        — not in the catalogue figures
+      </span>
+    );
+  }
+  return (
+    <span style={MUTED}>
+      from the catalogue: <CatalogueSentence route={{ ...route, ratio: route.ratio }} /> = {(route.anchor * line.quantity).toFixed(2)}
+    </span>
+  );
+}
+
+/** `catalogue 12.00 × 55% — bucket, n = 6`, with a certificate's derivation where there is one. */
+function CatalogueSentence({
+  route,
+}: {
+  route: Pick<LineAnchorView, "catalogueValue" | "derivation"> & {
+    ratio: NonNullable<LineAnchorView["ratio"]>;
+  };
+}) {
+  const derivation = route.derivation;
+  return (
+    <>
+      catalogue {route.catalogueValue ?? "—"} × {percent(route.ratio.ratio)} — {route.ratio.bucketLabel}
+      {route.ratio.n > 0 ? `, n = ${route.ratio.n}` : ", nothing learned yet"}
+      {derivation && derivation.percent !== null && (
+        <>
+          {" "}· derived: no {derivation.certificate} price, None {derivation.plainUnitValue ?? "—"} ×{" "}
+          {derivation.percent}%
+        </>
+      )}
+    </>
   );
 }
 
@@ -239,15 +339,7 @@ function AnchorEvidence({
   if (line.source === "catalogue" && line.ratio) {
     return (
       <span style={MUTED}>
-        catalogue {line.catalogueValue ?? "—"} × {percent(line.ratio.ratio)} —{" "}
-        {line.ratio.bucketLabel}
-        {line.ratio.n > 0 ? `, n = ${line.ratio.n}` : ", nothing learned yet"}
-        {derivation && derivation.percent !== null && (
-          <>
-            {" "}· derived: no {derivation.certificate} price, None{" "}
-            {derivation.plainUnitValue ?? "—"} × {derivation.percent}%
-          </>
-        )}
+        <CatalogueSentence route={{ ...line, ratio: line.ratio }} />
       </span>
     );
   }
@@ -355,6 +447,25 @@ function gapSentence(recommendation: AuctionLotBidEvidenceView["recommendation"]
 }
 
 /**
+ * The lines the catalogue set leaves out, **by name** (#2087) — the set exists to be weighed against
+ * the first, and a short catalogue total has to say which line it is short of.
+ */
+function catalogueGapSentence(data: AuctionLotBidEvidenceView): string | null {
+  const name = (line: AuctionLotBidEvidenceView["lines"][number]) =>
+    line.catalogLabel ?? line.stampName ?? "Unnamed stamp";
+  const unpriced = data.lines.filter((line) => line.fromCatalogue.anchor === null && !line.fromCatalogue.unconvertible);
+  const unconvertible = data.lines.filter((line) => line.fromCatalogue.unconvertible);
+  const gaps: string[] = [];
+  if (unpriced.length > 0) gaps.push(`no catalogue price for ${unpriced.map(name).join(", ")}`);
+  if (unconvertible.length > 0) gaps.push(`no ${data.currency} rate for ${unconvertible.map(name).join(", ")}`);
+  if (gaps.length === 0) return null;
+  return `Not counted from the catalogue: ${gaps.join("; ")}.`;
+}
+
+/** Which set a level was bid from — the results set is the recommendation and needs no word. */
+export type BidLevelSource = "results" | "catalogue";
+
+/**
  * The recommendation cell on the row, and the panel it opens.
  *
  * The trigger is the figure itself — `children` — so the way in is a number that is **already on
@@ -380,8 +491,13 @@ export function BidRecommendationPopover({
    * Bid a level (#1515) — `name` is the level's own word, for the undo that follows. Omitted on a
    * settled or closed lot, where the figures are still worth reading and nothing may be written —
    * the panel then renders its three levels as plain rows rather than as buttons that would refuse.
+   * `from` says which set the level was taken from when there are two (#2087).
    */
-  onPickLevel?: (name: "floor" | "fair" | "walkAway", level: { allIn: string; bid: string }) => void;
+  onPickLevel?: (
+    name: "floor" | "fair" | "walkAway",
+    level: { allIn: string; bid: string },
+    from: BidLevelSource
+  ) => void;
   /** What the cell shows: the fair figure, as the row draws its amounts. */
   children: React.ReactNode;
 }) {
@@ -437,11 +553,35 @@ export function BidRecommendationPopover({
   /** Taking a level **closes the panel**: the decision it was opened for has been made, and a panel
    * left standing over the row would hide the bid it just wrote. */
   const pick = onPickLevel
-    ? (name: "floor" | "fair" | "walkAway") => (level: { allIn: string; bid: string }) => {
-        onPickLevel(name, level);
-        setOpen(false);
-      }
+    ? (name: "floor" | "fair" | "walkAway", from: BidLevelSource = "results") =>
+        (level: { allIn: string; bid: string }) => {
+          onPickLevel(name, level, from);
+          setOpen(false);
+        }
     : undefined;
+
+  // The catalogue's own set (#2087), present only when some line was priced from results — without
+  // one it would repeat the first. Each level then reads as two sets side by side.
+  const catalogue = data?.catalogueRecommendation ?? null;
+  const levelSets = (name: "floor" | "fair" | "walkAway"): LevelSet[] => {
+    if (!data) return [];
+    const results: LevelSet = {
+      level: data.recommendation[name],
+      high: data.recommendation.high?.[name] ?? null,
+      onPick: pick?.(name),
+      name: catalogue ? "from results" : undefined,
+    };
+    if (!catalogue) return [results];
+    return [
+      results,
+      {
+        level: catalogue[name],
+        high: catalogue.high?.[name] ?? null,
+        onPick: pick?.(name, "catalogue"),
+        name: "from the catalogue",
+      },
+    ];
+  };
 
   return (
     <>
@@ -496,7 +636,7 @@ export function BidRecommendationPopover({
             ref={panelRef}
             role="dialog"
             aria-label="Bid recommendation"
-            style={{ ...PANEL, ...placement, zIndex: PANEL_Z_INDEX }}
+            style={{ ...PANEL, ...(catalogue ? { width: "40rem" } : null), ...placement, zIndex: PANEL_Z_INDEX }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
@@ -521,45 +661,48 @@ export function BidRecommendationPopover({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr auto auto",
+                    gridTemplateColumns: catalogue ? "1fr auto auto auto auto" : "1fr auto auto",
                     columnGap: "1rem",
                     rowGap: "0.25rem",
                     justifyItems: "end",
                     alignItems: "baseline",
                   }}
                 >
+                  {/* Each set labelled with its source when there are two (#2087): the first is
+                      the recommendation, the second what the catalogue alone says. */}
+                  {catalogue && (
+                    <>
+                      <span />
+                      <span style={{ ...HEAD, gridColumn: "span 2", justifySelf: "center" }}>from results</span>
+                      <span style={{ ...HEAD, gridColumn: "span 2", justifySelf: "center" }}>from catalogue</span>
+                    </>
+                  )}
                   <span />
                   <span style={HEAD}>all-in</span>
                   <span style={HEAD}>bid</span>
-                  <LevelRow
-                    label="floor"
-                    hint={`${data.band.bidFloorPercent}%`}
-                    level={data.recommendation.floor}
-                    high={data.recommendation.high?.floor ?? null}
-                    onPick={pick?.("floor")}
-                  />
-                  <LevelRow
-                    label="fair"
-                    level={data.recommendation.fair}
-                    high={data.recommendation.high?.fair ?? null}
-                    emphasis
-                    onPick={pick?.("fair")}
-                  />
-                  <LevelRow
-                    label="walk-away"
-                    hint={`${data.band.bidCeilingPercent}%`}
-                    level={data.recommendation.walkAway}
-                    high={data.recommendation.high?.walkAway ?? null}
-                    onPick={pick?.("walkAway")}
-                  />
+                  {catalogue && (
+                    <>
+                      <span style={HEAD}>all-in</span>
+                      <span style={HEAD}>bid</span>
+                    </>
+                  )}
+                  <LevelRow label="floor" hint={`${data.band.bidFloorPercent}%`} sets={levelSets("floor")} />
+                  <LevelRow label="fair" sets={levelSets("fair")} emphasis />
+                  <LevelRow label="walk-away" hint={`${data.band.bidCeilingPercent}%`} sets={levelSets("walkAway")} />
                 </div>
 
                 {/* Said once, under all three, rather than as a hint on each: which level to take is
                     one decision, and three copies of the same sentence would read as three. */}
-                {pick && data.recommendation.fair !== null && (
+                {pick && (data.recommendation.fair !== null || catalogue?.fair) && (
                   <span style={MUTED}>Click a figure to bid it — your ceiling follows the bid.</span>
                 )}
-                {data.recommendation.high && (
+                {catalogue && (
+                  <span style={MUTED}>
+                    The catalogue set prices every line from its catalogue value, results or none. The
+                    recommendation stays the set from results.
+                  </span>
+                )}
+                {(data.recommendation.high || catalogue?.high) && (
                   <span style={MUTED}>
                     Some line&rsquo;s condition is still to settle, so each figure is a range from its
                     lowest condition to its highest. A click bids the low end.
@@ -601,6 +744,12 @@ export function BidRecommendationPopover({
                   <>
                     <div style={RULE} />
                     <span style={MUTED}>{gapSentence(data.recommendation)}</span>
+                  </>
+                )}
+                {catalogue && catalogueGapSentence(data) && (
+                  <>
+                    {!gapSentence(data.recommendation) && <div style={RULE} />}
+                    <span style={MUTED}>{catalogueGapSentence(data)}</span>
                   </>
                 )}
               </>

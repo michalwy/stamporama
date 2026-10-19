@@ -1,8 +1,14 @@
 import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { resolveAuctionLotAnchors, toBidLines } from "../../src/lib/auction-lot-anchors";
+import {
+  pricedFromResults,
+  resolveAuctionLotAnchors,
+  toBidLines,
+  toCatalogueBidLines,
+} from "../../src/lib/auction-lot-anchors";
 import { recommendBid } from "../../src/lib/bid-recommendation";
+import { getAuctionLotBidEvidence } from "../../src/lib/bid-recommendations";
 
 // Auction lot line anchors (#510; ADR-0029 §1, §5, §7) and the learned ratio behind them (#520).
 //
@@ -331,6 +337,58 @@ describe("auction lot line anchors (#510)", () => {
     assert.equal(recommendation.catalogueLines, 1);
     assert.equal(recommendation.unanchoredLines, 1);
     assert.equal(recommendation.unconvertibleLines, 0);
+  });
+
+  it("prices every line from the catalogue as well, for the second set of figures (#2087)", async () => {
+    const saleId = await sale();
+    await lot({ saleId, finalPrice: "30.00", lines: [{ stampId: recordedStampId }] });
+    const targetId = await lot({
+      saleId,
+      status: "open",
+      lines: [
+        { stampId: recordedStampId, quantity: 2 },
+        { stampId: plainStampId },
+        { stampId: unknownStampId },
+      ],
+    });
+
+    const lines = (await resolveAuctionLotAnchors(collectionId, [targetId])).get(targetId)!.lines;
+    const recorded = lines.find((l) => l.stampId === recordedStampId)!;
+    const plain = lines.find((l) => l.stampId === plainStampId)!;
+    const unknown = lines.find((l) => l.stampId === unknownStampId)!;
+
+    // The line's own anchor is still the result; the catalogue route is stated beside it.
+    assert.equal(recorded.source, "market");
+    assert.equal(recorded.anchor, 30);
+    assert.equal(recorded.ratio, null);
+    assert.equal(recorded.fromCatalogue.catalogueValue, "50.00");
+    assert.ok(recorded.fromCatalogue.ratio);
+    assert.equal(recorded.fromCatalogue.anchor, 50 * recorded.fromCatalogue.ratio.ratio);
+    // A line the catalogue already anchors reads the same either way, and one it cannot price is
+    // unpriced in the catalogue set too.
+    assert.equal(plain.fromCatalogue.anchor, plain.anchor);
+    assert.equal(unknown.fromCatalogue.anchor, null);
+    assert.equal(unknown.fromCatalogue.unconvertible, false);
+
+    const band = { bidFloorPercent: 75, bidCeilingPercent: 125 };
+    const catalogueSet = recommendBid(toCatalogueBidLines(lines), band);
+    assert.equal(catalogueSet.marketLines, 0);
+    assert.equal(catalogueSet.catalogueLines, 2);
+    assert.equal(catalogueSet.unanchoredLines, 1);
+    assert.equal(
+      catalogueSet.fair?.allIn,
+      (2 * recorded.fromCatalogue.anchor! + plain.anchor!).toFixed(2)
+    );
+
+    // The evidence read carries it only when some line was priced from results.
+    assert.ok(lines.some(pricedFromResults));
+    const evidence = await getAuctionLotBidEvidence(userId, targetId);
+    assert.equal(evidence?.catalogueRecommendation?.fair?.allIn, catalogueSet.fair?.allIn);
+    assert.equal(evidence?.recommendation.fair?.allIn, (2 * 30 + plain.anchor!).toFixed(2));
+
+    const catalogueOnly = await lot({ saleId, status: "open", lines: [{ stampId: plainStampId }] });
+    const plainEvidence = await getAuctionLotBidEvidence(userId, catalogueOnly);
+    assert.equal(plainEvidence?.catalogueRecommendation, null);
   });
 
   it("resolves a whole page of lots in one pass", async () => {

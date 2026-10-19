@@ -5,8 +5,10 @@ import type { AuctionFees } from "./auction-lot";
 import {
   anchorLine,
   loadAnchorContext,
+  pricedFromResults,
   resolveAuctionLotAnchors,
   toBidLines,
+  toCatalogueBidLines,
   type AuctionLotLineAnchor,
   type LineAnchor,
 } from "./auction-lot-anchors";
@@ -174,6 +176,14 @@ export interface AuctionLotBidEvidence {
    * than leave two figures whose relationship to `fair` has to be inferred. */
   band: BidBandPercents;
   recommendation: BidRecommendation;
+  /**
+   * The same three figures with every line priced **from the catalogue** (#2087) — catalogue × the
+   * learned ratio, results or none — so one thin result does not hide what the catalogue says.
+   * **Null unless some line was priced from results**: without one it would only repeat
+   * {@link recommendation}. Shown beside it and bid from the panel only; {@link recommendation}
+   * stays the one the row recommends and the agent API answers with.
+   */
+  catalogueRecommendation: BidRecommendation | null;
   /** One per composition line, in the composition's own order. Carries what anchored it and the
    * evidence behind that — the whole point of the popover being that every figure on it can be
    * traced back to something recorded. */
@@ -220,6 +230,9 @@ export async function getAuctionLotBidEvidence(
     baseCurrency: resolved.baseCurrency,
     band,
     recommendation: recommendBid(toBidLines(resolved.lines), band, fees),
+    catalogueRecommendation: resolved.lines.some(pricedFromResults)
+      ? recommendBid(toCatalogueBidLines(resolved.lines), band, fees)
+      : null,
     lines: resolved.lines,
   };
 }

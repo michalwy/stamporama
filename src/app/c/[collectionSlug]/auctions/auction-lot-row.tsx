@@ -49,6 +49,7 @@ import { AmountWithBase } from "./auction-base-amount";
 import {
   BidRecommendationPopover,
   RECOMMENDATION_CARET_SLOT,
+  type BidLevelSource,
 } from "./bid-recommendation-popover";
 import { Icon } from "@/app/icons";
 import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -396,6 +397,14 @@ const LEVEL_LABEL: Record<BidLevelKey, string> = {
   walkAway: "walk-away",
 };
 
+/** The same levels when bid from the catalogue's own set in the panel (#2087) — named apart, since
+ * only the set from results is *the* recommendation. */
+const CATALOGUE_LEVEL_LABEL: Record<BidLevelKey, string> = {
+  floor: "bargain floor from the catalogue",
+  fair: "fair figure from the catalogue",
+  walkAway: "walk-away from the catalogue",
+};
+
 /** The `⋮` entries for the three levels — verbs, where {@link LEVEL_LABEL} names the figure. */
 const LEVEL_MENU_LABEL: Record<BidLevelKey, string> = {
   floor: "Bid the bargain floor",
@@ -707,13 +716,13 @@ export function AuctionLotRow({
    * replaced may have been typed by hand and one click should not cost it for good. The undo puts
    * both figures back exactly as they were on screen.
    */
-  function bidLevel(which: BidLevelKey, level: { allIn: string; bid: string }) {
+  function bidLevel(which: BidLevelKey, level: { allIn: string; bid: string }, from: BidLevelSource = "results") {
     const before = { myBid: myBid ?? "", maxBid: maxBid ?? "" };
     setPendingMine({ value: level.bid, was: lot.myBid });
     setPendingMax({ value: null, was: lot.maxBid });
     onSetBidAndCeiling(lot, level.bid, "");
     toast({
-      message: `Bid ${level.bid} ${lot.currency} on ${lotLabel(lot)} — the ${LEVEL_LABEL[which]}, ${level.allIn} all-in`,
+      message: `Bid ${level.bid} ${lot.currency} on ${lotLabel(lot)} — the ${(from === "catalogue" ? CATALOGUE_LEVEL_LABEL : LEVEL_LABEL)[which]}, ${level.allIn} all-in`,
       action: {
         label: "Undo",
         onSelect: () => {

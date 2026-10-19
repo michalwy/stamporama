@@ -1081,6 +1081,27 @@ evidence is — which is why the panel is where it is made: the results it is bu
 same screen. The row's own *Bid this* stays on **fair**, so a row you are only scanning still has
 exactly one answer on it.
 
+### A second set from the catalogue
+
+When any line of the lot is priced from **recorded results**, the panel shows the three figures
+twice, side by side: **from results** — the recommendation, worked out as described below — and
+**from catalogue**, where every line is priced from its catalogue value times the learned percentage
+(with a certificate's derived price where that applies) whether it has results or not. One thin
+result — *1 result, medium confidence* — then no longer hides what the catalogue says, and you can
+weigh one against the other.
+
+- Both sets are all-in with the hammer bid beside each, under the same floor and walk-away
+  percentages, and **any figure in either set can be clicked to bid it**; the toast names a figure
+  taken from the catalogue set as such (*the walk-away from the catalogue*).
+- Each line priced from results says, under its market evidence, what the catalogue makes of it —
+  *from the catalogue: catalogue 50.00 × 55% — … = 27.50* — so a gap between the two sets can be
+  traced to a line.
+- A line with no catalogue price is left out of the catalogue set and **named** at the foot of the
+  panel: *Not counted from the catalogue: no catalogue price for Mi·PL 12*.
+- The set from results **stays the recommendation**: the row's **Recommended** block, **Bid this**
+  and the ⋮ entries use it. The catalogue set is bid from the panel only.
+- A lot none of whose lines has a result shows one set, as before — the second would only repeat it.
+
 ### Where each line's figure comes from
 
 Every line of the composition is priced **on its own**, because one lot routinely mixes a stamp you
