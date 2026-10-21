@@ -33,6 +33,8 @@ import { issueLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shar
 import { AuctionLotRow } from "../../auction-lot-row";
 import { BaseAmount } from "../../auction-base-amount";
 import { AuctionLotLineDialog } from "../../auction-lot-line-dialog";
+import { AuctionLotCatalogValuesDialog } from "../../auction-lot-catalog-values-dialog";
+import { FillCatalogueValuesButton } from "../../fill-catalogue-values-button";
 import type { AuctionLotDetailView } from "../../use-auctions-query";
 import { AuctionLotLineRow } from "./auction-lot-line-row";
 import { Icon, type IconName } from "@/app/icons";
@@ -390,6 +392,8 @@ interface LotCardProps {
   ctx: LineCtx;
   onToggle: () => void;
   onStartAdd: () => void;
+  /** Open *Fill catalogue values* (#2094) over this lot's unpriced lines. */
+  onFillValues: () => void;
   onEditLot: (lot: AuctionLotDetailView) => void;
   onDeleteLot: (lot: AuctionLotDetailView) => void;
   onSetBid: (lot: AuctionLotDetailView, value: string) => void;
@@ -415,6 +419,7 @@ function LotCard({
   ctx,
   onToggle,
   onStartAdd,
+  onFillValues,
   onEditLot,
   onDeleteLot,
   onSetBid,
@@ -526,7 +531,15 @@ function LotCard({
 
           {/* A lot marked not stamps (#1624) takes no lines — a line is a stamp. */}
           {editable && !lot.notStamps && (
-            <div style={{ padding: "0.625rem 1.25rem", borderTop: "1px solid var(--color-border)" }}>
+            <div
+              style={{
+                padding: "0.625rem 1.25rem",
+                borderTop: "1px solid var(--color-border)",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+              }}
+            >
               <button
                 type="button"
                 onClick={onStartAdd}
@@ -543,6 +556,9 @@ function LotCard({
               >
                 + Add line
               </button>
+              {/* Over the lot's own lines, in its own order — not the card's filtered and sorted
+                  view of them: the values asked for are the lot's, whatever the toolbar shows. */}
+              <FillCatalogueValuesButton lines={lot.lines} onClick={onFillValues} />
             </div>
           )}
 
@@ -683,6 +699,8 @@ export function AuctionLotCardsView({
   const [priceError, setPriceError] = useState<string | undefined>();
   /** Which line's stamp the Valuation dialog is open on (#601). */
   const [valuationStampId, setValuationStampId] = useState<string | null>(null);
+  /** The lot *Fill catalogue values* (#2094) is open on. */
+  const [fillingLot, setFillingLot] = useState<AuctionLotDetailView | null>(null);
   const [linePending, startLineTransition] = useTransition();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -943,6 +961,7 @@ export function AuctionLotCardsView({
                 setFormError(undefined);
                 setDraft({ lotId: lot.id, value: "add" });
               }}
+              onFillValues={() => setFillingLot(lot)}
               onEditLot={onEditLot}
               onDeleteLot={onDeleteLot}
               onSetBid={onSetBid}
@@ -1063,6 +1082,18 @@ export function AuctionLotCardsView({
               }
             });
           }}
+        />
+      )}
+
+      {fillingLot && (
+        <AuctionLotCatalogValuesDialog
+          collectionId={collectionId}
+          lines={fillingLot.lines}
+          areaNameById={areaNameById}
+          primaryVendorByArea={primaryVendorByArea}
+          vendorMapFor={vendorMapFor}
+          onClose={() => setFillingLot(null)}
+          onSaved={() => onChanged()}
         />
       )}
 

@@ -58,6 +58,7 @@ export function PhotoThumb({
   plain = false,
   reserveWhenEmpty = false,
   size = DEFAULT_THUMB_SIZE,
+  tabIndex,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
@@ -70,6 +71,9 @@ export function PhotoThumb({
   /** Edge length of the (square) thumbnail. Taller rows (inventory copies) pass a larger value
    * so the preview doesn't sit short against the row. */
   size?: string;
+  /** `-1` takes the thumbnail's controls out of the Tab order — a list typed down with Tab (#2094),
+   * where the picture is looked at and never a stop between two values. */
+  tabIndex?: number;
 }) {
   // Index of the photo shown in the thumbnail; also the lightbox's starting photo.
   const [index, setIndex] = useState(0);
@@ -143,6 +147,7 @@ export function PhotoThumb({
           <button
             type="button"
             onClick={() => setLightbox(true)}
+            tabIndex={tabIndex}
             aria-label={`View ${roleLabel(current)}`}
             style={{
               display: "block",
@@ -193,8 +198,8 @@ export function PhotoThumb({
         {/* More-than-one signal + in-place navigation. */}
         {total > 1 && (
           <>
-            <ThumbNavButton side="left" visible={hovered} onClick={() => step(-1)} />
-            <ThumbNavButton side="right" visible={hovered} onClick={() => step(1)} />
+            <ThumbNavButton side="left" visible={hovered} tabIndex={tabIndex} onClick={() => step(-1)} />
+            <ThumbNavButton side="right" visible={hovered} tabIndex={tabIndex} onClick={() => step(1)} />
             <span
               aria-hidden="true"
               style={{
@@ -440,15 +445,18 @@ export function PhotoLightbox({
 function ThumbNavButton({
   side,
   visible,
+  tabIndex,
   onClick,
 }: {
   side: "left" | "right";
   visible: boolean;
+  tabIndex?: number;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      tabIndex={tabIndex}
       aria-label={side === "left" ? "Previous photo" : "Next photo"}
       onClick={(e) => {
         e.stopPropagation();
