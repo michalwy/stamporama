@@ -171,8 +171,6 @@ interface SettingsScreenProps {
   /** The morning auction reminder (#1373): on or off, its hour and zone, and whether the instance
    * can send mail at all. */
   auctionReminder: AuctionReminderSettings;
-  /** Internal copy-number display width (#268), edited on Collection. */
-  itemNoPad: number;
   /** The bid-recommendation percentages (#508), edited on Bid recommendation. */
   bidFloorPercent: number;
   bidCeilingPercent: number;
@@ -772,7 +770,6 @@ function SettingsEntryBody({
   initialAssistantTokens,
   mailSettings,
   auctionReminder,
-  itemNoPad,
   bidFloorPercent,
   bidCeilingPercent,
   bidFallbackPercent,
@@ -794,7 +791,6 @@ function SettingsEntryBody({
           baseCurrency={baseCurrency}
           defaultLanguage={defaultLanguage}
           homeMarket={homeMarket}
-          itemNoPad={itemNoPad}
         />
       );
     case "storage":

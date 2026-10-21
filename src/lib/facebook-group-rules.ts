@@ -17,12 +17,14 @@ import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 import { isKnownTemplateToken, templateTokens } from "./template-amount";
 
 /** One placeholder a post template may carry, with the label and example the editor shows. `amount`
- *  marks one that writes an amount, and so takes the currency parameter (#2028). */
+ *  marks one that writes an amount, and so takes the currency parameter (#2028); `number` one that
+ *  writes an internal number, and so takes the padding one (#2097). */
 export interface FacebookPostPlaceholder {
   token: string;
   label: string;
   example: string;
   amount?: boolean;
+  number?: boolean;
 }
 
 /**
@@ -51,8 +53,8 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
   { token: "{startingPrice}", label: "Starting price", example: "10 zł", amount: true },
   { token: "{increment}", label: "Bid increment", example: "1.50 zł", amount: true },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
-  { token: "{lot}", label: "Lot number", example: "3" },
-  { token: "{offer}", label: "Offer number", example: "412" },
+  { token: "{lot}", label: "Lot number", example: "3", number: true },
+  { token: "{offer}", label: "Offer number", example: "412", number: true },
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
@@ -64,8 +66,8 @@ export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[]
   { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
   { token: "{price}", label: "Price", example: "25 zł", amount: true },
-  { token: "{lot}", label: "Lot number", example: "3" },
-  { token: "{offer}", label: "Offer number", example: "412" },
+  { token: "{lot}", label: "Lot number", example: "3", number: true },
+  { token: "{offer}", label: "Offer number", example: "412", number: true },
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
@@ -120,6 +122,7 @@ export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
   token: "{post}",
   label: "Post number",
   example: "1",
+  number: true,
 };
 
 /**
@@ -153,7 +156,7 @@ export function facebookCaptionPlaceholders(listingType: OfferListingType): read
  * title (#1862), and the note on shipping, payment and terms. Each lot's own figures are its caption's.
  */
 export const FACEBOOK_CAPTION_POST_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
-  { token: "{offer}", label: "Offer numbers", example: "412, 413, 414" },
+  { token: "{offer}", label: "Offer numbers", example: "412, 413, 414", number: true },
   FACEBOOK_POST_NUMBER_PLACEHOLDER,
   FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_TERMS_PLACEHOLDER,

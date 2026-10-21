@@ -325,7 +325,8 @@ function TemplateSyntaxText() {
       <code>{"{catalog:Mi,Sc:vendor,area}"}</code>: pick vendors by abbreviation (<code>*</code> =
       all, blank = primary), then which prefixes to show (<code>vendor</code>/<code>v</code>,{" "}
       <code>area</code>/<code>a</code>; an empty flags segment like <code>{"{catalog:Mi:}"}</code>{" "}
-      gives the bare number). The multi-line templates also take <strong>blocks</strong>, listed
+      gives the bare number). The copy number is written plain; add <code>:N</code> to pad it with
+      zeros to N digits — <code>{"{itemNo:4}"}</code> gives <code>0042</code>. The multi-line templates also take <strong>blocks</strong>, listed
       under their tokens: a block chip wraps your selection and repeats it once per set, per copy or
       per distinct condition the offer uses — hover one for what it repeats over and an example. The
       tokens beside a block only mean something inside it.

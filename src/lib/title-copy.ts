@@ -9,7 +9,6 @@ import type { TranslatableEntity } from "./translations";
 import { prisma } from "./db";
 import { getCollectionAreas } from "./areas";
 import { loadIssuePrefixMap } from "./issue-prefix";
-import { DEFAULT_ITEM_NO_PAD } from "./item-number";
 import {
   buildAreaVendorMaps,
   buildAreaTitleEntries,
@@ -355,8 +354,7 @@ export function toTitleCopy(
   row: TitleCopyRow,
   maps: AreaVendorMaps,
   areaTitleById: ReadonlyMap<string, AreaTitleEntry>,
-  language: string | null = null,
-  itemNoPad: number = DEFAULT_ITEM_NO_PAD
+  language: string | null = null
 ): TitleTemplateCopy {
   const areas = row.stamp.stampAreaLinks;
   const primaryLink = areas.find((a) => a.isPrimary) ?? areas[0];
@@ -573,7 +571,6 @@ export function toTitleCopy(
     listedAs: null,
     // Not translatable and not an entity — plain digits, so it never joins the fallback machinery.
     itemNo: row.itemNo,
-    itemNoPad,
     issueName: issue
       ? resolve(
           "issueName",
@@ -668,13 +665,12 @@ export async function makeTitleCopyMapper(
     loadIssuePrefixMap(collectionId),
     prisma.collection.findUnique({
       where: { id: collectionId },
-      select: { defaultLanguage: true, itemNoPad: true },
+      select: { defaultLanguage: true },
     }),
   ]);
   const code = normalizeLanguage(language);
   const effective = code && code !== normalizeLanguage(collection?.defaultLanguage) ? code : null;
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
   const areaTitleById = buildAreaTitleEntries(areas, effective);
-  const itemNoPad = collection?.itemNoPad ?? DEFAULT_ITEM_NO_PAD;
-  return (row) => toTitleCopy(row, maps, areaTitleById, effective, itemNoPad);
+  return (row) => toTitleCopy(row, maps, areaTitleById, effective);
 }

@@ -11,7 +11,6 @@ import {
   type DispositionKey,
 } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
-import { useCollectionItemNoPad } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 
 const DISPOSITIONS: { key: DispositionKey; label: string }[] = [
   { key: "inCollection", label: "In collection" },
@@ -51,13 +50,12 @@ export function ReplacementCopy({
   itemNo: number;
   thumbSize?: string;
 }) {
-  const pad = useCollectionItemNoPad(collectionId);
   const { data: conditions } = useCollectionConditions(collectionId);
   if (!copy) {
     return (
       <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", minWidth: 0 }}>
         <PhotoThumb collectionId={collectionId} photos={[]} reserveWhenEmpty size={thumbSize} />
-        <div style={MUTED}>{formatItemNo(itemNo, pad)} · deleted</div>
+        <div style={MUTED}>{formatItemNo(itemNo)} · deleted</div>
       </div>
     );
   }
@@ -75,7 +73,7 @@ export function ReplacementCopy({
               color: "var(--color-text-primary)",
             }}
           >
-            {formatItemNo(copy.itemNo, pad)}
+            {formatItemNo(copy.itemNo)}
           </Link>
           <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
             {copy.stampLabel}

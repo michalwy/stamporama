@@ -2,8 +2,6 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem, deleteItem, listItemsPaginated } from "../../src/lib/items";
-import { getCollectionItemNoPad, setCollectionItemNoPad } from "../../src/lib/collections";
-import { DEFAULT_ITEM_NO_PAD } from "../../src/lib/item-number";
 
 // Internal copy number (#268): a per-collection sequence assigned at creation. The guarantees that
 // matter to a collector who has written the number on a physical piece — it starts at 1, never
@@ -101,17 +99,6 @@ describe("internal copy number", () => {
       conditionId: otherConditionId,
     });
     assert.equal(inOther.itemNo, 1);
-  });
-
-  it("stores the display width per collection, rejecting an unusable one", async () => {
-    assert.equal(await getCollectionItemNoPad(userId, collectionId), DEFAULT_ITEM_NO_PAD);
-    await setCollectionItemNoPad(userId, collectionId, 3);
-    assert.equal(await getCollectionItemNoPad(userId, collectionId), 3);
-    // The other collection is untouched — the width is a per-collection display choice.
-    assert.equal(await getCollectionItemNoPad(userId, otherCollectionId), DEFAULT_ITEM_NO_PAD);
-    await assert.rejects(() => setCollectionItemNoPad(userId, collectionId, 0));
-    await assert.rejects(() => setCollectionItemNoPad(userId, collectionId, 99));
-    await setCollectionItemNoPad(userId, collectionId, DEFAULT_ITEM_NO_PAD);
   });
 
   it("finds a copy by its number, padded or not", async () => {

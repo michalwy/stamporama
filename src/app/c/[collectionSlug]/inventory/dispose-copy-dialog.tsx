@@ -14,7 +14,6 @@ import {
   disposalNoteRequired,
 } from "@/lib/disposal";
 import { formatItemNo } from "@/lib/item-number";
-import { useCollectionItemNoPad } from "./use-inventory-query";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 
@@ -45,14 +44,12 @@ const HINT_STYLE: React.CSSProperties = {
  * copy did arrive and was paid for, so its cost basis stays and becomes a write-off (#396).
  */
 export function DisposeCopyDialog({
-  collectionId,
   item,
   isPending,
   error,
   onClose,
   onSubmit,
 }: {
-  collectionId: string;
   item: ItemListItem;
   isPending: boolean;
   error?: string;
@@ -61,13 +58,12 @@ export function DisposeCopyDialog({
 }) {
   const [reason, setReason] = useState<string>(DISPOSAL_REASONS[0]);
   const [note, setNote] = useState("");
-  const itemNoPad = useCollectionItemNoPad(collectionId);
 
   const noteMissing = disposalNoteRequired(reason) && !note.trim();
 
   return (
     <DialogShell
-      title={`No longer held — ${formatItemNo(item.itemNo, itemNoPad)}`}
+      title={`No longer held — ${formatItemNo(item.itemNo)}`}
       onClose={onClose}
       maxWidth="30rem"
     >

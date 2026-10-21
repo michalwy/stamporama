@@ -701,7 +701,13 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   its bare placeholder whatever parameter it was written with, so the card's reasons still match. **A
   frozen lot keeps the default it went up with**: `FacebookFrozenLot.currencyStyle`, written `symbol`
   by `freezeFacebookPostText`, and read back as `code` from a snapshot older than the field — those
-  posts said `PLN`, and the card says *As posted*. Screens are untouched. The retired `{catalog}` is every copy's leading number through
+  posts said `PLN`, and the card says *As posted*. Screens are untouched. **A number placeholder takes
+  `:N` the same way** (#2097, settled with the collector on 2026-10-21): every placeholder whose value
+  is an internal number — here `{lot}`, `{offer}`, `{post}`; in the buyer message `{sale}`; in a listing
+  text `{itemNo}` — writes it plain bare and zero-padded to N digits with `:N` (1–10, `parseNumberPad`,
+  never cut). It is flagged `number` in its list, and its value is a `TemplateNumbers` (`templateNumbers`)
+  rather than text, so a list — the captioned post's `{offer}` — pads every number alike. A width that
+  is not one is the misspelt parameter again: kept as typed, named under the field. The retired `{catalog}` is every copy's leading number through
   `compactCatalogNumberGroups`; `{lot}` is empty on a single post; `{offer}` (#1694) is each lot's own offer number, bare as `{lot}` is,
   so the template writes any `#` itself. A type with **no template gives an
   empty lot** (the `{description}` fallback template is gone), and the lot's text is not trimmed, so

@@ -34,6 +34,7 @@ import {
   resolveTemplateToken,
   splitTemplateToken,
   TEMPLATE_TOKEN,
+  templateNumbers,
   writtenAmount,
   type CurrencyStyle,
   type TemplateValue,
@@ -264,9 +265,9 @@ export function facebookTitleWithWords(
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 
 /** What `{post}` and `{postTitle}` become: the post's number and title, empty where there is none. */
-function postNameValues(post: FacebookPostName | null): Record<string, string> {
+function postNameValues(post: FacebookPostName | null): Record<string, TemplateValue> {
   return {
-    "{post}": post ? String(post.postNo) : "",
+    "{post}": templateNumbers(post?.postNo),
     [FACEBOOK_POST_TITLE_PLACEHOLDER.token]: post?.title?.trim() ?? "",
   };
 }
@@ -289,8 +290,8 @@ function placeholderValues(
     "{increment}": money(lot.increment),
     "{closesAt}": lot.closesAt,
     "{price}": money(lot.price),
-    "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
-    "{offer}": String(lot.offerNo),
+    "{lot}": templateNumbers(lot.lotNo),
+    "{offer}": templateNumbers(lot.offerNo),
     "{terms}": terms.trim(),
     ...postNameValues(post),
   };
@@ -580,9 +581,9 @@ function captionPostValues(
   sorted: readonly FacebookPostLotText[],
   standingNote: string,
   post: FacebookPostName | null
-): Record<string, string> {
+): Record<string, TemplateValue> {
   return {
-    "{offer}": sorted.map((lot) => String(lot.offerNo)).join(", "),
+    "{offer}": templateNumbers(...sorted.map((lot) => lot.offerNo)),
     ...postNameValues(post),
     [FACEBOOK_TERMS_PLACEHOLDER.token]: standingNote.trim(),
   };

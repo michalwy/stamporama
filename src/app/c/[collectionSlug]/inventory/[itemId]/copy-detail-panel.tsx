@@ -41,7 +41,6 @@ import { OtherCopiesCard } from "./other-copies-card";
 import { isOneStampsCopy } from "@/lib/other-copies-rules";
 import {
   useCollectionCertificateStatuses,
-  useCollectionItemNoPad,
   useInvalidateInventory,
   useItemStamps,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
@@ -132,7 +131,6 @@ export function CopyDetailPanel({
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
   const primaryVendorId = maps.primaryVendorByArea.get(item.areaId ?? "") ?? null;
-  const itemNoPad = useCollectionItemNoPad(collectionId);
 
   // The two dialogs this screen opens (#673). The dictionaries the copy form needs are fetched
   // here rather than loaded on the server beside the copy: both are cached per collection and
@@ -178,7 +176,7 @@ export function CopyDetailPanel({
       <DetailLayout>
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
           <Tooltip content="Internal copy number — never changes, never reused">
-            <span style={ITEM_NO}>{formatItemNo(item.itemNo, itemNoPad)}</span>
+            <span style={ITEM_NO}>{formatItemNo(item.itemNo)}</span>
           </Tooltip>
           <StampIdentity
             stamp={{

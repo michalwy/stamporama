@@ -6,7 +6,6 @@ import { formatItemNo } from "@/lib/item-number";
 import { describeReplacementStatus } from "@/lib/replacement-rules";
 import type { ReplacementPairData } from "@/lib/replacements";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
-import { useCollectionItemNoPad } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { replacementKeys } from "./record-replacement-dialog";
 
 /**
@@ -24,7 +23,6 @@ export function CopyReplacementsCard({
   collectionSlug: string;
   itemId: string;
 }) {
-  const pad = useCollectionItemNoPad(collectionId);
   const { data, isLoading } = useQuery<ReplacementPairData[]>({
     queryKey: replacementKeys(collectionId).copy(itemId),
     queryFn: async () => {
@@ -33,7 +31,7 @@ export function CopyReplacementsCard({
     },
   });
   const pairs = data ?? [];
-  const label = (n: number) => formatItemNo(n, pad);
+  const label = (n: number) => formatItemNo(n);
 
   return (
     <DetailCard title="Replacements" empty={isLoading || pairs.length === 0}>

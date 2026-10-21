@@ -148,7 +148,7 @@ export default async function TradePackingListPage({ params }: PageProps) {
 
       <TradePackingSheet
         collectionId={collection.id}
-        itemNoPad={collection.itemNoPad}
+       
         list={list}
         recordable={read.recordable}
       />

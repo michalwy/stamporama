@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { COMMON_CURRENCIES, CURRENCY_SYMBOLS, currencySymbol } from "../../src/lib/currencies";
 import {
   isKnownTemplateToken,
+  parseNumberPad,
   resolveTemplateToken,
   splitTemplateToken,
+  templateNumbers,
   templateTokens,
   writtenAmount,
+  writtenNumber,
 } from "../../src/lib/template-amount";
 
 // How a template placeholder writes an amount (#2028): the currency's symbol by default, its code or
@@ -95,5 +98,59 @@ describe("template tokens with a parameter (#2028)", () => {
     assert.equal(isKnownTemplateToken("{title}", specs), true);
     assert.equal(isKnownTemplateToken("{title:none}", specs), false);
     assert.equal(isKnownTemplateToken("{lot}", specs), false);
+  });
+});
+
+// Every placeholder that writes an internal number takes `:N` to pad it with zeros (#2097), and writes
+// it plain without (#2096).
+describe("internal numbers in templates (#2097)", () => {
+  const values = {
+    "{offer}": templateNumbers(42),
+    "{offers}": templateNumbers(42, 1234),
+    "{lot}": templateNumbers(null),
+    "{title}": "Mercury",
+  };
+
+  it("reads a width as a whole number from 1 to 10, written as typed", () => {
+    assert.equal(parseNumberPad("1"), 1);
+    assert.equal(parseNumberPad("4"), 4);
+    assert.equal(parseNumberPad("10"), 10);
+    for (const bad of ["0", "11", "04", "-1", "1.5", "", "four", " 4"]) {
+      assert.equal(parseNumberPad(bad), null, bad);
+    }
+  });
+
+  it("writes a number plain, or padded to a minimum width it never cuts", () => {
+    assert.equal(writtenNumber(42), "42");
+    assert.equal(writtenNumber(42, 4), "0042");
+    assert.equal(writtenNumber(123456, 4), "123456");
+  });
+
+  it("writes the plain number with no parameter, and pads with :N", () => {
+    assert.equal(resolveTemplateToken("{offer}", values), "42");
+    assert.equal(resolveTemplateToken("{offer:4}", values), "0042");
+    assert.equal(resolveTemplateToken("{offer:1}", values), "42");
+    // A list pads each of its numbers alike; a missing number writes nothing.
+    assert.equal(resolveTemplateToken("{offers:3}", values), "042, 1234");
+    assert.equal(resolveTemplateToken("{lot:3}", values), "");
+  });
+
+  it("resolves nothing for a width that is not one, or a width on a placeholder writing no number", () => {
+    for (const token of ["{offer:0}", "{offer:11}", "{offer:x}", "{offer:}", "{offer:code}", "{title:4}"]) {
+      assert.equal(resolveTemplateToken(token, values), null, token);
+    }
+  });
+
+  it("finds a token with a width as a token, so a bad one is named", () => {
+    assert.deepEqual(templateTokens("{offer:4} {offer:0} {price:2x}"), ["{offer:4}", "{offer:0}", "{price:2x}"]);
+  });
+
+  it("knows a width only on a placeholder that writes a number, and a currency only on an amount", () => {
+    const specs = [{ token: "{offer}", number: true }, { token: "{price}", amount: true }, { token: "{title}" }];
+    assert.equal(isKnownTemplateToken("{offer:4}", specs), true);
+    assert.equal(isKnownTemplateToken("{offer:0}", specs), false);
+    assert.equal(isKnownTemplateToken("{offer:code}", specs), false);
+    assert.equal(isKnownTemplateToken("{price:4}", specs), false);
+    assert.equal(isKnownTemplateToken("{title:4}", specs), false);
   });
 });

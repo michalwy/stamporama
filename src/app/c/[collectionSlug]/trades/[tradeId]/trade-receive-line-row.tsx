@@ -30,7 +30,7 @@ import { TradeLineSignalMarks, withTradeLineSignalActions } from "./trade-line-s
 //
 // It is deliberately **not** `InventoryItemRow`, for the reason an auction line is not: the partner's
 // stamps are in nobody's inventory, so there is no copy number, no location, no disposition, no
-// delivery state and no cost basis. Rendering it through the copy row would print `#00000` and five
+// delivery state and no cost basis. Rendering it through the copy row would print `#0` and five
 // empty slots and call that consistency. What it has and a copy does not is **quantity**.
 //
 // What it *does* share is the **thumbnail**, in the same reserved 5.5rem column the copy row uses,

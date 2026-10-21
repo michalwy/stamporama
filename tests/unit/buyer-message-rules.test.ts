@@ -121,6 +121,12 @@ describe("renderBuyerMessage (#1815)", () => {
     assert.equal(renderBuyerMessage("{total}", sale({ currency: "USD" })), "$35.50");
   });
 
+  it("writes the sale number plain, or padded with :N (#2097)", () => {
+    assert.equal(renderBuyerMessage("Sale {sale}, ref {sale:4}", sale()), "Sale 57, ref 0057");
+    assert.equal(renderBuyerMessage("{sale:0} {sale:x}", sale()), "{sale:0} {sale:x}");
+    assert.deepEqual(unknownBuyerMessagePlaceholders("{sale:4} {sale:0} {total:4}"), ["{sale:0}", "{total:4}"]);
+  });
+
   it("keeps a token with a parameter that is not a choice, or on a placeholder writing no amount, as typed (#2028)", () => {
     assert.equal(renderBuyerMessage("{total:cod} {buyer:code} {total:}", sale()), "{total:cod} {buyer:code} {total:}");
   });

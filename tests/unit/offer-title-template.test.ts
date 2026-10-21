@@ -75,7 +75,6 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     location: null,
     ref: null,
     itemNo: null,
-    itemNoPad: 5,
     issuedDate: null,
     subtype: null,
     denomination: null,
@@ -588,29 +587,31 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
     assert.equal(renderTitleTemplate("{location}/{ref}", [c]), "Stockbook A/A234");
   });
 
-  // Internal copy number (#268). Padded to the collection's configured width by default, to an
-  // explicit one with `{itemNo:N}`, and never prefixed with `#` — a template writes its own.
-  it("resolves {itemNo} at the collection's configured width", () => {
-    assert.equal(renderTitleTemplate("{itemNo}", [copy({ itemNo: 42, itemNoPad: 5 })]), "00042");
-    assert.equal(renderTitleTemplate("{itemNo}", [copy({ itemNo: 42, itemNoPad: 2 })]), "42");
-    assert.equal(renderTitleTemplate("no. {itemNo}", [copy({ itemNo: 7, itemNoPad: 3 })]), "no. 007");
+  // Internal copy number (#268). Plain by default (#2096), padded to N digits with `{itemNo:N}`
+  // (#2097), and never prefixed with `#` — a template writes its own.
+  it("resolves {itemNo} as the plain number", () => {
+    assert.equal(renderTitleTemplate("{itemNo}", [copy({ itemNo: 42 })]), "42");
+    assert.equal(renderTitleTemplate("no. {itemNo}", [copy({ itemNo: 7 })]), "no. 7");
   });
 
-  it("lets {itemNo:N} override the width, ignoring an unusable one", () => {
-    const c = copy({ itemNo: 42, itemNoPad: 5 });
+  it("pads {itemNo:N} to N digits, keeping a WIDTH that is not one as typed", () => {
+    const c = copy({ itemNo: 42 });
     assert.equal(renderTitleTemplate("{itemNo:3}", [c]), "042");
+    assert.equal(renderTitleTemplate("{itemNo:4}", [c]), "0042");
     assert.equal(renderTitleTemplate("{itemNo:1}", [c]), "42");
-    // Out of range / not a number → the collection's width, rather than an empty token.
-    assert.equal(renderTitleTemplate("{itemNo:0}", [c]), "00042");
-    assert.equal(renderTitleTemplate("{itemNo:abc}", [c]), "00042");
+    // Not a width → the token stays as typed, as an unknown placeholder does.
+    assert.equal(renderTitleTemplate("{itemNo:0}", [c]), "{itemNo:0}");
+    assert.equal(renderTitleTemplate("{itemNo:abc}", [c]), "{itemNo:abc}");
+    assert.equal(renderTitleTemplate("{itemNo:11}", [c]), "{itemNo:11}");
     // Padding sets a minimum width; it never truncates an identifier.
-    assert.equal(renderTitleTemplate("{itemNo:2}", [copy({ itemNo: 123456, itemNoPad: 5 })]), "123456");
+    assert.equal(renderTitleTemplate("{itemNo:2}", [copy({ itemNo: 123456 })]), "123456");
   });
 
   it("lists the numbers of several copies, and renders empty without one", () => {
-    const a = copy({ itemNo: 1, itemNoPad: 4 });
-    const b = copy({ itemNo: 2, itemNoPad: 4 });
-    assert.equal(renderTitleTemplate("{itemNo}", [a, b]), "0001 / 0002");
+    const a = copy({ itemNo: 1 });
+    const b = copy({ itemNo: 2 });
+    assert.equal(renderTitleTemplate("{itemNo}", [a, b]), "1 / 2");
+    assert.equal(renderTitleTemplate("{itemNo:4}", [a, b]), "0001 / 0002");
     assert.equal(renderTitleTemplate("x{itemNo}", [copy({ itemNo: null })]), "x");
   });
 

@@ -176,7 +176,7 @@ export default async function TradeEnclosurePage({ params }: PageProps) {
 
       <TradeEnclosureSheet
         collectionId={collection.id}
-        itemNoPad={collection.itemNoPad}
+       
         list={list}
       />
 

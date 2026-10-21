@@ -19,7 +19,6 @@ import {
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
 import { describeDisposal, disposalReasonLabel, disposalReasonToken } from "@/lib/disposal";
 import { formatItemNo } from "@/lib/item-number";
-import { useCollectionItemNoPad } from "./use-inventory-query";
 import type { AreaCatalogEntry, CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import {
@@ -260,9 +259,8 @@ const META: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** Internal copy number (#268). Monospaced and zero-padded so a column of them lines up the way
- * the numbers do on the physical pieces, and muted because it identifies the row rather than
- * describing the stamp. */
+/** Internal copy number (#268). Monospaced with tabular digits, plain as every internal number is
+ * (#2096), and muted because it identifies the row rather than describing the stamp. */
 const ITEM_NO_CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
   fontVariantNumeric: "tabular-nums",
@@ -633,7 +631,6 @@ export function InventoryItemRow({
   onSetPlatformExclusion,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
-  const itemNoPad = useCollectionItemNoPad(collectionId);
 
   const primaryCN = primaryVendorId
     ? (item.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
@@ -681,9 +678,8 @@ export function InventoryItemRow({
         ).toLowerCase()}.`;
 
   // Platforms this copy is deliberately never listed on (#506), named from the collection's own
-  // platforms (#1955). Read here rather than threaded down, for the reason `useCollectionItemNoPad`
-  // is: the copy row is rendered from eight screens, and one shared, cached query costs less than one
-  // more prop through all of them. An id with no platform behind it is one since deleted, whose
+  // platforms (#1955). Read here rather than threaded down: the copy row is rendered from eight
+  // screens, and one shared, cached query costs less than one more prop through all of them. An id with no platform behind it is one since deleted, whose
   // exclusion means nothing any more, so it is chipped as nothing.
   const { data: platforms } = usePlatforms(collectionId);
   const excludedNames = item.excludedPlatformIds
@@ -1055,7 +1051,7 @@ export function InventoryItemRow({
           }}
         >
           <Tooltip content="Internal copy number — assigned automatically, not editable">
-            <span style={ITEM_NO_CHIP}>{formatItemNo(item.itemNo, itemNoPad)}</span>
+            <span style={ITEM_NO_CHIP}>{formatItemNo(item.itemNo)}</span>
           </Tooltip>
           <ConditionChip
             collectionId={collectionId}

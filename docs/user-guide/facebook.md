@@ -153,6 +153,20 @@ already up keeps the words it went up with. Anything else after the colon — `{
 colon on a placeholder that is not an amount — is not a placeholder: it stays as typed and is named
 under the field. The app's own screens still show `15.00` with the code.
 
+**A number is written plain** — `{offer}` gives `412`, `{lot}` gives `3` — and **each number
+placeholder can pad it with zeros**, after a colon, to as many digits as you ask, from 1 to 10:
+
+| Written | Becomes, for offer #42 |
+| --- | --- |
+| `{offer}` | `42` — the plain number, the default |
+| `{offer:4}` | `0042` — padded to four digits |
+
+A number wider than you ask for is written in full: `{offer:2}` gives `412` for offer #412. This
+holds for `{offer}` and `{lot}` in post templates and captions, and for `{post}` in captions and a
+captioned post's text; in that text `{offer:4}` pads every lot's number alike — `0412, 0413`. Anything
+else after the colon — `{offer:0}`, `{offer:x}` — is not a placeholder: it stays as typed and is named
+under the field.
+
 A post is always written from the template of its own type — an auction's from the auction
 template, a quick buy's from the quick-buy one, never the other. In either template, anything else
 in braces stays exactly as you typed it, and the field says so under it while you type — so a

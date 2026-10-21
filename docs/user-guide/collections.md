@@ -62,7 +62,7 @@ Down the left of the Settings screen is a list of its entries, one per thing you
 named and coloured like the sidebar's sections, so you look for a setting under the part of the app
 it serves:
 
-- **General** — Collection (currency, default language, copy number width, reset to demo data) and
+- **General** — Collection (currency, default language, home market, reset to demo data) and
   Photos & storage (the storage figures and how long generated images and finished scans are kept).
 - **Catalog** — Catalogs, Conditions, Certificate statuses, Formats, Subtypes, Attributes, Size
   presets and Duplicate numbers.

@@ -8,7 +8,6 @@ import { formatItemNo } from "@/lib/item-number";
 import type { ReplacementSide } from "@/lib/replacement-rules";
 import type { ReplacementCandidateData } from "@/lib/replacements";
 import {
-  useCollectionItemNoPad,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ReplacementCopy } from "./replacement-copy";
@@ -58,7 +57,6 @@ export function RecordReplacementDialog({
   side: ReplacementSide;
   onClose: () => void;
 }) {
-  const pad = useCollectionItemNoPad(collectionId);
   const { toast } = useToast();
   const { invalidateList } = useInvalidateInventory();
   const [chosen, setChosen] = useState<string | null>(null);
@@ -73,7 +71,7 @@ export function RecordReplacementDialog({
     },
   });
 
-  const label = formatItemNo(item.itemNo, pad);
+  const label = formatItemNo(item.itemNo);
   const title = side === "new" ? `${label} replaces…` : `${label} is replaced by…`;
 
   function submit() {

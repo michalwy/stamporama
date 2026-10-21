@@ -11,8 +11,7 @@ import { Tooltip } from "./tooltip";
  * and a number that renders differently per screen would be a number one has to look twice at.
  *
  * Monospace and muted, like the copy number's chip (#268): it identifies the row rather than
- * describing what is on it. Unpadded — padding is a copy-number affordance, for a column of stock
- * cards that has to line up.
+ * describing what is on it. Unpadded, as every internal number is (#2096).
  *
  * The tooltip names the prefix, which is where a collector learns the box exists at all. */
 export function EntityNoChip({

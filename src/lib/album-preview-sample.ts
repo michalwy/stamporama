@@ -374,7 +374,6 @@ function sampleCopy(checklist: SampleChecklist, stamp: SampleStamp): TitleTempla
     location: null,
     ref: null,
     itemNo: null,
-    itemNoPad: 4,
     subtype: null,
     format: null,
     formatAbbr: null,

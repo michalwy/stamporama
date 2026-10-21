@@ -225,9 +225,11 @@ language — and the preview re-reads at once; the line goes when nothing is lef
   checklist headings and footers.
 - `{location}` — the copy's storage location name
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
-- `{itemNo}` — the copy's [internal number](inventory.md#internal-copy-number), padded to the width
-  set in **Settings → Collection**. Write `{itemNo:3}` to pad to a different width just here (`042`),
-  or `{itemNo:1}` for no padding at all. No `#` is added — type one in the template if you want it.
+- `{itemNo}` — the copy's [internal number](inventory.md#internal-copy-number), written plain
+  (`42`). Add `:N` to pad it with zeros to N digits, from 1 to 10: `{itemNo:4}` gives `0042`, and a
+  number wider than N is written in full. Anything else after the colon — `{itemNo:0}`,
+  `{itemNo:x}` — is not the placeholder, so it stays in the text as typed and the preview shows it.
+  No `#` is added — type one in the template if you want it.
 - `{issueName}` — name of the issue the stamp belongs to
 - `{issueYear}` — year of that issue (also collapses to a range across copies)
 - `{subtype}` — the stamp's [subtype](collections.md#stamp-subtypes) (`Error`, `Overprint`, …).

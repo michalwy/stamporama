@@ -136,6 +136,13 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     );
   });
 
+  it("writes the lot and offer numbers plain, or padded with :N (#2097)", () => {
+    assert.equal(renderFacebookLotText("Lot {lot}, #{offer}", lot({ lotNo: 3, offerNo: 42 })), "Lot 3, #42");
+    assert.equal(renderFacebookLotText("Lot {lot:2}, #{offer:4}", lot({ lotNo: 3, offerNo: 42 })), "Lot 03, #0042");
+    // A width that is not one keeps the token as typed, as an unknown placeholder does.
+    assert.equal(renderFacebookLotText("{offer:0} {title:4}", lot()), "{offer:0} {title:4}");
+  });
+
   it("still fills the retired {catalog}, so no post loses text unannounced (#1671)", () => {
     assert.equal(renderFacebookLotText("{catalog} {title}", lot()), "Mi·AT 1 Austria 1850 Mercury");
     assert.equal(renderFacebookLotText("{catalog}", lot({ listingType: "fixed" })), "Mi·AT 1");
@@ -677,6 +684,11 @@ describe("a captioned post (#1841)", () => {
         [2, "Second — 25 zł"],
       ],
     });
+  });
+
+  it("pads every offer number in the shared text, and the post's number, with :N (#2097)", () => {
+    const out = renderFacebookCaptionedPost({ ...captions, post: "Post {post:3}: {offer:4}" }, "", lots, { postNo: 7, title: null });
+    assert.equal(facebookPartsText(out.post), "Post 007: 0412, 0413");
   });
 
   it("keeps {terms} out of a caption — the note is the post's, stated once", () => {

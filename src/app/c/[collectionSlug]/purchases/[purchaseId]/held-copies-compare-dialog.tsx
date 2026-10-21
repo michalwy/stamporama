@@ -31,7 +31,6 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import { fitScale, type Viewport, type ViewportSize } from "@/lib/scan-viewport";
 import {
-  useCollectionItemNoPad,
   useHeldCopyPictures,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import type { PhotoEditorPreview } from "@/app/c/[collectionSlug]/inventory/photo-editor";
@@ -131,7 +130,6 @@ export function HeldCopiesCompareDialog({
   onClose: () => void;
 }) {
   const { data, isLoading, isError } = useHeldCopyPictures(collectionId, stampId, excludeItemId);
-  const pad = useCollectionItemNoPad(collectionId);
   const copies = useMemo(
     () =>
       orderHeldCopyPictures(
@@ -235,7 +233,7 @@ export function HeldCopiesCompareDialog({
             <span style={{ marginLeft: "auto" }}>
               <HeldCopyPageLink
                 itemId={chosen.id}
-                itemNo={formatItemNo(chosen.itemNo, pad)}
+                itemNo={formatItemNo(chosen.itemNo)}
                 named
                 focusable
                 fontSize="0.8125rem"
@@ -260,7 +258,6 @@ export function HeldCopiesCompareDialog({
               collectionId={collectionId}
               copies={copies}
               chosenId={chosen.id}
-              pad={pad}
               conditions={conditions}
               certificateStatuses={certificateStatuses}
               onChoose={choose}
@@ -545,7 +542,6 @@ function HeldCopyStrip({
   collectionId,
   copies,
   chosenId,
-  pad,
   conditions,
   certificateStatuses,
   onChoose,
@@ -553,7 +549,6 @@ function HeldCopyStrip({
   collectionId: string;
   copies: HeldCopyPicture[];
   chosenId: string;
-  pad: number;
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   onChoose: (id: string) => void;
@@ -636,7 +631,7 @@ function HeldCopyStrip({
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {formatItemNo(copy.itemNo, pad)}
+                  {formatItemNo(copy.itemNo)}
                 </span>
                 <ConditionChip
                   collectionId={collectionId}

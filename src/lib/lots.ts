@@ -859,7 +859,6 @@ export async function moveItemsToLot(
       itemNo: true,
       lotId: true,
       stamp: { select: { name: true } },
-      collection: { select: { itemNoPad: true } },
       lot: { select: { purchaseId: true, status: true, title: true } },
     },
   });
@@ -872,10 +871,7 @@ export async function moveItemsToLot(
   const sourceLots = new Set<string>();
   for (const item of items) {
     if (item.lotId === lotId) continue; // already here — nothing to do
-    const copy = `${item.stamp.name || "(unnamed stamp)"} (${formatItemNo(
-      item.itemNo,
-      item.collection.itemNoPad
-    )})`;
+    const copy = `${item.stamp.name || "(unnamed stamp)"} (${formatItemNo(item.itemNo)})`;
     if (!item.lot || item.lot.purchaseId !== purchaseId) {
       refused.push({
         itemId: item.id,

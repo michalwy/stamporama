@@ -159,7 +159,6 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           baseCurrency={collection.baseCurrency}
           defaultLanguage={collection.defaultLanguage}
           homeMarket={collection.homeMarket}
-          itemNoPad={collection.itemNoPad}
           bidFloorPercent={collection.bidFloorPercent}
           bidCeilingPercent={collection.bidCeilingPercent}
           bidFallbackPercent={collection.bidFallbackPercent}

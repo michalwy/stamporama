@@ -39,17 +39,14 @@ const COLUMNS: PackingColumnSpec[] = [
 
 export function SalePackingSheet({
   collectionId,
-  itemNoPad,
   list,
 }: {
   collectionId: string;
-  itemNoPad: number;
   list: PackingListData;
 }) {
   return (
     <PackingSheet
       collectionId={collectionId}
-      itemNoPad={itemNoPad}
       list={list}
       columns={COLUMNS}
       prefKey={PREF_KEY}

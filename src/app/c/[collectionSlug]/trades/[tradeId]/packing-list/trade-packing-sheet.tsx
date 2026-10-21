@@ -82,12 +82,10 @@ const COLUMNS: PackingColumnSpec[] = [
 
 export function TradePackingSheet({
   collectionId,
-  itemNoPad,
   list,
   recordable,
 }: {
   collectionId: string;
-  itemNoPad: number;
   list: PackingListData;
   /** Whether a verdict may be recorded right now. */
   recordable: boolean;
@@ -158,7 +156,6 @@ export function TradePackingSheet({
       )}
       <PackingSheet
         collectionId={collectionId}
-        itemNoPad={itemNoPad}
         list={list}
         columns={COLUMNS}
         prefKey={PREF_KEY}
