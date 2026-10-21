@@ -514,7 +514,7 @@ function copyRow(copy: SearchCopy): HTMLElement {
 
   const no = document.createElement("span");
   no.className = "held nums";
-  no.textContent = `#${String(copy.itemNo).padStart(5, "0")}`;
+  no.textContent = `#${copy.itemNo}`;
   marks.appendChild(no);
 
   // What the copy is *for* (#550), in the inventory row's own chips: which piece this is answers half

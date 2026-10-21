@@ -81,7 +81,6 @@ import {
   useItemYears,
   useItemAreaFacets,
   useInvalidateInventory,
-  useCollectionItemNoPad,
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
   type InventoryAreaFacetFilters,
@@ -496,9 +495,6 @@ export function InventoryListPanel({
   // is grouped by duplicates, and one per stamp otherwise — the switches apply to that grouping
   // alone, and say so. Absent while the filter is off, so the switches never re-key a query.
   const heldAxes = held && groupDuplicates ? axes : undefined;
-  // Names the offers popup for a copy whose stamp is unnamed (#276) — the internal copy number,
-  // padded to the collection's chosen width.
-  const itemNoPad = useCollectionItemNoPad(collectionId);
   const { sortBy, sortDir, persistSort } = usePersistedSort<ItemSortBy>(
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
@@ -2255,7 +2251,7 @@ export function InventoryListPanel({
           target={{
             kind: "item",
             itemId: dialog.item.id,
-            label: dialog.item.stampName ?? formatItemNo(dialog.item.itemNo, itemNoPad),
+            label: dialog.item.stampName ?? formatItemNo(dialog.item.itemNo),
           }}
           onClose={closeDialog}
         />
@@ -2299,7 +2295,6 @@ export function InventoryListPanel({
           offer to withdraw first. */}
       {dialog.kind === "dispose" && (
         <DisposeCopyDialog
-          collectionId={collectionId}
           item={dialog.item}
           isPending={isPending}
           error={actionError}

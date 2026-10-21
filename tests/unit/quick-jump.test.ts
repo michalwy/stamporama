@@ -23,6 +23,12 @@ describe("parseQuickJump (#431)", () => {
     assert.deepEqual(parseQuickJump("s 7"), { entity: "sale", no: 7 });
   });
 
+  it("reads a number written with leading zeros as the same number (#2096)", () => {
+    // Copy numbers were padded until #2096, so older labels carry the zeros.
+    assert.deepEqual(parseQuickJump("i 00123"), { entity: "item", no: 123 });
+    assert.deepEqual(parseQuickJump("i 123"), { entity: "item", no: 123 });
+  });
+
   it("takes the longest prefix, so `iss` is never read as `i`", () => {
     assert.deepEqual(parseQuickJump("iss12"), { entity: "issue", no: 12 });
     assert.deepEqual(parseQuickJump("iss 12"), { entity: "issue", no: 12 });

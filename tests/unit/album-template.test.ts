@@ -453,7 +453,6 @@ const baseCopy: TitleTemplateCopy = {
   location: null,
   ref: null,
   itemNo: null,
-  itemNoPad: 5,
   issuedDate: null,
   subtype: null,
   denomination: null,

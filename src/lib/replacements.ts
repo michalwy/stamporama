@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { stampLabel } from "./items";
-import { DEFAULT_ITEM_NO_PAD, formatItemNo } from "./item-number";
+import { formatItemNo } from "./item-number";
 import { buildLocationPath } from "./location-path";
 import type { PhotoSummary, PhotoRole } from "./photos";
 import { TRADED_AWAY_LINE } from "./trade-exit";
@@ -42,14 +42,6 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
   if (!col || col.ownerId !== ownerId) {
     throw new Error("Collection not found or access denied.");
   }
-}
-
-async function itemNoPad(db: Db, collectionId: string): Promise<number> {
-  const col = await db.collection.findUnique({
-    where: { id: collectionId },
-    select: { itemNoPad: true },
-  });
-  return col?.itemNoPad ?? DEFAULT_ITEM_NO_PAD;
 }
 
 /** What the moot test reads of a copy: whether it was sold, traded away or disposed of. */
@@ -351,7 +343,7 @@ async function candidateCopies(
   excludeItemId: string | null,
   side: ReplacementSide
 ): Promise<ReplacementCandidateData[]> {
-  const [rows, locations, pad] = await Promise.all([
+  const [rows, locations] = await Promise.all([
     prisma.item.findMany({
       where: {
         ...heldCopiesWhere(collectionId, [stampId]),
@@ -364,9 +356,8 @@ async function candidateCopies(
       orderBy: { itemNo: "asc" },
     }),
     loadLocations(prisma, collectionId),
-    itemNoPad(prisma, collectionId),
   ]);
-  const label = (n: number) => formatItemNo(n, pad);
+  const label = (n: number) => formatItemNo(n);
   return rows.map((row) => {
     // The candidate takes the other side: the old copy when the copy asking is new, and vice versa.
     // Only the old side is limited — a new copy may replace several (#1938).
@@ -410,10 +401,9 @@ async function recordPair(
   collectionId: string,
   input: { newItemId: string; oldItemId: string }
 ): Promise<{ id: string }> {
-  const [newRow, oldRow, pad] = await Promise.all([
+  const [newRow, oldRow] = await Promise.all([
     tx.item.findFirst({ where: { id: input.newItemId, collectionId }, select: RECORD_SELECT }),
     tx.item.findFirst({ where: { id: input.oldItemId, collectionId }, select: RECORD_SELECT }),
-    itemNoPad(tx, collectionId),
   ]);
   if (!newRow || !oldRow) throw new ReplacementError("Copy not found.");
   const conflict = replacementConflict({
@@ -426,7 +416,7 @@ async function recordPair(
       gone: copyMootReason(copyState(oldRow)),
       openAsOld: oldRow.replacedBy.length > 0,
     },
-    copyLabel: (n) => formatItemNo(n, pad),
+    copyLabel: formatItemNo,
   });
   if (conflict) throw new ReplacementError(conflict);
   return tx.itemReplacement.create({
@@ -454,13 +444,10 @@ export async function assertReplaceableCopies(
 ): Promise<void> {
   if (oldItemIds.length === 0) return;
   await closeMootReplacements(prisma, collectionId);
-  const [rows, pad] = await Promise.all([
-    prisma.item.findMany({
-      where: { id: { in: [...new Set(oldItemIds)] }, collectionId },
-      select: RECORD_SELECT,
-    }),
-    itemNoPad(prisma, collectionId),
-  ]);
+  const rows = await prisma.item.findMany({
+    where: { id: { in: [...new Set(oldItemIds)] }, collectionId },
+    select: RECORD_SELECT,
+  });
   const byId = new Map(rows.map((row) => [row.id, row]));
   const copies = oldItemIds.map((id) => {
     const row = byId.get(id);
@@ -471,7 +458,7 @@ export async function assertReplaceableCopies(
       openAsOld: row.replacedBy.length > 0,
     };
   });
-  const conflict = replacedCopiesConflict(copies, (n) => formatItemNo(n, pad));
+  const conflict = replacedCopiesConflict(copies, formatItemNo);
   if (conflict) throw new ReplacementError(conflict);
 }
 
@@ -724,21 +711,18 @@ export async function keepDuplicate(
   if (otherIds.length === 0) throw new ReplacementError("There is no other copy to replace.");
   return prisma.$transaction(async (tx) => {
     await closeMootReplacements(tx, collectionId);
-    const [rows, pad] = await Promise.all([
-      tx.item.findMany({
-        where: { id: { in: [input.keeperId, ...otherIds] }, collectionId },
-        select: {
-          id: true,
-          itemNo: true,
-          ...COPY_STATE_SELECT,
-          replacedBy: { where: { status: "open" as const }, select: { newItemNo: true } },
-        },
-      }),
-      itemNoPad(tx, collectionId),
-    ]);
+    const rows = await tx.item.findMany({
+      where: { id: { in: [input.keeperId, ...otherIds] }, collectionId },
+      select: {
+        id: true,
+        itemNo: true,
+        ...COPY_STATE_SELECT,
+        replacedBy: { where: { status: "open" as const }, select: { newItemNo: true } },
+      },
+    });
     if (rows.length !== otherIds.length + 1) throw new ReplacementError("Copy not found.");
     const keeper = rows.find((r) => r.id === input.keeperId)!;
-    const label = (n: number) => formatItemNo(n, pad);
+    const label = (n: number) => formatItemNo(n);
     for (const other of rows) {
       if (other.id === keeper.id) continue;
       const conflict = replacementConflict({

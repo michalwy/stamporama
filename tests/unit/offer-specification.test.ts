@@ -98,7 +98,6 @@ const titleCopy = (over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy => 
   location: "Klaser 3",
   ref: "A12",
   itemNo: 42,
-  itemNoPad: 5,
   subtype: null,
   format: null,
   formatAbbr: null,

@@ -123,7 +123,7 @@ describe("the new offer's summary (#1793)", () => {
 
   it("names a pending copy with no estimate by its number and stamp", () => {
     const summary = newOfferCopiesSummary([estimated(null, { itemNo: 7, stampName: "Eagle" })]);
-    assert.deepEqual(summary.cost.unestimated, ["#00007 (Eagle)"]);
+    assert.deepEqual(summary.cost.unestimated, ["#7 (Eagle)"]);
   });
 });
 

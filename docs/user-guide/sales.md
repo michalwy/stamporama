@@ -588,6 +588,11 @@ it — `15 zł`, `$10` — and with decimals only when they are not whole, `15.5
 written before this, with a bare `{total}`, now writes the symbol. Anything else after the colon is
 not a placeholder: it stays as typed, and the field says so under it.
 
+**The sale number is written plain** — `57` — and can be padded with zeros after a colon:
+`{sale:4}` gives `0057`. Any whole number of digits from 1 to 10 works, and a number wider than that
+is written in full. Anything else after the colon — `{sale:0}`, `{sale:x}` — stays as typed and is
+named under the field.
+
 The message is written from the sale as it stands, so choose the shipping option or add a sold set
 and the message follows.
 

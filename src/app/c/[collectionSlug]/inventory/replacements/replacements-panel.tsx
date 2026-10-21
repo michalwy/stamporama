@@ -23,7 +23,6 @@ import {
   useLocationRefUsage,
 } from "@/app/c/[collectionSlug]/shared/location-ref-field";
 import {
-  useCollectionItemNoPad,
   useCollectionLocations,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
@@ -92,7 +91,6 @@ export function ReplacementsPanel({
   const queryClient = useQueryClient();
   const { invalidateList } = useInvalidateInventory();
   const { toast } = useToast();
-  const pad = useCollectionItemNoPad(collectionId);
   const keys = replacementKeys(collectionId);
 
   const query = useQuery<ReplacementsData>({
@@ -136,7 +134,7 @@ export function ReplacementsPanel({
   const [cancelling, setCancelling] = useState<ReplacementPairData | null>(null);
   const [cancelError, setCancelError] = useState<string | undefined>();
 
-  const label = (n: number) => formatItemNo(n, pad);
+  const label = (n: number) => formatItemNo(n);
 
   function refresh() {
     void invalidateList(collectionId);

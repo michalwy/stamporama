@@ -9,7 +9,6 @@ import {
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionHomeMarketAction,
-  updateCollectionItemNoPadAction,
   updateCollectionScanSheetTtlAction,
   type ClearStorageCacheState,
   type ResetToDemoState,
@@ -24,11 +23,6 @@ import type { BidPercentPatch } from "@/lib/collections";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "@/lib/bid-recommendation";
 import { COMMON_LANGUAGES } from "@/lib/languages";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
-import {
-  MAX_ITEM_NO_PAD,
-  MIN_ITEM_NO_PAD,
-  formatItemNo,
-} from "@/lib/item-number";
 import { formatBytes } from "@/lib/format-bytes";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -47,8 +41,6 @@ interface CollectionSettingsPanelProps {
   defaultLanguage: string;
   /** The country whose auction results anchor valuations unless an area says otherwise (#1634). */
   homeMarket: string;
-  /** How many digits an internal copy number is padded to for display (#268). */
-  itemNoPad: number;
 }
 
 interface StorageSettingsPanelProps {
@@ -363,7 +355,7 @@ function StorageCacheCard({
 }
 
 /** Settings → Collection (#1469): what holds for the whole collection, and the reset. */
-export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, homeMarket, itemNoPad }: CollectionSettingsPanelProps) {
+export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, homeMarket }: CollectionSettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -373,22 +365,6 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
 
   const [market, setMarket] = useState(homeMarket);
   const [marketError, setMarketError] = useState<string | null>(null);
-
-  const [pad, setPad] = useState(itemNoPad);
-  const [padError, setPadError] = useState<string | null>(null);
-
-  function handlePadChange(next: number) {
-    const previous = pad;
-    setPad(next);
-    setPadError(null);
-    startTransition(async () => {
-      const result = await updateCollectionItemNoPadAction(collectionId, next);
-      if (result.status === "error") {
-        setPad(previous);
-        setPadError(result.message);
-      }
-    });
-  }
 
   function handleMarketChange(next: string) {
     const previous = market;
@@ -484,39 +460,6 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
             {COMMON_MARKETS.map((m) => (
               <option key={m.code} value={m.code}>
                 {m.label} ({m.code})
-              </option>
-            ))}
-          </select>
-        </SettingsFieldCard>
-
-        {/* Internal copy-number width (#268). Display only — the stored number is the bare integer,
-            so changing this renumbers nothing and never breaks a search. */}
-        <SettingsFieldCard
-          label="Copy number width"
-          hint="How many digits a copy's internal number is padded to."
-          tooltip={
-            <>
-              So a column of numbers lines up. Display only — no copy is renumbered, and a search
-              finds a number however it is written. Listing templates can override it per token, e.g.{" "}
-              <code>{"{itemNo:3}"}</code>.
-            </>
-          }
-          error={padError}
-        >
-          <select
-            aria-label="Copy number width"
-            value={pad}
-            onChange={(e) => handlePadChange(Number(e.target.value))}
-            disabled={isPending}
-            style={SETTINGS_FIELD_SELECT_STYLE}
-          >
-            {Array.from(
-              { length: MAX_ITEM_NO_PAD - MIN_ITEM_NO_PAD + 1 },
-              (_, i) => MIN_ITEM_NO_PAD + i
-            ).map((n) => (
-              // The example is the option's whole point: "5" says nothing, "#00042" says it all.
-              <option key={n} value={n}>
-                {n} — {formatItemNo(42, n)}
               </option>
             ))}
           </select>

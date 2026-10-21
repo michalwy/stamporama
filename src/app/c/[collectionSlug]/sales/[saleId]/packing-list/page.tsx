@@ -136,7 +136,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </div>
       </header>
 
-      <SalePackingSheet collectionId={collection.id} itemNoPad={collection.itemNoPad} list={list} />
+      <SalePackingSheet collectionId={collection.id} list={list} />
 
       {/* The legend closes the document — it is read once, after the last row, so it stays in the
           flow rather than repeating at the foot of every page. */}

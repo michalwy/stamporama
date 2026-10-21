@@ -15,7 +15,7 @@ page**; see [Detail pages](detail-pages.md).
 
 Each row shows:
 
-- The copy's **internal number** (e.g. `#00123`) — see [Internal copy number](#internal-copy-number).
+- The copy's **internal number** (e.g. `#123`) — see [Internal copy number](#internal-copy-number).
 - The linked stamp's **catalog number**, **name**, and **issue**.
 - The **condition** and any **certificate status**, each in the colour you gave it (see
   [Condition and certificate colours](collections.md#condition-and-certificate-colours)).
@@ -152,7 +152,7 @@ right, from *which copies* to *how they are shown*.
   (`Mi PL 200`, `MiPL200`); when the text starts with a known vendor abbreviation the match is
   narrowed to that vendor. Typing a shelf reference such as `A234` finds the copies filed under
   it, so you can go from a piece in hand straight to its record. A plain number also looks up an
-  **internal copy number** — `123`, `00123` and `#00123` all find copy `#00123` — alongside the
+  **internal copy number** — `123`, `#123` and `00123` all find copy `#123` — alongside the
   text matches, so a number that is also a catalog number still finds both.
 - **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
   that have **no offer** on it yet — your worklist of what still needs listing there. A copy
@@ -612,12 +612,12 @@ changes.
 
 If either copy is sold, traded away, marked as no longer held, or deleted before you press
 **Done**, there is nothing left to swap, and the replacement closes by itself. It moves to
-**Recently closed** at the bottom of the screen, saying why — *Closed — #00123 was sold*.
+**Recently closed** at the bottom of the screen, saying why — *Closed — #123 was sold*.
 
 ### A copy's replacement history
 
 A copy's own page shows a **Replacements** card listing every replacement it is in — *Replaces
-#00045* or *Replaced by #00123* — and how each stands: open (with a link to the Replacements
+#45* or *Replaced by #123* — and how each stands: open (with a link to the Replacements
 screen), done, cancelled, or closed and why. It stays there after the replacement is settled, so
 both copies keep the record.
 
@@ -840,23 +840,22 @@ Typing `i 123` in the sidebar's **Jump to…** box takes you straight to it — 
 [Quick jump](quick-jump.md), which does the same for offers, issues, purchases, sales and auction
 lots.
 
-It is shown zero-padded — `#00123` — so a column of numbers lines up. How many digits it pads to is
-your choice, under **Settings → Collection → Copy number width**: pick `2` and the same copy reads
-`#42`, pick `8` and it reads `#00000042`. That is a display setting only — nothing is renumbered,
-and a number wider than the setting simply renders in full. Listing templates can override it per
-token with `{itemNo:3}`, and can use the number at all through the
-[`{itemNo}` token](platforms.md#listing-templates).
+It is shown as the plain number — `#123` — everywhere: on screen, on printed packing lists and
+enclosures, and in the card-scan tiles, the way an offer's, a sale's or a post's number is. It is
+never padded with zeros. A listing template writes it with the
+[`{itemNo}` token](platforms.md#listing-templates) — plain too, unless the template asks for padding
+with `{itemNo:4}` (`0042`).
 
 Two things to expect:
 
-- **Numbers are never reused.** Deleting copy `#00123` retires that number — the next copy you add
+- **Numbers are never reused.** Deleting copy `#123` retires that number — the next copy you add
   continues past the highest number handed out, it does not fill the gap. A number you have already
   written on a piece must never turn up on a different one.
 - **Numbering is per collection.** Each collection starts again at `1`, so the numbers are yours
   rather than an artifact of the installation.
 
-To find a copy by its number, type it into the inventory search box — `123`, `00123` and `#00123`
-all work.
+To find a copy by its number, type it into the inventory search box — `123` and `#123` work,
+and so does `00123`, so a label written while numbers were still padded finds its copy too.
 
 Copies that already existed before this feature were numbered in the order they were added, oldest
 first.

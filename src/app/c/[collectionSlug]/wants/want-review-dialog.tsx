@@ -12,7 +12,6 @@ import type { WantAcceptanceInput, WantListItem, WantMatchForCopy } from "@/lib/
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
-import { useCollectionItemNoPad } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
@@ -140,7 +139,6 @@ export function WantReviewDialog({
   const { data: conditions } = useCollectionConditions(collectionId);
   const { data: certificateStatuses } = useCollectionCertificateStatuses(collectionId);
   const { data: formats } = useCollectionFormats(collectionId);
-  const itemNoPad = useCollectionItemNoPad(collectionId);
   const { invalidate } = useInvalidateWants();
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -194,11 +192,11 @@ export function WantReviewDialog({
     [copyItems]
   );
 
-  /** `#00123 · U, #00124 · U and 3 more` — each copy with the condition it arrived in. */
+  /** `#123 · U, #124 · U and 3 more` — each copy with the condition it arrived in. */
   function matchedBy(rowCopies: ArrivingCopy[]): string {
     const named = rowCopies
       .slice(0, MATCHED_BY_NAMED)
-      .map((c) => `${formatItemNo(c.itemNo, itemNoPad)} · ${conditionName(c.conditionId)}`)
+      .map((c) => `${formatItemNo(c.itemNo)} · ${conditionName(c.conditionId)}`)
       .join(", ");
     const rest = rowCopies.length - MATCHED_BY_NAMED;
     return rest > 0 ? `${named} and ${rest} more` : named;

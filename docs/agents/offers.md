@@ -194,7 +194,8 @@ The offer model, listing texts, pricing, photos, platform state, and the offer s
   `cost`, which is the seller's (the collector's choice); `{shippingOptions}` lists each method at its
   `cost`. Sums are in cents; amounts are `generatedAmount`'s (#1787), each amount placeholder a
   `TemplateValue` function of the currency style so `{total:code}` and the bare `{total}` (the symbol)
-  come from one value (#2028, `template-amount.ts`; `facebook.md` has the rule). Plain text: it goes into a chat.
+  come from one value (#2028, `template-amount.ts`; `facebook.md` has the rule); `{sale}` is a
+  `TemplateNumbers`, plain bare and padded by `{sale:N}` (#2097). Plain text: it goes into a chat.
   `sale-buyer-message.ts` imports `sales.ts`, never the reverse. The integration test is
   `tests/integration/sale-buyer-message.test.ts`; it fails with the one-group choice removed, and the
   unit test with the method condition removed from the total (both checked when written).

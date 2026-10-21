@@ -4,7 +4,6 @@ import type { StampConditionData } from "@/lib/conditions";
 import { heldCopyPlace, orderHeldCopyPictures } from "@/lib/held-copies";
 import { formatItemNo } from "@/lib/item-number";
 import {
-  useCollectionItemNoPad,
   useHeldCopyPictures,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
@@ -75,7 +74,6 @@ export function HeldCopyThumbs({
   onOpen: (itemId: string | null) => void;
 }) {
   const { data } = useHeldCopyPictures(collectionId, stampId, excludeItemId);
-  const pad = useCollectionItemNoPad(collectionId);
   // Nothing while loading or on a failed read: the line above already says what is held, or that
   // it could not check, and an empty strip here is no claim either way.
   const copies = orderHeldCopyPictures(
@@ -106,7 +104,7 @@ export function HeldCopyThumbs({
           ? certificateStatuses.find((c) => c.id === copy.certificateStatusId)
           : undefined;
         const photo = copy.photos[0];
-        const itemNo = formatItemNo(copy.itemNo, pad);
+        const itemNo = formatItemNo(copy.itemNo);
         const place = heldCopyPlace(copy);
         const sorting = place.kind === "inFlight" ? place.label : null;
         const label = `${itemNo} · ${condition?.name ?? "?"}${sorting ? ` · ${sorting}` : ""}`;

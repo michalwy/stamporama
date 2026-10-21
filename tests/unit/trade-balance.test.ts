@@ -33,7 +33,7 @@ function line(over: Partial<TradeLineValue> = {}): TradeLineValue {
     sectionId: "s1",
     side: "give",
     quantity: 1,
-    label: "#00001 Chopin (MNH)",
+    label: "#1 Chopin (MNH)",
     own: 10,
     ownUncertain: false,
     ownManual: false,
@@ -153,11 +153,11 @@ describe("the own-value skew", () => {
 
 describe("the gates", () => {
   it("names an unvalued line rather than counting it", () => {
-    const values = [line({ lineId: "a" }), line({ lineId: "b", own: null, label: "#00002 Kościuszko (MNH)" })];
+    const values = [line({ lineId: "a" }), line({ lineId: "b", own: null, label: "#2 Kościuszko (MNH)" })];
     const blockers = tradeGateBlockers(values, new Set(), true);
     assert.equal(blockers.length, 1);
     assert.equal(blockers[0].kind, "own-unvalued");
-    assert.match(blockers[0].message, /#00002 Kościuszko \(MNH\)/);
+    assert.match(blockers[0].message, /#2 Kościuszko \(MNH\)/);
   });
 
   it("counts an unknown-variant estimate as a value", () => {

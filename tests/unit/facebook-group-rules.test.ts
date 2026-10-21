@@ -510,6 +510,12 @@ describe("captioned posts' settings (#1841)", () => {
     assert.deepEqual(unknownPostPlaceholders("{post} {offer}", "auction", "captionPost"), []);
   });
 
+  it("take :N on every placeholder that writes a number, and name a width that is not one (#2097)", () => {
+    assert.deepEqual(unknownPostPlaceholders("{lot:2} {offer:4} {price:3} {lot:0}", "fixed"), ["{price:3}", "{lot:0}"]);
+    assert.deepEqual(unknownPostPlaceholders("{post:3} {offer:4} {lot:2}", "auction", "caption"), []);
+    assert.deepEqual(unknownPostPlaceholders("{post:3} {offer:4} {terms:4}", "auction", "captionPost"), ["{terms:4}"]);
+  });
+
   it("read any stored layout but `captions` as the post's text", () => {
     assert.equal(toFacebookMultiLotLayout("captions"), "captions");
     assert.equal(toFacebookMultiLotLayout("text"), "text");

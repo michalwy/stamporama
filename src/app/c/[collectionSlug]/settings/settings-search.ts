@@ -38,7 +38,6 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   general: [
     { label: "Base currency" },
     { label: "Default language" },
-    { label: "Copy number width" },
     { label: "Danger zone" },
     { label: "Reset to demo data" },
   ],

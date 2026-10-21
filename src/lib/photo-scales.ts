@@ -4,7 +4,7 @@ import { FULL_MAX_EDGE } from "./photos/process";
 import { photoMeasureFrame } from "./photo-measure-frame";
 import { assertCollectionProfiles } from "./photos";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
-import { DEFAULT_ITEM_NO_PAD, formatItemNo } from "./item-number";
+import { formatItemNo } from "./item-number";
 import {
   parsePhotoScaleInput,
   photoScaleColumns,
@@ -193,7 +193,7 @@ export async function readScaleListPhotos(
   photoIds: readonly string[]
 ): Promise<ScaleListPhotos> {
   await assertOwnedCollection(ownerId, collectionId);
-  const [rows, collection, labeller, scanning] = await Promise.all([
+  const [rows, labeller, scanning] = await Promise.all([
     prisma.photo.findMany({
       where: { id: { in: [...new Set(photoIds)] }, item: { collectionId } },
       select: {
@@ -205,11 +205,9 @@ export async function readScaleListPhotos(
         item: { select: { id: true, itemNo: true, stamp: { select: STAMP_LABEL_SELECT.stamp.select } } },
       },
     }),
-    prisma.collection.findUnique({ where: { id: collectionId }, select: { itemNoPad: true } }),
     makeOfferLabeller(collectionId),
     getScanningSetup(collectionId),
   ]);
-  const pad = collection?.itemNoPad ?? DEFAULT_ITEM_NO_PAD;
   const byId = new Map(rows.map((r) => [r.id, r]));
   const photos = photoIds.flatMap((id): ScaleListPhoto[] => {
     const row = byId.get(id);
@@ -218,7 +216,7 @@ export async function readScaleListPhotos(
       {
         photoId: row.id,
         itemId: row.item.id,
-        copyLabel: `${formatItemNo(row.item.itemNo, pad)} · ${labeller.copy(row.item.stamp)}`,
+        copyLabel: `${formatItemNo(row.item.itemNo)} · ${labeller.copy(row.item.stamp)}`,
         role: row.role,
         scale: photoScaleOf(row),
       },

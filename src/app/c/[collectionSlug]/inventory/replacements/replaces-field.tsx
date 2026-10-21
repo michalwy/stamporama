@@ -14,7 +14,6 @@ import {
   photoFullUrl,
   photoThumbUrl,
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import { useCollectionItemNoPad } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
   CertificateStatusChip,
   ConditionChip,
@@ -103,7 +102,6 @@ export function ReplacesButton({
   tabIndex?: number;
 }) {
   const { data } = useReplaceableCopies(collectionId, stampId, excludeItemId);
-  const pad = useCollectionItemNoPad(collectionId);
   const [picking, setPicking] = useState(false);
   const copies = data ?? [];
   if (copies.length === 0) return null;
@@ -149,7 +147,7 @@ export function ReplacesButton({
   }
 
   const photo = leadPhoto(chosen);
-  const label = `Replaces ${formatItemNo(chosen.itemNo, pad)}`;
+  const label = `Replaces ${formatItemNo(chosen.itemNo)}`;
   const on = dispositionChipColors("inCollection");
   return (
     <>
@@ -217,7 +215,6 @@ function ReplacesPicker({
   onChoose: (itemId: string) => void;
   onClose: () => void;
 }) {
-  const pad = useCollectionItemNoPad(collectionId);
   const { data: conditions } = useCollectionConditions(collectionId);
   const { data: certificateStatuses } = useCollectionCertificateStatuses(collectionId);
   const [enlarged, setEnlarged] = useState<{ copy: ReplacementCandidateData; index: number } | null>(
@@ -251,7 +248,7 @@ function ReplacesPicker({
               ? certificateStatuses?.find((c) => c.id === copy.certificateStatusId)
               : undefined;
             const photo = leadPhoto(copy);
-            const itemNo = formatItemNo(copy.itemNo, pad);
+            const itemNo = formatItemNo(copy.itemNo);
             return (
               <div
                 key={copy.id}

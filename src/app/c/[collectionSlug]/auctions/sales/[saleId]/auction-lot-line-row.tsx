@@ -36,7 +36,7 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 // It is deliberately **not** `InventoryItemRow` itself. A line is a stamp the lot is *described* as
 // holding, not a copy that exists: there is no internal copy number, no location, no disposition, no
 // delivery state and no cost basis, because nothing has been bought yet. Rendering it through the
-// copy row would print `#00000` and four empty slots and call that consistency. What a line has and
+// copy row would print `#0` and four empty slots and call that consistency. What a line has and
 // a copy does not is **quantity**, which is the last chip on the condition line.
 
 /** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */

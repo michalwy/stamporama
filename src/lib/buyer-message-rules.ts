@@ -14,6 +14,7 @@ import {
   isKnownTemplateToken,
   resolveTemplateToken,
   TEMPLATE_TOKEN,
+  templateNumbers,
   templateTokens,
   writtenAmount,
   type CurrencyStyle,
@@ -21,12 +22,14 @@ import {
 } from "./template-amount";
 
 /** One placeholder a buyer message may carry, with the label and example its editor shows. `amount`
- *  marks one that writes amounts, and so takes the currency parameter (#2028). */
+ *  marks one that writes amounts, and so takes the currency parameter (#2028); `number` one that
+ *  writes an internal number, and so takes the padding one (#2097). */
 export interface BuyerMessagePlaceholder {
   token: string;
   label: string;
   example: string;
   amount?: boolean;
+  number?: boolean;
 }
 
 /**
@@ -46,7 +49,7 @@ export const BUYER_MESSAGE_PLACEHOLDERS: readonly BuyerMessagePlaceholder[] = [
     example: "Registered letter — 12 zł",
     amount: true,
   },
-  { token: "{sale}", label: "Sale number", example: "57" },
+  { token: "{sale}", label: "Sale number", example: "57", number: true },
 ];
 
 /** One item sold, as `{items}` lists it: the offer's number and title. */
@@ -118,7 +121,7 @@ export function buyerMessageValues(sale: BuyerMessageSale): Record<string, Templ
       sale.shippingOptions
         .map((option) => priced(option.name, writtenAmount(option.price, option.currency, style)))
         .join("\n"),
-    "{sale}": String(sale.saleNo),
+    "{sale}": templateNumbers(sale.saleNo),
   };
 }
 

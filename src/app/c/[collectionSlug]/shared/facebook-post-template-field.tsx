@@ -16,7 +16,8 @@ import { OFFER_LISTING_TYPE_LABEL, type OfferListingType } from "@/lib/offer-rul
 // called out as typed, and a retired one flagged so it is removed. One field for every place a post
 // template is written: Settings → Facebook's defaults and groups, and an offer's own (#1780), so the
 // three never drift apart in what they say a template can hold. A captioned post's templates (#1841) —
-// a lot's caption, and the post's shared text — are this field too, with their own placeholders.
+// a lot's caption, and the post's shared text — are this field too, with their own placeholders. A
+// number placeholder's padding (#2097) is said in every role, since each of them carries one.
 
 const ROLE_LABEL: Record<FacebookTemplateRole, string> = {
   post: "post",
@@ -80,7 +81,8 @@ export function FacebookPostTemplateField({
             <code>{p.token}</code> {p.label.toLowerCase()}
           </span>
         ))}
-        .
+        . A number is written plain; add <code>:N</code> to pad it with zeros to N digits, as in{" "}
+        <code>{"{offer:4}"}</code> for <code>0042</code>.
         {role !== "captionPost" && (
           <>
             {" "}

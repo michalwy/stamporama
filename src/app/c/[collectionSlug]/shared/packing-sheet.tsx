@@ -26,9 +26,6 @@ import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb
 
 export interface PackingCellContext {
   collectionId: string;
-  /** How wide this collection writes its copy numbers (#268) — the sheet prints them exactly as
-   * every other surface does, since the number is matched against the piece's own label. */
-  itemNoPad: number;
 }
 
 export interface PackingColumnSpec {
@@ -129,7 +126,7 @@ export const PACKING_COLUMN = {
     numeric: true,
     // Every copy the row stands for (#474), because the number is what identifies the piece in
     // hand — a merged row of five is five labels to check off, not one.
-    render: (row, ctx) => row.itemNos.map((no) => formatItemNo(no, ctx.itemNoPad)).join(" "),
+    render: (row) => row.itemNos.map((no) => formatItemNo(no)).join(" "),
   },
   catalog: {
     key: "catalog",
@@ -247,7 +244,6 @@ const BOX: React.CSSProperties = {
 
 export interface PackingSheetProps {
   collectionId: string;
-  itemNoPad: number;
   list: PackingListData;
   /** This printout's columns, in print order. */
   columns: readonly PackingColumnSpec[];
@@ -285,7 +281,6 @@ export interface PackingSheetProps {
 
 export function PackingSheet({
   collectionId,
-  itemNoPad,
   list,
   columns,
   prefKey,
@@ -362,7 +357,7 @@ export function PackingSheet({
       {list.groups.map((group) => (
         <PackingSection
           key={group.key}
-          ctx={{ collectionId, itemNoPad }}
+          ctx={{ collectionId }}
           icon={groupIcon}
           group={group}
           columns={enabled}

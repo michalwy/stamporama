@@ -6,13 +6,11 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   createCollection,
-  getCollectionItemNoPad,
   resetCollectionToDemo,
   setCollectionBidPercents,
   setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
   setCollectionHomeMarket,
-  setCollectionItemNoPad,
   setCollectionScanSheetTtl,
   type BidPercentPatch,
 } from "@/lib/collections";
@@ -127,29 +125,6 @@ export async function updateCollectionHomeMarketAction(
   }
 }
 
-export type ItemNoPadState =
-  | { status: "idle" }
-  | { status: "success"; pad: number }
-  | { status: "error"; message: string };
-
-/** Set the internal copy-number width (#268) from the Settings → Collection picker. */
-export async function updateCollectionItemNoPadAction(
-  collectionId: string,
-  pad: number
-): Promise<ItemNoPadState> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect(await signInPath());
-  try {
-    await setCollectionItemNoPad(session.user.id, collectionId, pad);
-    return { status: "success", pad };
-  } catch (e) {
-    return {
-      status: "error",
-      message: e instanceof Error ? e.message : "Failed to save the copy-number width.",
-    };
-  }
-}
-
 export type ClosedOfferPhotoTtlState =
   | { status: "idle" }
   | { status: "success"; setting: string | null }
@@ -229,13 +204,6 @@ export async function updateCollectionBidPercentsAction(
       message: e instanceof Error ? e.message : "Failed to save the bid settings.",
     };
   }
-}
-
-/** The collection's copy-number width, for the client rows that render one (#268). */
-export async function getCollectionItemNoPadAction(collectionId: string): Promise<number> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect(await signInPath());
-  return getCollectionItemNoPad(session.user.id, collectionId);
 }
 
 export type ClearStorageCacheState =

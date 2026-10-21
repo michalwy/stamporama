@@ -1388,7 +1388,8 @@ function buildItemWhere(
       { locationRef: { contains: s, mode: "insensitive" } },
     ];
     // Internal copy number (#268): a purely numeric entry also looks up the copy by its own
-    // number, in whichever form the collector read off the label (`123`, `00123`, `#00123`).
+    // number, in whichever form the collector read off the label (`123`, `#123`, or `00123` from a
+    // label written while numbers were padded, #2096).
     // Added to the OR rather than replacing it — `200` is a plausible catalog number too.
     const itemNo = parseItemNoSearch(s);
     if (itemNo !== null) or.push({ itemNo });
@@ -1808,7 +1809,7 @@ export interface ItemIssueRef {
 export interface ItemListItem {
   id: string;
   /** Internal copy number (#268): per-collection, assigned on creation, never editable.
-   *  Rendered through `formatItemNo` (`#00123`). */
+   *  Rendered through `formatItemNo` (`#123`). */
   itemNo: number;
   stampId: string;
   stampName: string | null;

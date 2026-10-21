@@ -44,7 +44,7 @@ import {
   parseBareRomanNumber,
   CATALOG_RANGE_SEPARATOR,
 } from "./catalog-range";
-import { formatItemNoDigits, parseItemNoPad } from "./item-number";
+import { parseNumberPad, writtenNumber } from "./template-amount";
 import type { TranslatableEntity } from "./translations";
 
 /** One of a copy's catalog numbers, with the parts needed to render it under `{catalog}` options
@@ -110,13 +110,8 @@ export interface TitleTemplateCopy {
   /** Free-text identifier within that location (e.g. `A234`), or null. */
   ref: string | null;
   /** The copy's internal number (#268), or null when the source has none (a sample copy). Carried
-   *  as the bare integer so `{itemNo:N}` can re-pad it. */
+   *  as the bare integer so `{itemNo:N}` can pad it (#2097). */
   itemNo: number | null;
-  /** The owning collection's configured display width for `itemNo` — what a bare `{itemNo}` pads
-   *  to. It is collection-level rather than per-copy data, but `TitleTemplateCopy` is the engine's
-   *  only channel: every copy in a render scope belongs to one collection, so every copy carries
-   *  the same value. */
-  itemNoPad: number;
   /** The stamp's subtype (#339) — `Error`, `Overprint`… — or null. Null for a base stamp, which has
    * no subtype, **and** for the collection's default subtype: the default is the unmarked case, so
    * `{subtype}` renders empty rather than stamping a redundant "Variant" on every listing. */
@@ -256,7 +251,7 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{count}", label: "How many copies", example: "100" },
   { token: "{location}", label: "Location", example: "Stockbook A" },
   { token: "{ref}", label: "Location ref", example: "A234" },
-  { token: "{itemNo}", label: "Copy number", example: "00042" },
+  { token: "{itemNo}", label: "Copy number", example: "42" },
   { token: "{issueName}", label: "Issue name", example: "1850 First Issue" },
   { token: "{issueYear}", label: "Issue year", example: "1850" },
   { token: "{subtype}", label: "Subtype", example: "Overprint" },
@@ -873,17 +868,15 @@ function resolveCatalog(copies: readonly TitleTemplateCopy[], params: string[]):
   );
 }
 
-/** Resolve `{itemNo[:WIDTH]}` across the copies: each copy's own number, zero-padded to WIDTH when
- * given and usable, else to the collection's configured width. Distinct values joined like every
- * other per-copy token, so inside a `{#copy}` block it is one number and across a whole offer it
- * lists them. */
-function resolveItemNo(copies: readonly TitleTemplateCopy[], widthArg: string | undefined): string {
-  const override = widthArg === undefined ? null : parseItemNoPad(widthArg);
-  return distinct(
-    copies.map((c) =>
-      c.itemNo === null ? null : formatItemNoDigits(c.itemNo, override ?? c.itemNoPad)
-    )
-  ).join(" / ");
+/** Resolve `{itemNo[:WIDTH]}` across the copies: each copy's own number, plain (#2096), or
+ * zero-padded to WIDTH digits when the template asks (#2097). Distinct values joined like every other
+ * per-copy token, so inside a `{#copy}` block it is one number and across a whole offer it lists
+ * them. Null — the token kept as typed — when WIDTH is not a width, the rule of every template's
+ * `:N`. */
+function resolveItemNo(copies: readonly TitleTemplateCopy[], widthArg: string | undefined): string | null {
+  const pad = widthArg === undefined ? null : parseNumberPad(widthArg.trim());
+  if (widthArg !== undefined && pad === null) return null;
+  return distinct(copies.map((c) => (c.itemNo === null ? null : writtenNumber(c.itemNo, pad)))).join(" / ");
 }
 
 /** Roman month numerals, the convention the collector's own album headings are written in —
@@ -1039,11 +1032,12 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.location)).join(" / ");
     case "ref":
       return distinct(copies.map((c) => c.ref)).join(" / ");
-    // `{itemNo}` pads to the collection's configured width, `{itemNo:N}` to N — a listing that
-    // wants `42` rather than `00042` says so in the template. No `#`: a template is literal text,
-    // so a collector who wants one types it. An unusable argument falls back to the collection
-    // width rather than rendering nothing, like every other unrecognised token argument.
+    // `{itemNo}` writes the plain number (#2096), `{itemNo:N}` pads it to N digits (#2097) — a
+    // listing that wants `00042` says so in the template. No `#`: a template is literal text, so a
+    // collector who wants one types it. A WIDTH that is not one keeps the token as typed, as every
+    // template's `:N` does, so the slip is seen in the preview rather than quietly ignored.
     case "itemno":
+      if (segments.length > 2) return null;
       return resolveItemNo(copies, segments[1]);
     case "issuename":
       return distinct(copies.map((c) => c.issueName)).join(" / ");

@@ -25,7 +25,6 @@ import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import {
-  useCollectionItemNoPad,
   useInvalidateInventory,
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { ReplacementCopy } from "./replacement-copy";
@@ -95,8 +94,7 @@ export function DuplicateReview({
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { invalidateList } = useInvalidateInventory();
-  const pad = useCollectionItemNoPad(collectionId);
-  const label = (n: number) => formatItemNo(n, pad);
+  const label = (n: number) => formatItemNo(n);
 
   const { filterAreaId } = useListAreaYearFilter(collectionId, areas);
   const [includeSubAreas] = useSubtreeScope("area");

@@ -3421,7 +3421,7 @@ function useStuck(stickyTop: number) {
  * across, which two hues of the same badge would not.
  *
  * `aria-hidden`: the cell's `title` already names the outcome in words, and a screen reader reading
- * "became copy #00042" does not also need "check".
+ * "became copy #42" does not also need "check".
  */
 function TileStateBadge({ state, chrome }: { state: ScanTileData["state"]; chrome: ScanTileChrome }) {
   // The third mark (#597) is **parked**, and it is drawn like the other two rather than as a

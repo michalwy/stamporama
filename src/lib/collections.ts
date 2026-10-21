@@ -3,7 +3,6 @@ import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
 import { normalizeMarketCode } from "./market-anchoring";
-import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
 import { parseScanSheetTtlSetting } from "./scan-sheet-cleanup-rules";
@@ -167,51 +166,6 @@ export async function setCollectionHomeMarket(
 }
 
 /**
- * Set how many digits an internal copy number (#268) is padded to for display. Display only: the
- * stored `Item.itemNo` is the bare integer, so this rewrites no rows and never changes which copy
- * a number points at. Listing templates may still override it per token (`{itemNo:3}`).
- */
-export async function setCollectionItemNoPad(
-  ownerId: string,
-  collectionId: string,
-  pad: number
-): Promise<void> {
-  const value = parseItemNoPad(pad);
-  if (value === null) {
-    throw new Error(
-      `Width must be a whole number between ${MIN_ITEM_NO_PAD} and ${MAX_ITEM_NO_PAD}.`
-    );
-  }
-  const col = await prisma.collection.findUnique({
-    where: { id: collectionId },
-    select: { ownerId: true },
-  });
-  if (!col || col.ownerId !== ownerId) {
-    throw new Error("Collection not found or access denied.");
-  }
-  await prisma.collection.update({
-    where: { id: collectionId },
-    data: { itemNoPad: value },
-  });
-}
-
-/** The collection's configured copy-number width (#268), for the client surfaces that render one.
- * Owner-scoped like every other collection read. */
-export async function getCollectionItemNoPad(
-  ownerId: string,
-  collectionId: string
-): Promise<number> {
-  const col = await prisma.collection.findUnique({
-    where: { id: collectionId },
-    select: { ownerId: true, itemNoPad: true },
-  });
-  if (!col || col.ownerId !== ownerId) {
-    throw new Error("Collection not found or access denied.");
-  }
-  return col.itemNoPad;
-}
-
-/**
  * Set how long this collection's closed offers keep their generated listing images (#577), or clear
  * the setting so the collection defers to the instance again.
  *
@@ -339,7 +293,6 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       defaultLanguage: true,
       homeMarket: true,
       duplicateCatalogMode: true,
-      itemNoPad: true,
       bidFloorPercent: true,
       bidCeilingPercent: true,
       bidFallbackPercent: true,
