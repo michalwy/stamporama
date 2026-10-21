@@ -17,6 +17,7 @@ import { getCollectionBaseCurrency } from "./pricing";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
+import { makeFormatFactorLookup } from "./format-pricing";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
 import {
@@ -193,6 +194,10 @@ export interface AuctionLotLineItem extends AnchorableLine {
   lineValueHigh: string | null;
   /** The figure is a lowest-variant estimate (#238) — *inferred, not recorded*. */
   uncertain: boolean;
+  /** The multiplier that derives the line's format from the single at its condition (ADR-0020),
+   *  or null for the single, for an unsettled condition and where no factor applies. What
+   *  *Fill catalogue values* (#2094) shows a typed single's value coming to on a multiple. */
+  formatFactor: number | null;
   /** The open wants recorded for this stamp (#532), or null for none. On a lot being bid on this
    *  is the point of the whole record: what is in front of you, and whether you are after it. */
   wants: StampWantSummary | null;
@@ -442,7 +447,7 @@ export async function valuateAuctionLotLines(
   if (rows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [conditions, rates, areas, issuePrefixes, wantsByStamp] = await Promise.all([
+  const [conditions, rates, areas, issuePrefixes, wantsByStamp, factorOf] = await Promise.all([
     readCollectionConditions(collectionId),
     baseToSaleRates(
       collectionId,
@@ -458,6 +463,10 @@ export async function valuateAuctionLotLines(
     // The want marker (#532), for every stamp on the page's lines — one read, the same call the
     // catalogue lists make.
     loadStampWantSummaries(collectionId, rows.map((r) => r.stampId)),
+    // The format multipliers (#2094), read only where a line is a multiple at all.
+    rows.some((r) => r.formatId !== null)
+      ? makeFormatFactorLookup(collectionId)
+      : Promise.resolve(() => null),
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
   const currencyByLine = new Map(rows.map((row) => [row.id, row.auctionLot.auctionSale.currency]));
@@ -551,6 +560,10 @@ export async function valuateAuctionLotLines(
       mark: value.mark,
       unconvertible,
       uncertain: value.uncertain,
+      formatFactor:
+        row.conditionId === null
+          ? null
+          : factorOf(row.formatId, areaId, membership?.issueId ?? null, row.conditionId),
       conditionUnsettled: value.conditionUnsettled ?? false,
       unpricedConditions: value.unpricedConditions ?? 0,
     });

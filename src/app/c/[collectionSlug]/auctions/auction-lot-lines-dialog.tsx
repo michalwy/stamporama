@@ -17,6 +17,8 @@ import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import type { CollectionAreaData } from "@/lib/areas";
 import { useAtRiskLotLines, useAuctionLotComposition, type AuctionLotView } from "./use-auctions-query";
 import { AuctionDuplicateWarning } from "./auction-duplicate-warning";
+import { AuctionLotCatalogValuesDialog } from "./auction-lot-catalog-values-dialog";
+import { FillCatalogueValuesButton } from "./fill-catalogue-values-button";
 import type { ComposedLine } from "@/lib/auction-duplicates";
 
 
@@ -132,6 +134,8 @@ export function AuctionLotLinesDialog({
   /** Which line's stamp the Valuation dialog is open on (#601) — one dialog for the whole list,
    * since a hook cannot be called per row. */
   const [valuationStampId, setValuationStampId] = useState<string | null>(null);
+  /** *Fill catalogue values* (#2094) is open over the lot's unpriced lines. */
+  const [filling, setFilling] = useState(false);
 
   const { data, isLoading, refetch } = useAuctionLotComposition(collectionId, lot.id);
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -404,28 +408,32 @@ export function AuctionLotLinesDialog({
           </div>
         )}
 
-        {editable && (
-          <button
-            type="button"
-            onClick={() => {
-              setError(undefined);
-              setDraft({ kind: "add" });
-            }}
-            style={{
-              marginTop: "0.75rem",
-              padding: "0.375rem 0.75rem",
-              border: "1px dashed var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              background: "none",
-              cursor: "pointer",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            + Add line
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
+          {editable && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setDraft({ kind: "add" });
+              }}
+              style={{
+                padding: "0.375rem 0.75rem",
+                border: "1px dashed var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                background: "none",
+                cursor: "pointer",
+                fontSize: "0.8125rem",
+                fontWeight: 500,
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              + Add line
+            </button>
+          )}
+          {/* Beside the lines it fills, and ungated like their `+ catalog value` slots: a
+              catalogue value is a fact about the stamp, not about the lot being editable. */}
+          <FillCatalogueValuesButton lines={lines} onClick={() => setFilling(true)} />
+        </div>
 
         {data && lines.length > 0 && <CompositionTotals data={data} />}
       </DialogBody>
@@ -525,6 +533,18 @@ export function AuctionLotLinesDialog({
         />,
           document.body
         )}
+
+      {filling && (
+        <AuctionLotCatalogValuesDialog
+          collectionId={collectionId}
+          lines={lines}
+          areaNameById={areaNameById}
+          primaryVendorByArea={primaryVendorByArea}
+          vendorMapFor={vendorMapFor}
+          onClose={() => setFilling(false)}
+          onSaved={() => void reload()}
+        />
+      )}
 
       {/* The Valuation dialog (#114) for a line's stamp — what the market has paid, the catalogue
           and what this collection paid, read while a ceiling is being decided (#601). Portaled for

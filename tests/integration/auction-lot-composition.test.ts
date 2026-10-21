@@ -304,6 +304,10 @@ describe("auction lot composition (#353)", () => {
     let composition = await getAuctionLotComposition(userId, lotId);
     assert.equal(composition.lines.find((l) => l.id === blockLine)?.unitValue, "50.00");
     assert.equal(composition.lines.find((l) => l.id === pairLine)?.unitValue, "20.00");
+    // The multiplier each line carries for *Fill catalogue values* (#2094): the pair's, and none
+    // for a block that is priced explicitly and has no factor of its own.
+    assert.equal(composition.lines.find((l) => l.id === pairLine)?.formatFactor, 2.5);
+    assert.equal(composition.lines.find((l) => l.id === blockLine)?.formatFactor, null);
 
     // Move the pair to a condition with no single price and no factor of its own: the multiple is
     // then unpriced, never valued at the single's figure.
@@ -316,6 +320,8 @@ describe("auction lot composition (#353)", () => {
     });
     composition = await getAuctionLotComposition(userId, lotId);
     assert.equal(composition.lines.find((l) => l.id === pairLine)?.unpriced, true);
+    // …and still says what a single typed at that condition would come to there.
+    assert.equal(composition.lines.find((l) => l.id === pairLine)?.formatFactor, 2.5);
 
     await deleteAuctionLotLine(userId, blockLine);
     await deleteAuctionLotLine(userId, pairLine);

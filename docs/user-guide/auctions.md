@@ -852,6 +852,20 @@ the same rules, so the two can never disagree:
   is the **single's** value, as it is everywhere that dialog opens; when the line is a multiple, the
   dialog shows what that comes to with the format's multiplier — and says so when there is no
   multiplier to apply, which is the case where filling this in leaves the line unpriced.
+- **Several lines missing a value?** **Fill catalogue values (N)**, beside **+ Add line** in the lot's
+  *Lot contents* window and on its card on the sale screen, opens one window listing them all, in the
+  lot's own order. Each value is a field you type straight into — **Tab** goes to the next one and
+  **Shift+Tab** to the previous, with nothing else in between, and Tab from the last one reaches
+  **Save**. A line shows the stamp's picture (hover it to see it larger), its primary catalogue
+  number, its condition and certificate. A value is the **single's**, recorded in the area's
+  **primary catalogue** exactly as **+ catalog value** records it, so a stamp at one condition and
+  certificate is asked once even when the lot holds it both as a single and as a block; for a
+  multiple the line shows what the typed figure comes to with the format's multiplier, or says
+  there is none. `-` (does not exist) and `?` (not determinable) work as in any catalogue-value
+  field. **N** is how many values the window asks for. **Save** writes them all at once, and the
+  lot's catalogue value and bid recommendation follow. A line pointed at a base stamp (variant not
+  identified) is not listed — its value is its variants', which the variant price grid fills — nor
+  is one whose condition is not settled yet.
 
 - **A line whose condition is not settled is a range.** It is valued at each condition it may be in,
   and shows the lowest figure to the highest, `20.00–40.00`; the lot's catalogue value, its
