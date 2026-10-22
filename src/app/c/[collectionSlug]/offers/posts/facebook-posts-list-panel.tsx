@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
-import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { LIST_BANNER_STYLE, STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -21,7 +20,6 @@ import {
   FACEBOOK_POST_STAGES,
   FACEBOOK_POST_STAGE_LABEL,
   facebookPostLabel,
-  isFacebookPostStage,
 } from "@/lib/facebook-post-rules";
 import { FACEBOOK_MULTI_LOT_LAYOUT_SHORT_LABEL } from "@/lib/facebook-group-rules";
 import {
@@ -31,6 +29,8 @@ import {
   type FacebookPostFilters,
 } from "../use-offers-query";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "./delete-post-dialog";
+import { postsViewNarrowings, type PostsNarrowing } from "./posts-view-params";
+import { usePostsView } from "./use-posts-view";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -60,7 +60,9 @@ interface FacebookPostsListPanelProps {
  * The list of Facebook posts (#1850): each post's number and title (#1862), group, lots and how many
  * are still for sale, where it stands, its layout, the day it went up and its link — the row opening
  * the post's own screen. Newest first, paged on the server like trades; the group, stage and no-title
- * filters live in the URL (`group`, a comma-separated set, `stage`, and `untitled`).
+ * filters live in the URL (`group`, a comma-separated set, `stage`, and `untitled`) and are remembered
+ * per collection (#2108, `use-posts-view.ts`), so the list comes back as it was left however it is
+ * reached; while one narrows the list, the band under the toolbar says so with *Clear filters*.
  *
  * Every Facebook offer that has gone up is in a post (#1989) — one posted alone in a post of one lot —
  * so the list is everything up on Facebook. Above it, *Not in a post yet* names the Facebook offers
@@ -70,27 +72,9 @@ interface FacebookPostsListPanelProps {
  * (#1991), folded the first time and left as the collector last left it after that.
  */
 export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }: FacebookPostsListPanelProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const groupParam = searchParams.get("group") ?? "";
-  const groupIds = useMemo(() => groupParam.split(",").filter(Boolean), [groupParam]);
-  const stageParam = searchParams.get("stage") ?? "";
-  const stage = isFacebookPostStage(stageParam) ? stageParam : undefined;
-  const untitled = searchParams.get("untitled") === "1";
-
-  const updateParams = useCallback(
-    (updates: Record<string, string>) => {
-      const params = new URLSearchParams(searchParams.toString());
-      for (const [key, value] of Object.entries(updates)) {
-        if (value) params.set(key, value);
-        else params.delete(key);
-      }
-      const qs = params.toString();
-      router.push(`/c/${collectionSlug}/offers/posts${qs ? `?${qs}` : ""}`);
-    },
-    [router, collectionSlug, searchParams]
-  );
+  const knownGroups = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
+  const { view, setView, clearFilters } = usePostsView(collectionId, `/c/${collectionSlug}/offers/posts`, knownGroups);
+  const { groups: groupIds, stage, untitled } = view;
 
   const filters: FacebookPostFilters = useMemo(() => ({ groupIds, stage, untitled }), [groupIds, stage, untitled]);
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useFacebookPostsInfinite(
@@ -98,49 +82,88 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
     filters
   );
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
-  const hasActiveFilters = groupIds.length > 0 || !!stage || untitled;
+  const narrowings = postsViewNarrowings(view);
+  const hasActiveFilters = narrowings.length > 0;
   // An offer in no post is still being prepared or Ready, and has no title to lack.
   const notInPostStates = stage === "preparing" ? ["preparing"] : stage === "ready" ? ["ready"] : null;
   const showNotInPost = !untitled && (!stage || notInPostStates !== null);
   const { data: notInPost } = useFacebookOffersNotInPost(collectionId, groupIds, notInPostStates, showNotInPost);
 
+  /** One narrowing as the band names it — in the words of the control that set it, so it can be found
+   *  on the toolbar and switched off there as well as by *Clear filters*. */
+  function narrowingLabel(n: PostsNarrowing): string {
+    switch (n.key) {
+      case "groups":
+        return `Group: ${n.value.map((id) => groups.find((g) => g.id === id)?.name ?? "Unknown group").join(" or ")}`;
+      case "stage":
+        return FACEBOOK_POST_STAGE_LABEL[n.value];
+      case "untitled":
+        return "No title";
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
+      {/* The narrowed-list band sits inside the sticky block, as on the Intake documents list (#848). */}
       <div
         style={{
           ...STICKY_TOOLBAR_STYLE,
           display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
+          flexDirection: "column",
+          gap: "0.5rem",
           padding: "0.5rem 0",
           background: "var(--color-bg-page)",
         }}
       >
-        <MultiSelectFilter
-          options={groups.map((g) => ({ id: g.id, label: g.archived ? `${g.name} (archived)` : g.name }))}
-          selected={groupIds}
-          onChange={(ids) => updateParams({ group: ids.join(",") })}
-          allLabel="All groups"
-          itemNoun="groups"
-          ariaLabel="Filter by group"
-        />
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
-          {FACEBOOK_POST_STAGES.map((value) => (
-            <FilterChip
-              key={value}
-              label={FACEBOOK_POST_STAGE_LABEL[value]}
-              active={stage === value}
-              onClick={() => updateParams({ stage: stage === value ? "" : value })}
-            />
-          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <MultiSelectFilter
+            options={groups.map((g) => ({ id: g.id, label: g.archived ? `${g.name} (archived)` : g.name }))}
+            selected={groupIds}
+            onChange={(ids) => setView({ groups: ids })}
+            allLabel="All groups"
+            itemNoun="groups"
+            ariaLabel="Filter by group"
+          />
+          <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
+            {FACEBOOK_POST_STAGES.map((value) => (
+              <FilterChip
+                key={value}
+                label={FACEBOOK_POST_STAGE_LABEL[value]}
+                active={stage === value}
+                onClick={() => setView({ stage: stage === value ? undefined : value })}
+              />
+            ))}
+          </div>
+          {/* Posts made before titles have none until they are given one (#1862). */}
+          <FilterChip
+            label="No title"
+            active={untitled}
+            onClick={() => setView({ untitled: !untitled })}
+          />
         </div>
-        {/* Posts made before titles have none until they are given one (#1862). */}
-        <FilterChip
-          label="No title"
-          active={untitled}
-          onClick={() => updateParams({ untitled: untitled ? "" : "1" })}
-        />
+        {hasActiveFilters && (
+          <div style={LIST_BANNER_STYLE}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+              This list is narrowed — {narrowings.map(narrowingLabel).join(" · ")}
+            </span>
+            <button
+              type="button"
+              onClick={clearFilters}
+              style={{
+                ...FILTER_CONTROL_STYLE,
+                marginLeft: "auto",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                color: "var(--color-accent)",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </div>
 
       {showNotInPost && notInPost && notInPost.length > 0 && (

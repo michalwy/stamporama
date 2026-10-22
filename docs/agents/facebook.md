@@ -414,6 +414,15 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   as last left — a `usePersistedFlag` per collection (`…:notInPostExpanded:<collectionId>`), like the
   Offers summary bar's *More*; a client preference, not URL state, since it is not a filter. The count
   is the filtered list's length, so it follows the group filter.
+  **The group, stage and *No title* filters are remembered per collection and kept in the address**
+  (#2108, decided with the collector on 2026-10-22): the Intake documents list's arrangement (#1392),
+  in `offers/posts/posts-view-params.ts` (pure, unit-tested) and `use-posts-view.ts` over
+  `usePersistedFilterParams` — the address wins where it names a filter, the memory fills in the rest,
+  every press writes both, and a restored filter is written back into the address with `replace`
+  (#844). The params keep their pre-#2108 names (`group`, `stage`, `untitled`). A **stored** group that
+  no longer holds a post is pruned against the menu's options; one a link names is taken as written.
+  While any filter narrows the list, the band under the toolbar names them with *Clear filters*. The
+  fold of *Not in a post yet* stays its own flag, not part of the set.
 
 - **A post is deleted with every offer in it** (#2060, decided with the collector on 2026-10-18), in
   any stage, from the ⋮ beside the post screen's title and from the row's ⋮ on the list of posts —

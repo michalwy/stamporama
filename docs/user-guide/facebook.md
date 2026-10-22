@@ -600,7 +600,10 @@ waiting for approval, up in the group, or over), how many lots it holds and how 
 for sale — neither sold nor withdrawn — and its layout (**Text** or **Captions**), or **Posted alone**
 for a post of one offer; then the day it went up and its link. Click a row to open the post's screen.
 Narrow the list with the **group** filter, the **stage** chips and **No title**; click a lit chip again
-to show every post.
+to show every post. The list remembers its filters for the collection: leave it and come back — from
+the sidebar, a post's screen or Quick jump — and it shows the same group and chips, and a reload or a
+copied link keeps them too. While any filter narrows the list, a band under the toolbar says which,
+with **Clear filters** to show every post again.
 
 Above the posts, **Not in a post yet** lists the Facebook offers being prepared or Ready that are in no
 post — each one linking to its offer — so the screen shows the whole of Facebook, posted or not. Each
