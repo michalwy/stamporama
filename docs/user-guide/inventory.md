@@ -1495,16 +1495,21 @@ titles and descriptions from the platform's templates. That is also why *Ready* 
 where the platform supplies a starting price of its own; otherwise the preview tells you to start the
 offers as *Preparing*.
 
-**On Facebook, the new offers can go straight into a new post.** While the bar's status is
-*Preparing* or *Ready*, tick **In a new post** and give the post a **title**: the offers the pass
-creates become the [lots of one new post](facebook.md#a-post-with-several-lots) in the bar's group,
+**On Facebook, the new offers go straight into a new post.** While the bar's status is *Preparing*
+or *Ready*, **In a new post** starts ticked and the post's **title** is suggested from what the new
+offers hold: the deepest area holding every copy and the span of their issues' years —
+*Generalgouvernement 1940–44*, or *1940–44* alone when the copies share no area. The suggestion
+follows the preview — a change of what to list, an offer ticked or unticked — until you type in the
+field; from then on your title stands. The offers the pass creates become the [lots of one new post](facebook.md#a-post-with-several-lots) in the bar's group,
 in the order the preview lists them — each new offer's line says which lot it will be — and the
 button reads *Create 12 offers in a new post*. Only offers the pass **creates** join the post: an
 existing offer that receives sets stays where it is, in its own post or none. A post needs at least
-two lots, so a pass that would create only one offer cannot be put in a post. The message after the
+two lots, so where the pass would create only one offer the option starts unticked and says why. The
+message after the
 pass has **Open post**, the post's screen, where the lots are priced and put up together — no
 *Post together…* afterwards. The auctions among them share one closing time, as in any post.
-Unticked, the pass makes no post, and on any other platform the option is not there.
+Untick it and the pass makes no post; on any other platform, or in a status past *Ready*, the option
+is not there.
 
 Confirming creates **all of the ticked offers or none of them**. If anything changed since the
 preview in a ticked offer — a copy sold or went onto another offer, or an offer due to receive sets

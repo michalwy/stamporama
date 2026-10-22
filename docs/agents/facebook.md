@@ -513,6 +513,20 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   stays where it is. The toast links to the post's screen. The integration test is
   `tests/integration/offer-generator-facebook-post.test.ts`.
 
+- **Generate offers starts with *In a new post* ticked and the title suggested** (#2105, settled with
+  the collector on 2026-10-22). Both are the plan's until touched: the dialog keeps
+  `inPostChoice` / `typedTitle` null until the collector ticks, unticks or types, and reads the plan
+  meanwhile — ticked while the ticked lines create at least two new offers, and the title from
+  `suggestGeneratorPostTitle` (`generator-post-title.ts`, pure) over the copies of the ticked *new*
+  lines. The plan's answer is kept from the last preview read (React's state-during-render pattern),
+  so a mode change does not untick the box and empty the field while the next plan loads. The title
+  is **the deepest area holding every stamp** — at any level, a top-level area included (the
+  collector's answer on 2026-10-22; the issue's *below the top level* read as "no shared area") — by
+  `areaOwnTitleName` in the default language, then the **issues' years** as `1940–44` (one century:
+  the end's last two digits; across one: in full). No shared area: the years alone; no years either:
+  empty, and the refusal asks for a title as before. Unticked where fewer than two new offers, the
+  box shows `generatorPostRefusal`'s reason beside it. Nothing reaches the server that did not before.
+
 - **A post's lots can be reordered before it goes up** (#1986, raised on 2026-10-16; ADR-0061 §2 as
   amended). `reorderFacebookLots` (`facebook-posts.ts`) takes **every** lot's offer id in the new order
   and renumbers them in two passes (the unique index, `detachFacebookLot`'s shape); it refuses once a
