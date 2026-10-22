@@ -10,6 +10,8 @@ import {
   isScanUploadShown,
   newlyPreparedSheets,
   queueAhead,
+  scanCardTitle,
+  scanProgressSummary,
 } from "../../src/lib/scan-upload-status-rules";
 
 describe("scan upload status rules (#1567)", () => {
@@ -79,5 +81,33 @@ describe("scan upload status rules (#1567)", () => {
     ];
     assert.deepEqual(newlyPreparedSheets(new Set(["watched", "still", "broke"]), uploads), ["s1"]);
     assert.deepEqual(newlyPreparedSheets(new Set(), uploads), []);
+  });
+});
+
+describe("the panel of scans being added (#2099)", () => {
+  it("calls a scan by its card: a back by its batch, a front by its name", () => {
+    assert.equal(scanCardTitle({ side: "back", batchNo: 4, label: "Klaser" }), "Back of batch 4");
+    assert.equal(scanCardTitle({ side: "front", batchNo: 4, label: "Klaser" }), "New card · Klaser");
+    assert.equal(scanCardTitle({ side: "front", batchNo: null, label: null }), "New card");
+  });
+
+  it("folds to one line, each part only when it counts", () => {
+    assert.equal(
+      scanProgressSummary({
+        uploading: { position: 3, of: 12 },
+        waiting: 9,
+        notUploaded: 0,
+        preparing: 1,
+      }),
+      "Uploading 3 of 12 · Preparing 1"
+    );
+    assert.equal(
+      scanProgressSummary({ uploading: null, waiting: 0, notUploaded: 0, preparing: 2 }),
+      "Preparing 2"
+    );
+    assert.equal(
+      scanProgressSummary({ uploading: null, waiting: 2, notUploaded: 1, preparing: 0 }),
+      "Waiting to upload 2 · 1 not uploaded"
+    );
   });
 });

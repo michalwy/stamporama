@@ -35,6 +35,9 @@ import {
  * (`pagehide`, a beacon) and the browser asks first while anything is unsent (`beforeunload`); for a
  * tab that could not say so, the files it holds are kept alive once a minute and the server takes
  * silence for closure (`SCAN_UPLOAD_STALL_MS`).
+ *
+ * **Drawn by the panel of scans being added** (#2099), on every screen, not by the Card scans
+ * section: the batch carries on wherever the collector goes, so its progress goes with them.
  */
 
 export type QueuedScanState =
@@ -49,11 +52,13 @@ export type QueuedScanState =
   /** The server will not take this file at all — the reason says why — and the others went ahead. */
   | "refused";
 
-/** One file of a batch, as the Card scans section draws it. */
+/** One file of a batch, as the panel of scans being added draws it. */
 export interface QueuedScan {
   key: string;
   collectionId: string;
   purchaseId: string;
+  /** The document it is being added to, as the panel names it: *Order #12*. */
+  documentName: string;
   fileName: string;
   side: "front" | "back";
   batchNo: number | null;
@@ -79,6 +84,19 @@ export interface SentScan {
 }
 
 let entries: readonly Entry[] = [];
+/**
+ * The files of the current round of sending — counted from the moment a file is added to a queue
+ * with nothing left to send, until nothing is again — and how many of them have been sent. What
+ * *Uploading 3 of 12* counts. A file that fails or is refused leaves the round; tried again, it
+ * rejoins it.
+ */
+export interface UploadRound {
+  sent: number;
+  total: number;
+}
+let round: UploadRound = { sent: 0, total: 0 };
+/** The file each sent upload was, so a scan the server is preparing is still named by its file. */
+const sentFileNames = new Map<string, string>();
 let nextKey = 0;
 let pumping = false;
 const listeners = new Set<() => void>();
@@ -91,6 +109,20 @@ function emit() {
 function patch(key: string, change: Partial<Entry>) {
   entries = entries.map((e) => (e.key === key ? { ...e, ...change } : e));
   emit();
+}
+
+/** Still to be sent, or being sent: the files of the current round not yet in. */
+function toSend(): Entry[] {
+  return entries.filter((e) => e.state === "opening" || e.state === "waiting" || e.state === "uploading");
+}
+
+/** Count files into the round — a new one if nothing was still to be sent. */
+function joinRound(count: number) {
+  round = toSend().length === 0 ? { sent: 0, total: count } : { ...round, total: round.total + count };
+}
+
+function leaveRound() {
+  round = { ...round, total: Math.max(round.sent, round.total - 1) };
 }
 
 function remove(key: string) {
@@ -117,6 +149,7 @@ function unsent(): Entry[] {
 export function enqueueScans(input: {
   collectionId: string;
   purchaseId: string;
+  documentName: string;
   files: readonly File[];
   labels: readonly (string | null)[];
   side: "front" | "back";
@@ -128,6 +161,7 @@ export function enqueueScans(input: {
     key: `scan-${++nextKey}`,
     collectionId: input.collectionId,
     purchaseId: input.purchaseId,
+    documentName: input.documentName,
     fileName: file.name,
     side: input.side,
     batchNo: input.batchNo ?? null,
@@ -141,6 +175,7 @@ export function enqueueScans(input: {
     upload: null,
   }));
   if (added.length === 0) return;
+  joinRound(added.length);
   entries = [...entries, ...added];
   installPageHooks();
   emit();
@@ -160,6 +195,7 @@ export function enqueueScans(input: {
         patch(entry.key, { state: "waiting", upload });
         void pump();
       } catch (err) {
+        leaveRound();
         patch(entry.key, { state: "refused", error: errorText(err, "Failed to upload the scan.") });
       }
     }
@@ -192,10 +228,13 @@ async function send(entry: Entry, upload: OpenedSheetUpload): Promise<void> {
     });
     await finalizeSheetUpload(entry.collectionId, upload.id);
   } catch (err) {
+    leaveRound();
     patch(entry.key, { state: "failed", error: errorText(err, "Failed to upload the scan.") });
     return;
   }
-  // In the server's queue now, where the section draws it from the order's scans.
+  // In the server's queue now, where the panel draws it from the collection's scans being prepared.
+  sentFileNames.set(upload.id, entry.fileName);
+  round = { ...round, sent: round.sent + 1 };
   remove(entry.key);
   const sent = { collectionId: entry.collectionId, purchaseId: entry.purchaseId, uploadId: upload.id };
   for (const listener of sentListeners) listener(sent);
@@ -206,6 +245,7 @@ async function send(entry: Entry, upload: OpenedSheetUpload): Promise<void> {
 export function retryQueuedScan(key: string): void {
   const entry = entries.find((e) => e.key === key);
   if (!entry || entry.state !== "failed") return;
+  joinRound(1);
   patch(key, { state: "waiting", error: null });
   void pump();
 }
@@ -278,13 +318,17 @@ function subscribe(listener: () => void) {
 
 const NONE: readonly Entry[] = [];
 
-/** The files of one order this tab is sending or has failed to send, in the order they were chosen. */
-export function useQueuedScans(collectionId: string, purchaseId: string): QueuedScan[] {
-  const all = useSyncExternalStore(
+function useEntries(): readonly Entry[] {
+  return useSyncExternalStore(
     subscribe,
     () => entries,
     () => NONE
   );
+}
+
+/** The files of one order this tab is sending or has failed to send, in the order they were chosen. */
+export function useQueuedScans(collectionId: string, purchaseId: string): QueuedScan[] {
+  const all = useEntries();
   return useMemo(
     () =>
       all
@@ -294,12 +338,38 @@ export function useQueuedScans(collectionId: string, purchaseId: string): Queued
   );
 }
 
+/** Every file of the collection this tab is sending or has failed to send — the panel's (#2099). */
+export function useCollectionQueuedScans(collectionId: string): QueuedScan[] {
+  const all = useEntries();
+  return useMemo(
+    () => all.filter((e) => e.collectionId === collectionId).map(toScan),
+    [all, collectionId]
+  );
+}
+
+const NO_ROUND: UploadRound = { sent: 0, total: 0 };
+
+/** The current round of sending, for *Uploading 3 of 12*. */
+export function useUploadRound(): UploadRound {
+  return useSyncExternalStore(
+    subscribe,
+    () => round,
+    () => NO_ROUND
+  );
+}
+
+/** The file a sent upload was, if this tab sent it. */
+export function sentScanFileName(uploadId: string): string | null {
+  return sentFileNames.get(uploadId) ?? null;
+}
+
 /** An entry as the screen sees it — without the file and the upload it is sending. */
 function toScan(e: Entry): QueuedScan {
   return {
     key: e.key,
     collectionId: e.collectionId,
     purchaseId: e.purchaseId,
+    documentName: e.documentName,
     fileName: e.fileName,
     side: e.side,
     batchNo: e.batchNo,

@@ -1,6 +1,12 @@
 import "server-only";
 import { prisma } from "./db";
-import { isOpeningBalance } from "./purchase-kind";
+import { intakeDocumentRef } from "./purchase-kind";
+import {
+  asScanUploadStatus,
+  queueAhead,
+  scanCardTitle,
+  type ScanUploadStatus,
+} from "./scan-upload-status-rules";
 
 /**
  * What the notification centre says about card scans (#1567).
@@ -11,6 +17,10 @@ import { isOpeningBalance } from "./purchase-kind";
  *
  * A scan that is ready to cut is not reported (#1675): the purchase's cards already say so, and
  * with scans uploaded many at a time the notices only filled the panel.
+ *
+ * And, since #2099, what the **panel of scans being added** reads for the scans already in the
+ * server's hands — waiting their turn to be prepared or being prepared — on whichever screen the
+ * collector is on.
  */
 
 interface ScanNotice {
@@ -27,11 +37,6 @@ async function assertOwner(ownerId: string, collectionId: string): Promise<void>
     select: { id: true },
   });
   if (!found) throw new Error("Collection not found");
-}
-
-/** How the panel names the document a card belongs to. */
-function documentName(p: { kind: string; purchaseNo: number }): string {
-  return isOpeningBalance(p) ? `Opening balance #${p.purchaseNo}` : `Order #${p.purchaseNo}`;
 }
 
 /** Preparations that failed and are still waiting for a retry or a discard. Newest first. */
@@ -64,15 +69,58 @@ export async function failedScanPreparations(
     total,
     uploads: rows.map((row) => ({
       id: row.id,
-      label:
-        row.side === "back" && row.batchNo != null
-          ? `Back of batch ${row.batchNo}`
-          : row.label
-            ? `New card · ${row.label}`
-            : "New card",
-      detail: `${documentName(row.purchase)}${row.error ? ` · ${row.error}` : ""}`,
+      label: scanCardTitle(row),
+      detail: `${intakeDocumentRef(row.purchase)}${row.error ? ` · ${row.error}` : ""}`,
       at: row.updatedAt,
       purchaseId: row.purchaseId,
     })),
   };
+}
+
+/** A scan of the collection the server is preparing or will prepare next (#2099). */
+export interface ScanInPreparation {
+  id: string;
+  status: Extract<ScanUploadStatus, "queued" | "preparing">;
+  title: string;
+  purchaseId: string;
+  documentName: string;
+  /** How many scans of any collection are prepared before this one, while it waits its turn. */
+  ahead: number | null;
+}
+
+/** Every scan of the collection waiting its turn to be prepared or being prepared, in the queue's
+ * order. The places are counted over the instance's queue, as the section's cards count them. */
+export async function scansInPreparation(
+  ownerId: string,
+  collectionId: string
+): Promise<ScanInPreparation[]> {
+  await assertOwner(ownerId, collectionId);
+  const [rows, queue] = await Promise.all([
+    prisma.scanUpload.findMany({
+      where: { collectionId, status: { in: ["queued", "preparing"] } },
+      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        status: true,
+        side: true,
+        batchNo: true,
+        label: true,
+        purchaseId: true,
+        purchase: { select: { kind: true, purchaseNo: true } },
+      },
+    }),
+    prisma.scanUpload.findMany({
+      where: { status: { in: ["queued", "preparing"] } },
+      select: { id: true, status: true, queuedAt: true },
+    }),
+  ]);
+  const ahead = queueAhead(queue.map((q) => ({ ...q, status: asScanUploadStatus(q.status) })));
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status === "preparing" ? "preparing" : "queued",
+    title: scanCardTitle(row),
+    purchaseId: row.purchaseId,
+    documentName: intakeDocumentRef(row.purchase),
+    ahead: ahead.get(row.id) ?? null,
+  }));
 }

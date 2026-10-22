@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
+import { intakeDocumentRef } from "@/lib/purchase-kind";
 import {
   useCallback,
   useEffect,
@@ -1360,6 +1361,7 @@ export function PurchaseDetailPanel({
         parkedTileCount={purchase.parkedTileCount}
         discardedTileCount={purchase.discardedTileCount}
         scanSheetCount={purchase.scanSheetCount}
+        documentName={intakeDocumentRef(purchase)}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={tileChain.onIdentifyTiles}
         onReidentifyTile={tileChain.onReidentifyTile}

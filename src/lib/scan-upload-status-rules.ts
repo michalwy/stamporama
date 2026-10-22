@@ -157,3 +157,37 @@ export function queueAhead(
     .sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return new Map(waiting.map((q, i) => [q.id, preparing + i]));
 }
+
+/** What a scan on its way to being a card is called, wherever it is listed — the panel of scans being
+ * added (#2099), the section's failed card, the notification centre. */
+export function scanCardTitle(scan: {
+  side: string;
+  batchNo: number | null;
+  label: string | null;
+}): string {
+  if (scan.side === "back" && scan.batchNo != null) return `Back of batch ${scan.batchNo}`;
+  return scan.label ? `New card · ${scan.label}` : "New card";
+}
+
+/** What the panel of scans being added says when it is folded (#2099). */
+export interface ScanProgressCounts {
+  /** The file being sent now, counted among the files of this round of sending: the third of twelve.
+   * Null while nothing is going up. */
+  uploading: { position: number; of: number } | null;
+  /** Files still waiting their turn to be sent, while none is going up (the moment between two). */
+  waiting: number;
+  /** Files whose sending failed or was refused, waiting for *Try again*, *Discard* or *Dismiss*. */
+  notUploaded: number;
+  /** Scans in the server's hands: waiting their turn to be prepared, or being prepared. */
+  preparing: number;
+}
+
+/** The panel's one folded line: *Uploading 3 of 12 · Preparing 1*. Each part only when it counts. */
+export function scanProgressSummary(c: ScanProgressCounts): string {
+  const parts: string[] = [];
+  if (c.uploading) parts.push(`Uploading ${c.uploading.position} of ${c.uploading.of}`);
+  else if (c.waiting > 0) parts.push(`Waiting to upload ${c.waiting}`);
+  if (c.preparing > 0) parts.push(`Preparing ${c.preparing}`);
+  if (c.notUploaded > 0) parts.push(`${c.notUploaded} not uploaded`);
+  return parts.join(" · ");
+}
