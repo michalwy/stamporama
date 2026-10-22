@@ -8,7 +8,9 @@
 //
 // - *Complete* is the bulk-lot builder's slot resolution (`checklistSlots`, #758), a variant copy
 //   filling its parent's slot (#661), over one condition, certificate status and format at a time
-//   (`combinationOf` under no mixing, #1265). A checklist of one stamp is not a series (#1257).
+//   (`combinationOf` under no mixing, #1265) — unless the collector lets a set mix an axis, with the
+//   switches Series from Singles has (`SeriesMixing`, #2102). A checklist of one stamp is not a series
+//   (#1257).
 // - *A similar offer already exists* is `collidingItemIdsByOffer`, the rule the Copies list warns with
 //   (#732) — the same function, handed the same members, not a second reading of it.
 // - *Available* is decided in SQL before this runs (`listableOnPlatformFilters`, #758/#759); what is
@@ -20,7 +22,9 @@ import {
   combinationOf,
   MIN_SERIES_STAMPS,
   NO_MIXING,
+  SERIES_MIXING_PARAMS,
   type SeriesCombination,
+  type SeriesMixing,
 } from "./series-recombination-rules";
 import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision-rules";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
@@ -38,6 +42,22 @@ export type GeneratorPackaging = "multi" | "separate";
 
 export const GENERATOR_MODES: readonly GeneratorMode[] = ["checklists", "singles"];
 export const GENERATOR_PACKAGINGS: readonly GeneratorPackaging[] = ["multi", "separate"];
+
+/**
+ * With a mixing switch on, which sets come first (#2102): **same value first** forms every set complete
+ * in one value as before and mixes only the copies left over; **mix freely** forms sets in the usual
+ * order whatever the value, so whatever completes a set does, pure or mixed.
+ */
+export type MixPriority = "same-first" | "free";
+
+export const MIX_PRIORITIES: readonly MixPriority[] = ["same-first", "free"];
+
+/** The query parameter the priority travels in; only *mix freely* is written, the default is not. */
+export const MIX_PRIORITY_PARAM = "mixPriority";
+
+function mixesAny(mixing: SeriesMixing): boolean {
+  return mixing.condition || mixing.certificate || mixing.format;
+}
 
 // The input --------------------------------------------------------------------------------------
 
@@ -78,7 +98,8 @@ export interface GeneratorOffer {
 export interface GeneratedSet {
   /** The series the set completes; null for a single. */
   checklistId: string | null;
-  /** What every copy shares — a set is uniform in condition, certificate and format (#1265). */
+  /** What every copy shares (#1265): a value on every axis the copies agree on, and no key on one they
+   *  mix (#2102) — so a set that happens to come out pure names its value, however it was formed. */
   combination: SeriesCombination;
   /** In the checklist's own order; one copy for a single. */
   copies: GeneratorCopy[];
@@ -86,15 +107,107 @@ export interface GeneratedSet {
 
 const byItemNo = (a: GeneratorCopy, b: GeneratorCopy) => a.itemNo - b.itemNo;
 
+/** What a set's copies share: the value on every axis they agree on, no key on one they do not. */
+function sharedCombination(copies: readonly GeneratorCopy[]): SeriesCombination {
+  const [first, ...rest] = copies;
+  return {
+    ...(rest.every((copy) => copy.conditionId === first.conditionId) ? { conditionId: first.conditionId } : {}),
+    ...(rest.every((copy) => copy.certificateStatusId === first.certificateStatusId)
+      ? { certificateStatusId: first.certificateStatusId }
+      : {}),
+    ...(rest.every((copy) => copy.formatId === first.formatId) ? { formatId: first.formatId } : {}),
+  };
+}
+
+const MIX_AXES = [
+  ["condition", (copy: GeneratorCopy) => copy.conditionId],
+  ["certificate", (copy: GeneratorCopy) => copy.certificateStatusId],
+  ["format", (copy: GeneratorCopy) => copy.formatId],
+] as const;
+
+/**
+ * One copy per slot, leaning to the value most of the set shares (#2102, *same value first*): on each
+ * mixed axis the value the most slots can be filled in is preferred, so a mixed set is eleven MH and
+ * one MNH rather than six and six. A tie goes to the value more candidates hold, then to the lower id
+ * — the same answer on every read. The rest is the usual order: own stamp, then lowest copy number.
+ */
+function pickLeaning(slots: Map<string, GeneratorCopy[]>, mixing: SeriesMixing): GeneratorCopy[] {
+  const preferred = MIX_AXES.filter(([axis]) => mixing[axis]).map(([, valueOf]) => {
+    const slotsFor = new Map<string | null, number>();
+    const copiesFor = new Map<string | null, number>();
+    for (const candidates of slots.values()) {
+      for (const value of new Set(candidates.map(valueOf))) slotsFor.set(value, (slotsFor.get(value) ?? 0) + 1);
+      for (const copy of candidates) copiesFor.set(valueOf(copy), (copiesFor.get(valueOf(copy)) ?? 0) + 1);
+    }
+    const [best] = [...slotsFor.keys()].sort(
+      (a, b) =>
+        slotsFor.get(b)! - slotsFor.get(a)! ||
+        copiesFor.get(b)! - copiesFor.get(a)! ||
+        (a ?? "").localeCompare(b ?? "")
+    );
+    return { valueOf, best };
+  });
+  return [...slots].map(([stampId, candidates]) => {
+    const score = (copy: GeneratorCopy) =>
+      preferred.reduce((n, { valueOf, best }, i) => n + (valueOf(copy) === best ? 2 ** (preferred.length - i) : 0), 0);
+    return [...candidates].sort(
+      (a, b) =>
+        score(b) - score(a) || Number(b.stampId === stampId) - Number(a.stampId === stampId) || byItemNo(a, b)
+    )[0];
+  });
+}
+
+/**
+ * Take every complete set each checklist can make out of `pool`, the copies grouped by what `mixing`
+ * keeps apart. Checklists are asked **in precedence order**, each taking every set before the next is
+ * asked; `used` is shared, so a copy goes into at most one set.
+ */
+function takeSets(
+  pool: readonly GeneratorCopy[],
+  series: readonly LotChecklist[],
+  mixing: SeriesMixing,
+  lean: boolean,
+  used: Set<string>,
+  sets: GeneratedSet[]
+): void {
+  const groups = new Map<string, GeneratorCopy[]>();
+  for (const copy of pool) {
+    const key = combinationKey(combinationOf(copy, mixing));
+    const group = groups.get(key);
+    if (group) group.push(copy);
+    else groups.set(key, [copy]);
+  }
+  for (const checklist of series) {
+    for (const key of [...groups.keys()].sort()) {
+      const group = groups.get(key)!;
+      for (;;) {
+        const remaining = group.filter((copy) => !used.has(copy.itemId)).sort(byItemNo);
+        const slots = checklistSlots(remaining, checklist);
+        if (slots.size === 0 || [...slots.values()].some((candidates) => candidates.length === 0)) break;
+        const picked = lean
+          ? pickLeaning(slots, mixing)
+          : [...slots].map(([stampId, candidates]) => candidates.find((copy) => copy.stampId === stampId) ?? candidates[0]);
+        for (const copy of picked) used.add(copy.itemId);
+        sets.push({ checklistId: checklist.checklistId, combination: sharedCombination(picked), copies: picked });
+      }
+    }
+  }
+}
+
 /**
  * Split the pool into complete series and the singles left over.
  *
  * `checklists` come **in precedence order** — the order set on the issue (#531) — and each is asked on
  * its own: the first takes every complete set it can out of the copies, and the next is asked of what
  * is left, so a copy goes into at most one set and the order decides between two series competing for
- * it. The copies are split by combination first, so a series completable only by mixing conditions,
- * certificates or formats forms no set and its copies stay singles; perforated and imperforate are
- * simply two checklists.
+ * it. The copies are split by combination first, so with no mixing a series completable only by mixing
+ * conditions, certificates or formats forms no set and its copies stay singles; perforated and
+ * imperforate are simply two checklists.
+ *
+ * **Mixing** (#2102) stops splitting on the axes it names. Under *same value first* the pass above runs
+ * unchanged and a second one, mixing, is asked of what it left — leaning each mixed set to the value
+ * most of it shares; under *mix freely* only the mixing pass runs. Either way the sets come out
+ * checklist by checklist, a checklist's pure sets before its mixed ones.
  *
  * Which copy fills a slot when several can: **the slot's own stamp before a variant of it** (#661 lets
  * the variant in; it is not the collector's first choice for a series), then the lowest copy number,
@@ -102,36 +215,19 @@ const byItemNo = (a: GeneratorCopy, b: GeneratorCopy) => a.itemNo - b.itemNo;
  */
 export function assembleSets(
   copies: readonly GeneratorCopy[],
-  checklists: readonly LotChecklist[]
+  checklists: readonly LotChecklist[],
+  mixing: SeriesMixing = NO_MIXING,
+  priority: MixPriority = "same-first"
 ): { sets: GeneratedSet[]; singles: GeneratedSet[] } {
   const series = checklists.filter((checklist) => new Set(checklist.stampIds).size >= MIN_SERIES_STAMPS);
-  const groups = new Map<string, { combination: SeriesCombination; copies: GeneratorCopy[] }>();
-  for (const copy of copies) {
-    if (copy.multiStamp) continue;
-    const combination = combinationOf(copy, NO_MIXING);
-    const key = combinationKey(combination);
-    const group = groups.get(key);
-    if (group) group.copies.push(copy);
-    else groups.set(key, { combination, copies: [copy] });
-  }
-
+  const pool = copies.filter((copy) => !copy.multiStamp);
+  const mixed = mixesAny(mixing);
   const sets: GeneratedSet[] = [];
   const used = new Set<string>();
-  for (const checklist of series) {
-    for (const key of [...groups.keys()].sort()) {
-      const group = groups.get(key)!;
-      for (;;) {
-        const remaining = group.copies.filter((copy) => !used.has(copy.itemId)).sort(byItemNo);
-        const slots = checklistSlots(remaining, checklist);
-        if (slots.size === 0 || [...slots.values()].some((candidates) => candidates.length === 0)) break;
-        const picked = [...slots].map(
-          ([stampId, candidates]) => candidates.find((copy) => copy.stampId === stampId) ?? candidates[0]
-        );
-        for (const copy of picked) used.add(copy.itemId);
-        sets.push({ checklistId: checklist.checklistId, combination: group.combination, copies: picked });
-      }
-    }
-  }
+  if (!mixed || priority === "same-first") takeSets(pool, series, NO_MIXING, false, used, sets);
+  if (mixed) takeSets(pool, series, mixing, priority === "same-first", used, sets);
+  const order = new Map(series.map((checklist, index) => [checklist.checklistId, index]));
+  sets.sort((a, b) => order.get(a.checklistId!)! - order.get(b.checklistId!)!);
 
   const singles = copies
     .filter((copy) => !used.has(copy.itemId))
@@ -156,11 +252,22 @@ function listedStampOf(copy: GeneratorCopy): string {
  * to `523I` goes on the very entry a `523I` copy does, and two lines for it would be two offers the
  * marketplace refuses the second of. A variant that is *not* what its umbrella resolves to still makes
  * a different set, exactly as before.
+ *
+ * A **mixed** set (#2102) is identical to another only when every stamp is in the same condition,
+ * certificate and format in both: twelve MH but one MNH is a different set from eleven MH and one MNH
+ * on another stamp.
  */
 
 export function setIdentity(set: GeneratedSet): string {
   const { conditionId, certificateStatusId, formatId } = set.combination;
   if (set.checklistId !== null) {
+    if (conditionId === undefined || certificateStatusId === undefined || formatId === undefined) {
+      return JSON.stringify([
+        "mixed",
+        set.checklistId,
+        set.copies.map((copy) => [listedStampOf(copy), copy.conditionId, copy.certificateStatusId, copy.formatId]),
+      ]);
+    }
     return JSON.stringify(["set", set.checklistId, set.copies.map(listedStampOf), conditionId, certificateStatusId, formatId]);
   }
   const copy = set.copies[0];
@@ -208,6 +315,10 @@ export interface GeneratorPlanInput {
   checklists: readonly LotChecklist[];
   mode: GeneratorMode;
   packaging: GeneratorPackaging;
+  /** Which axes a set may mix (#2102); absent, none — the default. */
+  mixing?: SeriesMixing;
+  /** Which sets come first while some axis is mixed; absent, *same value first*. */
+  priority?: MixPriority;
   /** Every copy of every set of the platform's open offers that holds one of the pool's stamps — the
    *  members `collidingItemIdsByOffer` compares whole compositions over (#732). */
   members: readonly OfferMemberCopy[];
@@ -239,7 +350,7 @@ function inActiveBidding(offer: GeneratorOffer): boolean {
  * whose only matches are in active bidding becomes a new offer instead (#334).
  */
 export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
-  const { sets, singles } = assembleSets(input.copies, input.checklists);
+  const { sets, singles } = assembleSets(input.copies, input.checklists, input.mixing, input.priority);
   const listed = input.mode === "checklists" ? sets : singles;
   const otherModeCopies =
     input.mode === "checklists" ? singles.length : sets.reduce((n, set) => n + set.copies.length, 0);
@@ -556,6 +667,10 @@ export interface GeneratorRequest {
   state: OfferState;
   mode: GeneratorMode;
   packaging: GeneratorPackaging;
+  /** Which axes a complete set may mix (#2102), and which sets come first while one is mixed. Absent,
+   *  no mixing — the pass as it always was. */
+  mixing?: SeriesMixing;
+  priority?: MixPriority;
   itemIds: string[] | null;
   filters: string;
   targets: Record<string, string>;
@@ -574,6 +689,12 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
   params.set("state", request.state);
   params.set("mode", request.mode);
   params.set("packaging", request.packaging);
+  // Spelled as Series from Singles spells them (#1265), and only what is on.
+  const mixing = request.mixing ?? NO_MIXING;
+  for (const axis of Object.keys(SERIES_MIXING_PARAMS) as (keyof SeriesMixing)[]) {
+    if (mixing[axis]) params.set(SERIES_MIXING_PARAMS[axis], "true");
+  }
+  if (mixesAny(mixing) && request.priority === "free") params.set(MIX_PRIORITY_PARAM, "free");
   if (request.itemIds !== null) params.set("ids", request.itemIds.join(","));
   else if (request.filters) params.set("filters", request.filters);
   const targets = Object.entries(request.targets)
@@ -608,6 +729,12 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     state,
     mode: mode as GeneratorMode,
     packaging: packaging as GeneratorPackaging,
+    mixing: {
+      condition: sp.get(SERIES_MIXING_PARAMS.condition) === "true",
+      certificate: sp.get(SERIES_MIXING_PARAMS.certificate) === "true",
+      format: sp.get(SERIES_MIXING_PARAMS.format) === "true",
+    },
+    priority: sp.get(MIX_PRIORITY_PARAM) === "free" ? "free" : "same-first",
     itemIds: sp.has("ids") ? (ids ?? "").split(",").filter(Boolean) : null,
     filters: sp.get("filters") ?? "",
     targets,
@@ -645,21 +772,51 @@ export function generatorPostRefusal(request: {
 
 // ── How the preview states a line (#1368) ──────────────────────────────────────────────────────────
 
+/** One axis value on a preview line; `count` only where the line mixes that axis (#2102). */
+export interface CombinationPartRef {
+  axis: "condition" | "certificate" | "format";
+  id: string | null;
+  count: number | null;
+}
+
 /**
  * The combination the way the copy count popover writes it (#1243): the condition always, the
  * certificate and the format **only when they are not the default** — no certificate, single. Over
  * fifty lines the defaults said nothing and took most of the room.
+ *
+ * An axis the set **mixes** (#2102) names every value in it with how many of the set's copies are in
+ * it, the most first — *MH ×11 · MNH ×1* — the default included, since there it is half the story.
  */
-export function generatorCombinationParts(combination: {
-  conditionId?: string | null;
-  certificateStatusId?: string | null;
-  formatId?: string | null;
-}): { axis: "condition" | "certificate" | "format"; id: string | null }[] {
+export function generatorCombinationParts(
+  combination: {
+    conditionId?: string | null;
+    certificateStatusId?: string | null;
+    formatId?: string | null;
+  },
+  copies: readonly Pick<GeneratorCopy, "conditionId" | "certificateStatusId" | "formatId">[] = []
+): CombinationPartRef[] {
+  const mix = (axis: CombinationPartRef["axis"], values: (string | null)[]): CombinationPartRef[] => {
+    const counts = new Map<string | null, number>();
+    for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+    return [...counts]
+      .sort(([, a], [, b]) => b - a)
+      .map(([id, count]) => ({ axis, id, count }));
+  };
   const { conditionId, certificateStatusId, formatId } = combination;
   return [
-    { axis: "condition" as const, id: conditionId ?? null },
-    ...(certificateStatusId ? [{ axis: "certificate" as const, id: certificateStatusId }] : []),
-    ...(formatId ? [{ axis: "format" as const, id: formatId }] : []),
+    ...("conditionId" in combination
+      ? [{ axis: "condition" as const, id: conditionId ?? null, count: null }]
+      : mix("condition", copies.map((copy) => copy.conditionId))),
+    ...("certificateStatusId" in combination
+      ? certificateStatusId
+        ? [{ axis: "certificate" as const, id: certificateStatusId, count: null }]
+        : []
+      : mix("certificate", copies.map((copy) => copy.certificateStatusId))),
+    ...("formatId" in combination
+      ? formatId
+        ? [{ axis: "format" as const, id: formatId, count: null }]
+        : []
+      : mix("format", copies.map((copy) => copy.formatId))),
   ];
 }
 
