@@ -821,25 +821,15 @@ export function generatorCombinationParts(
 }
 
 /**
- * A single's name on its preview line (#2046): its issue's name, then the stamp's own name where it
- * has one — `Issue · Stamp`. Most stamps carry no name of their own, and a fallback to a stand-in
- * made a long pass hundreds of identical lines. With neither name the line has none: its catalogue
- * numbers already say what it is. A stamp named exactly as its issue is named once.
+ * A line's name in the preview: its issue's name, then its own — the stamp's for a single (#2046),
+ * the checklist's for a set (#2104) — as `Issue · Own`, so every line reads by its issue first. Most
+ * stamps carry no name of their own, and a fallback to a stand-in made a long pass hundreds of
+ * identical lines. With neither name the line has none: its catalogue numbers already say what it is.
+ * An own name equal to the issue's is named once — a checklist is often named after its issue (#1368).
  */
-export function singleLineTitle(issueName: string | null | undefined, stampName: string | null | undefined): string {
+export function issueLineTitle(issueName: string | null | undefined, ownName: string | null | undefined): string {
   const issue = issueName?.trim() ?? "";
-  const stamp = stampName?.trim() ?? "";
-  if (!issue || !stamp) return issue || stamp;
-  return issue.localeCompare(stamp, undefined, { sensitivity: "base" }) === 0 ? issue : `${issue} · ${stamp}`;
-}
-
-/**
- * The issue a series belongs to, when it says something the checklist's name does not. A checklist
- * is usually named after its issue, and the preview printed the one name twice (#1368).
- */
-export function seriesSubtitle(title: string, issueName: string | null | undefined): string | null {
-  const issue = issueName?.trim();
-  if (!issue) return null;
-  const same = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" }) === 0;
-  return same(issue, title.trim()) ? null : issue;
+  const own = ownName?.trim() ?? "";
+  if (!issue || !own) return issue || own;
+  return issue.localeCompare(own, undefined, { sensitivity: "base" }) === 0 ? issue : `${issue} · ${own}`;
 }

@@ -16,8 +16,7 @@ import {
   generatorPostRefusal,
   parsePlanFingerprint,
   planOffers,
-  seriesSubtitle,
-  singleLineTitle,
+  issueLineTitle,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -644,21 +643,20 @@ describe("how the preview states a line (#1368)", () => {
     );
   });
 
-  it("drops the issue's name where the checklist already carries it", () => {
-    assert.equal(seriesSubtitle("Polish Castles", "Polish Castles"), null);
-    assert.equal(seriesSubtitle("Polish Castles", " polish castles "), null);
-    assert.equal(seriesSubtitle("Low values", "Polish Castles"), "Polish Castles");
-    assert.equal(seriesSubtitle("Low values", null), null);
-    assert.equal(seriesSubtitle("Low values", "  "), null);
+  it("names a single by its issue, then its stamp, and never by a stand-in (#2046)", () => {
+    assert.equal(issueLineTitle("Polish Castles", "Malbork"), "Polish Castles · Malbork");
+    assert.equal(issueLineTitle("Polish Castles", null), "Polish Castles");
+    assert.equal(issueLineTitle("Polish Castles", "  "), "Polish Castles");
+    assert.equal(issueLineTitle(null, "Malbork"), "Malbork");
+    assert.equal(issueLineTitle(" polish castles ", "Polish Castles"), "polish castles");
+    assert.equal(issueLineTitle(null, null), "");
+    assert.equal(issueLineTitle(undefined, ""), "");
   });
 
-  it("names a single by its issue, then its stamp, and never by a stand-in (#2046)", () => {
-    assert.equal(singleLineTitle("Polish Castles", "Malbork"), "Polish Castles · Malbork");
-    assert.equal(singleLineTitle("Polish Castles", null), "Polish Castles");
-    assert.equal(singleLineTitle("Polish Castles", "  "), "Polish Castles");
-    assert.equal(singleLineTitle(null, "Malbork"), "Malbork");
-    assert.equal(singleLineTitle(" polish castles ", "Polish Castles"), "polish castles");
-    assert.equal(singleLineTitle(null, null), "");
-    assert.equal(singleLineTitle(undefined, ""), "");
+  it("names a set by its issue, then its checklist, and a checklist named as its issue once (#2104)", () => {
+    assert.equal(issueLineTitle("Adolf Hitler (II)", "Perforation 14"), "Adolf Hitler (II) · Perforation 14");
+    assert.equal(issueLineTitle("Adolf Hitler (I)", "Adolf Hitler (I)"), "Adolf Hitler (I)");
+    assert.equal(issueLineTitle("Polish Castles", " polish castles "), "Polish Castles");
+    assert.equal(issueLineTitle(null, "Low values"), "Low values");
   });
 });
