@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -19,10 +20,17 @@ import { Icon } from "@/app/icons";
 import { PhoneScreen, phoneRow } from "@/app/phone-screen";
 import { PhonePurchasePhotos } from "./phone-purchase-photos";
 
-export const metadata = { title: "Purchase" };
-
 interface PhonePurchasePageProps {
   params: Promise<{ collectionSlug: string; purchaseId: string }>;
+}
+
+// The number leads the tab title, as on the record's desk screen (#2112).
+export async function generateMetadata({ params }: PhonePurchasePageProps): Promise<Metadata> {
+  const { purchaseId } = await params;
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { title: "Purchase" };
+  const purchase = await getPurchaseDetail(session.user.id, purchaseId);
+  return { title: purchase ? `Purchase ${formatEntityNo(purchase.purchaseNo)}` : "Purchase" };
 }
 
 // A purchase on the phone (#2006): what the phone recorded — seller, date, what was paid, the stamps

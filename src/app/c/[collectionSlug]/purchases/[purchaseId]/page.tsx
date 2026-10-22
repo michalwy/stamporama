@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getStampConditions } from "@/lib/conditions";
@@ -34,8 +35,9 @@ export async function generateMetadata({
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase) return {};
 
-  if (purchase.kind === "opening_balance") return { title: `Opening balance — ${purchase.title}` };
-  return { title: `Purchase — ${purchase.contactName ?? purchase.purchasedAt}` };
+  const no = formatEntityNo(purchase.purchaseNo);
+  if (purchase.kind === "opening_balance") return { title: `Opening balance ${no} — ${purchase.title}` };
+  return { title: `Purchase ${no} — ${purchase.contactName ?? purchase.purchasedAt}` };
 }
 
 export default async function PurchaseDetailPage({ params }: PurchaseDetailPageProps) {

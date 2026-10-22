@@ -25,7 +25,11 @@ export async function generateMetadata({ params }: IssueDetailPageProps): Promis
   if (!collection) return {};
   const issue = await getIssueListItem(session.user.id, collection.id, issueId);
   if (!issue) return {};
-  return { title: `Issue — ${[issue.year, issue.name].filter(Boolean).join(", ")}` };
+  return {
+    title: [`Issue ${formatEntityNo(issue.issueNo)}`, [issue.year, issue.name].filter(Boolean).join(", ")]
+      .filter(Boolean)
+      .join(" — "),
+  };
 }
 
 /**

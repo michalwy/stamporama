@@ -64,6 +64,12 @@ clicking the row.
 The URLs are `/c/[slug]/inventory/[copyId]`, `/c/[slug]/stamps/[stampId]` and
 `/c/[slug]/issues/[issueId]`, so a page can be bookmarked or kept open in a second tab.
 
+Every record that has a number names itself by it **at the start of the browser tab's title** —
+*Offer #412 — Facebook*, *Sale #37 — Allegro*, *Copy #123 — …*, *Purchase #8 — …*, *Stamp #901 — …*,
+*Issue #55 — …*, *Trade #5 — …*, *Post #22* — followed by the collection's name. The number comes
+first so it is still there when the tab is narrow, and two offers open side by side are two tabs you
+can tell apart without switching to them. The phone's screens do the same.
+
 ## Getting back to one
 
 Every one of these pages — and the offer, purchase, sale and auction sale screens with them — is
