@@ -19,6 +19,13 @@ export function isOpeningBalance(p: { kind: string }): boolean {
   return p.kind === "opening_balance";
 }
 
+/** How a document is referred to by its number where it is only pointed at — the notification
+ * centre, the panel of scans being added (#2099): *Order #12*, *Opening balance #3*. Not
+ * {@link intakeDocumentName}, which names it by its supplier or title. */
+export function intakeDocumentRef(p: { kind: string; purchaseNo: number }): string {
+  return isOpeningBalance(p) ? `Opening balance #${p.purchaseNo}` : `Order #${p.purchaseNo}`;
+}
+
 /**
  * What the Intake documents list filters by (#1323). Three values because the collector asked for
  * trade orders to be told apart from purchases, and a trade order is a purchase underneath: `trade`

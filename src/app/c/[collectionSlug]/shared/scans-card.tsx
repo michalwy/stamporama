@@ -95,24 +95,17 @@ import {
 import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidateLotCopies } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/use-lot-copies-query";
 import { useInvalidateScans, useScans } from "./use-scans-query";
-import { IndeterminateBar, ProgressBar } from "@/app/progress-bar";
 import {
   SheetUploadError,
   discardSheetUpload,
   retrySheetPreparation,
 } from "./upload-sheet-chunks";
-import {
-  discardQueuedScan,
-  enqueueScans,
-  onScanSent,
-  retryQueuedScan,
-  useQueuedScans,
-  type QueuedScan,
-} from "./scan-upload-queue";
+import { enqueueScans, onScanSent, useQueuedScans } from "./scan-upload-queue";
 import {
   isScanUploadPending,
   isScanUploadShown,
   newlyPreparedSheets,
+  scanCardTitle,
   scanUploadStatusText,
   type ScanUploadCard,
 } from "@/lib/scan-upload-status-rules";
@@ -197,6 +190,8 @@ interface Props {
    * read off the fetched batches would therefore settle after it. */
   discardedTileCount: number;
   scanSheetCount: number;
+  /** The order as the panel of scans being added names it (#2099): *Order #12*. */
+  documentName: string;
   /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies, but
    * a tile can still be assigned to one of its copies or discarded — closing froze the money, not
    * the photographs. An order whose every lot is closed is the one that cannot identify at all. */
@@ -254,6 +249,7 @@ export function ScansCard({
   parkedTileCount,
   discardedTileCount,
   scanSheetCount,
+  documentName,
   canIdentify,
   onIdentifyTiles,
   onIdentifyIssueRun,
@@ -364,11 +360,10 @@ export function ScansCard({
    * a copy of the ticked ids: the selection is already held below and is pruned against the strip on
    * every render, so a second list here could name a tile that has since been worked through. */
   const [selectionOpen, setSelectionOpen] = useState(false);
-  /** The files of this order the tab is sending (#1568), each with how far it has got — the
-   * chunks the server has acknowledged (#590). Held outside this component, so a batch keeps going
-   * while the collector is on another screen and is drawn again when they come back. A file leaves
-   * it when its bytes are in: preparing it runs in the background (#1567) and is shown on the
-   * scan's own card below. Nothing here makes the section busy — a batch can take an hour. */
+  /** The files of this order the tab is sending (#1568). Held outside this component, so a batch
+   * keeps going while the collector is on another screen, and **drawn by the panel of scans being
+   * added** (#2099), not here — read here only to know a back is on its way and that the order is
+   * not empty. Nothing here makes the section busy — a batch can take an hour. */
   const queued = useQueuedScans(collectionId, purchaseId);
   /** The scans this page has seen waiting or being prepared (#1567) — the ones whose cut editor
    * opens on its own when they are ready. A ref, not state: it changes nothing on screen, and a
@@ -417,8 +412,13 @@ export function ScansCard({
   const [pending, startTransition] = useTransition();
 
   const batches = data?.batches ?? [];
-  /** Scans on their way to being cards (#1567): waiting their turn, being prepared, or failed. */
+  /** Scans that did not become cards (#1567, #1568): could not be prepared, or never sent because
+   * the page sending them closed. A lasting state of the order, so drawn here — what is still on its
+   * way is the panel's (#2099). */
   const uploadCards = (data?.uploads ?? []).filter((u) => isScanUploadShown(u.status));
+  /** Scans of this order the server will prepare or is preparing — drawn in the panel, and enough
+   * that the section does not say it has no scans. */
+  const preparingCount = (data?.uploads ?? []).filter((u) => isScanUploadPending(u.status)).length;
   const fromAuction = data?.fromAuction ?? false;
   /** How the collection's last back was made (#1555) — what every *Add back scan* offers until the
    * collector picks another for that card. */
@@ -672,7 +672,8 @@ export function ScansCard({
    *
    * The scans go up **in chunks** (#590): a 1200 dpi card is 100–200 MB and no ordinary proxy
    * passes a body that size. What that buys here, beyond the upload working at all, is a measure —
-   * the chunks the server has acknowledged — so each file says how far it has got.
+   * the chunks the server has acknowledged — so each file says how far it has got, in the panel of
+   * scans being added (#2099) rather than in this section.
    *
    * **And they go at their own pace** (#1568): one after another from the tab's queue, each prepared
    * in the background (#1567) as soon as its last piece is in. Nothing here waits — the section stays
@@ -689,6 +690,7 @@ export function ScansCard({
     enqueueScans({
       collectionId,
       purchaseId,
+      documentName,
       files,
       // The name typed beside the button rides with the card it names (#587), and is cleared
       // afterwards: it is a name for *this* card, not a setting, and carrying it to the next one is
@@ -712,7 +714,8 @@ export function ScansCard({
       turnover: side === "back" ? (turnover ?? null) : null,
     });
     if (side === "front") setNewLabel("");
-    // The files are drawn inside the section, so it is opened.
+    // Their progress is in the panel of scans being added (#2099), but each becomes a batch card
+    // here and the editor opens on it from here — which only an open section reads the scans for.
     if (!open) setOpen(true);
   };
 
@@ -1174,11 +1177,6 @@ export function ScansCard({
         />
       </header>
 
-      {/* Above the fold of the section rather than inside it: the button that starts a batch is in
-          the header and works with the section collapsed, so a batch going up has to be visible
-          with the section shut too. One line — each file is drawn inside. */}
-      {!open && queued.length > 0 && <QueuedScansLine queued={queued} />}
-
       {!open ? null : (
         <>
       {error && <Banner tone="error">{error}</Banner>}
@@ -1231,7 +1229,19 @@ export function ScansCard({
 
       {isLoading && <Muted>Loading scans…</Muted>}
 
-      {!isLoading && batches.length === 0 && uploadCards.length === 0 && queued.length === 0 && (
+      {/* Only scans on their way: they are in the panel until they are ready to cut (#2099). */}
+      {!isLoading &&
+        batches.length === 0 &&
+        uploadCards.length === 0 &&
+        (queued.length > 0 || preparingCount > 0) && (
+          <Muted>The scans being added appear here as soon as each is ready to cut.</Muted>
+        )}
+
+      {!isLoading &&
+        batches.length === 0 &&
+        uploadCards.length === 0 &&
+        queued.length === 0 &&
+        preparingCount === 0 && (
         <Muted>
           No scans yet. Lay the stamps out on a black stockbook card, leaving about one perforation
           tooth of gap between them, and scan the whole card. Turn each stamp over in place and scan
@@ -1382,8 +1392,9 @@ export function ScansCard({
         />
       ))}
 
-      {/* Scans on their way to being cards (#1567), under the batches they will become (#1826) —
-          batches read oldest first, and a scan being prepared is the newest of all. */}
+      {/* Scans that did not become cards (#1567, #1568), under the batches (#1826) — batches read
+          oldest first, and these are the newest of all. What is still on its way is in the panel of
+          scans being added (#2099). */}
       {uploadCards.map((card) => (
         <PreparingScanCard
           key={card.id}
@@ -1393,19 +1404,8 @@ export function ScansCard({
           onDiscard={() => void discardPreparation(card)}
         />
       ))}
-      {/* The files of a batch this tab is still sending (#1568), after the scans already on the
-          server: they will join that queue in this order. */}
-      {queued.map((scan) => (
-        <QueuedScanCard
-          key={scan.key}
-          scan={scan}
-          onRetry={() => retryQueuedScan(scan.key)}
-          onDiscard={() => void discardQueuedScan(scan.key)}
-        />
-      ))}
-
       {/* The header's *Add card scans* again, under the last scan (#1826): a stack is scanned in
-          order, so the next card goes where the eye already is, and its progress appears just above.
+          order, so the next card goes where the eye already is.
           The same button — the name and the profile in the header apply to it as well. With nothing
           listed yet the header's is the only one, a second one under the empty note being the same
           button twice in one glance. */}
@@ -3790,142 +3790,10 @@ function CutReportBanner({
 }
 
 /**
- * How far the card scan being sent has got (#590).
- *
- * The photo editor's upload treatment, in its single-file case: the same bar, the same label-plus-
- * percentage line above it, because a card is one file and the strip's aggregate bar is what that
- * already looks like. Nothing new is invented for it.
- *
- * **Only the upload is measured here.** It is the chunks the server has acknowledged — a real
- * measure, and the one that exists only because the upload is in parts. What follows the last chunk,
- * preparing the scan, runs in the background since #1567 and is shown on the scan's own card in the
- * section, where it says whether it is waiting its turn or being prepared now.
- */
-/** What a file of a batch says it is doing (#1568). */
-function queuedScanText(scan: QueuedScan): string {
-  switch (scan.state) {
-    case "opening":
-    case "waiting":
-      return "Waiting to upload";
-    case "uploading":
-      return `Uploading… ${Math.round(scan.fraction * 100)}%`;
-    case "failed":
-      return "Upload failed";
-    case "refused":
-      return "Not accepted";
-  }
-}
-
-/**
- * A file of a batch this tab is sending (#1568), before its bytes are all in: waiting its turn,
- * going up (with the share the server has acknowledged, #590), failed part-way — with the reason and
- * a retry that resumes from what the server holds — or refused outright, with the reason and nothing
- * to retry, since the same file would be refused again. Drawn as the scan being prepared is, because
- * it is the step before it.
- */
-function QueuedScanCard({
-  scan,
-  onRetry,
-  onDiscard,
-}: {
-  scan: QueuedScan;
-  onRetry: () => void;
-  onDiscard: () => void;
-}) {
-  const failed = scan.state === "failed" || scan.state === "refused";
-  const title =
-    scan.side === "back" && scan.batchNo != null
-      ? `Back of batch ${scan.batchNo}`
-      : scan.label
-        ? `New card · ${scan.label}`
-        : "New card";
-  return (
-    <div
-      style={{
-        border: `1px solid ${failed ? "var(--color-error-border)" : "var(--color-border)"}`,
-        borderRadius: "0.5rem",
-        padding: "0.75rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.5rem",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-        <strong style={{ fontSize: "0.8125rem" }}>{title}</strong>
-        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          {scan.fileName}
-        </span>
-        <span
-          style={{
-            fontSize: "0.8125rem",
-            color: failed ? "var(--color-error)" : "var(--color-text-muted)",
-          }}
-        >
-          · {queuedScanText(scan)}
-        </span>
-        <span style={{ flex: 1 }} />
-        {scan.state === "failed" && (
-          <SmallButton onClick={onRetry}>Try again</SmallButton>
-        )}
-        {failed && (
-          <SmallButton onClick={onDiscard} danger={scan.state === "failed"}>
-            {scan.state === "failed" ? (
-              <>
-                <Icon name="delete" size="sm" /> Discard
-              </>
-            ) : (
-              "Dismiss"
-            )}
-          </SmallButton>
-        )}
-      </div>
-      {failed && scan.error && (
-        <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{scan.error}</span>
-      )}
-      {scan.state === "uploading" && <ProgressBar fraction={scan.fraction} />}
-    </div>
-  );
-}
-
-/** A batch going up while the section is shut (#1568): how far it has got, in one line. */
-function QueuedScansLine({ queued }: { queued: QueuedScan[] }) {
-  const sending = queued.find((q) => q.state === "uploading");
-  const toSend = queued.filter((q) => q.state !== "failed" && q.state !== "refused").length;
-  const failed = queued.length - toSend;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginTop: "0.5rem" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: "0.75rem",
-          color: "var(--color-text-secondary)",
-        }}
-      >
-        <span>
-          {toSend > 0 && `Uploading ${toSend} ${toSend === 1 ? "scan" : "scans"}…`}
-          {toSend > 0 && failed > 0 && " · "}
-          {failed > 0 && (
-            <span style={{ color: "var(--color-error)" }}>
-              {failed} not uploaded
-            </span>
-          )}
-        </span>
-        {sending && <span>{Math.round(sending.fraction * 100)}%</span>}
-      </div>
-      {sending && <ProgressBar fraction={sending.fraction} />}
-    </div>
-  );
-}
-
-/**
- * A scan whose bytes are in and that is not a card yet (#1567).
- *
- * It says which of three things is true: it is **waiting its turn** (the instance prepares one scan
- * at a time, every collection's in one queue, so it says how many are ahead), it is **being
- * prepared now**, or it **could not be prepared** — with the reason, a retry that prepares it again
- * from what is already on the server, and a way to throw it away. Drawn as a batch is, because it is
- * the batch-to-be: when it is ready it is replaced by the card itself.
+ * A scan whose bytes are in and that **could not be prepared** (#1567) — with the reason, a retry that
+ * prepares it again from what is already on the server, and a way to throw it away. Drawn as a batch
+ * is, because it is the batch-to-be. Waiting its turn and being prepared are progress, and drawn in
+ * the panel of scans being added since #2099.
  *
  * Or, since #1568, it **never arrived**: the page sending it closed first. Nothing of it was kept, so
  * there is nothing to retry — the note says which file to choose again, and is dismissed once read.
@@ -3943,12 +3811,7 @@ function PreparingScanCard({
 }) {
   const failed = card.status === "failed";
   const interrupted = card.status === "interrupted";
-  const title =
-    card.side === "back" && card.batchNo != null
-      ? `Back of batch ${card.batchNo}`
-      : card.label
-        ? `New card · ${card.label}`
-        : "New card";
+  const title = scanCardTitle(card);
   return (
     <div
       style={{
@@ -3969,10 +3832,6 @@ function PreparingScanCard({
           }}
         >
           {scanUploadStatusText(card.status)}
-          {card.status === "queued" &&
-            card.ahead != null &&
-            card.ahead > 0 &&
-            ` · ${card.ahead} ${card.ahead === 1 ? "scan" : "scans"} ahead`}
         </span>
         <span style={{ flex: 1 }} />
         {failed && (
@@ -3994,7 +3853,6 @@ function PreparingScanCard({
       {failed && card.error && (
         <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{card.error}</span>
       )}
-      {card.status === "preparing" && <IndeterminateBar />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   OPENING_BALANCE_TITLE_MAX,
   intakeDocumentName,
+  intakeDocumentRef,
   intakeDocumentType,
   isIntakeDocumentType,
   isOpeningBalance,
@@ -78,5 +79,12 @@ describe("intakeDocumentName", () => {
       "Allegro"
     );
     assert.equal(intakeDocumentName({ kind: "purchase", title: null, contactName: null }), null);
+  });
+});
+
+describe("intakeDocumentRef (#2099)", () => {
+  it("refers to a document by its kind and number", () => {
+    assert.equal(intakeDocumentRef({ kind: "purchase", purchaseNo: 12 }), "Order #12");
+    assert.equal(intakeDocumentRef({ kind: "opening_balance", purchaseNo: 3 }), "Opening balance #3");
   });
 });

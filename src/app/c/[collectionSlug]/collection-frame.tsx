@@ -15,7 +15,17 @@ import { useSelectedLayoutSegment } from "next/navigation";
  * The phone screens still sit inside the layout's providers: one query client and the same
  * collection checks, rather than a second copy of them on a path of their own.
  */
-export function CollectionFrame({ sidebar, children }: { sidebar: ReactNode; children: ReactNode }) {
+export function CollectionFrame({
+  sidebar,
+  corner,
+  children,
+}: {
+  sidebar: ReactNode;
+  /** What floats over every desktop screen — the panel of card scans being added (#2099). Not on a
+   * phone screen, which adds no card scans. */
+  corner: ReactNode;
+  children: ReactNode;
+}) {
   if (useSelectedLayoutSegment() === "phone") return children;
 
   return (
@@ -28,6 +38,7 @@ export function CollectionFrame({ sidebar, children }: { sidebar: ReactNode; chi
     >
       {sidebar}
       <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+      {corner}
     </div>
   );
 }

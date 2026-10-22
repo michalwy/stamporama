@@ -197,7 +197,8 @@ function ToastViewport({
       style={{
         position: "fixed",
         right: "1.25rem",
-        bottom: "1.25rem",
+        // Above the panel of card scans being added while it is up (#2099), which shares the corner.
+        bottom: "calc(1.25rem + var(--scan-uploads-panel-height, 0px))",
         zIndex: Z_INDEX,
         display: "flex",
         flexDirection: "column",

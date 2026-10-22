@@ -569,8 +569,10 @@ choose **several files at once**, or drop them onto the section — see
 
 The section lists its card scans **oldest first**, in the order you added them — the way a stack of
 cards is scanned and then worked through — so the card you added last is at the bottom. **Add card
-scans** is offered there too, under the last scan, and does exactly what the one at the top does;
-the scans you add appear just above it while they upload and are prepared.
+scans** is offered there too, under the last scan, and does exactly what the one at the top does.
+While the scans you add upload and are prepared, their progress is in the
+[panel of scans being added](#while-the-scan-is-uploading) in the corner of the window; each appears
+in the section once it is ready to cut.
 
 For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — scan them on an
 [opening balance](#opening-balances), which has the same section.
@@ -664,24 +666,25 @@ Two things to know:
 #### While the scan is uploading
 
 A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so adding one goes in **two stages
-that mean different things**:
+that mean different things**. Both are shown in the **panel of scans being added**, which floats in
+the bottom right corner of the window, over the page, on **every screen** — the order's page or any
+other — for as long as something is on its way. Each file has a row there: its name, the order it
+belongs to (a link back to it), where it is, and the bar while it uploads.
 
-- **Uploading…**, with a bar and a percentage on the file's own card at the bottom of the **Card
-  scans** section, under the last scan.
+- **Uploading…**, with a bar and a percentage on the file's row.
   That is real: it counts the pieces of the file the app has actually taken, not what your browser
   has handed to the network. You can move around the app while it uploads; **keep the browser tab
   open** — closing or reloading it stops the upload, and the browser asks first.
-- **Preparing the scan…**, on the scan's own card in the **Card scans** section. The bytes are all
-  in; what is happening now is the app opening a very large image and making the working copy the
+- **Preparing the scan…**, on the same row. The bytes are all in; what is happening now is the app opening a very large image and making the working copy the
   cut editor draws. On a big card that can take a few minutes, so it happens **in the background**:
-  from the moment this card appears **the scan is safe**, and you can go anywhere in the app, reload
-  the page, or add the next card straight away.
+  from the moment the row says so **the scan is safe**, and you can go anywhere in the app, reload
+  the page, or add the next card straight away — the panel still shows it.
 
 The app prepares **one scan at a time**, in the order they finished uploading, so a card added while
 another is being prepared says **Waiting its turn to be prepared** — with how many scans are ahead of
 it — until its turn comes. The app may be a little slower while a large scan is being prepared.
 
-When a scan is ready:
+When a scan is ready, it **leaves the panel** and appears in the **Card scans** section as a batch:
 
 - if you are still on the order's page, the **cut editor opens on it**, as it always has — and when
   several scans become ready while you are cutting one, committing that cut **opens the next**, so a
@@ -691,7 +694,8 @@ When a scan is ready:
   back cut**). The [notification bell](action-items.md) does not mention it — with a sitting's worth
   of scans it would fill up with cards that only need cutting here.
 
-If a scan **could not be prepared**, its card says so in red, with the reason. **Try again** prepares
+If a scan **could not be prepared**, it leaves the panel too: its card in the **Card scans** section
+says so in red, with the reason. **Try again** prepares
 it once more from what was already uploaded — nothing is sent again — and **Discard** throws it away.
 A scan you leave like that is cleaned up after a while, the same way an upload that never finished
 is, and until then the notification bell lists it under **Card scan could not be prepared**.
@@ -699,8 +703,8 @@ is, and until then the notification bell lists it under **Card scan could not be
 The scan is sent in pieces, which is what makes a card this size possible at all — most self-hosted
 setups sit behind something that refuses a single upload that large, or gives up on one request that
 takes minutes. It also means a hiccup costs you a piece and not the whole card: a dropped request is
-retried on its own. If the connection gives up entirely, the file's card says **Upload failed** with
-the reason: **Try again** carries on from the last piece the app took, and **Discard** gives up on it.
+retried on its own. If the connection gives up entirely, the file's row in the panel says **Upload
+failed** with the reason: **Try again** carries on from the last piece the app took, and **Discard** gives up on it.
 
 #### Adding several scans at once
 
@@ -710,18 +714,22 @@ scans** — or drag them from your desktop onto the **Card scans** section — a
 - **Each file becomes a card of its own**, a front, numbered in the order you chose them.
 - They **upload one after another**, and each is prepared as soon as it has arrived, so the first can
   be cut while the next is still uploading.
-- Each file has its own card in the section, saying where it is: **Waiting to upload**,
-  **Uploading…** with its percentage, then **Waiting its turn to be prepared**, **Preparing the
-  scan…**, and finally the batch itself, ready to cut. With the section folded shut, one line under
-  its heading says how many are still uploading.
+- Each file has its own row in the panel of scans being added, saying where it is: **Waiting to
+  upload**, **Uploading…** with its percentage, then **Waiting its turn to be prepared**, **Preparing
+  the scan…** — and then it leaves the panel and is the batch itself in the **Card scans** section,
+  ready to cut. The section shows no upload cards.
+- **The panel folds to one line** — *Uploading 3 of 12 · Preparing 1* — with its heading. Folded
+  once, it stays folded: the next batch, after a reload and on another screen it appears folded until
+  you unfold it, and unfolded the other way round. It **closes by itself** when nothing is left in
+  progress.
 - A file the app does not take — not a JPEG, PNG or WebP, or over 200 MB — says **Not accepted** with
-  the reason, and the others go ahead. **Dismiss** clears it.
+  the reason on its row in the panel, and the others go ahead. **Dismiss** clears it.
 - A file that fails can be tried again on its own, without touching the others.
 
 You can **move around the app** while a batch runs. **Closing or reloading the tab stops it**; the
 browser asks first while something is still to upload. The files it had not finished are not kept —
-not even the half-sent one — and the next time you open the order, each says **Not uploaded — the
-page was closed before it was sent**, so you know which to choose again. **Dismiss** clears the
+not even the half-sent one — and the next time you open the order, each says in the **Card scans**
+section **Not uploaded — the page was closed before it was sent**, so you know which to choose again. **Dismiss** clears the
 note.
 
 Back scans are still added one at a time, from the batch's own **Add back scan**, since the app has

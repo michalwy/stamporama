@@ -8,6 +8,7 @@ import { QueryProvider } from "@/app/query-provider";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
 import { CollectionFrame } from "./collection-frame";
+import { ScanUploadsPanel } from "./scan-uploads-panel";
 import { UmbrellaPricesQuestionProvider } from "./shared/umbrella-prices-question";
 import { SpecialisedChecklistsProvider } from "./shared/specialised-checklists";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
@@ -76,6 +77,7 @@ export default async function CollectionLayout({
                 appReleaseDate={getAppReleaseDate()}
               />
             }
+            corner={<ScanUploadsPanel collectionId={collection.id} collectionSlug={collectionSlug} />}
           >
             {children}
           </CollectionFrame>
