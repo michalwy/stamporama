@@ -1,11 +1,14 @@
 import type { CSSProperties } from "react";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
+import { getIssueListItem } from "@/lib/issues";
 import { getPhoneBrowseIssue } from "@/lib/phone-browse";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { loadPhoneStampThumbs } from "@/lib/phone-stamp-thumbs";
 import { phoneStampPath } from "@/lib/phone";
 import {
@@ -20,10 +23,19 @@ import { PhoneScreen, phoneRow } from "@/app/phone-screen";
 import { BROWSE_LIST, BROWSE_MUTED, BrowseTrail } from "../../phone-browse-parts";
 import { PhoneStampThumb } from "../../../phone-stamp-thumb";
 
-export const metadata = { title: "Issue" };
-
 interface PhoneBrowseIssuePageProps {
   params: Promise<{ collectionSlug: string; issueId: string }>;
+}
+
+// The number leads the tab title, as on the record's desk screen (#2112).
+export async function generateMetadata({ params }: PhoneBrowseIssuePageProps): Promise<Metadata> {
+  const { collectionSlug, issueId } = await params;
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { title: "Issue" };
+  const collection = await getCollectionBySlug(session.user.id, collectionSlug);
+  if (!collection) return { title: "Issue" };
+  const issue = await getIssueListItem(session.user.id, collection.id, issueId);
+  return { title: issue ? `Issue ${formatEntityNo(issue.issueNo)}` : "Issue" };
 }
 
 const MARK: CSSProperties = {

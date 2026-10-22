@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: StampDetailPageProps): Promis
   try {
     const stamp = await getStampListItem(session.user.id, stampId);
     return {
-      title: `Stamp — ${stamp.name ?? stamp.catalogNumbers[0]?.number ?? "untitled"}`,
+      title: `Stamp ${formatEntityNo(stamp.stampNo)} — ${stamp.name ?? stamp.catalogNumbers[0]?.number ?? "untitled"}`,
     };
   } catch {
     return {};

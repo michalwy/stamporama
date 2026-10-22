@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getOfferDetail, getOfferIssueIds } from "@/lib/offers";
@@ -27,7 +28,8 @@ export async function generateMetadata({ params }: OfferDetailPageProps): Promis
   if (!session) return {};
   const offer = await getOfferDetail(session.user.id, offerId);
   if (!offer) return {};
-  return { title: `Offer — ${offer.platformName}` };
+  // The number leads, so two offers open side by side are two tabs told apart (#2112).
+  return { title: `Offer ${formatEntityNo(offer.offerNo)} — ${offer.platformName}` };
 }
 
 export default async function OfferDetailPage({ params, searchParams }: OfferDetailPageProps) {

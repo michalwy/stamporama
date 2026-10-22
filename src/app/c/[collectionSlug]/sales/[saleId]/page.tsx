@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: SaleDetailPageProps): Promise
   if (!session) return {};
   const sale = await getSaleDetail(session.user.id, saleId);
   if (!sale) return {};
-  return { title: `Sale — ${sale.platformName}` };
+  return { title: `Sale ${formatEntityNo(sale.saleNo)} — ${sale.platformName}` };
 }
 
 export default async function SaleDetailPage({ params }: SaleDetailPageProps) {

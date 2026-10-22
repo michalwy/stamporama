@@ -7,6 +7,8 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getPhoneStamp, PHONE_STAMP_COPY_LIMIT } from "@/lib/phone-stamp";
+import { getStampListItem } from "@/lib/stamps";
+import { formatEntityNo } from "@/lib/quick-jump";
 import {
   phoneCopiesSummary,
   phoneCopyLine,
@@ -23,10 +25,21 @@ import { PhoneScreen, PHONE_TAP_TARGET, phoneRow } from "@/app/phone-screen";
 import { Icon } from "@/app/icons";
 import { PhoneStampPicture } from "./phone-stamp-picture";
 
-export const metadata: Metadata = { title: "Stamp" };
-
 interface PhoneStampPageProps {
   params: Promise<{ collectionSlug: string; stampId: string }>;
+}
+
+// The number leads the tab title, as on the record's desk screen (#2112).
+export async function generateMetadata({ params }: PhoneStampPageProps): Promise<Metadata> {
+  const { stampId } = await params;
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { title: "Stamp" };
+  try {
+    const stamp = await getStampListItem(session.user.id, stampId);
+    return { title: `Stamp ${formatEntityNo(stamp.stampNo)}` };
+  } catch {
+    return { title: "Stamp" };
+  }
 }
 
 const SECTION_TITLE: CSSProperties = {
