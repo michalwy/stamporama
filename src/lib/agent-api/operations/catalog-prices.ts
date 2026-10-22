@@ -50,7 +50,7 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // -- The editions ------------------------------------------------------------------------
 
 /** Every edition of every book the collection keeps, as {@link EditionSource}s. */
-async function loadEditions(context: OperationContext): Promise<EditionSource[]> {
+export async function loadEditions(context: OperationContext): Promise<EditionSource[]> {
   const rows = await prisma.catalogEdition.findMany({
     where: { catalogName: { vendor: { collectionId: context.collectionId } } },
     select: {
@@ -75,7 +75,7 @@ async function loadEditions(context: OperationContext): Promise<EditionSource[]>
     );
 }
 
-async function areaEntries(context: OperationContext): Promise<VocabularyEntry[]> {
+export async function areaEntries(context: OperationContext): Promise<VocabularyEntry[]> {
   const areas = await prisma.collectionArea.findMany({
     where: { collectionId: context.collectionId },
     select: { id: true, name: true, titleName: true },

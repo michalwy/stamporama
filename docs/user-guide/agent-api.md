@@ -321,7 +321,16 @@ exactly what the [variant price grid](variant-prices.md) does, cell by cell. It 
   too, as typing `-` or `?` into the grid does — and reads such cells back as *does not exist* or *not
   determinable* rather than as missing prices;
 - **clear prices**, as emptying a grid cell does. The cell then records nothing, which is not the
-  same as a price of nought — and not the same as **—** or **?** either.
+  same as a price of nought — and not the same as **—** or **?** either;
+- **find the prices still missing** across an area (with every area under it), an issue, a checklist
+  or a list of stamps — whether you have the stamps or not. By default it looks in each stamp's
+  area's main catalogue, newest edition, at every condition, without a certificate, as a single; it
+  can be asked about another edition, some conditions, certificates or formats instead. The answer
+  is grouped by issue in catalogue order, each stamp with its numbers and the cells it lacks, so a
+  whole series can be priced in one go afterwards. A cell with **—** or **?** is not missing. Neither
+  is a format cell the grid already works out from the single's price, nor a stamp with variants
+  whose variants all have the price. A certificate cell the grid's *Fill from None* could fill is
+  still missing, and the answer says what the fill would write. A **read only** token can do this.
 
 **Each cell is answered on its own**: written, unchanged because that figure was already there,
 cleared, or refused with the reason — a stamp number it cannot place, a condition you do not have, an
