@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data and #1949 sales; both wrappers exist and the registry carries **one hundred and five operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales and #2110 the catalogue's missing prices; both wrappers exist and the registry carries **one hundred and six operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #1168's bid recommendation, and #1037's catalog-number
-resolver. Fourteen counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Fifteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following) and *the registry carries one hundred operations* (from #1910 until #1949).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949) and *the registry carries one hundred and five operations* (from #1949 until #2110).
 
-**Sixty-five of them write** since #1949 added three; *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Sixty-five of them write** since #1949 added three — #2110's read left it there; *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -138,6 +138,7 @@ src/lib/agent-api/
   translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
   checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
   catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
+  missing-catalog-prices.ts  what counts as a missing price, the order it is told in, the page by stamps (#2110)
   area-reads.ts     the area row, the tree order, the catalogue spelling, the refusals (#1539)
   auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627, #1628)
   shipping-reads.ts carriers, options, supplies and uses as told; amounts, "supply: quantity", naming a supply or service (#1910)
@@ -165,6 +166,7 @@ src/lib/agent-api/
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
     checklists.ts   the eight checklist operations (#1512)              ← server-side
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
+    missing-catalog-prices.ts  find_missing_catalogue_prices (#2110)     ← server-side
     areas.ts        the six area operations (#1539)                     ← server-side
     auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
     shipping.ts     the fourteen carrier, option, supply and use operations (#1910)  ← server-side
@@ -172,7 +174,7 @@ src/lib/agent-api/
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -2133,6 +2135,56 @@ and fails on any operation module saying `catalogPrices` — `updateStampWithCat
 `tests/integration/agent-api-catalog-prices.test.ts` pins the two writes and that
 `clear_catalog_prices` is the only price- or catalogue-shaped name that removes anything.
 
+### Finding the prices still missing (#2110)
+
+**`find_missing_catalogue_prices` is the gap read in front of `set_catalog_prices`**, as
+`find_missing_translations` is in front of `set_translations` (#1452): an assistant entering a
+catalogue had to read stamp after stamp to learn where the gaps were. It reads and stores nothing, so
+a *read only* token may call it (`GET /catalog-prices/missing`).
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `find_missing_catalogue_prices` | no | the stamps of an `area` (with its subtree), an `issue`, a `checklist` or a list of `stamps` lacking a price in the cells asked, grouped by issue |
+
+**Every stamp of the catalogue, held or not** — the collector's decision on #2110. That is what
+separates it from the grid's worklist (`listUnpricedVariantTrees`), which judges a tree only on the
+conditions the collection holds: an assistant typing a catalogue page in wants the page, not the part
+of it someone owns. The cells default to every condition, no certificate, the single; `conditions`,
+`certificates` and `formats` narrow or widen them, and every combination of the three is checked.
+
+**Missing means not entered, read as the grid reads a cell** (`missing-catalog-prices.ts`, pure):
+
+- A cell recorded as `-` or `?` is an answer (#1615) and never reported.
+- A **format cell the single and a multiplier derive** is priced: the grid draws it, the valuation
+  uses it, and the worklist already counts it so (`summarizeUmbrellaCell`).
+- An **umbrella** is missing a cell only while one of its fully identified variant-kind descendants
+  is — the same set `variantDescendantMap` rolls up — since its value is the lowest of theirs (#238).
+  While one is, the umbrella is reported too, marked `umbrella`, because its own price outranks the
+  rollup (#616) and is the other way to close the gap. Its variants are read whether or not the scope
+  names them: a checklist holding only the umbrella is still answered by its tree.
+- A **certificate cell *Fill from None* would fill is still missing** and carries `derivable` — the
+  figure `fillCertificateCell` gives from the **recorded** plain cell at the status's percentage, or
+  `-`/`?` carried from a marked one, spelled as `set_catalog_prices` takes a `price`. The fill is a
+  one-time copy a person presses (#1242): nothing derives a certificate figure on read, so the
+  valuation has none until one is entered. An umbrella gets no `derivable`, as the fill passes a
+  locked row by.
+
+**The edition is the one sent, else each stamp's own default**: the effective primary catalogue
+(`buildEffectivePrimaryCatalogMap`) of its issue's area — of its own area link when it is in no
+issue — in its newest edition, which is the grid's `defaultEditionId`. Per stamp rather than per call
+because an area's subtree may span books (Poland in Michel Polen, Germany in Michel Deutschland). A
+stamp whose area has no primary catalogue with an edition cannot be checked without `edition`, and is
+counted in `withoutCatalogue` rather than dropped silently.
+
+**Grouped by issue and paged by stamps.** Issues come in catalogue order — the area's place in the
+tree (`areaTreeOrder`'s walk), then the issue's catalogue sort key, then the year — and each issue's
+stamps in the variant grid's tree order (`flattenTree`'s rule), stamps in no issue last; a group is an
+issue and an edition, and names both once. The window counts **stamps, not groups**, so `limit` caps
+what a page costs whatever the issues' sizes, `total` is the number of stamps with a gap, and an issue
+cut by a page boundary is told on both pages. That is the list convention's `total` kept honest one
+level down — a total of groups would let a page of three issues hold three hundred stamps.
+`missingCells` counts the cells across every page.
+
 ## Changing checklists
 
 **Eight operations, six of which write** (#1512): a checklist created on an issue or spanning several
@@ -2693,7 +2745,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and five operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and six operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2719,9 +2771,9 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 `create_shipping_option`, `update_shipping_option`, `list_packing_supplies`,
 `get_packing_supply_history`, `create_packing_supply`, `update_packing_supply`, `record_supply_use`
 and `update_supply_use`; #1949 added `list_sales`, `get_sale`, `find_or_create_buyer`, `sell_offer`
-and `sell_offer_set`.
+and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

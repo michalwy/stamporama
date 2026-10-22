@@ -167,6 +167,7 @@ import {
   listCatalogEditionsOperation,
   setCatalogPricesOperation,
 } from "./operations/catalog-prices";
+import { findMissingCataloguePricesOperation } from "./operations/missing-catalog-prices";
 import {
   addChecklistStampsOperation,
   createChecklistOperation,
@@ -298,6 +299,7 @@ export const OPERATIONS: readonly Operation[] = [
   getCatalogPricesOperation,
   setCatalogPricesOperation,
   clearCatalogPricesOperation,
+  findMissingCataloguePricesOperation,
   listAreasOperation,
   createAreaOperation,
   updateAreaOperation,
