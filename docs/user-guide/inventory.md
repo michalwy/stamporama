@@ -1427,17 +1427,31 @@ Two choices:
 
 - **What to list.**
   - **Complete sets** — every [checklist](collections.md#checklists) the copies complete becomes a set holding one
-    copy of each of its stamps. A set is always one condition, one certificate status and one format:
-    a checklist that could only be completed by mixing them forms no set. A variant fills its
+    copy of each of its stamps. By default a set is one condition, one certificate status and one
+    format: a checklist that could only be completed by mixing them forms no set. A variant fills its
     parent's place when the parent itself is missing, and a checklist of a single stamp is not a set.
     Where one copy could complete two checklists, the checklist that comes first on the issue gets it.
+
+    **A set may mix** — the same switches as on [Series from Singles](offers.md#series-from-singles):
+    **Conditions**, **Certificates** and **Formats**, each on its own (*Certificates* and *Formats*
+    only appear when the collection defines any). With *Conditions* on, a checklist you hold one stamp
+    MNH and the other eleven MH becomes one set instead of twelve singles; the other two axes still
+    have to agree unless you switch them on too. All three are off when the dialog opens. With any of
+    them on, choose which sets come first:
+    - **Same value first** (the default) — sets complete in one condition (certificate, format) are
+      formed first, exactly as without mixing, and only the copies left over are combined into mixed
+      sets. A mixed set leans to the value most of it shares: eleven MH and one MNH, not six and six.
+    - **Mix freely** — sets are formed in the usual order, lowest copy numbers first, whatever their
+      value: whatever completes a set does, pure or mixed.
+
+    The switches belong to *Complete sets*; *Singles* lists what it always did.
   - **Singles** — every copy **left over** once the complete sets are taken out becomes a set of its
     own. A copy that belongs in a complete set is never offered as a single, so it does not matter
     which of the two you run first. A cover or other piece with several stamps is always an offer of
     its own.
 - **How to pack identical sets.**
   - **Multi-quantity** — identical sets (the same stamps, in the same condition, certificate status
-    and format) share one offer, with one set per copy of the set. On a platform that lists an
+    and format — for a mixed set, every stamp in the same one as in the other) share one offer, with one set per copy of the set. On a platform that lists an
     unidentified variant under its cheapest one, "the same stamps" means what each copy
     [will be listed as](#the-same-stamp-in-the-same-condition): a `523` copy that goes on Colnect as
     `523I` packs with the `523I` copies, since two offers of it would be refused. If an offer on that platform —
@@ -1451,7 +1465,8 @@ Two choices:
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
 
 The preview lists every offer on **one line**: its name, the condition
-in its colour — with the certificate status and format only when there is one — the set by its
+in its colour — with the certificate status and format only when there is one; a mixed set names
+each value with how many of its copies are in it, *MH ×11 · MNH ×1* — the set by its
 catalogue numbers, run together as a range where they follow on (`Mi·PL 865-870`), any variant
 standing in for its parent, how many sets (`×3`), and whether it is a **new offer** or **added to
 #N**. Hover *added to #N* for the offer's name and how many sets it will then have. Click a line to

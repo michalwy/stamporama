@@ -228,6 +228,47 @@ describe("offer generator (#1287)", () => {
     assert.equal(singles.lines.length, 3);
   });
 
+  it("makes one set of a checklist complete only across conditions when they may mix, naming the mix (#2102)", async () => {
+    const [s1, s2, s3] = await stamps(3);
+    await checklist([s1, s2, s3]);
+    const copies = [await copy(s1, { conditionId: usedId }), await copy(s2, { conditionId: usedId }), await copy(s3)];
+    const mixing = { condition: true, certificate: false, format: false };
+
+    const preview = await previewOfferGeneration(userId, collectionId, ticked(copies, { mixing }));
+    assert.equal(preview.lines.length, 1);
+    assert.equal(preview.otherModeCopies, 0);
+    assert.deepEqual(
+      preview.lines[0].combination.map(({ axis, label, count }) => ({ axis, label, count })),
+      [
+        { axis: "condition", label: "U", count: 2 },
+        { axis: "condition", label: "MNH", count: 1 },
+      ]
+    );
+
+    const result = await commitOfferGeneration(userId, collectionId, ticked(copies, { mixing }), preview.fingerprint);
+    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 3, post: null });
+    const [created] = await offersHolding(copies);
+    assert.deepEqual(created.sets.map((set) => set.items.map((i) => i.itemId).sort()), [[...copies].sort()]);
+  });
+
+  it("forms the pure set first under same value first, and in the usual order under mix freely (#2102)", async () => {
+    const [s1, s2] = await stamps(2);
+    await checklist([s1, s2]);
+    // Lowest numbers first: a used s1, then an MNH pair.
+    const used1 = await copy(s1, { conditionId: usedId });
+    const mnh1 = await copy(s1);
+    const mnh2 = await copy(s2);
+    const copies = [used1, mnh1, mnh2];
+    const mixing = { condition: true, certificate: false, format: false };
+
+    const first = await previewOfferGeneration(userId, collectionId, ticked(copies, { mixing }));
+    assert.deepEqual(first.lines.map((line) => line.sets.map((set) => set.map((c) => c.id).sort())), [[[mnh1, mnh2].sort()]]);
+    assert.deepEqual(first.lines[0].combination.map((part) => [part.label, part.count]), [["MNH", null]]);
+
+    const free = await previewOfferGeneration(userId, collectionId, ticked(copies, { mixing, priority: "free" }));
+    assert.deepEqual(free.lines.map((line) => line.sets.map((set) => set.map((c) => c.id).sort())), [[[used1, mnh2].sort()]]);
+  });
+
   it("adds a matching set to a listed offer with multi-quantity and flags it (#542) — and not with separate offers", async () => {
     const [s1, s2] = await stamps(2);
     await checklist([s1, s2]);

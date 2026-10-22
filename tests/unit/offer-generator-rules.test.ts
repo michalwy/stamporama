@@ -137,6 +137,113 @@ describe("assembleSets (#1287)", () => {
   });
 });
 
+describe("assembleSets with mixing (#2102)", () => {
+  const conditions = { condition: true, certificate: false, format: false };
+  const triple: LotChecklist = { checklistId: "triple", stampIds: ["s1", "s2", "s3"] };
+
+  it("makes one set of a checklist complete only across conditions, and leaves it off without the switch", () => {
+    const copies = [copy("c1", "s1"), copy("c2", "s2", { conditionId: "mh" })];
+    const mixed = assembleSets(copies, [pair], conditions);
+    assert.deepEqual(ids(mixed.sets), [["c1", "c2"]]);
+    assert.deepEqual(mixed.sets[0].combination, { certificateStatusId: null, formatId: null });
+    assert.equal(mixed.singles.length, 0);
+    assert.equal(assembleSets(copies, [pair]).sets.length, 0);
+  });
+
+  it("mixes only the axis switched on", () => {
+    const copies = [copy("c1", "s1"), copy("c2", "s2", { conditionId: "mh", certificateStatusId: "cert" })];
+    assert.equal(assembleSets(copies, [pair], conditions).sets.length, 0);
+    assert.equal(assembleSets(copies, [pair], { condition: true, certificate: true, format: false }).sets.length, 1);
+  });
+
+  it("forms the pure set first under same value first, mixing only what is left", () => {
+    // s1 in MNH and MH, s2 in MNH and MH, s3 in MNH only: one pure MNH set, nothing left to mix.
+    const copies = [
+      copy("mh1", "s1", { conditionId: "mh", itemNo: 1 }),
+      copy("mh2", "s2", { conditionId: "mh", itemNo: 2 }),
+      copy("mnh1", "s1", { itemNo: 3 }),
+      copy("mnh2", "s2", { itemNo: 4 }),
+      copy("mnh3", "s3", { itemNo: 5 }),
+    ];
+    const first = assembleSets(copies, [triple], conditions, "same-first");
+    assert.deepEqual(ids(first.sets), [["mnh1", "mnh2", "mnh3"]]);
+    assert.deepEqual(first.sets[0].combination, { conditionId: "mnh", certificateStatusId: null, formatId: null });
+    assert.deepEqual(ids(first.singles).flat().sort(), ["mh1", "mh2"]);
+
+    // Mix freely takes copies in the usual order — the lowest copy numbers — pure or not.
+    const free = assembleSets(copies, [triple], conditions, "free");
+    assert.deepEqual(ids(free.sets), [["mh1", "mh2", "mnh3"]]);
+    assert.deepEqual(free.sets[0].combination, { certificateStatusId: null, formatId: null });
+  });
+
+  it("leans a mixed set to the value most of it shares", () => {
+    // s1 in both, s2 and s3 only MH, s4 only MNH: MH fills three slots, so s1 is taken in MH too —
+    // three and one, not two and two — although its MNH copy has the lower number.
+    const quad: LotChecklist = { checklistId: "quad", stampIds: ["s1", "s2", "s3", "s4"] };
+    const copies = [
+      copy("mnh1", "s1", { itemNo: 1 }),
+      copy("mh1", "s1", { conditionId: "mh", itemNo: 2 }),
+      copy("mh2", "s2", { conditionId: "mh", itemNo: 3 }),
+      copy("mh3", "s3", { conditionId: "mh", itemNo: 4 }),
+      copy("mnh4", "s4", { itemNo: 5 }),
+    ];
+    const { sets } = assembleSets(copies, [quad], conditions, "same-first");
+    assert.deepEqual(ids(sets), [["mh1", "mh2", "mh3", "mnh4"]]);
+    // Mix freely does not lean: the lowest copy number fills the slot.
+    assert.deepEqual(ids(assembleSets(copies, [quad], conditions, "free").sets), [["mnh1", "mh2", "mh3", "mnh4"]]);
+  });
+
+  it("keeps a checklist's pure sets before its mixed ones, checklist by checklist", () => {
+    const other: LotChecklist = { checklistId: "other", stampIds: ["s8", "s9"] };
+    const copies = [
+      copy("a1", "s1"),
+      copy("a2", "s2", { conditionId: "mh" }),
+      copy("b1", "s8"),
+      copy("b2", "s9"),
+    ];
+    const { sets } = assembleSets(copies, [pair, other], conditions, "same-first");
+    assert.deepEqual(sets.map((set) => set.checklistId), ["pair", "other"]);
+  });
+});
+
+describe("planOffers with mixing (#2102)", () => {
+  const conditions = { condition: true, certificate: false, format: false };
+
+  it("packs two mixed sets together only when every stamp is in the same condition in both", () => {
+    const same = plan({
+      copies: [
+        copy("a1", "s1"),
+        copy("a2", "s2", { conditionId: "mh" }),
+        copy("b1", "s1"),
+        copy("b2", "s2", { conditionId: "mh" }),
+      ],
+      mixing: conditions,
+    });
+    assert.deepEqual(same.lines.map((line) => ids(line.sets)), [[["a1", "a2"], ["b1", "b2"]]]);
+
+    const swapped = plan({
+      copies: [
+        copy("a1", "s1"),
+        copy("a2", "s2", { conditionId: "mh" }),
+        copy("b1", "s1", { conditionId: "mh" }),
+        copy("b2", "s2", { conditionId: "used" }),
+      ],
+      mixing: conditions,
+    });
+    assert.equal(swapped.lines.length, 2);
+  });
+
+  it("packs a set that came out pure under mixing with the pure sets", () => {
+    const { lines } = plan({
+      copies: [copy("a1", "s1"), copy("a2", "s2"), copy("b1", "s1"), copy("b2", "s2")],
+      mixing: conditions,
+      priority: "free",
+    });
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].id, plan({ copies: [copy("a1", "s1"), copy("a2", "s2"), copy("b1", "s1"), copy("b2", "s2")] }).lines[0].id);
+  });
+});
+
 describe("planOffers (#1287)", () => {
   const twoSets = () => [copy("a1", "s1"), copy("a2", "s2"), copy("b1", "s1"), copy("b2", "s2")];
 
@@ -420,6 +527,8 @@ describe("the generator request (#1287)", () => {
       state: "preparing" as const,
       mode: "singles" as const,
       packaging: "separate" as const,
+      mixing: { condition: false, certificate: false, format: false },
+      priority: "same-first" as const,
       itemIds: ["i1", "i2"],
       filters: "",
       targets: { abc: "o1" },
@@ -441,6 +550,18 @@ describe("the generator request (#1287)", () => {
       const post = { ...facebook, postTitle };
       assert.deepEqual(parseGeneratorRequest(generatorRequestParams(post)), { ...post, skip: ["l1", "l2"] });
     }
+    // The mixing switches and the priority, spelled as Series from Singles spells them (#2102).
+    const mixed = {
+      ...request,
+      mixing: { condition: true, certificate: false, format: true },
+      priority: "free" as const,
+    };
+    const mixedParams = generatorRequestParams(mixed);
+    assert.equal(mixedParams.get("mixConditions"), "true");
+    assert.equal(mixedParams.has("mixCertificates"), false);
+    assert.deepEqual(parseGeneratorRequest(mixedParams), { ...mixed, skip: ["l1", "l2"] });
+    // No mixing, no priority: the default address is the one it always was.
+    assert.equal(generatorRequestParams({ ...request, priority: "free" }).has("mixPriority"), false);
   });
 
   it("refuses a request missing a choice, rather than guessing it", () => {
@@ -488,17 +609,39 @@ describe("generating into a new post (#2030)", () => {
 describe("how the preview states a line (#1368)", () => {
   it("names the condition always, and the certificate and format only when they are not the default", () => {
     assert.deepEqual(generatorCombinationParts({ conditionId: "mnh", certificateStatusId: null, formatId: null }), [
-      { axis: "condition", id: "mnh" },
+      { axis: "condition", id: "mnh", count: null },
     ]);
     assert.deepEqual(generatorCombinationParts({ conditionId: "mnh", certificateStatusId: "sig", formatId: "pair" }), [
-      { axis: "condition", id: "mnh" },
-      { axis: "certificate", id: "sig" },
-      { axis: "format", id: "pair" },
+      { axis: "condition", id: "mnh", count: null },
+      { axis: "certificate", id: "sig", count: null },
+      { axis: "format", id: "pair", count: null },
     ]);
     assert.deepEqual(generatorCombinationParts({ conditionId: null, certificateStatusId: null, formatId: "pair" }), [
-      { axis: "condition", id: null },
-      { axis: "format", id: "pair" },
+      { axis: "condition", id: null, count: null },
+      { axis: "format", id: "pair", count: null },
     ]);
+  });
+
+  it("names every value of a mixed axis with its count, the most first (#2102)", () => {
+    const copies = [
+      copy("a", "s1", { conditionId: "mh" }),
+      copy("b", "s2"),
+      copy("c", "s3", { conditionId: "mh" }),
+    ];
+    assert.deepEqual(generatorCombinationParts({ certificateStatusId: null, formatId: null }, copies), [
+      { axis: "condition", id: "mh", count: 2 },
+      { axis: "condition", id: "mnh", count: 1 },
+    ]);
+    assert.deepEqual(
+      generatorCombinationParts({ conditionId: "mh" }, [
+        copy("a", "s1", { certificateStatusId: "cert" }),
+        copy("b", "s2"),
+      ]).filter((part) => part.axis === "certificate"),
+      [
+        { axis: "certificate", id: "cert", count: 1 },
+        { axis: "certificate", id: null, count: 1 },
+      ]
+    );
   });
 
   it("drops the issue's name where the checklist already carries it", () => {

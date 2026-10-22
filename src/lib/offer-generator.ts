@@ -196,6 +196,8 @@ async function readGeneratorState(
     checklists,
     mode: input.mode,
     packaging: input.packaging,
+    mixing: input.mixing,
+    priority: input.priority,
     members,
     offers,
     targets: input.targets,
@@ -329,11 +331,14 @@ export interface GeneratorOfferRef {
 /** One axis of a line's combination, short (#1368): the chip says `label`, its hover says `name`. */
 export interface GeneratorCombinationPart {
   axis: "condition" | "certificate" | "format";
-  /** Null only for a condition the copies do not record. */
+  /** Null for a condition the copies do not record, and for *no certificate* or *single* on an axis
+   *  the line mixes. */
   id: string | null;
   /** The dictionary's abbreviation, else its name. */
   label: string;
   name: string;
+  /** How many of a set's copies are in this value, on an axis the line mixes (#2102); else null. */
+  count: number | null;
 }
 
 export interface GeneratorLineView {
@@ -344,7 +349,8 @@ export interface GeneratorLineView {
   title: string;
   /** The issue a series belongs to, only where it is not already the checklist's name (#1368). */
   subtitle: string | null;
-  /** Condition always, certificate and format only when not the default (#1368, as #1243). */
+  /** Condition always, certificate and format only when not the default (#1368, as #1243); on a mixed
+   *  axis every value with its count (#2102). */
   combination: GeneratorCombinationPart[];
   /** What a set is, by catalogue number and as ranges where they run (#379/#400). Every set of a line
    * holds the same stamps, so the first one speaks for all. */
@@ -423,13 +429,15 @@ async function nameLines(ownerId: string, collectionId: string, state: Generator
   const conditionIds = new Set<string>();
   const certificateIds = new Set<string>();
   const formatIds = new Set<string>();
+  const dictionaryIds = { condition: conditionIds, certificate: certificateIds, format: formatIds };
+  // Every set of a line holds the same values (#2102 included), so the first speaks for all.
+  const partsOf = new Map(
+    plan.lines.map((line) => [line.id, generatorCombinationParts(line.combination, line.sets[0].copies)])
+  );
   for (const line of plan.lines) {
     if (line.checklistId) checklistIds.add(line.checklistId);
     for (const id of [...line.matches, ...line.biddingMatches]) offerIds.add(id);
-    const { conditionId, certificateStatusId, formatId } = line.combination;
-    if (conditionId) conditionIds.add(conditionId);
-    if (certificateStatusId) certificateIds.add(certificateStatusId);
-    if (formatId) formatIds.add(formatId);
+    for (const part of partsOf.get(line.id)!) if (part.id) dictionaryIds[part.axis].add(part.id);
     for (const set of line.sets) {
       for (const copy of set.copies) {
         stampIds.add(copy.stampId);
@@ -495,7 +503,11 @@ async function nameLines(ownerId: string, collectionId: string, state: Generator
     return stamp ? labeller.copy(stamp) : "Copy";
   };
   const combinationPart = (part: ReturnType<typeof generatorCombinationParts>[number]): GeneratorCombinationPart => {
-    if (part.id === null) return { ...part, label: "No condition", name: "No condition recorded" };
+    if (part.id === null) {
+      if (part.axis === "certificate") return { ...part, label: "No cert.", name: "No certificate" };
+      if (part.axis === "format") return { ...part, label: "Single", name: "Single" };
+      return { ...part, label: "No condition", name: "No condition recorded" };
+    }
     const known = names[part.axis].get(part.id);
     return { ...part, label: known?.label ?? "?", name: known?.name ?? `Unknown ${part.axis}` };
   };
@@ -518,7 +530,7 @@ async function nameLines(ownerId: string, collectionId: string, state: Generator
       kind: line.checklistId ? "series" : first.multiStamp ? "carrier" : "single",
       title,
       subtitle: seriesSubtitle(title, checklist?.issue?.name),
-      combination: generatorCombinationParts(line.combination).map(combinationPart),
+      combination: partsOf.get(line.id)!.map(combinationPart),
       catalog: labeller.set({
         title: null,
         items: firstSet.flatMap((copy) => {

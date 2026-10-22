@@ -11,7 +11,9 @@ import {
   type GeneratorMode,
   type GeneratorPackaging,
   type GeneratorSelection,
+  type MixPriority,
 } from "@/lib/offer-generator-rules";
+import { NO_MIXING, type SeriesMixing } from "@/lib/series-recombination-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
@@ -23,6 +25,8 @@ import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CertificateStatusChip, ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
@@ -32,6 +36,7 @@ import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { InventoryItemRow } from "./inventory-item-row";
+import { useCollectionFormats } from "./use-inventory-query";
 import { SELECT_STRIP } from "./inventory-copy-list";
 
 // Generating offers in bulk (#1287): quick offer mode's platform and status (#537), applied to every
@@ -45,6 +50,10 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // plan — an unticked offer's copies go to no other offer, they stay where they are — so the ticks are
 // this dialog's own state, the counts follow them through `generatorSelection`, and only the commit
 // carries them (`skip`). An expanded offer draws its copies with the app's own copy row.
+//
+// A complete set may mix conditions, certificates or formats (#2102), with Series from Singles' own
+// switches (#1265), and with one on, the collector says which sets come first. The switches belong to
+// Complete sets: Singles is sent no mixing, so it lists what it always listed.
 //
 // On Facebook, a pass whose offers are not yet up can put the offers it creates into one new post
 // (#2030), as its lots in the preview's order — the batch gathered from the start, with no *Post
@@ -66,7 +75,7 @@ const MODES: { value: GeneratorMode; label: string; hint: string }[] = [
   {
     value: "checklists",
     label: "Complete sets",
-    hint: "Every complete checklist, in one condition, certificate and format, becomes one set.",
+    hint: "Every complete checklist becomes one set — in one condition, certificate and format, unless it may mix them.",
   },
   {
     value: "singles",
@@ -85,6 +94,19 @@ const PACKAGINGS: { value: GeneratorPackaging; label: string; hint: string }[] =
     value: "separate",
     label: "Separate offers",
     hint: "Every set gets a new offer of its own, even where a similar offer already exists.",
+  },
+];
+
+const PRIORITIES: { value: MixPriority; label: string; hint: string }[] = [
+  {
+    value: "same-first",
+    label: "Same value first",
+    hint: "Sets in one value are formed first; only the copies left over are mixed.",
+  },
+  {
+    value: "free",
+    label: "Mix freely",
+    hint: "Sets are formed in the usual order, pure or mixed.",
   },
 ];
 
@@ -205,6 +227,12 @@ export function OfferGeneratorDialog({
 }) {
   const [mode, setMode] = useState<GeneratorMode>("checklists");
   const [packaging, setPackaging] = useState<GeneratorPackaging>("multi");
+  const [mixing, setMixing] = useState<SeriesMixing>(NO_MIXING);
+  const [priority, setPriority] = useState<MixPriority>("same-first");
+  // An axis the collection defines nothing on has one value, so its switch is not drawn (#1265's rule).
+  const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
+  const { data: formats = [] } = useCollectionFormats(collectionId);
+  const mixesAny = mixing.condition || mixing.certificate || mixing.format;
   const [targets, setTargets] = useState<Record<string, string>>({});
   // The lines left out, by id — kept rather than the ticked ones, so every offer starts ticked and a
   // line the plan newly proposes after a change of mode or packaging is ticked too (#1887).
@@ -223,13 +251,15 @@ export function OfferGeneratorDialog({
       state,
       mode,
       packaging,
+      mixing: mode === "checklists" ? mixing : NO_MIXING,
+      priority,
       itemIds: input.kind === "ticked" ? input.itemIds : null,
       filters: input.kind === "filtered" ? input.filters : "",
       targets,
       skip: [] as string[],
       facebook,
     }),
-    [platformId, state, mode, packaging, input, targets, facebook]
+    [platformId, state, mode, packaging, mixing, priority, input, targets, facebook]
   );
   // The preview's query never carries the ticks: a tick changes what is written, not the plan.
   const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
@@ -341,6 +371,17 @@ export function OfferGeneratorDialog({
                   </span>
                 </label>
               ))}
+              {mode === "checklists" && (
+                <MixingSwitches
+                  mixing={mixing}
+                  priority={priority}
+                  showCertificates={certificateStatuses.length > 0}
+                  showFormats={formats.length > 0}
+                  disabled={isPending}
+                  onMixing={setMixing}
+                  onPriority={setPriority}
+                />
+              )}
             </fieldset>
             <fieldset style={FIELDSET}>
               <legend style={LEGEND}>How to pack identical sets</legend>
@@ -402,7 +443,9 @@ export function OfferGeneratorDialog({
               {preview.lines.length === 0 ? (
                 <Empty>
                   {mode === "checklists"
-                    ? "None of these copies completes a set in one condition, certificate and format."
+                    ? mixesAny
+                      ? "None of these copies completes a set, even with the mixing allowed."
+                      : "None of these copies completes a set in one condition, certificate and format."
                     : "Every one of these copies belongs to a complete set — generate the complete sets instead."}
                 </Empty>
               ) : (
@@ -446,6 +489,71 @@ export function OfferGeneratorDialog({
         onAction={confirm}
       />
     </DialogShell>
+  );
+}
+
+/**
+ * Whether a complete set may mix an axis (#2102): Series from Singles' switches, one per axis and
+ * independent; an axis the collection defines nothing on is not drawn. While any is on, which sets
+ * come first — pure ones, or whatever completes a set in the usual order.
+ */
+function MixingSwitches({
+  mixing,
+  priority,
+  showCertificates,
+  showFormats,
+  disabled,
+  onMixing,
+  onPriority,
+}: {
+  mixing: SeriesMixing;
+  priority: MixPriority;
+  showCertificates: boolean;
+  showFormats: boolean;
+  disabled: boolean;
+  onMixing: (mixing: SeriesMixing) => void;
+  onPriority: (priority: MixPriority) => void;
+}) {
+  const axes: { axis: keyof SeriesMixing; label: string; shown: boolean }[] = [
+    { axis: "condition", label: "Conditions", shown: true },
+    { axis: "certificate", label: "Certificates", shown: showCertificates },
+    { axis: "format", label: "Formats", shown: showFormats },
+  ];
+  const mixesAny = mixing.condition || mixing.certificate || mixing.format;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", paddingLeft: "1.375rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+        <span style={HINT}>A set may mix:</span>
+        {axes
+          .filter((entry) => entry.shown)
+          .map((entry) => (
+            <FilterChip
+              key={entry.axis}
+              label={entry.label}
+              toggle
+              active={mixing[entry.axis]}
+              onClick={() => {
+                if (!disabled) onMixing({ ...mixing, [entry.axis]: !mixing[entry.axis] });
+              }}
+            />
+          ))}
+      </div>
+      {mixesAny &&
+        PRIORITIES.map((option) => (
+          <label key={option.value} style={OPTION}>
+            <input
+              type="radio"
+              name="generator-mix-priority"
+              checked={priority === option.value}
+              onChange={() => onPriority(option.value)}
+              disabled={disabled}
+            />
+            <span>
+              {option.label} <span style={HINT}>— {option.hint}</span>
+            </span>
+          </label>
+        ))}
+    </div>
   );
 }
 
@@ -696,19 +804,22 @@ function biddingNote(offers: GeneratorOfferRef[]): string {
   return `${offers.map((offer) => formatEntityNo(offer.offerNo)).join(", ")} ${one ? "lists" : "list"} the same, but ${one ? "is" : "are"} in active bidding, so nothing is added there.`;
 }
 
-/** Condition and certificate in the dictionary's own colours (#728); a format carries none. */
+/** Condition and certificate in the dictionary's own colours (#728); a format carries none. On an axis
+ *  the set mixes, each value says how many of its copies are in it — *MH ×11* (#2102). */
 function CombinationChip({ collectionId, part }: { collectionId: string; part: GeneratorCombinationPart }) {
+  const label = part.count === null ? part.label : `${part.label} ×${part.count}`;
+  const tooltip = part.count === null ? part.name : `${part.name} — ${plural(part.count, "copy", "copies")} of the set`;
   if (part.axis === "condition") {
-    return <ConditionChip collectionId={collectionId} conditionId={part.id} label={part.label} tooltip={part.name} />;
+    return <ConditionChip collectionId={collectionId} conditionId={part.id} label={label} tooltip={tooltip} />;
   }
   if (part.axis === "certificate") {
     return (
-      <CertificateStatusChip collectionId={collectionId} certificateStatusId={part.id} label={part.label} tooltip={part.name} />
+      <CertificateStatusChip collectionId={collectionId} certificateStatusId={part.id} label={label} tooltip={tooltip} />
     );
   }
   return (
-    <Tooltip content={part.name}>
-      <span style={ROW_CHIP}>{part.label}</span>
+    <Tooltip content={tooltip}>
+      <span style={ROW_CHIP}>{label}</span>
     </Tooltip>
   );
 }
