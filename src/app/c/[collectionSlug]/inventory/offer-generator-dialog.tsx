@@ -693,7 +693,6 @@ function Line({
   const [open, setOpen] = useState(false);
   const targetId = line.target.kind === "existing" ? line.target.offerId : null;
   const target = line.matches.find((offer) => offer.offerId === targetId) ?? null;
-  const name = line.subtitle ? `${line.title} — ${line.subtitle}` : line.title;
   // A line with no name (#2046) is spoken of by its catalogue numbers.
   const subject = line.title || line.catalog;
   const catalog = line.variantLabels.length > 0 ? `${line.catalog}, with ${line.variantLabels.join(", ")}` : line.catalog;
@@ -724,9 +723,8 @@ function Line({
         >
           <Icon name={open ? "collapse" : "expand"} size="sm" />
         </button>
-        <Tooltip content={name} style={CELL}>
+        <Tooltip content={line.title} style={CELL}>
           <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{line.title}</span>
-          {line.subtitle && <span style={HINT}> — {line.subtitle}</span>}
         </Tooltip>
         <span style={{ display: "inline-flex", gap: "0.2rem", minWidth: 0, overflow: "hidden" }}>
           {line.kind === "carrier" && <span style={ROW_CHIP}>Several stamps</span>}

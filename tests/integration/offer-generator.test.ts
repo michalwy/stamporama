@@ -184,6 +184,7 @@ describe("offer generator (#1287)", () => {
     const preview = await previewOfferGeneration(userId, collectionId, ticked(copies));
     assert.equal(preview.lines.length, 1);
     assert.equal(preview.lines[0].kind, "series");
+    assert.equal(preview.lines[0].title, `Issue ${nextIssueNo} · Set ${nextIssueNo}`, "issue first, then checklist (#2104)");
     assert.equal(preview.lines[0].sets.length, 2);
     assert.deepEqual(preview.lines[0].target, { kind: "new" });
     assert.equal(preview.otherModeCopies, 1);
