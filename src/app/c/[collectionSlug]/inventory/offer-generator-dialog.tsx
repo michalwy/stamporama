@@ -18,6 +18,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
+import { suggestGeneratorPostTitle } from "@/lib/generator-post-title";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { DIALOG_MAX_HEIGHT, DIALOG_MAX_WIDTH, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
@@ -58,6 +59,10 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // On Facebook, a pass whose offers are not yet up can put the offers it creates into one new post
 // (#2030), as its lots in the preview's order — the batch gathered from the start, with no *Post
 // together…* afterwards. Like the ticks, the post's title is carried by the commit alone.
+//
+// The option starts ticked wherever a post can be made (#2105) — offers for a group nearly always go up
+// together — and its title is suggested from the area and the years of what the pass puts into new
+// offers. Both follow the plan and the ticks until the collector touches them; from then on theirs stands.
 
 /** Which copies the pass is over: the ticked ones in view, or everything the list's filters show. */
 export type OfferGeneratorInput =
@@ -239,8 +244,9 @@ export function OfferGeneratorDialog({
   const [skip, setSkip] = useState<ReadonlySet<string>>(() => new Set());
   // In a new post (#2030): offered on Facebook only, and only while the bar's status is not yet up.
   const offerPost = !!facebook.facebookGroupId && canGenerateIntoPost(state);
-  const [inPost, setInPost] = useState(false);
-  const [postTitle, setPostTitle] = useState("");
+  // Null until the collector ticks, unticks or types: until then the plan decides (#2105).
+  const [inPostChoice, setInPostChoice] = useState<boolean | null>(null);
+  const [typedTitle, setTypedTitle] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const vendorMaps = useAreaVendorMaps(areas, collectionId);
@@ -268,6 +274,21 @@ export function OfferGeneratorDialog({
   const lines = useMemo(() => preview?.lines ?? [], [preview]);
   const selection = useMemo(() => generatorSelection(lines, skip), [lines, skip]);
   const { newOffers, changedOffers } = selection;
+  // What the plan says about a post, kept from the last plan read, so a mode change does not untick the
+  // option and empty the title while the next plan loads.
+  const suggestedTitle = useMemo(
+    () =>
+      suggestGeneratorPostTitle(
+        areas,
+        lines.flatMap((line) => (line.target.kind === "new" && !skip.has(line.id) ? line.sets.flat() : []))
+      ),
+    [areas, lines, skip]
+  );
+  const planNow = preview ? { possible: newOffers >= 2, title: suggestedTitle } : null;
+  const [plan, setPlan] = useState({ possible: false, title: "" });
+  if (planNow && (planNow.possible !== plan.possible || planNow.title !== plan.title)) setPlan(planNow);
+  const inPost = inPostChoice ?? plan.possible;
+  const postTitle = typedTitle ?? plan.title;
   const intoPost = offerPost && inPost;
   const postRefusal = intoPost
     ? generatorPostRefusal({ state, facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
@@ -408,7 +429,7 @@ export function OfferGeneratorDialog({
                 <input
                   type="checkbox"
                   checked={inPost}
-                  onChange={(e) => setInPost(e.target.checked)}
+                  onChange={(e) => setInPostChoice(e.target.checked)}
                   disabled={isPending}
                 />
                 <span>
@@ -420,7 +441,7 @@ export function OfferGeneratorDialog({
                   <TextInput
                     aria-label="The post's title"
                     value={postTitle}
-                    onChange={(e) => setPostTitle(e.target.value)}
+                    onChange={(e) => setTypedTitle(e.target.value)}
                     disabled={isPending}
                     placeholder="The post's title, e.g. Generalgouvernement 1940–44"
                     style={TITLE_INPUT}
@@ -428,6 +449,11 @@ export function OfferGeneratorDialog({
                   />
                   {postRefusal && <span style={HINT}>{postRefusal}</span>}
                 </>
+              )}
+              {!inPost && preview && newOffers < 2 && (
+                <span style={HINT}>
+                  {generatorPostRefusal({ state, facebookGroupId: facebook.facebookGroupId, newOffers, title: "" })}
+                </span>
               )}
             </div>
           )}
