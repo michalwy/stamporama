@@ -158,6 +158,10 @@ export interface PurchaseListItem {
   status: string;
   shippingCost: string | null;
   lotCount: number;
+  /** Every copy filed on the document's lots (#2125), whatever has happened to it since — sold,
+   *  traded and written-off ones included, since this is where they came in. A piece with several
+   *  stamps is one copy; a scan tile not yet identified is none. */
+  copyCount: number;
   expenseCount: number;
   /** On an opening balance, the sum of the lots' opening values, and **null when no lot carries
    *  one** — never `0.00` (#1184). Always set on a purchase. */
@@ -330,7 +334,7 @@ export async function listPurchasesPaginated(
       shippingCost: true,
       contact: { select: { name: true } },
       platform: { select: { name: true } },
-      lots: { select: { price: true } },
+      lots: { select: { price: true, _count: { select: { items: true } } } },
       expenses: { select: { price: true } },
       supplyLines: { select: { price: true } },
     },
@@ -364,6 +368,7 @@ export async function listPurchasesPaginated(
       status: row.status,
       shippingCost: row.shippingCost?.toFixed(2) ?? null,
       lotCount: row.lots.length,
+      copyCount: row.lots.reduce((sum, lot) => sum + lot._count.items, 0),
       expenseCount: row.expenses.length,
       // No value at all is said as such rather than summed to nothing (#1184).
       total: isOpeningBalance(row) && valued.length === 0 ? null : total.toFixed(2),

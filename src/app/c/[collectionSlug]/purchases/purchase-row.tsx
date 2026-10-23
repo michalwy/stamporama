@@ -197,6 +197,10 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           <span style={CHIP}>
             {p.lotCount} lot{p.lotCount === 1 ? "" : "s"}
           </span>
+          {/* Every copy filed here, sold ones included (#2125) — the size of the parcel at a glance. */}
+          <span style={CHIP}>
+            {p.copyCount} cop{p.copyCount === 1 ? "y" : "ies"}
+          </span>
           {p.expenseCount > 0 && (
             <span style={CHIP}>
               {p.expenseCount} expense{p.expenseCount === 1 ? "" : "s"}

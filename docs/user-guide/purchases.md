@@ -181,13 +181,20 @@ Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.m
 shows its **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, a
 *Trade* mark when the order came from closing a trade, the delivery **status**, the mark
 *Started on the phone — to complete* on a purchase [started on the phone](#purchases-started-on-the-phone), a
-short summary of its lines (how many **lots** and **expenses**), and the **total** — the sum
+short summary of its lines (how many **lots** and **expenses**), how many **copies** are filed on it,
+and the **total** — the sum
 of every lot, every expense, every packing-supply line, and the shipping cost, shown in the
 purchase's currency. A
 freshly recorded purchase shows *0 lots* until you add its lines during intake.
 
+The **copies** figure counts every copy that came in on the document, whatever has happened to it
+since — still held, on its way, being sorted, sold, traded or written off. A cover or a piece with
+several stamps counts once. Scan tiles you have not identified yet are not copies and are not
+counted, so a document you are still working through shows the copies made so far; one with none
+shows *0 copies*.
+
 An opening balance shows its **title**, the **date**, an *Opening balance* mark (and a *Completed*
-one once it is marked completed), how many **lots** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
+one once it is marked completed), how many **lots** and **copies** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
 opening value* rather than `0.00`, and when only some do, a chip says how many lots have none.
 
 - **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
