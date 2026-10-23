@@ -871,6 +871,15 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(facebookPostMoves(lots("ready", "preparing")).backToReady, false);
   });
 
+  it("offers Back to preparing only while the post is not up and a lot is Ready (#2115)", () => {
+    assert.equal(facebookPostMoves(lots("ready", "ready")).backToPreparing, true);
+    assert.equal(facebookPostMoves(lots("ready", "preparing")).backToPreparing, true);
+    assert.equal(facebookPostMoves(lots("preparing", "preparing")).backToPreparing, false);
+    assert.equal(facebookPostMoves(lots("pending", "pending")).backToPreparing, false);
+    assert.equal(facebookPostMoves(lots("active", "ready")).backToPreparing, false);
+    assert.equal(facebookPostMoves(lots("active", "sold")).backToPreparing, false);
+  });
+
   it("names the lots that stay and the bids Back to Ready clears (#1998)", () => {
     const lot = (lotNo: number, state: string, listingType: "auction" | "fixed", price: string) => ({
       lotNo,

@@ -680,6 +680,18 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   refusal is named by its lot number under the buttons. Prepare itself is unchanged. The integration
   test is `tests/integration/facebook-post-prepare.test.ts`.
 
+- **A Ready post, or one of its lots, goes back to Preparing from the post's screen** (#2115, settled
+  with the collector on 2026-10-23; the issue's *to be confirmed* points implemented as written).
+  `takeFacebookPostBackToPreparing` (`facebook-posts.ts`, by post id) through
+  `takeFacebookPostBackToPreparingAction` (`actions/facebook.ts`) moves every Ready lot through the
+  ordinary `setOfferState(…, "preparing")` — nothing of its own, so each offer is as its own *Back to
+  preparing* leaves it — and refuses once any lot is past Ready. The gate is
+  `facebookPostMoves().backToPreparing`: not posted and some lot Ready, so a post still partly being
+  prepared offers it too (its *Every lot must be Ready…* line stays under the button). One lot is its
+  row's `⋮` *Back to preparing* while the post is not up (`moves.takeOut`), through
+  `setOfferStateAction`. No confirmation: *Mark ready* undoes it. The integration test is
+  `tests/integration/facebook-post-back-to-preparing.test.ts`.
+
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
   is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports
