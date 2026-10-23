@@ -1070,7 +1070,13 @@ anything out of date.
 
 To look at the covers again, press **Covers** (once every photo is checked) or **Review every photo**
 under the card's summary — the walk then shows every photo asked about, checked ones included, and
-the others with **Include photos from other areas**. A copy's own page
+the others with **Include photos from other areas**.
+
+**Covers can be changed on a Ready offer** until it is up: the offer stays Ready, and its images are
+made again when you close the walk, as on an offer being prepared. Publishing waits for them —
+**Activate**, or **Publish…** on Facebook, is held while they are being made, so the listing never
+goes up with the old covers. Once the offer is up — waiting for approval or active — the card no
+longer offers the walk: its covers stay as they were posted. A copy's own page
 shows them too: tick **Offer covers** on its Photos card to see them laid over the photos, and click
 a photo to edit them there.
 

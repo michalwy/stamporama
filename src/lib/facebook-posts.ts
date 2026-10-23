@@ -46,6 +46,7 @@ import {
   readOwnOfferState,
   regenerateOfferText,
   readPrepareOffers,
+  readPublishPhotoHold,
   regenerateOfferTitleAndDescription,
   readOfferPostTitles,
   readSoldElsewhereRefusal,
@@ -1180,6 +1181,14 @@ export async function publishFacebookPost(
     const refusal = await readSoldElsewhereRefusal(lot.id, lot.state, to);
     if (refusal) {
       throw new OfferActionBlockedError("sold-elsewhere", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${refusal}`);
+    }
+  }
+  // So does a Ready lot whose photos are being made again (#2114) — covers changed after it was
+  // readied — so the post never goes up with the old ones.
+  for (const lot of lots) {
+    const hold = await readPublishPhotoHold(lot.id);
+    if (hold) {
+      throw new OfferActionBlockedError("photos-generating", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${hold}`);
     }
   }
   const approving = lots.some((l) => l.state === "pending") && to === "active";

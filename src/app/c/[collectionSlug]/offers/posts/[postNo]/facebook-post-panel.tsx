@@ -23,7 +23,7 @@ import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { facebookLotsInView, isFacebookLotForSale } from "@/lib/facebook-post-ui-state";
 import { isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
-import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { isCoverReadinessBlocker, isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
@@ -111,6 +111,9 @@ import { useFacebookPostStillForSale } from "./post-ui-state";
 //   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`), so a price
 //   saved settles its own row and refreshes only the kit. Once the post is up the rows show what they
 //   showed before: pricing and readying belong to before.
+// - **Covers on Ready lots** (#2114), until the post is up: a Ready lot's row offers *Review every
+//   photo*, and *Check covers* walks every lot's photos once none is left unchecked. The lot stays
+//   Ready and its photos are made again; *Publish…* waits while any lot's are being made.
 // - **Still for sale** (#2081), above the lots once the post is up: one chip narrowing the rows to the
 //   lots neither sold nor withdrawn, remembered per post. A filter never unticks anything — a ticked lot
 //   it hides stays ticked, and *Sell…* reaches only the ticked lots in view. The kit, the photos' ZIP
@@ -204,8 +207,11 @@ interface LotSkip {
   message: string;
 }
 
-/** Which covers walk is open (#2031): one lot's, from its row, or every lot's in one pass. */
-type CoverWalk = { kind: "lot"; offerId: string } | { kind: "post"; offers: { id: string; offerNo: number }[] };
+/** Which covers walk is open (#2031): one lot's, from its row, or every lot's in one pass — the photos
+ *  not yet checked, or every one again on Ready lots (#2114). */
+type CoverWalk =
+  | { kind: "lot"; offerId: string; mode: "unchecked" | "all"; includeOtherAreas: boolean }
+  | { kind: "post"; offers: { id: string; offerNo: number }[]; mode: "unchecked" | "all" };
 
 /** The lot has no stated price yet — the figure *Use estimated price* fills. */
 function unpriced(offer: PrepareOffer): boolean {
@@ -446,6 +452,16 @@ export function FacebookPostPanel({
   const toCover = prepared.filter((o) => uncheckedCovers(o) > 0);
   const coverCount = toCover.reduce((sum, o) => sum + uncheckedCovers(o), 0);
   const toReady = prepared.filter((o) => lots.find((l) => l.offerId === o.id)?.state === "preparing");
+  // With nothing left unchecked, *Check covers* walks every photo of the lots that apply covers again —
+  // a cover found wrong at the last look, on a Ready lot (#2114).
+  const toReview = prepared.filter((o) => o.covers.needed && o.covers.photoCount > 0);
+  const coverWalkOffers = toCover.length > 0 ? toCover : toReview;
+  // The lots whose photos are being made — *Publish…* waits for them (#2114).
+  const photoRunLots = lots.filter((l) => prepareRows?.[l.offerId]?.readyBlockers.some(isPhotoRunBlocker));
+  const publishHeld =
+    photoRunLots.length > 0
+      ? `Waiting for the photos of ${photoRunLots.map((l) => `lot ${l.lotNo ?? lots.indexOf(l) + 1}`).join(", ")} — Publish once they are done, so the new ones go up.`
+      : null;
   const lotNoOf = (offerId: string) => {
     const lot = lots.find((l) => l.offerId === offerId);
     return lot ? `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1}` : "A lot";
@@ -726,12 +742,13 @@ export function FacebookPostPanel({
             {moves.activate && (
               <DialogSecondaryButton
                 type="button"
-                disabled={isPending}
+                disabled={isPending || publishHeld !== null}
                 onClick={() => setDialog({ kind: "publish", target: "active", approving: false })}
               >
                 Publish…
               </DialogSecondaryButton>
             )}
+            {moves.activate && publishHeld && <span style={MUTED}>{publishHeld}</span>}
             {moves.approve && (
               <DialogSecondaryButton
                 type="button"
@@ -924,13 +941,21 @@ export function FacebookPostPanel({
                     content={
                       toCover.length > 0
                         ? "Go through the lots' photos not yet checked for symbols, lot after lot in one walk — covers carry on from photo to photo."
-                        : "No lot has photos left to check for symbols."
+                        : toReview.length > 0
+                          ? "Every photo is checked. Go through them all again, lot after lot — a Ready lot stays Ready and its photos are made again."
+                          : "No lot has photos to check for symbols."
                     }
                   >
                     <DialogSecondaryButton
                       type="button"
-                      disabled={isPending || toCover.length === 0}
-                      onClick={() => setCoverWalk({ kind: "post", offers: toCover.map((o) => ({ id: o.id, offerNo: o.offerNo })) })}
+                      disabled={isPending || coverWalkOffers.length === 0}
+                      onClick={() =>
+                        setCoverWalk({
+                          kind: "post",
+                          offers: coverWalkOffers.map((o) => ({ id: o.id, offerNo: o.offerNo })),
+                          mode: toCover.length > 0 ? "unchecked" : "all",
+                        })
+                      }
                     >
                       Check covers{coverCount > 0 ? ` (${coverCount})` : ""}
                     </DialogSecondaryButton>
@@ -1057,7 +1082,15 @@ export function FacebookPostPanel({
                           void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
                         }
                         onPrepareChanged={() => void invalidateAll(collectionId)}
-                        onCheckCovers={() => setCoverWalk({ kind: "lot", offerId: lot.offerId })}
+                        onCheckCovers={(mode) => {
+                          const covers = prepareRows?.[lot.offerId]?.covers;
+                          setCoverWalk({
+                            kind: "lot",
+                            offerId: lot.offerId,
+                            mode,
+                            includeOtherAreas: covers ? covers.photoCount === 0 : false,
+                          });
+                        }}
                       />
                     </Fragment>
                   );
@@ -1220,7 +1253,8 @@ export function FacebookPostPanel({
         <OfferCoverWalk
           collectionId={collectionId}
           offerId={coverWalk.offerId}
-          mode="unchecked"
+          mode={coverWalk.mode}
+          includeOtherAreas={coverWalk.includeOtherAreas}
           onClose={() => setCoverWalk(null)}
           onChanged={() => void invalidateAll(collectionId)}
         />
@@ -1229,6 +1263,7 @@ export function FacebookPostPanel({
         <OffersCoverWalk
           collectionId={collectionId}
           offers={coverWalk.offers}
+          mode={coverWalk.mode}
           onClose={() => setCoverWalk(null)}
           onChanged={() => void invalidateAll(collectionId)}
         />
@@ -1344,7 +1379,8 @@ function LotRow({
   onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
   /** The title or the covers changed — the lots' rows are read again. */
   onPrepareChanged: () => void;
-  onCheckCovers: () => void;
+  /** Opens the lot's covers walk: the photos not yet checked, or every one again (#2114). */
+  onCheckCovers: (mode: "unchecked" | "all") => void;
 }) {
   const price = facebookLotPrice(lot);
   const item = drag?.itemProps(index);
@@ -1413,7 +1449,10 @@ function LotRow({
               <div style={{ display: "flex", justifyContent: "flex-start" }}>
                 <PreparePriceField ref={priceRef} offer={prepare} onEnter={onPriceEnter} onSaved={onPriceSaved} />
               </div>
-              {lot.state === "preparing" && <PrepareReadiness offer={prepare} onCheckCovers={onCheckCovers} />}
+              {lot.state === "preparing" && (
+                <PrepareReadiness offer={prepare} onCheckCovers={() => onCheckCovers("unchecked")} />
+              )}
+              {lot.state === "ready" && <ReadyLotPhotos offer={prepare} onCheckCovers={onCheckCovers} />}
             </div>
           )}
           <dl style={LOT_FACTS}>
@@ -1492,5 +1531,39 @@ function LotRow({
         {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}
       </div>
     </li>
+  );
+}
+
+/**
+ * A Ready lot's photos on the post's screen (#2114), under its price while the post is not up: its
+ * covers walked again — the photos not yet checked while there are any, every one otherwise — and,
+ * while its photos are being made again, that *Publish…* waits for them. The lot stays Ready.
+ */
+function ReadyLotPhotos({
+  offer,
+  onCheckCovers,
+}: {
+  offer: PrepareOffer;
+  onCheckCovers: (mode: "unchecked" | "all") => void;
+}) {
+  const generating = offer.readyBlockers.some(isPhotoRunBlocker);
+  const { covers } = offer;
+  const walkable = covers.needed && covers.photoCount + covers.otherCount > 0;
+  if (!generating && !walkable) return null;
+  return (
+    <p style={{ ...MUTED, margin: 0, display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+      {walkable && (
+        <Tooltip content="Change the covers on this lot's photos. It stays Ready, and its photos are made again.">
+          <button
+            type="button"
+            onClick={() => onCheckCovers(covers.uncheckedCount > 0 ? "unchecked" : "all")}
+            style={STEP_LINK}
+          >
+            {covers.uncheckedCount > 0 ? `Check covers (${covers.uncheckedCount})` : "Review every photo"}
+          </button>
+        </Tooltip>
+      )}
+      {generating && <span>Photos being generated — Publish waits for them.</span>}
+    </p>
   );
 }

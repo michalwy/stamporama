@@ -152,6 +152,29 @@ describe("a post's lots as Prepare rows (#2031)", () => {
     assert.equal(await getFacebookPostLotsPrepare(userId, collectionId, post.postId), null);
   });
 
+  it("holds the post while a Ready lot's photos are being made again, and moves nothing (#2114)", async () => {
+    const a = await preparing();
+    const b = await preparing();
+    for (const id of [a, b]) {
+      await patchOffer(userId, id, { startingPrice: "5.00" });
+      await setOfferState(userId, id, "ready");
+    }
+    await createFacebookPost(userId, collectionId, [a, b], "Held for its photos");
+    // Covers changed on the second lot after it was readied: its run is queued.
+    await prisma.offerPhotoGeneration.create({ data: { offerId: b, status: "queued" } });
+
+    await assert.rejects(
+      () => publishOfferOrPost(userId, a, "https://www.facebook.com/groups/203100/posts/2"),
+      /Lot 2 .*still being generated/
+    );
+    const states = await prisma.offer.findMany({ where: { id: { in: [a, b] } }, select: { state: true } });
+    assert.deepEqual(states.map((o) => o.state), ["ready", "ready"], "no lot went up alone");
+
+    await prisma.offerPhotoGeneration.update({ where: { offerId: b }, data: { status: "ready" } });
+    await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/203100/posts/2");
+    assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: b } })).state, "active");
+  });
+
   it("refuses a post read through another collection, or by another owner", async () => {
     const a = await preparing();
     const b = await preparing();

@@ -678,7 +678,12 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`OffersCoverWalk` over every lot with unchecked photos) and *Mark ready* (`markOffersReadyAction`,
   every Preparing lot) — Prepare's own actions over the lots' ids, so nothing new runs server-side; a
   refusal is named by its lot number under the buttons. Prepare itself is unchanged. The integration
-  test is `tests/integration/facebook-post-prepare.test.ts`.
+  test is `tests/integration/facebook-post-prepare.test.ts`. **A Ready lot's covers** (#2114): its row
+  draws `ReadyLotPhotos` instead of the readiness — *Review every photo* (`OfferCoverWalk` in `all`
+  mode; *Check covers (N)* while one is unchecked) and *Photos being generated* while its run is in
+  flight — and the post's *Check covers*, once no lot has a photo left unchecked, walks every lot
+  needing covers again (`OffersCoverWalk`'s `mode="all"`). *Publish…* is disabled while any lot's run
+  is in flight, the lots named beside it; `publishFacebookPost` refuses the same (`offers.md`).
 
 - **A Ready post, or one of its lots, goes back to Preparing from the post's screen** (#2115, settled
   with the collector on 2026-10-23; the issue's *to be confirmed* points implemented as written).

@@ -181,3 +181,21 @@ export function evaluatePhotoReadiness(input: PhotoReadinessInput): PhotoReadine
   }
   return blockers;
 }
+
+/**
+ * Why publishing a Ready offer waits (#2114), or null when it does not: its images are being made
+ * again — covers changed after it was marked ready, say — and what would go up is the old set. Only a
+ * run in flight holds it, since the wait ends by itself; the photos are what the ready gate already
+ * passed in every other respect.
+ */
+export function evaluatePublishPhotoHold(status: OfferPhotoGenerationStatus): string | null {
+  return status === "queued" || status === "running"
+    ? "Its photos are still being generated — publish once they are done, so the new ones go up."
+    : null;
+}
+
+/** Whether one ready-gate reason says the photos are being generated right now — what holds a Ready
+ *  lot's *Publish…* on a screen that reads the lots as Prepare rows (#2114). */
+export function isPhotoRunBlocker(blocker: ReadyBlocker): boolean {
+  return blocker.code === "photos-generating";
+}

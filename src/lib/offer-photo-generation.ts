@@ -1358,6 +1358,8 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
   /** Photos the images are made from that still need checking for symbols (#1665); 0 when the offer
    *  needs no covers. */
   uncheckedCoverCount: number;
+  /** The covers as the Photos card counts them — what a screen offering the walk asks (#2114). */
+  covers: OfferPhotoCoverState;
 } | null> {
   const inputs = await readInputs(offerId);
   if (!inputs) return null;
@@ -1369,6 +1371,13 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
     prisma.offerPhotoEntry.count({ where: { offerId } }),
   ]);
   const plan = planFor(inputs);
+  const coverCandidates = coverCandidatesFor(inputs, plan);
+  const covers: OfferPhotoCoverState = {
+    needed: inputs.needsCovers,
+    photoCount: coverCandidates.filter((c) => c.asked).length,
+    uncheckedCount: coverCandidates.filter((c) => c.asked && !c.checked).length,
+    otherCount: coverCandidates.filter((c) => !c.asked).length,
+  };
   return {
     status: (generation?.status as OfferPhotoGenerationStatus) ?? "none",
     // Same rule as the panel's: only stored images can be stale, and only against a recorded
@@ -1381,7 +1390,8 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
     plannedCount: plan.images.length,
     // Only the photos asked about (#1891): a copy from an area that carries no forbidden symbols
     // never holds the offer back.
-    uncheckedCoverCount: coverCandidatesFor(inputs, plan).filter((c) => c.asked && !c.checked).length,
+    uncheckedCoverCount: covers.uncheckedCount,
+    covers,
   };
 }
 

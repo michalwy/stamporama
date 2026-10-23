@@ -130,6 +130,7 @@ import {
 import {
   evaluateCoverReadiness,
   evaluatePhotoReadiness,
+  evaluatePublishPhotoHold,
   isPhotoReadinessBlocker,
   type CoverReadinessBlocker,
   type ListingCardBlocker,
@@ -174,6 +175,7 @@ import {
   deleteOfferPhotoBytes,
   enqueueOfferPhotoGeneration,
   readOfferPhotoReadiness,
+  type OfferPhotoCoverState,
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
 import type { OfferAreaYear } from "./listing-groups";
@@ -242,7 +244,9 @@ export type OfferBlockReason =
   | "facebook-auction"
   /** *Remove sets sold elsewhere* (#1805) with nothing to remove, or with nothing left to sell after
    *  it — the second is a listing to close, not to trim. */
-  | "sold-elsewhere";
+  | "sold-elsewhere"
+  /** Publishing a Ready offer (#2114) while its images are being made again. */
+  | "photos-generating";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -4134,6 +4138,9 @@ export interface PrepareOffer {
   readyBlockers: ReadyBlocker[];
   readyAfterPhotos: boolean;
   readyAfterPhotosRefusal: string | null;
+  /** The covers as the offer's Photos card counts them (#1665) — whether a Ready lot of a post offers
+   *  its walk (#2114). */
+  covers: OfferPhotoCoverState;
   /** Every copy the offer holds, set by set in the offer's own order — the order the row's expanded
    *  copies are drawn in (#1941). */
   itemIds: string[];
@@ -4395,11 +4402,11 @@ async function buildPrepareOffers(
   }
 
   // The photo half of the ready gate (#311) and the covers (#1665), per offer — a few at a time.
-  const photoBlockers = new Map<string, (PhotoReadinessBlocker | CoverReadinessBlocker)[]>();
+  const photoGates = new Map<string, OfferPhotoGate>();
   for (let i = 0; i < rows.length; i += PREPARE_PHOTO_READS) {
     const chunk = rows.slice(i, i + PREPARE_PHOTO_READS);
-    const answers = await Promise.all(chunk.map((row) => readOfferPhotoBlockers(row.id)));
-    chunk.forEach((row, j) => photoBlockers.set(row.id, answers[j]));
+    const answers = await Promise.all(chunk.map((row) => readOfferPhotoGate(row.id)));
+    chunk.forEach((row, j) => photoGates.set(row.id, answers[j]));
   }
 
   return rows.map((row) => {
@@ -4472,7 +4479,7 @@ async function buildPrepareOffers(
       readyBlockers: [
         ...listingBlockersFor(row.sets, platformModule, labeller, conditionMap, catalogIds, "ready"),
         ...textBlockers,
-        ...(photoBlockers.get(row.id) ?? []),
+        ...(photoGates.get(row.id)?.blockers ?? []),
         ...evaluateSoldElsewhereReadiness(
           sets.filter((s) => s.soldElsewhere).length,
           transitionVerb("ready")
@@ -4480,6 +4487,7 @@ async function buildPrepareOffers(
       ],
       readyAfterPhotos: row.readyAfterPhotosAt !== null,
       readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
+      covers: photoGates.get(row.id)?.covers ?? NO_COVERS,
       itemIds: sets.flatMap((s) => s.items.map((li) => li.itemId)),
       conditions: offerConditionCounts(sets.flatMap((s) => s.items.map((li) => li.item))),
       titleTranslations: titleGaps.get(row.id) ?? { language: null, gaps: [] },
@@ -4724,10 +4732,40 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
 async function readOfferPhotoBlockers(
   offerId: string
 ): Promise<(PhotoReadinessBlocker | CoverReadinessBlocker)[]> {
+  return (await readOfferPhotoGate(offerId)).blockers;
+}
+
+interface OfferPhotoGate {
+  blockers: (PhotoReadinessBlocker | CoverReadinessBlocker)[];
+  covers: OfferPhotoCoverState;
+}
+
+const NO_COVERS: OfferPhotoCoverState = { needed: false, photoCount: 0, uncheckedCount: 0, otherCount: 0 };
+
+/** {@link readOfferPhotoBlockers} with the covers counted beside them (#2114), from the one read. */
+async function readOfferPhotoGate(offerId: string): Promise<OfferPhotoGate> {
   const readiness = await readOfferPhotoReadiness(offerId);
   return readiness
-    ? [...evaluatePhotoReadiness(readiness), ...evaluateCoverReadiness(readiness.uncheckedCoverCount)]
-    : [];
+    ? {
+        blockers: [...evaluatePhotoReadiness(readiness), ...evaluateCoverReadiness(readiness.uncheckedCoverCount)],
+        covers: readiness.covers,
+      }
+    : { blockers: [], covers: NO_COVERS };
+}
+
+/**
+ * Why publishing this offer waits for its photos (#2114), or null: a **Ready** offer whose images are
+ * being made again — covers changed after it was marked ready — waits for the run, so it never goes up
+ * with the old set. Asked by every *Publish…* / *Activate* before anything moves; never of an approval
+ * or of the Assistant's capture, which record a listing already made.
+ */
+export async function readPublishPhotoHold(offerId: string): Promise<string | null> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { state: true, photoGeneration: { select: { status: true } } },
+  });
+  if (offer?.state !== "ready") return null;
+  return evaluatePublishPhotoHold((offer.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none");
 }
 
 type AreaLinkedSet = {
@@ -4823,6 +4861,8 @@ export async function publishOffer(
   // address recorded on it, which is the very thing the URL-after-transition order exists to avoid.
   const ref = await assertOfferOwner(ownerId, offerId);
   await resolveColnectSaleId(ref.collectionId, offerId, url);
+  const photoHold = await readPublishPhotoHold(offerId);
+  if (photoHold) throw new OfferActionBlockedError("photos-generating", photoHold);
   await setOfferState(ownerId, offerId, to);
   await patchOffer(ownerId, offerId, { url });
 }

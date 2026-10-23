@@ -65,6 +65,13 @@ export function isPreparedState(state: OfferState): boolean {
   return state === "preparing" || state === "ready";
 }
 
+/** Whether the covers on an offer's photos may still be changed from it (#2114): while it is prepared —
+ *  a Ready offer included, which stays Ready while its images are made again — and never once it is
+ *  up, where the photos stay as they were posted. */
+export function coversChangeable(state: OfferState): boolean {
+  return isPreparedState(state);
+}
+
 /** Whether a set sold elsewhere is flagged on an offer in this state (#167, #1876): a live offer, whose
  * listing is selling it, and a prepared one, about to. A paused, sold or withdrawn offer is not asked. */
 export function flagsSoldElsewhere(state: OfferState): boolean {

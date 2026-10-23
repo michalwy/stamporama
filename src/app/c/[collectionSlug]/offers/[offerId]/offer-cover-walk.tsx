@@ -182,15 +182,20 @@ export function OfferCoverWalk({
  *
  * With *Regenerate photos when done*, the offers a photo was saved for are queued again on close.
  * `onChanged` follows as the offer walk's does, for the screen to read its rows again.
+ *
+ * `all` walks every photo asked about again, checked ones included — a Facebook post's Ready lots
+ * once nothing is left unchecked (#2114), which stay Ready while their photos are made again.
  */
 export function OffersCoverWalk({
   collectionId,
   offers,
+  mode = "unchecked",
   onClose,
   onChanged,
 }: {
   collectionId: string;
   offers: { id: string; offerNo: number }[];
+  mode?: "unchecked" | "all";
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -219,7 +224,7 @@ export function OffersCoverWalk({
   const seen = new Set<string>();
   const photos: CoverWalkEntry[] = offers.flatMap((offer, i) =>
     data[i].photos
-      .filter((p) => p.asked && !p.checked && !seen.has(p.photoId))
+      .filter((p) => p.asked && (mode === "all" || !p.checked) && !seen.has(p.photoId))
       .map((p) => {
         seen.add(p.photoId);
         return {
@@ -237,7 +242,7 @@ export function OffersCoverWalk({
   return (
     <PhotoCoverWalkDialog
       collectionId={collectionId}
-      title={`Check photos for symbols to cover — ${offers.length} offer${offers.length === 1 ? "" : "s"}`}
+      title={`${mode === "all" ? "Covers on the photos" : "Check photos for symbols to cover"} — ${offers.length} offer${offers.length === 1 ? "" : "s"}`}
       photos={photos}
       defaultStyle={data[0].defaultStyle}
       defaultColor={data[0].defaultColor}
