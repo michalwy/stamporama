@@ -491,14 +491,21 @@ function SpendRow({
  * counting the order's unpriced copies (#1510). A figure over fewer copies than the scope holds says
  * how many it is over; on an *at most* one only a lot left out of it entirely does, the unpriced
  * count already saying the rest. The amounts behind it are in the tooltip.
+ *
+ * An opening balance states the same figure beside its opening value (#2129), under the same rules:
+ * a comparison only, the value still never a price paid. A lot without a value has no figure, so
+ * the document's is over the copies of its valued lots and says so.
  */
 function CostToCatalogNote({
   ratio,
   lot,
+  openingBalance = false,
   currency,
 }: {
   ratio: CostToCatalog;
   lot: boolean;
+  /** On an opening balance the figure is its opening value against catalogue, and the tooltip says so. */
+  openingBalance?: boolean;
   /** The base currency, which both sides of the figure are in. */
   currency: string;
 }) {
@@ -516,19 +523,21 @@ function CostToCatalogNote({
         ? over
         : null;
   const amounts = `${ratio.cost.toFixed(2)} ${currency} against ${ratio.value.toFixed(2)} ${currency} of catalog value`;
-  const scope = lot ? "this lot" : "this order";
+  const scope = lot ? "this lot" : openingBalance ? "this opening balance" : "this order";
   const tooltip =
     ratio.kind === "at_most"
       ? `An upper bound: ${ratio.unpricedCount} ${copiesWord(ratio.unpricedCount)} in ${scope} have no catalog price yet, and pricing ${lot ? "them" : "those in its open lots"} can only bring it down — ${amounts}.`
       : ratio.kind === "estimate"
-        ? `An estimate: ${lot ? "the lot is" : "some of its lots are"} still open, so the cost is not yet frozen onto copies — ${amounts}.`
-        : `What ${scope} cost as a share of its copies' catalog value — ${amounts}.`;
+        ? `An estimate: ${lot ? "the lot is" : "some of its lots are"} still open, so the ${openingBalance ? "opening value" : "cost"} is not yet frozen onto copies — ${amounts}.`
+        : openingBalance
+          ? `What ${scope} is valued at as a share of its copies' catalog value — ${amounts}.`
+          : `What ${scope} cost as a share of its copies' catalog value — ${amounts}.`;
   const partial =
     (ratio.kind !== "at_most" && ratio.coveredCount < ratio.copyCount
       ? " Only copies with a catalog value are counted."
       : "") +
     (ratio.noFigureCount > 0
-      ? ` Lots with no figure of their own — no copy with a catalog value, or no exchange rate to ${currency} — are left out.`
+      ? ` Lots with no figure of their own — ${openingBalance ? "no opening value, " : ""}no copy with a catalog value, or no exchange rate to ${currency} — are left out.`
       : "");
   return (
     <Tooltip content={tooltip + partial}>
@@ -556,9 +565,12 @@ function lotsWord(n: number): string {
  */
 function OpeningValueRow({
   openingValue,
+  costToCatalog,
   children,
 }: {
   openingValue: OpeningValue;
+  /** The opening value as a share of catalogue (#2129), stated after the notes as a purchase's is. */
+  costToCatalog?: CostToCatalog | null;
   children?: React.ReactNode;
 }) {
   const { value, currency, baseCurrency } = openingValue;
@@ -595,8 +607,21 @@ function OpeningValueRow({
       ) : (
         <AbsentAmount text="no opening value" style={HEADLINE_AMOUNT_STYLE} />
       )}
-      {notes.length > 0 && (
-        <span style={warn ? WARN_NOTE_STYLE : NOTE_STYLE}>{notes.join(" · ")}</span>
+      {(notes.length > 0 || costToCatalog) && (
+        <span style={warn ? WARN_NOTE_STYLE : NOTE_STYLE}>
+          {notes.join(" · ")}
+          {costToCatalog && (
+            <>
+              {notes.length > 0 ? " · " : ""}
+              <CostToCatalogNote
+                ratio={costToCatalog}
+                lot={openingValue.scope === "lot"}
+                openingBalance
+                currency={baseCurrency}
+              />
+            </>
+          )}
+        </span>
       )}
       {children}
     </div>
@@ -952,8 +977,9 @@ export function HoldingsSummaryBar({
   openingValue?: OpeningValue;
   /**
    * What the scope cost as a share of its copies' catalogue value (#1395), said beside `spend` on
-   * the headline row. Null — or absent — draws nothing: with no catalogue value there is no figure,
-   * never `0%` or `∞`.
+   * the headline row — or, on an opening balance, its opening value's share beside `openingValue`
+   * (#2129). Null — or absent — draws nothing: with no catalogue value there is no figure, never
+   * `0%` or `∞`.
    */
   costToCatalog?: CostToCatalog | null;
 }) {
@@ -1026,7 +1052,9 @@ export function HoldingsSummaryBar({
           {toggle}
         </SpendRow>
       ) : openingValue ? (
-        <OpeningValueRow openingValue={openingValue}>{toggle}</OpeningValueRow>
+        <OpeningValueRow openingValue={openingValue} costToCatalog={costToCatalog}>
+          {toggle}
+        </OpeningValueRow>
       ) : total ? (
         <CatalogValueRow total={total} itemCount={itemCount} headline>
           {toggle}
