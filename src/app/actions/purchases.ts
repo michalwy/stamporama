@@ -33,6 +33,7 @@ import {
   removeLotItem,
   attachItemsToLot,
   moveItemsToLot,
+  moveCopiesToDocument,
   intakeStamps,
   closeLot,
   reopenLot,
@@ -468,6 +469,56 @@ export async function moveCopiesToLotAction(
       moved: result.moved,
       refusals: result.refused.map(({ copy, reason }) => ({ copy, reason })),
       lotIds: result.lotIds,
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to move copies. Please try again.",
+    };
+  }
+}
+
+/** Outcome of *Move copies to…* (#2123): how many moved, every lot of this screen they left, and
+ * the document and lot they went to. */
+export type MoveCopiesToDocumentActionState =
+  | { status: "success"; moved: number; fromLotIds: string[]; purchaseId: string; lotId: string }
+  | { status: "error"; message: string };
+
+/** Move every copy of a purchase (`sourcePurchaseId`) or of one lot (`sourceLotId`) to a lot of
+ * another document (#2123): an existing open lot as `targetLotId`, or a new one on
+ * `targetPurchaseId`, titled and priced from `title` and `price` as *Add lot* is. */
+export async function moveCopiesToDocumentAction(
+  formData: FormData
+): Promise<MoveCopiesToDocumentActionState> {
+  const session = await getSession();
+  const sourceLotId = optionalStr(formData, "sourceLotId");
+  const sourcePurchaseId = optionalStr(formData, "sourcePurchaseId");
+  const targetLotId = optionalStr(formData, "targetLotId");
+  const targetPurchaseId = optionalStr(formData, "targetPurchaseId");
+  const source = sourceLotId
+    ? { lotId: sourceLotId }
+    : sourcePurchaseId
+      ? { purchaseId: sourcePurchaseId }
+      : null;
+  if (!source) return { status: "error", message: "Nothing to move." };
+  let destination;
+  if (targetLotId) {
+    destination = { lotId: targetLotId };
+  } else if (targetPurchaseId) {
+    const price = parseLotPrice(formData);
+    if (price === undefined) return { status: "error", message: "Enter a valid amount." };
+    destination = { purchaseId: targetPurchaseId, title: optionalStr(formData, "title"), price };
+  } else {
+    return { status: "error", message: "Choose where to move the copies." };
+  }
+  try {
+    const result = await moveCopiesToDocument(session.user.id, source, destination);
+    return {
+      status: "success",
+      moved: result.moved,
+      fromLotIds: result.fromLotIds,
+      purchaseId: result.purchaseId,
+      lotId: result.lotId,
     };
   } catch (e) {
     return {

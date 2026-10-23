@@ -124,6 +124,7 @@ import type { WantMatchForCopy } from "@/lib/wants";
 import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
+import { MoveCopiesToDocumentDialog } from "./move-copies-to-document-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
 import { PurchasePhoneCard } from "./purchase-phone-card";
 import { PurchasePhotosCard } from "./purchase-photos-card";
@@ -406,6 +407,8 @@ export function PurchaseDetailPanel({
   // The Photos card's file input, which the header's `⋮ → Add photos` opens (#2011).
   const photoInput = useRef<HTMLInputElement>(null);
   const [addingSupplies, setAddingSupplies] = useState(false);
+  // *Move copies to…* (#2123): every copy of the order to a lot of another document.
+  const [movingCopies, setMovingCopies] = useState(false);
   const [arriving, setArriving] = useState(false);
   // Marking the order completed with work still left on it (#1449): the dialog that says what.
   const [completing, setCompleting] = useState(false);
@@ -941,6 +944,24 @@ export function PurchaseDetailPanel({
           },
         ]
       : []),
+    // Moving the whole order's copies to another document (#2123) — offered once there is a copy to
+    // move. A closed lot holding copies is not hidden here: the dialog names it, to be reopened.
+    ...(purchase.lots.some((l) => l.itemCount > 0)
+      ? [
+          {
+            key: "move-copies",
+            label: "Move copies to…",
+            icon: "move" as const,
+            hint: "Every copy, to a lot of another purchase or opening balance",
+            separatorBefore: true,
+            disabled: isPending,
+            onSelect: () => {
+              setError(undefined);
+              setMovingCopies(true);
+            },
+          },
+        ]
+      : []),
   ];
   const headerRow = (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -1307,6 +1328,21 @@ export function PurchaseDetailPanel({
         run={run}
         clearError={() => setError(undefined)}
       />
+
+      {movingCopies && (
+        <MoveCopiesToDocumentDialog
+          collectionId={collectionId}
+          purchaseId={purchase.id}
+          sourceName={openingBalance ? "this opening balance" : "this purchase"}
+          lots={moveLots}
+          onClose={() => setMovingCopies(false)}
+          onDone={() => {
+            setMovingCopies(false);
+            // Every lot of the order may have lost copies: the whole order is re-read.
+            run(async () => ({ status: "success" }));
+          }}
+        />
+      )}
 
       {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.
           A purchase's only: an opening balance paid for nothing. Drawn only once it has a line
@@ -3220,6 +3256,7 @@ function LotCard({
     | "picker"
     | "intake-condition"
     | "attach"
+    | "move-copies"
     | "edit-price"
     | "delete"
     | "close"
@@ -3452,6 +3489,18 @@ function LotCard({
             hint: "For a copy entered by hand, or filed under the wrong purchase",
             onSelect: () => setDialog("attach"),
           },
+          // Its counterpart the other way (#2123): every copy of this lot to another document.
+          ...(lot.itemCount > 0
+            ? [
+                {
+                  key: "move-copies",
+                  label: "Move copies to…",
+                  icon: "move",
+                  hint: "Every copy of this lot, to a lot of another purchase or opening balance",
+                  onSelect: () => setDialog("move-copies"),
+                } satisfies RowAction,
+              ]
+            : []),
           { key: "price", label: "Edit lot", icon: "edit", onSelect: () => setDialog("edit-price") },
           // The whole-lot bulk entries that used to sit here are gone (#571): the lot header's own
           // checkbox selects every copy the list is showing, and the bar above the rows carries
@@ -3886,6 +3935,25 @@ function LotCard({
             setDialog("none");
             // The dialog owns the mutation; this only refreshes the order and its copy pages.
             onRun(async () => ({ status: "success" }));
+          }}
+        />
+      )}
+
+      {/* Move every copy of this lot to another document (#2123). */}
+      {dialog === "move-copies" && (
+        <MoveCopiesToDocumentDialog
+          collectionId={collectionId}
+          purchaseId={purchaseId}
+          sourceLotId={lot.id}
+          sourceName={lotName}
+          lots={[{ id: lot.id, label: lotName, status: lot.status, itemCount: lot.itemCount }]}
+          onClose={closeDialog}
+          onDone={() => {
+            setDialog("none");
+            onRun(async () => ({
+              status: "success",
+              refresh: { lotIds: [lot.id], orderChanged: true },
+            }));
           }}
         />
       )}

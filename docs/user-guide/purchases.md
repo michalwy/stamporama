@@ -2571,6 +2571,28 @@ became the copy follows it and shows it in its new lot. The same two cost rules 
 lot. It never crosses purchases: to bring in a copy from another order, use **Attach existing
 copies…** on the lot, which names the purchase being left and asks you to confirm.
 
+### Moving all copies to another purchase or opening balance
+
+When a whole purchase — or one of its lots — was filed against the wrong document, move its copies
+in one go rather than attaching them on the other side lot by lot. **Move copies to…** is in the
+purchase header's **⋮** (every copy of the purchase) and in each open lot's **⋮** (that lot's
+copies). It appears once there is a copy to move.
+
+The dialog lists every other purchase and opening balance, newest first; type part of its number,
+supplier, title or date to find one. Pick it, then its lot: an open lot, or **A new lot**, titled
+and priced as **Add lot** would be (on an opening balance the opening value may be left blank). A
+closed lot is listed, marked *Closed — reopen it first*. **Continue** shows what will happen — the
+target, how many copies move and how many leave each lot — and **Move 12 copies** does it. A
+message with a link to the target follows.
+
+- **Every copy moves**: held, on its way, being sorted, sold, traded or written off. As with
+  attaching, only the copy's purchase link changes — its condition, storage, delivery status,
+  dispositions, photos, internal number and any sale stay as they are.
+- **Both ends must be open.** If a lot holding copies is closed, the dialog names it and nothing
+  moves; reopen it first. The copies take their cost when the lot they went to is closed.
+- **The lots stay behind, empty**, with their prices; the purchase's expenses and shipping are not
+  touched. Delete the empty lots yourself if you no longer want them.
+
 ### The delivery lifecycle: ordered → to sort → delivered
 
 Each copy carries a **delivery status** shown as a chip on its row, separate from its
