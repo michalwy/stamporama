@@ -131,6 +131,18 @@ shipped, so there is **no Price or Shipping** under it.
 Each lot's own bar opens the same way with its **lot value**: that lot's opening value, or *no
 opening value*.
 
+**Its share of catalogue.** Beside the opening total, and beside each lot value, the row says what
+the value comes to as a share of the copies' catalog value — *23% of catalog* — under exactly the
+rules a purchase's percentage follows (*What fraction of catalogue you paid*, under the purchase's
+values bar further down): in your base currency, rounded to a
+whole percent with `<1%` below one, `~` while the lot is open, *at most N% of catalog (M unpriced)*
+while copies are unpriced, and nothing at all with no catalog value.
+
+- **A lot without a value has no percentage**, and the opening balance's percentage leaves it out
+  and says how many copies it is over — *over 40 of 95 copies* — never `0%`.
+- **A lot valued at `0`** is a value, and reads `0%` as a free purchase lot does.
+- It is a comparison only: the opening value is still never money spent.
+
 **More** opens the same groups a purchase has — *What it's worth*, *Cost accounted to copies* and,
 once something has sold, *What it has returned*. A cost that does not apply reads as such: copies
 from a lot without a value are counted *without a value*, and where they are all the line has, it

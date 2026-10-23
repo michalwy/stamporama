@@ -26,6 +26,9 @@ import type { LotSummary } from "../../src/lib/lots";
 //
 // A second order holds only partly priced open lots — an order being sorted — whose figure is then
 // wholly an upper bound (#1510).
+//
+// An opening balance states the same figure over its opening value (#2129): a valued lot reads as a
+// purchase lot does, and a lot with no value has no figure and is left out of the document's.
 
 const TS = Date.now();
 
@@ -37,6 +40,7 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
   let partLotId: string;
   let unpricedLotId: string;
   let sortingPurchaseId: string;
+  let openingId: string;
 
   before(async () => {
     userId = `test-user-costcat-${TS}`;
@@ -136,6 +140,24 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
     await intake(secondSortingLotId, pricedStampId);
     await intake(secondSortingLotId, unpricedStampId);
     await intake(secondSortingLotId, unpricedStampId);
+
+    // An opening balance: a lot valued at 3 EUR, closed over two priced copies (4 EUR), and a lot with
+    // no value holding two more priced copies.
+    openingId = (
+      await createPurchase(userId, collectionId, {
+        kind: "opening_balance",
+        title: "Stockbook",
+        purchasedAt: "2026-09-03",
+        currency: "EUR",
+      })
+    ).id;
+    const valuedLotId = await createLot(userId, openingId, 3, null);
+    await intake(valuedLotId, pricedStampId);
+    await intake(valuedLotId, pricedStampId);
+    assert.equal((await closeLot(userId, valuedLotId)).ok, true);
+    const unvaluedLotId = await createLot(userId, openingId, null, null);
+    await intake(unvaluedLotId, pricedStampId);
+    await intake(unvaluedLotId, pricedStampId);
   });
 
   after(async () => {
@@ -240,6 +262,26 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
     assert.equal(r?.copyCount, 6);
     assert.equal(r?.unpricedCount, 3);
     assert.equal(r?.noFigureCount, 0);
+  });
+
+  it("states an opening balance's value against catalogue, leaving a lot with no value out (#2129)", async () => {
+    const summary = await getPurchaseIntakeSummary(userId, collectionId, openingId);
+    const lots = await lotsWith(summary.lotCatalogBasis, openingId);
+    const [valued] = lots.filter((l) => l.valued);
+    const [unvalued] = lots.filter((l) => !l.valued);
+    assert.equal(unvalued.poolBase, null);
+    assert.equal(lotCostToCatalog(unvalued), null);
+    const lot = lotCostToCatalog(valued);
+    assert.equal(lot?.kind, "settled");
+    assert.equal(formatCostPercent(costPercent(lot!)), "75%");
+
+    const r = orderCostToCatalog(lots);
+    assert.equal(r?.kind, "settled");
+    assert.equal(r?.cost, 3);
+    assert.equal(r?.value, 4);
+    assert.equal(r?.coveredCount, 2);
+    assert.equal(r?.copyCount, 4);
+    assert.equal(r?.noFigureCount, 2);
   });
 
   it("is whole-order whatever the list is filtered to", async () => {

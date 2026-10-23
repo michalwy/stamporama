@@ -178,6 +178,27 @@ describe("orderCostToCatalog", () => {
     assert.equal(settled?.noFigureCount, 1);
   });
 
+  // An opening balance states the same figure (#2129): a lot with no opening value is `valued: false`
+  // with no pool, has no figure, and is left out of the document's — never read as `0%`.
+  it("leaves an opening balance's unvalued lot out, and its copies are what the figure is over", () => {
+    const unvalued: CostToCatalogLot = {
+      open: false,
+      valued: false,
+      poolBase: null,
+      basis: lotCatalogBasis([copy(50), copy(50)]),
+    };
+    const r = orderCostToCatalog([closedLot([copy(100, 25)]), unvalued]);
+    assert.equal(r?.kind, "settled");
+    assert.equal(formatCostPercent(costPercent(r!)), "25%");
+    assert.equal(r?.coveredCount, 1);
+    assert.equal(r?.copyCount, 3);
+    assert.equal(r?.noFigureCount, 2);
+
+    assert.equal(orderCostToCatalog([unvalued]), null);
+    const zero = orderCostToCatalog([openLot(0, [copy(40)]), unvalued]);
+    assert.equal(zero && formatCostPercent(costPercent(zero)), "0%");
+  });
+
   it("has no figure when no lot has one", () => {
     assert.equal(orderCostToCatalog([openLot(25, [copy(null)])]), null);
     assert.equal(orderCostToCatalog([]), null);

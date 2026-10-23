@@ -1198,9 +1198,10 @@ export function PurchaseDetailPanel({
     spend: openingBalance ? undefined : purchase.spend,
     openingValue: purchase.openingValue ?? undefined,
     // What the order cost as a share of catalogue (#1395), over every lot with a figure of its own —
-    // an upper bound when any of those is (#1510).
+    // an upper bound when any of those is (#1510). An opening balance states its opening value's
+    // share the same way (#2129); a lot with no value has no figure and is left out of it.
     costToCatalog:
-      orderSummary && !openingBalance
+      orderSummary
         ? orderCostToCatalog(
             purchase.lots.map((l) => costToCatalogLot(l, orderSummary.lotCatalogBasis[l.id]))
           )
@@ -3393,9 +3394,8 @@ function LotCard({
   const weightBase = summary?.estimateWeightBase ?? 0;
   const groupTree = summary?.groupTree ?? [];
   // What the lot cost as a share of catalogue (#1395) — on its bar, and what a copy's own figure is
-  // held against. Never on an opening balance, whose lots cost nothing.
-  const lotRatio =
-    summary && !openingBalance ? lotCostToCatalog(costToCatalogLot(lot, summary.catalogBasis)) : null;
+  // held against. On an opening balance it is the lot value's share (#2129), and none without one.
+  const lotRatio = summary ? lotCostToCatalog(costToCatalogLot(lot, summary.catalogBasis)) : null;
 
   // Live cost-basis estimate for an open lot needs the base-currency pool, so it is unavailable
   // when no FX rate is known.
