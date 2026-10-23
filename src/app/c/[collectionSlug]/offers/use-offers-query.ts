@@ -25,6 +25,7 @@ import type {
   OfferLookupTarget,
   OfferListNeighbours,
 } from "@/lib/offers";
+import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { OfferListContext } from "./list-context";
 import type { FacebookOfferNotInPost, FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
@@ -243,8 +244,13 @@ export function useFacebookPostLotsPrepare(collectionId: string, postId: string,
       return (await res.json()).lots;
     },
     enabled,
+    // Also while a lot's photos are being made again (#2114): *Publish…* waits for them.
     refetchInterval: (query) =>
-      Object.values(query.state.data ?? {}).some((o) => o.readyAfterPhotos) ? READY_WAIT_POLL_MS : false,
+      Object.values(query.state.data ?? {}).some(
+        (o) => o.readyAfterPhotos || o.readyBlockers.some(isPhotoRunBlocker)
+      )
+        ? READY_WAIT_POLL_MS
+        : false,
   });
 }
 

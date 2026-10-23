@@ -23,6 +23,7 @@ import type { BulkCopyPhotoAttachResult } from "@/lib/offer-photo-attachments";
 import type { OfferPhotoConfigInput, PlatformPhotoLimits } from "@/lib/offer-photo-config";
 import { PLAN_IMAGE_SIDE_LABELS } from "@/lib/offer-photo-plan";
 import { Icon } from "@/app/icons";
+import { coversChangeable, isOfferState } from "@/lib/offer-rules";
 
 // The offer's generated listing images (#311, #314) — state first, gallery second. Generation is
 // explicit and runs in a background worker, so the card's first job is to start a run and then tell
@@ -827,6 +828,9 @@ export function OfferPhotosCard({
   // the two habits are genuinely different, so remembering them together would fight the collector
   // on every visit.
   const preparing = offerState === "preparing";
+  // Covers are changed while the offer is prepared — Ready included, which stays Ready while its images
+  // are made again — and left as posted once it is up (#2114).
+  const coversOpen = isOfferState(offerState) && coversChangeable(offerState);
   const [expanded, setExpanded] = usePersistentToggle(
     preparing ? "stamporama.offerPhotos.expanded.preparing" : "stamporama.offerPhotos.expanded",
     preparing
@@ -1171,8 +1175,9 @@ export function OfferPhotosCard({
           {/* Covering symbols (#1665): the walk through the unchecked photos while there are any, a
               revisit of every one afterwards — and, while any are unchecked, marking them all
               *nothing to cover* at once (#1701). Offered only where the offer needs covers, and
-              still offered when no photo is asked about (#1891), to cover one anyway. */}
-          {plan.covers.needed && plan.covers.photoCount + plan.covers.otherCount > 0 && (
+              still offered when no photo is asked about (#1891), to cover one anyway — until the
+              offer is up (#2114). */}
+          {coversOpen && plan.covers.needed && plan.covers.photoCount + plan.covers.otherCount > 0 && (
             <Tooltip
               content={
                 plan.covers.uncheckedCount > 0
@@ -1192,7 +1197,7 @@ export function OfferPhotosCard({
               </button>
             </Tooltip>
           )}
-          {plan.covers.needed && plan.covers.uncheckedCount > 0 && (
+          {coversOpen && plan.covers.needed && plan.covers.uncheckedCount > 0 && (
             <OfferNothingToCoverButton
               collectionId={collectionId}
               offerId={offerId}
@@ -1248,15 +1253,22 @@ export function OfferPhotosCard({
                       : `${plan.covers.photoCount - plan.covers.uncheckedCount} of ${plan.covers.photoCount} photos checked.`}
                     {plan.covers.otherCount > 0 &&
                       ` ${plan.covers.otherCount} more ${plan.covers.otherCount === 1 ? "is" : "are"} from areas whose stamps carry none.`}
-                  </>}{" "}
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => setCoverWalk("all")}
-                style={LINK_BTN}
-              >
-                Review every photo
-              </button>
+                  </>}
+              {coversOpen ? (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setCoverWalk("all")}
+                    style={LINK_BTN}
+                  >
+                    Review every photo
+                  </button>
+                </>
+              ) : (
+                " The covers stay as posted."
+              )}
             </p>
           )}
 

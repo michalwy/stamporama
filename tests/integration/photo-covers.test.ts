@@ -12,6 +12,8 @@ import {
   addOfferSet,
   createOffer,
   getOfferDetail,
+  publishOffer,
+  readPublishPhotoHold,
   setOfferState,
   updateOfferPhotoConfig,
 } from "../../src/lib/offers";
@@ -364,6 +366,39 @@ describe("covering symbols on offer photos (#1665)", () => {
     await generate(offerId);
     assert.deepEqual(await codes(offerId), []);
     assert.equal((await readOfferCoverWalk(userId, offerId)).needed, false);
+  });
+
+  it("changes covers on a Ready offer, which stays Ready, and holds its publishing while the photos are made (#2114)", async () => {
+    const copy = await scannedCopy();
+    const offerId = await preparingOffer(coveredPlatformId, [copy.itemId]);
+    await generate(offerId);
+    await savePhotoCovers(userId, copy.photoId, []);
+    await setOfferState(userId, offerId, "ready");
+    assert.equal(await readPublishPhotoHold(offerId), null, "a Ready offer with current photos publishes");
+
+    // A cover found wrong at the last look: drawn on the Ready offer's photo, it stays Ready.
+    await savePhotoCovers(userId, copy.photoId, [
+      { shape: "rect", style: "bar", x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+    ]);
+    assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).state, "ready");
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
+
+    // While the images are made again, publishing waits — and nothing moves.
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.match((await readPublishPhotoHold(offerId)) ?? "", /still being generated/);
+    await assert.rejects(() => publishOffer(userId, offerId, "https://example.com/l/1"), /still being generated/);
+    assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).state, "ready");
+
+    // Once they are done it publishes, with the new covers drawn in.
+    await claimNextOfferPhotoGeneration({ offerId });
+    await runOfferPhotoGeneration(offerId);
+    assert.ok((await generatedCentre(offerId)).every((c) => c < 40), "the regenerated image shows the bar");
+    assert.equal(await readPublishPhotoHold(offerId), null);
+    await publishOffer(userId, offerId, "https://example.com/l/1");
+    assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).state, "active");
+    // Up, it is no longer held, whatever its photos do.
+    await enqueueOfferPhotoGeneration(userId, offerId);
+    assert.equal(await readPublishPhotoHold(offerId), null);
   });
 
   it("refuses covers on a photo that is not the owner's copy photo", async () => {

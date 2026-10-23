@@ -658,20 +658,28 @@ without opening an offer. Each lot's row carries:
   be marked ready*. Photos still to be checked for symbols are **Check covers (N)**, which goes through
   them there and then. Missing or out-of-date listing photos are not a reason: *Mark ready* makes them
   first (*Photos generated on Mark ready*).
+- **Its covers, for a lot already Ready**: **Review every photo** goes through its photos again, so a
+  cover found wrong at the last look — a symbol left showing, a cover over the wrong spot — is fixed
+  without stepping the lot back to preparing. The lot stays Ready and its photos are made again;
+  while they are, the row says *Photos being generated — Publish waits for them*.
 
 Above the lots, three buttons act on **every lot of the post**:
 
 - **Use estimated price** gives each lot that has no price yet its estimated value; lots with a price
   keep it.
 - **Check covers** goes through every lot's photos not yet checked for symbols, lot after lot, in one
-  walk.
+  walk. Once none is left unchecked it goes through all of them again — Ready lots included, which
+  stay Ready and have their photos made again.
 - **Mark ready** marks every lot still being prepared ready. A lot whose listing photos are missing or
   out of date has them made first and turns Ready once they are done (*Generating photos — Ready when
   done*). A lot that cannot be made ready is named under the buttons by its lot number, with its
   reason, and the others are marked ready.
 
+**Publish…** waits while any lot's photos are being made again: it is held, and a line beside it names
+the lots, so the post never goes up with the old covers. It is offered again as soon as they are done.
+
 Once the post is up — waiting for approval or in the group — the rows show its price, state and link
-as before: pricing and readying belong to before it goes up. The **Prepare** screen itself stays as it
+as before: pricing, readying and covers belong to before it goes up. The **Prepare** screen itself stays as it
 is, for offers on every platform, these lots included.
 
 #### Changing the order of the lots

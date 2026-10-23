@@ -2,10 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   evaluatePhotoReadiness,
+  evaluatePublishPhotoHold,
   isPhotoReadinessBlocker,
+  isPhotoRunBlocker,
   type PhotoReadinessInput,
   type ReadyBlocker,
 } from "../../src/lib/offer-photo-readiness";
+import { coversChangeable } from "../../src/lib/offer-rules";
 
 // The photo half of the ready gate (#311): an offer is not "assembled" while the images a buyer
 // sees do not exist, are still rendering, or were rendered from a composition it no longer has.
@@ -89,5 +92,30 @@ describe("isPhotoReadinessBlocker", () => {
       { code: "title-too-long", title: "", message: "", subjects: [], stampIds: [] },
     ];
     assert.deepEqual(others.filter(isPhotoReadinessBlocker), []);
+  });
+});
+
+describe("covers on a Ready offer (#2114)", () => {
+  it("are changed while the offer is prepared, and never once it is up", () => {
+    assert.equal(coversChangeable("preparing"), true);
+    assert.equal(coversChangeable("ready"), true);
+    for (const state of ["pending", "active", "paused", "sold", "withdrawn"] as const) {
+      assert.equal(coversChangeable(state), false, state);
+    }
+  });
+
+  it("hold publishing only while a photo run is in flight", () => {
+    assert.match(evaluatePublishPhotoHold("queued") ?? "", /still being generated/);
+    assert.match(evaluatePublishPhotoHold("running") ?? "", /still being generated/);
+    for (const status of ["none", "ready", "failed", "purged"] as const) {
+      assert.equal(evaluatePublishPhotoHold(status), null, status);
+    }
+  });
+
+  it("tell a run in flight from the other photo reasons", () => {
+    const [generating] = evaluatePhotoReadiness({ status: "running", outOfDate: false, storedCount: 1, plannedCount: 1 });
+    const [outdated] = evaluatePhotoReadiness({ status: "ready", outOfDate: true, storedCount: 1, plannedCount: 1 });
+    assert.equal(isPhotoRunBlocker(generating), true);
+    assert.equal(isPhotoRunBlocker(outdated), false);
   });
 });

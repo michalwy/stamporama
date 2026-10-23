@@ -25,6 +25,7 @@ import {
   useOfferCopies,
   useOfferTranslationGaps,
   useOfferListingDuplicates,
+  useOfferPhotoPlan,
   useInvalidateOffers,
 } from "../use-offers-query";
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
@@ -86,7 +87,11 @@ import {
 } from "@/lib/offer-needs-action-remedy";
 import { facebookPostLink } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
-import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
+import {
+  evaluatePublishPhotoHold,
+  isCoverReadinessBlocker,
+  isPhotoReadinessBlocker,
+} from "@/lib/offer-photo-readiness";
 import { OfferCoverWalk } from "./offer-cover-walk";
 import { describeCommittedCopies } from "@/lib/trade-reservation-rules";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -384,6 +389,9 @@ export function OfferDetailPanel({
   // Other live offers on this platform listing the same thing (#1347) — the pair the collision
   // warnings exist to prevent, found after the fact so it can be merged.
   const { data: listingDuplicates = [] } = useOfferListingDuplicates(collectionId, offerId, !!offer);
+  // The Photos card's own read, shared through its key: a Ready offer whose images are being made
+  // again waits for them before it is published (#2114).
+  const { data: photoPlan } = useOfferPhotoPlan(collectionId, offerId);
 
   if (isLoading || !offer) {
     return (
@@ -397,6 +405,9 @@ export function OfferDetailPanel({
   // the narrowing the early return above gave `offer`.
   const state = offer.state;
   const editable = !isTerminalState(state);
+  // A Ready offer whose images are being made again — covers changed after it was readied — is not
+  // published until they are done (#2114); the server refuses it too, this only says so first.
+  const publishHold = state === "ready" && photoPlan ? evaluatePublishPhotoHold(photoPlan.status) : null;
 
   // One-click advance through the linear part of the lifecycle (#255), mirroring the offer row.
   // Only the unambiguous forward step is offered; a target that lists something needs ≥1 set.
@@ -719,11 +730,14 @@ export function OfferDetailPanel({
       .filter((s): s is ManualOfferTarget => s !== "sold")
       .map((s) => {
         const { label, icon } = transitionEntryLabel(offer.state, s, offer.facebook !== null);
+        // Publishing waits for photos being made again (#2114).
+        const held = publishHold !== null && (s === "active" || s === "pending");
         return {
           key: s,
           label,
           icon,
           danger: s === "withdrawn",
+          ...(held ? { disabled: true, hint: publishHold } : {}),
           onSelect: () => setState(s),
         };
       }),
@@ -966,11 +980,15 @@ export function OfferDetailPanel({
               // Photos alone do not block Mark ready (#1893): pressing it generates them and the
               // offer turns Ready once they are done. Anything else still does, photos included.
               const blocked = readyBlockers.some((b) => !isPhotoReadinessBlocker(b));
+              // Publishing waits for photos being made again (#2114).
+              const held = advanceTo !== "ready" && publishHold !== null;
               return (
                 <Tooltip
                   maxWidth="26rem"
                   content={
-                    blocked ? (
+                    held ? (
+                      publishHold
+                    ) : blocked ? (
                       // One line per reason, never a count: each is fixed somewhere different (#406,
                       // #311) — a catalogue match on another screen, a photo run on the card below.
                       //
@@ -1020,10 +1038,10 @@ export function OfferDetailPanel({
                 >
                   <button
                     type="button"
-                    disabled={isPending || blocked}
+                    disabled={isPending || blocked || held}
                     onClick={() => setState(advanceTo)}
                     aria-label={label}
-                    style={{ ...QUICK_ADVANCE_BTN, ...(blocked ? { opacity: 0.55, cursor: "default" } : null) }}
+                    style={{ ...QUICK_ADVANCE_BTN, ...(blocked || held ? { opacity: 0.55, cursor: "default" } : null) }}
                   >
                     <Icon name={icon} size="sm" />
                     {label}
