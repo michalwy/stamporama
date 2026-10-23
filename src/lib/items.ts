@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
-import { NOT_TRADED_AWAY } from "./trade-exit";
+import { NOT_TRADED_AWAY, TRADED_AWAY } from "./trade-exit";
 import {
   COMMITTING_FULFILLMENTS,
   hasLeftInTrade,
@@ -1193,6 +1193,12 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * basis has been frozen into that lot's split (ADR-0009 §3) — moving it would under-cost the
    * copies that stayed, so that lot has to be reopened first. */
   attachableToLotId?: string;
+  /** Restrict to copies in any of these states (#2120, #2121) — `held`, `gone` (on a sale line or
+   * the give line of a closed trade, {@link excludeGone}'s two mechanisms) or `disposed` — an
+   * **OR**. Set, it replaces both defaults that hide the copies that have left: the attach picker
+   * asks *which* of them it wants rather than turning each on beside the held ones. Absent is the
+   * defaults, {@link excludeGone} and {@link includeDisposed} as given. */
+  holdingStates?: readonly ("held" | "gone" | "disposed")[];
   /** Restrict to copies whose linked stamp has this issued year. A number matches
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
@@ -1532,6 +1538,20 @@ function buildItemWhere(
       ],
     });
   }
+  if (filters.holdingStates) {
+    // An `OR` of the states asked for, into the AND list so it cannot collide with the search's.
+    const branches: Prisma.ItemWhereInput[] = [];
+    for (const state of filters.holdingStates) {
+      if (state === "held") {
+        branches.push({ saleLineItems: { none: {} }, ...NOT_TRADED_AWAY, disposedAt: null });
+      } else if (state === "gone") {
+        branches.push({ OR: [{ saleLineItems: { some: {} } }, TRADED_AWAY] });
+      } else {
+        branches.push({ disposedAt: { not: null } });
+      }
+    }
+    and.push({ OR: branches });
+  }
 
   return {
     collectionId,
@@ -1569,7 +1589,7 @@ function buildItemWhere(
     ...(filters.excludeGone ? { saleLineItems: { none: {} }, ...NOT_TRADED_AWAY } : {}),
     // Disposed copies are hidden unless asked for (#395) — `disposedAt` doubles as the flag, so
     // this stays a plain `where` rather than a derived narrowing.
-    ...(filters.includeDisposed ? {} : { disposedAt: null }),
+    ...(filters.includeDisposed || filters.holdingStates ? {} : { disposedAt: null }),
     // For or against the multi-stamp copies (#748). A flat `stampCount` clause like the counts', and
     // nothing else in this `where` touches that column, so it spreads without colliding.
     ...multiStampFilterWhere(filters.multiStamp),

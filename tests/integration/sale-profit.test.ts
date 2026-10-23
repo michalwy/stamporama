@@ -2,6 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createPurchase } from "../../src/lib/purchases";
+import { attachItemsToLot, closeLot, listAttachableCopies } from "../../src/lib/lots";
 import { getItemSaleRecord, getSaleDetail } from "../../src/lib/sales";
 import { getOverviewValue } from "../../src/lib/overview";
 
@@ -366,5 +367,54 @@ describe("sale profit and loss (#168)", () => {
     assert.deepEqual(settled.copiesWithoutCost, []);
     assert.equal(settled.lines[0].profit.profit, "25.00");
     assert.equal(settled.profit.profit, "25.00");
+  });
+
+  it("costs a copy sold with no purchase once it is attached to a lot and the lot closes, leaving the sale alone (#2120)", async () => {
+    const sold = await copy(cheap, noCost);
+    const saleId = await sell([sold], "30.00");
+    const before = (await getSaleDetail(userId, saleId))!;
+    assert.deepEqual(before.copiesWithoutCost.map((r) => r.itemId), [sold]);
+    const saleBefore = await prisma.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      include: { lines: { include: { items: true } } },
+    });
+
+    const receipt = await createPurchase(userId, collectionId, {
+      currency: "EUR",
+      purchasedAt: "2026-04-01",
+    });
+    const lot = (
+      await prisma.purchaseLot.create({
+        data: { purchaseId: receipt.id, price: "12.00", status: "open" },
+      })
+    ).id;
+
+    // Held is the picker's default and leaves it out; the sold state offers it, naming its sale.
+    const held = await listAttachableCopies(userId, lot);
+    assert.ok(!held.some((r) => r.id === sold));
+    const gone = await listAttachableCopies(userId, lot, { states: ["gone"] });
+    const row = gone.find((r) => r.id === sold);
+    assert.ok(row, "the sold copy is offered under the sold state");
+    assert.equal(row.soldOn?.saleId, saleId);
+
+    const { attached, refused } = await attachItemsToLot(userId, lot, [sold]);
+    assert.equal(attached, 1);
+    assert.deepEqual(refused, []);
+    const closed = await closeLot(userId, lot);
+    assert.ok(closed.ok, "the lot closes with the sold copy in it");
+
+    const item = await prisma.item.findUniqueOrThrow({ where: { id: sold } });
+    assert.equal(item.costBasis?.toFixed(2), "12.00");
+    const after = (await getSaleDetail(userId, saleId))!;
+    assert.deepEqual(after.copiesWithoutCost, []);
+    assert.equal(after.profit.cost, "12.00");
+    assert.equal(after.profit.profit, "18.00");
+
+    // Nothing about the sale itself moved.
+    const saleAfter = await prisma.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      include: { lines: { include: { items: true } } },
+    });
+    assert.deepEqual(saleAfter, saleBefore);
   });
 });
