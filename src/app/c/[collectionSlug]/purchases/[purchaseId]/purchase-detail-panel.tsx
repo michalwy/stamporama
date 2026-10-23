@@ -122,6 +122,11 @@ import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dia
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
+import {
+  DeletePurchaseDialog,
+  purchaseDeletedMessage,
+} from "@/app/c/[collectionSlug]/purchases/delete-purchase-dialog";
+import { useToast } from "@/app/toast-provider";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
 import { MoveCopiesToDocumentDialog } from "./move-copies-to-document-dialog";
@@ -409,6 +414,9 @@ export function PurchaseDetailPanel({
   const [addingSupplies, setAddingSupplies] = useState(false);
   // *Move copies to…* (#2123): every copy of the order to a lot of another document.
   const [movingCopies, setMovingCopies] = useState(false);
+  // The header's Delete (#2126): the list's confirmation, and the list again once it is done.
+  const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
   const [arriving, setArriving] = useState(false);
   // Marking the order completed with work still left on it (#1449): the dialog that says what.
   const [completing, setCompleting] = useState(false);
@@ -905,6 +913,7 @@ export function PurchaseDetailPanel({
   // The order's header row and its value bar, each drawn twice (#1410): where they sit, and again in
   // the pinned layer once the page has scrolled them away. One element and one set of props, so the
   // pinned copy cannot drift from the one it stands in for.
+  const hasCopies = purchase.lots.some((l) => l.itemCount > 0);
   const headerLineActions: RowAction[] = [
     ...(openingBalance
       ? []
@@ -946,7 +955,7 @@ export function PurchaseDetailPanel({
       : []),
     // Moving the whole order's copies to another document (#2123) — offered once there is a copy to
     // move. A closed lot holding copies is not hidden here: the dialog names it, to be reopened.
-    ...(purchase.lots.some((l) => l.itemCount > 0)
+    ...(hasCopies
       ? [
           {
             key: "move-copies",
@@ -962,6 +971,22 @@ export function PurchaseDetailPanel({
           },
         ]
       : []),
+    // The list row's Delete (#2126), with the list's rule: a lot holding a copy refuses the delete
+    // (the copies are the collection, not the document's), so the entry says so instead of offering
+    // a confirmation that can only end in the server's refusal.
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "delete" as const,
+      danger: true,
+      separatorBefore: true,
+      disabled: isPending || hasCopies,
+      hint: hasCopies ? "Not while its lots hold copies" : undefined,
+      onSelect: () => {
+        setError(undefined);
+        setDeleting(true);
+      },
+    },
   ];
   const headerRow = (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -1340,6 +1365,33 @@ export function PurchaseDetailPanel({
             setMovingCopies(false);
             // Every lot of the order may have lost copies: the whole order is re-read.
             run(async () => ({ status: "success" }));
+          }}
+        />
+      )}
+
+      {deleting && (
+        <DeletePurchaseDialog
+          kind={purchase.kind}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (isPending) return;
+            setDeleting(false);
+            setError(undefined);
+          }}
+          onConfirm={() => {
+            setError(undefined);
+            // Not through `run`: its refresh would re-render a document that no longer exists.
+            startTransition(async () => {
+              const { deletePurchaseAction } = await import("@/app/actions/purchases");
+              const result = await deletePurchaseAction(purchase.id);
+              if (result.status === "success") {
+                invalidatePurchaseList(collectionId);
+                toast({ message: purchaseDeletedMessage(purchase.kind) });
+                // The list restores the filters it was left with (#1392), so the bare path is it.
+                router.push(`/c/${collectionSlug}/purchases`);
+              } else if (result.status === "error") setError(result.message);
+            });
           }}
         />
       )}
