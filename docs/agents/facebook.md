@@ -227,9 +227,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   copy is not asked: listing in two places is the collector's business.
 
 - **A post is a row; its lots are offers** (ADR-0061 §2). `FacebookPost` (group only) holds several
-  lots, or one offer posted alone once it has gone up (#1989, below); its lots are offers with
-  `facebookPostId` + `facebookLotNo`, unique per post. An offer in no post is published through the
-  ordinary `publishOffer`, which makes its post of one lot on the way. **The post's link is every lot's own `url` too** (#1668, decided
+  lots, or one offer posted alone — every Facebook offer from the moment it is made (#2116, below);
+  its lots are offers with `facebookPostId` + `facebookLotNo`, unique per post. **The post's link is every lot's own `url` too** (#1668, decided
   with the collector on 2026-10-07): the post's own column and the card's *Post link* field were a
   second field for one address, and both are gone — the migration moved a recorded post link into
   each lot whose `url` was empty, then dropped the column. A post is up once any lot is
@@ -240,49 +239,81 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the group's `mixedListingTypes` says otherwise: `facebookPostRefusal` takes the group's setting
   (`facebookGroupMixesTypes`) and `facebookMixedTypesRefusal` names each type's offers, and
   `updateOffer` asks `facebookLotTypeRefusal` before a lot changes type inside such a post.
-  `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), deletes a post
-  left with none, dissolves one left with one lot **not yet up** (#1989 — one left with a lot that went
-  up stays, a post of one), and runs on take-out, on `deleteOffer` and on `updateOffer` moving a lot
-  off Facebook.
+  `detachFacebookLot` is the one way out: renumbers in two passes (the unique index) and deletes a post
+  left with none; a post left with one lot stays, a post of one with the title it had (#2116 — until
+  then one not yet up was dissolved). Where the offer goes is the caller's: a new post of one on
+  take-out (`removeFacebookLot`), another post on joining (`leavePostsOfOne`), nowhere on `deleteOffer`
+  and on `updateOffer` moving it off Facebook.
 
 - **Every Facebook offer that goes up is in a post** (#1989, decided with the collector on
-  2026-10-16, amending ADR-0061 §2): an offer posted alone is a post of one lot, made **when it is
-  published**, never when it is created. `placeInOneLotFacebookPost` (`offers.ts`, private — it needs
-  `allocateEntityNumber`, which `offers.ts` already imports from `items.ts`) is the one writer: it runs
-  in `setOfferState` on any move into Pending/Active **before** `freezeFacebookPostText`, so the freeze
-  reads the post, in `freezeIfPublished` for an offer created or duplicated already up, and in
-  `updateOffer` for an offer moved onto Facebook once already up — a no-op for an offer in a post or
-  off Facebook. Every publish path reaches it through the transition, so `publishOfferOrPost` needs
-  no branch of its own beyond the title. **A post of one is titled with its offer's title** (#2068,
-  decided with the collector on 2026-10-18): `placeInOneLotFacebookPost` creates it with
-  `readOfferPostTitles` (`offers.ts` — the offer's display title, its `name` else the label derived
-  from its sets, as `readKitLots` names the lot; an offer with neither is left out rather than given
-  the *Untitled listing* stand-in, #1692). It is **stored once**, not a stand-in at display time:
-  renaming the offer later does not rename the post. `postTitle` (asked by `ActivateOfferDialog`'s
-  `askPostTitle`, a Facebook offer in no post and not approving; the field starts on `offerLabel`) is
-  written with `setFacebookPostTitle` after `publishOffer` when not blank, so a typed title replaces
-  the offer's and a cleared field keeps it. The snapshot is written before a typed title, so its
-  `postTitle` is the offer's; nothing a post of one renders reads it, since `{postTitle}` is in no
-  post template. **Existing untitled posts of one** were titled by `titleUntitledFacebookPostsOfOne`
-  (`facebook-posts.ts`), run once at boot beside the freeze (`instrumentation-node.ts`) — the display
-  title is built in TypeScript — and an idempotent no-op after; posts of several lots keep asking for
-  their own (#1862). The integration test is the *its title* suite of
-  `tests/integration/facebook-single-posts.test.ts`. **A post of one reads as an offer
-  posted alone**: `facebookPostLayout` takes `{ layout, lotCount }` and is `text` under two lots;
+  2026-10-16, amending ADR-0061 §2): an offer posted alone is a post of one lot. #1989 made it **when
+  it was published**; #2116 (next bullet) makes it when the offer is made, and what is left of #1989
+  is the safety net and the reading. `placeInOneLotFacebookPost` (`offers.ts`, exported since #2116)
+  still runs in `setOfferState` on any move into Pending/Active **before** `freezeFacebookPostText`, a
+  no-op for an offer in a post, so nothing ever goes up in no post. **A post of one is titled with its
+  offer's title** (#2068, decided with the collector on 2026-10-18): `readOfferPostTitles` (`offers.ts`
+  — the offer's display title, its `name` else the label derived from its sets, as `readKitLots` names
+  the lot; an offer with neither is left out rather than given the *Untitled listing* stand-in,
+  #1692). #2068 copied it once at publishing and let *Publish…* type another; since #2116 the post
+  follows it and *Publish…* asks no title. **A post of one reads as an offer posted alone**:
+  `facebookPostLayout` takes `{ layout, lotCount }` and is `text` under two lots;
   `getFacebookOfferKit` nulls the lone lot's `lotNo` (so `{lot}` and the gaps behave as on a single
   post) and gives the offer's own `photoZipPath`; `OfferListItem.facebookPost.lotNo` is null there
   (the chip reads *Post #N*). On the client "posted alone" is `kit.lots.length < 2`, not `!kit.post`:
   the card keeps its kit, listing link and *Repost…* and adds the post's name, stage and *Open post*;
   the kit's `multiLot` (layout select, lot numbers) is `kit.post && lots > 1`, while its `renderLots`
-  is drawn for any post, so the post's screen has its one row. Taking out the only lot of a post not
-  up (after a rejection) removes the post. **The migration**
+  is drawn for any post, so the post's screen has its one row. **The migration**
   (`20261016180000_facebook_every_offer_in_post`) gave every Facebook offer in no post in a state past
   Ready (`isFacebookLotPosted`'s reading — a withdrawn or sold offer included) a post of one, numbered
-  from `nextFacebookPostNo` in `createdAt` order, untitled (titled since by #2068's boot pass); link, state and snapshot stay on the
-  offer, where they already were. The integration test is
-  `tests/integration/facebook-single-posts.test.ts`, which runs the migration's SQL in a rolled-back
-  transaction over seeded rows; removing the transition's placement or restoring the old dissolve
-  rule each fails it (checked when written).
+  from `nextFacebookPostNo` in `createdAt` order, untitled (titled since by #2068's boot pass, which
+  #2116 replaced with `syncFollowingPostTitles`); link, state and snapshot stay on the offer, where
+  they already were. The integration test is `tests/integration/facebook-single-posts.test.ts`, which
+  runs both migrations' SQL in a rolled-back transaction over seeded rows.
+
+- **A Facebook offer is in a post from the moment it is made** (#2116, settled with the collector on
+  2026-10-23; the issue's *to be confirmed* points implemented as written; amends #1989 and ADR-0061
+  §2). **A post of one lot and a post of several differ only in their text templates** — the post's
+  screen, number, title, moves and placeholders are the same. **Every creation route** ends in
+  `finishOfferCreation` → `placeCreatedOffer` (`createOffer`, `writeGeneratedOffers` — quick offer
+  mode, Generate offers, the Lot builder, Series from singles and the agent API's `draft_offer` all go
+  through those two) and `duplicateOffer` calls `placeCreatedOffer` itself: `placeInOneLotFacebookPost`
+  after the commit, before the freeze of an offer created already up. After the commit, not inside
+  the creation's transaction, so Generate offers' *In a new post* (#2030), whose `inTransaction` hook
+  makes the post first, leaves the placement a no-op and burns no post numbers on throwaway posts of
+  one. `updateOffer` places an offer moved onto Facebook in any state, and a post of one **not yet up**
+  follows its offer into another group (a lot of several is still refused, and so is a post of one
+  that is up). `writePostOfOne` (`offers.ts`, inside a transaction) is the one writer of the row.
+  **Joining another post** — `writeFacebookPost` (*Post together…*, Generate offers' *In a new
+  post*) and `addFacebookLots` (*Add to post…*, *Add lots…*) — first takes each joining offer out of
+  its post of one through `leavePostsOfOne`, which deletes it; its number is never given again
+  (`allocateEntityNumber` is a counter). So `FacebookPostCandidate.postLots` says how many lots the
+  offer's post holds, and `facebookPostRefusal` / `facebookLotAddRefusal` refuse only a lot of a post
+  **of several** (`inPostOfSeveral`); `listFacebookLotCandidates` lists the offers alone in a post of
+  one (a `groupBy` over `facebookPostId`) beside any in none. **Taking a lot out**
+  (`removeFacebookLot`) detaches it and writes it a new post of one in the same transaction; the only
+  lot of a post is not taken out (`facebookPostMoves().takeOut` is `!posted && lots > 1`, and the
+  server returns early) — the post screen's row ⋮ reads its *Withdraw this lot…* and *Back to
+  preparing* gates off `notUp`, not `takeOut`, for that reason. **The title follows the offer**:
+  `FacebookPost.titleFollowsOffer`, true on a post of one from `writePostOfOne`, false for good once
+  `setFacebookPostTitle` renames it by hand or `addFacebookLots` gives it a second lot (a post left with
+  one lot by a take-out never starts following; the #1998 split copies the flag). The one writer of a
+  following title is `syncFollowingPostTitles(offerIds?)` (`offers.ts`), run after `patchOffer` writes
+  a `name`, at the end of `syncGeneratedTexts` (which every composition change runs) and of
+  `regenerateOfferText` for the title, and at boot over every following post (`instrumentation-node.ts`)
+  for what moves out of sight — an area renamed under a derived label — and for the posts the
+  migration made. **`{post}` and `{postTitle}`** are in both post templates' lists
+  (`FACEBOOK_AUCTION_PLACEHOLDERS`, `FACEBOOK_QUICK_BUY_PLACEHOLDERS`; the caption list is now the
+  post list without `{terms}`), `renderFacebookPostParts` / `facebookPostGaps` take the
+  `FacebookPostName`, and an empty `{postTitle}` is `FacebookPostGaps.missingPostTitle` — once for
+  the post, as in a captioned one; on an offer's card the gap links to the post's screen. **Publish…**
+  asks no title (`ActivateOfferDialog` lost `askPostTitle`, `publishOfferOrPost` its `postTitle`),
+  and a post of one publishes through `publishFacebookPost` like any post. **The migration**
+  (`20261023120000_facebook_post_from_creation`) adds the column, marks an existing post of one
+  following where its title is null or exactly its offer's `name` (one titled otherwise was typed in
+  *Publish…* or renamed), and gives every Facebook offer still in no post — Preparing or Ready — a
+  following post of one numbered from the counter in `createdAt` order, titled with the offer's
+  stored `name`; a derived label is the boot pass's. *Not in a post yet* (#1989, #1991) went: there is
+  nothing to list. The integration test is `tests/integration/facebook-single-posts.test.ts`.
 
 - **A post of several lots can be captioned** (#1841, decided with the collector on 2026-10-12;
   ADR-0061 §2). `multiLotLayout` (`text` | `captions`, `FACEBOOK_MULTI_LOT_LAYOUTS`) and three
@@ -300,10 +331,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   field's list; `{catalog}` is unknown outside a post template). `facebookCaptionedPostGaps` adds
   `missingPostText` and names the shared text's empty placeholders with `lotNo: null`. **`{post}`**
   (#1854, `FACEBOOK_POST_NUMBER_PLACEHOLDER`) is the post's `postNo`, bare, in the shared text and
-  every caption — an offer's own template included, since it writes the caption — and in **no** post
-  template: an offer posted alone has no number until it is published (its post of one lot, #1989, is
-  written from the post templates all the same) and nothing stands in for it (#1692), so there it is
-  *unknown* and kept as typed. Both functions take `postNo` explicitly (the kit's `post.postNo`); it
+  every caption — an offer's own template included, since it writes the caption — and, since #2116,
+  in the post templates too: an offer posted alone had no number until it was published, so until
+  then they did not offer it. Both functions take `postNo` explicitly (the kit's `post.postNo`); it
   is the post's identity rather than its content, so it is read live and not frozen. **Freezing**:
   `FacebookFrozenLot` gained `layout` and `postText` (a snapshot without them reads as `text`), and
   `freezeFacebookPostText` stores the caption template as `template` in a captioned post through
@@ -349,8 +379,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`refreshFacebookLotPhotosForOffer`), and Settings → Facebook's saves (`refreshFacebookLotPhotos` /
   `refreshFacebookGroupLotPhotos`, in the actions — `facebook-groups.ts` cannot import it,
   `facebook-auctions.ts` importing that). `pruneFacebookLotPhotos(collectionId)` drops the photos of
-  offers in no post, after `removeFacebookLot`, `deleteOffer` and an `updateOffer` moving a lot off
-  Facebook — a dissolved post's last lot included. **The worker** (`offer-photo-worker.ts`) drains this
+  offers in no post, after `deleteOffer` and an `updateOffer` moving a lot off Facebook; those and
+  `removeFacebookLot` also sync the post left behind, whose last lot is laid out as text once it is
+  alone (#2116, which ended the dissolving that used to put that lot in no post). **The worker** (`offer-photo-worker.ts`) drains this
   queue behind the offer queue, one job at a time, offers first; `runFacebookLotPhoto` reads the plan,
   fingerprints it, reads the bytes as `work`, draws, writes the new photo before the old one goes and
   records the fingerprint it drew — or, failing, the one it tried. **The offer's own run never swaps
@@ -366,7 +397,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
 - **A multi-lot post has a number and a screen of its own** (#1842, decided with the collector on
   2026-10-12; ADR-0061 §2). `FacebookPost.postNo` comes from `Collection.nextFacebookPostNo` through
   `allocateEntityNumber(…, "facebookPost")` in `createFacebookPost` — the one writer, so not ADR-0062's
-  trigger — unique per collection and never reused (the integration test dissolves the **newest** post
+  trigger — unique per collection and never reused (the integration test removes the **newest** post
   so a `max + 1` would fail it; checked when written). The migration numbered existing posts oldest
   first. The screen is `/c/[slug]/offers/posts/[postNo]` (`findFacebookPostId` resolves the number;
   the static `posts` segment shadows no offer id), drawn by `facebook-post-panel.tsx` off
@@ -403,17 +434,10 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   preparing — since the stage is no column; the integration test
   (`tests/integration/facebook-posts-list.test.ts`) checks every filtered row's own stage. The group
   filter's options are the groups holding posts (`listFacebookPostGroups`). Since #1989 every post is
-  listed, a post of one lot included (its row says *Posted alone* in place of the lots and layout), and
-  **Not in a post yet** sits above the rows: `listFacebookOffersNotInPost` (Facebook offers with no
-  post in Preparing or Ready, read through `readKitLots` for the title) behind
-  `GET …/facebook-posts/not-in-post` (a static segment shadowing `[postId]`), under
-  `offerKeys.facebookNotInPost`. The group filter narrows it; the *Being prepared* / *Ready to post*
-  chips narrow it to that state; the other stages and *No title* hide it. It **folds to one line**, its
-  heading and count (#1991, decided with the collector on 2026-10-17): sixty-odd offers in no post
-  pushed the posts far down, useful when wanted and noise otherwise. Folded the first time, and then
-  as last left — a `usePersistedFlag` per collection (`…:notInPostExpanded:<collectionId>`), like the
-  Offers summary bar's *More*; a client preference, not URL state, since it is not a filter. The count
-  is the filtered list's length, so it follows the group filter.
+  listed, a post of one lot included (its row says *Posted alone* in place of the lots and layout).
+  **Not in a post yet**, the Facebook offers in no post that sat above the rows (#1989; folded to one
+  line by #1991), went with #2116: every Facebook offer is in a post from the start, so the rows are
+  the whole of Facebook and there is nothing left to list.
   **The group, stage and *No title* filters are remembered per collection and kept in the address**
   (#2108, decided with the collector on 2026-10-22): the Intake documents list's arrangement (#1392),
   in `offers/posts/posts-view-params.ts` (pure, unit-tested) and `use-posts-view.ts` over
@@ -421,8 +445,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   every press writes both, and a restored filter is written back into the address with `replace`
   (#844). The params keep their pre-#2108 names (`group`, `stage`, `untitled`). A **stored** group that
   no longer holds a post is pruned against the menu's options; one a link names is taken as written.
-  While any filter narrows the list, the band under the toolbar names them with *Clear filters*. The
-  fold of *Not in a post yet* stays its own flag, not part of the set.
+  While any filter narrows the list, the band under the toolbar names them with *Clear filters*.
 
 - **A post is deleted with every offer in it** (#2060, decided with the collector on 2026-10-18), in
   any stage, from the ⋮ beside the post screen's title and from the row's ⋮ on the list of posts —
@@ -479,9 +502,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   through `facebookPostLabel` (*Post #N · title*, or *Post #N*) on the screen, the lot's card and the
   chip's hover (`OfferListItem.facebookPost.title`); the list of posts shows it and filters to the
   untitled (`untitled`, URL `untitled=1`). **`{postTitle}`** (`FACEBOOK_POST_TITLE_PLACEHOLDER`) sits
-  beside `{post}` in the caption and captioned-post lists only. The render and gap functions take a
+  beside `{post}` — in the caption and captioned-post lists, and in the post templates' since #2116. The render and gap functions take a
   `FacebookPostName` (`{ postNo, title }`) where they took `postNo`. A missing title is
-  `FacebookCaptionedPostGaps.missingPostTitle` — **one** gap for the post, kept out of
+  `missingPostTitle` (`FacebookCaptionedPostGaps`, and `FacebookPostGaps` since #2116) — **one** gap for the post, kept out of
   `emptyPlaceholders` so it is not named per lot. **Unlike the number, the title is content**: frozen as
   `FacebookFrozenLot.postTitle` (`""` when the post had none; null on a snapshot older than titles,
   which reads the live one), and `facebookPostSource` returns the `post` to render, its title off the
@@ -489,10 +512,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   test is the *its title* suite in `tests/integration/facebook-post-screen.test.ts`.
 
 - **Offers can join a post that exists** (#1870, decided with the collector on 2026-10-12; ADR-0061 §2
-  as amended), only while it is not up — `facebookPostMoves().addLots`, the same `!posted` as
-  `takeOut`. `addFacebookLots` (`facebook-posts.ts`) refuses a post with a lot past Ready whole, then
+  as amended), only while it is not up — `facebookPostMoves().addLots`, `!posted`. `addFacebookLots` (`facebook-posts.ts`) refuses a post with a lot past Ready whole, then
   asks each offer `facebookLotAddRefusal` (pure, `facebook-post-rules.ts`: *Post together*'s conditions
-  against the post — its group, in no post, not yet up, one of the post's `lotTypes` unless
+  against the post — its group, in no post of several (#2116), not yet up, one of the post's `lotTypes` unless
   `mixedListingTypes`), phrased to follow the offer's number. **Partial by design**: the qualifying
   offers become lots `max + 1…` in the order given, the rest come back in `refused` and as one
   `describeRefusedLots` sentence; when none qualifies nothing is written and that sentence is the

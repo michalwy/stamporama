@@ -121,6 +121,7 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
     const quickBuy = await offer({ quickBuy: true });
     const inPost = await offer();
     await createFacebookPost(userId, collectionId, [inPost, await offer()], "Another");
+    const ownPosts = new Map(await Promise.all([elsewhere, quickBuy, later].map(async (id) => [id, (await lot(id)).facebookPostId] as const)));
 
     const result = await addFacebookLots(userId, post.postId, [later, elsewhere, sooner, quickBuy, inPost]);
     assert.equal(result.postNo, post.postNo);
@@ -151,7 +152,14 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
       assert.equal(row.facebookPostId, post.postId);
       assert.equal(row.endsAt?.toISOString(), closes.toISOString(), "an added auction takes the post's closing time");
     }
-    for (const id of [elsewhere, quickBuy]) assert.equal((await lot(id)).facebookPostId, null);
+    for (const id of [elsewhere, quickBuy]) {
+      assert.equal((await lot(id)).facebookPostId, ownPosts.get(id), "a refused offer stays in its post of one");
+    }
+    assert.equal(
+      await prisma.facebookPost.count({ where: { id: ownPosts.get(later)! } }),
+      0,
+      "a joining offer's post of one goes (#2116)"
+    );
   });
 
   it("gives every auction the closing time the first one carries when the post had none", async () => {
@@ -170,6 +178,7 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
     const b = await offer();
     const post = await createFacebookPost(userId, collectionId, [a, b], "Full");
     const elsewhere = await offer({ group: otherGroupId });
+    const elsewherePost = (await lot(elsewhere)).facebookPostId;
     await assert.rejects(
       () => addFacebookLots(userId, post.postId, [elsewhere, a]),
       (err: Error) => {
@@ -177,7 +186,7 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
         return true;
       }
     );
-    assert.equal((await lot(elsewhere)).facebookPostId, null);
+    assert.equal((await lot(elsewhere)).facebookPostId, elsewherePost);
     assert.equal((await lot(a)).facebookLotNo, 1);
   });
 
@@ -186,11 +195,12 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
     const b = await offer();
     const post = await createFacebookPost(userId, collectionId, [a, b], "Submitted");
     const c = await offer();
+    const cPost = (await lot(c)).facebookPostId;
     assert.ok((await listFacebookLotCandidates(userId, collectionId, post.postId)).some((o) => o.offerId === c));
 
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/190001/pending/1", "pending");
     await assert.rejects(() => addFacebookLots(userId, post.postId, [c]), /is up, so it takes no new lots/);
-    assert.equal((await lot(c)).facebookPostId, null);
+    assert.equal((await lot(c)).facebookPostId, cPost);
     assert.deepEqual(await listFacebookLotCandidates(userId, collectionId, post.postId), []);
 
     await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/190001/posts/1", "active");
@@ -237,6 +247,6 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
     assert.ok(!readyOnly.items.some((p) => p.postNo === preparing.postNo));
 
     const otherGroup = await listFacebookPostsPaginated(userId, collectionId, { groupIds: [otherGroupId], notUp: true });
-    assert.deepEqual(otherGroup.items, []);
+    assert.ok(otherGroup.items.every((p) => p.group.id === otherGroupId && p.lotCount === 1), "only the other group's posts of one");
   });
 });

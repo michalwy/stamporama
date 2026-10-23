@@ -310,11 +310,11 @@ export async function offerItemIds(offerId: string): Promise<string[]> {
 }
 
 /**
- * Take an offer out of its post, inside the caller's transaction: the lots after it move up one. A
- * post left with no lot is deleted, and one left with a single lot that has **not** gone up is
- * **dissolved** — that offer is an offer in no post again, and gets a post of its own only if it is
- * published alone (#1989). A post left with one lot that has gone up stays, a post of one lot: every
- * Facebook offer that went up is in a post. A no-op for an offer in no post.
+ * Take an offer out of its post, inside the caller's transaction: the lots after it move up one, and a
+ * post left with no lot is deleted — its number is never given again. A post left with one lot stays,
+ * a post of one with the title it had (#2116; until then one not yet up was dissolved): every Facebook
+ * offer is in a post. Where the offer goes is the caller's — into another post, a new post of one
+ * (`removeFacebookLot`), off Facebook or nowhere, deleted. A no-op for an offer in no post.
  */
 export async function detachFacebookLot(tx: DbTransaction, offerId: string): Promise<void> {
   const offer = await tx.offer.findUnique({
@@ -330,13 +330,9 @@ export async function detachFacebookLot(tx: DbTransaction, offerId: string): Pro
   const rest = await tx.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true, state: true },
+    select: { id: true },
   });
-  if (rest.length === 0 || (rest.length === 1 && !isFacebookLotPosted(rest[0].state))) {
-    await tx.offer.updateMany({
-      where: { facebookPostId: postId },
-      data: { facebookPostId: null, facebookLotNo: null },
-    });
+  if (rest.length === 0) {
     await tx.facebookPost.delete({ where: { id: postId } });
     return;
   }

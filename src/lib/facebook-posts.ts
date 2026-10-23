@@ -13,7 +13,7 @@ import {
   setFrozenFacebookClosing,
 } from "./facebook-auctions";
 import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./facebook-group-rules";
-import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
+import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
   describeRefusedLots,
   facebookBackToReadyPlan,
@@ -50,6 +50,7 @@ import {
   regenerateOfferTitleAndDescription,
   readOfferPostTitles,
   readSoldElsewhereRefusal,
+  writePostOfOne,
   setOfferState,
   syncGeneratedTexts,
   takeFacebookOfferBackToReady,
@@ -63,7 +64,6 @@ import {
   isAuctionListing,
   isOfferState,
   normalizeListingType,
-  type OfferListingType,
   type OfferState,
 } from "./offer-rules";
 
@@ -73,9 +73,10 @@ import {
 // group lets its posts mix them; what a post adds is that they go up **together**: one group, one
 // closing time for its auctions, numbered in the order they were put in, and one activation that
 // takes all of them live. The post's link is each lot's own listing link (#1668), given once when any lot is
-// activated. Every Facebook offer that has gone up is in a post (#1989): one published in no post is
-// published the ordinary way, and `setOfferState` makes its post of one lot as it goes up — which
-// from then on reads, renders and moves as an offer posted alone always did.
+// activated. Every Facebook offer is in a post from the moment it is made (#2116; #1989 made it at
+// publishing): an offer meant to go up alone is a post of one lot, made with it (`offers.ts`), which
+// reads and renders as an offer posted alone always did and differs from a post of several only in
+// its templates. Joining another post takes an offer out of its post of one, which goes.
 //
 // This module sits on the far side of `offers.ts` (it goes through `setOfferState`, so every gate an
 // activation asks is asked of each lot); `facebook-auctions.ts` is the half `offers.ts` imports.
@@ -98,12 +99,40 @@ async function assertPostOwner(ownerId: string, postId: string): Promise<{ colle
   return post;
 }
 
+/** What `facebookPostRefusal` and `facebookLotAddRefusal` read of an offer, and the closing time. */
+const POST_CANDIDATE_SELECT = {
+  id: true,
+  offerNo: true,
+  facebookGroupId: true,
+  facebookPostId: true,
+  listingType: true,
+  state: true,
+  url: true,
+  endsAt: true,
+  facebookPost: { select: { _count: { select: { lots: true } } } },
+} as const;
+
+function postCandidate<R extends { listingType: string; facebookPost: { _count: { lots: number } } | null }>(row: R) {
+  const { facebookPost, ...rest } = row;
+  return { ...rest, listingType: normalizeListingType(row.listingType), postLots: facebookPost?._count.lots ?? 0 };
+}
+
+/** Take each joining offer out of its post of one (#2116), inside the caller's transaction — the post
+ *  goes and its number is never given again. The refusals have already kept out a lot of a post of
+ *  several. */
+async function leavePostsOfOne(
+  tx: DbTransaction,
+  offers: readonly { id: string; facebookPostId: string | null }[]
+): Promise<void> {
+  for (const offer of offers) if (offer.facebookPostId) await detachFacebookLot(tx, offer.id);
+}
+
 /**
  * Put several Facebook offers into one post, numbered as lots **in the order given** — the order
  * the collector ticked them is the order the album shows them.
  *
- * They must be offers in one group, in no other post, and not yet up (ADR-0061 §2): a lot of a post
- * goes up with the post. They share one listing type unless the group's posts may mix them (#1671).
+ * They must be offers in one group, in no post of several, and not yet up (ADR-0061 §2): a lot of a
+ * post goes up with the post. Each leaves its post of one, which goes (#2116). They share one listing type unless the group's posts may mix them (#1671).
  * The auctions' closing time becomes one — the first auction's that has one — since the lots of a
  * post close together; a quick buy closes at no time and keeps none. Every post is given a title
  * (#1862), what tells it apart from the other posts running at once; a blank one is refused.
@@ -139,28 +168,17 @@ export async function writeFacebookPost(
   const ids = [...new Set(offerIds)];
   const rows = await tx.offer.findMany({
     where: { id: { in: ids }, collectionId },
-    select: {
-      id: true,
-      offerNo: true,
-      facebookGroupId: true,
-      facebookPostId: true,
-      listingType: true,
-      state: true,
-      url: true,
-      endsAt: true,
-    },
+    select: POST_CANDIDATE_SELECT,
   });
   if (rows.length !== ids.length) throw new Error("Offer not found or access denied.");
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const lots = ids.map((id) => {
-    const row = byId.get(id)!;
-    return { ...row, listingType: normalizeListingType(row.listingType) };
-  });
+  const byId = new Map(rows.map((r) => [r.id, postCandidate(r)]));
+  const lots = ids.map((id) => byId.get(id)!);
   const groupId = lots.find((l) => l.facebookGroupId !== null)?.facebookGroupId ?? null;
   const refusal = facebookPostRefusal(lots, {
     mixedListingTypes: groupId ? await facebookGroupMixesTypes(groupId) : false,
   });
   if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
+  await leavePostsOfOne(tx, lots);
 
   const auction = (l: (typeof lots)[number]) => isAuctionListing(l.listingType);
   const endsAt = lots.find((l) => auction(l) && l.endsAt !== null)?.endsAt ?? null;
@@ -188,9 +206,10 @@ export interface FacebookLotsAdded {
 }
 
 /**
- * Add offers to an existing multi-lot post as its next lots (#1870), **in the order given** — the
- * order the collector ticked or picked them — before the post is up: a post pending or live keeps the
- * lots it went up with, and is refused whole.
+ * Add offers to an existing post as its next lots (#1870), **in the order given** — the order the
+ * collector ticked or picked them — before the post is up: a post pending or live keeps the lots it
+ * went up with, and is refused whole. Each offer leaves its post of one, which goes, and a post of one
+ * added to stops following its offer's title (#2116).
  *
  * Each offer is asked what *Post together* asks of every offer (`facebookLotAddRefusal`): one that
  * fails is turned away by number with its reason and the rest are added; when none qualifies nothing
@@ -226,19 +245,10 @@ export async function addFacebookLots(
   const ids = [...new Set(offerIds)];
   const rows = await prisma.offer.findMany({
     where: { id: { in: ids }, collectionId: post.collectionId },
-    select: {
-      id: true,
-      offerNo: true,
-      facebookGroupId: true,
-      facebookPostId: true,
-      listingType: true,
-      state: true,
-      url: true,
-      endsAt: true,
-    },
+    select: POST_CANDIDATE_SELECT,
   });
   if (rows.length !== ids.length) throw new Error("Offer not found or access denied.");
-  const byId = new Map(rows.map((r) => [r.id, { ...r, listingType: normalizeListingType(r.listingType) }]));
+  const byId = new Map(rows.map((r) => [r.id, postCandidate(r)]));
   const target = {
     postId,
     groupId: post.groupId,
@@ -264,6 +274,9 @@ export async function addFacebookLots(
   const endsAt = auctions.find((l) => l.endsAt !== null)?.endsAt ?? null;
   const first = Math.max(0, ...post.lots.map((l) => l.facebookLotNo ?? 0)) + 1;
   const added = await prisma.$transaction(async (tx) => {
+    await leavePostsOfOne(tx, joining);
+    // A post of one that gains a second lot keeps the title it has, as its own from now on (#2116).
+    await tx.facebookPost.update({ where: { id: postId }, data: { titleFollowsOffer: false } });
     const numbered: FacebookLotsAdded["added"] = [];
     for (const [index, offer] of joining.entries()) {
       await tx.offer.update({
@@ -285,8 +298,9 @@ export async function addFacebookLots(
 
 /**
  * The offers that could join a post as further lots (#1870) — what its screen's *Add lots…* picks
- * from: Facebook offers in the post's group, in no post, not yet up, and of a type the post holds
- * unless the group's posts may mix them — the same conditions `addFacebookLots` asks again on save.
+ * from: Facebook offers in the post's group, alone in a post of one (#2116) or in none, not yet up,
+ * and of a type the post holds unless the group's posts may mix them — the same conditions
+ * `addFacebookLots` asks again on save.
  * Empty once the post is up, since it then takes none. In offer order, read as a post's lots are.
  */
 export async function listFacebookLotCandidates(
@@ -303,9 +317,18 @@ export async function listFacebookLotCandidates(
   if (post.lots.some((l) => isFacebookLotPosted(l.state))) return [];
   const mixes = await facebookGroupMixesTypes(post.groupId);
   const types = [...new Set(post.lots.map((l) => normalizeListingType(l.listingType)))];
+  const alone = (
+    await prisma.offer.groupBy({
+      by: ["facebookPostId"],
+      where: { facebookGroupId: post.groupId, facebookPostId: { not: null } },
+      _count: { _all: true },
+    })
+  )
+    .filter((g) => g._count._all === 1 && g.facebookPostId !== postId)
+    .map((g) => g.facebookPostId!);
   const offers = await readKitLots(post.collectionId, {
     facebookGroupId: post.groupId,
-    facebookPostId: null,
+    OR: [{ facebookPostId: null }, { facebookPostId: { in: alone } }],
     state: { in: OFFER_STATES.filter((s) => !isFacebookLotPosted(s)) },
   });
   return mixes ? offers : offers.filter((o) => types.includes(o.listingType));
@@ -406,8 +429,8 @@ export async function findFacebookPostId(
 
 /**
  * A post as its own screen shows it (#1842): the kit every lot's card used to repeat, read once off its
- * first lot, and each lot's sale. Null for a post that is gone — dissolved when it was left with one
- * lot not yet up, or removed with its last lot.
+ * first lot, and each lot's sale. Null for a post that is gone — removed with its last lot, deleted, or
+ * a post of one whose offer joined another post (#2116).
  */
 export async function getFacebookPostScreen(ownerId: string, postId: string): Promise<FacebookPostScreen | null> {
   const post = await prisma.facebookPost.findUnique({
@@ -714,9 +737,9 @@ function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWh
 
 /**
  * Every post in a collection, newest first (#1850) — of several lots or of one, since every Facebook
- * offer that has gone up is in a post (#1989). Paged by offset like the other lists; a post's stage is
- * read off its lots, so its filter is a query over them rather than a column. The Facebook offers not
- * yet in a post are `listFacebookOffersNotInPost`'s.
+ * offer is in a post (#2116), so this is the whole of Facebook, published or not. Paged by offset
+ * like the other lists; a post's stage is read off its lots, so its filter is a query over them rather
+ * than a column.
  */
 export async function listFacebookPostsPaginated(
   ownerId: string,
@@ -786,60 +809,6 @@ export async function listFacebookPostsPaginated(
   return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
 }
 
-/** A Facebook offer not yet in a post (#1989), as the list of posts names it under *Not in a post
- *  yet*: still being prepared or Ready, its post made when it is published or grouped. */
-export interface FacebookOfferNotInPost {
-  offerId: string;
-  offerNo: number;
-  title: string;
-  listingType: OfferListingType;
-  state: OfferState;
-  group: { id: string; name: string; archived: boolean };
-}
-
-/** The states a Facebook offer is in while it has no post yet — what *Not in a post yet* lists, and
- *  what the list's *Being prepared* and *Ready to post* chips narrow it to. */
-const NOT_YET_POSTED_STATES: readonly OfferState[] = OFFER_STATES.filter((s) => !isFacebookLotPosted(s));
-
-/**
- * The Facebook offers in a collection that are in no post and not yet up (#1989) — so the list of posts
- * is a complete picture of Facebook, published or not. Each gets its post when it is published alone
- * (a post of one lot) or put into one with others. In offer order; `groupIds` and `states` narrow it as
- * the list's group filter and stage chips do.
- */
-export async function listFacebookOffersNotInPost(
-  ownerId: string,
-  collectionId: string,
-  filters: { groupIds?: readonly string[]; states?: readonly OfferState[] } = {}
-): Promise<FacebookOfferNotInPost[]> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const states = (filters.states ?? NOT_YET_POSTED_STATES).filter((s) => NOT_YET_POSTED_STATES.includes(s));
-  const where: Prisma.OfferWhereInput = {
-    facebookGroupId: filters.groupIds?.length ? { in: [...filters.groupIds] } : { not: null },
-    facebookPostId: null,
-    state: { in: [...states] },
-  };
-  const [lots, groups] = await Promise.all([
-    readKitLots(collectionId, where),
-    prisma.offer.findMany({
-      where: { ...where, collectionId },
-      select: { id: true, facebookGroup: { select: { id: true, name: true, archivedAt: true } } },
-    }),
-  ]);
-  const groupOf = new Map(groups.map((o) => [o.id, o.facebookGroup!]));
-  return lots.map((lot) => {
-    const group = groupOf.get(lot.offerId)!;
-    return {
-      offerId: lot.offerId,
-      offerNo: lot.offerNo,
-      title: lot.title,
-      listingType: lot.listingType,
-      state: lot.state,
-      group: { id: group.id, name: group.name, archived: group.archivedAt !== null },
-    };
-  });
-}
-
 /** The groups a collection's posts are in, by name — what the list of posts filters by (#1850). */
 export async function listFacebookPostGroups(
   ownerId: string,
@@ -855,14 +824,15 @@ export async function listFacebookPostGroups(
 }
 
 /**
- * Take a lot out of its post before the post is up: the lots after it move up one, and a post left
- * with one lot is dissolved, that offer becoming a post of its own. Once one lot has gone up the lots
- * are what was posted, and stay.
+ * Take a lot out of its post before the post is up: the lots after it move up one, and the lot goes
+ * into a new post of one of its own (#2116) — every Facebook offer is in a post. A post left with one
+ * lot stays, a post of one with the title it had. The only lot of a post has nowhere to be taken out
+ * to, so it stays. Once one lot has gone up the lots are what was posted, and stay.
  */
 export async function removeFacebookLot(ownerId: string, offerId: string): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
-    select: { collectionId: true, facebookPostId: true },
+    select: { collectionId: true, facebookGroupId: true, facebookPostId: true },
   });
   if (!offer) throw new Error("Offer not found or access denied.");
   await assertCollectionOwner(ownerId, offer.collectionId);
@@ -877,9 +847,16 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
       "The post is up, so its lots stay as they were posted. Withdraw this lot instead."
     );
   }
-  await prisma.$transaction((tx) => detachFacebookLot(tx, offerId));
-  // Its lot photo goes with it, and so does the last lot's of a post it dissolved (#1861).
-  await pruneFacebookLotPhotos(offer.collectionId);
+  if (lots.length < 2) return;
+  const title = (await readOfferPostTitles([offerId])).get(offerId) ?? null;
+  const ownPostId = await prisma.$transaction(async (tx) => {
+    await detachFacebookLot(tx, offerId);
+    return writePostOfOne(tx, { id: offerId, collectionId: offer.collectionId, facebookGroupId: offer.facebookGroupId! }, title);
+  });
+  // A post of one is laid out as text, so the lot's captioned photo goes, and so does the last lot's
+  // of a post it left with one (#1861).
+  await syncFacebookPostLotPhotos(ownPostId);
+  await syncFacebookPostLotPhotos(offer.facebookPostId);
 }
 
 /** A post's lots with what *Delete post…* weighs (#2060), in lot order. */
@@ -1023,39 +1000,15 @@ export async function setFacebookPostTitle(ownerId: string, postId: string, titl
   const refusal = facebookPostTitleRefusal(title);
   if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
   await assertPostOwner(ownerId, postId);
-  await prisma.facebookPost.update({ where: { id: postId }, data: { title: title.trim() } });
-}
-
-/**
- * Give every untitled post of one offer its offer's title (#2068) — the posts made before a post of
- * one took the title as it went up. Once, at boot (`instrumentation-node.ts`): the title is the
- * offer's display title, which only TypeScript builds, so a SQL migration could not. Idempotent — a
- * post with a title is never touched, and a title cannot be cleared — so every later boot costs one
- * query. Posts of several lots keep asking for their own (#1862). Returns how many it titled.
- */
-export async function titleUntitledFacebookPostsOfOne(): Promise<number> {
-  const posts = await prisma.facebookPost.findMany({
-    where: { title: null },
-    select: { id: true, lots: { select: { id: true }, take: 2 } },
-  });
-  const ofOne = posts.filter((p) => p.lots.length === 1).map((p) => ({ postId: p.id, offerId: p.lots[0].id }));
-  const titles = await readOfferPostTitles(ofOne.map((p) => p.offerId));
-  let titled = 0;
-  for (const { postId, offerId } of ofOne) {
-    const title = titles.get(offerId);
-    if (!title) continue;
-    const { count } = await prisma.facebookPost.updateMany({ where: { id: postId, title: null }, data: { title } });
-    titled += count;
-  }
-  return titled;
+  // Renamed by hand, a post of one no longer follows its offer's title (#2116).
+  await prisma.facebookPost.update({ where: { id: postId }, data: { title: title.trim(), titleFollowsOffer: false } });
 }
 
 /**
  * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook offer
- * that is the post's link. A lot of a post takes the whole post live with it. An offer in no post,
- * and every offer off Facebook, is the ordinary `publishOffer` — which, for a Facebook offer, makes
- * its post of one lot as it goes up (#1989), titled with the offer's title (#2068); a `postTitle`
- * typed in the dialog replaces it, a blank one leaves it as the offer's.
+ * that is the post's link. A lot of a post takes the whole post live with it, a post of one included:
+ * the dialog asks only for the link and the approval, as for a post of several, and the title is the
+ * post's (#2116). An offer in no post — every offer off Facebook — is the ordinary `publishOffer`.
  *
  * `to` is `pending` when the post went to the group's administrator rather than straight up (#1778):
  * the link is then the pending post's. Approving a pending offer is this same call with `active`.
@@ -1065,22 +1018,15 @@ export async function publishOfferOrPost(
   offerId: string,
   url: string | null,
   to: "active" | "pending" = "active",
-  endsAt?: Date | null,
-  postTitle?: string
+  endsAt?: Date | null
 ): Promise<void> {
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
   // The auctions an approval may re-time (#1779), read before anything moves: once approved they are
   // no longer told apart from the post's lots that were already up.
   const approved =
     to === "active" && endsAt !== undefined ? await pendingFacebookAuctions(ownerId, offerId) : [];
-  if (!offer?.facebookPostId) {
-    await publishOffer(ownerId, offerId, url, to);
-    const title = postTitle?.trim();
-    if (title) {
-      const placed = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
-      if (placed?.facebookPostId) await setFacebookPostTitle(ownerId, placed.facebookPostId, title);
-    }
-  } else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
+  if (!offer?.facebookPostId) await publishOffer(ownerId, offerId, url, to);
+  else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
   if (approved.length > 0) {
     await prisma.offer.updateMany({ where: { id: { in: approved } }, data: { endsAt } });
     // The post in the group is corrected to the closing time the approval states, so the text frozen
@@ -1295,6 +1241,7 @@ export async function takeFacebookPostBackToReady(ownerId: string, offerId: stri
       groupId: true,
       postNo: true,
       title: true,
+      titleFollowsOffer: true,
       layout: true,
       lots: {
         orderBy: { facebookLotNo: "asc" },
@@ -1330,6 +1277,7 @@ export async function takeFacebookPostBackToReady(ownerId: string, offerId: stri
           collectionId: post.collectionId,
           postNo,
           title: post.title,
+          titleFollowsOffer: post.titleFollowsOffer,
           groupId: post.groupId,
           layout: post.layout,
         },

@@ -158,9 +158,14 @@ describe("deleting a Facebook post with its offers (#2060)", () => {
     assert.equal(await prisma.item.count({ where: { id: { in: lots.map((l) => l.itemId) } } }), 3);
     assert.equal(await findFacebookPostId(userId, collectionId, postNo), null);
 
-    // The newest post went, so a `max + 1` allocation would hand its number straight out again.
-    const next = await createFacebookPost(userId, collectionId, [(await offer()).offerId, (await offer()).offerId], "Next");
-    assert.equal(next.postNo, postNo + 1);
+    // The newest post went, so a `max + 1` allocation would hand its number straight out again — to
+    // the next offer's post of one (#2116), the next post made.
+    const next = await offer();
+    const nextPost = await prisma.offer.findUniqueOrThrow({
+      where: { id: next.offerId },
+      select: { facebookPost: { select: { postNo: true } } },
+    });
+    assert.equal(nextPost.facebookPost?.postNo, postNo + 1);
   });
 
   it("deletes a post that is up, saying it was submitted to the group", async () => {

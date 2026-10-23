@@ -7,9 +7,6 @@
 // screen — and a reload, the Back button and a copied link all agree with what is on screen (#844).
 // The params keep the names they had before #2108 (`group`, `stage`, `untitled`), so an address
 // bookmarked before it still means what it meant.
-//
-// *Not in a post yet*'s fold is not here: it is not a filter, and keeps its own per-collection flag
-// (#1991).
 
 import { isFacebookPostStage, type FacebookPostStage } from "@/lib/facebook-post-rules";
 

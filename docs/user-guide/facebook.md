@@ -99,6 +99,8 @@ How an auction's post reads, and what a new auction starts from, each optional:
   | `{closesAt}` | when the auction closes |
   | `{lot}` | the lot number, in a post holding several lots |
   | `{offer}` | the offer's number — `412` for offer #412; in a post holding several lots, each lot's own |
+  | `{post}` | the post's number — `12` for Post #12, a post of one offer included; write any `#` yourself |
+  | `{postTitle}` | the post's title — for a post of one offer, the offer's own while it follows it |
   | `{terms}` | the note on shipping, payment and terms |
 
 - **Caption** — an auction lot's text under its photo, in a post with captions
@@ -124,6 +126,8 @@ How a quick buy's post reads:
   | `{price}` | the price |
   | `{lot}` | the lot number, in a post holding several lots |
   | `{offer}` | the offer's number — `412` for offer #412; in a post holding several lots, each lot's own |
+  | `{post}` | the post's number — `12` for Post #12, a post of one offer included; write any `#` yourself |
+  | `{postTitle}` | the post's title — for a post of one offer, the offer's own while it follows it |
   | `{terms}` | the note on shipping, payment and terms |
 
   A quick buy has no price default here: its price is set on each offer.
@@ -162,7 +166,7 @@ placeholder can pad it with zeros**, after a colon, to as many digits as you ask
 | `{offer:4}` | `0042` — padded to four digits |
 
 A number wider than you ask for is written in full: `{offer:2}` gives `412` for offer #412. This
-holds for `{offer}` and `{lot}` in post templates and captions, and for `{post}` in captions and a
+holds for `{offer}`, `{lot}` and `{post}` in post templates and captions, and for `{post}` in a
 captioned post's text; in that text `{offer:4}` pads every lot's number alike — `0412, 0413`. Anything
 else after the colon — `{offer:0}`, `{offer:x}` — is not a placeholder: it stays as typed and is named
 under the field.
@@ -352,24 +356,34 @@ of several lots, the same kit is on the post's own screen — see
   offer's type, or the offer's own (below);
 - **↓ Photos**: the offer's photos as one download.
 
-### Every offer that goes up is a post
+### Every Facebook offer is a post from the start
 
 On Facebook what you put up is always a post — with one offer in it or many — and Stamporama keeps it
-that way. **Publish…** on a Facebook offer that is in no post makes it a **post of its own**, with a
-number — **Post #12** — and asks for the post's **title** beside the link. The field starts on the
-**offer's title**, so you see what the post will be called; type another to use that instead, and if
-you clear it the post takes the offer's title all the same. The title is copied once, when the post is
-made: from then on it is the post's own, renamed with the pencil like any post's, and renaming the
-offer later does not rename the post. Posts of one offer made before this was so were given their
-offer's title too. Creating an offer makes no post — only publishing it alone does — so an offer you
-mean to put in a post with others never passes through one of its own.
+that way from the moment an offer is made. **A new Facebook offer is a post of its own**, however it is
+made — the offer form, quick offer mode, Generate offers, Series from singles, the Lot builder or the
+agent API — with a number — **Post #12** — and a **title**, the offer's own. Moving an offer onto
+Facebook gives it one too, and moving it off Facebook takes it away. Facebook offers made before this
+was so were each given a post of their own.
+
+**A post of one offer and a post of several differ only in their templates.** The post's screen, its
+number and title, its moves and the placeholders are the same for both, so the post's screen is where
+a post of one is prepared, priced, marked ready and published too.
+
+**The post's title follows the offer's** while it is a post of one: rename the offer, or change what it
+lists so its title changes, and the post is renamed with it. That stops for good when you rename the
+post yourself — with the pencil on its screen — or when it gains a second lot; it then keeps the title
+it has.
+
+**Joining another post** — **Post together…**, **Add to post…**, or Generate offers' **In a new post** —
+takes the offer out of its post of one, which goes; its number is never used again.
 
 A post of one offer reads exactly as a single post always did: its text comes from the auction or
 quick-buy post template, the layout for posts of several lots does not apply, and **↓ Photos** is the
 offer's own download. The offer's Facebook card keeps everything it showed before and adds the post's
 number, title and where it stands, with **Open post** — the post's screen, with that one offer as its
-only row. If the group turns the post down, the offer goes back to Ready and stays in its post;
-publishing it again publishes that post.
+only row. **Publish…** asks only for the link, and whether the post is waiting for the group's
+approval, as for a post of several: the title is the post's. If the group turns the post down, the
+offer goes back to Ready and stays in its post; publishing it again publishes that post.
 
 ### Once it is posted, the text stays as posted
 
@@ -472,7 +486,7 @@ quick buy's **refresh** count starts on the day it is approved, not the day it w
 A post can hold several offers as **lots** — an album, each photo a lot of its own. On the
 **Offers** screen, tick the offers to post together and choose **Post together…** in the selection
 bar, then give the post a **title** — *Generalgouvernement 1940–44*, say — and choose **Post together**.
-Every post has one: with several posts running at once, it tells them apart. They must all be Facebook offers in the same group, not yet posted and not in another post —
+Every post has one: with several posts running at once, it tells them apart. They must all be Facebook offers in the same group, not yet posted and not lots of another post of several — each one's post of its own goes —
 and all auctions or all quick buys, unless the group's posts may mix them (**A post may mix auctions
 and quick buys**, above). They become lots 1, 2, 3… in the order you ticked them — until the post is up
 you can [change that order](#changing-the-order-of-the-lots) on its screen. The auctions among
@@ -596,7 +610,7 @@ show, and from the
 ### The list of posts
 
 **Marketplaces → Facebook** in the sidebar lists every post, newest first, headed *Facebook posts* —
-posts of several lots and offers posted alone alike, so it is everything you have put up on Facebook.
+posts of several lots and posts of one offer alike, so it is the whole of Facebook, posted or not.
 Each row shows the post's number, title and group, where it stands (being prepared, ready to post,
 waiting for approval, up in the group, or over), how many lots it holds and how many of them are still
 for sale — neither sold nor withdrawn — and its layout (**Text** or **Captions**), or **Posted alone**
@@ -606,14 +620,6 @@ to show every post. The list remembers its filters for the collection: leave it 
 the sidebar, a post's screen or Quick jump — and it shows the same group and chips, and a reload or a
 copied link keeps them too. While any filter narrows the list, a band under the toolbar says which,
 with **Clear filters** to show every post again.
-
-Above the posts, **Not in a post yet** lists the Facebook offers being prepared or Ready that are in no
-post — each one linking to its offer — so the screen shows the whole of Facebook, posted or not. Each
-gets its post when you publish it alone, or joins one with **Post together** or **Add to post…** on the
-**Offers** screen. The group filter narrows it too, **Being prepared** and **Ready to post** narrow it to
-offers in that state, and it is hidden under the other stages and **No title**. It starts folded to one
-line — **Not in a post yet · 68** — so the posts follow straight beneath; click it to open the list and
-again to fold it. The screen remembers which way you left it, in this browser.
 
 Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · Generalgouvernement
 1940–44 · lot 3 of 5** and
@@ -636,8 +642,9 @@ post's closing time. On the **Offers** screen, tick them and choose **Add to pos
 bar: it lists the posts of their group not yet up, newest first, by number and title. On the post's
 screen, **Add lots…** beside the *Lots* heading lists the offers that could join and adds the ones you
 pick; each row says which lot it will become. An offer joins on the same conditions as for **Post
-together** — a Facebook offer in the post's group, not yet posted, in no other post, and of the
-post's listing type unless the group's posts may mix them. One that does not qualify is named with
+together** — a Facebook offer in the post's group, not yet posted, in no other post of several lots,
+and of the post's listing type unless the group's posts may mix them; its post of one goes. A post of
+one that gains a lot this way keeps the title it has as its own. One that does not qualify is named with
 the reason and the others are added; on the **Offers** screen it stays ticked. A post waiting for
 approval or up in the group takes no new lots.
 
@@ -717,13 +724,14 @@ waiting for approval or in the group — its lots stay in the order they were po
 grip nor the sorting is offered.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
-move up, and the offer taken out is in no post again — it gets a post of its own only when you publish
-it alone. A post left with one lot is dissolved the same way, so that offer is in no post either; its
-number is not used again. Once the post is up, its lots stay as they were posted. Deleting a lot's
-offer works the same way as taking it out, except that a post already up keeps its last lot as a post
-of one, and is removed only with it.
+move up, and the offer taken out becomes a post of its own, titled with its own title. A post left
+with one lot stays, a post of one with the title it had; the only lot of a post is not offered to be
+taken out, since it already is one. Once the post is up, its lots stay as they were posted. Deleting a
+lot's offer works the same way, except that the offer goes with it; a post left with no lot is
+removed, and its number is not used again.
 
-A lot cannot be moved to another group while it is in a post; take it out first. Nor can it change
+A lot cannot be moved to another group while it is in a post of several; take it out first. An offer
+alone in its post moves to another group with its post, until it is up. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.
 
 #### Deleting a post
@@ -766,19 +774,13 @@ A captioned post is written from its own templates, set beside the layout:
   | `{terms}` | the note on shipping, payment and terms |
 
 - **Auctions → Caption** and **Quick buys → Caption** — the text under each lot's photo, from the
-  template of the lot's type. They take the same placeholders as that type's post template, except
-  `{terms}` — the note goes in the post's text, once — and two more:
+  template of the lot's type. They take the same placeholders as that type's post template — `{post}`
+  and `{postTitle}` among them — except `{terms}`: the note goes in the post's text, once.
 
-  | Placeholder | Becomes |
-  | --- | --- |
-  | `{post}` | the post's number — `1` for Post #1 |
-  | `{postTitle}` | the post's title |
-
-`{post}` and `{postTitle}` are offered only in these templates. An offer posted alone has no post
-number or title until it is published, and its text is written from the auction and quick-buy post
-templates, so those do not take them: there they stay as typed, and the field says so. A post made before titles has none until you give it one; while it has
-none, `{postTitle}` is left empty and the kit says so under the post text — nothing is put in its
-place.
+`{post}` and `{postTitle}` are known from the moment an offer is made, since every Facebook offer is
+in a post from the start, so every template takes them. A post with no title — one made before titles,
+or a post of one whose offer has no title — leaves `{postTitle}` empty, and the kit says so under the
+post text; nothing is put in its place.
 
 An offer's own template (above), if it has one, writes its caption in a captioned post.
 

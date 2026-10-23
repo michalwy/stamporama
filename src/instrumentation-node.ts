@@ -84,7 +84,7 @@ import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rul
 import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
 import { startAuctionReminderSweep } from "@/lib/auction-reminder-sweep";
 import { freezeUnfrozenFacebookPosts } from "@/lib/facebook-auctions";
-import { titleUntitledFacebookPostsOfOne } from "@/lib/facebook-posts";
+import { syncFollowingPostTitles } from "@/lib/offers";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -114,9 +114,11 @@ export async function start(): Promise<void> {
   } catch (err) {
     console.error("[facebook] freezing posted offers' text failed", err);
   }
+  // A post of one follows its offer's title (#2116): those the migration made, and any title that
+  // moved out of sight — a derived label over an area renamed — are brought back in step.
   try {
-    const titled = await titleUntitledFacebookPostsOfOne();
-    if (titled > 0) console.log(`[facebook] titled ${titled} post(s) of one offer with the offer's title`);
+    const titled = await syncFollowingPostTitles();
+    if (titled > 0) console.log(`[facebook] brought ${titled} post(s) of one offer in step with the offer's title`);
   } catch (err) {
     console.error("[facebook] titling posts of one offer failed", err);
   }

@@ -692,11 +692,11 @@ export function OfferDetailPanel({
   /** Go live with the URL the platform gave back (#399): `publishOffer` transitions first and writes
    * the URL after, so a refused activation — a lost set, a missing price — leaves no listing link
    * behind on an offer that never went live. A blank URL is a normal answer. */
-  function publish(url: string, target: PublishTarget, endsAt?: string, postTitle?: string) {
+  function publish(url: string, target: PublishTarget, endsAt?: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { publishOfferAction } = await import("@/app/actions/offers");
-      const result = await publishOfferAction(offerId, url, target, endsAt, postTitle);
+      const result = await publishOfferAction(offerId, url, target, endsAt);
       if (result.status === "success") {
         setActivating(null);
         // Whatever the Assistant reported described the form, and the form has now been posted.
@@ -1749,7 +1749,6 @@ export function OfferDetailPanel({
           initialTarget={activating.target}
           approving={activating.approving}
           offerId={offerId}
-          askPostTitle={offer.facebook !== null && offer.facebook.post === null}
           isPending={isPending}
           error={actionError}
           onClose={() => {

@@ -40,10 +40,37 @@ export const FACEBOOK_TERMS_PLACEHOLDER: FacebookPostPlaceholder = {
 };
 
 /**
+ * The post's own number (#1854) — `1` for *Post #1* (#1842), bare as `{offer}` is, so the template
+ * writes any prefix. Offered in every template: every Facebook offer is in a post from the moment it
+ * is made (#2116), so a post of one lot knows its number while its text is written. Until then an
+ * offer posted alone had none before it was published (#1989), and only the captioned templates
+ * offered it.
+ */
+export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
+  token: "{post}",
+  label: "Post number",
+  example: "1",
+  number: true,
+};
+
+/**
+ * The post's title (#1862), as the collector gave it — or, on a post of one, its offer's title, which
+ * it follows (#2116) — offered where `{post}` is and for the same reason. A post made before titles,
+ * or of one whose offer has no title, has none; the kit then names the gap rather than filling it
+ * (#1692).
+ */
+export const FACEBOOK_POST_TITLE_PLACEHOLDER: FacebookPostPlaceholder = {
+  token: "{postTitle}",
+  label: "Post title",
+  example: "Generalgouvernement 1940–44",
+};
+
+/**
  * The placeholders an **auction's** post template may carry.
  *
  * Settled with the issue (#1543): the description, the starting price, the increment, the closing
- * time and the lot number — and the offer's title since #1671, and its number since #1694. They are the `{token}` spelling every
+ * time and the lot number — and the offer's title since #1671, its number since #1694, and the post's
+ * number and title since #2116. They are the `{token}` spelling every
  * other template here uses (`offer-title-template.ts`). Rendering them is #1544's; an unknown token
  * is kept as typed rather than refused, the title template's rule.
  */
@@ -55,6 +82,8 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3", number: true },
   { token: "{offer}", label: "Offer number", example: "412", number: true },
+  FACEBOOK_POST_NUMBER_PLACEHOLDER,
+  FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
@@ -68,6 +97,8 @@ export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[]
   { token: "{price}", label: "Price", example: "25 zł", amount: true },
   { token: "{lot}", label: "Lot number", example: "3", number: true },
   { token: "{offer}", label: "Offer number", example: "412", number: true },
+  FACEBOOK_POST_NUMBER_PLACEHOLDER,
+  FACEBOOK_POST_TITLE_PLACEHOLDER,
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
@@ -112,42 +143,12 @@ export function toFacebookMultiLotLayout(value: string | null | undefined): Face
 }
 
 /**
- * The post's own number (#1854) — `1` for *Post #1* (#1842), bare as `{offer}` is, so the template
- * writes any prefix. Offered only where a post always has one: a captioned post's text and its
- * captions. An offer posted alone has no post number until it is published, when its post of one lot
- * gets one (#1989) — so the post templates, which write it before and after, do not offer it, and
- * nothing would stand in for it there (#1692).
- */
-export const FACEBOOK_POST_NUMBER_PLACEHOLDER: FacebookPostPlaceholder = {
-  token: "{post}",
-  label: "Post number",
-  example: "1",
-  number: true,
-};
-
-/**
- * The post's title (#1862), as the collector gave it — offered where `{post}` is and for the same
- * reason: an offer posted alone has no post until it is published, so no title either. A post made
- * before titles has none until it is given one; the kit then names the gap rather than filling it
- * (#1692).
- */
-export const FACEBOOK_POST_TITLE_PLACEHOLDER: FacebookPostPlaceholder = {
-  token: "{postTitle}",
-  label: "Post title",
-  example: "Generalgouvernement 1940–44",
-};
-
-/**
  * The placeholders a lot's **caption** may carry in a captioned post (#1841): its type's post
- * placeholders without `{terms}` — the note belongs to the post's shared text, stated once, not to
- * any one photo — and with the post's number (#1854) and title (#1862).
+ * placeholders — the post's number (#1854) and title (#1862) among them — without `{terms}`: the note
+ * belongs to the post's shared text, stated once, not to any one photo.
  */
 export function facebookCaptionPlaceholders(listingType: OfferListingType): readonly FacebookPostPlaceholder[] {
-  return [
-    ...facebookPostPlaceholders(listingType).filter((p) => p.token !== FACEBOOK_TERMS_PLACEHOLDER.token),
-    FACEBOOK_POST_NUMBER_PLACEHOLDER,
-    FACEBOOK_POST_TITLE_PLACEHOLDER,
-  ];
+  return facebookPostPlaceholders(listingType).filter((p) => p.token !== FACEBOOK_TERMS_PLACEHOLDER.token);
 }
 
 /**

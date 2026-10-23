@@ -51,9 +51,8 @@ import {
 // group's length and time of day, and the field holds whichever the collector settles on — written
 // to every auction of the post. A quick buy closes at no time and is not asked.
 //
-// A Facebook offer published in no post goes up as a post of one lot (#1989), made by this publish,
-// so the dialog asks for that post's title too. It may be left empty: the post is then listed as
-// untitled, never given a title nobody wrote (#1692).
+// A Facebook offer is in a post from the moment it is made (#2116), a post of one included, so the
+// dialog never asks for a post's title: it is the post's.
 
 const INPUT: React.CSSProperties = {
   ...formControl,
@@ -88,7 +87,6 @@ export function ActivateOfferDialog({
   canWait = true,
   approving = false,
   offerId,
-  askPostTitle = false,
   isPending,
   error,
   onClose,
@@ -109,19 +107,14 @@ export function ActivateOfferDialog({
   approving?: boolean;
   /** Approving, the offer whose Facebook auctions may be asked for a closing time (#1779). */
   offerId?: string;
-  /** A Facebook offer in no post: publishing makes its post of one lot (#1989), whose title is asked —
-   *  starting on the offer's title, which the post takes when the field is left empty (#2068). */
-  askPostTitle?: boolean;
   isPending: boolean;
   error?: string;
   onClose: () => void;
-  /** `endsAt` is sent only when the closing time was asked: an ISO instant, or "" for none.
-   *  `postTitle` only when the post's title was asked, "" when left empty. */
-  onConfirm: (url: string, target: PublishTarget, endsAt?: string, postTitle?: string) => void;
+  /** `endsAt` is sent only when the closing time was asked: an ISO instant, or "" for none. A post's
+   *  title is never asked here — it is the post's, a post of one included (#2116). */
+  onConfirm: (url: string, target: PublishTarget, endsAt?: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
-  const [postTitle, setPostTitle] = useState(askPostTitle ? offerLabel : "");
-  const asksTitle = askPostTitle && !approving;
   const [target, setTarget] = useState<PublishTarget>(
     approving || !canWait
       ? "active"
@@ -140,13 +133,7 @@ export function ActivateOfferDialog({
       : "";
   const written = toLocalInputValue(closing.value?.endsAt ?? null);
   const endsAtValue = endsAt ?? (proposal || written);
-  const confirm = () =>
-    onConfirm(
-      url,
-      target,
-      closing.value ? fromLocalInputValue(endsAtValue) : undefined,
-      asksTitle ? postTitle : undefined
-    );
+  const confirm = () => onConfirm(url, target, closing.value ? fromLocalInputValue(endsAtValue) : undefined);
   const busy = isPending || closing.loading;
   const lots = facebookLots ?? 0;
   const pending = target === "pending";
@@ -220,24 +207,6 @@ export function ActivateOfferDialog({
             />
             Waiting for approval — the platform or group has to accept it first
           </label>
-        )}
-        {asksTitle && (
-          <div style={{ marginBottom: "1rem" }}>
-            <LabelWithError htmlFor="f-post-title">Post title (optional)</LabelWithError>
-            <TextInput
-              id="f-post-title"
-              value={postTitle}
-              disabled={isPending}
-              onChange={(e) => setPostTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !busy) confirm();
-              }}
-              style={INPUT}
-            />
-            <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              It goes up as a post of its own, named by this on Facebook posts. Left empty, it takes the offer&apos;s title.
-            </p>
-          </div>
         )}
         <LabelWithError htmlFor="f-listing-url">{label}</LabelWithError>
         <TextInput
