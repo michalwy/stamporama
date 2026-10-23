@@ -1220,6 +1220,30 @@ export async function rejectOfferOrPost(ownerId: string, offerId: string): Promi
   for (const lot of lots) await setOfferState(ownerId, lot.id, "ready");
 }
 
+/**
+ * Take a post that is not up yet back to Preparing (#2115): every Ready lot goes through the
+ * ordinary `ready → preparing`, as each offer's own *Back to preparing* does, so prices, texts,
+ * photos and lot order stay. Refused once any lot is past Ready — a post waiting for approval or up
+ * has its own moves back. Returns how many lots went back.
+ */
+export async function takeFacebookPostBackToPreparing(ownerId: string, postId: string): Promise<number> {
+  await assertPostOwner(ownerId, postId);
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    orderBy: { facebookLotNo: "asc" },
+    select: { id: true, state: true },
+  });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      "The post has gone up, so its lots no longer go back to Preparing."
+    );
+  }
+  const ready = lots.filter((l) => l.state === "ready");
+  for (const lot of ready) await setOfferState(ownerId, lot.id, "preparing");
+  return ready.length;
+}
+
 /** What taking a post back to Ready did (#1998): the post the lots are Ready in now — the same one,
  *  or the new one they moved into when lots sold or withdrawn stayed behind — and whether it split. */
 export interface FacebookBackToReady {

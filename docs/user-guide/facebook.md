@@ -507,7 +507,9 @@ show, and from the
 
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
-  offered only while it can be made: **Publish…** once every lot is Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
+  offered only while it can be made: **Publish…** once every lot is Ready, **Back to preparing** while
+  a lot is Ready and the post is not up yet ([below](#taking-a-ready-post-back-to-preparing)), and
+  **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
   the group's approval, and **Back to Ready…** while it is up
   ([above](#taking-a-post-that-is-up-back-to-ready)). While some lot is not Ready yet, it says which.
 - **Post kit** — the layout (laid out in its text as below, or in captions
@@ -673,6 +675,20 @@ Above the lots, three buttons act on **every lot of the post**:
 Once the post is up — waiting for approval or in the group — the rows show its price, state and link
 as before: pricing and readying belong to before it goes up. The **Prepare** screen itself stays as it
 is, for offers on every platform, these lots included.
+
+#### Taking a Ready post back to Preparing
+
+A post that is Ready but not up yet can be taken back to work on it without opening every lot's offer:
+
+- **Back to preparing**, among the post's moves under **The post**, takes **every Ready lot** back to
+  Preparing at once; the post then reads as being prepared.
+- **Back to preparing** in a lot's **⋮** does the same for that one lot, as the offer's own menu does.
+
+Nothing else changes: prices, titles, descriptions, photos and the order of the lots stay, and each
+offer is exactly as its own **Back to preparing** would leave it. There is no confirmation — **Mark
+ready** takes the lots forward again. Neither is offered once the post is waiting for the group's
+approval or up: those have **Rejected — back to Ready** and
+[**Back to Ready…**](#taking-a-post-that-is-up-back-to-ready).
 
 #### Changing the order of the lots
 

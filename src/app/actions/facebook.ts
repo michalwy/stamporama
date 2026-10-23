@@ -30,6 +30,7 @@ import {
   setFacebookPostLayout,
   setFacebookPostTitle,
   setFacebookPostTitleTemplate,
+  takeFacebookPostBackToPreparing,
   takeFacebookPostBackToReady,
   type FacebookBackToReady,
   type FacebookLotsAdded,
@@ -228,6 +229,20 @@ export async function takeFacebookPostBackToReadyAction(
     return { status: "success", ...moved };
   } catch (err) {
     return failure(err, "Failed to take the post back to Ready.");
+  }
+}
+
+/** Take a post not yet up back to Preparing (#2115): every Ready lot of it, as its own *Back to
+ *  preparing* would. */
+export async function takeFacebookPostBackToPreparingAction(
+  postId: string
+): Promise<{ status: "success"; count: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const count = await takeFacebookPostBackToPreparing(session.user.id, postId);
+    return { status: "success", count };
+  } catch (err) {
+    return failure(err, "Failed to take the post back to Preparing.");
   }
 }
 

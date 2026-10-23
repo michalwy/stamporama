@@ -848,6 +848,8 @@ export function isFacebookLotPosted(state: string): boolean {
  *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
  *  - `backToReady` — while the post is up and a lot of it is still for sale (#1998): a Publish that
  *    was a mistake, or a post gone from the group, taken back to Ready (`facebookBackToReadyPlan`);
+ *  - `backToPreparing` — while the post is not up and a lot of it is Ready (#2115): every Ready lot
+ *    taken back to Preparing, as each offer's own *Back to preparing* would;
  *  - `takeOut` — a lot may leave the post only until the post is up;
  *  - `addLots` — offers may join the post as further lots only until it is up, too (#1870);
  *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
@@ -858,6 +860,7 @@ export interface FacebookPostMoves {
   reject: boolean;
   withdraw: boolean;
   backToReady: boolean;
+  backToPreparing: boolean;
   takeOut: boolean;
   addLots: boolean;
   waiting: number[];
@@ -875,6 +878,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     reject: pending,
     withdraw: pending,
     backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
+    backToPreparing: !posted && ready,
     takeOut: !posted,
     addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),

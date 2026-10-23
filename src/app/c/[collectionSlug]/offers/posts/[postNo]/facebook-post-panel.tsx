@@ -72,7 +72,8 @@ import { useFacebookPostStillForSale } from "./post-ui-state";
 //   post with it, so the buttons are offered only where `facebookPostMoves` says the server would.
 //   *Back to Ready…* (#1998) takes a post that is up back — a mistaken Publish, or a post gone from the
 //   group; when lots sold or withdrawn stay behind, the others move into a new post, and the screen
-//   goes there.
+//   goes there. *Back to preparing* (#2115) is its counterpart before the post is up: every Ready lot
+//   back to Preparing in one go, and each lot's `⋮` the same for that lot alone.
 // - **The kit**: the layout, the post's text and the photos' ZIP, above the lots.
 // - **The lots**, listed once (#1863), in lot order and so in posting order: each row is the lot's
 //   photo (its upload set, laid out as text), the lot number, the offer (linking to it), its type, its
@@ -516,11 +517,31 @@ export function FacebookPostPanel({
     });
   }
 
-  function setLotState(offerId: string, next: "ready" | "withdrawn", done: string) {
+  function setLotState(offerId: string, next: "preparing" | "ready" | "withdrawn", done: string) {
     run(async () => {
       const { setOfferStateAction } = await import("@/app/actions/offers");
       return setOfferStateAction(offerId, next);
     }, done);
+  }
+
+  // Every Ready lot back to Preparing (#2115), each as its own *Back to preparing* leaves it.
+  function backToPreparing() {
+    setError(undefined);
+    startTransition(async () => {
+      const { takeFacebookPostBackToPreparingAction } = await import("@/app/actions/facebook");
+      const result = await takeFacebookPostBackToPreparingAction(postId);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      invalidateAll(collectionId);
+      toast({
+        message:
+          result.count === 1
+            ? `Post #${postNo}: 1 lot back to Preparing`
+            : `Post #${postNo}: ${result.count} lots back to Preparing`,
+      });
+    });
   }
 
   // Asked of any lot (#1998); a split post's lots are Ready in a new post, which is where the screen goes.
@@ -613,6 +634,17 @@ export function FacebookPostPanel({
             } as RowAction,
           ]
         : []),
+      // One Ready lot back to Preparing, while the post is not up (#2115) — the offer's own step.
+      ...(moves.takeOut && lot.state === "ready"
+        ? [
+            {
+              key: "back-to-preparing",
+              label: "Back to preparing",
+              icon: "revert",
+              onSelect: () => setLotState(lot.offerId, "preparing", `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1} is back to Preparing`),
+            } as RowAction,
+          ]
+        : []),
       ...(moves.takeOut
         ? [
             {
@@ -688,7 +720,7 @@ export function FacebookPostPanel({
       {/* The moves the post makes as one (#1778, #1779). */}
       <section style={CARD} aria-label="The post's moves">
         <h3 style={CARD_TITLE}>The post</h3>
-        {anyMove ? (
+        {(anyMove || moves.backToPreparing) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             {/* One door (#1847): live or waiting for the group's approval is chosen in the dialog. */}
             {moves.activate && (
@@ -731,9 +763,16 @@ export function FacebookPostPanel({
                 <span style={MUTED}>Published by mistake, or gone from the group.</span>
               </>
             )}
+            {moves.backToPreparing && (
+              <DialogSecondaryButton type="button" disabled={isPending} onClick={backToPreparing}>
+                Back to preparing
+              </DialogSecondaryButton>
+            )}
           </div>
-        ) : (
-          <p style={{ ...MUTED, margin: 0 }}>
+        )}
+        {/* A post still being prepared can have Ready lots to take back and lots still short of Ready. */}
+        {!anyMove && (
+          <p style={{ ...MUTED, margin: moves.backToPreparing ? "0.5rem 0 0" : 0 }}>
             {moves.waiting.length > 0
               ? `Every lot must be Ready before the post goes up: ${moves.waiting.map((n) => `lot ${n}`).join(", ")}.`
               : "Every lot is sold or withdrawn."}
