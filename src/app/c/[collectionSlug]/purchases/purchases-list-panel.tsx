@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
@@ -29,6 +28,7 @@ import { intakeViewNarrowings, intakeViewStatusesFor, type IntakeNarrowing } fro
 import { useIntakeView } from "./use-intake-view";
 import { PurchaseFormDialog } from "./purchase-form-dialog";
 import { PurchaseRow } from "./purchase-row";
+import { DeletePurchaseDialog, purchaseDeletedMessage } from "./delete-purchase-dialog";
 import { useToast } from "@/app/toast-provider";
 
 type DialogState =
@@ -433,16 +433,8 @@ export function PurchasesListPanel({
 
       {/* Delete confirmation */}
       {dialog.kind === "delete" && (
-        <ConfirmDialog
-          title={dialog.purchase.kind === "opening_balance" ? "Delete opening balance" : "Delete purchase"}
-          message={
-            dialog.purchase.kind === "opening_balance"
-              ? "This permanently removes this opening balance and its lots. This cannot be undone."
-              : "This permanently removes this purchase and its lot and expense lines. This cannot be undone."
-          }
-          actionLabel={dialog.purchase.kind === "opening_balance" ? "Delete opening balance" : "Delete purchase"}
-          pendingLabel="Deleting…"
-          variant="destructive"
+        <DeletePurchaseDialog
+          kind={dialog.purchase.kind}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
@@ -452,12 +444,7 @@ export function PurchasesListPanel({
               const result = await deletePurchaseAction(dialog.purchase.id);
               if (result.status === "success") {
                 handleSuccess();
-                toast({
-                  message:
-                    dialog.purchase.kind === "opening_balance"
-                      ? "Opening balance deleted"
-                      : "Purchase deleted",
-                });
+                toast({ message: purchaseDeletedMessage(dialog.purchase.kind) });
               } else if (result.status === "error") setActionError(result.message);
             });
           }}

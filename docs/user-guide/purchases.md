@@ -291,6 +291,10 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
   on the phone for one started there. This cannot be undone.
   Once lots have been resolved into copies (during intake), a purchase whose lots still hold
   copies cannot be deleted until those copies are detached.
+  **Delete** is also the last entry of the **⋮** in the header of a purchase's, trade's or opening
+  balance's own screen, with the same confirmation; while its lots hold copies the entry is greyed
+  and says so. Once it is deleted you are back on the Intake documents list, its filters as you
+  left them.
 
 ## Intake and the lot lifecycle
 
