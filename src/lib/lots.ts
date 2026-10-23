@@ -43,11 +43,17 @@ import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake"
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
 import { foldLocationRefCounts, type LocationRefInUse } from "./location-ref";
-import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
+import {
+  intakeDocumentName,
+  intakeDocumentRef,
+  isOpeningBalance,
+  type PurchaseKind,
+} from "./purchase-kind";
 import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
 import { formatUnitCost } from "./supply-stock";
 import { formatItemNo } from "./item-number";
 import type { AttachState } from "./attach-picker-filters";
+import { closedLotsMessage, summarizeCopiesMove } from "./copies-move";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -937,6 +943,197 @@ export async function moveItemsToLot(
     refused,
     lotIds: toMove.length > 0 ? [lotId, ...sourceLots] : [],
   };
+}
+
+/** A lot of another intake document, as *Move copies to…* offers it (#2123). */
+export interface CopiesMoveTargetLot {
+  id: string;
+  /** The lot's title, or null — the dialog names an untitled one by its place, as the lot cards do. */
+  title: string | null;
+  status: string;
+  itemCount: number;
+}
+
+/** Another purchase or opening balance the copies could move to (#2123), with its lots. */
+export interface CopiesMoveTarget {
+  id: string;
+  kind: PurchaseKind;
+  /** `Order #12` / `Opening balance #3`. */
+  ref: string;
+  /** The supplier or title the Intake documents list leads with; null when it has neither. */
+  name: string | null;
+  /** `yyyy-mm-dd`. */
+  purchasedAt: string;
+  lots: CopiesMoveTargetLot[];
+}
+
+/** Every other intake document of the collection, newest first, with its lots in screen order —
+ * what *Move copies to…* (#2123) chooses among. Unpaginated: the dialog searches it client-side, and
+ * a document whose lots are all closed is still a target, since the move can open a new lot there. */
+export async function listCopiesMoveTargets(
+  ownerId: string,
+  purchaseId: string
+): Promise<CopiesMoveTarget[]> {
+  const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
+  const rows = await prisma.purchase.findMany({
+    where: { collectionId, id: { not: purchaseId } },
+    orderBy: [{ purchasedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      purchaseNo: true,
+      purchasedAt: true,
+      contact: { select: { name: true } },
+      platform: { select: { name: true } },
+      lots: {
+        orderBy: { id: "asc" },
+        select: { id: true, title: true, status: true, _count: { select: { items: true } } },
+      },
+    },
+  });
+  return rows.map((p) => ({
+    id: p.id,
+    kind: p.kind as PurchaseKind,
+    ref: intakeDocumentRef(p),
+    name: intakeDocumentName({
+      kind: p.kind,
+      title: p.title,
+      contactName: p.contact?.name ?? null,
+      platformName: p.platform?.name ?? null,
+    }),
+    purchasedAt: p.purchasedAt.toISOString().slice(0, 10),
+    lots: p.lots.map((l) => ({
+      id: l.id,
+      title: l.title,
+      status: l.status,
+      itemCount: l._count.items,
+    })),
+  }));
+}
+
+/** Where *Move copies to…* puts the copies (#2123): an open lot of another document, or a new lot
+ * opened on one — titled and priced as *Add lot* would be, the price optional on an opening
+ * balance only. */
+export type CopiesMoveDestination =
+  | { lotId: string }
+  | { purchaseId: string; title: string | null; price: number | null };
+
+/**
+ * Move **every** copy of a purchase, or of one of its lots, to a lot of another purchase or opening
+ * balance (#2123) — the correction for copies filed against the wrong document, which otherwise
+ * meant *Attach existing copies…* on the target, lot by lot, unticking every other purchase.
+ *
+ * It is #388's attach over a whole source, so its rules hold unchanged. **Every copy moves**: held,
+ * on its way, being sorted, sold, traded or written off — the reach attaching has had since #2120.
+ * **Only the purchase link changes**: condition, location, dispositions, delivery state, photos,
+ * `itemNo` and any sale stay. **Both ends must be open**, because a cost basis is frozen at close
+ * (ADR-0009 §3) — and here that is a precondition of the whole move, not a per-copy refusal as in
+ * `attachItemsToLot`: the promise is *every copy*, so a closed source lot holding copies refuses
+ * the move, naming each lot to reopen, and nothing moves. The copies take their cost when the target
+ * lot is closed. The source keeps its lots, now empty, with their prices — the purchase's expenses
+ * and shipping are not touched either.
+ *
+ * The target is never the source's own document: moving between one purchase's lots is
+ * *Move to lot…* (#1918). A new lot is created in the same transaction as the move, so a refused
+ * move leaves no empty lot behind. Scan tiles point at their copies, not at a lot (#586), and follow
+ * with nothing written.
+ *
+ * Returns how many copies moved, and from which lots, and the lot they went to.
+ */
+export async function moveCopiesToDocument(
+  ownerId: string,
+  source: { purchaseId: string } | { lotId: string },
+  destination: CopiesMoveDestination
+): Promise<{ moved: number; fromLotIds: string[]; lotId: string; purchaseId: string }> {
+  const from =
+    "lotId" in source
+      ? await assertLotOwner(ownerId, source.lotId)
+      : await assertPurchaseOwner(ownerId, source.purchaseId).then((p) => ({
+          ...p,
+          purchaseId: source.purchaseId,
+        }));
+  const sourcePurchaseId = from.purchaseId;
+  const collectionId = from.collectionId;
+
+  // Every lot of the source document, for its place: an untitled lot is named `Lot N` by it, as the
+  // lot cards name it (the screen orders them by id).
+  const documentLots = await prisma.purchaseLot.findMany({
+    where: { purchaseId: sourcePurchaseId },
+    orderBy: { id: "asc" },
+    select: { id: true, title: true, status: true, _count: { select: { items: true } } },
+  });
+  const sourceLots = documentLots
+    .map((l, i) => ({
+      id: l.id,
+      label: l.title ?? `Lot ${i + 1}`,
+      status: l.status,
+      itemCount: l._count.items,
+    }))
+    .filter((l) => !("lotId" in source) || l.id === source.lotId);
+  const summary = summarizeCopiesMove(sourceLots);
+  if (summary.total === 0) throw new Error("There are no copies to move.");
+  if (summary.closed.length > 0) throw new Error(closedLotsMessage(summary.closed));
+  const fromLotIds = sourceLots.filter((l) => l.itemCount > 0).map((l) => l.id);
+
+  let target: { lotId: string } | { purchaseId: string; kind: string };
+  if ("lotId" in destination) {
+    const to = await assertLotOwner(ownerId, destination.lotId);
+    if (to.collectionId !== collectionId) throw new Error("Lot not found or access denied.");
+    if (to.purchaseId === sourcePurchaseId) {
+      throw new Error("That lot is on this purchase. Use Move to lot… to move copies between its lots.");
+    }
+    if (to.status !== "open") {
+      throw new Error("That lot is closed. Reopen it before moving copies into it.");
+    }
+    target = { lotId: destination.lotId };
+  } else {
+    const to = await assertPurchaseOwner(ownerId, destination.purchaseId);
+    if (to.collectionId !== collectionId) throw new Error("Purchase not found or access denied.");
+    if (destination.purchaseId === sourcePurchaseId) {
+      throw new Error("Choose another purchase or opening balance to move the copies to.");
+    }
+    target = { purchaseId: destination.purchaseId, kind: to.kind };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    let lotId: string;
+    let purchaseId: string;
+    if ("lotId" in target) {
+      lotId = target.lotId;
+      purchaseId = (
+        await tx.purchaseLot.findUniqueOrThrow({ where: { id: lotId }, select: { purchaseId: true } })
+      ).purchaseId;
+    } else {
+      const d = destination as { purchaseId: string; title: string | null; price: number | null };
+      const lot = await tx.purchaseLot.create({
+        data: {
+          purchaseId: target.purchaseId,
+          title: d.title?.trim() || null,
+          price: lotPriceFor(target.kind, d.price),
+          status: "open",
+        },
+        select: { id: true },
+      });
+      lotId = lot.id;
+      purchaseId = target.purchaseId;
+    }
+    // Re-read under the transaction: the lots were open a moment ago, and a close landing in
+    // between must not have its frozen split shrunk underneath it.
+    const stillOpen = await tx.purchaseLot.count({
+      where: { id: { in: fromLotIds }, status: "open" },
+    });
+    if (stillOpen !== fromLotIds.length) {
+      throw new Error("A lot was closed meanwhile. Reopen it before moving its copies.");
+    }
+    const { count } = await tx.item.updateMany({
+      where: { lotId: { in: fromLotIds }, collectionId },
+      // Both ends are open, so the basis was pending and stays so — set explicitly for
+      // `attachItemsToLot`'s reason: the invariant holds whichever way the copy arrived.
+      data: { lotId, costBasis: null },
+    });
+    return { moved: count, fromLotIds, lotId, purchaseId };
+  });
 }
 
 /** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single
