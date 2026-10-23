@@ -13,6 +13,20 @@ import {
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
+import type { AttachableCopy } from "@/lib/lots";
+import {
+  ATTACH_PURCHASE_LABEL,
+  ATTACH_PURCHASE_VALUES,
+  ATTACH_STATES,
+  ATTACH_STATE_LABEL,
+  effectiveAttachStates,
+  matchesAttachFilters,
+  parseAttachFilters,
+  serializeAttachFilters,
+  toggleValue,
+  type AttachPickerFilters,
+  type AttachState,
+} from "@/lib/attach-picker-filters";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { summarizeRelink, untickOrder, type TickedCopy } from "@/lib/attach-relink";
@@ -33,6 +47,15 @@ import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-i
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
+import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
+import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
+import { FILTER_WIDTH } from "@/app/c/[collectionSlug]/inventory/copies-filter-controls";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -57,6 +80,37 @@ const LINK_BTN: React.CSSProperties = {
   fontWeight: 600,
 };
 
+/** The rule between the chip groups of the filter row, so *Held* and *On a purchase* read as two
+ *  questions rather than one list. */
+const DIVIDER_STYLE: React.CSSProperties = {
+  width: 1,
+  alignSelf: "stretch",
+  background: "var(--color-border)",
+  margin: "0 0.25rem",
+};
+
+/**
+ * What the picker adds to a copy's row (#2121, #2120): the purchase it is filed against, which is
+ * the question the *On a purchase* chip asks and which the row otherwise answers only in its menu,
+ * and the sale a sold copy went out on, beside the row's own *Sold* chip.
+ */
+function AttachRowChips({ item }: { item: AttachableCopy }) {
+  return (
+    <>
+      {item.purchase && (
+        <span style={ROW_CHIP}>
+          <Icon name="purchases" size="sm" /> {item.purchase.label}
+        </span>
+      )}
+      {item.soldOn && (
+        <span style={ROW_CHIP}>
+          <Icon name="sell" size="sm" /> Sale #{item.soldOn.saleNo}
+        </span>
+      )}
+    </>
+  );
+}
+
 const HINT_STYLE: React.CSSProperties = {
   padding: "2rem 1.5rem",
   textAlign: "center",
@@ -65,17 +119,19 @@ const HINT_STYLE: React.CSSProperties = {
 };
 
 /** The copies this lot could take on (#388). Unpaginated — the dialog scopes by area/year and
- * filters the rest client-side, exactly as the offer composition picker does. */
+ * filters the rest client-side, exactly as the offer composition picker does. The state (#2121) is
+ * the one filter sent to the server, since it decides which copies are read at all. */
 function useAttachableCopies(
   collectionId: string,
   lotId: string,
   areaIds: string[] | null,
+  states: AttachState[],
   areaSelection: AreaSelection
 ) {
-  return useQuery<ItemListItem[]>({
-    queryKey: ["purchases", collectionId, "attachable", lotId, areaIds] as const,
+  return useQuery<AttachableCopy[]>({
+    queryKey: ["purchases", collectionId, "attachable", lotId, areaIds, states] as const,
     // An area added from the rail's `＋` must not blank the list the collector is ticking in (#977).
-    ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
+    ...keepRowsAcrossTreeChange<AttachableCopy[]>(areaSelection, [
       "purchases",
       collectionId,
       "attachable",
@@ -84,6 +140,7 @@ function useAttachableCopies(
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
+      for (const state of states) params.append("state", state);
       const res = await fetch(
         `/api/collections/${collectionId}/purchases/lots/${lotId}/attachable-copies?${params.toString()}`
       );
@@ -100,7 +157,11 @@ function useAttachableCopies(
  *
  * Modelled on the offer composition picker: area tree + year facets on the left, a text-filterable
  * list of eligible copies on the right, each a checkbox row rendered with `InventoryItemRow` so a
- * copy reads the same here as everywhere else.
+ * copy reads the same here as everywhere else. Above the list, the picker's own filters (#2121):
+ * condition, certificate and format as the Copies list draws them, whether a copy is on a purchase,
+ * and whether it is still held — the copies that have been sold or written off are offered too
+ * (#2120), because a copy that left before its receipt was recorded still needs a cost. They are
+ * remembered per collection, as the area and year are.
  *
  * A copy that already belongs to **another** purchase is offered but never moved silently — the
  * footer names the orders being left and the move has to be confirmed, because reassigning a copy
@@ -144,6 +205,17 @@ export function AttachCopiesDialog({
   );
 
   const [search, setSearch] = usePersistedSearch(`${collectionId}:attach-copies`);
+  const [storedFilters, storeFilters] = usePersistedCollectionValue(
+    "attach-copies-filters",
+    collectionId
+  );
+  const filters = useMemo(() => parseAttachFilters(storedFilters), [storedFilters]);
+  const setFilters = (patch: Partial<AttachPickerFilters>) =>
+    storeFilters(serializeAttachFilters({ ...filters, ...patch }));
+  const states = useMemo(() => effectiveAttachStates(filters.states), [filters.states]);
+  const { data: conditions = [] } = useCollectionConditions(collectionId);
+  const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
+  const { data: formats = [] } = useCollectionFormats(collectionId);
   // The selection carries what the re-link warning needs rather than re-deriving it from the
   // current fetch (#1079): the area rail is resolved server-side, so a copy ticked under one area
   // is not in `copies` at all once the rail moves, and a warning read off `copies` went silent for
@@ -163,7 +235,7 @@ export function AttachCopiesDialog({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: copies = [], isLoading } = useAttachableCopies(collectionId, lotId, areaIds, {
+  const { data: copies = [], isLoading } = useAttachableCopies(collectionId, lotId, areaIds, states, {
     areaId,
     includeSubAreas,
   });
@@ -182,6 +254,7 @@ export function AttachCopiesDialog({
     const q = raw.toLowerCase();
     const y = year === "none" ? "none" : year ? Number(year) : null;
     return copies.filter((c) => {
+      if (!matchesAttachFilters(c, filters)) return false;
       if (y === "none" && c.issuedYear !== null) return false;
       if (typeof y === "number" && c.issuedYear !== y) return false;
       if (!q) return true;
@@ -195,7 +268,7 @@ export function AttachCopiesDialog({
       });
       return catalogKeyMatches(raw, keys);
     });
-  }, [copies, year, search, vendorMapFor]);
+  }, [copies, filters, year, search, vendorMapFor]);
 
   function toggle(item: ItemListItem) {
     setSelected((prev) => {
@@ -222,8 +295,8 @@ export function AttachCopiesDialog({
   const selectedIds = useMemo(() => [...selected.keys()], [selected]);
 
   // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
-  // The area rail is resolved server-side and the year facet and search client-side, so what is
-  // subtracted is the rows on screen rather than any one of the three.
+  // The area rail and the state are resolved server-side and the rest client-side, so what is
+  // subtracted is the rows on screen rather than any one filter.
   const hiddenTicks = countHiddenTicks(selected.keys(), new Set(allVisibleIds));
   const hiddenNote = hiddenTicksSuffix(hiddenTicks);
 
@@ -329,13 +402,92 @@ export function AttachCopiesDialog({
             />
           </div>
 
+          {/* The picker's own filters (#2121). The state chips decide which copies are read at
+              all — the held ones by default, the sold, traded and written-off ones for a receipt
+              recorded after they left (#2120); the purchase chips separate the copies on no
+              purchase from those already filed against one. Neither set lit is every value. */}
+          <div
+            style={{
+              padding: "0.5rem 1rem",
+              borderBottom: "1px solid var(--color-border)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            {ATTACH_STATES.map((state) => (
+              <FilterChip
+                key={state}
+                label={ATTACH_STATE_LABEL[state]}
+                active={filters.states.includes(state)}
+                toggle
+                onClick={() => setFilters({ states: toggleValue(filters.states, state) })}
+              />
+            ))}
+            <span aria-hidden style={DIVIDER_STYLE} />
+            {ATTACH_PURCHASE_VALUES.map((value) => (
+              <FilterChip
+                key={value}
+                label={ATTACH_PURCHASE_LABEL[value]}
+                active={filters.purchase.includes(value)}
+                toggle
+                onClick={() => setFilters({ purchase: toggleValue(filters.purchase, value) })}
+              />
+            ))}
+            <span aria-hidden style={DIVIDER_STYLE} />
+            <FilterSlot width={FILTER_WIDTH.conditions}>
+              <MultiSelectFilter
+                fullWidth
+                options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+                selected={filters.conditionIds}
+                onChange={(ids) => setFilters({ conditionIds: ids })}
+                allLabel="All conditions"
+                itemNoun="conditions"
+                ariaLabel="Filter by condition"
+              />
+            </FilterSlot>
+            {certificateStatuses.length > 0 && (
+              <FilterSlot width={FILTER_WIDTH.certificates}>
+                <MultiSelectFilter
+                  fullWidth
+                  options={[
+                    { id: "none", label: "No certificate" },
+                    ...certificateStatuses.map((c) => ({ id: c.id, label: c.name })),
+                  ]}
+                  selected={filters.certificateStatusIds}
+                  onChange={(ids) => setFilters({ certificateStatusIds: ids })}
+                  allLabel="All certificates"
+                  itemNoun="certificates"
+                  ariaLabel="Filter by certificate status"
+                />
+              </FilterSlot>
+            )}
+            {formats.length > 0 && (
+              <FilterSlot width={FILTER_WIDTH.formats}>
+                <MultiSelectFilter
+                  fullWidth
+                  options={[
+                    { id: "single", label: "Single" },
+                    ...formats.map((f) => ({ id: f.id, label: f.name })),
+                  ]}
+                  selected={filters.formatIds}
+                  onChange={(ids) => setFilters({ formatIds: ids })}
+                  allLabel="All formats"
+                  itemNoun="formats"
+                  ariaLabel="Filter by format"
+                />
+              </FilterSlot>
+            )}
+          </div>
+
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {isLoading ? (
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? "No copies available to attach. A copy already on this lot, or on a lot that has been closed, is not offered — reopen that lot first."
+                  ? "No copies available to attach. A copy already on this lot, or on a lot that has been closed, is not offered — reopen that lot first. Sold and written-off copies are under their own chips."
                   : "No copies match your filter."}
               </p>
             ) : (
@@ -375,6 +527,7 @@ export function AttachCopiesDialog({
                         isLast={i === visibleCopies.length - 1}
                         readOnly
                         showCostBasis
+                        trailingChips={<AttachRowChips item={item} />}
                       />
                     </div>
                   </div>

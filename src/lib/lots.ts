@@ -47,6 +47,7 @@ import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purch
 import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
 import { formatUnitCost } from "./supply-stock";
 import { formatItemNo } from "./item-number";
+import type { AttachState } from "./attach-picker-filters";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -673,27 +674,56 @@ export async function removeLotItem(ownerId: string, itemId: string): Promise<vo
   await prisma.item.delete({ where: { id: itemId } });
 }
 
+/** The sale a copy went out on (#2120), named the way the sale's own screen is: its number. */
+export interface AttachableSoldOn {
+  saleId: string;
+  saleNo: number;
+}
+
+/** A copy the attach picker offers: a Copies-list row, plus the sale it went out on if it was sold
+ *  (#2120) — the row's *Sold* chip says that it left, and this says on which sale. */
+export type AttachableCopy = ItemListItem & { soldOn: AttachableSoldOn | null };
+
 /** The copies an open lot could take on (#388): every copy in the collection that is not already
  * on it and not frozen into a closed lot's cost split. Unpaginated like the offer composition
  * picker it mirrors — the dialog filters client-side over an area/year scope the collector picks.
  *
- * Sold and disposed copies are left out by the list's own defaults: this is an intake correction,
- * and a piece that has left the collection is not what one is filing a receipt against. */
+ * `states` picks which copies are read at all (#2121): the held ones by default, which is what
+ * #388 offered, and the sold, traded and written-off ones on request — a copy that left before
+ * its receipt was recorded still needs a cost, or its sale's profit stays incomplete (#2120,
+ * #1875). */
 export async function listAttachableCopies(
   ownerId: string,
   lotId: string,
-  opts: { areaIds?: string[] | null; search?: string; year?: number | "none" } = {}
-): Promise<ItemListItem[]> {
+  opts: {
+    areaIds?: string[] | null;
+    search?: string;
+    year?: number | "none";
+    states?: readonly AttachState[];
+  } = {}
+): Promise<AttachableCopy[]> {
   const { collectionId } = await assertLotOwner(ownerId, lotId);
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     attachableToLotId: lotId,
+    holdingStates: opts.states && opts.states.length > 0 ? opts.states : ["held"],
     areaIds: opts.areaIds ?? undefined,
     search: opts.search,
     year: opts.year,
     sortDir: "asc",
     pageSize: 1000,
   });
-  return items;
+  const soldIds = items.filter((i) => i.sold).map((i) => i.id);
+  const sales =
+    soldIds.length === 0
+      ? []
+      : await prisma.saleLineItem.findMany({
+          where: { itemId: { in: soldIds } },
+          select: { itemId: true, saleLine: { select: { sale: { select: { id: true, saleNo: true } } } } },
+        });
+  const saleByItem = new Map(
+    sales.map((s) => [s.itemId, { saleId: s.saleLine.sale.id, saleNo: s.saleLine.sale.saleNo }])
+  );
+  return items.map((item) => ({ ...item, soldOn: saleByItem.get(item.id) ?? null }));
 }
 
 /** A copy that cannot be attached, with the reason a person can act on (#388). */

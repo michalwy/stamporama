@@ -3,10 +3,12 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listAttachableCopies } from "@/lib/lots";
 import { readSearchParam } from "@/lib/text-input";
+import { readAttachStates } from "@/lib/attach-picker-filters";
 
 /** The copies this open lot could take on (#388) — everything not already on it and not frozen
  * into a closed lot's cost split. Unpaginated, mirroring the offer composition picker: the dialog
- * scopes by area/year and filters the rest client-side. */
+ * scopes by area/year and filters the rest client-side. `state` (repeatable) picks held, gone or
+ * disposed copies (#2121); none named is the held ones. */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string; lotId: string }> }
@@ -32,6 +34,7 @@ export async function GET(
       areaIds: areaIds.length > 0 ? areaIds : null,
       search: readSearchParam(sp),
       year,
+      states: readAttachStates(sp.getAll("state")),
     });
     return NextResponse.json({ items });
   } catch {

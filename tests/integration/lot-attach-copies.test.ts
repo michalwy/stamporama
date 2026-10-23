@@ -205,4 +205,29 @@ describe("attachItemsToLot (#388)", () => {
     assert.ok(row.purchase, "it carries its purchase (#387)");
     assert.match(row.purchase.label, /2026-02-01/);
   });
+
+  it("offers a written-off copy only under its own state, and attaches it like any other (#2120, #2121)", async () => {
+    const written = await addCopy(null);
+    await prisma.item.update({
+      where: { id: written },
+      data: { disposedAt: new Date("2026-03-01"), disposalReason: "lost" },
+    });
+    const kept = await addCopy(null);
+
+    const ids = async (states?: ("held" | "gone" | "disposed")[]) =>
+      new Set((await listAttachableCopies(userId, targetLotId, { states })).map((i) => i.id));
+    const held = await ids();
+    assert.ok(held.has(kept) && !held.has(written), "held is the default");
+    const disposed = await ids(["disposed"]);
+    assert.ok(disposed.has(written) && !disposed.has(kept));
+    const both = await ids(["held", "disposed"]);
+    assert.ok(both.has(written) && both.has(kept));
+
+    const result = await attachItemsToLot(userId, targetLotId, [written]);
+    assert.equal(result.attached, 1);
+    const after = await prisma.item.findUniqueOrThrow({ where: { id: written } });
+    assert.equal(after.lotId, targetLotId);
+    assert.ok(after.disposedAt, "the write-off stays");
+    assert.equal(after.disposalReason, "lost");
+  });
 });

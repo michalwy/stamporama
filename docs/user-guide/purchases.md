@@ -2519,6 +2519,38 @@ where they are, press **Untick these** on its line: every ticked copy from that 
 at once, including those you ticked under another area or year that are not on screen. When no
 ticked copy belongs to another purchase any more, the warning and its confirmation go away.
 
+#### Narrowing the picker
+
+Above the list sits a row of filters, in any combination:
+
+- **Held**, **Sold & traded**, **No longer held** — which copies are listed at all. **Held** is lit
+  when you first open the picker. Light **Sold & traded** to find a copy that has already left — sold,
+  or given away in a closed trade — and **No longer held** for one you have written off. With none
+  of the three lit, every copy is listed.
+- **Not on a purchase**, **On a purchase** — the copies on no purchase yet, or those already filed
+  against one. With neither lit (or both), both kinds are listed. A copy on a purchase names it on
+  its row.
+- **Condition**, **certificate** and **format**, as on the Copies list. *No certificate* and *Single*
+  can be ticked like any other value. The certificate and format filters appear only when your
+  collection defines certificate statuses or formats.
+
+The filters are remembered for the next time you open the picker. **Ticks survive every one of
+them**, as they survive the search, and the button keeps counting the ticked copies they hide.
+
+#### Attaching a copy that has already been sold
+
+A copy entered straight into the inventory, with no purchase, has **no cost** — and if it has been
+sold, its sale's profit shows as incomplete for want of one. Record the purchase it came from, open
+the lot's **Attach existing copies…**, light **Sold & traded**, and tick it. A sold copy shows its
+*Sold* chip and the sale it went out on (*Sale #12*). Attaching changes **only its purchase link**:
+the sale, its price and its status stay exactly as they were. The usual rules hold — the lot must be
+open, a copy in a closed lot is not offered, and a copy on another open purchase is moved only once
+you confirm.
+
+When you close the lot, the sold copy takes its share of the pool like every other copy in it, and
+its sale's profit is complete. A written-off copy (*No longer held*) is attached the same way, so its
+cost is known too.
+
 ### Moving copies to another lot of the same purchase
 
 A copy identified into the wrong lot of this order is moved from the copy itself, not from the
