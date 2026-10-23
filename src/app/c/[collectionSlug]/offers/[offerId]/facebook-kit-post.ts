@@ -53,7 +53,7 @@ export interface FacebookKitPost extends FacebookKitText {
   /** Each lot's caption, in lot order — empty unless the post is captioned. */
   captions: FacebookKitCaption[];
   /** What it is missing (#1692) — none on a post already published, which nothing here changes.
-   *  `missingPostText` and `missingPostTitle` (#1862) are a captioned post's alone. */
+   *  `missingPostText` is a captioned post's alone. */
   gaps: FacebookCaptionedPostGaps;
   /** When the post was published and its text frozen (#1800), or null while it follows the template. */
   frozenAt: string | null;
@@ -102,12 +102,10 @@ export function renderFacebookKitPost(
     };
   }
   return {
-    ...kitText(renderFacebookPostParts(templates, standingNote, lots)),
+    ...kitText(renderFacebookPostParts(templates, standingNote, lots, name)),
     layout,
     captions: [],
-    gaps: frozenAt
-      ? NO_GAPS
-      : { ...facebookPostGaps(templates, standingNote, lots), missingPostText: false, missingPostTitle: false },
+    gaps: frozenAt ? NO_GAPS : { ...facebookPostGaps(templates, standingNote, lots, name), missingPostText: false },
     frozenAt,
   };
 }

@@ -391,17 +391,17 @@ describe("isFacebookGroupUrl", () => {
 });
 
 describe("post template placeholders", () => {
-  it("are an auction's settled ones with {title} and {terms}, and {offer}, and no longer {catalog} (#1543, #1671, #1689, #1694)", () => {
+  it("are an auction's settled ones with {title} and {terms}, {offer}, the post's number and title, and no longer {catalog} (#1543, #1671, #1689, #1694, #2116)", () => {
     assert.deepEqual(
       FACEBOOK_AUCTION_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}", "{offer}", "{terms}"]
+      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}", "{offer}", "{post}", "{postTitle}", "{terms}"]
     );
   });
 
-  it("are a quick buy's own: its price where an auction states its bidding (#1671), and {terms} (#1689) and {offer} (#1694)", () => {
+  it("are a quick buy's own: its price where an auction states its bidding (#1671), and {terms} (#1689), {offer} (#1694) and the post's (#2116)", () => {
     assert.deepEqual(
       FACEBOOK_QUICK_BUY_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{price}", "{lot}", "{offer}", "{terms}"]
+      ["{title}", "{description}", "{price}", "{lot}", "{offer}", "{post}", "{postTitle}", "{terms}"]
     );
   });
 
@@ -497,17 +497,18 @@ describe("captioned posts' settings (#1841)", () => {
     assert.deepEqual(unknownPostPlaceholders("{title} {catalog}", "auction"), []);
   });
 
-  it("offer {postTitle} where {post} is, and not in a post template (#1862)", () => {
-    assert.deepEqual(unknownPostPlaceholders("{postTitle} {title}", "auction"), ["{postTitle}"]);
-    assert.deepEqual(unknownPostPlaceholders("{postTitle} {title}", "fixed", "caption"), []);
-    assert.deepEqual(unknownPostPlaceholders("{postTitle} {offer}", "auction", "captionPost"), []);
+  it("offer {post} and {postTitle} in every template, a post of one being a post from the start (#1854, #1862, #2116)", () => {
+    for (const type of ["auction", "fixed"] as const) {
+      assert.deepEqual(unknownPostPlaceholders("{post} {postTitle} {title}", type), [], type);
+      assert.deepEqual(unknownPostPlaceholders("{post} {postTitle} {title}", type, "caption"), [], type);
+    }
+    assert.deepEqual(unknownPostPlaceholders("{post} {postTitle} {offer}", "auction", "captionPost"), []);
   });
 
-  it("offer {post} only where a post always has a number — not in a post template (#1854)", () => {
-    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "auction"), ["{post}"]);
-    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "fixed"), ["{post}"]);
-    assert.deepEqual(unknownPostPlaceholders("{post} {title}", "auction", "caption"), []);
-    assert.deepEqual(unknownPostPlaceholders("{post} {offer}", "auction", "captionPost"), []);
+  it("list each once in a caption, which takes the post template's placeholders without {terms}", () => {
+    const tokens = facebookTemplatePlaceholders("caption", "auction").map((p) => p.token);
+    assert.equal(new Set(tokens).size, tokens.length);
+    assert.ok(!tokens.includes("{terms}"));
   });
 
   it("take :N on every placeholder that writes a number, and name a width that is not one (#2097)", () => {

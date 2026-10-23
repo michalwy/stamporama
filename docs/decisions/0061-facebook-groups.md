@@ -17,6 +17,8 @@ several lots can carry each lot's text in its photo's caption. §2 is amended by
 several lots has a number and a screen of its own. §2 is amended by #1989: every Facebook offer that
 goes up is in a post — an offer posted alone is a post of one lot, made when it is published. §2 is
 amended by #1998: a post that is up can be taken back to Ready, split when lots sold or withdrawn stay.
+§2 is amended by #2116: a Facebook offer is in a post from the moment it is made, and a post of one
+differs from a post of several only in its templates.
 
 Facebook is the Facebook module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact named as Facebook; its groups and settings are unchanged.
 
@@ -202,6 +204,28 @@ corrected. Until then the only way back to Ready was a rejection while the post 
   went up — number, link, frozen text — and the lots going back move into a new post in the same
   group, with the same title, layout and lot order, which is Ready. When every lot goes back the post
   itself is Ready again and nothing new is made.
+
+**Amended by #2116 (settled with the collector on 2026-10-23): a Facebook offer is in a post from the
+moment it is made.** Under #1989 an offer meant to go up alone got its post only at publishing, so
+until then it was worked on as an offer, its post's number and title did not exist while its text was
+written, and a post of one and a post of several behaved differently for no reason but when the post
+came into being. **A post of one lot and a post of several now differ only in their text templates**:
+the screen, the number and title, the moves and the placeholders are the same. This replaces #1989's
+*when it is published* and its grouping, title and *Not in a post yet* bullets above.
+
+- **Creating a Facebook offer creates its post of one lot**, by any route — the form, quick offer
+  mode, Generate offers without *In a new post*, Series from singles, the Lot builder, the agent API —
+  and moving an offer onto Facebook does too; moving it off takes its post of one away.
+- **Joining another post** (*Post together…*, *Add to post…*, Generate offers' *In a new post*) moves
+  the offer out of its post of one, which goes; its number is never given again. **Taking a lot out**
+  of a post puts it in a new post of one; a post left with one lot stays, a post of one.
+- **A post of one is titled with its offer's title and follows it** while the offer's title changes,
+  until the post is renamed by hand or gains a second lot; then it keeps the title it has.
+- **`{post}` and `{postTitle}` are offered in the auction and quick-buy post templates too**, known
+  from the start. **Publish…** asks only for the link and the approval; the title is the post's.
+- **Existing Facebook offers in no post** were each given a post of one, following its offer's title,
+  and an existing post of one follows where its title was its offer's or none. *Not in a post yet*
+  had nothing left to list and went.
 
 ### 3. Posting starts as a kit to paste
 

@@ -120,6 +120,7 @@ describe("Generate offers into a new post (#2030)", () => {
     const input = singles(copies);
     const preview = await previewOfferGeneration(userId, collectionId, input);
     assert.equal(preview.lines.length, 3);
+    const { nextFacebookPostNo } = await prisma.collection.findUniqueOrThrow({ where: { id: collectionId } });
     const result = await commitOfferGeneration(
       userId,
       collectionId,
@@ -133,6 +134,7 @@ describe("Generate offers into a new post (#2030)", () => {
       select: { postNo: true, title: true, groupId: true },
     });
     assert.deepEqual(post, { postNo: result.post.postNo, title: "Germany 1960", groupId });
+    assert.equal(post.postNo, nextFacebookPostNo, "no post of one was made for them on the way (#2116)");
 
     // Lot N is the preview's Nth line.
     const order = preview.lines.map((line) => line.sets[0][0].id);
@@ -188,8 +190,12 @@ describe("Generate offers into a new post (#2030)", () => {
     const lots = await prisma.offer.findMany({ where: { facebookPostId: result.post!.postId }, select: { id: true } });
     assert.equal(lots.length, 2);
     assert.ok(!lots.some((lot) => lot.id === existing));
-    const kept = await prisma.offer.findUniqueOrThrow({ where: { id: existing }, select: { facebookPostId: true } });
-    assert.equal(kept.facebookPostId, null, "the offer that only received a set is in no post");
+    const kept = await prisma.offer.findUniqueOrThrow({
+      where: { id: existing },
+      select: { facebookPostId: true, facebookPost: { select: { _count: { select: { lots: true } } } } },
+    });
+    assert.notEqual(kept.facebookPostId, result.post!.postId, "the offer that only received a set stays where it was");
+    assert.equal(kept.facebookPost?._count.lots, 1, "in its post of one");
   });
 
   it("writes nothing when the post would be refused", async () => {
@@ -234,6 +240,8 @@ describe("Generate offers into a new post (#2030)", () => {
     const result = await commitOfferGeneration(userId, collectionId, input, preview.fingerprint);
     assert.equal(result.createdOffers, 2);
     assert.equal(result.post, null);
-    for (const itemId of pair) assert.equal((await offerOf(itemId)).facebookPostId, null);
+    const posts = await Promise.all(pair.map(async (itemId) => (await offerOf(itemId)).facebookPostId));
+    assert.ok(posts.every((p) => p !== null), "each new offer is a post of its own (#2116)");
+    assert.notEqual(posts[0], posts[1]);
   });
 });

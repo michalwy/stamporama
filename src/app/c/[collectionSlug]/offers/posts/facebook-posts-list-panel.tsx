@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { LIST_BANNER_STYLE, STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -10,12 +9,8 @@ import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
-import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
-import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
-import type { FacebookOfferNotInPost, FacebookPostListItem } from "@/lib/facebook-posts";
-import { OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
-import { OfferStateChip } from "../offer-badges";
+import type { FacebookPostListItem } from "@/lib/facebook-posts";
 import {
   FACEBOOK_POST_STAGES,
   FACEBOOK_POST_STAGE_LABEL,
@@ -23,7 +18,6 @@ import {
 } from "@/lib/facebook-post-rules";
 import { FACEBOOK_MULTI_LOT_LAYOUT_SHORT_LABEL } from "@/lib/facebook-group-rules";
 import {
-  useFacebookOffersNotInPost,
   useFacebookPostsInfinite,
   useInvalidateOffers,
   type FacebookPostFilters,
@@ -64,12 +58,9 @@ interface FacebookPostsListPanelProps {
  * per collection (#2108, `use-posts-view.ts`), so the list comes back as it was left however it is
  * reached; while one narrows the list, the band under the toolbar says so with *Clear filters*.
  *
- * Every Facebook offer that has gone up is in a post (#1989) — one posted alone in a post of one lot —
- * so the list is everything up on Facebook. Above it, *Not in a post yet* names the Facebook offers
- * still being prepared or Ready in no post, so the screen is the whole of Facebook, published or not;
- * the group filter narrows it, the *Being prepared* and *Ready to post* chips narrow it to that state,
- * and a chip only posts can be in (or *No title*) hides it. It folds to one line with its count
- * (#1991), folded the first time and left as the collector last left it after that.
+ * Every Facebook offer is in a post from the moment it is made (#2116) — one meant to go up alone in a
+ * post of one lot — so the list is the whole of Facebook, published or not. *Not in a post yet*, the
+ * offers in no post that sat above the rows (#1989, #1991), went with that: there are none.
  */
 export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }: FacebookPostsListPanelProps) {
   const knownGroups = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
@@ -84,10 +75,6 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
   const narrowings = postsViewNarrowings(view);
   const hasActiveFilters = narrowings.length > 0;
-  // An offer in no post is still being prepared or Ready, and has no title to lack.
-  const notInPostStates = stage === "preparing" ? ["preparing"] : stage === "ready" ? ["ready"] : null;
-  const showNotInPost = !untitled && (!stage || notInPostStates !== null);
-  const { data: notInPost } = useFacebookOffersNotInPost(collectionId, groupIds, notInPostStates, showNotInPost);
 
   /** One narrowing as the band names it — in the words of the control that set it, so it can be found
    *  on the toolbar and switched off there as well as by *Clear filters*. */
@@ -166,10 +153,6 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
         )}
       </div>
 
-      {showNotInPost && notInPost && notInPost.length > 0 && (
-        <NotInPost offers={notInPost} collectionId={collectionId} collectionSlug={collectionSlug} />
-      )}
-
       <div
         style={{
           border: "1px solid var(--color-border)",
@@ -190,7 +173,7 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {hasActiveFilters
               ? "No posts match this filter."
-              : "No Facebook posts yet. A Facebook offer gets its post when it is published; several go into one with Post together in Offers."}
+              : "No Facebook posts yet. Every Facebook offer is in a post from the moment it is made; several go into one with Post together in Offers."}
           </div>
         )}
 
@@ -210,85 +193,6 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
         )}
       </div>
     </div>
-  );
-}
-
-/** The Facebook offers in no post yet (#1989), each linking to its offer: published alone it gets a
- *  post of its own, or it joins a post with others first. Folded it is one line, its heading and
- *  count (#1991); whether it is open is a client preference remembered per collection, closed until
- *  the collector first opens it — useful when wanted, and pushing the posts down the rest of the time. */
-function NotInPost({
-  offers,
-  collectionId,
-  collectionSlug,
-}: {
-  offers: FacebookOfferNotInPost[];
-  collectionId: string;
-  collectionSlug: string;
-}) {
-  const [expanded, setExpanded] = usePersistedFlag(`stamporama:facebook-posts:notInPostExpanded:${collectionId}`);
-
-  return (
-    <section
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.75rem",
-        background: "var(--color-bg-elevated)",
-        padding: expanded ? "0.75rem 1.25rem" : "0.5rem 1.25rem",
-      }}
-    >
-      <h3 style={{ margin: expanded ? "0 0 0.5rem" : 0, fontSize: "0.9375rem", fontWeight: 600 }}>
-        <Tooltip content="Facebook offers being prepared or Ready that are in no post. Published alone, one becomes a post of its own; Post together or Add to post in Offers puts several into one.">
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            aria-expanded={expanded}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: 0,
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              font: "inherit",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            <span aria-hidden style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
-              <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-            </span>
-            Not in a post yet · {offers.length}
-          </button>
-        </Tooltip>
-      </h3>
-      {expanded && (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-          {offers.map((offer) => (
-            <li key={offer.offerId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
-              <Link
-                href={`/c/${collectionSlug}/offers/${offer.offerId}`}
-                style={{
-                  fontSize: "0.875rem",
-                  color: "var(--color-accent)",
-                  textDecoration: "none",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                #{offer.offerNo} · {offer.title}
-              </Link>
-              <span style={{ ...META_INLINE, overflow: "hidden", textOverflow: "ellipsis" }}>
-                {offer.group.name}
-                {offer.group.archived && " (archived)"} · {OFFER_LISTING_TYPE_LABEL[offer.listingType].toLowerCase()}
-              </span>
-              <OfferStateChip state={offer.state} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

@@ -275,6 +275,7 @@ describe("facebookPostGaps (#1692)", () => {
       missingTemplates: [],
       emptyOwnTemplates: [],
       emptyPlaceholders: [],
+      missingPostTitle: false,
     });
   });
 
@@ -409,6 +410,7 @@ describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
       facebookGroupId: "g1",
       listingType: "auction",
       facebookPostId: null,
+      postLots: 0,
       state: "ready",
       url: null,
       ...overrides,
@@ -423,10 +425,17 @@ describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
     assert.match(facebookPostRefusal([offer()])!, /at least two/);
     assert.match(facebookPostRefusal([offer(), offer({ offerNo: 7, facebookGroupId: null })])!, /#7 is not a Facebook offer/);
     assert.match(facebookPostRefusal([offer(), offer({ offerNo: 2, facebookGroupId: "g2" })])!, /different groups/);
-    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 3, facebookPostId: "p" })])!, /#3 is already a lot/);
+    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 3, facebookPostId: "p", postLots: 2 })])!, /#3 is already a lot/);
     assert.match(
       facebookPostRefusal([offer({ offerNo: 4, state: "active" }), offer({ offerNo: 5, state: "sold" })])!,
       /Offers #4 and #5 are already up or closed/
+    );
+  });
+
+  it("lets offers alone in their posts of one be posted together (#2116)", () => {
+    assert.equal(
+      facebookPostRefusal([offer({ facebookPostId: "p1", postLots: 1 }), offer({ offerNo: 2, facebookPostId: "p2", postLots: 1 })]),
+      null
     );
   });
 
@@ -451,6 +460,7 @@ describe("facebookLotAddRefusal (#1870)", () => {
       facebookGroupId: "g1",
       listingType: "auction",
       facebookPostId: null,
+      postLots: 0,
       state: "ready",
       url: null,
       ...overrides,
@@ -466,8 +476,10 @@ describe("facebookLotAddRefusal (#1870)", () => {
   it("asks what Post together asks: Facebook, the post's group, in no post, not yet up", () => {
     assert.equal(facebookLotAddRefusal(offer({ facebookGroupId: null }), post), "is not a Facebook offer");
     assert.equal(facebookLotAddRefusal(offer({ facebookGroupId: "g2" }), post), "is in another group");
-    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p1" }), post), "is already a lot of this post");
-    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p2" }), post), "is already a lot of another post");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p1", postLots: 2 }), post), "is already a lot of this post");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p1", postLots: 1 }), post), "is already a lot of this post");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p2", postLots: 2 }), post), "is already a lot of another post");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p2", postLots: 1 }), post), null, "alone in a post of one, it may join (#2116)");
     for (const state of ["pending", "active", "paused", "sold", "withdrawn"]) {
       assert.equal(facebookLotAddRefusal(offer({ state }), post), "is already up or closed", state);
     }
@@ -785,11 +797,13 @@ describe("a captioned post (#1841)", () => {
     assert.equal(facebookPartsText(own.captions[0].parts), "7/1");
   });
 
-  it("keeps {post} as typed in a post template — an offer posted alone has no post number (#1854)", () => {
-    const templates = { auction: "Post {post}: {title}", quickBuy: "" };
-    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })]), "Post {post}: Austria 1850 Mercury");
-    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: 1 })]), "Post {post}: Austria 1850 Mercury");
-    assert.deepEqual(facebookPostGaps(templates, "", [lot({ lotNo: null })]).emptyPlaceholders, []);
+  it("writes {post} in a post template, a post of one included (#2116)", () => {
+    const templates = { auction: "Post {post:3}: {title}", quickBuy: "" };
+    const post = { postNo: 7, title: "Alone" };
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })], post), "Post 007: Austria 1850 Mercury");
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: 1 }), lot({ lotNo: 2 })], post).split("\n\n").length, 2);
+    assert.deepEqual(facebookPostGaps(templates, "", [lot({ lotNo: null })], post).emptyPlaceholders, []);
+    assert.deepEqual(facebookPostGaps(templates, "", [lot({ lotNo: null })], null).emptyPlaceholders, [{ lotNo: null, token: "{post}" }]);
   });
 
   it("names {post} as empty where a captioned post has no number (#1854)", () => {
@@ -835,6 +849,13 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(short.submit, false);
     assert.deepEqual(short.waiting, [2, 3]);
     assert.equal(short.addLots, true, "a post still being prepared takes lots too (#1870)");
+  });
+
+  it("takes no lot out of a post of one — it is already one (#2116)", () => {
+    const alone = facebookPostMoves(lots("ready"));
+    assert.equal(alone.takeOut, false);
+    assert.equal(alone.addLots, true);
+    assert.equal(alone.activate, true);
   });
 
   it("finishes an activation refused halfway, but not a submission into a live post", () => {
@@ -984,12 +1005,12 @@ describe("a post's title (#1862)", () => {
     assert.equal(facebookPostTitleRefusal("   "), "A post needs a title.");
   });
 
-  it("is offered beside {post} in the captioned post's text and its captions, and in no post template", () => {
+  it("is offered beside {post} in every template — the captioned post's text, its captions and the post templates (#2116)", () => {
     const tokens = (role: "post" | "caption" | "captionPost", type: "auction" | "fixed") =>
       facebookTemplatePlaceholders(role, type).map((p) => p.token);
     for (const type of ["auction", "fixed"] as const) {
       assert.ok(tokens("caption", type).includes("{postTitle}"), type);
-      assert.ok(!tokens("post", type).includes("{postTitle}"), type);
+      assert.ok(tokens("post", type).includes("{postTitle}"), type);
     }
     assert.ok(tokens("captionPost", "auction").includes("{postTitle}"));
   });
@@ -1004,9 +1025,13 @@ describe("a post's title (#1862)", () => {
     assert.equal(facebookPartsText(own.captions[0].parts), "[Generalgouvernement 1940–44]");
   });
 
-  it("keeps {postTitle} as typed in a post template — an offer posted alone has no post", () => {
+  it("writes {postTitle} in a post template, and names its want once for the post (#2116)", () => {
     const templates = { auction: "{postTitle}: {title}", quickBuy: "" };
-    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })]), "{postTitle}: Austria 1850 Mercury");
+    assert.equal(renderFacebookPostText(templates, "", [lot({ lotNo: null })], titled), "Generalgouvernement 1940–44: Austria 1850 Mercury");
+    const gaps = facebookPostGaps(templates, "", [lot({ lotNo: 1 }), lot({ lotNo: 2 })], untitled);
+    assert.equal(gaps.missingPostTitle, true);
+    assert.deepEqual(gaps.emptyPlaceholders, []);
+    assert.equal(facebookPostGaps(templates, "", [lot({ lotNo: null })], titled).missingPostTitle, false);
   });
 
   it("leaves {postTitle} empty on a post with no title and names the want once, never per lot", () => {

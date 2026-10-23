@@ -206,8 +206,8 @@ function knownTokens(listingType: OfferListingType, role: FacebookTemplateRole =
   ]);
 }
 
-/** The multi-lot post a captioned text names (#1854, #1862): its number, and its title — null on a post
- *  made before titles until it is given one. */
+/** The post a text names (#1854, #1862): its number, and its title — null on a post made before titles
+ *  until it is given one, or on a post of one whose offer has no title (#2116). */
 export interface FacebookPostName {
   postNo: number;
   title: string | null;
@@ -274,7 +274,7 @@ function postNameValues(post: FacebookPostName | null): Record<string, TemplateV
 
 /** What each placeholder becomes for this lot. `{terms}` is `terms`, empty unless this lot is where
  *  the post states the note (#1689); `{post}` and `{postTitle}` are the post's number (#1854) and
- *  title (#1862), which only a caption knows of — empty where there is none. */
+ *  title (#1862) — empty where there is none. */
 function placeholderValues(
   lot: FacebookPostLotText,
   terms: string,
@@ -320,9 +320,9 @@ function partsText(parts: readonly FacebookPostPart[]): string {
  * while it is typed (`unknownPostPlaceholders`) — so an auction's `{closesAt}` left in a quick buy's
  * template is seen, not quietly emptied. A retired placeholder is still filled in (#1671), so no post
  * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
- * (#1689) — `terms`, empty unless this lot is where the post states it. `post` is what a caption's
- * `{post}` and `{postTitle}` become (#1854, #1862); a post template knows neither token, so they stay
- * as typed there.
+ * (#1689) — `terms`, empty unless this lot is where the post states it. `post` is what `{post}` and
+ * `{postTitle}` become (#1854, #1862) — in every template since #2116, every Facebook offer being in
+ * a post from the moment it is made.
  */
 export function renderFacebookLotParts(
   template: string,
@@ -376,8 +376,13 @@ function fillTemplate(
 }
 
 /** {@link renderFacebookLotParts} as one string — the lot's text as the template's source reads. */
-export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
-  return partsText(renderFacebookLotParts(template, lot, terms));
+export function renderFacebookLotText(
+  template: string,
+  lot: FacebookPostLotText,
+  terms = "",
+  post: FacebookPostName | null = null
+): string {
+  return partsText(renderFacebookLotParts(template, lot, terms, "post", post));
 }
 
 /** Parts as one string — the source a part list was rendered from. */
@@ -445,11 +450,13 @@ function inLotOrder<T extends { lotNo: number | null }>(lots: readonly T[]): T[]
  * `{terms}` (#1689) — once, however many lots the post holds, as it was when it was appended under
  * the last — and nowhere when that template has none. A lot with no template has no text, and adds no
  * gap between the others; what is in a lot's text is its template's, line breaks included (#1692).
+ * `post` is the post the lots are in, whose number and title `{post}` and `{postTitle}` write (#2116).
  */
 export function renderFacebookPostParts(
   templates: FacebookPostTemplates,
   standingNote: string,
-  lots: readonly FacebookPostLotText[]
+  lots: readonly FacebookPostLotText[],
+  post: FacebookPostName | null = null
 ): FacebookPostPart[] {
   const sorted = inLotOrder(lots);
   const written = sorted
@@ -457,7 +464,9 @@ export function renderFacebookPostParts(
       renderFacebookLotParts(
         facebookLotTemplate(templates, lot),
         lot,
-        i === sorted.length - 1 ? standingNote : ""
+        i === sorted.length - 1 ? standingNote : "",
+        "post",
+        post
       )
     )
     .filter((parts) => partsText(parts).trim() !== "");
@@ -468,9 +477,10 @@ export function renderFacebookPostParts(
 export function renderFacebookPostText(
   templates: FacebookPostTemplates,
   standingNote: string,
-  lots: readonly FacebookPostLotText[]
+  lots: readonly FacebookPostLotText[],
+  post: FacebookPostName | null = null
 ): string {
-  return partsText(renderFacebookPostParts(templates, standingNote, lots));
+  return partsText(renderFacebookPostParts(templates, standingNote, lots, post));
 }
 
 /** A placeholder a lot's template places that comes out empty, and the lot it is in. */
@@ -482,12 +492,14 @@ export interface FacebookEmptyPlaceholder {
 
 /** What a post is missing (#1692), for the card to name: the templates its lots' types have none of,
  *  the lots whose own template is empty (#1780), and the placeholders its templates place that are
- *  empty. */
+ *  empty. `missingPostTitle` is the post's want of a title (#1862) where a template places
+ *  `{postTitle}` — named once for the post, never per lot, since one title fills every place. */
 export interface FacebookPostGaps {
   missingTemplates: OfferListingType[];
   /** The lots (by `lotNo`, null for an offer posted alone) whose offer's own template is empty. */
   emptyOwnTemplates: (number | null)[];
   emptyPlaceholders: FacebookEmptyPlaceholder[];
+  missingPostTitle: boolean;
 }
 
 /**
@@ -497,12 +509,14 @@ export interface FacebookPostGaps {
  * is not what it lacks; a placeholder the template places and the lot leaves empty is named per lot,
  * once per token. Two are
  * empty by the post's own rule rather than for want of anything, and are not named: `{lot}` on an
- * offer posted alone, and `{terms}` in every lot but the last, where the note is stated once.
+ * offer posted alone, and `{terms}` in every lot but the last, where the note is stated once. An empty
+ * `{postTitle}` is the post's one `missingPostTitle`.
  */
 export function facebookPostGaps(
   templates: FacebookPostTemplates,
   standingNote: string,
-  lots: readonly FacebookPostLotText[]
+  lots: readonly FacebookPostLotText[],
+  post: FacebookPostName | null = null
 ): FacebookPostGaps {
   const sorted = inLotOrder(lots);
   const followsGroup = (lot: FacebookPostLotText) => lot.ownTemplate == null;
@@ -515,11 +529,12 @@ export function facebookPostGaps(
     .filter((lot) => !followsGroup(lot) && !lot.ownTemplate!.trim())
     .map((lot) => lot.lotNo);
   const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
+  let missingPostTitle = false;
   sorted.forEach((lot, i) => {
     const template = facebookLotTemplate(templates, lot);
     const known = knownTokens(lot.listingType);
     const last = i === sorted.length - 1;
-    const values = placeholderValues(lot, last ? standingNote : "");
+    const values = placeholderValues(lot, last ? standingNote : "", post);
     const seen = new Set<string>();
     for (const written of template.match(TOKEN) ?? []) {
       const value = knownValue(written, known, values, lotCurrencyStyle(lot));
@@ -529,10 +544,12 @@ export function facebookPostGaps(
       seen.add(token);
       if (token === "{lot}" && lot.lotNo == null) continue;
       if (token === FACEBOOK_TERMS_PLACEHOLDER.token && !last) continue;
-      if (value.trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
+      if (value.trim() !== "") continue;
+      if (token === FACEBOOK_POST_TITLE_PLACEHOLDER.token) missingPostTitle = true;
+      else emptyPlaceholders.push({ lotNo: lot.lotNo, token });
     }
   });
-  return { missingTemplates, emptyOwnTemplates, emptyPlaceholders };
+  return { missingTemplates, emptyOwnTemplates, emptyPlaceholders, missingPostTitle };
 }
 
 /** One lot's caption in a captioned post (#1841): the photo it goes under, by lot. */
@@ -592,12 +609,9 @@ function captionPostValues(
 /** What a captioned post is missing (#1841): {@link FacebookPostGaps} for its captions — the caption
  *  templates its lots' types have none of, the lots whose own template is empty, the placeholders a
  *  caption leaves empty — and for its shared text, whether there is none and the placeholders it
- *  leaves empty (named with `lotNo: null`). `missingPostTitle` is the post's want of a title (#1862)
- *  where its text or a caption places `{postTitle}` — named once for the post, never per lot, since
- *  one title fills every place. */
+ *  leaves empty (named with `lotNo: null`); `missingPostTitle` counts its text and its captions. */
 export interface FacebookCaptionedPostGaps extends FacebookPostGaps {
   missingPostText: boolean;
-  missingPostTitle: boolean;
 }
 
 export function facebookCaptionedPostGaps(
@@ -759,9 +773,9 @@ export interface FacebookPostSource {
 }
 
 /** The group's templates and note as the source reads them, and the layout the post has **now** — its
- *  own, or its group's (#1841); `text` for an offer posted alone. `post` is the multi-lot post the lots
- *  are in, its title as it reads now (#1862); absent or null for an offer in no post. A post of one
- *  lot (#1989) is laid out as `text` and its lot carries no number, so it renders as one posted alone. */
+ *  own, or its group's (#1841); `text` for an offer posted alone. `post` is the post the lots are in,
+ *  its title as it reads now (#1862); absent or null for an offer in no post. A post of one lot
+ *  (#1989) is laid out as `text` and its lot carries no number, so it renders as one posted alone. */
 export interface FacebookPostSourceGroup {
   postTemplate: string;
   quickBuyTemplate: string;
@@ -850,7 +864,8 @@ export function isFacebookLotPosted(state: string): boolean {
  *    was a mistake, or a post gone from the group, taken back to Ready (`facebookBackToReadyPlan`);
  *  - `backToPreparing` — while the post is not up and a lot of it is Ready (#2115): every Ready lot
  *    taken back to Preparing, as each offer's own *Back to preparing* would;
- *  - `takeOut` — a lot may leave the post only until the post is up;
+ *  - `takeOut` — a lot may leave the post only until the post is up, and only a post of several lots:
+ *    a lot taken out is a post of one (#2116), which the only lot of a post already is;
  *  - `addLots` — offers may join the post as further lots only until it is up, too (#1870);
  *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
 export interface FacebookPostMoves {
@@ -879,7 +894,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     withdraw: pending,
     backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
     backToPreparing: !posted && ready,
-    takeOut: !posted,
+    takeOut: !posted && lots.length > 1,
     addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
   };
@@ -987,8 +1002,17 @@ export interface FacebookPostCandidate {
   facebookGroupId: string | null;
   listingType: OfferListingType;
   facebookPostId: string | null;
+  /** How many lots the offer's post holds, itself included — 0 in no post. An offer alone in its post
+   *  is free to join another (#2116): its post of one goes. */
+  postLots: number;
   state: string;
   url: string | null;
+}
+
+/** Whether an offer is a lot of a post of several — the one post it cannot leave by joining another.
+ *  An offer alone in its post of one may (#2116). */
+function inPostOfSeveral(offer: Pick<FacebookPostCandidate, "facebookPostId" | "postLots">): boolean {
+  return offer.facebookPostId !== null && offer.postLots > 1;
 }
 
 export function facebookPostRefusal(
@@ -1007,7 +1031,7 @@ export function facebookPostRefusal(
     const mixed = facebookMixedTypesRefusal(offers);
     if (mixed) return mixed;
   }
-  const inPost = offers.filter((o) => o.facebookPostId !== null);
+  const inPost = offers.filter(inPostOfSeveral);
   if (inPost.length > 0) {
     return `${listOfferNos(inPost)} ${inPost.length === 1 ? "is" : "are"} already a lot of another post.`;
   }
@@ -1045,8 +1069,9 @@ export interface FacebookLotAddTarget {
 /**
  * Why one offer cannot become a further lot of an existing post (#1870), or null when it can — the
  * conditions *Post together* asks of every offer, asked of this one against the post: a Facebook offer
- * in the post's group, in no post, not yet up, and of a type the post already holds unless its group
- * lets posts mix them. Phrased to follow the offer's number, which the caller puts before it.
+ * in the post's group, in no post of several (alone in its post of one, #2116), not yet up, and of a
+ * type the post already holds unless its group lets posts mix them. Phrased to follow the offer's
+ * number, which the caller puts before it.
  */
 export function facebookLotAddRefusal(
   offer: FacebookPostCandidate,
@@ -1055,7 +1080,7 @@ export function facebookLotAddRefusal(
   if (offer.facebookGroupId === null) return "is not a Facebook offer";
   if (offer.facebookGroupId !== post.groupId) return "is in another group";
   if (offer.facebookPostId === post.postId) return "is already a lot of this post";
-  if (offer.facebookPostId !== null) return "is already a lot of another post";
+  if (inPostOfSeveral(offer)) return "is already a lot of another post";
   if (isFacebookLotPosted(offer.state)) return "is already up or closed";
   if (!post.mixedListingTypes && !post.lotTypes.includes(offer.listingType)) {
     const kind = isAuctionListing(offer.listingType) ? "an auction" : "a quick buy";

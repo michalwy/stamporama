@@ -125,7 +125,7 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     return { offerId, itemId: item.id };
   }
 
-  it("numbers each post from the collection's counter, and a dissolved post's number is never reused", async () => {
+  it("numbers each post from the collection's counter, and a deleted post's number is never reused", async () => {
     const a = (await offer()).offerId;
     const b = (await offer()).offerId;
     const c = (await offer()).offerId;
@@ -136,12 +136,17 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
     assert.equal(await findFacebookPostId(userId, collectionId, first.postNo), first.postId);
     assert.equal((await getFacebookOfferKit(a))!.post!.postNo, first.postNo);
 
-    // Taking one of two lots out dissolves the post — and its number goes with it. The newest post is
-    // the one dissolved, so a `max + 1` allocation would hand its number straight out again.
+    // Taking a lot out gives it a post of one, the next number (#2116); the post it left keeps its own.
+    // Joining again, that post of one goes — and its number with it. It is the newest post, so a
+    // `max + 1` allocation would hand its number straight out again.
     await removeFacebookLot(userId, d);
-    assert.equal(await findFacebookPostId(userId, collectionId, second.postNo), null);
-    const third = await createFacebookPost(userId, collectionId, [c, d], "Test post");
-    assert.equal(third.postNo, second.postNo + 1);
+    const out = (await getFacebookOfferKit(d))!.post!.postNo;
+    assert.equal(out, second.postNo + 1);
+    assert.equal(await findFacebookPostId(userId, collectionId, second.postNo), second.postId);
+    const e = (await offer()).offerId;
+    const third = await createFacebookPost(userId, collectionId, [d, e], "Test post");
+    assert.equal(await findFacebookPostId(userId, collectionId, out), null);
+    assert.ok(third.postNo > out + 1, "the post of one's number is not given again");
   });
 
   it("reads the post's lots in lot order, with the sale each sold lot left on", async () => {
@@ -203,20 +208,25 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
       ].sort()
     );
 
+    // An offer alone is a post of one from the start (#2116): its post, with no lot number.
     const all = await listOffersPaginated(userId, collectionId, {});
-    assert.equal(all.items.find((i) => i.id === alone)!.facebookPost, null);
+    assert.equal(all.items.find((i) => i.id === alone)!.facebookPost?.lotNo, null);
+    assert.notEqual(all.items.find((i) => i.id === alone)!.facebookPost?.postNo, postNo);
   });
 
   describe("its title (#1862)", () => {
     it("is asked for when the post is made — never blank — and kept trimmed", async () => {
       const a = (await offer()).offerId;
       const b = (await offer()).offerId;
+      const postsOf = async () =>
+        (await prisma.offer.findMany({ where: { id: { in: [a, b] } }, orderBy: { offerNo: "asc" }, select: { facebookPostId: true } }))
+          .map((o) => o.facebookPostId);
+      const own = await postsOf();
       for (const blank of ["", "   "]) {
         await assert.rejects(createFacebookPost(userId, collectionId, [a, b], blank), /A post needs a title/);
       }
-      // Refused before anything is written: the offers are in no post.
-      const loose = await prisma.offer.findMany({ where: { id: { in: [a, b] } }, select: { facebookPostId: true } });
-      assert.deepEqual(loose.map((o) => o.facebookPostId), [null, null]);
+      // Refused before anything is written: the offers are each in their post of one still (#2116).
+      assert.deepEqual(await postsOf(), own);
 
       const { postId } = await createFacebookPost(userId, collectionId, [a, b], "  Generalgouvernement 1940–44 ");
       const row = await prisma.facebookPost.findUniqueOrThrow({ where: { id: postId }, select: { title: true } });

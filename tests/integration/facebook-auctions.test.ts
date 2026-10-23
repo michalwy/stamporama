@@ -655,7 +655,7 @@ describe("Facebook auction offers (#1544)", () => {
     );
   });
 
-  it("renumbers the lots when one leaves, and dissolves a post left with one", async () => {
+  it("renumbers the lots when one leaves, puts the one taken out in a post of its own, and keeps a post left with one (#2116)", async () => {
     const [a, b, c] = [
       await auction([await newItem()]),
       await auction([await newItem()]),
@@ -664,11 +664,14 @@ describe("Facebook auction offers (#1544)", () => {
     const { postId } = await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
 
     await removeFacebookLot(userId, a);
-    assert.deepEqual([(await read(a)).facebookPostId, (await read(a)).facebookLotNo], [null, null]);
+    const out = await read(a);
+    assert.ok(out.facebookPostId && out.facebookPostId !== postId, "taken out, it is a post of its own");
+    assert.equal(out.facebookLotNo, 1);
     assert.deepEqual([(await read(b)).facebookLotNo, (await read(c)).facebookLotNo], [1, 2]);
 
     await deleteOffer(userId, b);
-    assert.equal((await read(c)).facebookPostId, null, "one lot left is a post of its own");
-    assert.equal(await prisma.facebookPost.count({ where: { id: postId } }), 0);
+    assert.deepEqual([(await read(c)).facebookPostId, (await read(c)).facebookLotNo], [postId, 1], "one lot left is a post of one");
+    await deleteOffer(userId, c);
+    assert.equal(await prisma.facebookPost.count({ where: { id: postId } }), 0, "a post with no lot goes");
   });
 });

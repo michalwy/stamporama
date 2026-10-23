@@ -2980,10 +2980,10 @@ model FacebookDefaults {
 }
 
 // A post in one Facebook group (#1544; ADR-0061 §2): one offer posted alone, or an album of several,
-// each photo a lot bid on in its own comments. Every Facebook offer that has gone up is in one
-// (#1989) — an offer posted alone gets its post of one lot when it is published. Its lots are offers
-// naming it (`Offer.facebookPostId`), numbered by `Offer.facebookLotNo`, sharing its group and their
-// closing time. The closing time is kept on each lot (`Offer.endsAt`), where everything that reads an
+// each photo a lot bid on in its own comments. Every Facebook offer is in one from the moment it is
+// made (#2116; #1989 made it at publishing) — an offer meant to go up alone is a post of one lot. Its
+// lots are offers naming it (`Offer.facebookPostId`), numbered by `Offer.facebookLotNo`, sharing its
+// group and their closing time. The closing time is kept on each lot (`Offer.endsAt`), where everything that reads an
 // auction's end already looks, and written to all of them together. The post's link is likewise each
 // lot's own `url` (#1668): activating the post writes it into every lot that has no link of its own.
 model FacebookPost {
@@ -2994,9 +2994,13 @@ model FacebookPost {
   // `Collection.nextFacebookPostNo` and never reused — what *Post #12 · lot 3* names on the offers list.
   postNo       Int
   // The post's title (#1862) — what tells it apart beside its number, and what `{postTitle}` puts into
-  // a captioned post. Every post made since has one (*Post together* asks for it); null only on a post
-  // made before, which is named by number until it is given one.
+  // its text. A post of several lots is given one (*Post together* asks for it); a post of one takes
+  // its offer's (#2068, #2116). Null on a post made before titles, or of one whose offer has none.
   title        String?
+  // Whether the title is its one lot's offer's title, kept in step as that changes (#2116): true on a
+  // post of one from the moment it is made, false once the post is renamed by hand or gains a second
+  // lot — and then for good. `syncFollowingPostTitles` is the one writer of a following title.
+  titleFollowsOffer Boolean @default(false)
   // How this post is laid out (#1841): `text` or `captions`, or null to follow its group's setting,
   // read live. Changeable only until a lot has gone up — after that the post is what was posted.
   layout       String?
@@ -5351,9 +5355,8 @@ model Offer {
   // offer is created, then the offer's own. Null on every other offer, a Facebook quick buy included.
   bidIncrement Decimal? @db.Decimal(10, 2)
   // The post this offer is a lot of, and its number there (#1544; ADR-0061 §2) — a post of one lot for
-  // an offer posted alone (#1989), made when it is published. Both null on a Facebook offer not yet
-  // published or grouped, and off Facebook. `SetNull`: a post is removed only by the app, which
-  // renumbers first.
+  // an offer posted alone (#1989), made with the offer (#2116). Both null off Facebook only. `SetNull`:
+  // a post is removed only by the app, which renumbers first.
   facebookPostId String?
   facebookLotNo  Int?
   // This offer's own post template (#1780), overriding its group's for this offer only — for the

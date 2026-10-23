@@ -197,7 +197,7 @@ import {
   type FacebookOfferResolution,
 } from "./facebook-auctions";
 import { facebookDefaultStartingPrice, isFacebookLotPosted } from "./facebook-post-rules";
-import { pruneFacebookLotPhotos } from "./facebook-lot-photos";
+import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import type { PlanDrift } from "./offer-generator-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
@@ -6784,7 +6784,8 @@ async function writeOfferCreation(
   return offer.id;
 }
 
-/** What follows a committed creation: the texts that need the offer's id, and the category backfills. */
+/** What follows a committed creation: the texts that need the offer's id, the category backfills, and
+ *  a Facebook offer's post of one. */
 async function finishOfferCreation(
   ownerId: string,
   offerId: string,
@@ -6796,28 +6797,27 @@ async function finishOfferCreation(
   // moment and the offer would otherwise sit with a blank Allegro card until something was added.
   await backfillAllegroCategory(ownerId, offerId);
   await backfillDelcampeCategory(offerId); // #609, the same question on the marketplace next door
-  await freezeIfPublished(offerId, prepared.input.state);
+  await placeCreatedOffer(offerId, prepared.input.state);
 }
 
-/** A Facebook offer created already up — Pending or Active — is published as it is made, so it gets
- *  its post of one lot (#1989) and its post text is frozen there and then (#1800), after the texts the
- *  offer's id completes. */
-async function freezeIfPublished(offerId: string, state: OfferState): Promise<void> {
-  if (!isLiveState(state)) return;
+/** A new Facebook offer is in a post from the moment it is made (#2116): its post of one lot, unless
+ *  the write that made it already put it in a post (Generate offers' *In a new post*, #2030). One
+ *  created already up — Pending or Active — is published as it is made, so its post text is frozen
+ *  there and then (#1800), after the texts the offer's id completes. */
+async function placeCreatedOffer(offerId: string, state: OfferState): Promise<void> {
   await placeInOneLotFacebookPost(offerId);
-  await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
+  if (isLiveState(state)) await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
 }
 
 /**
- * Give a Facebook offer that is going up in no post its post of one lot (#1989, amending ADR-0061 §2):
- * every Facebook offer that has gone up is in a post, as it is on Facebook, so the list of posts shows
- * everything up there. Made at publication, never at creation — an offer meant for a post of several
- * lots never passes through a throwaway post, and post numbers go only to what went up. Titled with
- * the offer's own title (#2068), copied once: the post's title from then on, renamed like any post's,
- * and untouched by a later rename of the offer. A title typed in *Publish…* replaces it afterwards.
- * A no-op for an offer already in a post and off Facebook.
+ * Give a Facebook offer in no post its post of one lot (#2116, amending #1989 and ADR-0061 §2): every
+ * Facebook offer is in a post from the moment it is made, so a post of one lot and a post of several
+ * differ only in their templates — the same screen, number, title, moves and placeholders. Titled
+ * with the offer's own title (#2068) and following it (`syncFollowingPostTitles`) until the post is
+ * renamed by hand or gains a second lot. Run on creation, on a move onto Facebook, and on every move
+ * up as a safety net. A no-op for an offer already in a post and off Facebook.
  */
-async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
+export async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
   const titles = await readOfferPostTitles([offerId]);
   await prisma.$transaction(async (tx) => {
     const offer = await tx.offer.findUnique({
@@ -6825,18 +6825,55 @@ async function placeInOneLotFacebookPost(offerId: string): Promise<void> {
       select: { collectionId: true, facebookGroupId: true, facebookPostId: true },
     });
     if (!offer?.facebookGroupId || offer.facebookPostId) return;
-    const postNo = await allocateEntityNumber(tx, offer.collectionId, "facebookPost");
-    const post = await tx.facebookPost.create({
-      data: {
-        collectionId: offer.collectionId,
-        postNo,
-        groupId: offer.facebookGroupId,
-        title: titles.get(offerId) ?? null,
-      },
-      select: { id: true },
-    });
-    await tx.offer.update({ where: { id: offerId }, data: { facebookPostId: post.id, facebookLotNo: 1 } });
+    await writePostOfOne(tx, { id: offerId, ...offer, facebookGroupId: offer.facebookGroupId }, titles.get(offerId) ?? null);
   });
+}
+
+/** Lot 1 of a new post of one in the offer's group, inside the caller's transaction (#2116): numbered
+ *  from the collection's counter, titled `title` — the offer's, read by the caller through
+ *  `readOfferPostTitles` — and following the offer's title from then on. The offer must be in no post. */
+export async function writePostOfOne(
+  tx: DbTransaction,
+  offer: { id: string; collectionId: string; facebookGroupId: string },
+  title: string | null
+): Promise<string> {
+  const postNo = await allocateEntityNumber(tx, offer.collectionId, "facebookPost");
+  const post = await tx.facebookPost.create({
+    data: { collectionId: offer.collectionId, postNo, groupId: offer.facebookGroupId, title, titleFollowsOffer: true },
+    select: { id: true },
+  });
+  await tx.offer.update({ where: { id: offer.id }, data: { facebookPostId: post.id, facebookLotNo: 1 } });
+  return post.id;
+}
+
+/**
+ * Bring the title of every post of one that follows its offer's (#2116) back in step with that
+ * offer's title — after anything that can change it: its stored title (`patchOffer`), its generated
+ * texts (`syncGeneratedTexts`, which every change to its sets runs), and at boot for what changed out
+ * of sight (an area renamed under a derived label) and for the posts the migration made. `offerIds`
+ * narrows it to those offers' posts; omitted, every following post. An offer with no title leaves its
+ * post untitled (#1692). Returns how many titles it changed.
+ */
+export async function syncFollowingPostTitles(offerIds?: readonly string[]): Promise<number> {
+  if (offerIds?.length === 0) return 0;
+  const posts = await prisma.facebookPost.findMany({
+    where: { titleFollowsOffer: true, ...(offerIds ? { lots: { some: { id: { in: [...offerIds] } } } } : {}) },
+    select: { id: true, title: true, lots: { select: { id: true }, take: 2 } },
+  });
+  const ofOne = posts.filter((p) => p.lots.length === 1);
+  if (ofOne.length === 0) return 0;
+  const titles = await readOfferPostTitles(ofOne.map((p) => p.lots[0].id));
+  let changed = 0;
+  for (const post of ofOne) {
+    const title = titles.get(post.lots[0].id) ?? null;
+    if (title === post.title) continue;
+    const { count } = await prisma.facebookPost.updateMany({
+      where: { id: post.id, titleFollowsOffer: true },
+      data: { title },
+    });
+    changed += count;
+  }
+  return changed;
 }
 
 /**
@@ -7060,7 +7097,7 @@ export async function duplicateOffer(
   });
 
   await syncOfferContextTexts(ownerId, id, platform); // #415, as in `createOffer`
-  await freezeIfPublished(id, targetState); // #1800, as in `createOffer`
+  await placeCreatedOffer(id, targetState); // #2116 and #1800, as in `createOffer`
   return { id, skippedCopies };
 }
 
@@ -7079,7 +7116,8 @@ export async function updateOffer(
   const platform = await assertPlatform(ref.collectionId, input.platformId);
   // The Facebook half (#1544): the group stays editable — an archived one may be kept, not chosen —
   // and none of its defaults are read again. A lot of a multi-lot post shares its post's group, so
-  // it moves to another only by leaving the post first.
+  // it moves to another only by leaving the post first; a post of one not yet up moves with its
+  // offer (#2116).
   const facebook = facebookOrRefuse(
     await resolveFacebookOffer(
       ref.collectionId,
@@ -7093,11 +7131,18 @@ export async function updateOffer(
     select: { facebookPostId: true, facebookLotNo: true },
   });
   const postId = current?.facebookPostId ?? null;
-  if (postId && facebook.facebookGroupId && facebook.facebookGroupId !== ref.facebookGroupId) {
-    throw new OfferActionBlockedError(
-      "facebook-group",
-      `This auction is lot ${current?.facebookLotNo} of a post — take it out of the post before moving it to another group.`
-    );
+  const regrouped = !!postId && !!facebook.facebookGroupId && facebook.facebookGroupId !== ref.facebookGroupId;
+  if (regrouped) {
+    const lots = await prisma.offer.findMany({ where: { facebookPostId: postId }, select: { state: true } });
+    if (lots.length > 1) {
+      throw new OfferActionBlockedError(
+        "facebook-group",
+        `This auction is lot ${current?.facebookLotNo} of a post — take it out of the post before moving it to another group.`
+      );
+    }
+    if (lots.some((l) => isFacebookLotPosted(l.state))) {
+      throw new OfferActionBlockedError("facebook-group", "This offer's post is up in its group, so it stays there.");
+    }
   }
   // The same resolution creation uses (#449), minus the platform default: switching platforms on an
   // existing offer must not re-describe a listing that already exists. An auction with no current
@@ -7149,8 +7194,11 @@ export async function updateOffer(
   // template again. The form warns before saving; nothing is translated between the two types.
   const dropsOwnTemplate = !facebook.facebookGroupId || pricing.listingType !== ref.listingType;
   await prisma.$transaction(async (tx) => {
-    // Moved off Facebook: a lot leaves its post, which renumbers or dissolves it (ADR-0061 §2).
+    // Moved off Facebook: a lot leaves its post, which renumbers or goes (ADR-0061 §2) — a post of
+    // one goes with it (#2116).
     if (postId && !facebook.facebookGroupId) await detachFacebookLot(tx, offerId);
+    // A post of one not yet up follows its offer into another group (#2116).
+    if (regrouped) await tx.facebookPost.update({ where: { id: postId }, data: { groupId: facebook.facebookGroupId! } });
     // The lots of one post close together (ADR-0061 §2), so a closing time written on one is the
     // post's — written to every auction among its lots, which is where everything reading an
     // auction's end looks. A quick buy closes at no time, so it neither writes one nor takes one.
@@ -7187,14 +7235,14 @@ export async function updateOffer(
     },
     });
   });
-  // Off Facebook, it is no lot any more: its captioned photo goes, and the last lot's of a post it
-  // dissolved (#1861).
-  if (postId && !facebook.facebookGroupId) await pruneFacebookLotPhotos(ref.collectionId);
-  // Moved onto Facebook once already up, it is a Facebook offer that went up, so it is in a post
-  // (#1989) — one of its own.
-  if (!postId && facebook.facebookGroupId && isFacebookLotPosted(ref.state)) {
-    await placeInOneLotFacebookPost(offerId);
+  // Off Facebook, it is no lot any more: its captioned photo goes, and so does the last lot's of a post
+  // it left with one (#1861).
+  if (postId && !facebook.facebookGroupId) {
+    await pruneFacebookLotPhotos(ref.collectionId);
+    await syncFacebookPostLotPhotos(postId);
   }
+  // Moved onto Facebook, it is a Facebook offer, so it is in a post (#2116) — one of its own.
+  if (!postId && facebook.facebookGroupId) await placeInOneLotFacebookPost(offerId);
 
   // The header form writes no texts, so the only question is the price — and on an auction, only the
   // *starting* one (#542): the current figure is where the bidding stands, and noting a bid is not a
@@ -7368,6 +7416,8 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
         : {}),
     },
   });
+  // A post of one following its offer's title takes the new one (#2116).
+  if (patch.name !== undefined) await syncFollowingPostTitles([offerId]);
 
   if (
     listedBefore &&
@@ -7495,6 +7545,7 @@ export async function regenerateOfferText(
     where: { id: offerId },
     data: { [field]: value, [EDITED_FLAG[field]]: false },
   });
+  if (field === "name") await syncFollowingPostTitles([offerId]); // #2116
   if (before && before[field] !== value) {
     await markListingContentChanged(offerId);
   }
@@ -7582,6 +7633,17 @@ export async function syncGeneratedTexts(
   offerId: string,
   /** The fields to bring back in step — all three unless a caller knows only some can have moved. */
   fields: readonly OfferTextField[] = ["name", "description", "privateNote"]
+): Promise<void> {
+  await writeGeneratedTexts(ownerId, offerId, fields);
+  // The offer's title may have moved — its generated one, or the label its sets give it when it has
+  // none — and a post of one following it moves with it (#2116).
+  if (fields.includes("name")) await syncFollowingPostTitles([offerId]);
+}
+
+async function writeGeneratedTexts(
+  ownerId: string,
+  offerId: string,
+  fields: readonly OfferTextField[]
 ): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
@@ -7923,9 +7985,10 @@ async function transitionOffer(
       readyAfterPhotosRefusal: null,
     },
   });
-  // Going up — Pending or Active, whichever comes first — is publication: a Facebook offer in no post
-  // gets its post of one lot (#1989), and its post text is frozen as it reads now (#1800). Only where
-  // none is frozen yet: approving a pending post or resuming a paused one puts up nothing new.
+  // Going up — Pending or Active, whichever comes first — is publication: its post text is frozen as
+  // it reads now (#1800), only where none is frozen yet — approving a pending post or resuming a
+  // paused one puts up nothing new. A Facebook offer has had its post since it was made (#2116); the
+  // placement is a no-op kept so nothing ever goes up in no post (#1989).
   if (ref.facebookGroupId && isLiveState(to)) {
     await placeInOneLotFacebookPost(offerId);
     await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
@@ -8058,13 +8121,18 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
   // Generated listing images (#311) hang off the offer. The cascade drops their rows but never the
   // files, so their bytes go first, while the rows can still be read.
   await deleteOfferPhotoBytes(offerId);
-  // A lot of a multi-lot post leaves it first, so the lots after it move up and a post left with one
-  // lot is dissolved (#1544) — the key alone would leave a gap in the numbering.
+  // A lot leaves its post first, so the lots after it move up and a post left with none goes (#1544,
+  // #2116) — the key alone would leave a gap in the numbering, or a post of no lot.
+  const { facebookPostId: postId } = await prisma.offer.findUniqueOrThrow({
+    where: { id: offerId },
+    select: { facebookPostId: true },
+  });
   await prisma.$transaction(async (tx) => {
     await detachFacebookLot(tx, offerId);
     await tx.offer.delete({ where: { id: offerId } });
   });
-  // The last lot of a post it dissolved is no lot any more, and loses its captioned photo (#1861).
+  // A post left with one lot is laid out as text, so that lot's captioned photo goes too (#1861).
+  if (postId) await syncFacebookPostLotPhotos(postId);
   await pruneFacebookLotPhotos(collectionId);
 }
 

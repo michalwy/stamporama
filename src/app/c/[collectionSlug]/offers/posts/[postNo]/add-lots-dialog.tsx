@@ -36,7 +36,8 @@ const MUTED: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-
 
 /**
  * *Add lots…* on a post's screen (#1870): the offers that could join the post — Facebook offers in its
- * group, in no post, not yet up, of a type it holds unless its group mixes them — picked here, and
+ * group, alone in a post of one or in none (#2116), not yet up, of a type it holds unless its group
+ * mixes them — picked here, and
  * added as the post's next lots **in the order they were picked**, each row saying which lot it will
  * be. The server asks each again on save, since the list is a moment old by then.
  */

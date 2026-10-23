@@ -226,7 +226,8 @@ describe("a Facebook post that is up goes back to Ready (#1998)", () => {
     await withdrawOfferOrPost(userId, over);
     await assert.rejects(() => takeFacebookPostBackToReady(userId, over), /nothing up for sale/);
 
+    // Every Facebook offer is in a post from the start (#2116): one not yet up is refused by its post's.
     const loose = await offer();
-    await assert.rejects(() => takeFacebookPostBackToReady(userId, loose), /in no post/);
+    await assert.rejects(() => takeFacebookPostBackToReady(userId, loose), /nothing up for sale/);
   });
 });

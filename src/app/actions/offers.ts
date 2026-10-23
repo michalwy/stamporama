@@ -1137,14 +1137,12 @@ export async function deleteOffersAction(offerIds: string[]): Promise<BulkOfferA
  * holding several takes the whole post live, the URL being the post's (#1668).
  *
  * `pending` publishes it as **waiting for approval** (#1778), the URL being the pending post's; the
- * approval of a pending offer is this same action with `active`, the URL the final one. `postTitle`
- * names the post of one lot a Facebook offer in no post goes up as (#1989). */
+ * approval of a pending offer is this same action with `active`, the URL the final one. */
 export async function publishOfferAction(
   offerId: string,
   rawUrl: string,
   to: "active" | "pending" = "active",
-  rawEndsAt?: string | null,
-  postTitle?: string
+  rawEndsAt?: string | null
 ): Promise<OfferActionState> {
   const session = await getSession();
   if (to !== "active" && to !== "pending") return { status: "error", message: "Unknown offer state." };
@@ -1157,7 +1155,7 @@ export async function publishOfferAction(
     endsAt = ends.value;
   }
   try {
-    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl), to, endsAt, postTitle);
+    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl), to, endsAt);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to publish the offer.");

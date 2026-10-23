@@ -1462,15 +1462,14 @@ export function OffersListPanel({
           initialTarget={dialog.target}
           approving={dialog.approving}
           offerId={dialog.offer.id}
-          askPostTitle={dialog.offer.facebookGroupId !== null && dialog.offer.facebookPostId === null}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
-          onConfirm={(url, target, endsAt, postTitle) => {
+          onConfirm={(url, target, endsAt) => {
             startTransition(async () => {
               const { publishOfferAction } = await import("@/app/actions/offers");
               const offer = dialog.offer;
-              const result = await publishOfferAction(offer.id, url, target, endsAt, postTitle);
+              const result = await publishOfferAction(offer.id, url, target, endsAt);
               if (result.status === "success") {
                 handleSuccess();
                 toast({

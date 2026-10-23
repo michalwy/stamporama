@@ -294,8 +294,14 @@ export function FacebookPostKit({
           )}
           {gaps.missingPostTitle && (
             <li>
-              The post has no title, so <code>{FACEBOOK_POST_TITLE_PLACEHOLDER.token}</code> is empty — give it one at
-              the top of this screen
+              The post has no title, so <code>{FACEBOOK_POST_TITLE_PLACEHOLDER.token}</code> is empty —{" "}
+              {selfOfferId === null || !kit.post ? (
+                "give it one at the top of this screen"
+              ) : (
+                <Link href={`/c/${collectionSlug}/offers/posts/${kit.post.postNo}`} style={{ color: "var(--color-accent)" }}>
+                  give it one on the post&apos;s screen
+                </Link>
+              )}
             </li>
           )}
           {gaps.missingTemplates.map((type) => (
