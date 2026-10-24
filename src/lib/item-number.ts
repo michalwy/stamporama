@@ -24,9 +24,9 @@ export function formatItemNo(itemNo: number): string {
  * Accepts what a collector would actually type after reading a label: the bare number (`123`), a
  * padded form written on an older label or by a padded template (`00123`), and either with the `#`
  * (`#00123`). Anything else — a stamp name, a catalog number like `Mi 200`, a location ref — is not
- * a copy number, and the caller keeps matching it as free text. A numeric search is matched *in
+ * a copy number, and the caller keeps matching it as free text. A bare number is matched *in
  * addition to* the text search, never instead of it, because `200` is also a perfectly good catalog
- * number.
+ * number; one written with the `#` is the copy alone — {@link parseItemNoOnlySearch}.
  *
  * Leading zeros are simply insignificant, so a label written while numbers were padded (#2096)
  * still finds its copy.
@@ -40,4 +40,16 @@ export function parseItemNoSearch(search: string): number | null {
   // Beyond a 32-bit integer the column cannot hold it, so it matches nothing.
   if (!Number.isSafeInteger(value) || value < 1 || value > 2_147_483_647) return null;
   return value;
+}
+
+/** Read a search box entry as **only** a copy number — the number written the way the app writes
+ * it, `#123` — or null when it isn't one (#2136).
+ *
+ * The `#` is the collector saying *this is a copy's number*, so the search finds that one copy and
+ * nothing else: no catalogue number, stamp name or location ref is matched beside it. A bare `123`
+ * stays ambiguous and keeps matching both ({@link parseItemNoSearch}). Leading zeros are ignored
+ * here as there, so `#00123` from a padded label is copy 123. */
+export function parseItemNoOnlySearch(search: string): number | null {
+  if (!search.trim().startsWith(ITEM_NO_PREFIX)) return null;
+  return parseItemNoSearch(search);
 }

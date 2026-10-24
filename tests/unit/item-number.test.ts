@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { formatItemNo, parseItemNoSearch } from "../../src/lib/item-number";
+import { formatItemNo, parseItemNoOnlySearch, parseItemNoSearch } from "../../src/lib/item-number";
 
 describe("formatItemNo", () => {
   // No padding anywhere (#2096): a copy's number reads as every other internal number does.
@@ -33,5 +33,19 @@ describe("parseItemNoSearch", () => {
     assert.equal(parseItemNoSearch("0"), null);
     assert.equal(parseItemNoSearch("00000"), null);
     assert.equal(parseItemNoSearch("9999999999"), null);
+  });
+});
+
+describe("parseItemNoOnlySearch", () => {
+  // #2136: the `#` says *this is a copy's number*, so only the prefixed form reads as one alone.
+  it("reads only the #-prefixed form, leading zeros ignored", () => {
+    assert.equal(parseItemNoOnlySearch("#809"), 809);
+    assert.equal(parseItemNoOnlySearch("#00809"), 809);
+    assert.equal(parseItemNoOnlySearch("  # 809 "), 809);
+    assert.equal(parseItemNoOnlySearch("809"), null);
+    assert.equal(parseItemNoOnlySearch("00809"), null);
+    assert.equal(parseItemNoOnlySearch("#"), null);
+    assert.equal(parseItemNoOnlySearch("#0"), null);
+    assert.equal(parseItemNoOnlySearch("#Mi 200"), null);
   });
 });

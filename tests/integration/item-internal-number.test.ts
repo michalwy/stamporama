@@ -112,4 +112,35 @@ describe("internal copy number", () => {
       );
     }
   });
+
+  // #2136: written with the `#`, the number is the copy alone; bare, it is a catalogue number too.
+  it("reads #N as only copy N, and a bare N as the copy and its catalogue matches", async () => {
+    const target = await createItem(userId, collectionId, { stampId, conditionId });
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const numbered = await prisma.stamp.create({
+      data: {
+        collectionId,
+        catalogNumbers: { create: [{ catalogVendorId: vendor.id, number: `${target.itemNo}` }] },
+      },
+    });
+    const catalogueMatch = await createItem(userId, collectionId, {
+      stampId: numbered.id,
+      conditionId,
+    });
+
+    const ids = async (search: string, extra: { conditionIds?: string[] } = {}) =>
+      (await listItemsPaginated(userId, collectionId, { search, ...extra })).items
+        .map((i) => i.id)
+        .sort();
+
+    assert.deepEqual(await ids(`${target.itemNo}`), [target.id, catalogueMatch.id].sort());
+    assert.deepEqual(await ids(`#${target.itemNo}`), [target.id]);
+    assert.deepEqual(await ids(`#000${target.itemNo}`), [target.id]);
+    // The filters still apply beside it.
+    assert.deepEqual(await ids(`#${target.itemNo}`, { conditionIds: [otherConditionId] }), []);
+    // A `#` before text that is no number is ordinary text.
+    assert.deepEqual(await ids("#x"), []);
+  });
 });

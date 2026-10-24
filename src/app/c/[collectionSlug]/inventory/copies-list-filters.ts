@@ -67,3 +67,28 @@ export function exactCopiesListHref(base: string, params: Readonly<Record<string
   for (const [key, value] of Object.entries(params)) query.set(key, value);
   return `${base}/inventory?${query.toString()}`;
 }
+
+/** The parts of a copy {@link copyBehindFiltersHref} reads — whether it has left, and how. */
+export interface CopyBehindFilters {
+  itemNo: number;
+  /** Left on a sale line (#166). */
+  sold: boolean;
+  /** Left in a closed trade (#644), or null. */
+  tradedAway: unknown;
+  /** No longer held (#394), or null. */
+  disposedAt: unknown;
+}
+
+/**
+ * Where the Copies list goes to show one copy that a `#123` search found nothing for (#2136): the
+ * same search with every filter cleared — the {@link exactCopiesListHref} spelling, so nothing
+ * remembered narrows it — and the one *Include* switch the copy needs turned on, because a sold,
+ * traded-away or written-off copy is hidden by default and a cleared list would still hide it.
+ */
+export function copyBehindFiltersHref(base: string, copy: CopyBehindFilters): string {
+  return exactCopiesListHref(base, {
+    search: `#${copy.itemNo}`,
+    ...(copy.sold || copy.tradedAway ? { includeGone: "true" } : {}),
+    ...(copy.disposedAt ? { includeDisposed: "true" } : {}),
+  });
+}

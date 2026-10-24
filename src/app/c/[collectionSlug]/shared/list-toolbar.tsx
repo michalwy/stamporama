@@ -177,6 +177,9 @@ export interface ListToolbarProps {
    * is where it is shortened, and whether a search is a lookup or a standing question is a question
    * about the list, not about search boxes (#846; `ui-patterns.md`, #1028). */
   searchMaxWidth?: string;
+  /** The search box's placeholder — the one line of help a list's search gets (the Copies list names
+   *  `#123`, #2136). `Search...` when absent. */
+  searchPlaceholder?: string;
   /** The **grouped** bar (#2086), the Issues list's: given `filters` or `view`, the row is drawn as
    * four groups in a fixed order — the search; the filters (the catalogue search first, then these);
    * the view (the sort control first, then these); and `actions` at the right end. The bar wraps
@@ -205,6 +208,7 @@ export function ListToolbar({
   sortDisabledReason = null,
   sortLast = false,
   searchMaxWidth = "20rem",
+  searchPlaceholder = "Search...",
   actions,
   filters,
   view,
@@ -355,7 +359,7 @@ export function ListToolbar({
   const searchBox = (
     <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
       <TextInput
-        placeholder="Search..."
+        placeholder={searchPlaceholder}
         value={localSearch}
         onChange={(e) => setLocalSearch(e.target.value)}
         style={{ ...INPUT_STYLE, width: "100%", paddingRight: "1.75rem" }}
