@@ -1378,7 +1378,10 @@ The dialog **opens on the likely answer rather than asking which one you want**,
 are always one click away in its footer. It opens on *assign* when the order holds a copy that could
 still take **this tile's** images, and on *identify* when it does not — so a settled auction order
 starts on its list of lines, the same order starts on identify once they are all photographed, and a
-stockbook order with a couple of hand-entered copies offers them. There are three answers:
+stockbook order with a couple of hand-entered copies offers them. What it opens on changes only what
+the dialog shows, never its footer: **Identify as a new copy is always the main button, on the
+right**, on a purchase and on an opening balance alike, so your hand goes to the same place on every
+document. Assigning is done by picking a copy from the list itself. There are three answers:
 
 - **Identify as a new copy** — the stockbook path. It leads into the same browse popup and condition
   step as [Add stamps](#identifying-stamps-intake), with the same remembered choices, and the tile's

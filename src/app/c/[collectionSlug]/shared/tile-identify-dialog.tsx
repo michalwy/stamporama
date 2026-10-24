@@ -117,7 +117,9 @@ import { TextArea, TextInput } from "./text-input";
  *
  * The other two answers sit in the footer, one click from wherever it opened. A chooser standing in
  * front of them would be a screen whose whole content is three buttons, and a card of forty would
- * mean forty of them showing nothing.
+ * mean forty of them showing nothing. The footer is **the same in either mode** (#2131): *Identify
+ * as a new copy* is always its primary, on the right — the opening outcome changes what the body
+ * shows, never where the collector's hand goes.
  *
  * The candidate query is keyed by the order **and the slots asked for**, so a card of like tiles —
  * the ordinary case — is one fetch, served from cache for every tile after the first. The dialog
@@ -912,28 +914,13 @@ export function TileIdentifyDialog({
         <DialogFooter>
           <DialogSecondaryButton onClick={onClose}>Cancel</DialogSecondaryButton>
         </DialogFooter>
-      ) : mode === "assign" ? (
-        // Assign is the *showing* outcome, so picking a copy row is the action and the footer
-        // carries only the two ways out of it — each one click, not a round trip through a menu.
-        <DialogFooter>
-          <div
-            style={{ marginRight: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}
-          >
-            <DialogSecondaryButton
-              onClick={() => onIdentifyNew(pieces)}
-              disabled={pending || !canIdentify}
-            >
-              <Icon name="add" size="sm" /> Identify as new copy
-            </DialogSecondaryButton>
-            {parked ? putBack : park}
-            {discard}
-            {unpairBack}
-          </div>
-          <DialogSecondaryButton onClick={onClose} disabled={pending}>
-            Cancel
-          </DialogSecondaryButton>
-        </DialogFooter>
       ) : (
+        // **One footer for both modes** (#2131). Which mode the dialog opens on depends on the
+        // document — a purchase of fresh pieces lands on identify, an opening balance of hand-entered
+        // copies on assign — so a footer per mode moved *Identify as a new copy* from the primary on
+        // the right to a grey button on the left between one document and the next, and the hand
+        // went to the wrong place. Assigning is a pick from the list above and never needed the
+        // primary; the footer stays put and only the *Assign…* switch drops out once it is shown.
         <DialogActions
           // The count is stated before anything is created, as every bulk action on this screen
           // does — and it says *one stamp*, which is the assertion ticking the tiles made.
@@ -962,8 +949,9 @@ export function TileIdentifyDialog({
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose
                   identify over assign, so this is one expression rather than a second rule. Without
-                  it the button is always here and always opens an empty list. */}
-              {tile && candidates.length > 0 && (
+                  it the button is always here and always opens an empty list. Gone while the list
+                  is already showing: it would open what is open. */}
+              {mode === "identify" && tile && candidates.length > 0 && (
                 <DialogSecondaryButton onClick={() => setMode("assign")} disabled={pending}>
                   <Icon name="link" size="sm" />{" "}
                   Assign to a copy on this order
@@ -1151,7 +1139,7 @@ function AssignList({
       {fromAuction && (
         <Muted>
           None of these? Then the parcel holds something its description never listed — press{" "}
-          <em>Identify as new copy</em> below.
+          <em>Identify as a new copy</em> below.
         </Muted>
       )}
     </div>
