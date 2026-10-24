@@ -612,18 +612,21 @@ describe("the agent API's operation modules (#2139)", () => {
  * **#1539 lifted it for areas, and for exactly its operations**: moving an issue to another area
  * (`moveIssueToArea`) left this map for {@link AREA_WRITES}. Deleting an area (`deleteCollectionArea`)
  * was rejected for the API and joined it instead.
+ *
+ * **#2140 lifted it for the variant tree, and for exactly its operations**: moving a stamp under
+ * another parent and deleting a stamp (`reparentStampNode`, `deleteStamp`) left this map for
+ * {@link VARIANT_TREE_WRITES}. Only a variant is deleted there, and that is the handler's refusal,
+ * not something an import can show — so the two may be reached from that module alone.
  */
 const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["deleteCatalogVendor", { module: "src/lib/catalog.ts", why: "deletes a catalogue, with every book, edition and price in it" }],
   ["deleteCatalogName", { module: "src/lib/catalog.ts", why: "deletes a catalogue book, with its editions and their prices" }],
   ["deleteCatalogEdition", { module: "src/lib/catalog.ts", why: "deletes a catalogue edition, with every price recorded in it" }],
   ["deleteIssue", { module: "src/lib/issues.ts", why: "deletes an issue" }],
-  ["deleteStamp", { module: "src/lib/stamps.ts", why: "deletes a stamp" }],
   ["deleteStampCatalogNumber", { module: "src/lib/stamps.ts", why: "takes a catalogue number off a stamp" }],
   ["removeStampFromIssue", { module: "src/lib/issues.ts", why: "takes a stamp out of its issue" }],
   ["mergeIssues", { module: "src/lib/issues.ts", why: "folds one issue into another and deletes it" }],
   ["moveStampNode", { module: "src/lib/issues.ts", why: "moves a stamp to another issue" }],
-  ["reparentStampNode", { module: "src/lib/issues.ts", why: "moves a stamp under another parent" }],
   ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
   ["reorderChecklists", { module: "src/lib/checklists.ts", why: "rewrites the collector's order of an issue's checklists" }],
   ["deleteCollectionArea", { module: "src/lib/areas.ts", why: "deletes an area" }],
@@ -654,6 +657,48 @@ describe("the agent API's operation modules (#1438)", () => {
       assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/catalog-edits.ts`);
     }
     for (const [name, { module }] of CATALOG_BOUNDARY) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+  });
+});
+
+/**
+ * **The variant-tree writes the agent may make, and the one module that may make them** (#2140). The
+ * collector allowed a stamp to be moved under another stamp of its issue, a variant brought up, and
+ * a variant nothing names deleted — the stamp screen's own `reparentStampNode` and `deleteStamp`.
+ * Pinned both ways, as {@link AREA_WRITES} is: the variant-tree module imports exactly these writes,
+ * and no other operation module imports either, so `deleteStamp` cannot arrive through a module that
+ * does not refuse a base stamp.
+ */
+const VARIANT_TREE_WRITES = new Map<string, string>([
+  ["reparentStampNode", "src/lib/issues.ts"],
+  ["deleteStamp", "src/lib/stamps.ts"],
+]);
+
+describe("the agent API's operation modules (#2140)", () => {
+  it("make variant-tree writes only in the variant-tree module, and only the ones allowed", () => {
+    const treeModule = path.join(AGENT_API, "operations/variant-tree.ts");
+    const fromDomain = importedBindings(treeModule)
+      .filter((binding) => binding.from === "../../issues" || binding.from === "../../stamps")
+      .map((binding) => binding.name);
+    assert.deepEqual(fromDomain.sort(), [...VARIANT_TREE_WRITES.keys()].sort());
+
+    const elsewhere: string[] = [];
+    for (const file of operationModules()) {
+      if (file === treeModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (VARIANT_TREE_WRITES.has(name)) elsewhere.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(elsewhere, [], "variant-tree writes belong to operations/variant-tree.ts alone (#2140)");
+  });
+
+  it("names only real exports", () => {
+    for (const [name, module] of VARIANT_TREE_WRITES) {
       assert.match(
         readFileSync(path.join(ROOT, module), "utf8"),
         new RegExp(`export async function ${name}\\(`),
