@@ -290,12 +290,30 @@ number up first. The same goes for an issue's prefix: one that would make a stam
 as a number another stamp already has is refused, naming both, and nothing is changed. It will not
 create an issue in a grouping-only area, nor record a number in a catalogue the area does not keep.
 
-**What it cannot do on the catalogue is delete or move anything.** It never deletes an issue, a
-stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
-or under another stamp, never merges two issues, and never changes the order of an issue's stamps.
-Those stay on the issue's and the stamp's own screens, where everything it creates can be seen and
-corrected. Checklists, clearing a catalogue price and areas are the exceptions, below — moving an
-issue to another area among them.
+**It can correct the variant tree**, the way *Move under another stamp…* and *Delete* do on your
+screens:
+
+- **Move a stamp under another stamp of the same issue**, so it becomes that stamp's variant — a
+  variant hung under the wrong stamp, or a stamp that turns out to be a variant of another. Its own
+  variants come with it, and its catalogue numbers, prices, size, copies and checklist places stay as
+  they are. A stamp from another issue, or one of the stamp's own variants, is refused.
+- **Bring a variant up** to stand on its own at the top of its issue.
+- **Delete a variant created by mistake**, but only when nothing names it. A variant with copies,
+  offers, wants, auction lot lines, price observations, trade lines or variants of its own is refused,
+  and the assistant is told which — so it never takes a record of yours with it. Its catalogue
+  numbers, catalogue prices, translations, checklist places and photos go with it, and the assistant
+  is told how many. This is stricter than your own *Delete*, which takes a variant's copies and wants
+  with it.
+
+If a stamp that becomes a variant's parent had catalogue prices of its own, they are kept and the
+assistant is told so, exactly as when it adds variants.
+
+**What it cannot do on the catalogue is delete or move anything else.** It never deletes an issue or a
+base stamp, never takes a catalogue number off a stamp, never moves a stamp to another issue, never
+merges two issues, and never changes the order of an issue's stamps. Those stay on the issue's and the
+stamp's own screens, where everything it creates can be seen and corrected. Checklists, clearing a
+catalogue price and areas are the other exceptions, below — moving an issue to another area among
+them.
 
 **It can also record a stamp's Colnect item-ID** — the number in the stamp's Colnect address, which
 listing on Colnect, the Colnect links and the Colnect list sync all go by. An assistant reading a

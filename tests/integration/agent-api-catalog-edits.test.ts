@@ -688,9 +688,11 @@ describe("the catalogue writes (#1438)", () => {
 
     it("publishes exactly these catalogue writes, and nothing that deletes, moves or reorders an issue or a stamp", () => {
       // **`move_issue_to_area` is #1539's, not #1438's**: the collector allowed an issue to be moved to
-      // another area, and `agent-api-areas.test.ts` pins it with the area operations.
+      // another area, and `agent-api-areas.test.ts` pins it with the area operations. The two
+      // variant-tree operations are #2140's the same way, pinned in `agent-api-variant-tree.test.ts`.
+      const EXEMPT_WRITES = new Set(["move_issue_to_area", "move_stamp_variant", "delete_stamp_variant"]);
       const catalogue = OPERATIONS.filter(
-        (op) => /^\/(issues|stamps)(\/|$)/.test(op.path) && op.writes && op.name !== "move_issue_to_area"
+        (op) => /^\/(issues|stamps)(\/|$)/.test(op.path) && op.writes && !EXEMPT_WRITES.has(op.name)
       ).map((op) => op.name);
       assert.deepEqual(catalogue.sort(), [...CATALOG_OPERATIONS].sort());
       for (const name of CATALOG_OPERATIONS) {
@@ -700,8 +702,9 @@ describe("the catalogue writes (#1438)", () => {
       // collector allowed a checklist's stamps to be taken off it, and the stamps themselves stay in
       // the catalogue. `agent-api-checklists.test.ts` pins the checklist operations exactly.
       // `move_issue_to_area` is exempted the same way (#1539): the collector allowed an issue to be
-      // moved between areas, and nothing else about an issue or a stamp to be moved.
-      const exempt = new Set(["remove_checklist_stamps", "move_issue_to_area"]);
+      // moved between areas, and #2140's two the same way: the collector allowed a stamp to be moved
+      // under another stamp of its issue and a variant nothing names to be deleted, and nothing else.
+      const exempt = new Set(["remove_checklist_stamps", ...EXEMPT_WRITES]);
       const destructive = OPERATIONS.filter(
         (op) =>
           !exempt.has(op.name) &&

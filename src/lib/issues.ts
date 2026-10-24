@@ -2985,7 +2985,7 @@ export async function reparentStampNode(
   /** What becomes of the new parent's own catalogue prices when this stamp is its first variant
    *  (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
   umbrellaPrices: UmbrellaPricesPolicy = "keep"
-): Promise<void> {
+): Promise<UmbrellaWithOwnPrices[]> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
@@ -3005,7 +3005,7 @@ export async function reparentStampNode(
   if (parentStampId && !byId.has(parentStampId)) {
     throw new Error("Parent stamp is not a member of this issue.");
   }
-  if (moving.parentId === parentStampId) return;
+  if (moving.parentId === parentStampId) return [];
 
   // The cycle guard, walked **upwards** from the proposed parent: a parent that has this stamp
   // somewhere above it would be filed under its own descendant, and the tree would close into a ring
@@ -3030,7 +3030,7 @@ export async function reparentStampNode(
           )?.parentId ?? null);
   }
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     // A child carries a subtype and a top-level stamp does not (ADR-0010 §2a, the rule
     // `addStampToIssue` writes by). So a stamp arriving at a parent with none takes the collection
     // default, and one keeping the subtype it already has keeps it: that subtype is the collector's
@@ -3047,9 +3047,11 @@ export async function reparentStampNode(
     }
     // Arriving as a variant may make the new parent an umbrella, whose own prices would then
     // override the value rolled up from its variants (#1573) — settled before the edge is written.
-    if (parentStampId && (await wouldActAsVariant(tx, subtypeId, moving.actsAsVariantOverride))) {
-      await settleUmbrellaPrices(tx, collectionId, [parentStampId], umbrellaPrices);
-    }
+    // Returned, as `addVariantRangeToStamp` returns them, for a caller that cannot ask (#2140).
+    const umbrellas =
+      parentStampId && (await wouldActAsVariant(tx, subtypeId, moving.actsAsVariantOverride))
+        ? await settleUmbrellaPrices(tx, collectionId, [parentStampId], umbrellaPrices)
+        : [];
     await tx.stamp.update({
       where: { id: stampId },
       data: { parentId: parentStampId, subtypeId },
@@ -3064,6 +3066,7 @@ export async function reparentStampNode(
       where: { issueId_stampId: { issueId, stampId } },
       data: { sortOrder: await nextIssueSortOrder(tx, issueId) },
     });
+    return umbrellas;
   });
 }
 
