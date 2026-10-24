@@ -33,7 +33,7 @@
     "@pdf-lib/fontkit": "1.1.1",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
-    "@tanstack/react-query": "5.104.3",
+    "@tanstack/react-query": "5.104.5",
     "better-auth": "1.7.10",
     "dompurify": "3.4.17",
     "lucide-react": "1.58.0",
