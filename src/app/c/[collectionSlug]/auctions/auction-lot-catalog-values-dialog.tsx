@@ -14,6 +14,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { ConditionCertificateChips } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
@@ -358,8 +359,23 @@ function ValuesList({
                     </span>
                   </td>
                   <td style={TD_CONDITION}>
-                    <span style={{ color: "var(--color-text-primary)" }}>{line.conditionName}</span>
-                    {line.certificateStatusName && <span> · {line.certificateStatusName}</span>}
+                    <ConditionCertificateChips
+                      collectionId={collectionId}
+                      condition={{
+                        id: entry.conditionId,
+                        abbreviation: line.conditionAbbreviation,
+                        name: line.conditionName,
+                      }}
+                      certificate={
+                        entry.certificateStatusId && line.certificateStatusName
+                          ? {
+                              id: entry.certificateStatusId,
+                              abbreviation: line.certificateStatusAbbreviation ?? "",
+                              name: line.certificateStatusName,
+                            }
+                          : null
+                      }
+                    />
                   </td>
                   <td style={TD_CONDITION}>
                     <span style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
