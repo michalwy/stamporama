@@ -663,6 +663,32 @@ packing list can't set for you — the screen reminds you of it above the list.
 Click **🖨 Print** for your browser's print dialog (or print/save as PDF from the browser menu).
 The sheet always prints in light colours, even if you use the dark [theme](appearance.md).
 
+## The conversation with the buyer
+
+What you agreed with a buyer — which copies, the price, shipping, payment, their address, a
+complaint — usually lives in Messenger, e-mail or the marketplace's messages. The **Conversation**
+card on a sale's screen keeps it with the sale, so you do not have to search those histories again.
+It is there whenever the sale has a buyer.
+
+Each **entry** says **when** it was said, the **channel** (*Messenger*, *E-mail*, *Allegro messages*,
+*Phone* or *Other*), the **direction** (*From the buyer*, *To the buyer*, or a *Note*), a short
+**summary**, and optionally a **quote** of what matters word for word (an agreement, an address, an
+amount) and a **link** to where the conversation can be found. Entries are listed newest first.
+
+- **An entry belongs to the buyer, and only optionally to a sale.** A conversation often covers
+  several sales, or happens before there is one. The card shows **This sale**'s entries; **All with
+  this buyer** shows the whole history with them, each entry naming its sale. The same log is on the
+  buyer's [contact page](contacts.md#the-conversation-log).
+- **Add entry** writes one by hand; an entry's **⋮** menu **edits** or **deletes** it. In the dialog,
+  **Sale** chooses which of the buyer's sales it is about, or *No sale*.
+- **Entries an [AI assistant](agent-api.md) wrote are marked *Assistant*.** That is mostly how the
+  log is filled: the assistant reads the conversation and records it. Nothing waits for your
+  review — an entry is a record, not an act.
+- **An entry changes nothing else** — no sale, status or amount.
+- **An entry stays with the person it was with.** If you change a sale's buyer, its entries stay
+  with the previous buyer and no longer name the sale; the same happens when the sale is deleted,
+  or merged into a sale of a different buyer.
+
 ## What the assistant recorded — *To review · API*
 
 When an [AI assistant](agent-api.md) records a sale for you (see [what it can do on sales](agent-api.md#what-it-can-do-and-what-it-will-not)), or adds a sold offer to one you already
@@ -703,8 +729,9 @@ buyer bid from two accounts and asked for everything to go together, in one parc
    one of them.
 
 **Merge** then moves every sold set — with its price, its packed marks and any set still to be
-chosen — and every packing supply the other sale used. Nothing is sold or withdrawn twice: the
-copies stay sold and the offers stay *Sold*. The totals, profit and [message to the
+chosen — and every packing supply the other sale used, and the [conversation
+entries](#the-conversation-with-the-buyer) about it when the remaining sale is with the same buyer.
+Nothing is sold or withdrawn twice: the copies stay sold and the offers stay *Sold*. The totals, profit and [message to the
 buyer](#message-to-the-buyer) follow at once. If the other sale was recorded by an assistant and you
 had not [confirmed](#what-the-assistant-recorded--to-review--api) it, the merged sale is marked *To
 review* too.

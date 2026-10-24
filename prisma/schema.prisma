@@ -179,6 +179,7 @@ model Collection {
   scanUploads     ScanUpload[]
   offers          Offer[]
   sales           Sale[]
+  conversationEntries ConversationEntry[]
   shippingOptions ShippingOption[]
   carriers        Carrier[]
   carrierServices CarrierService[]
@@ -5994,6 +5995,8 @@ model Sale {
   // Packing supplies the parcel used (#1898): with the postage, what *my shipping* is.
   supplyLines   SaleSupplyLine[]
   statusEvents  SaleStatusEvent[]
+  // What was said with the buyer about this sale (#2149) — see `ConversationEntry`.
+  conversationEntries ConversationEntry[]
   /** The buyer's link for choosing their own copy (#699), or none. At most one — see
    *  {@link SaleShareToken}. */
   shareToken    SaleShareToken?
@@ -6153,6 +6156,50 @@ model SaleStatusEvent {
 
   @@index([saleId])
   @@map("sale_status_event")
+}
+
+// The conversation log (#2149, ADR-0073): what was said with a buyer — an agreement, an address, an
+// amount, a complaint — kept here so it does not have to be found again in Messenger or the mail.
+// Written mostly by the Assistant reading those conversations, through the agent API.
+//
+// **An entry belongs to the contact, and only optionally to one of their sales**: a conversation
+// often spans several sales or happens before there is one. While `saleId` is set it is a sale *of
+// this contact* — the domain holds that (`conversation-log.ts`), a sale whose buyer changes or which
+// is merged into another buyer's drops the link and the entry stays with the person it was with.
+// Deleting a sale drops the link the same way (`SetNull`); deleting the contact deletes its log.
+//
+// **A record, not an act**: an entry changes no sale, status or amount, so nothing waits for the
+// collector's review — `author` only says who wrote it.
+model ConversationEntry {
+  id           String   @id @default(cuid())
+  collectionId String
+  contactId    String
+  saleId       String?
+  // When it was said — an instant, as the conversation's own timestamps are.
+  occurredAt   DateTime
+  // messenger | email | allegro | phone | other — `conversation-log-rules.ts`.
+  channel      String
+  // from_buyer | to_buyer | note.
+  direction    String
+  // What matters, in a sentence or two.
+  summary      String
+  // What was said word for word, where the words themselves matter (an address, an amount). Optional.
+  quote        String?
+  // Where the conversation can be found — a Messenger thread, a marketplace message. Optional.
+  url          String?
+  // assistant | collector — who wrote the entry, fixed when it is written.
+  author       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sale       Sale?      @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@index([collectionId, occurredAt])
+  @@index([contactId, occurredAt])
+  @@index([saleId])
+  @@map("conversation_entry")
 }
 
 // One line of a sale (ADR-0013): the offer set that went, the offer it sold through, its line
@@ -6910,6 +6957,8 @@ model Contact {
   // The person's Facebook profiles (#1545, several since #2042; ADR-0061 §4) — see
   // `ContactFacebookProfile`.
   facebookProfiles          ContactFacebookProfile[]
+  // The conversation log with this contact (#2149; ADR-0073) — see `ConversationEntry`.
+  conversationEntries       ConversationEntry[]
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

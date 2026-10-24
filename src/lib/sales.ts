@@ -38,6 +38,7 @@ import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
+import { keepConversationWithBuyer } from "./conversation-log";
 import { readShareAddress, type ShareAddress } from "./share-address";
 import { SALES_WAITING_STATUSES } from "./dashboard-sales-rules";
 import type { SaleToDo } from "./phone-sales-rules";
@@ -870,6 +871,8 @@ export async function updateSaleHeader(
     if (shipping) {
       await followSentAs(tx, saleId, before, sentAsServiceId ?? shipping.sentAs.optionServiceId);
     }
+    // What was said with the previous buyer stays theirs, no longer about this sale (#2149).
+    await keepConversationWithBuyer(tx, saleId, input.buyerId);
   });
 }
 
@@ -2823,6 +2826,7 @@ const SALE_MERGE_SELECT = {
   apiReviewAt: true,
   apiReviewCreated: true,
   apiReviewActions: true,
+  buyerId: true,
   buyer: { select: { name: true } },
   lines: { select: { price: true } },
   supplyLines: { select: { supplyId: true } },
@@ -2947,6 +2951,14 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
       where: { saleId: otherSaleId },
       data: { saleId: remainingSaleId },
     });
+    // The conversation about the other sale moves with it where it was with the remaining sale's
+    // buyer; with another buyer it stays theirs and drops the sale as the delete below drops it (#2149).
+    if (remainingRow.buyerId !== null) {
+      await tx.conversationEntry.updateMany({
+        where: { saleId: otherSaleId, contactId: remainingRow.buyerId },
+        data: { saleId: remainingSaleId },
+      });
+    }
     await tx.sale.update({
       where: { id: remainingSaleId },
       data: {

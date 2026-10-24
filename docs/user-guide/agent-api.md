@@ -185,6 +185,24 @@ until you confirm it. **It cannot delete a sale or move one along** — no *Paid
 no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
 does not record a running auction's current bid either: the price it sells at is the one it read.
 
+On the **conversations with your buyers**, it can keep the
+[log](sales.md#the-conversation-with-the-buyer) that a sale's screen and a contact's page show —
+reading a Messenger thread, an e-mail or the marketplace's messages and writing down what was agreed.
+It can:
+
+- **read and search the log** — a buyer's whole conversation, the entries about one sale, or entries
+  found by words, channel and dates. A **read only** token can do this much, and it is how the
+  assistant checks a conversation is not already recorded;
+- **record a conversation**, several entries in one go, each with when it was said, the channel, the
+  direction, a summary, and optionally a quote, a link and which of the buyer's sales it is about.
+  It names the buyer by their name or Facebook profile, as **Sell** finds one, and a sale by its
+  number (*s12*); a sale of somebody else is refused. It never creates a contact here — finding or
+  adding the buyer is its own step;
+- **correct** an entry, **move** it to another sale of the same buyer or to none, and **delete** one.
+
+Every entry it writes is marked *Assistant*. Nothing waits for your review: an entry changes no sale,
+status or amount.
+
 On **shipping and packing**, it can set up the data you would otherwise type in yourself under
 [Settings → Carriers](collections.md#carriers), on a platform's shipping options and under
 [Settings → Packing supplies](collections.md#packing-supplies). It can:

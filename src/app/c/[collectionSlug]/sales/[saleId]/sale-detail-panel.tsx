@@ -44,6 +44,7 @@ import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
 import { MergeSalesDialog } from "./merge-sales-dialog";
+import { ConversationLogCard } from "@/app/c/[collectionSlug]/shared/conversation-log-card";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
@@ -772,6 +773,16 @@ export function SaleDetailPanel({
         run={run}
         clearError={() => setError(undefined)}
       />
+
+      {/* What was said with the buyer (#2149) — kept on the buyer, so a sale with none has no log. */}
+      {sale.buyerId && (
+        <ConversationLogCard
+          collectionId={collectionId}
+          collectionSlug={params.collectionSlug}
+          contactId={sale.buyerId}
+          saleId={sale.id}
+        />
+      )}
 
       {/* Sold units */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

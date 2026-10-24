@@ -189,6 +189,8 @@ export function useInvalidateSales() {
       queryClient.invalidateQueries({ queryKey: ["offers", collectionId] });
       queryClient.invalidateQueries({ queryKey: ["lots", collectionId] });
       queryClient.invalidateQueries({ queryKey: ["inventory", collectionId] });
+      // A changed buyer or a merge moves conversation entries off a sale (#2149).
+      queryClient.invalidateQueries({ queryKey: ["conversation", collectionId] });
     },
   };
 }

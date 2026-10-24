@@ -208,7 +208,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
       {dialog.kind === "delete" && (
         <ConfirmDialog
           title="Delete contact"
-          message={`Permanently delete "${dialog.contact.name}"? This cannot be undone.`}
+          message={`Permanently delete "${dialog.contact.name}" and the log of conversations with them? This cannot be undone.`}
           actionLabel="Delete contact"
           pendingLabel="Deleting…"
           variant="destructive"
