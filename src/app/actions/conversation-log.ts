@@ -12,9 +12,11 @@ import {
   type ConversationEntryInput,
 } from "@/lib/conversation-log";
 import { isConversationChannel, isConversationDirection } from "@/lib/conversation-log-rules";
+import { ConversationAttachmentError, removeConversationAttachment } from "@/lib/conversation-attachments";
 
 // Server actions for the *Conversation* card (#2149): the collector adds, corrects and deletes
-// entries by hand. Thin wrappers over `conversation-log.ts`, which holds every rule.
+// entries by hand, and removes a file attached to one (#2150 — attaching is the upload route's).
+// Thin wrappers over `conversation-log.ts` and `conversation-attachments.ts`, which hold every rule.
 
 export type ConversationActionState = { status: "success" } | { status: "error"; message: string };
 
@@ -49,7 +51,8 @@ function parseEntry(formData: FormData): ConversationEntryInput | string {
 }
 
 function failure(e: unknown, fallback: string): ConversationActionState {
-  return { status: "error", message: e instanceof ConversationEntryError ? e.message : fallback };
+  const known = e instanceof ConversationEntryError || e instanceof ConversationAttachmentError;
+  return { status: "error", message: known ? e.message : fallback };
 }
 
 export async function createConversationEntryAction(
@@ -89,5 +92,15 @@ export async function deleteConversationEntryAction(entryId: string): Promise<Co
     return { status: "success" };
   } catch (e) {
     return failure(e, "Failed to delete the entry. Please try again.");
+  }
+}
+
+export async function removeConversationAttachmentAction(attachmentId: string): Promise<ConversationActionState> {
+  const session = await getSession();
+  try {
+    await removeConversationAttachment(session.user.id, attachmentId);
+    return { status: "success" };
+  } catch (e) {
+    return failure(e, "Failed to remove the file. Please try again.");
   }
 }

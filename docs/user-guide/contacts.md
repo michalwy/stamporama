@@ -167,8 +167,9 @@ of their copies have no catalogue price.
 At the foot of the page, the **Conversation** card lists every entry of the log of conversations
 with the contact, newest first, each naming the sale it is about where it has one — the same card a
 [sale's screen](sales.md#the-conversation-with-the-buyer) shows, there narrowed to that sale. **Add
-entry** records one by hand, and an entry's **⋮** menu edits or deletes it. Entries an AI assistant
-wrote are marked *Assistant*.
+entry** records one by hand, and an entry's **⋮** menu edits or deletes it, or attaches files to it
+— see [the conversation with the buyer](sales.md#the-conversation-with-the-buyer). Entries an AI
+assistant wrote are marked *Assistant*.
 
 ## Finding a contact
 
@@ -212,5 +213,5 @@ more **purchases** as their supplier, the **Delete** action is disabled
 and the row shows how many purchases use it — detach it from those
 [purchases](purchases.md) first. This keeps purchase history from losing who it was with.
 
-Deleting a contact also deletes its [conversation log](#the-conversation-log); the confirmation says
-so.
+Deleting a contact also deletes its [conversation log](#the-conversation-log), with the files
+attached to its entries; the confirmation says so.

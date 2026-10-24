@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree and #2149 the conversation log; both wrappers exist and the registry carries **one hundred and fifteen operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log and #2150 its files; both wrappers exist and the registry carries **one hundred and seventeen operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #1168's bid recommendation, and #1037's catalog-number
 resolver. Seventeen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150).
 
-**Seventy-three of them write** since #2149 added four; *sixty-nine of them write* was the count from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Seventy-five of them write** since #2150 added two; *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -143,7 +143,7 @@ src/lib/agent-api/
   auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627, #1628)
   shipping-reads.ts carriers, options, supplies and uses as told; amounts, "supply: quantity", naming a supply or service (#1910)
   sale-reads.ts     the sale row and record, the buyer, a sold set's price (#1949)
-  conversation-log-reads.ts  an entry a field per line, naming a sale, an entry read back (#2149)
+  conversation-log-reads.ts  an entry a field per line, naming a sale, an entry read back (#2149); a file the same way, base64 (#2150)
   variant-tree.ts   what keeps a variant from being deleted, and the refusal (#2140)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
@@ -174,7 +174,7 @@ src/lib/agent-api/
     auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
     shipping.ts     the fourteen carrier, option, supply and use operations (#1910)  ← server-side
     sales.ts        the two sale reads, the buyer, and selling an offer or a set (#1949)  ← server-side
-    conversation-log.ts  the five conversation-log operations (#2149)    ← server-side
+    conversation-log.ts  the five conversation-log operations (#2149) and the two for files (#2150)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
@@ -1022,6 +1022,41 @@ is reached by no operation module.
 **The search is the domain's**: every word must appear in the summary or the quote, ignoring case;
 `from` and `to` are whole days in UTC. `tests/integration/conversation-log.test.ts` drives the five
 through the real route, a read only token reading and refused the four writes.
+
+### An entry's files (#2150)
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `add_conversation_entries` `files` | yes | the files that came with the conversation, each naming its entry by `entry=` (its place in `entries`) |
+| `attach_conversation_files` | yes | up to 10 files to one entry afterwards, each answered `attached` or `refused` |
+| `remove_conversation_attachment` | yes | one attached by mistake; the entry stays |
+
+**A file is bytes, and this is the one place the surface takes bytes in.** *Photos are URLs, never
+bytes* is about what the agent **reads** — its context is the constraint — and holds here: an
+entry's `attachments` are `name`, `type` (`image` / `pdf`), `bytes` and a `url` on the attachment
+route (`agentConversationAttachmentUrl`, beside `agentPhotoUrl`), which takes the same token, so a
+*read only* token lists and fetches. **Sending** has no such option: a file the agent read in a
+Messenger thread exists nowhere the app could fetch it from, and a URL to download would make the
+app fetch an address an agent chose. So a file is **base64 inside a string of the entry grammar**
+(`name=`, `data=`; a `data:…;base64,` prefix is read past and the base64 may wrap), which keeps #706's
+type set — scalars and string lists — and is the one spelling an MCP client can send as well. The
+decode is **strict** (`decodeAttachmentData`): `Buffer.from` skips what it cannot read and would
+store a damaged file without a word.
+
+**What a file is comes from its bytes** (`sniffAttachment`), never from the name: pictures (JPEG,
+PNG, WebP) and PDFs, at most `MAX_UPLOAD_BYTES` each and 20 per entry. **Each file is answered on its
+own**, as an entry of a batch is — `attachFilesTo` attaches them one at a time through
+`addConversationAttachments`, the card's own write — and a file for an entry the batch refused is
+refused with it. `tests/unit/agent-api-operation-boundary.test.ts` keeps the two writes
+(`addConversationAttachments`, `removeConversationAttachment`) in `operations/conversation-log.ts`
+alone; `tests/integration/conversation-attachments.test.ts` drives them through the real routes,
+fetches a file with a read only token through the attachment route, and refuses that token both
+writes.
+
+**The attachment route lets a sent bearer token decide alone** — the link is one this surface hands
+out — through `resolveAgentApiCaller`, and must be the URL's collection; without a token the
+screen's session decides. That keeps the route testable without a request scope, which
+`resolveCollectionOwner`'s session lookup needs.
 
 ## Wants and checklists
 
@@ -2650,7 +2685,8 @@ exist cannot be.
   price, set choice, packing, shipping or share link changed. It records sales and finds or adds
   their buyers, and what it records waits for the collector's *Confirm*. See *Recording sales* above.
 - **Conversation entries are deleted** (#2149): a misrecorded entry — twice, or with the wrong
-  buyer — is the Assistant's to remove, as it is its to write. See *The conversation log* above.
+  buyer — is the Assistant's to remove, as it is its to write, and so is a file attached to one
+  (#2150). See *The conversation log* above.
 - **Price observations are deleted** (#1635): they are market facts the assistant itself records,
   not the collector's transactions, and a misread one must be removable — see *Recording price
   observations* above.
@@ -2882,7 +2918,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and fifteen operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and seventeen operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2911,9 +2947,10 @@ and `update_supply_use`; #1949 added `list_sales`, `get_sale`, `find_or_create_b
 and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`; #2139 added `create_subtype` and `update_subtype`; #2140 added
 `move_stamp_variant` and `delete_stamp_variant`; #2149 added `list_conversation_entries`,
 `add_conversation_entries`, `update_conversation_entry`, `move_conversation_entry` and
-`delete_conversation_entry`.
+`delete_conversation_entry`; #2150 added `attach_conversation_files` and
+`remove_conversation_attachment`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

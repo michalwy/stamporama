@@ -18,8 +18,17 @@
 // **A batch answers per entry and never fails whole over one** (#1540's rule): an entry with a
 // misread time is one entry to send again.
 //
+// **A file is one string too** (#2150), the same grammar: `name=` the file's name and `data=` its
+// bytes in base64 — a data URL's `data:…;base64,` prefix is read past, and the base64 may wrap over
+// lines. A parameter carries no bytes any other way, and this is the one spelling an MCP client can
+// send as well as a REST one. **What the file is comes from its bytes**, never from the name. A file
+// sent with `add_conversation_entries` says which entry it goes with by `entry=`, the entry's place
+// in `entries` — the `index` its answer carries.
+//
 // Pure: no Prisma, so `pnpm test:unit` holds every rule here.
 
+import { agentConversationAttachmentUrl } from "./photo-url";
+import { attachmentKind } from "../conversation-attachment-rules";
 import {
   CONVERSATION_CHANNELS,
   CONVERSATION_DIRECTIONS,
@@ -148,6 +157,17 @@ export function parseConversationEntrySpec(
   };
 }
 
+/** A file kept with an entry, as an agent reads it — a link, never the bytes (#706). */
+export interface AgentConversationAttachment {
+  readonly id: string;
+  readonly name: string;
+  /** `image` or `pdf`. */
+  readonly type: string;
+  readonly bytes: number;
+  /** The file itself, fetched with the same token. */
+  readonly url: string;
+}
+
 /** An entry as an agent reads it. */
 export interface AgentConversationEntry {
   readonly id: string;
@@ -161,6 +181,8 @@ export interface AgentConversationEntry {
   readonly link: string | null;
   /** `assistant` or `collector` — who wrote it. */
   readonly writtenBy: string;
+  /** The files kept with it, in the order they were attached. */
+  readonly attachments: readonly AgentConversationAttachment[];
 }
 
 /** The fields of an entry the projection reads — structurally typed, so it unit-tests without Prisma. */
@@ -177,9 +199,31 @@ export interface ConversationEntryLike {
   readonly quote: string | null;
   readonly url: string | null;
   readonly author: string;
+  readonly attachments: readonly ConversationAttachmentLike[];
 }
 
-export function agentConversationEntry(entry: ConversationEntryLike): AgentConversationEntry {
+/** The fields of an attachment the projection reads. */
+export interface ConversationAttachmentLike {
+  readonly id: string;
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+}
+
+export function agentConversationAttachment(
+  attachment: ConversationAttachmentLike,
+  collectionId: string
+): AgentConversationAttachment {
+  return {
+    id: attachment.id,
+    name: attachment.fileName,
+    type: attachmentKind(attachment.contentType),
+    bytes: attachment.sizeBytes,
+    url: agentConversationAttachmentUrl(collectionId, attachment.id),
+  };
+}
+
+export function agentConversationEntry(entry: ConversationEntryLike, collectionId: string): AgentConversationEntry {
   return {
     id: entry.id,
     buyer: { id: entry.contactId, name: entry.contactName },
@@ -191,6 +235,7 @@ export function agentConversationEntry(entry: ConversationEntryLike): AgentConve
     quote: entry.quote,
     link: entry.url,
     writtenBy: entry.author,
+    attachments: entry.attachments.map((attachment) => agentConversationAttachment(attachment, collectionId)),
   };
 }
 
@@ -203,12 +248,126 @@ export interface AgentConversationBatch {
   readonly recorded: number;
   readonly refused: number;
   readonly entries: readonly AgentConversationAnswer[];
+  /** The files sent with the entries, answered each by its place in `files` — present only when
+   *  files were sent. */
+  readonly files?: readonly AgentAttachmentAnswer[];
 }
 
-export function summarizeConversationBatch(answers: readonly AgentConversationAnswer[]): AgentConversationBatch {
+export function summarizeConversationBatch(
+  answers: readonly AgentConversationAnswer[],
+  files?: readonly AgentAttachmentAnswer[]
+): AgentConversationBatch {
   return {
     recorded: answers.filter((answer) => answer.status === "recorded").length,
     refused: answers.filter((answer) => answer.status === "refused").length,
     entries: answers,
+    ...(files && files.length > 0 ? { files } : {}),
+  };
+}
+
+// ── Files ───────────────────────────────────────────────────────────────────
+
+/** The most files one call attaches. A file is sent whole in the call, so a handful at a time. */
+export const MAX_ATTACHMENT_FILES = 10;
+
+/** The names a file may carry; `entry` only with `add_conversation_entries`. */
+export const ATTACHMENT_FILE_FIELDS = ["name", "data", "entry"] as const;
+
+type AttachmentFileField = (typeof ATTACHMENT_FILE_FIELDS)[number];
+
+/** One file as sent: its name, its bytes, and — sent with entries — the entry it goes with. */
+export interface AttachmentFileSpec {
+  readonly name: string;
+  readonly bytes: Buffer;
+  /** The entry's place in `entries`; null where the call names the entry itself. */
+  readonly entry: number | null;
+}
+
+const FILE_EXAMPLE = "`name=payment.png` and `data=<the file in base64>` on lines of their own";
+
+/**
+ * Bytes from base64 — standard or URL-safe, padded or not, wrapped over lines, after an optional
+ * data URL prefix — or null when it is not base64. Strict, since `Buffer.from` quietly skips what it
+ * cannot read and would store a damaged file without a word.
+ */
+export function decodeAttachmentData(value: string): Buffer | null {
+  let text = value.replace(/\s+/g, "");
+  const dataUrl = /^data:[^,]*;base64,/i.exec(text);
+  if (dataUrl) text = text.slice(dataUrl[0].length);
+  text = text.replace(/-/g, "+").replace(/_/g, "/");
+  if (text === "" || !/^[A-Za-z0-9+/]+={0,2}$/.test(text)) return null;
+  const unpadded = text.replace(/=+$/, "");
+  if (unpadded.length % 4 === 1) return null;
+  return Buffer.from(unpadded, "base64");
+}
+
+/**
+ * One file, a field per line, or the reason it is not one. `withEntry` is whether the call sends
+ * entries, so a file must say which of them it goes with — and must not where it does not.
+ */
+export function parseAttachmentFileSpec(
+  file: string,
+  options: { withEntry: boolean; entries?: number }
+): { ok: true; spec: AttachmentFileSpec } | { ok: false; reason: string } {
+  const fields = new Map<AttachmentFileField, string>();
+  let last: AttachmentFileField | null = null;
+  for (const line of file.split(/\r?\n/)) {
+    const eq = line.indexOf("=");
+    const named = eq < 0 ? "" : line.slice(0, eq).trim().toLocaleLowerCase();
+    if ((ATTACHMENT_FILE_FIELDS as readonly string[]).includes(named)) {
+      const name = named as AttachmentFileField;
+      if (fields.has(name)) return { ok: false, reason: `The file names "${name}" twice.` };
+      fields.set(name, line.slice(eq + 1).trim());
+      last = name;
+      continue;
+    }
+    if (last === null) {
+      if (line.trim() === "") continue;
+      return { ok: false, reason: `The file does not start with a field. A file takes ${FILE_EXAMPLE}.` };
+    }
+    fields.set(last, `${fields.get(last)}\n${line}`);
+  }
+  const data = fields.get("data");
+  if (!data?.trim()) return { ok: false, reason: `The file has no data. Send it as ${FILE_EXAMPLE}.` };
+  const bytes = decodeAttachmentData(data);
+  if (!bytes) return { ok: false, reason: "The file's data is not base64. Send the file's bytes base64-encoded in `data=`." };
+  let entry: number | null = null;
+  const entryValue = fields.get("entry")?.trim();
+  if (options.withEntry) {
+    if (!entryValue || !/^\d+$/.test(entryValue)) {
+      return { ok: false, reason: "The file says no `entry=` — the place in `entries`, from 0, of the entry it goes with." };
+    }
+    entry = Number(entryValue);
+    if (options.entries !== undefined && entry >= options.entries) {
+      return { ok: false, reason: `\`entry=${entry}\` names no entry; "entries" carries ${options.entries}, numbered from 0.` };
+    }
+  } else if (entryValue !== undefined) {
+    return { ok: false, reason: "`entry=` is for files sent with `add_conversation_entries`; this call names its entry itself." };
+  }
+  return { ok: true, spec: { name: fields.get("name")?.trim() ?? "", bytes, entry } };
+}
+
+/** One file of a call, answered. */
+export type AgentAttachmentAnswer =
+  | { readonly index: number; readonly entry?: number; readonly status: "attached"; readonly attachment: AgentConversationAttachment }
+  | { readonly index: number; readonly entry?: number; readonly status: "refused"; readonly reason: string };
+
+export interface AgentAttachmentBatch {
+  readonly attached: number;
+  readonly refused: number;
+  readonly files: readonly AgentAttachmentAnswer[];
+  /** The entry as it now stands, its files included. */
+  readonly entry: AgentConversationEntry;
+}
+
+export function summarizeAttachmentBatch(
+  answers: readonly AgentAttachmentAnswer[],
+  entry: AgentConversationEntry
+): AgentAttachmentBatch {
+  return {
+    attached: answers.filter((answer) => answer.status === "attached").length,
+    refused: answers.filter((answer) => answer.status === "refused").length,
+    files: answers,
+    entry,
   };
 }

@@ -1670,7 +1670,7 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 ### Photo storage used
 
-**Settings → Photos & storage** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
+**Settings → Photos & storage** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up, together with the files attached to [conversation entries](sales.md#the-conversation-with-the-buyer). Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
 
 It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
 

@@ -6,6 +6,7 @@ import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { FACEBOOK_PROFILES_SELECT } from "./facebook-sales";
 import { normalizeMarketCode } from "./market-anchoring";
 import { mergedContactDetails } from "./contact-merge-rules";
+import { conversationAttachmentRefs, deleteConversationAttachmentBytes } from "./conversation-attachments";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is a person or firm the collector deals with — sellers, buyers, exchange
@@ -563,7 +564,9 @@ export async function getCollectionTranslationContext(
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still
  * references it as its supplier (`onDelete: Restrict`, ADR-0008/0009) — the
- * caller must detach it from those purchases first. Its conversation log (#2149) goes with it. */
+ * caller must detach it from those purchases first. Its conversation log (#2149) goes with it, and
+ * the files attached to its entries (#2150) — the cascade drops their rows, so the bytes are read
+ * first and deleted once the contact is gone. */
 export async function deleteContact(
   ownerId: string,
   contactId: string
@@ -573,7 +576,9 @@ export async function deleteContact(
     where: { contactId },
   });
   if (referenceCount > 0) throw new ContactInUseError(referenceCount);
+  const attachments = await conversationAttachmentRefs({ entry: { contactId } });
   await prisma.contact.delete({ where: { id: contactId } });
+  await deleteConversationAttachmentBytes(attachments);
 }
 
 // ── Merge (#2043) ────────────────────────────────────────────────────────────────────────────────

@@ -198,7 +198,11 @@ It can:
   It names the buyer by their name or Facebook profile, as **Sell** finds one, and a sale by its
   number (*s12*); a sale of somebody else is refused. It never creates a contact here — finding or
   adding the buyer is its own step;
-- **correct** an entry, **move** it to another sale of the same buyer or to none, and **delete** one.
+- **correct** an entry, **move** it to another sale of the same buyer or to none, and **delete** one;
+- **attach files** to an entry — pictures and PDFs, such as a payment confirmation or a scan of a
+  certificate — when it records the conversation or afterwards, and **remove** one. It reads an
+  entry's files as links and fetches one only when it needs what is in it; a **read only** token can
+  list and fetch them, but not attach or remove.
 
 Every entry it writes is marked *Assistant*. Nothing waits for your review: an entry changes no sale,
 status or amount.

@@ -7,6 +7,14 @@ import {
   type ConversationChannel,
   type ConversationDirection,
 } from "./conversation-log-rules";
+import {
+  ATTACHMENT_ORDER,
+  ATTACHMENT_SELECT,
+  conversationAttachmentRefs,
+  deleteConversationAttachmentBytes,
+  toAttachmentData,
+  type ConversationAttachmentData,
+} from "./conversation-attachments";
 
 // The conversation log (#2149, ADR-0073): what was said with a buyer, entry by entry. One module for
 // every writer — the card on a sale and on a contact (through `app/actions/conversation-log.ts`) and
@@ -45,6 +53,8 @@ export interface ConversationEntryData {
   author: ConversationAuthor;
   createdAt: string;
   updatedAt: string;
+  /** The files kept with it (#2150), in the order they were attached. */
+  attachments: ConversationAttachmentData[];
 }
 
 const ENTRY_SELECT = {
@@ -62,6 +72,7 @@ const ENTRY_SELECT = {
   updatedAt: true,
   contact: { select: { name: true } },
   sale: { select: { saleNo: true } },
+  attachments: { select: ATTACHMENT_SELECT, orderBy: ATTACHMENT_ORDER },
 } as const;
 
 type EntryRow = Prisma.ConversationEntryGetPayload<{ select: typeof ENTRY_SELECT }>;
@@ -82,6 +93,7 @@ function toEntryData(row: EntryRow): ConversationEntryData {
     author: row.author as ConversationAuthor,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    attachments: row.attachments.map(toAttachmentData),
   };
 }
 
@@ -300,9 +312,12 @@ export async function updateConversationEntry(
   });
 }
 
+/** Delete an entry and its attachments' files (#2150) — the cascade drops their rows, never the bytes. */
 export async function deleteConversationEntry(ownerId: string, entryId: string): Promise<void> {
+  const refs = await conversationAttachmentRefs({ entryId, collection: { ownerId } });
   const { count } = await prisma.conversationEntry.deleteMany({ where: { id: entryId, collection: { ownerId } } });
   if (count === 0) throw new ConversationEntryError("That conversation entry is not in this collection any more.");
+  await deleteConversationAttachmentBytes(refs);
 }
 
 /**

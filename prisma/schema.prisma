@@ -180,6 +180,7 @@ model Collection {
   offers          Offer[]
   sales           Sale[]
   conversationEntries ConversationEntry[]
+  conversationAttachments ConversationAttachment[]
   shippingOptions ShippingOption[]
   carriers        Carrier[]
   carrierServices CarrierService[]
@@ -6195,11 +6196,46 @@ model ConversationEntry {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
   sale       Sale?      @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  attachments ConversationAttachment[]
 
   @@index([collectionId, occurredAt])
   @@index([contactId, occurredAt])
   @@index([saleId])
   @@map("conversation_entry")
+}
+
+// A file kept with a conversation entry (#2150, ADR-0073 §7): a payment confirmation, a photo of a
+// damaged stamp, a scan of a certificate — an image (JPEG, PNG, WebP) or a PDF, as it came. Never an
+// offer photo or anything else's: it belongs to its entry alone and goes with it.
+//
+// **The bytes are kept as uploaded** (`storageKey`), what kind they are read from the bytes and never
+// from the name; an image also gets a thumbnail (`thumbKey`, WebP) for the card. Both under
+// `<collectionId>/conversation/<uuid>/` through `src/lib/storage/`. **The cascade drops rows, never
+// files**: deleting an entry, or the contact whose log it is, deletes the bytes explicitly
+// (`conversation-attachments.ts`), as every other owner of stored bytes does.
+model ConversationAttachment {
+  id             String   @id @default(cuid())
+  collectionId   String
+  entryId        String
+  // The file's name as it was sent, cleaned of path separators and control characters.
+  fileName       String
+  // image/jpeg | image/png | image/webp | application/pdf — read from the bytes.
+  contentType    String
+  sizeBytes      Int
+  storageBackend String
+  storageKey     String
+  // An image's thumbnail; null for a PDF.
+  thumbKey       String?
+  widthPx        Int?
+  heightPx       Int?
+  createdAt      DateTime @default(now())
+
+  collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  entry      ConversationEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, createdAt])
+  @@index([collectionId])
+  @@map("conversation_attachment")
 }
 
 // One line of a sale (ADR-0013): the offer set that went, the offer it sold through, its line

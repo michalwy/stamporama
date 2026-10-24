@@ -3,7 +3,7 @@
 ## Status
 
 Accepted. Decided with the collector on 2026-10-24 in #2149, which built it. #2150 adds attachments
-to entries and builds on this model.
+to entries and builds on this model (§7).
 
 ## Context
 
@@ -67,9 +67,37 @@ name one, or by their Facebook profile as *Sell* finds one (#1777); a sale by it
 in a batch is one string with a field per line, since free text cannot use the `;`-separated
 grammar of the other batches. See `docs/agents/agent-api.md`, *The conversation log*.
 
+### 7. An entry keeps files (#2150)
+
+A buyer's message often carries what matters as a file. `ConversationAttachment` hangs off an entry:
+**pictures (JPEG, PNG, WebP) and PDFs**, several per entry (at most 20), each up to the upload limit
+photos have (`MAX_UPLOAD_BYTES`), with the file's name.
+
+- **What a file is comes from its bytes** (`sniffAttachment`), never from its name or a declared
+  type; anything else is refused before a byte is stored. The name is kept cleaned of path
+  separators and control characters, given the extension its bytes say when it has none.
+- **Kept as it came**, through `src/lib/storage/` under `<collectionId>/conversation/<uuid>/`, with a
+  WebP thumbnail for a picture. It belongs to its entry alone — never an offer photo or anything
+  else's — so it is a table of its own rather than a sixth owner of `Photo`, which would have taken a
+  PDF only by growing columns no photo has.
+- **Deleted with its entry.** The cascade from an entry, and from a contact through its entries,
+  drops rows only; `deleteConversationEntry` and `deleteContact` read the files first and delete
+  them after, as every other owner of stored bytes does. Bytes are written before the rows, so a row
+  never names a file that is not there; a failed delete leaves an orphan file, never a dangling row.
+- **Shown on the entry** — a picture's thumbnail enlarging in the shared lightbox, a PDF by name,
+  opening in a new tab — and added (*⋮ → Attach files*) and removed (*×*) by hand in the same card.
+  They count in the collection's storage figure.
+- **The agent API** sends a file as base64 in a string of the entry grammar (`name=`, `data=`): a
+  parameter carries nothing richer, and it is the one spelling an MCP client can send too. Files go
+  with `add_conversation_entries` (each naming its entry by place) or to one entry afterwards
+  (`attach_conversation_files`), each answered on its own; `remove_conversation_attachment` removes
+  one. An entry reads its files back as **links, never bytes** (#706) — the attachment route, which
+  takes the same token, so a *read only* token lists and fetches them.
+
 ## Consequences
 
 - The log is one query per view and needs no paging on a buyer's card; past 200 entries the card
   says how many more there are.
-- #2150's attachments hang off an entry and are deleted with it.
+- #2150's attachments hang off an entry and are deleted with it (§7); a delete path added later
+  for entries must delete their files too.
 - An entry has no effect anywhere else, so nothing in profit, statuses or the dashboard reads it.

@@ -213,7 +213,10 @@ describe("the conversation log (#2149)", () => {
 
   describe("through the agent API", () => {
     it("registers five operations, the four writes refused to a read only token", async () => {
-      const names = OPERATIONS.filter((op) => op.path.startsWith("/conversation-entries")).map((op) => [op.name, op.writes]);
+      // #2149's five by name, not every operation under the path: #2150 added an entry's files there,
+      // and a question about one issue asked of the whole registry turns red on the next.
+      const own = ["list_conversation_entries", "add_conversation_entries", "update_conversation_entry", "move_conversation_entry", "delete_conversation_entry"];
+      const names = OPERATIONS.filter((op) => own.includes(op.name)).map((op) => [op.name, op.writes]);
       assert.deepEqual(names, [
         ["list_conversation_entries", false],
         ["add_conversation_entries", true],
