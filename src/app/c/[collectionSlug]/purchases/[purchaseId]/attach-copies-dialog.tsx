@@ -27,6 +27,12 @@ import {
   type AttachPickerFilters,
   type AttachState,
 } from "@/lib/attach-picker-filters";
+import {
+  ATTACH_SORT_KEYS,
+  ATTACH_SORT_LABEL,
+  isAttachSortKey,
+  sortAttachableCopies,
+} from "@/lib/attach-picker-sort";
 import { catalogMatchKey } from "@/lib/catalog-number";
 import { copyMatchesSearch } from "@/lib/copy-search";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
@@ -34,7 +40,11 @@ import { summarizeRelink, untickOrder, type TickedCopy } from "@/lib/attach-reli
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
-import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
+import {
+  flattenAreaTree,
+  resolveAreaFilterIds,
+} from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { SortControl } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import {
   keepRowsAcrossTreeChange,
@@ -112,6 +122,8 @@ function AttachRowChips({ item }: { item: AttachableCopy }) {
   );
 }
 
+const SORT_OPTIONS = ATTACH_SORT_KEYS.map((key) => ({ value: key, label: ATTACH_SORT_LABEL[key] }));
+
 const HINT_STYLE: React.CSSProperties = {
   padding: "2rem 1.5rem",
   textAlign: "center",
@@ -161,8 +173,9 @@ function useAttachableCopies(
  * copy reads the same here as everywhere else. Above the list, the picker's own filters (#2121):
  * condition, certificate and format as the Copies list draws them, whether a copy is on a purchase,
  * and whether it is still held — the copies that have been sold or written off are offered too
- * (#2120), because a copy that left before its receipt was recorded still needs a cost. They are
- * remembered per collection, as the area and year are.
+ * (#2120), because a copy that left before its receipt was recorded still needs a cost. Beside them,
+ * the sort (#2147): catalogue order by default, so the copies come in the order a receipt or an album
+ * lists them. Filters and sort are remembered per collection, as the area and year are.
  *
  * A copy that already belongs to **another** purchase is offered but never moved silently — the
  * footer names the orders being left and the move has to be confirmed, because reassigning a copy
@@ -241,6 +254,7 @@ export function AttachCopiesDialog({
     includeSubAreas,
   });
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  const areaOrder = useMemo(() => flattenAreaTree(areas).map(({ area }) => area.id), [areas]);
 
   const yearFacets = useMemo(() => {
     const counts = new Map<number | null, number>();
@@ -253,7 +267,7 @@ export function AttachCopiesDialog({
   const visibleCopies = useMemo(() => {
     const raw = search.trim();
     const y = year === "none" ? "none" : year ? Number(year) : null;
-    return copies.filter((c) => {
+    const matching = copies.filter((c) => {
       if (!matchesAttachFilters(c, filters)) return false;
       if (y === "none" && c.issuedYear !== null) return false;
       if (typeof y === "number" && c.issuedYear !== y) return false;
@@ -267,7 +281,9 @@ export function AttachCopiesDialog({
         });
       });
     });
-  }, [copies, filters, year, search, vendorMapFor]);
+    // Re-sorting reorders the rows and nothing else: a tick is keyed by copy, never by position.
+    return sortAttachableCopies(matching, filters.sortBy, filters.sortDir, areaOrder);
+  }, [copies, filters, year, search, vendorMapFor, areaOrder]);
 
   function toggle(item: ItemListItem) {
     setSelected((prev) => {
@@ -404,7 +420,8 @@ export function AttachCopiesDialog({
           {/* The picker's own filters (#2121). The state chips decide which copies are read at
               all — the held ones by default, the sold, traded and written-off ones for a receipt
               recorded after they left (#2120); the purchase chips separate the copies on no
-              purchase from those already filed against one. Neither set lit is every value. */}
+              purchase from those already filed against one. Neither set lit is every value. The
+              sort closes the row (#2147), the Copies list's control, remembered with the filters. */}
           <div
             style={{
               padding: "0.5rem 1rem",
@@ -478,6 +495,15 @@ export function AttachCopiesDialog({
                 />
               </FilterSlot>
             )}
+            <span aria-hidden style={DIVIDER_STYLE} />
+            <SortControl
+              sortBy={filters.sortBy}
+              sortDir={filters.sortDir}
+              sortOptions={SORT_OPTIONS}
+              onSortChange={(sortBy, sortDir) =>
+                setFilters({ sortBy: isAttachSortKey(sortBy) ? sortBy : filters.sortBy, sortDir })
+              }
+            />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>

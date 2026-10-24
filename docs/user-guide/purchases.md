@@ -2572,8 +2572,14 @@ Above the list sits a row of filters, in any combination:
   can be ticked like any other value. The certificate and format filters appear only when your
   collection defines certificate statuses or formats.
 
-The filters are remembered for the next time you open the picker. **Ticks survive every one of
-them**, as they survive the search, and the button keeps counting the ticked copies they hide.
+At the end of the row, **Sort** puts the list in order — by **Catalogue number** (the order a
+catalogue or an album lists them: area, year, issue, then the stamp's place in its issue, a piece
+with several stamps by its first), **Copy number**, **Date added** or **Catalogue value** — and the
+arrow beside it turns the order round. The picker opens in catalogue order; copies with no catalogue
+value come last whichever way the value sort runs.
+
+The filters and the sort are remembered for the next time you open the picker. **Ticks survive every
+one of them**, as they survive the search, and the button keeps counting the ticked copies they hide.
 
 #### Attaching a copy that has already been sold
 
