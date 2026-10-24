@@ -273,7 +273,7 @@ describe("every Facebook offer is in a post from the moment it is made (#1989, #
     assert.equal((row.facebookPostSnapshot as { postTitle: string }).postTitle, "Polska 1954");
   });
 
-  it("reads a post of one lot as an offer posted alone: no lot number, laid out as text, the offer's own ZIP", async () => {
+  it("reads a post of one lot as an offer posted alone: no lot number, laid out as text, the post's ZIP", async () => {
     await prisma.facebookGroup.update({
       where: { id: groupId },
       data: { multiLotLayout: "captions", customSettings: ["multiLotLayout"] },
@@ -285,7 +285,11 @@ describe("every Facebook offer is in a post from the moment it is made (#1989, #
       assert.equal(kit.lots.length, 1);
       assert.equal(kit.lots[0].lotNo, null, "{lot} stays empty, as on a single post");
       assert.equal(kit.layout, "text", "the group's layout for several lots does not apply");
-      assert.match(kit.photoZipPath, new RegExp(`/offers/${id}/photos/zip$`));
+      assert.match(
+        kit.photoZipPath,
+        new RegExp(`/facebook-posts/${kit.post.id}/photos/zip$`),
+        "↓ Photos is the post's download, named by the post, as for a post of several (#2133)"
+      );
       await publishOfferOrPost(userId, id, null);
       const snapshot = (await prisma.offer.findUniqueOrThrow({ where: { id }, select: { facebookPostSnapshot: true } }))
         .facebookPostSnapshot as { layout: string };

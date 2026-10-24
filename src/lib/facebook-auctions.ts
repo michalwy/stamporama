@@ -423,8 +423,9 @@ export interface FacebookOfferKit {
   /** The post's lots in lot order — or this offer alone. A post of one lot reads as an offer posted
    *  alone (#1989): its lot carries no number, so `{lot}` is empty. */
   lots: FacebookKitLot[];
-  /** Where one click downloads the photos, in lot order: the offer's own archive when it is posted
-   *  alone, the post's when it is one of several lots — one photo per lot in a captioned post (#1841). */
+  /** Where one click downloads the photos, in lot order: the post's archive whenever the offer is in a
+   *  post — of one lot too (#2133), named by the post with `lot-NN-…` files — one photo per lot in a
+   *  captioned post (#1841); the offer's own archive only for an offer in no post. */
   photoZipPath: string;
 }
 
@@ -562,7 +563,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       settings
     ),
     lots,
-    photoZipPath: offer.facebookPost && !alone
+    photoZipPath: offer.facebookPost
       ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
   };

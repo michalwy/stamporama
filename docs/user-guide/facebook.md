@@ -354,7 +354,9 @@ of several lots, the same kit is on the post's own screen — see
   copies what there is;
 - the **post template** the text is written from: *Same as group*, with the group's template for the
   offer's type, or the offer's own (below);
-- **↓ Photos**: the offer's photos as one download.
+- **↓ Photos**: the offer's photos as one download — its post's, named by the post's number and title,
+  each file starting `lot-01-…` (the offer's own **Download all**, on its Photos card, keeps the offer's
+  naming).
 
 ### Every Facebook offer is a post from the start
 
@@ -378,8 +380,8 @@ it has.
 takes the offer out of its post of one, which goes; its number is never used again.
 
 A post of one offer reads exactly as a single post always did: its text comes from the auction or
-quick-buy post template, the layout for posts of several lots does not apply, and **↓ Photos** is the
-offer's own download. The offer's Facebook card keeps everything it showed before and adds the post's
+quick-buy post template, the layout for posts of several lots does not apply. **↓ Photos** is the post's
+download, as for any post: named by the post's number and title, its files starting `lot-01-…`. The offer's Facebook card keeps everything it showed before and adds the post's
 number, title and where it stands, with **Open post** — the post's screen, with that one offer as its
 only row. **Publish…** asks only for the link, and whether the post is waiting for the group's
 approval, as for a post of several: the title is the post's. If the group turns the post down, the
