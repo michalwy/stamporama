@@ -543,6 +543,57 @@ describe("the agent API's operation modules (#1415)", () => {
 });
 
 /**
+ * The subtype writes the agent API must never reach (#2139).
+ *
+ * The collector asked for subtypes to be added and their names corrected; deleting, reordering,
+ * choosing the default and flipping *acts as variant* were left in Settings on purpose. Each of the
+ * last three changes how stamps already classified are valued, created or ordered — the default is
+ * what a new variant is given and what a cleared subtype falls back to, and *acts as variant* turns
+ * every stamp of the subtype into, or out of, its base stamp's variant tree.
+ */
+const SUBTYPE_BOUNDARY = new Map<string, string>([
+  ["deleteStampSubtype", "deletes a subtype"],
+  ["reorderStampSubtypes", "rewrites the collector's dragged order of subtypes"],
+  ["setDefaultSubtype", "changes which subtype new and cleared variants are given"],
+  ["setSubtypeActsAsVariant", "moves every stamp of a subtype into or out of its variant tree"],
+]);
+
+describe("the agent API's operation modules (#2139)", () => {
+  it("reach no domain function that deletes, reorders, re-defaults or re-flags a subtype", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const why = SUBTYPE_BOUNDARY.get(name);
+        if (why) {
+          breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${why}`);
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent adds subtypes and corrects their names, and nothing else about the dictionary (#2139).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the subtype writes that are allowed", () => {
+    const fixture = path.join(AGENT_API, "operations/subtypes.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const allowed of ["createStampSubtype", "updateStampSubtype"]) {
+      assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/subtypes.ts`);
+    }
+    const domain = readFileSync(path.join(ROOT, "src/lib/subtypes.ts"), "utf8");
+    for (const name of SUBTYPE_BOUNDARY.keys()) {
+      assert.match(
+        domain,
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of src/lib/subtypes.ts any more`
+      );
+    }
+  });
+});
+
+/**
  * **The catalogue writes create and correct, and never delete, move or reorder** (#1438). An issue,
  * a stamp or a variant is created and its names, numbers and attributes corrected; deleting one,
  * moving a stamp to another issue or under another parent, merging two issues, moving an issue to

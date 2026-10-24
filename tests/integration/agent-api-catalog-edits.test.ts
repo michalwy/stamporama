@@ -518,6 +518,146 @@ describe("the catalogue writes (#1438)", () => {
     });
   });
 
+  describe("a variant's subtype (#2138) and the subtype dictionary (#2139)", () => {
+    type SubtypeEntry = { id: string; name: string; actsAsVariant: boolean; isDefault: boolean };
+    type Edited = AgentStampDetail & { ownPricesKept: { priceCount: number; editions: string[]; note: string } | null };
+    let base: string;
+    let variant: string;
+    let colorSubtypeId: string;
+    const subtypeOf = async (stampId: string) =>
+      (await prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { subtypeId: true } })).subtypeId;
+    const subtypeCount = () => prisma.stampSubtype.count({ where: { collectionId } });
+
+    before(async () => {
+      const issue = await ok<CreatedIssue>(token, "POST", "/issues", { area: "Poland", year: 1935, name: "Kinds", catalog_numbers: ["Mi: 600"] });
+      base = issue.createdStamps[0].stampId;
+      const variants = await ok<Created>(token, "POST", `/stamps/${base}/variants`, { numbers: "a" });
+      variant = variants.createdStamps[0].stampId;
+      colorSubtypeId = (await prisma.stampSubtype.findFirstOrThrow({ where: { collectionId, name: "Color" } })).id;
+    });
+
+    it("sets, changes and clears a variant's subtype, the clear giving it the collection's default", async () => {
+      assert.equal(await subtypeOf(variant), colorSubtypeId, "a new variant is given the default");
+
+      const set = await ok<Edited>(token, "PATCH", `/stamps/${variant}`, { subtype: "perforation" });
+      assert.equal(set.subtype, "Perforation");
+      assert.equal(set.ownPricesKept, null);
+      assert.deepEqual(set.catalogNumbers, ["Mi·PL 600a"], "only the subtype was sent");
+      assert.equal(await subtypeOf(variant), perforationSubtypeId);
+
+      const changed = await ok<Edited>(token, "PATCH", `/stamps/${variant}`, { subtype: colorSubtypeId });
+      assert.equal(changed.subtype, undefined, "the default subtype reads as none");
+      assert.equal(await subtypeOf(variant), colorSubtypeId);
+
+      await ok<Edited>(token, "PATCH", `/stamps/${variant}`, { subtype: "Perforation" });
+      const cleared = await ok<Edited>(token, "PATCH", `/stamps/${variant}`, { clear: ["subtype"] });
+      assert.equal(cleared.subtype, undefined);
+      assert.equal(await subtypeOf(variant), colorSubtypeId);
+    });
+
+    it("refuses a subtype the collection does not have, naming those it has, and writes nothing", async () => {
+      const err = await refused(token, "PATCH", `/stamps/${variant}`, { name: "Renamed", subtype: "Shade" });
+      assert.match(err.error.message, /Shade/);
+      assert.deepEqual(err.error.accepted?.slice(0, 2), ["Color", "Perforation"]);
+      const row = await prisma.stamp.findUniqueOrThrow({ where: { id: variant }, select: { name: true, subtypeId: true } });
+      assert.deepEqual(row, { name: null, subtypeId: colorSubtypeId });
+    });
+
+    it("refuses a subtype on a stamp under no other, and one both sent and cleared", async () => {
+      const topLevel = await refused(token, "PATCH", `/stamps/${base}`, { subtype: "Perforation" });
+      assert.match(topLevel.error.message, /only a variant/);
+      const clearTop = await refused(token, "PATCH", `/stamps/${base}`, { clear: ["subtype"] });
+      assert.match(clearTop.error.message, /only a variant/);
+      assert.equal(await subtypeOf(base), null);
+      const both = await refused(token, "PATCH", `/stamps/${variant}`, { subtype: "Perforation", clear: ["subtype"] });
+      assert.match(both.error.message, /both sent and named in "clear"/);
+    });
+
+    it("adds a subtype at the end of the order, never the default, which both stamp writes can name at once", async () => {
+      const created = await ok<SubtypeEntry>(token, "POST", "/subtypes", { name: "Plate flaw", acts_as_variant: false });
+      assert.deepEqual(
+        [created.name, created.actsAsVariant, created.isDefault],
+        ["Plate flaw", false, false]
+      );
+      const last = await prisma.stampSubtype.findFirstOrThrow({ where: { collectionId }, orderBy: { sortOrder: "desc" } });
+      assert.equal(last.id, created.id);
+
+      const flaws = await ok<Created>(token, "POST", `/stamps/${base}/variants`, { numbers: "b", subtype: "plate flaw" });
+      assert.equal(await subtypeOf(flaws.createdStamps[0].stampId), created.id);
+      const edited = await ok<Edited>(token, "PATCH", `/stamps/${variant}`, { subtype: "Plate flaw" });
+      assert.equal(edited.subtype, "Plate flaw");
+
+      const shade = await ok<SubtypeEntry>(token, "POST", "/subtypes", { name: "Shade" });
+      assert.equal(shade.actsAsVariant, true, "a subtype acts as a variant unless told otherwise, as the panel's form does");
+      const vocabulary = await ok<CollectionVocabulary>(token, "GET", "/vocabulary");
+      assert.deepEqual(vocabulary.subtypes.map((row) => row.name).slice(-2), ["Plate flaw", "Shade"]);
+    });
+
+    it("refuses a name the collection already has, whatever its case, and adds nothing", async () => {
+      const before = await subtypeCount();
+      const err = await refused(token, "POST", "/subtypes", { name: " PERFORATION " });
+      assert.match(err.error.message, /already has a subtype named "Perforation"/);
+      assert.deepEqual(err.error.accepted, [perforationSubtypeId]);
+      assert.equal(await subtypeCount(), before);
+    });
+
+    it("corrects a subtype's name, by id or by name, and its stamps read under the new one", async () => {
+      const plateFlaw = await prisma.stampSubtype.findFirstOrThrow({ where: { collectionId, name: "Plate flaw" } });
+      const renamed = await ok<SubtypeEntry>(token, "PATCH", "/subtypes/Plate%20flaw", { name: "Plate variety" });
+      assert.deepEqual(renamed, { id: plateFlaw.id, name: "Plate variety", actsAsVariant: false, isDefault: false });
+      const stamp = await ok<AgentStampDetail>(token, "GET", `/stamps/${variant}`);
+      assert.equal(stamp.subtype, "Plate variety");
+
+      const recased = await ok<SubtypeEntry>(token, "PATCH", `/subtypes/${plateFlaw.id}`, { name: "Plate Variety" });
+      assert.equal(recased.name, "Plate Variety", "its own name in another case is not a duplicate");
+
+      const taken = await refused(token, "PATCH", `/subtypes/${plateFlaw.id}`, { name: "shade" });
+      assert.deepEqual(taken.error.accepted, [(await prisma.stampSubtype.findFirstOrThrow({ where: { collectionId, name: "Shade" } })).id]);
+      const unknown = await refused(token, "PATCH", "/subtypes/Nonesuch", { name: "Anything" });
+      assert.match(unknown.error.message, /Nonesuch/);
+      assert.equal((await prisma.stampSubtype.findUniqueOrThrow({ where: { id: plateFlaw.id } })).name, "Plate Variety");
+    });
+
+    it("keeps the base stamp's own prices when a changed subtype makes it an umbrella, and says so (#1573)", async () => {
+      const added = await ok<Created>(token, "POST", `/issues/${(await prisma.issueMember.findFirstOrThrow({ where: { stampId: base } })).issueId}/stamps`, {
+        catalog_numbers: ["Mi: 610"],
+      });
+      const priced = added.createdStamps[0].stampId;
+      const flaw = await ok<Created>(token, "POST", `/stamps/${priced}/variants`, { numbers: "a", subtype: "Plate Variety" });
+      const conditionId = (
+        await prisma.stampCondition.create({ data: { collectionId, name: "Hinged", abbreviation: "*", sortOrder: 1 } })
+      ).id;
+      const catalogNameId = (
+        await prisma.catalogName.create({ data: { vendorId: michelId, name: "Michel Spezial", currency: "EUR" } })
+      ).id;
+      const editionId = (await prisma.catalogEdition.create({ data: { catalogNameId, year: 2025 } })).id;
+      await prisma.stampCatalogPrice.create({
+        data: { stampId: priced, catalogEditionId: editionId, conditionId, price: "3.00", currency: "EUR" },
+      });
+
+      const edited = await ok<Edited>(token, "PATCH", `/stamps/${flaw.createdStamps[0].stampId}`, { subtype: "Perforation" });
+      assert.equal(edited.ownPricesKept?.priceCount, 1);
+      assert.deepEqual(edited.ownPricesKept?.editions, ["Michel Spezial 2025"]);
+      assert.match(edited.ownPricesKept?.note ?? "", /clear_catalog_prices/);
+      assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: priced } }), 1);
+    });
+
+    it("refuses a read-only token on both dictionary writes, and writes nothing", async () => {
+      const before = await subtypeCount();
+      for (const [method, path] of [["POST", "/subtypes"], ["PATCH", `/subtypes/${perforationSubtypeId}`]] as [Method, string][]) {
+        const err = await refused(readOnlyToken, method, path, { name: "Read-only" });
+        assert.equal(err.status, 403, `${method} ${path}`);
+      }
+      assert.equal(await subtypeCount(), before);
+      assert.equal((await prisma.stampSubtype.findUniqueOrThrow({ where: { id: perforationSubtypeId } })).name, "Perforation");
+    });
+
+    it("publishes exactly these two subtype writes, and nothing that deletes or reorders one", () => {
+      const subtypes = OPERATIONS.filter((op) => /^\/subtypes(\/|$)/.test(op.path));
+      assert.deepEqual(subtypes.map((op) => [op.name, op.writes]).sort(), [["create_subtype", true], ["update_subtype", true]]);
+    });
+  });
+
   describe("the vocabulary", () => {
     it("carries the attribute dictionaries update_stamp takes", async () => {
       const vocabulary = await ok<CollectionVocabulary>(token, "GET", "/vocabulary");

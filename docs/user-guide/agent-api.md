@@ -265,7 +265,19 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   because the issue form cannot either; that is said on the area;
 - **correct a stamp or a variant**: its name and translated names, its date of issue, its number in
   any catalogue its area keeps, and its attributes — denomination and perforation as printed, and the
-  colour, watermark, paper and printing from your own lists in Settings.
+  colour, watermark, paper and printing from your own lists in Settings;
+- **correct the kind of a variant** — its [subtype](collections.md#stamp-subtypes): set it, change
+  it, or clear it, which gives the variant your default subtype, exactly as the stamp form's
+  *Subtype* field does. A subtype you do not have is refused, and the assistant is told the ones you
+  do. Only a variant has a subtype, as on the form. Where the new kind makes it a stamp's first
+  variant and that stamp has catalogue prices of its own, the prices stay and the assistant is told,
+  as when it adds variants;
+- **add a subtype and correct a subtype's name**, as *Settings → Stamp subtypes* does — so an
+  assistant entering a specialised catalogue can name a kind of variant you have no subtype for yet,
+  and use it straight away. A new subtype goes at the end of your list and is never the default; it
+  acts as a variant unless the assistant says it is an entry of its own, such as a plate flaw. A name
+  you already have, in any mix of capitals, is refused. Deleting a subtype, reordering them, choosing
+  the default and changing whether one acts as a variant stay in Settings.
 
 Only what it is told to change changes; a stamp's other catalogue numbers and fields stay as they
 are. A name in another language is accepted only in a language you list or print in.
