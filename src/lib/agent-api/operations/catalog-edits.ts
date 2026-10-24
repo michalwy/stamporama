@@ -608,6 +608,36 @@ export const addIssueStampsOperation: Operation = {
   handler: async (context, params) => addIssueStampsFromParams(context, params),
 };
 
+/**
+ * The subtype a reference names, by id or name, as the variant range dialog and the stamp form
+ * offer them — the collection's whole dictionary, in its order, so a refusal lists them as Settings
+ * does. One resolver for `add_stamp_variants` and `update_stamp`, so a name one accepts the other
+ * accepts too.
+ */
+async function resolveSubtype(context: OperationContext, ref: string): Promise<string> {
+  const subtypes = await prisma.stampSubtype.findMany({
+    where: { collectionId: context.collectionId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true },
+  });
+  return resolveVocabularyValue(ref, subtypes, { vocabulary: "subtype", parameter: "subtype" });
+}
+
+/** The parent's own prices an edit left in place when it made the parent an umbrella (#1573). */
+export interface AgentOwnPricesKept {
+  readonly priceCount: number;
+  readonly editions: string[];
+  readonly note: string;
+}
+
+const OWN_PRICES_KEPT_NOTE =
+  "The base stamp became an umbrella with catalogue prices of its own, and they were kept. A price recorded on an umbrella overrides the value rolled up from its variants, so its value no longer follows them. Ask the collector whether to clear them, and clear them with `clear_catalog_prices` if so.";
+
+function ownPricesKept(umbrellas: readonly { priceCount: number; editions: string[] }[]): AgentOwnPricesKept | null {
+  const [umbrella] = umbrellas;
+  return umbrella ? { priceCount: umbrella.priceCount, editions: umbrella.editions, note: OWN_PRICES_KEPT_NOTE } : null;
+}
+
 async function loadStamp(context: OperationContext, stampId: string) {
   const stamp = await prisma.stamp.findFirst({
     where: { id: stampId, collectionId: context.collectionId },
@@ -639,7 +669,7 @@ export async function addStampVariantsFromParams(
   issueId: string;
   path: string;
   createdStamps: AgentCreatedStamp[];
-  ownPricesKept: { priceCount: number; editions: string[]; note: string } | null;
+  ownPricesKept: AgentOwnPricesKept | null;
 }> {
   const stamp = await loadStamp(context, await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id"));
   const memberships = stamp.issueMemberships.map((row) => row.issueId);
@@ -693,15 +723,7 @@ export async function addStampVariantsFromParams(
   }
 
   const subtypeRef = optionalString(params, "subtype");
-  let subtypeId: string | null = null;
-  if (subtypeRef !== null) {
-    const subtypes = await prisma.stampSubtype.findMany({
-      where: { collectionId: context.collectionId },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
-    });
-    subtypeId = resolveVocabularyValue(subtypeRef, subtypes, { vocabulary: "subtype", parameter: "subtype" });
-  }
+  const subtypeId = subtypeRef !== null ? await resolveSubtype(context, subtypeRef) : null;
 
   await refuseDuplicates(
     context,
@@ -718,20 +740,13 @@ export async function addStampVariantsFromParams(
     stamp.id,
     { catalogVendorId, numbers: parsed.numbers, subtypeId, umbrellaPrices: "keep" }
   );
-  const [umbrella] = umbrellas;
   const header = await loadCollectionHeader(context);
   return {
     stampId: stamp.id,
     issueId,
     path: collectionPath(header, `/stamps/${stamp.id}`),
     createdStamps: await createdStamps(context, stampIds),
-    ownPricesKept: umbrella
-      ? {
-          priceCount: umbrella.priceCount,
-          editions: umbrella.editions,
-          note: "The base stamp became an umbrella with catalogue prices of its own, and they were kept. A price recorded on an umbrella overrides the value rolled up from its variants, so its value no longer follows them. Ask the collector whether to clear them, and clear them with `clear_catalog_prices` if so.",
-        }
-      : null,
+    ownPricesKept: ownPricesKept(umbrellas),
   };
 }
 
@@ -912,6 +927,7 @@ const STAMP_CLEARABLE = [
   "denomination",
   "perforation",
   ...STAMP_ATTRIBUTE_KINDS,
+  "subtype",
 ] as const;
 
 const ATTRIBUTE_FIELD: Record<StampAttributeKind, "colorId" | "watermarkId" | "paperId" | "printingId"> = {
@@ -924,7 +940,7 @@ const ATTRIBUTE_FIELD: Record<StampAttributeKind, "colorId" | "watermarkId" | "p
 export async function updateStampFromParams(
   context: OperationContext,
   params: ParsedParams
-): Promise<AgentStampDetail> {
+): Promise<AgentStampDetail & { ownPricesKept: AgentOwnPricesKept | null }> {
   const stamp = await loadStamp(context, await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id"));
   const cleared = clearList(params);
 
@@ -964,12 +980,26 @@ export async function updateStampFromParams(
     if (cleared.has(kind)) attributes[ATTRIBUTE_FIELD[kind]] = null;
   }
 
+  // The subtype (#2138) is the stamp form's field, on the form's rules: it is offered only for a
+  // stamp under another, so a top-level stamp is refused rather than silently left unclassified as
+  // `updateStampWithCatalog` would leave it; and the form has no *none*, so clearing it is handing
+  // back null, which gives the variant the collection's default subtype — the one reads leave out.
+  const subtypeRef = optionalString(params, "subtype");
+  refuseSentAndCleared("subtype", subtypeRef !== null, cleared);
+  const managesSubtype = subtypeRef !== null || cleared.has("subtype");
+  if (managesSubtype && stamp.parentId === null) {
+    throw invalidRequest(
+      "The stamp stands under no other stamp, and only a variant — a stamp under another — has a subtype, as on the collector's stamp form. Add it as a variant of its base stamp with `add_stamp_variants` instead."
+    );
+  }
+  const subtypeId = subtypeRef !== null ? await resolveSubtype(context, subtypeRef) : null;
+
   const translations = await translationWrites(context, params);
   const entries = stringList(params, "catalog_numbers");
   const changesDate = Object.values(date).some((value) => value !== null);
-  if (name === null && !changesDate && cleared.size === 0 && !translations && entries.length === 0 && Object.keys(attributes).length === 0) {
+  if (name === null && !changesDate && cleared.size === 0 && !translations && entries.length === 0 && Object.keys(attributes).length === 0 && !managesSubtype) {
     throw invalidRequest(
-      'Nothing to change: send a field to set — "name", "names", "issued_year", "catalog_numbers", "denomination", "color" and the rest — or "clear" / "clear_names".'
+      'Nothing to change: send a field to set — "name", "names", "issued_year", "catalog_numbers", "denomination", "color", "subtype" and the rest — or "clear" / "clear_names".'
     );
   }
 
@@ -999,9 +1029,11 @@ export async function updateStampFromParams(
   const restated = (field: "issued_year" | "issued_month" | "issued_day", current: number | null) =>
     cleared.has(field) ? null : (date[field] ?? current);
   // `updateStampWithCatalog` is the stamp form's write: the name, the date and every catalogue
-  // number are written whatever it is handed, so each is restated; the attributes and the
-  // translations take only what is sent.
-  await updateStampWithCatalog(context.ownerId, stamp.id, {
+  // number are written whatever it is handed, so each is restated; the attributes, the subtype and
+  // the translations take only what is sent. A variant this edit turns into one of a variant
+  // subtype can make its base stamp an umbrella, and the base stamp's own prices are kept, as
+  // `add_stamp_variants` keeps them, and said so.
+  const { umbrellas } = await updateStampWithCatalog(context.ownerId, stamp.id, {
     name: cleared.has("name") ? null : (name ?? stamp.name),
     issuedYear: restated("issued_year", stamp.issuedYear),
     issuedMonth: restated("issued_month", stamp.issuedMonth),
@@ -1009,8 +1041,12 @@ export async function updateStampFromParams(
     catalogNumbers: [...catalogNumbers].map(([catalogVendorId, number]) => ({ catalogVendorId, number })),
     translations,
     ...attributes,
+    ...(managesSubtype ? { subtypeId, umbrellaPrices: "keep" as const } : {}),
   });
-  return readStamp(context, Object.freeze({ stamp_id: stamp.id }));
+  return {
+    ...(await readStamp(context, Object.freeze({ stamp_id: stamp.id }))),
+    ownPricesKept: ownPricesKept(umbrellas),
+  };
 }
 
 export const updateStampOperation: Operation = {
@@ -1018,7 +1054,7 @@ export const updateStampOperation: Operation = {
   method: "PATCH",
   path: "/stamps/{stamp_id}",
   description:
-    "Correct a stamp — or a variant — the way the collector's stamp form does: its name and translated names, its date of issue, its number in any catalogue its area keeps, and its catalogue attributes (denomination and perforation as printed; colour, watermark, paper and printing by name from `get_collection_vocabulary`). Only what is sent changes. A catalogue number another stamp already has is refused with that stamp. Nothing here deletes a stamp, moves it to another issue or parent, or reorders it; its size is `set_stamp_size`'s.",
+    "Correct a stamp — or a variant — the way the collector's stamp form does: its name and translated names, its date of issue, its number in any catalogue its area keeps, its catalogue attributes (denomination and perforation as printed; colour, watermark, paper and printing by name from `get_collection_vocabulary`), and a variant's subtype. Only what is sent changes. A catalogue number another stamp already has is refused with that stamp. Nothing here deletes a stamp, moves it to another issue or parent, or reorders it; its size is `set_stamp_size`'s.",
   writes: true,
   parameters: [
     { name: "stamp_id", in: "path", type: "string", required: true, description: "The stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it. A stamp may also be named by its short number, `st 123`." },
@@ -1038,6 +1074,14 @@ export const updateStampOperation: Operation = {
     { name: "paper", in: "body", type: "string", required: false, description: "The paper, by name or id from `papers` in the vocabulary." },
     { name: "printing", in: "body", type: "string", required: false, description: "The printing, by name or id from `printings` in the vocabulary." },
     {
+      name: "subtype",
+      in: "body",
+      type: "string",
+      required: false,
+      description:
+        "What kind of variant this is — a subtype from `subtypes` in the vocabulary, by name or id (`Color`, `Perforation`, `Forgery`). Only a variant, a stamp under another, has one; a subtype the collection does not have is refused with those it has. Clearing it gives the variant the collection's default subtype, which reads leave out.",
+    },
+    {
       name: "clear",
       in: "body",
       type: "string[]",
@@ -1046,6 +1090,10 @@ export const updateStampOperation: Operation = {
       values: STAMP_CLEARABLE,
     },
   ],
-  result: { kind: "object", description: "The stamp as `get_stamp` now reads it." },
+  result: {
+    kind: "object",
+    description:
+      "The stamp as `get_stamp` now reads it, and `ownPricesKept`: null unless a changed subtype made this the base stamp's first variant while the base stamp carried catalogue prices of its own — then their `priceCount` and `editions`, which were left in place and now override the value rolled up from the variants.",
+  },
   handler: async (context, params) => updateStampFromParams(context, params),
 };

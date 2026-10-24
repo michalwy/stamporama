@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales and #2110 the catalogue's missing prices; both wrappers exist and the registry carries **one hundred and six operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices and #2139 the subtype dictionary; both wrappers exist and the registry carries **one hundred and eight operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #2139's two subtype writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #1168's bid recommendation, and #1037's catalog-number
 resolver. Fifteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949) and *the registry carries one hundred and five operations* (from #1949 until #2110).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) and *the registry carries one hundred and six operations* (from #2110 until #2139).
 
-**Sixty-five of them write** since #1949 added three — #2110's read left it there; *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Sixty-seven of them write** since #2139 added two; *sixty-five of them write* was the count from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -1926,7 +1926,7 @@ where until then the resolver could find a number and nothing could add one.
 | `add_issue_stamps` | yes | the issue's *Add stamp range* dialog (#219), optionally sized from a preset (#807) |
 | `add_stamp_variants` | yes | the *Add variant range* dialog (#722), with its subtype (#1000) |
 | `update_issue` | yes | the name, the year, the translated names, a catalogue's declared range, its own prefix in a catalogue (#1606) |
-| `update_stamp` | yes | the name, translated names, date, catalogue numbers and attributes (#71, #736) |
+| `update_stamp` | yes | the name, translated names, date, catalogue numbers and attributes (#71, #736), and a variant's subtype (#2138) |
 
 **Every write is the app's own.** `createIssue`, `addStampRangeToIssue`, `addVariantRangeToStamp`,
 `updateIssue` and `updateStampWithCatalog` are the issue form's, the two range dialogs' and the two
@@ -2000,6 +2000,22 @@ manual value.
 **The four attribute dictionaries joined the vocabulary** (`colors`, `watermarks`, `papers`,
 `printings`) on #708's licence, *adding a key is not a break*: `update_stamp` takes them by name.
 
+**A variant's subtype is the stamp form's field, on the form's rules** (#2138). `update_stamp` takes
+`subtype` by name or id — one resolver, `resolveSubtype`, shared with `add_stamp_variants`, so a name
+one accepts the other does — and `clear: ["subtype"]` hands `updateStampWithCatalog` a null, which
+gives a variant the collection's default subtype: the form's select has no *none*, and the default is
+the row reads leave out (ADR-0010 §6), so *cleared* is what an agent reads back. The form offers the
+field only for a stamp under another, so a top-level stamp is **refused** rather than handed to
+`updateStampWithCatalog`, which would silently write it back to null. The *acts as variant* override
+beside the field is not on the operation; nobody asked for it. A subtype change that makes a stamp
+its base stamp's first variant settles #1573's question the way `add_stamp_variants` does —
+`umbrellaPrices: "keep"`, and the answer carries `ownPricesKept` — which is why
+`updateStampWithCatalog` now returns the umbrellas `settleUmbrellaPrices` reported (the form's caller
+ignores them).
+
+**The issue's *by name or abbreviation* did not survive the schema**: a subtype has no abbreviation
+(`SUBTYPE_TRANSLATION_FIELDS` is `["name"]`), so #2138 and #2139 take and correct a name.
+
 **Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
 `CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteIssue`,
 `deleteStamp`, `deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`, `moveStampNode`,
@@ -2007,6 +2023,34 @@ manual value.
 operation module, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
 writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-shaped name. New stamps
 take the issue's order as the dialogs' generation gives it (#549).
+
+## The subtype dictionary
+
+**Two operations, and both write** (#2139): an assistant entering a specialised catalogue meets kinds
+of variant the collection has no subtype for, and adds them rather than stopping for Settings.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `create_subtype` | yes | a subtype, at the end of the order and never the default, as *Settings → Stamp subtypes* adds one |
+| `update_subtype` | yes | a subtype's name, the subtype named by id or by its current name |
+
+**Every write is the panel's** — `createStampSubtype` (which now returns the new id; the panel ignores
+it) and `updateStampSubtype`, handed no translations so every language is left alone. A new
+subtype's `acts_as_variant` defaults to true, because the panel's add form comes ticked.
+
+**A duplicate name is refused, and that is the API's rule rather than the panel's**: the panel saves
+one without a word, and #2139's *Done when* refuses it. It is compared trimmed and case-folded, as
+`resolveVocabularyValue` compares, so a subtype added here is always one `add_stamp_variants` and
+`update_stamp` can name without an ambiguity refusal; the refusal names the holder with its id in
+`accepted`. A subtype's own name in another case is not a duplicate of itself.
+
+**Deleting, reordering, choosing the default and flipping *acts as variant* stay in Settings**, and are
+held as the other boundaries are: `SUBTYPE_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts`
+keeps `deleteStampSubtype`, `reorderStampSubtypes`, `setDefaultSubtype` and `setSubtypeActsAsVariant`
+out of every operation module. The last two change how stamps already classified are valued or
+created — the default is also what a cleared subtype falls back to — which is a decision for the
+screen. Translated names stay with `set_translations` (#1452).
+`tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of operations under `/subtypes`.
 
 **#1512 lifted this for checklists, and for exactly its operations** — see *Changing checklists*
 below. **#1540 lifted it for one catalogue price at a time** — see *Pricing the catalogue* below — and
@@ -2745,7 +2789,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and six operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and eight operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2771,9 +2815,9 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 `create_shipping_option`, `update_shipping_option`, `list_packing_supplies`,
 `get_packing_supply_history`, `create_packing_supply`, `update_packing_supply`, `record_supply_use`
 and `update_supply_use`; #1949 added `list_sales`, `get_sale`, `find_or_create_buyer`, `sell_offer`
-and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`.
+and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`; #2139 added `create_subtype` and `update_subtype`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

@@ -62,7 +62,7 @@ import { putStampOnChecklists } from "./checklists";
 import { asChecklistKind, shownChecklists, type ChecklistKind } from "./checklist-kind";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
 import { refreshCandidateCopiesTx } from "./item-candidates";
-import type { UmbrellaPricesPolicy } from "./umbrella-prices-question";
+import type { UmbrellaPricesPolicy, UmbrellaWithOwnPrices } from "./umbrella-prices-question";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -1488,9 +1488,12 @@ export async function updateStampWithCatalog(
      *  variant (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
     umbrellaPrices?: UmbrellaPricesPolicy;
   } & StampAttributeInput
-): Promise<void> {
+): Promise<{ umbrellas: UmbrellaWithOwnPrices[] }> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
+  // The parent this edit made an umbrella while it carried prices of its own, as the policy left
+  // them (#1573) — told to a caller with no dialog to ask in, as `addVariantRangeToStamp` tells it.
+  let umbrellas: UmbrellaWithOwnPrices[] = [];
   await prisma.$transaction(async (tx) => {
     const managesSubtype =
       data.subtypeId !== undefined || data.actsAsVariantOverride !== undefined;
@@ -1536,7 +1539,7 @@ export async function updateStampWithCatalog(
             : current.actsAsVariantOverride
         );
         if (!wasVariant && isVariant) {
-          await settleUmbrellaPrices(tx, collectionId, [current.parentId], data.umbrellaPrices ?? "keep");
+          umbrellas = await settleUmbrellaPrices(tx, collectionId, [current.parentId], data.umbrellaPrices ?? "keep");
         }
       }
     }
@@ -1604,6 +1607,7 @@ export async function updateStampWithCatalog(
   });
   // Catalog numbers may have changed → refresh the denormalized sort key (#181).
   await recomputeStampSortKeys(collectionId, [stampId]);
+  return { umbrellas };
 }
 
 /** A recorded cell as an input shows it: the amount at 2 dp, or a mark as it is typed (`-`, `?`). */

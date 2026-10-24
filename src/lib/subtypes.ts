@@ -172,7 +172,7 @@ export async function createStampSubtype(
   ownerId: string,
   collectionId: string,
   data: { name: string; actsAsVariant: boolean; translations?: TranslationValueMap }
-): Promise<void> {
+): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampSubtype.findFirst({
     where: { collectionId },
@@ -193,6 +193,7 @@ export async function createStampSubtype(
     select: { id: true },
   });
   await syncSubtypeTranslations(created.id, data.translations);
+  return created.id;
 }
 
 /** Renames a subtype, and rewrites its per-language names (#338). */
