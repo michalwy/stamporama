@@ -143,6 +143,10 @@ while copies are unpriced, and nothing at all with no catalog value.
 - **A lot valued at `0`** is a value, and reads `0%` as a free purchase lot does.
 - It is a comparison only: the opening value is still never money spent.
 
+**Its copies.** The opening total's row ends with how many copies the opening balance holds across
+all its lots, counted as a purchase's are (*How many copies it holds*, under the purchase's values
+bar further down).
+
 **More** opens the same groups a purchase has — *What it's worth*, *Cost accounted to copies* and,
 once something has sold, *What it has returned*. A cost that does not apply reads as such: copies
 from a lot without a value are counted *without a value*, and where they are all the line has, it
@@ -491,6 +495,14 @@ cost too small to reach one reads `<1%` rather than `0%`.
 - A copy that **never arrived** is out of the figure; its share of the cost went to the others.
 
 Hover the percentage for the two amounts behind it, and on an *at most* how many copies are unpriced.
+
+**How many copies it holds.** Last on the same row, the order's bar says how many copies the document
+holds across all its lots — *70.84 PLN · ~94% of catalog · 37 copies* — so the size of the parcel is
+there with the bar folded and when it is pinned above the lots. It is counted exactly as the
+**copies** figure on the [Intake documents list](#the-intake-documents-list) is, so the two always
+agree: every copy filed on the document, whatever has happened to it since; a piece with several
+stamps counts once; scan tiles not yet identified are not counted. Each lot's own bar leaves it out,
+since the lot's row already says how many copies it has.
 
 **A copy's own percentage appears only where it differs from its lot's.** A lot's cost is split
 across its copies by their catalog value, so every copy costs the same share of its catalogue as the

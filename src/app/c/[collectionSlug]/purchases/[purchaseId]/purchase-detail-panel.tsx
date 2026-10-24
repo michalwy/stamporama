@@ -1231,6 +1231,9 @@ export function PurchaseDetailPanel({
             purchase.lots.map((l) => costToCatalogLot(l, orderSummary.lotCatalogBasis[l.id]))
           )
         : null,
+    // How many copies the document holds across its lots (#2143), counted as the Intake documents
+    // list counts them (#2125) — every one filed, sold ones included — so the two always agree.
+    itemCount: purchase.lots.reduce((sum, l) => sum + l.itemCount, 0),
   };
 
   return (
