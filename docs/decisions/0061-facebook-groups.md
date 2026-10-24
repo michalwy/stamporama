@@ -174,7 +174,8 @@ alone, not of what is up in the groups, and handled singles and albums through t
   starts on it, and a title typed there is used instead. Posts of several lots still need their own.
 - **It reads as the single post it always was**: its text comes from the post templates, not the
   caption ones; the layout of several lots does not apply; `{lot}` stays empty; its photos are the
-  offer's own download; and its screen is the post screen with one row. The offer's card keeps its
+  post's download, named by the post with `lot-NN-` files, as any post's (amended by #2133 on
+  2026-10-24 — it was the offer's own download); and its screen is the post screen with one row. The offer's card keeps its
   kit and names the post with a link to it.
 - **Grouping works on offers in no post**, as before (*Post together*, *Add to post*, #1870). A lot
   taken out of a post not yet up is an offer in no post again, and a post not yet up that is left

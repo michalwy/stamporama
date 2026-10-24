@@ -258,7 +258,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   follows it and *Publish…* asks no title. **A post of one reads as an offer posted alone**:
   `facebookPostLayout` takes `{ layout, lotCount }` and is `text` under two lots;
   `getFacebookOfferKit` nulls the lone lot's `lotNo` (so `{lot}` and the gaps behave as on a single
-  post) and gives the offer's own `photoZipPath`; `OfferListItem.facebookPost.lotNo` is null there
+  post); its `photoZipPath` is the post's ZIP, as any post's (#2133 — the offer's own ZIP is left to
+  its Photos card's *Download all*); `OfferListItem.facebookPost.lotNo` is null there
   (the chip reads *Post #N*). On the client "posted alone" is `kit.lots.length < 2`, not `!kit.post`:
   the card keeps its kit, listing link and *Repost…* and adds the post's name, stage and *Open post*;
   the kit's `multiLot` (layout select, lot numbers) is `kit.post && lots > 1`, while its `renderLots`
@@ -788,8 +789,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   same day, following #1692): they post no note until the collector places `{terms}`. `standingNoteUnused` is the warning
   under the note field, read off what is being typed (the pane holds both templates and the note in
   one state for it); a group following Facebook's note is warned too, beside the followed value. The photos
-  are the offer's own ZIP for a single post and `GET …/facebook-posts/[postId]/photos/zip` for a
-  multi-lot one — every lot's upload set, flat, prefixed `lot-NN-`.
+  are `GET …/facebook-posts/[postId]/photos/zip` for any post, of one lot too since #2133 — every lot's
+  upload set, flat, prefixed `lot-NN-`; the offer's own ZIP only for an offer in no post.
 
 - **The running bid is the offer's own price, typed** (#1545; ADR-0061 §4, decided with the
   collector on 2026-10-03). No bidder is recorded — amount only. The card's **Record bid** is
