@@ -356,6 +356,10 @@ function copiesWord(n: number): string {
   return `cop${n === 1 ? "y" : "ies"}`;
 }
 
+function copiesNote(n: number): string {
+  return `${n} ${copiesWord(n)}`;
+}
+
 /** A cost over a set of copies, stated (#1184). A copy from an opening-balance lot with no opening
  * value is neither behind the figure nor missing from it — its cost is not applicable (#1325) — so a
  * scope made only of such copies reads *not applicable* rather than *not worked out yet*.
@@ -566,11 +570,14 @@ function lotsWord(n: number): string {
 function OpeningValueRow({
   openingValue,
   costToCatalog,
+  itemCount,
   children,
 }: {
   openingValue: OpeningValue;
   /** The opening value as a share of catalogue (#2129), stated after the notes as a purchase's is. */
   costToCatalog?: CostToCatalog | null;
+  /** How many copies the document holds (#2143), said last, as on a purchase's total. */
+  itemCount?: number;
   children?: React.ReactNode;
 }) {
   const { value, currency, baseCurrency } = openingValue;
@@ -607,7 +614,7 @@ function OpeningValueRow({
       ) : (
         <AbsentAmount text="no opening value" style={HEADLINE_AMOUNT_STYLE} />
       )}
-      {(notes.length > 0 || costToCatalog) && (
+      {(notes.length > 0 || costToCatalog || itemCount !== undefined) && (
         <span style={warn ? WARN_NOTE_STYLE : NOTE_STYLE}>
           {notes.join(" · ")}
           {costToCatalog && (
@@ -619,6 +626,12 @@ function OpeningValueRow({
                 openingBalance
                 currency={baseCurrency}
               />
+            </>
+          )}
+          {itemCount !== undefined && (
+            <>
+              {notes.length > 0 || costToCatalog ? " · " : ""}
+              {copiesNote(itemCount)}
             </>
           )}
         </span>
@@ -760,7 +773,7 @@ function CatalogValueRow({
       <span style={NOTE_STYLE}>
         {/* How many copies are in scope, first in the note because it is the plainest thing the
             row can say and the one the toolbar above it cannot (#845). */}
-        {itemCount !== undefined ? `${itemCount} ${copiesWord(itemCount)} · ` : ""}
+        {itemCount !== undefined ? `${copiesNote(itemCount)} · ` : ""}
         {total.pricedCount} priced
         {valuationNotes.length > 0 ? ` · ${valuationNotes.join(" · ")}` : ""}
         <FaultReducedNote
@@ -947,6 +960,10 @@ export function HoldingsSummaryBar({
    * one derived from `total`: the Copies list is where "how many items are on this list" is a
    * question, and on a lot it is one the rows already answer. Absent while it is still loading, so
    * the segment simply is not drawn rather than showing a placeholder number.
+   *
+   * On an intake document (#2143) it is every copy filed on its lots, sold ones included, and it is
+   * said last on the `spend` or `openingValue` headline — so it is there folded and pinned — and not
+   * again beside catalog value inside the expander, whose copies are only those still held.
    */
   itemCount?: number;
   /**
@@ -1040,19 +1057,29 @@ export function HoldingsSummaryBar({
           part="total"
           emphasis="headline"
           suffix={
-            costToCatalog ? (
-              <CostToCatalogNote
-                ratio={costToCatalog}
-                lot={spend.scope === "lot"}
-                currency={spend.baseCurrency}
-              />
+            costToCatalog || itemCount !== undefined ? (
+              <>
+                {costToCatalog && (
+                  <CostToCatalogNote
+                    ratio={costToCatalog}
+                    lot={spend.scope === "lot"}
+                    currency={spend.baseCurrency}
+                  />
+                )}
+                {itemCount !== undefined && (
+                  <>
+                    {costToCatalog ? " · " : ""}
+                    {copiesNote(itemCount)}
+                  </>
+                )}
+              </>
             ) : undefined
           }
         >
           {toggle}
         </SpendRow>
       ) : openingValue ? (
-        <OpeningValueRow openingValue={openingValue} costToCatalog={costToCatalog}>
+        <OpeningValueRow openingValue={openingValue} costToCatalog={costToCatalog} itemCount={itemCount}>
           {toggle}
         </OpeningValueRow>
       ) : total ? (
@@ -1109,7 +1136,9 @@ export function HoldingsSummaryBar({
                   figure off from the one it belongs with. */}
               {ledByDocument ? (
                 <Group label={WORTH_LABEL}>
-                  <CatalogValueRow total={total} itemCount={itemCount} headline={false} />
+                  {/* No copy count here: the headline has it (#2143), counted over every copy
+                      filed rather than the ones still held that this row values. */}
+                  <CatalogValueRow total={total} headline={false} />
                   <MarketValueRow total={total} />
                 </Group>
               ) : (
