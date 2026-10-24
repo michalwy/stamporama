@@ -857,8 +857,9 @@ the same rules, so the two can never disagree:
   lot's own order. Each value is a field you type straight into — **Tab** goes to the next one and
   **Shift+Tab** to the previous, with nothing else in between, and Tab from the last one reaches
   **Save**. A line shows the stamp's picture (hover it to see it larger), its primary catalogue
-  number, its condition and certificate. A value is the **single's**, recorded in the area's
-  **primary catalogue** exactly as **+ catalog value** records it, so a stamp at one condition and
+  number, and its condition and certificate as the usual coloured chips (hover one for its full
+  name). A value is the **single's**, recorded in the area's **primary catalogue** exactly as
+  **+ catalog value** records it, so a stamp at one condition and
   certificate is asked once even when the lot holds it both as a single and as a block; for a
   multiple the line shows what the typed figure comes to with the format's multiplier, or says
   there is none. `-` (does not exist) and `?` (not determinable) work as in any catalogue-value
