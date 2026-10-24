@@ -1105,3 +1105,46 @@ describe("the agent API's operation modules (#1949)", () => {
     }
   });
 });
+
+/**
+ * **The conversation log is the agent's to write in full** (#2149, ADR-0073) — add, correct, move,
+ * delete — and only through its own module, so every entry it writes is marked as the Assistant's.
+ * The one writer it may not reach is the one that keeps entries true to a sale's buyer: that runs
+ * inside the collector's own buyer change and merge, never on its own.
+ */
+const CONVERSATION_API_WRITES = ["createConversationEntries", "updateConversationEntry", "deleteConversationEntry"];
+
+describe("the agent API's operation modules (#2149)", () => {
+  const logModule = path.join(AGENT_API, "operations/conversation-log.ts");
+
+  it("reach the conversation log's writes from their own module and nowhere else", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (name === "keepConversationWithBuyer") misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        if (file !== logModule && CONVERSATION_API_WRITES.includes(name)) {
+          misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        }
+      }
+    }
+    assert.deepEqual(misplaced, [], `The conversation log's writes belong to operations/conversation-log.ts.\n  ${misplaced.join("\n  ")}`);
+    const names = importedBindings(logModule).map((binding) => binding.name);
+    for (const name of CONVERSATION_API_WRITES) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/conversation-log.ts`);
+    }
+  });
+
+  it("writes every entry as the Assistant's", () => {
+    const source = readFileSync(logModule, "utf8");
+    const creates = [...source.matchAll(/createConversationEntries\(([^;]*?)\)\s*\)/gs)].map((match) => match[1]);
+    assert.equal(creates.length, 1, "expected one call of createConversationEntries");
+    assert.match(creates[0], /"assistant"\s*$/, "an entry the agent writes must be marked as the Assistant's");
+  });
+
+  it("names only real exports", () => {
+    const domain = readFileSync(path.join(ROOT, "src/lib/conversation-log.ts"), "utf8");
+    for (const name of [...CONVERSATION_API_WRITES, "keepConversationWithBuyer"]) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of conversation-log.ts any more`);
+    }
+  });
+});

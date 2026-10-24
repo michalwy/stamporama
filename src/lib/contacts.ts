@@ -563,7 +563,7 @@ export async function getCollectionTranslationContext(
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still
  * references it as its supplier (`onDelete: Restrict`, ADR-0008/0009) — the
- * caller must detach it from those purchases first. */
+ * caller must detach it from those purchases first. Its conversation log (#2149) goes with it. */
 export async function deleteContact(
   ownerId: string,
   contactId: string
@@ -592,6 +592,8 @@ export interface ContactMergeCandidate extends ContactData {
   auctionSaleCount: number;
   /** Realised prices recorded from it as the auction house (#1633). */
   priceObservationCount: number;
+  /** Entries of the conversation log with it (#2149). */
+  conversationEntryCount: number;
 }
 
 const MERGE_COUNT_SELECT = {
@@ -602,6 +604,7 @@ const MERGE_COUNT_SELECT = {
       trades: true,
       auctionSalesSeller: true,
       priceObservationsHouse: true,
+      conversationEntries: true,
     },
   },
 } as const;
@@ -637,15 +640,16 @@ export async function getContactMergePair(
       tradeCount: _count.trades,
       auctionSaleCount: _count.auctionSalesSeller,
       priceObservationCount: _count.priceObservationsHouse,
+      conversationEntryCount: _count.conversationEntries,
     };
   };
   return { contact: toCandidate(contactId), other: toCandidate(otherContactId) };
 }
 
 /**
- * Merge `otherContactId` into `remainingContactId` (#2043): every purchase, sale, trade, auction sale
- * and price observation naming the other moves to the remaining contact, and so do its Facebook
- * profiles; the remaining one keeps its name and details, takes the ones it lacks, the union of the
+ * Merge `otherContactId` into `remainingContactId` (#2043): every purchase, sale, trade, auction sale,
+ * price observation and conversation entry naming the other moves to the remaining contact, and so
+ * do its Facebook profiles; the remaining one keeps its name and details, takes the ones it lacks, the union of the
  * roles and the other's notes under its own (`mergedContactDetails`), and the other is deleted. One
  * transaction, so a merge that fails half-way leaves both as they were.
  */
@@ -677,6 +681,8 @@ export async function mergeContacts(
       where: { auctionHouseId: otherId },
       data: { auctionHouseId: remainingId },
     });
+    // The conversation log moves whole, with the sales its entries name (#2149).
+    await tx.conversationEntry.updateMany({ where: { contactId: otherId }, data: { contactId: remainingId } });
     // A profile is unique per collection, so the other's can never collide with the remaining's.
     await tx.contactFacebookProfile.updateMany({
       where: { contactId: otherId },

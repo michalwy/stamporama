@@ -162,6 +162,14 @@ the figure to see how many are why. The share of catalogue is read the way a pur
 reads it: `~` marks an estimate while lots are still open, and **at most** an upper bound while some
 of their copies have no catalogue price.
 
+### The conversation log
+
+At the foot of the page, the **Conversation** card lists every entry of the log of conversations
+with the contact, newest first, each naming the sale it is about where it has one — the same card a
+[sale's screen](sales.md#the-conversation-with-the-buyer) shows, there narrowed to that sale. **Add
+entry** records one by hand, and an entry's **⋮** menu edits or deletes it. Entries an AI assistant
+wrote are marked *Assistant*.
+
 ## Finding a contact
 
 Use the **search box** to filter by name, and the **role chips** to show only contacts of
@@ -188,7 +196,8 @@ the merged contact beside them, and you choose **which one remains**. The merged
   one seller's terms, so they are never mixed from two.
 
 Before you merge, the dialog says how many **purchases**, **sales** and **trades** — and any tracked
-**auction sales** and **price observations** — of the other contact will move. **Merge** moves every
+**auction sales**, **price observations** and **conversation entries** — of the other contact will
+move. **Merge** moves every
 one of them to the remaining contact and deletes the other; its name is not kept, since buyers are
 recognised by their profile, not by name. The contact's page then counts them all together. There is
 no undoing a merge.
@@ -202,3 +211,6 @@ A contact can only be deleted once nothing references it. If it is still used by
 more **purchases** as their supplier, the **Delete** action is disabled
 and the row shows how many purchases use it — detach it from those
 [purchases](purchases.md) first. This keeps purchase history from losing who it was with.
+
+Deleting a contact also deletes its [conversation log](#the-conversation-log); the confirmation says
+so.

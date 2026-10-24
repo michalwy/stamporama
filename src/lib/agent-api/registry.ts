@@ -32,7 +32,9 @@
 // open, then the two reads over what is
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
 // drafting a listing and drafting one before pricing and wording it, and recording it sold last
-// (#1949): the sales already recorded, the buyer, and the sale — then the exchange workflow in
+// (#1949): the sales already recorded, the buyer, and the sale — then the conversation with the
+// buyer (#2149): what is already in the log, a conversation recorded, a correction, a move, a
+// deletion — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
 // this counterparty have that answers it, what is this set still missing, then the trade itself,
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
@@ -103,6 +105,13 @@ import {
   sellOfferOperation,
   sellOfferSetOperation,
 } from "./operations/sales";
+import {
+  addConversationEntriesOperation,
+  deleteConversationEntryOperation,
+  listConversationEntriesOperation,
+  moveConversationEntryOperation,
+  updateConversationEntryOperation,
+} from "./operations/conversation-log";
 import {
   findChecklistGapsOperation,
   listWantsOperation,
@@ -240,6 +249,11 @@ export const OPERATIONS: readonly Operation[] = [
   findOrCreateBuyerOperation,
   sellOfferOperation,
   sellOfferSetOperation,
+  listConversationEntriesOperation,
+  addConversationEntriesOperation,
+  updateConversationEntryOperation,
+  moveConversationEntryOperation,
+  deleteConversationEntryOperation,
   listWantsOperation,
   matchWantsOperation,
   findChecklistGapsOperation,
