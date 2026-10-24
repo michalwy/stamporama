@@ -11,7 +11,8 @@ import {
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
+import { catalogMatchKey } from "@/lib/catalog-number";
+import { copyMatchesSearch } from "@/lib/copy-search";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
@@ -135,22 +136,19 @@ export function TradeCopyPickerDialog({
 
   const visibleCopies = useMemo(() => {
     const raw = search.trim();
-    const q = raw.toLowerCase();
     const y = year === "none" ? "none" : year ? Number(year) : null;
     return copies.filter((c) => {
       if (y === "none" && c.issuedYear !== null) return false;
       if (typeof y === "number" && c.issuedYear !== y) return false;
-      if (!q) return true;
-      if ((c.stampName ?? "").toLowerCase().includes(q)) return true;
-      if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
-      // Where the copy is filed (#303) — pull a piece off the shelf, type its ref, add it.
-      if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
-      const vm = vendorMapFor(c.areaId, c.issueId);
-      const keys = c.catalogNumbers.map((cn) => {
-        const v = vm.get(cn.catalogVendorId);
-        return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
+      // The one copy search a picker runs (#2136): `#123` is that copy alone, anything else its
+      // stamp, issue, location ref, catalogue number or — bare — its own number.
+      return copyMatchesSearch(c, raw, () => {
+        const vm = vendorMapFor(c.areaId, c.issueId);
+        return c.catalogNumbers.map((cn) => {
+          const v = vm.get(cn.catalogVendorId);
+          return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
+        });
       });
-      return catalogKeyMatches(raw, keys);
     });
   }, [copies, year, search, vendorMapFor]);
 

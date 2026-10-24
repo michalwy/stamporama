@@ -17,7 +17,11 @@ import {
   describeCopyGrouping,
 } from "@/lib/copy-grouping";
 import type { LocationGroupBy } from "@/lib/location-groups";
-import { DISPOSITION_FILTERS, REMEMBERED_FILTER_KEYS } from "./copies-list-filters";
+import {
+  DISPOSITION_FILTERS,
+  REMEMBERED_FILTER_KEYS,
+  copyBehindFiltersHref,
+} from "./copies-list-filters";
 import {
   CopiesFilterControls,
   FILTER_WIDTH,
@@ -55,7 +59,7 @@ import { DEFAULT_TAG_FILTER_MODE, isTagFilterMode } from "@/lib/tag-filter";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { NO_AREA, decadeValue, parseDecade } from "@/lib/list-area-year-filter";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
-import { formatItemNo } from "@/lib/item-number";
+import { formatItemNo, parseItemNoOnlySearch } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import {
   useStampConditionCollisions,
@@ -81,6 +85,7 @@ import {
   useItemYears,
   useItemAreaFacets,
   useInvalidateInventory,
+  useCopyByNumber,
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
   type InventoryAreaFacetFilters,
@@ -1057,6 +1062,18 @@ export function InventoryListPanel({
         ? allIssueGroups.length === 0 && !multiStampGroup
         : allCopies.length === 0;
 
+  // A `#123` search (#2136) is one copy, so an empty answer is worth explaining: the copy does not
+  // exist, or the filters — the default that hides sold and written-off copies among them — hide
+  // it. Read only once the list has come back empty, and whatever the grouping.
+  const onlyItemNo = parseItemNoOnlySearch(search);
+  const { data: copyBehindFilters } = useCopyByNumber(
+    collectionId,
+    onlyItemNo,
+    !listLoading && listEmpty
+  );
+  // Until the lookup answers (or if it fails) the list says what it says for any search.
+  const explainOnlyItemNo = onlyItemNo !== null && copyBehindFilters !== undefined;
+
   // **Every copy still held is selectable** (#682). It used to be the offer picker's own
   // eligibility — for sale and in hand (#164/#188) — because listing was the only thing a selection
   // was for; filing a batch into a location and re-flagging one are about exactly the copies that
@@ -1314,6 +1331,9 @@ export function InventoryListPanel({
                of working — it is the one control here that is never left set — and on a row
                carrying eleven others its width was the cheapest to give back. */
             searchMaxWidth="13rem"
+            /* A copy's own number (#2136): `#123` finds that copy alone, where a bare `123` is a
+               catalogue number too. */
+            searchPlaceholder="Search… or #123"
             /* The screen's actions, trailing the filters as they do on Offers (#847) — the
                arrangement is followed rather than re-invented, and the primary one is filled for
                the same reason it is there. They are what the screen *does*, so they are one group
@@ -1863,7 +1883,37 @@ export function InventoryListPanel({
             </div>
           )}
 
-          {!listLoading && listEmpty && (
+          {!listLoading && listEmpty && explainOnlyItemNo && (
+            <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+              {copyBehindFilters ? (
+                <>
+                  Copy {formatItemNo(onlyItemNo!)} exists, but the filters hide it.{" "}
+                  <Tooltip content="Clears every filter on this list, the area and the year included, and shows sold, traded and written-off copies when this one is.">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(copyBehindFiltersHref(`/c/${collectionSlug}`, copyBehindFilters))
+                      }
+                      style={{
+                        border: "none",
+                        background: "none",
+                        padding: 0,
+                        font: "inherit",
+                        cursor: "pointer",
+                        color: "var(--color-accent)",
+                      }}
+                    >
+                      Show it
+                    </button>
+                  </Tooltip>
+                </>
+              ) : (
+                `There is no copy ${formatItemNo(onlyItemNo!)} in this collection.`
+              )}
+            </div>
+          )}
+
+          {!listLoading && listEmpty && !explainOnlyItemNo && (
             <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
               {groupDuplicates
                 ? "No copies match these filters, so there is nothing to group as duplicates."

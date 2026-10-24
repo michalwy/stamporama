@@ -710,6 +710,30 @@ export function useItemStamps(collectionId: string, itemId: string | null, enabl
   });
 }
 
+/**
+ * The copy numbered `itemNo` whatever the list's filters say, or null when the collection has none
+ * (#2136). Read only for an empty `#123` search, so the list can say whether the copy exists and is
+ * being hidden: the search alone, sold, traded-away and written-off copies included, no area, year
+ * or other filter. Under the `inventory` key, so an edit refreshes it with the list.
+ */
+export function useCopyByNumber(collectionId: string, itemNo: number | null, enabled: boolean) {
+  return useQuery<ItemListItem | null>({
+    queryKey: ["inventory", collectionId, "copyByNumber", itemNo] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        search: `#${itemNo}`,
+        includeGone: "true",
+        includeDisposed: "true",
+      });
+      const res = await fetch(`/api/collections/${collectionId}/items?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to look up the copy");
+      const data: InventoryItemsPage = await res.json();
+      return data.items[0] ?? null;
+    },
+    enabled: enabled && itemNo !== null,
+  });
+}
+
 /** Contact suggestions for the acquisition-source autocomplete (#108). Backed by the
  * #107 search API; disabled until the user types (the dropdown only opens then). */
 export function useContactSearch(collectionId: string, query: string) {

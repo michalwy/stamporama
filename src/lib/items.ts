@@ -102,7 +102,7 @@ import {
   type IntakeGroupAxis,
   type IntakeGroupNode,
 } from "./intake-groups";
-import { parseItemNoSearch } from "./item-number";
+import { parseItemNoOnlySearch, parseItemNoSearch } from "./item-number";
 import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 import {
@@ -1377,7 +1377,12 @@ function buildItemWhere(
   // `offerSetMemberships` filters, the search `OR`) are collected here and AND-ed.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const and: any[] = [];
-  if (filters.search) {
+  // A number written with the `#` (#2136) is the copy with that number and nothing else — it is how
+  // the app writes a copy's number, so it is read as one. The other filters still apply beside it.
+  const onlyItemNo = filters.search ? parseItemNoOnlySearch(filters.search) : null;
+  if (onlyItemNo !== null) {
+    and.push({ itemNo: onlyItemNo });
+  } else if (filters.search) {
     const s = filters.search;
     // Free text spans two levels — the linked stamp's identity and the copy's own filing
     // reference (#303) — so the OR sits on the item, not inside `stampWhere` (whose other
@@ -1393,9 +1398,8 @@ function buildItemWhere(
       { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } },
       { locationRef: { contains: s, mode: "insensitive" } },
     ];
-    // Internal copy number (#268): a purely numeric entry also looks up the copy by its own
-    // number, in whichever form the collector read off the label (`123`, `#123`, or `00123` from a
-    // label written while numbers were padded, #2096).
+    // Internal copy number (#268): a bare numeric entry also looks up the copy by its own number,
+    // `123` or `00123` from a label written while numbers were padded (#2096).
     // Added to the OR rather than replacing it — `200` is a plausible catalog number too.
     const itemNo = parseItemNoSearch(s);
     if (itemNo !== null) or.push({ itemNo });

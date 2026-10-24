@@ -152,8 +152,13 @@ right, from *which copies* to *how they are shown*.
   (`Mi PL 200`, `MiPL200`); when the text starts with a known vendor abbreviation the match is
   narrowed to that vendor. Typing a shelf reference such as `A234` finds the copies filed under
   it, so you can go from a piece in hand straight to its record. A plain number also looks up an
-  **internal copy number** — `123`, `#123` and `00123` all find copy `#123` — alongside the
-  text matches, so a number that is also a catalog number still finds both.
+  **internal copy number** — `123` and `00123` find copy `#123` — alongside the text matches, so a
+  number that is also a catalog number still finds both. Written with the **`#`**, as the box's
+  placeholder reminds you, it is the copy's number and nothing else: `#123` lists **only** copy
+  `#123`, and `#00123` finds it too. The filters still apply to it; when they hide that copy, the
+  empty list says so, with **Show it** to clear every filter — the area and the year included — and,
+  for a copy that was sold, traded away or written off, to switch on the *Include* that shows it.
+  When the collection has no such copy, the list says that instead.
 - **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
   that have **no offer** on it yet — your worklist of what still needs listing there. A copy
   already listed on a *different* platform still shows up, since the same copy can be offered on
@@ -854,8 +859,11 @@ Two things to expect:
 - **Numbering is per collection.** Each collection starts again at `1`, so the numbers are yours
   rather than an artifact of the installation.
 
-To find a copy by its number, type it into the inventory search box — `123` and `#123` work,
-and so does `00123`, so a label written while numbers were still padded finds its copy too.
+To find a copy by its number, type it into the inventory search box with the `#` — `#123` lists
+that copy and nothing else, and so does `#00123`, so a label written while numbers were still padded
+finds its copy too. A bare `123` works as well, but it also lists every copy with 123 among its
+catalog numbers. The same holds in the pickers that list copies — **Attach existing copies…** on a
+purchase lot, **Add set** on an offer, and **Add copies** on a sale and on a trade.
 
 Copies that already existed before this feature were numbered in the order they were added, oldest
 first.
