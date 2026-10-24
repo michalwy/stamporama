@@ -13,7 +13,12 @@
  * and a picker that fetched every sold and written-off copy to show the held ones would spend its
  * page on rows it hides. The other four narrow the fetched rows client-side, as the year facet and
  * the search already do.
+ *
+ * The sort (#2147, `attach-picker-sort.ts`) is stored in the same value, so the picker reopens in
+ * the order it was left in, as it does with the filters it was left with.
  */
+
+import { isAttachSortKey, type AttachSortDir, type AttachSortKey } from "./attach-picker-sort";
 
 /** Where a copy stands: still held, gone on a sale or a closed trade, or written off (#394).
  *  *Gone* is one value for a sale and a trade because the Copies list asks it as one question
@@ -44,15 +49,20 @@ export interface AttachPickerFilters {
   formatIds: string[];
   purchase: AttachPurchaseValue[];
   states: AttachState[];
+  sortBy: AttachSortKey;
+  sortDir: AttachSortDir;
 }
 
-/** What the picker opens on the first time: everything held, which is what #388 offered. */
+/** What the picker opens on the first time: everything held, which is what #388 offered, in
+ *  catalogue order. */
 export const DEFAULT_ATTACH_FILTERS: AttachPickerFilters = {
   conditionIds: [],
   certificateStatusIds: [],
   formatIds: [],
   purchase: [],
   states: ["held"],
+  sortBy: "catalogue",
+  sortDir: "asc",
 };
 
 function stringList(value: unknown): string[] {
@@ -86,6 +96,8 @@ export function parseAttachFilters(raw: string | null): AttachPickerFilters {
     // A stored list with no recognised state is the default, not *every state*: only a list the
     // collector emptied themselves means that, and it is stored as `[]`.
     states: readStoredStates(o.states),
+    sortBy: isAttachSortKey(o.sortBy) ? o.sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
+    sortDir: o.sortDir === "desc" ? "desc" : "asc",
   };
 }
 

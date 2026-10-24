@@ -230,4 +230,68 @@ describe("attachItemsToLot (#388)", () => {
     assert.ok(after.disposedAt, "the write-off stays");
     assert.equal(after.disposalReason, "lost");
   });
+
+  it("places each copy in its issue's tree read down the page, for the catalogue sort (#2147)", async () => {
+    const area = await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } });
+    const issue = await prisma.issue.create({
+      data: {
+        collectionId,
+        issueNo: 1,
+        collectionAreaId: area.id,
+        name: "Definitives",
+        year: 1950,
+        primaryCatalogSortKey: "0000000100",
+      },
+    });
+    const stamp = (name: string, parentId: string | null = null) =>
+      prisma.stamp.create({
+        data: { collectionId, name, parentId, primaryCatalogSortKey: null },
+        select: { id: true },
+      });
+    const base = await stamp("Base");
+    const first = await stamp("First");
+    const variant = await stamp("Variant", base.id);
+    // The base is second among the roots; its variant is first among its children, and must still
+    // come after it — `sortOrder` alone would rank the variant with the first root.
+    await prisma.issueMember.createMany({
+      data: [
+        { issueId: issue.id, stampId: first.id, sortOrder: 0 },
+        { issueId: issue.id, stampId: base.id, sortOrder: 1 },
+        { issueId: issue.id, stampId: variant.id, sortOrder: 0 },
+      ],
+    });
+    const copyOf = async (sid: string) =>
+      (
+        await prisma.item.create({
+          data: {
+            collectionId,
+            itemNo: nextItemNo++,
+            stampId: sid,
+            conditionId,
+            deliveryState: "delivered",
+          },
+          select: { id: true },
+        })
+      ).id;
+    const ofBase = await copyOf(base.id);
+    const ofFirst = await copyOf(first.id);
+    const ofVariant = await copyOf(variant.id);
+
+    const rows = await listAttachableCopies(userId, targetLotId);
+    const order = (id: string) => rows.find((r) => r.id === id)?.catalogueOrder;
+    assert.deepEqual(order(ofFirst), {
+      issueSortKey: "0000000100",
+      memberRank: 0,
+      stampSortKey: null,
+    });
+    assert.equal(order(ofBase)?.memberRank, 1);
+    assert.equal(order(ofVariant)?.memberRank, 2);
+    const loose = rows.find((r) => r.issueId === null);
+    assert.ok(loose, "a copy of a stamp in no issue is offered too");
+    assert.deepEqual(order(loose.id), {
+      issueSortKey: null,
+      memberRank: null,
+      stampSortKey: null,
+    });
+  });
 });

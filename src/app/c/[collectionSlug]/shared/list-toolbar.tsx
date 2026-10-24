@@ -297,63 +297,15 @@ export function ListToolbar({
       </div>
     ) : null;
 
-  // Still on the bar when it cannot be honoured, greyed and carrying the reason (#868) — see
-  // `sortDisabledReason`. The reason is hung on the **whole group** rather than on the select: a
-  // disabled control is the one a collector reaches for to find out why it is disabled, and half of
-  // what they can point at (the *Sort* label, the arrow) is not the select. The arrow keeps its own
-  // hint only while it is live, where the group has nothing to say and the arrow does.
-  const sortDisabled = !!sortDisabledReason;
-  const sortGroup = (
-    <div
-      style={{
-        display: "flex",
-        gap: "0.375rem",
-        alignItems: "center",
-        ...(sortDisabled ? { opacity: 0.5 } : null),
-      }}
-    >
-      <span style={LABEL_STYLE}>Sort</span>
-      <select
-        value={sortBy}
-        onChange={(e) => onSortChange(e.target.value, sortDir)}
-        disabled={sortDisabled}
-        style={{ ...SELECT_STYLE, cursor: sortDisabled ? "default" : "pointer" }}
-      >
-        {sortOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {sortDisabled ? (
-        <span style={{ ...INPUT_STYLE, padding: "0.375rem 0.5rem", fontSize: "0.75rem", lineHeight: 1 }}>
-          {sortDir === "asc" ? "↑" : "↓"}
-        </span>
-      ) : (
-        <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
-          <button
-            type="button"
-            onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
-            aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-            style={{
-              ...INPUT_STYLE,
-              cursor: "pointer",
-              padding: "0.375rem 0.5rem",
-              fontSize: "0.75rem",
-              lineHeight: 1,
-            }}
-          >
-            {sortDir === "asc" ? "↑" : "↓"}
-          </button>
-        </Tooltip>
-      )}
-    </div>
-  );
   const sortControl =
-    sortOptions.length === 0 ? null : sortDisabled ? (
-      <Tooltip content={sortDisabledReason}>{sortGroup}</Tooltip>
-    ) : (
-      sortGroup
+    sortOptions.length === 0 ? null : (
+      <SortControl
+        sortBy={sortBy}
+        sortDir={sortDir}
+        sortOptions={sortOptions}
+        onSortChange={onSortChange}
+        disabledReason={sortDisabledReason}
+      />
     );
 
   const searchBox = (
@@ -467,4 +419,78 @@ export function ListToolbar({
       {footer}
     </div>
   );
+}
+
+/**
+ * The sort control a list toolbar draws — a *Sort* label, a select of keys and a direction arrow —
+ * exported for a list that sorts without the bar around it: the **Attach existing copies…** picker
+ * (#2147) puts it beside its own filters, so it reads and behaves as every other list's does.
+ */
+export function SortControl({
+  sortBy,
+  sortDir,
+  sortOptions,
+  onSortChange,
+  disabledReason = null,
+}: {
+  sortBy: string;
+  sortDir: "asc" | "desc";
+  sortOptions: readonly SortOption[];
+  onSortChange: (sortBy: string, sortDir: "asc" | "desc") => void;
+  disabledReason?: string | null;
+}) {
+  // Still on the bar when it cannot be honoured, greyed and carrying the reason (#868) — see
+  // `ListToolbarProps.sortDisabledReason`. The reason is hung on the **whole group** rather than on
+  // the select: a disabled control is the one a collector reaches for to find out why it is
+  // disabled, and half of what they can point at (the *Sort* label, the arrow) is not the select.
+  // The arrow keeps its own hint only while it is live, where the group has nothing to say and the
+  // arrow does.
+  const sortDisabled = !!disabledReason;
+  const group = (
+    <div
+      style={{
+        display: "flex",
+        gap: "0.375rem",
+        alignItems: "center",
+        ...(sortDisabled ? { opacity: 0.5 } : null),
+      }}
+    >
+      <span style={LABEL_STYLE}>Sort</span>
+      <select
+        value={sortBy}
+        onChange={(e) => onSortChange(e.target.value, sortDir)}
+        disabled={sortDisabled}
+        style={{ ...SELECT_STYLE, cursor: sortDisabled ? "default" : "pointer" }}
+      >
+        {sortOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      {sortDisabled ? (
+        <span style={{ ...INPUT_STYLE, padding: "0.375rem 0.5rem", fontSize: "0.75rem", lineHeight: 1 }}>
+          {sortDir === "asc" ? "↑" : "↓"}
+        </span>
+      ) : (
+        <Tooltip content={sortDir === "asc" ? "Ascending" : "Descending"}>
+          <button
+            type="button"
+            onClick={() => onSortChange(sortBy, sortDir === "asc" ? "desc" : "asc")}
+            aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+            style={{
+              ...INPUT_STYLE,
+              cursor: "pointer",
+              padding: "0.375rem 0.5rem",
+              fontSize: "0.75rem",
+              lineHeight: 1,
+            }}
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
+        </Tooltip>
+      )}
+    </div>
+  );
+  return sortDisabled ? <Tooltip content={disabledReason}>{group}</Tooltip> : group;
 }

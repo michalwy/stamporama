@@ -53,6 +53,8 @@ import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
 import { formatUnitCost } from "./supply-stock";
 import { formatItemNo } from "./item-number";
 import type { AttachState } from "./attach-picker-filters";
+import type { AttachCatalogueOrder } from "./attach-picker-sort";
+import { flattenMemberTree } from "./issue-member-order";
 import { closedLotsMessage, summarizeCopiesMove } from "./copies-move";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
@@ -687,8 +689,75 @@ export interface AttachableSoldOn {
 }
 
 /** A copy the attach picker offers: a Copies-list row, plus the sale it went out on if it was sold
- *  (#2120) — the row's *Sold* chip says that it left, and this says on which sale. */
-export type AttachableCopy = ItemListItem & { soldOn: AttachableSoldOn | null };
+ *  (#2120) — the row's *Sold* chip says that it left, and this says on which sale — and where its
+ *  stamp stands in the catalogue, which the picker's catalogue-number sort reads (#2147). */
+export type AttachableCopy = ItemListItem & {
+  soldOn: AttachableSoldOn | null;
+  catalogueOrder: AttachCatalogueOrder;
+};
+
+/**
+ * Where each copy's stamp stands in the catalogue (#2147), keyed by copy id: its issue's sort key
+ * and its place in that issue's tree, read down the page as the issue's own page draws it. The
+ * row's `issueId` and `stampId` already follow a multi-stamp piece's leading stamp, so the piece
+ * sorts by it. Three reads over the issues and stamps of the page, whatever its size.
+ */
+async function readCatalogueOrder(
+  items: readonly ItemListItem[]
+): Promise<Map<string, AttachCatalogueOrder>> {
+  const issueIds = [...new Set(items.flatMap((i) => (i.issueId ? [i.issueId] : [])))];
+  const stampIds = [...new Set(items.map((i) => i.stampId))];
+  const [issues, members, stamps] = await Promise.all([
+    issueIds.length === 0
+      ? []
+      : prisma.issue.findMany({
+          where: { id: { in: issueIds } },
+          select: { id: true, primaryCatalogSortKey: true },
+        }),
+    issueIds.length === 0
+      ? []
+      : prisma.issueMember.findMany({
+          where: { issueId: { in: issueIds } },
+          select: {
+            issueId: true,
+            stampId: true,
+            sortOrder: true,
+            stamp: { select: { parentId: true } },
+          },
+        }),
+    prisma.stamp.findMany({
+      where: { id: { in: stampIds } },
+      select: { id: true, primaryCatalogSortKey: true },
+    }),
+  ]);
+  const issueKey = new Map(issues.map((i) => [i.id, i.primaryCatalogSortKey]));
+  const stampKey = new Map(stamps.map((s) => [s.id, s.primaryCatalogSortKey]));
+  const membersByIssue = new Map<
+    string,
+    { stampId: string; parentId: string | null; sortOrder: number }[]
+  >();
+  for (const m of members) {
+    const list = membersByIssue.get(m.issueId) ?? [];
+    list.push({ stampId: m.stampId, parentId: m.stamp.parentId, sortOrder: m.sortOrder });
+    membersByIssue.set(m.issueId, list);
+  }
+  const rankInIssue = new Map<string, Map<string, number>>();
+  for (const [issueId, list] of membersByIssue) {
+    rankInIssue.set(issueId, new Map(flattenMemberTree(list).map((m, i) => [m.stampId, i])));
+  }
+  return new Map(
+    items.map((item) => [
+      item.id,
+      {
+        issueSortKey: item.issueId ? (issueKey.get(item.issueId) ?? null) : null,
+        memberRank: item.issueId
+          ? (rankInIssue.get(item.issueId)?.get(item.stampId) ?? null)
+          : null,
+        stampSortKey: stampKey.get(item.stampId) ?? null,
+      },
+    ])
+  );
+}
 
 /** The copies an open lot could take on (#388): every copy in the collection that is not already
  * on it and not frozen into a closed lot's cost split. Unpaginated like the offer composition
@@ -729,7 +798,16 @@ export async function listAttachableCopies(
   const saleByItem = new Map(
     sales.map((s) => [s.itemId, { saleId: s.saleLine.sale.id, saleNo: s.saleLine.sale.saleNo }])
   );
-  return items.map((item) => ({ ...item, soldOn: saleByItem.get(item.id) ?? null }));
+  const catalogueOrder = await readCatalogueOrder(items);
+  return items.map((item) => ({
+    ...item,
+    soldOn: saleByItem.get(item.id) ?? null,
+    catalogueOrder: catalogueOrder.get(item.id) ?? {
+      issueSortKey: null,
+      memberRank: null,
+      stampSortKey: null,
+    },
+  }));
 }
 
 /** A copy that cannot be attached, with the reason a person can act on (#388). */
