@@ -24,3 +24,12 @@ export function agentPhotoUrl(
 ): string {
   return `/api/collections/${encodeURIComponent(collectionId)}/photos/${encodeURIComponent(photoId)}/${variant}`;
 }
+
+/**
+ * A file kept with a conversation log entry (#2150), on the attachment route — which takes the same
+ * bearer token, so a *read only* token fetches it. The same reasoning as a photo: an entry names its
+ * files by link, and the agent fetches one only if it needs what is in it.
+ */
+export function agentConversationAttachmentUrl(collectionId: string, attachmentId: string): string {
+  return `/api/collections/${encodeURIComponent(collectionId)}/conversation-attachments/${encodeURIComponent(attachmentId)}`;
+}

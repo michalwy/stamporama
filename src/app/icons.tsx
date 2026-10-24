@@ -106,6 +106,8 @@ import {
   MessageSquare,
   Minus,
   Package,
+  Paperclip,
+  FileText,
   Pause,
   Percent,
   Pencil,
@@ -329,6 +331,10 @@ const GLYPHS = {
   shipping: Truck,
   parcel: Package,
   receipt: Receipt,
+  /** A file kept with a record — a conversation entry's attachments (#2150). */
+  attachment: Paperclip,
+  /** A document that is not a picture, drawn where a thumbnail would be: a PDF attachment (#2150). */
+  document: FileText,
   /** Money changing hands: sell an offer, a copy already sold. */
   sell: HandCoins,
   /** The marketplaces this collection lists on, as a subject (#762) — the sidebar group over the

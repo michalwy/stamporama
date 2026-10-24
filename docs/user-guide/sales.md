@@ -684,6 +684,13 @@ amount) and a **link** to where the conversation can be found. Entries are liste
 - **Entries an [AI assistant](agent-api.md) wrote are marked *Assistant*.** That is mostly how the
   log is filled: the assistant reads the conversation and records it. Nothing waits for your
   review — an entry is a record, not an act.
+- **An entry can keep files** — a payment confirmation, a photo of a damaged stamp, a scan of a
+  certificate, a screenshot of what was agreed. **Attach files** in the entry's **⋮** menu adds
+  pictures (JPEG, PNG or WebP) and PDFs, several at a time and up to 20 on one entry, each as large
+  as a photo may be (200 MB). They are shown under the entry: a picture as a thumbnail that
+  enlarges when clicked, a PDF by its name, which opens it in a new tab. The **×** on a file removes
+  it. Files are kept as they came, belong to their entry alone — they never become offer photos —
+  and are deleted with it. An assistant can attach them too.
 - **An entry changes nothing else** — no sale, status or amount.
 - **An entry stays with the person it was with.** If you change a sale's buyer, its entries stay
   with the previous buyer and no longer name the sale; the same happens when the sale is deleted,

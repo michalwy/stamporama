@@ -18,14 +18,27 @@ import {
   type ConversationChannel,
   type ConversationDirection,
 } from "../../conversation-log-rules";
+import {
+  ConversationAttachmentError,
+  addConversationAttachments,
+  getConversationAttachment,
+  removeConversationAttachment,
+} from "../../conversation-attachments";
 import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow, type ListResponse } from "../list";
 import { optionalString, requiredString, stringList } from "../params";
 import { parseIsoDate, resolveSeller, type SellerCandidate } from "../purchase-reads";
 import {
+  MAX_ATTACHMENT_FILES,
   MAX_CONVERSATION_ENTRIES,
   NO_SALE,
+  agentConversationAttachment,
   agentConversationEntry,
+  parseAttachmentFileSpec,
+  summarizeAttachmentBatch,
+  type AgentAttachmentAnswer,
+  type AgentAttachmentBatch,
+  type AttachmentFileSpec,
   parseConversationEntrySpec,
   parseConversationInstant,
   parseSaleRef,
@@ -51,6 +64,11 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // on Facebook (#1777), the link to their Facebook profile. Nobody is created from here:
 // `find_or_create_buyer` is that act. **A sale is named by its number** as the collector calls it, or
 // its id, and a sale of another buyer is refused.
+//
+// **An entry's files are the agent's to attach and remove** (#2150), sent in the call as base64 —
+// with the entries that `add_conversation_entries` records, or afterwards to one entry — and read back
+// on every entry as links to the attachment route, which a *read only* token opens. Each file is
+// answered on its own: one the app does not keep is one file to send again, never the whole call.
 
 // ── Naming a buyer and a sale ────────────────────────────────────────────────
 
@@ -151,8 +169,43 @@ async function loadEntry(context: OperationContext, entryId: string): Promise<Ag
       `No conversation entry with id "${entryId}" is in this token's collection. Use \`list_conversation_entries\` to find the right id.`
     );
   }
-  return agentConversationEntry(entry);
+  return agentConversationEntry(entry, context.collectionId);
 }
+
+/** Attach each file to its entry, one at a time so each is answered on its own. */
+async function attachFilesTo(
+  context: OperationContext,
+  files: readonly { index: number; entryId: string; entry?: number; spec: AttachmentFileSpec }[]
+): Promise<AgentAttachmentAnswer[]> {
+  const answers: AgentAttachmentAnswer[] = [];
+  for (const file of files) {
+    const at = { index: file.index, ...(file.entry !== undefined ? { entry: file.entry } : {}) };
+    try {
+      const [attachment] = await addConversationAttachments(context.ownerId, file.entryId, [
+        { name: file.spec.name, bytes: file.spec.bytes },
+      ]);
+      answers.push({ ...at, status: "attached", attachment: agentConversationAttachment(attachment, context.collectionId) });
+    } catch (error) {
+      if (!(error instanceof ConversationAttachmentError)) throw error;
+      answers.push({ ...at, status: "refused", reason: error.message });
+    }
+  }
+  return answers;
+}
+
+/** The files parameter, refused whole only when there are too many to read. */
+function fileList(params: ParsedParams): readonly string[] {
+  const raw = stringList(params, "files");
+  if (raw.length > MAX_ATTACHMENT_FILES) {
+    throw invalidRequest(
+      `"files" carries ${raw.length} files; one call attaches at most ${MAX_ATTACHMENT_FILES}. Send the rest in a second call with \`attach_conversation_files\`.`
+    );
+  }
+  return raw;
+}
+
+const FILE_GRAMMAR =
+  "one string each with a field per line written `name=value`: `data` (the file's bytes in base64; a `data:…;base64,` prefix is fine, and it may wrap over lines) is required, `name` (the file's name, e.g. `payment.png`) is optional. A picture (JPEG, PNG, WebP) or a PDF, read from the bytes; anything else is refused";
 
 // ── list_conversation_entries ────────────────────────────────────────────────
 
@@ -234,7 +287,11 @@ export async function readConversationEntries(
     limit: window.limit,
   });
   // The match count and never `items.length` (#706).
-  return listResponse(page.items.map(agentConversationEntry), page.total, window);
+  return listResponse(
+    page.items.map((entry) => agentConversationEntry(entry, context.collectionId)),
+    page.total,
+    window
+  );
 }
 
 export const listConversationEntriesOperation: Operation = {
@@ -248,7 +305,7 @@ export const listConversationEntriesOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "The entries. `at` is when it was said; `channel` and `direction` (`from_buyer`, `to_buyer`, `note`) say how; `summary` is what matters and `quote` the words themselves where recorded; `link` is where the conversation can be found; `sale` is the sale it is about, or null; `writtenBy` is `assistant` or `collector`.",
+      "The entries. `at` is when it was said; `channel` and `direction` (`from_buyer`, `to_buyer`, `note`) say how; `summary` is what matters and `quote` the words themselves where recorded; `link` is where the conversation can be found; `sale` is the sale it is about, or null; `writtenBy` is `assistant` or `collector`; `attachments` are the files kept with it — `name`, `type` (`image` or `pdf`), `bytes` and `url`, which this same token fetches.",
   },
   handler: async (context, params) => readConversationEntries(context, params),
 };
@@ -278,6 +335,13 @@ const ADD_PARAMETERS: readonly ParameterSpec[] = [
     type: "string[]",
     required: true,
     description: `The entries, at most ${MAX_CONVERSATION_ENTRIES}, one string each with a field per line written \`name=value\`: \`at\` (when it was said, ISO 8601 with the time zone), \`channel\` (${CONVERSATION_CHANNELS.join(", ")}), \`direction\` (${CONVERSATION_DIRECTIONS.join(", ")}) and \`summary\` are required; \`quote\` (the words themselves, where they matter — an address, an amount), \`link\` (where it can be found) and \`sale\` (a number, an id, or \`${NO_SALE}\`, in place of the call's) are optional. A line not starting with a field's name and \`=\` continues the field before it.`,
+  },
+  {
+    name: "files",
+    in: "body",
+    type: "string[]",
+    required: false,
+    description: `Files that came with the conversation — a payment confirmation, a photo of a stamp, a certificate — at most ${MAX_ATTACHMENT_FILES}, ${FILE_GRAMMAR}. Each also says \`entry=\` — the place in \`entries\`, from 0, of the entry it goes with. A file for an entry that was refused is refused with it.`,
   },
 ];
 
@@ -309,6 +373,9 @@ export async function addConversationEntries(
   if (buyerId === null) {
     throw invalidRequest('Send "buyer" — who the conversation was with — or "sale", whose buyer it was.');
   }
+
+  const rawFiles = fileList(params);
+  const fileSpecs = rawFiles.map((file) => parseAttachmentFileSpec(file, { withEntry: true, entries: raw.length }));
 
   const answers: (AgentConversationAnswer | null)[] = [];
   const toWrite: { index: number; input: ConversationEntryInput }[] = [];
@@ -346,10 +413,31 @@ export async function addConversationEntries(
   const ids = await refusingDomainGuards(() =>
     createConversationEntries(context.ownerId, buyerId!, toWrite.map((row) => row.input), "assistant")
   );
-  for (const [i, row] of toWrite.entries()) {
-    answers[row.index] = { index: row.index, status: "recorded", entry: await loadEntry(context, ids[i]) };
+  const idOf = new Map(toWrite.map((row, i) => [row.index, ids[i]]));
+
+  // The files, each to the entry it names — one for an entry that was refused is refused with it.
+  const fileAnswers: AgentAttachmentAnswer[] = [];
+  const toAttach: { index: number; entryId: string; entry: number; spec: AttachmentFileSpec }[] = [];
+  for (const [index, parsed] of fileSpecs.entries()) {
+    if (!parsed.ok) {
+      fileAnswers.push({ index, status: "refused", reason: parsed.reason });
+      continue;
+    }
+    const entry = parsed.spec.entry!;
+    const entryId = idOf.get(entry);
+    if (!entryId) {
+      fileAnswers.push({ index, entry, status: "refused", reason: `Entry ${entry} was refused, so its file was not attached. Attach it with \`attach_conversation_files\` once the entry is recorded.` });
+      continue;
+    }
+    toAttach.push({ index, entryId, entry, spec: parsed.spec });
   }
-  return summarizeConversationBatch(answers as AgentConversationAnswer[]);
+  fileAnswers.push(...(await attachFilesTo(context, toAttach)));
+  fileAnswers.sort((a, b) => a.index - b.index);
+
+  for (const row of toWrite) {
+    answers[row.index] = { index: row.index, status: "recorded", entry: await loadEntry(context, idOf.get(row.index)!) };
+  }
+  return summarizeConversationBatch(answers as AgentConversationAnswer[], fileAnswers);
 }
 
 export const addConversationEntriesOperation: Operation = {
@@ -357,13 +445,13 @@ export const addConversationEntriesOperation: Operation = {
   method: "POST",
   path: "/conversation-entries",
   description:
-    "Record a conversation with a buyer — what was agreed about copies, price, shipping, payment or the address, or a complaint — as entries in their conversation log, several in one call, each optionally about one of their sales. The entries are marked as written by the Assistant; they change nothing else — no sale, status or amount. Check `list_conversation_entries` first so nothing is recorded twice.",
+    "Record a conversation with a buyer — what was agreed about copies, price, shipping, payment or the address, or a complaint — as entries in their conversation log, several in one call, each optionally about one of their sales, with the files that came with it (a payment confirmation, a photo, a certificate). The entries are marked as written by the Assistant; they change nothing else — no sale, status or amount. Check `list_conversation_entries` first so nothing is recorded twice.",
   writes: true,
   parameters: ADD_PARAMETERS,
   result: {
     kind: "object",
     description:
-      "`recorded` and `refused` count the entries; `entries` answers each in the order sent, by `index`: `recorded` with the entry in `list_conversation_entries`' shape, or `refused` with the `reason` — fix that entry and send it again alone.",
+      "`recorded` and `refused` count the entries; `entries` answers each in the order sent, by `index`: `recorded` with the entry in `list_conversation_entries`' shape, or `refused` with the `reason` — fix that entry and send it again alone. Where files were sent, `files` answers each by its `index` in `files`, with the `entry` it went with: `attached` with the `attachment`, or `refused` with the `reason`.",
   },
   handler: async (context, params) => addConversationEntries(context, params),
 };
@@ -506,4 +594,91 @@ export const deleteConversationEntryOperation: Operation = {
   parameters: [ENTRY_ID_PARAMETER],
   result: { kind: "object", description: "`deleted`, the entry's id." },
   handler: async (context, params) => removeConversationEntry(context, params),
+};
+
+// ── attach_conversation_files / remove_conversation_attachment ──────────────
+
+export async function attachConversationFiles(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentAttachmentBatch> {
+  const entryId = requiredString(params, "entryId");
+  await loadEntry(context, entryId);
+  const raw = fileList(params);
+  if (raw.length === 0) throw invalidRequest('"files" is empty. Send at least one file.');
+  const answers: AgentAttachmentAnswer[] = [];
+  const toAttach: { index: number; entryId: string; spec: AttachmentFileSpec }[] = [];
+  for (const [index, file] of raw.entries()) {
+    const parsed = parseAttachmentFileSpec(file, { withEntry: false });
+    if (parsed.ok) toAttach.push({ index, entryId, spec: parsed.spec });
+    else answers.push({ index, status: "refused", reason: parsed.reason });
+  }
+  answers.push(...(await attachFilesTo(context, toAttach)));
+  answers.sort((a, b) => a.index - b.index);
+  return summarizeAttachmentBatch(answers, await loadEntry(context, entryId));
+}
+
+export const attachConversationFilesOperation: Operation = {
+  name: "attach_conversation_files",
+  method: "POST",
+  path: "/conversation-entries/{entryId}/attachments",
+  description:
+    "Attach files to an entry of the conversation log — a payment confirmation, a photo of a damaged stamp, a scan of a certificate, a screenshot of what was agreed: pictures and PDFs, kept with the entry and shown on it. Files sent with the entries when they are recorded go in `add_conversation_entries`' `files` instead.",
+  writes: true,
+  parameters: [
+    ENTRY_ID_PARAMETER,
+    {
+      name: "files",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: `The files, at most ${MAX_ATTACHMENT_FILES}, ${FILE_GRAMMAR}.`,
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "`attached` and `refused` count the files; `files` answers each by its `index`: `attached` with the `attachment` (`id`, `name`, `type`, `bytes`, `url`), or `refused` with the `reason`. `entry` is the entry as it now stands, in `list_conversation_entries`' shape.",
+  },
+  handler: async (context, params) => attachConversationFiles(context, params),
+};
+
+export async function removeConversationFile(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{ removed: string; entry: AgentConversationEntry }> {
+  const attachmentId = requiredString(params, "attachmentId");
+  const attachment = await getConversationAttachment(context.ownerId, context.collectionId, attachmentId);
+  if (!attachment) {
+    throw notFound(
+      `No attachment with id "${attachmentId}" is in this token's collection. An entry's files are listed on it by \`list_conversation_entries\`.`
+    );
+  }
+  try {
+    await removeConversationAttachment(context.ownerId, attachmentId);
+  } catch (error) {
+    if (error instanceof ConversationAttachmentError) throw invalidRequest(error.message);
+    throw error;
+  }
+  return { removed: attachmentId, entry: await loadEntry(context, attachment.entryId) };
+}
+
+export const removeConversationAttachmentOperation: Operation = {
+  name: "remove_conversation_attachment",
+  method: "DELETE",
+  path: "/conversation-attachments/{attachmentId}",
+  description:
+    "Remove a file from an entry of the conversation log and delete it — one attached by mistake, or to the wrong entry. The entry stays as it is.",
+  writes: true,
+  parameters: [
+    {
+      name: "attachmentId",
+      in: "path",
+      type: "string",
+      required: true,
+      description: "The attachment's id, from the entry's `attachments` in `list_conversation_entries`.",
+    },
+  ],
+  result: { kind: "object", description: "`removed`, the attachment's id, and `entry`, the entry as it now stands." },
+  handler: async (context, params) => removeConversationFile(context, params),
 };

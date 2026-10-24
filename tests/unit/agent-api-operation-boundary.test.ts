@@ -1114,6 +1114,9 @@ describe("the agent API's operation modules (#1949)", () => {
  */
 const CONVERSATION_API_WRITES = ["createConversationEntries", "updateConversationEntry", "deleteConversationEntry"];
 
+/** The writes of an entry's files (#2150), held to the same module. */
+const ATTACHMENT_API_WRITES = ["addConversationAttachments", "removeConversationAttachment"];
+
 describe("the agent API's operation modules (#2149)", () => {
   const logModule = path.join(AGENT_API, "operations/conversation-log.ts");
 
@@ -1122,14 +1125,14 @@ describe("the agent API's operation modules (#2149)", () => {
     for (const file of operationModules()) {
       for (const { name, from } of importedBindings(file)) {
         if (name === "keepConversationWithBuyer") misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
-        if (file !== logModule && CONVERSATION_API_WRITES.includes(name)) {
+        if (file !== logModule && [...CONVERSATION_API_WRITES, ...ATTACHMENT_API_WRITES].includes(name)) {
           misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
         }
       }
     }
     assert.deepEqual(misplaced, [], `The conversation log's writes belong to operations/conversation-log.ts.\n  ${misplaced.join("\n  ")}`);
     const names = importedBindings(logModule).map((binding) => binding.name);
-    for (const name of CONVERSATION_API_WRITES) {
+    for (const name of [...CONVERSATION_API_WRITES, ...ATTACHMENT_API_WRITES]) {
       assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/conversation-log.ts`);
     }
   });
@@ -1145,6 +1148,10 @@ describe("the agent API's operation modules (#2149)", () => {
     const domain = readFileSync(path.join(ROOT, "src/lib/conversation-log.ts"), "utf8");
     for (const name of [...CONVERSATION_API_WRITES, "keepConversationWithBuyer"]) {
       assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of conversation-log.ts any more`);
+    }
+    const attachments = readFileSync(path.join(ROOT, "src/lib/conversation-attachments.ts"), "utf8");
+    for (const name of ATTACHMENT_API_WRITES) {
+      assert.match(attachments, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of conversation-attachments.ts any more`);
     }
   });
 });
