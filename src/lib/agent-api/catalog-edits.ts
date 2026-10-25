@@ -202,3 +202,30 @@ export function duplicateCatalogNumbers(groups: readonly DuplicateIdentity[]): A
     [...new Set(held.flatMap((group) => group.stamps.map((stamp) => stamp.stampId)))]
   );
 }
+
+// -- Many at once (#2174, #2175) ------------------------------------------------------------
+
+/** The most stamps one `update_stamps` call corrects — the list cap, so the answer fits. */
+export const MAX_STAMP_NUMBER_UPDATES = 100;
+
+export const STAMP_UPDATE_FIELDS = ["stamp", "catalog_numbers"] as const;
+
+export const STAMP_UPDATE_EXAMPLE = "`stamp=st 123; catalog_numbers=Mi: 124a, Fi: 456`";
+
+/**
+ * An update's `catalog_numbers`, `"Mi: 124a, Fi: 456"`, as `update_stamp`'s list of entries. It is
+ * split on commas, which is safe because one catalogue's number for one stamp never carries one: in
+ * the issue form's syntax a comma separates numbers, and a stamp has one in each catalogue.
+ */
+export function splitCatalogNumberList(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+}
+
+/** The most issues one `create_issues` call creates (#2175) — each answered with its whole record. */
+export const MAX_ISSUES_PER_CALL = 25;
+
+export const ISSUE_ENTRY_EXAMPLE =
+  "`area=Poland`, `year=1950`, `name=Definitives` and `catalog_numbers=Mi: 500-505` on lines of their own, a second catalogue on a second `catalog_numbers=` line";

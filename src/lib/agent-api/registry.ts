@@ -48,7 +48,8 @@
 // carriers and their rate lists, the platforms' options that link to them, the supplies with their
 // stock and history, and the uses without a sale — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
-// their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
+// their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445), each
+// batch form beside its single call (#2173, #2174, #2175) — then
 // catalogue prices (#1540), in the order a page of them is entered: the editions, what the tree
 // already records, the figures, and the clear that undoes one — then
 // checklists (#1512), in the order a set is put together: the checklists already kept, one's stamps
@@ -162,12 +163,14 @@ import {
   addIssueStampsOperation,
   addStampVariantsOperation,
   createIssueOperation,
+  createIssuesOperation,
   updateIssueOperation,
   updateStampOperation,
+  updateStampsOperation,
 } from "./operations/catalog-edits";
 import { createSubtypeOperation, updateSubtypeOperation } from "./operations/subtypes";
 import { deleteStampVariantOperation, moveStampVariantOperation } from "./operations/variant-tree";
-import { setStampColnectIdOperation } from "./operations/colnect-ids";
+import { setStampColnectIdOperation, setStampColnectIdsOperation } from "./operations/colnect-ids";
 import {
   deletePriceObservationOperation,
   listPriceObservationsOperation,
@@ -311,15 +314,18 @@ export const OPERATIONS: readonly Operation[] = [
   recordSupplyUseOperation,
   updateSupplyUseOperation,
   createIssueOperation,
+  createIssuesOperation,
   addIssueStampsOperation,
   addStampVariantsOperation,
   updateIssueOperation,
   updateStampOperation,
+  updateStampsOperation,
   createSubtypeOperation,
   updateSubtypeOperation,
   moveStampVariantOperation,
   deleteStampVariantOperation,
   setStampColnectIdOperation,
+  setStampColnectIdsOperation,
   listCatalogEditionsOperation,
   getCatalogPricesOperation,
   setCatalogPricesOperation,

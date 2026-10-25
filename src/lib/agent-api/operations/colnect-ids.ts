@@ -1,10 +1,22 @@
 import "server-only";
 import { prisma } from "../../db";
 import { clearColnectMatch, confirmColnectMatch, findColnectIdHolders } from "../../colnect";
-import { colnectIdHeld, parseAgentColnectId, type AgentColnectIdWrite } from "../colnect-ids";
-import { invalidRequest } from "../errors";
-import { optionalBoolean, optionalString, requiredString } from "../params";
-import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
+import { checkBatchSize, parsePairFields, refusalOf, refused } from "../batch";
+import {
+  COLNECT_PAIR_EXAMPLE,
+  COLNECT_PAIR_FIELDS,
+  MAX_COLNECT_ID_PAIRS,
+  colnectIdHeld,
+  parseAgentColnectId,
+  stampNamedTwice,
+  summarizeColnectIdPairs,
+  type AgentColnectIdBatch,
+  type AgentColnectIdPairAnswer,
+  type AgentColnectIdWrite,
+} from "../colnect-ids";
+import { invalidRequest, isApiError } from "../errors";
+import { optionalBoolean, optionalString, requiredString, stringList } from "../params";
+import { loadStampLabels, resolveStampRefs, resolveStampRefsEach, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 
 // A stamp's Colnect item-ID through the agent API (#1445) — the link listing on Colnect, the Colnect
@@ -43,6 +55,15 @@ async function writeColnectId(context: OperationContext, params: ParsedParams): 
   }
   const colnectId = raw === null ? null : parseAgentColnectId(raw, "colnect_id");
   const [stampId] = await resolveStampRefs(context, [requiredString(params, "stamp")], "stamp");
+  return writeStampColnectId(context, stampId, colnectId);
+}
+
+/** One stamp's ID set, changed or — with null — cleared, on `set_stamp_colnect_id`'s rules. */
+async function writeStampColnectId(
+  context: OperationContext,
+  stampId: string,
+  colnectId: string | null
+): Promise<AgentColnectIdWrite> {
   const before = (
     await prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { colnectId: true } })
   ).colnectId;
@@ -113,4 +134,76 @@ export const setStampColnectIdOperation: Operation = {
       "`status` is `written`, `cleared`, or `unchanged` when the stamp already carried exactly this (or, on a clear, none). `colnectId` is the ID the stamp carries now, and `replaced` the one a change or a clear took off — the collector can restore it on the stamp's screen.",
   },
   handler: async (context, params) => writeColnectId(context, params),
+};
+
+// ── set_stamp_colnect_ids (#2173) ──────────────────────────────────────────
+
+// **The single write, a pair at a time, in the order sent.** Each pair is `set_stamp_colnect_id`'s
+// rules exactly — the same reading of the ID, the same refusal of one another stamp holds — so a pair
+// later in the call sees what an earlier one wrote: two pairs giving one ID to two stamps write the
+// first and refuse the second, naming it. A stamp named twice is refused the second time rather than
+// written twice. A clear stays the single call's: nobody clears a catalogue's IDs in bulk.
+
+export async function writeColnectIdPairs(context: OperationContext, params: ParsedParams): Promise<AgentColnectIdBatch> {
+  const entries = stringList(params, "pairs");
+  checkBatchSize(entries, "pairs", MAX_COLNECT_ID_PAIRS, "pair", COLNECT_PAIR_EXAMPLE);
+  const parsed = entries.map((entry) => parsePairFields(entry, COLNECT_PAIR_FIELDS, COLNECT_PAIR_EXAMPLE));
+  const stamps = await resolveStampRefsEach(
+    context,
+    parsed.flatMap((p) => (p.ok ? [p.fields.get("stamp")!] : []))
+  );
+
+  const seen = new Map<string, number>();
+  const pairs: AgentColnectIdPairAnswer[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const p = parsed[index];
+    if (!p.ok) {
+      pairs.push({ ...refused(index, p.reason), entry });
+      continue;
+    }
+    const stamp = stamps.get(p.fields.get("stamp")!.trim())!;
+    if ("reason" in stamp) {
+      pairs.push({ ...refused(index, stamp.reason, stamp.accepted), entry });
+      continue;
+    }
+    const earlier = seen.get(stamp.stampId);
+    if (earlier !== undefined) {
+      pairs.push({ ...refused(index, stampNamedTwice(earlier), [stamp.stampId]), entry });
+      continue;
+    }
+    seen.set(stamp.stampId, index);
+    try {
+      const colnectId = parseAgentColnectId(p.fields.get("colnect_id")!, "colnect_id");
+      const answer = await writeStampColnectId(context, stamp.stampId, colnectId);
+      pairs.push({ index, entry, ...answer, status: answer.status === "unchanged" ? "unchanged" : "written" });
+    } catch (err) {
+      if (!isApiError(err)) console.error("[api/v1] set_stamp_colnect_ids pair failed", err);
+      pairs.push({ ...refusalOf(index, err), entry });
+    }
+  }
+  return summarizeColnectIdPairs(pairs);
+}
+
+export const setStampColnectIdsOperation: Operation = {
+  name: "set_stamp_colnect_ids",
+  method: "POST",
+  path: "/stamp-colnect-ids",
+  description:
+    "Set or change the Colnect IDs of many stamps in one call — up to 100 `stamp → colnect_id` pairs, as when a Colnect export or a catalogue's Colnect pages are matched to the stamps here. Each pair follows `set_stamp_colnect_id`'s rules exactly and is answered on its own: written, unchanged when the stamp already carries that ID, or refused with the reason — an ID another stamp has, a stamp no reference names, the same stamp twice. A refused pair does not stop the others. Pairs are applied in the order sent, so an ID given to two stamps in one call goes to the first. To take an ID off, use `set_stamp_colnect_id` with `clear`.",
+  writes: true,
+  parameters: [
+    {
+      name: "pairs",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: `One pair per entry, at most ${MAX_COLNECT_ID_PAIRS}, as \`name=value\` pairs separated by \`;\`: ${COLNECT_PAIR_EXAMPLE}. \`stamp\` is the stamp's id, its short number (\`st 123\`) or a catalogue number naming only it; \`colnect_id\` the Colnect item-ID or the stamp's Colnect address.`,
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The counts `written`, `unchanged` and `refused`, and `pairs` in the order sent — each with its `index` and the `entry` as sent, and then `set_stamp_colnect_id`'s answer (`status` `written` or `unchanged`, `stampId`, `stampNo`, `catalogNumbers`, `colnectId`, `replaced` with the ID a change took off), or `status: refused` with the `reason` and, where it names stamps, their ids in `accepted`.",
+  },
+  handler: async (context, params) => writeColnectIdPairs(context, params),
 };

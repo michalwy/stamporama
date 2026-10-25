@@ -6,9 +6,14 @@
 // a validator — the item-ID is Colnect's identifier, not ours, and nothing here knows which numbers
 // exist — so an agent holding the page's address can send it as readily as the bare number.
 //
+// **`set_stamp_colnect_ids` (#2173) is the same write a hundred pairs at a time**, each on these
+// rules exactly and answered on its own (`batch.ts`); it sets and changes, and a clear stays the
+// single call's.
+//
 // Pure: no Prisma, so `pnpm test:unit` holds every rule here.
 
 import { colnectItemIdInput } from "../colnect-link";
+import { countStatuses, type BatchRefusal } from "./batch";
 import { invalidRequest, type ApiError } from "./errors";
 
 /** What `set_stamp_colnect_id` answers. */
@@ -58,4 +63,35 @@ export function colnectIdHeld(colnectId: string, holders: readonly ColnectIdHold
     `Colnect item-ID ${colnectId} already belongs to ${holders.map(describeHolder).join(" and ")}. Nothing was written. One Colnect ID names one stamp here, so either this is that stamp's ID and the one you meant to set is another, or it sits on the wrong stamp — then clear it there first, with "clear": true, and set it here.`,
     holders.map((holder) => holder.stampId)
   );
+}
+
+// -- Many at once (#2173) -------------------------------------------------------------------
+
+/** The most pairs one `set_stamp_colnect_ids` call writes — the list cap, so the answer fits. */
+export const MAX_COLNECT_ID_PAIRS = 100;
+
+export const COLNECT_PAIR_FIELDS = ["stamp", "colnect_id"] as const;
+
+export const COLNECT_PAIR_EXAMPLE = "`stamp=Mi 301; colnect_id=1133075`";
+
+/** One pair of a batch, answered: `set_stamp_colnect_id`'s answer, or the refusal. */
+export type AgentColnectIdPairAnswer =
+  | ({ readonly index: number; readonly entry: string } & AgentColnectIdWrite & { readonly status: "written" | "unchanged" })
+  | (BatchRefusal & { readonly entry: string });
+
+/** What `set_stamp_colnect_ids` answers. */
+export interface AgentColnectIdBatch {
+  readonly written: number;
+  readonly unchanged: number;
+  readonly refused: number;
+  readonly pairs: readonly AgentColnectIdPairAnswer[];
+}
+
+export function summarizeColnectIdPairs(pairs: readonly AgentColnectIdPairAnswer[]): AgentColnectIdBatch {
+  return { ...countStatuses(pairs, ["written", "unchanged", "refused"] as const), pairs };
+}
+
+/** The refusal for a stamp a pair names after an earlier pair of the same call already did. */
+export function stampNamedTwice(earlier: number): string {
+  return `It names the same stamp as the pair at index ${earlier}, which was answered first. Send each stamp once.`;
 }

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "../../db";
 import { invalidRequest, notFound } from "../errors";
 import { parseStampNoRef } from "../../quick-jump";
+import { unresolvedStampReason } from "../catalog-prices";
 import { unresolvedStamps } from "../size-reads";
 import { resolveCatalogStrings } from "./catalog";
 import { loadCatalogLabelling } from "./reads-shared";
@@ -122,6 +123,51 @@ export async function resolveStampRefMap(
   return new Map(
     wanted.map((ref) => [ref, byShort.get(ref) ?? (ids.has(ref) ? ref : byNumber.get(ref)!)])
   );
+}
+
+/** What one reference of a batch names: a stamp, or why it names none. */
+export type StampRefAnswer = { stampId: string } | { reason: string; accepted?: string[] };
+
+/**
+ * {@link resolveStampRefMap}, answered per reference rather than refusing the call: for a batch whose
+ * items each name a stamp (#2173, #2174), a reference that names none refuses its own item and no
+ * other. The same three spellings — an id, a short number, a catalogue number naming only it — and
+ * the resolver runs once over the whole batch rather than once an item.
+ */
+export async function resolveStampRefsEach(
+  context: OperationContext,
+  refs: readonly string[]
+): Promise<Map<string, StampRefAnswer>> {
+  const wanted = [...new Set(refs.map((ref) => ref.trim()).filter((ref) => ref !== ""))];
+  const out = new Map<string, StampRefAnswer>();
+  const shortRefs = wanted.filter((ref) => parseStampNoRef(ref) !== null);
+  const { ids: byNo } = await stampIdsByNumber(context, shortRefs.map((ref) => parseStampNoRef(ref)!));
+  for (const ref of shortRefs) {
+    const no = parseStampNoRef(ref)!;
+    const id = byNo.get(no);
+    out.set(ref, id ? { stampId: id } : { reason: `No stamp st ${no} is in this collection. Use \`search_collection\` to find the right stamp.` });
+  }
+  const rest = wanted.filter((ref) => !out.has(ref));
+  const byId = await prisma.stamp.findMany({
+    where: { id: { in: rest }, collectionId: context.collectionId },
+    select: { id: true },
+  });
+  for (const { id } of byId) out.set(id, { stampId: id });
+  const numbers = rest.filter((ref) => !out.has(ref));
+  const resolutions = await resolveCatalogStrings(context, numbers);
+  numbers.forEach((ref, i) => {
+    const resolution = resolutions[i];
+    out.set(
+      ref,
+      resolution.verdict === "resolved"
+        ? { stampId: resolution.stamps[0].stampId }
+        : {
+            reason: unresolvedStampReason(resolution),
+            ...(resolution.verdict === "ambiguous" ? { accepted: resolution.stamps.map((stamp) => stamp.stampId) } : {}),
+          }
+    );
+  });
+  return out;
 }
 
 /** A stamp as an answer names it: its short number (#1574), its name and its catalogue numbers. */
