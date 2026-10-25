@@ -1,6 +1,7 @@
 /**
  * Where a menu or popover opened from a control is drawn, so that it always fits inside the window
- * (#1765). Pure geometry — the hook that measures and applies it is `use-anchored-placement.ts`.
+ * (#1765). Pure geometry, and the measurement it is fed — the hook that applies it is
+ * `use-anchored-placement.ts`.
  *
  * The rule, for every dropdown and popover in the app:
  *
@@ -90,4 +91,45 @@ export function placeAnchored({
     maxHeight,
     maxWidth,
   };
+}
+
+/** A box whose scroll position a measurement must leave where the collector put it. */
+export interface ScrollPosition {
+  scrollTop: number;
+  scrollLeft: number;
+}
+
+/** What {@link measureNaturalSize} needs of the floating box — an `HTMLElement`, in the app. */
+export interface MeasurableBox extends ScrollPosition {
+  style: { maxHeight: string };
+  offsetWidth: number;
+  offsetHeight: number;
+  querySelectorAll(selectors: "*"): Iterable<ScrollPosition>;
+}
+
+/**
+ * The box's natural size — what it would take with nothing cutting it short — read with the cut
+ * `useAnchoredPlacement` applied lifted for the reading: `scrollHeight` alone would not do, since a
+ * box whose inner list scrolls reports only what it was cut to.
+ *
+ * **Every scroll position inside the box comes back as it was** (#2155). Lifting the cut lets the
+ * box and the list in it grow to their full height, which leaves nothing to scroll, and the browser
+ * clamps every `scrollTop` to 0 as it lays them out; putting the cut back does not undo that. The
+ * box is measured again whenever it resizes, so an open multi-select scrolled to its last options
+ * jumped back to the top a moment later — on a tick, or on its own scroll — and those options could
+ * not be reached.
+ */
+export function measureNaturalSize(box: MeasurableBox): { width: number; height: number } {
+  const scrolled = [box, ...box.querySelectorAll("*")]
+    .filter((el) => el.scrollTop !== 0 || el.scrollLeft !== 0)
+    .map((el) => ({ el, top: el.scrollTop, left: el.scrollLeft }));
+  const cut = box.style.maxHeight;
+  box.style.maxHeight = "none";
+  const size = { width: box.offsetWidth, height: box.offsetHeight };
+  box.style.maxHeight = cut;
+  for (const { el, top, left } of scrolled) {
+    el.scrollTop = top;
+    el.scrollLeft = left;
+  }
+  return size;
 }
