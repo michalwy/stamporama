@@ -2473,6 +2473,69 @@ export async function filterItemIds(
   return rows.map((r) => r.id);
 }
 
+/** The fields of a copy's list row that a picker searches, facets and sorts by (#2179) — read
+ * without enriching anything, so a picker can order its whole matching set and enrich only the page
+ * it draws. Each field is resolved exactly as {@link toItemListItem} resolves it: the area is the
+ * stamp's primary link, else its first; the issue is its first membership. Ownership is the
+ * caller's, as on {@link buildItemFilterWhere}, whose `where` this is meant to run. */
+export interface ItemListKeys {
+  id: string;
+  itemNo: number;
+  createdAt: Date;
+  stampId: string;
+  stampName: string | null;
+  issuedYear: number | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  areaId: string | null;
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  locationRef: string | null;
+}
+
+export async function readItemListKeys(where: Prisma.ItemWhereInput): Promise<ItemListKeys[]> {
+  const rows = await prisma.item.findMany({
+    where,
+    select: {
+      id: true,
+      itemNo: true,
+      createdAt: true,
+      stampId: true,
+      locationRef: true,
+      stamp: {
+        select: {
+          name: true,
+          issuedYear: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          issueMemberships: {
+            ...FIRST_ISSUE_MEMBERSHIP,
+            select: { issue: { select: { id: true, name: true, year: true } } },
+          },
+        },
+      },
+    },
+  });
+  return rows.map((row) => {
+    const links = row.stamp.stampAreaLinks;
+    const firstIssue = row.stamp.issueMemberships[0]?.issue ?? null;
+    return {
+      id: row.id,
+      itemNo: row.itemNo,
+      createdAt: row.createdAt,
+      stampId: row.stampId,
+      stampName: row.stamp.name,
+      issuedYear: row.stamp.issuedYear,
+      catalogNumbers: row.stamp.catalogNumbers,
+      areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
+      issueId: firstIssue?.id ?? null,
+      issueName: firstIssue?.name ?? null,
+      issueYear: firstIssue?.year ?? null,
+      locationRef: row.locationRef,
+    };
+  });
+}
+
 export async function listItemsPaginated(
   ownerId: string,
   collectionId: string,

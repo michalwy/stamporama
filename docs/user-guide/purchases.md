@@ -2613,7 +2613,16 @@ The dialog is the same picker used elsewhere: areas and years down the left, a s
 of copies on the right, tick the ones you want. **Your ticks survive the search, the area tree and
 the year facets**, so you can gather copies from several searches and attach them in one go; when
 some of what you have ticked is off screen the button says so — **Attach 7 copies (3 hidden by
-these filters)** — and with everything on screen it stays a plain **Attach 7 copies**. Attaching
+these filters)** — and with everything on screen it stays a plain **Attach 7 copies**. A ticked
+copy further down the list, which you have not scrolled back to, is not hidden and is not counted
+as hidden.
+
+The list loads as you scroll, so it opens quickly however many copies the collection holds. The
+**All** box at its top ticks **the copies loaded so far** — hovering it says how many. To take the
+rest, scroll further down and tick **All** again. The year counts down the left count what the list
+holds under the current filters and search, not only what has been loaded.
+
+Attaching
 changes the copy's **purchase link and
 nothing else** — its condition, storage, delivery status, dispositions, photos and
 [internal number](inventory.md#internal-copy-number) all stay exactly as they were. A copy
