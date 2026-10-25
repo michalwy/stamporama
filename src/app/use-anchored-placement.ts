@@ -1,7 +1,12 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { placeAnchored, type AnchorRect, type Placement } from "./anchored-placement";
+import {
+  measureNaturalSize,
+  placeAnchored,
+  type AnchorRect,
+  type Placement,
+} from "./anchored-placement";
 
 /**
  * The position of a portaled, `position: fixed` menu or popover opened from a control, measured so
@@ -56,12 +61,7 @@ export function useAnchoredPlacement({
       const { anchor, side, align, maxHeightRem } = latest.current;
       const rect = anchor && "current" in anchor ? anchor.current?.getBoundingClientRect() : anchor;
       if (!rect || !floating) return;
-      // The natural height, with the cut this hook applied lifted for the reading: `scrollHeight`
-      // alone would not do, since a box whose inner list scrolls reports only what it was cut to.
-      const cut = floating.style.maxHeight;
-      floating.style.maxHeight = "none";
-      const size = { width: floating.offsetWidth, height: floating.offsetHeight };
-      floating.style.maxHeight = cut;
+      const size = measureNaturalSize(floating);
       const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       const next = {
         ...placeAnchored({
@@ -104,13 +104,19 @@ export function useAnchoredPlacement({
           : next
       );
     }
+    // A scroll **inside** the box does not move its control, so it is no reason to measure again —
+    // and measuring on every frame of it is how a scrolled list was thrown back to its top (#2155).
+    function onScroll(e: Event) {
+      if (e.target instanceof Node && floating?.contains(e.target)) return;
+      update();
+    }
     update();
-    window.addEventListener("scroll", update, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", update);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     observer?.observe(floating);
     return () => {
-      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", update);
       observer?.disconnect();
     };
