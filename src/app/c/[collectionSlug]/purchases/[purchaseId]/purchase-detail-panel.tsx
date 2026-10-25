@@ -1452,6 +1452,8 @@ export function PurchaseDetailPanel({
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
         discardedTileCount={purchase.discardedTileCount}
+        unreviewedCutCount={purchase.unreviewedCutCount}
+        commitDetectedCuts={purchase.commitDetectedCuts}
         scanSheetCount={purchase.scanSheetCount}
         documentName={intakeDocumentRef(purchase)}
         canIdentify={purchase.lots.some((l) => l.status === "open")}

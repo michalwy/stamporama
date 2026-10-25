@@ -791,6 +791,37 @@ opens on next; a back is never cut before its front. If a front cannot be prepar
 
 Otherwise back scans are added one at a time, from the batch's own **Add back scan**.
 
+#### Committing detected cuts without the editor
+
+On a well-laid stockbook card the boxes the app finds are usually right, and confirming each one
+in the cut editor is one more press per card, front and back. Tick **Commit detected cuts** beside
+**Add card scans** to skip it:
+
+- **Every scan you add is cut from the boxes found on it** as soon as it is ready, with no editor —
+  fronts and backs alike. The panel of scans being added says **Preparing the scan…** until the card
+  is cut.
+- **Backs pair with their fronts as usual.** When the back holds a different number of pieces from
+  the front, every back goes to the unpaired strip to be dragged onto its tile, and the batch line
+  says how many backs are unpaired.
+- **A scan with nothing found on it is not cut**: it waits in the **Card scans** section with
+  **Review the front cut**, exactly as without the switch. So does a back whose front is not cut yet.
+- The switch is **remembered for the collection**. Each scan keeps the setting it was added with, so
+  turning the switch off does not change scans already on their way.
+
+A card cut this way is marked **Cut not reviewed** on its batch line, and the **N cuts not reviewed**
+chip on the section's header shows only those cards. On each of them:
+
+- **Review the cut** opens the cut editor on the boxes that were committed. Nothing changes until
+  you commit: **Cancel** leaves the card as it was. Committing re-cuts the card with the usual
+  rules — the tiles that became copies stay as they are, and the editor then opens on the back with
+  the boxes it had. If the card holds parked or discarded tiles, you are asked first, as **Re-cut**
+  asks.
+- **The cut is fine**, on the batch line or in the editor, takes the mark off and keeps the tiles
+  exactly as they are.
+- **Re-cut** takes the mark off too: the card is then cut by hand.
+
+Marking, identifying and everything after cutting work on these tiles as on any others.
+
 #### Naming a card
 
 Beside **Add card scans** there is an optional **name**: type one and it rides with the card you are

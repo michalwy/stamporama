@@ -8,6 +8,7 @@ import {
   isScanUploadPending,
   scanUploadStatusText,
   isScanUploadShown,
+  newlyDoneUploads,
   newlyPreparedSheets,
   queueAhead,
   scanCardTitle,
@@ -81,6 +82,21 @@ describe("scan upload status rules (#1567)", () => {
     ];
     assert.deepEqual(newlyPreparedSheets(new Set(["watched", "still", "broke"]), uploads), ["s1"]);
     assert.deepEqual(newlyPreparedSheets(new Set(), uploads), []);
+  });
+
+  it("opens no editor on a scan added with Commit detected cuts on, but still reports it done (#2164)", () => {
+    const uploads = [
+      { id: "editor", status: "done" as const, sheetId: "s1" },
+      { id: "quick", status: "done" as const, sheetId: "s2", commitDetectedCut: true },
+      { id: "cutting", status: "preparing" as const, sheetId: "s3", commitDetectedCut: true },
+    ];
+    const watched = new Set(["editor", "quick", "cutting"]);
+    assert.deepEqual(newlyPreparedSheets(watched, uploads), ["s1"]);
+    // Still being cut names its sheet, and is not done until the cut is.
+    assert.deepEqual(
+      newlyDoneUploads(watched, uploads).map((u) => u.id),
+      ["editor", "quick"]
+    );
   });
 });
 

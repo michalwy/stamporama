@@ -247,6 +247,11 @@ export interface PurchaseDetail {
    * stockbook now that the app's side of the pass is done. Served from here rather than counted
    * off the fetched batches because the chip decides which batches the strip fetches at all. */
   discardedTileCount: number;
+  /** Cards on this order cut from their detected boxes with no editor and not reviewed since
+   * (#2164) — what the Card scans header's *Cut not reviewed* chip counts and narrows to. */
+  unreviewedCutCount: number;
+  /** The collection's *Commit detected cuts* switch (#2164), drawn beside *Add card scans*. */
+  commitDetectedCuts: boolean;
   /** Retained card scans on this order (#566), so the section can say it has scans before any of
    * them has been cut. */
   scanSheetCount: number;
@@ -288,7 +293,7 @@ export async function getPurchaseDetail(
       shippingCost: true,
       status: true,
       toCompleteSince: true,
-      collection: { select: { ownerId: true, baseCurrency: true } },
+      collection: { select: { ownerId: true, baseCurrency: true, commitDetectedCuts: true } },
       contact: { select: { id: true, name: true } },
       platform: { select: { id: true, name: true } },
       // The auction settlement this purchase was transcribed from (#28), when it came from one.
@@ -333,6 +338,13 @@ export async function getPurchaseDetail(
   });
   const tilesInState = (state: string) =>
     tileStates.find((g) => g.state === state)?._count._all ?? 0;
+  // Cards cut from their detected boxes and not looked at since (#2164) — counted by batch, since
+  // either sheet of a card can carry the mark and the chip names cards.
+  const unreviewedCuts = await prisma.scanSheet.findMany({
+    where: { purchaseId, cutUnreviewed: true },
+    distinct: ["batchNo"],
+    select: { batchNo: true },
+  });
 
   // The same pool and rate rule the copy's own page reads its estimate by (#1696), from the shared
   // helpers, so the order and the copy can never state two different estimates.
@@ -445,6 +457,8 @@ export async function getPurchaseDetail(
     unidentifiedTileCount: tilesInState("unidentified"),
     parkedTileCount: tilesInState("parked"),
     discardedTileCount: tilesInState("discarded"),
+    unreviewedCutCount: unreviewedCuts.length,
+    commitDetectedCuts: row.collection.commitDetectedCuts,
     scanSheetCount: row._count.scanSheets,
   };
 }
