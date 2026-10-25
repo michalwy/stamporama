@@ -164,9 +164,11 @@ of their copies have no catalogue price.
 
 ### The conversation log
 
-At the foot of the page, the **Conversation** card lists every entry of the log of conversations
-with the contact, newest first, each naming the sale it is about where it has one — the same card a
-[sale's screen](sales.md#the-conversation-with-the-buyer) shows, there narrowed to that sale. **Add
+**Conversation (N)** in the page's header opens the log of conversations with the contact in a panel
+at the right side of the window — *N* is how many entries there are. It lists every entry, newest
+first, each naming the sale it is about where it has one — the same panel a
+[sale's screen](sales.md#the-conversation-with-the-buyer) opens, there narrowed to that sale. It
+closes with its **✕** or **Esc**, and if you leave it open it is open on the next contact too. **Add
 entry** records one by hand, and an entry's **⋮** menu edits or deletes it, or attaches files to it
 — see [the conversation with the buyer](sales.md#the-conversation-with-the-buyer). Entries an AI
 assistant wrote are marked *Assistant*.

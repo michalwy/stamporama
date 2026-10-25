@@ -44,7 +44,7 @@ import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
 import { MergeSalesDialog } from "./merge-sales-dialog";
-import { ConversationLogCard } from "@/app/c/[collectionSlug]/shared/conversation-log-card";
+import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
@@ -287,6 +287,19 @@ export function SaleDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             {sale.buyerName ? `to ${sale.buyerName}` : "buyer unknown"}
           </span>
+          {/* The header's buttons sit on the right, whichever of them are drawn. */}
+          <span style={{ marginLeft: "auto" }} />
+          {/* What was said with the buyer (#2149), in a panel at the side (#2153) — kept on the buyer,
+              so a sale with none has no log. */}
+          {sale.buyerId && (
+            <ConversationButton
+              collectionId={collectionId}
+              collectionSlug={params.collectionSlug}
+              contactId={sale.buyerId}
+              saleId={sale.id}
+              buttonStyle={SECONDARY_BTN}
+            />
+          )}
           {/* **Ask the buyer** (#699): a link that lets them pick which of the interchangeable copies
               they get. Drawn while there is something to ask about — or while a link is already out
               there, since a seller who has sent one needs a way back to it to check or withdraw it
@@ -294,10 +307,7 @@ export function SaleDetailPanel({
           {/* **Message to buyer** (#1815): what to pay, where, and what happens next, from the
               platform's template — offered only where the platform has one (#1692). */}
           {buyerMessage && (
-            <Tooltip
-              content="Read and copy the message for the buyer — what to pay and what happens next"
-              style={{ marginLeft: "auto" }}
-            >
+            <Tooltip content="Read and copy the message for the buyer — what to pay and what happens next">
               <button
                 type="button"
                 onClick={() => {
@@ -318,7 +328,6 @@ export function SaleDetailPanel({
                   ? "Send the buyer a link and let them choose which copy they get"
                   : "This sale has a buyer link out — open it to check or withdraw it"
               }
-              style={buyerMessage ? undefined : { marginLeft: "auto" }}
             >
               <button
                 type="button"
@@ -338,7 +347,6 @@ export function SaleDetailPanel({
             href={`/c/${params.collectionSlug}/sales/${sale.id}/packing-list`}
             style={{
               ...SECONDARY_BTN,
-              marginLeft: buyerMessage || pendingSetCount > 0 || sale.share ? undefined : "auto",
               textDecoration: "none",
               display: "inline-block",
             }}
@@ -773,16 +781,6 @@ export function SaleDetailPanel({
         run={run}
         clearError={() => setError(undefined)}
       />
-
-      {/* What was said with the buyer (#2149) — kept on the buyer, so a sale with none has no log. */}
-      {sale.buyerId && (
-        <ConversationLogCard
-          collectionId={collectionId}
-          collectionSlug={params.collectionSlug}
-          contactId={sale.buyerId}
-          saleId={sale.id}
-        />
-      )}
 
       {/* Sold units */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

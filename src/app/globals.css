@@ -390,6 +390,27 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 }
 
+/* A panel opened at the side of the page — the conversation log (#2153). It slides in from the edge
+   it is drawn against; the page under it stays where it was. */
+@keyframes side-panel-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.side-panel {
+  animation: side-panel-in 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel {
+    animation: none;
+  }
+}
+
 /* Print support (#330). The packing list is the one screen meant for paper, but the rules are
    generic: anything that is app chrome rather than content opts out with `.no-print`, and the
    colour tokens are forced to an ink-friendly light palette so a dark theme doesn't print as a

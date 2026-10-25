@@ -666,9 +666,15 @@ The sheet always prints in light colours, even if you use the dark [theme](appea
 ## The conversation with the buyer
 
 What you agreed with a buyer — which copies, the price, shipping, payment, their address, a
-complaint — usually lives in Messenger, e-mail or the marketplace's messages. The **Conversation**
-card on a sale's screen keeps it with the sale, so you do not have to search those histories again.
-It is there whenever the sale has a buyer.
+complaint — usually lives in Messenger, e-mail or the marketplace's messages. The conversation log
+keeps it with the sale, so you do not have to search those histories again.
+
+**Conversation (N)** in the sale's header opens it — *N* is how many entries this sale has, and with
+none the button reads just *Conversation*. It is there whenever the sale has a buyer. The log opens
+in a **panel at the right side of the window**, over the page, so you can read the sale and what was
+said about it side by side; the page under it does not move, and a long conversation scrolls inside
+the panel. Close it with its **✕** or **Esc**. If you leave it open, it stays open as you move to the
+next sale.
 
 Each **entry** says **when** it was said, the **channel** (*Messenger*, *E-mail*, *Allegro messages*,
 *Phone* or *Other*), the **direction** (*From the buyer*, *To the buyer*, or a *Note*), a short
@@ -676,7 +682,7 @@ Each **entry** says **when** it was said, the **channel** (*Messenger*, *E-mail*
 amount) and a **link** to where the conversation can be found. Entries are listed newest first.
 
 - **An entry belongs to the buyer, and only optionally to a sale.** A conversation often covers
-  several sales, or happens before there is one. The card shows **This sale**'s entries; **All with
+  several sales, or happens before there is one. The panel shows **This sale**'s entries; **All with
   this buyer** shows the whole history with them, each entry naming its sale. The same log is on the
   buyer's [contact page](contacts.md#the-conversation-log).
 - **Add entry** writes one by hand; an entry's **⋮** menu **edits** or **deletes** it. In the dialog,

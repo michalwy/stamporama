@@ -53,7 +53,7 @@ import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { CONTACT_ROLES } from "../contact-roles";
 import { ContactFormDialog } from "../contact-form-dialog";
 import { MergeContactsDialog } from "./merge-contacts-dialog";
-import { ConversationLogCard } from "@/app/c/[collectionSlug]/shared/conversation-log-card";
+import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { useContactPage, useInvalidateContacts } from "../use-contacts-query";
 
 // A contact's own page (#1708): who the contact is, and what the collector has done with them — one
@@ -176,6 +176,14 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           </span>
         ))}
         <span style={{ marginLeft: "auto", display: "flex", gap: "0.375rem" }}>
+          {/* Every entry of the conversation log with them, each naming its sale (#2149), in a panel
+              at the side (#2153). */}
+          <ConversationButton
+            collectionId={collectionId}
+            collectionSlug={collectionSlug}
+            contactId={contact.id}
+            buttonStyle={DETAIL_BUTTON}
+          />
           <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
             <Icon name="edit" size="sm" /> Edit
           </button>
@@ -240,11 +248,6 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           )}
         </DetailColumn>
       </DetailColumns>
-
-      {/* Every entry of the conversation log with them, each naming its sale (#2149). */}
-      <DetailFullRow>
-        <ConversationLogCard collectionId={collectionId} collectionSlug={collectionSlug} contactId={contact.id} />
-      </DetailFullRow>
 
       {editing && (
         <ContactFormDialog
