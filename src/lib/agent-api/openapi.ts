@@ -14,7 +14,7 @@
 // that way.
 
 import { API_ERROR_CODES } from "./errors";
-import { DEFAULT_LIST_LIMIT, LIST_PARAMETERS, MAX_LIST_LIMIT } from "./list";
+import { DEFAULT_LIST_LIMIT, LIST_PARAMETERS, listParameters, MAX_LIST_LIMIT } from "./list";
 import { parsePathTemplate } from "./path-template";
 import type { Operation, ParameterSpec } from "./types";
 
@@ -105,7 +105,10 @@ function errorResponses(): Record<string, unknown> {
 
 function operationObject(operation: Operation): Record<string, unknown> {
   const isList = operation.result.kind === "list";
-  const specs = isList ? [...operation.parameters, ...LIST_PARAMETERS] : operation.parameters;
+  const specs =
+    operation.result.kind === "list"
+      ? [...operation.parameters, ...listParameters(operation.result.maxLimit)]
+      : operation.parameters;
   const body = requestBody(specs);
   const description = isList
     ? `${operation.result.description} The response states the full \`total\`, so a trimmed page is visible as one; follow \`nextCursor\` for the rest.`
@@ -223,7 +226,7 @@ export function buildOpenApiDocument(
         "",
         `Authenticate with \`Authorization: Bearer stmpa_…\`. The token is pinned to exactly one collection, so no path here carries a collection id — every operation acts on the token's own collection.`,
         "",
-        `Lists return at most ${MAX_LIST_LIMIT} rows (${DEFAULT_LIST_LIMIT} by default) and always state the full \`total\`, so a trimmed answer is visible as one.`,
+        `Lists return at most ${MAX_LIST_LIMIT} rows (${DEFAULT_LIST_LIMIT} by default) unless an operation's \`limit\` states a larger cap, and always state the full \`total\`, so a trimmed answer is visible as one.`,
         "",
         "A token carries a scope. An operation marked `x-stamporama-writes` needs a `read_write` token; a `read` token is refused on one with `403 forbidden`, and the refusal names the scope that would have worked. Nothing here can widen a token — the collector mints one in Settings → Assistant & API.",
         "",

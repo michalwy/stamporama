@@ -272,8 +272,12 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   some years and to a name or a catalogue number as the list's search box narrows it. Each issue
   comes with its year, its name in your languages, its area, the range it declares in each
   catalogue, any prefix of its own, how many stamps it has, and how many copies you hold of them in
-  each condition. So an assistant entering *Generalgouvernement 1940* can see first which of its
-  series are already there. A **read only** token can do this;
+  each condition. It can narrow the list to the issues with numbers in one catalogue, read up to 200
+  issues at a time, and ask for **every stamp's catalogue numbers** with each issue — the variants
+  too, marked as variants, and the stamps whose numbers fall outside the range the issue declares —
+  so it sees which numbers are already taken before it adds any. So an assistant entering
+  *Generalgouvernement 1940* can see first which of its series are already there. A **read only**
+  token can do this;
 - **create an issue** in one of your areas, with its year, its name and each catalogue's numbers,
   written the way the *Add issue* form takes them — `Mi: 100-105, 107`, or `2895A-2897A,
   2895B-2897B`. The numbers declare the issue's range and create its stamps, one per number, matched

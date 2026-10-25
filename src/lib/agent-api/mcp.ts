@@ -69,7 +69,7 @@
 // ADR-0051 §5 carries both halves.
 
 import { isApiError } from "./errors";
-import { LIST_PARAMETERS } from "./list";
+import { listParameters } from "./list";
 import { parameterSchema, validateOperations } from "./openapi";
 import { parseParameters } from "./params";
 import type { ScopedOperation } from "./scope";
@@ -282,7 +282,7 @@ export interface McpDispatchOptions {
 /** Every parameter a tool accepts: the operation's own, plus the shared window on a list. */
 function toolParameters(operation: Operation): readonly ParameterSpec[] {
   return operation.result.kind === "list"
-    ? [...operation.parameters, ...LIST_PARAMETERS]
+    ? [...operation.parameters, ...listParameters(operation.result.maxLimit)]
     : operation.parameters;
 }
 

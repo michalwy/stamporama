@@ -31,6 +31,7 @@ interface Row {
   requiredCount: number;
   heldCopies: number;
   heldByCondition: { condition: string; copies: number }[];
+  stamps?: { stampId: string; stampNo: number; catalogNumbers: string[]; isVariant: boolean; parentStampId?: string }[];
   path: string;
 }
 
@@ -57,6 +58,8 @@ describe("list_issues (#2167)", () => {
   let token: string;
   let readOnlyToken: string;
   let castles: string;
+  let warsaw: string;
+  const warsawStamps: Record<string, string> = {};
 
   const list = async (query: string) => {
     const answer = await call(token, `/issues?${query}`);
@@ -83,6 +86,7 @@ describe("list_issues (#2167)", () => {
       })
     ).id;
     const michel = await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } });
+    const fischer = await prisma.catalogVendor.create({ data: { collectionId, name: "Fischer", abbreviation: "Fi" } });
 
     const poland = await prisma.collectionArea.create({
       data: {
@@ -122,8 +126,9 @@ describe("list_issues (#2167)", () => {
       ).id;
     castles = await issue(1, gg.id, "Castles", 1940, "1", "5");
     await issue(2, gg.id, "Buildings", 1941, "60", "64");
-    await issue(3, poland.id, "Warsaw", 1938, "300", "302");
-    await issue(4, poland.id, "Undated", null, "900", "900");
+    warsaw = await issue(3, poland.id, "Warsaw", 1938, "300", "302");
+    const undated = await issue(4, poland.id, "Undated", null, "900", "900");
+    await prisma.issueCatalogNumber.create({ data: { issueId: undated, catalogVendorId: fischer.id, firstNumber: "900" } });
     await prisma.issueTranslation.create({ data: { issueId: castles, language: "pl", name: "Zamki" } });
     await prisma.issueCatalogPrefix.create({ data: { issueId: castles, catalogVendorId: michel.id, areaPrefix: "GGX" } });
 
@@ -138,6 +143,19 @@ describe("list_issues (#2167)", () => {
       await prisma.issueMember.create({ data: { issueId, stampId: created.id } });
       return created.id;
     };
+    // #2170: Warsaw declares Mi 300–302 and files a stamp numbered outside it, a variant, and a
+    // Fischer number; told in the collector's order, the variant under its parent.
+    const member = async (key: string, numbers: { catalogVendorId: string; number: string }[], sortOrder: number, parentId?: string) => {
+      const created = await prisma.stamp.create({
+        data: { collectionId, name: `Mermaid ${key}`, parentId, catalogNumbers: { create: numbers } },
+      });
+      await prisma.issueMember.create({ data: { issueId: warsaw, stampId: created.id, sortOrder } });
+      warsawStamps[key] = created.id;
+    };
+    await member("305", [{ catalogVendorId: michel.id, number: "305" }], 0);
+    await member("300", [{ catalogVendorId: michel.id, number: "300" }, { catalogVendorId: fischer.id, number: "280" }], 1);
+    await member("300a", [{ catalogVendorId: michel.id, number: "300a" }], 2, warsawStamps["300"]);
+
     const one = await stamp("1", castles);
     const two = await stamp("2", castles);
     let itemNo = 0;
@@ -159,6 +177,7 @@ describe("list_issues (#2167)", () => {
     await prisma.assistantToken.deleteMany({ where: { collectionId } });
     await prisma.item.deleteMany({ where: { collectionId } });
     await prisma.issueMember.deleteMany({ where: { issue: { collectionId } } });
+    await prisma.stamp.deleteMany({ where: { collectionId, parentId: { not: null } } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
     await prisma.issue.deleteMany({ where: { collectionId } });
     await prisma.stampCondition.deleteMany({ where: { collectionId } });
@@ -234,6 +253,60 @@ describe("list_issues (#2167)", () => {
     const unknown = await call(token, "/issues?area=Atlantis");
     assert.equal(unknown.status, 400);
     assert.ok((unknown.body as ApiErrorBody).error.accepted?.includes("Poland"));
+  });
+
+  it("narrows by catalogue: a declared range in it or a stamp numbered in it (#2170)", async () => {
+    assert.deepEqual(names(await list("area=Poland&catalogue=Fi")), ["Warsaw", "Undated"]);
+    assert.deepEqual(names(await list("area=Poland&catalogue=Fischer&year_to=1939")), ["Warsaw"]);
+    assert.deepEqual(names(await list("area=Generalgouvernement&catalogue=Mi")), ["Castles", "Buildings"]);
+    const unknown = await call(token, "/issues?area=Poland&catalogue=Scott");
+    assert.equal(unknown.status, 400);
+    assert.ok((unknown.body as ApiErrorBody).error.accepted?.some((value) => value.includes("Fischer")), JSON.stringify(unknown.body));
+  });
+
+  it("lists every stamp's numbers only with include_numbers, those outside the range too (#2170)", async () => {
+    const [plain] = (await list("area=Poland&text=Warsaw")).items;
+    assert.equal(plain.stamps, undefined);
+
+    const [row] = (await list("area=Poland&text=Warsaw&include_numbers=true")).items;
+    assert.equal(row.issueId, warsaw);
+    assert.deepEqual(row.catalogRanges, ["Mi·PL 300–02"]);
+    assert.deepEqual(
+      row.stamps?.map(({ stampNo, ...rest }) => {
+        assert.equal(typeof stampNo, "number");
+        return rest;
+      }),
+      [
+        { stampId: warsawStamps["305"], catalogNumbers: ["Mi·PL 305"], isVariant: false },
+        { stampId: warsawStamps["300"], catalogNumbers: ["Mi·PL 300", "Fi 280"], isVariant: false },
+        {
+          stampId: warsawStamps["300a"],
+          catalogNumbers: ["Mi·PL 300a"],
+          isVariant: true,
+          parentStampId: warsawStamps["300"],
+        },
+      ]
+    );
+
+    // Labelled against the row's issue: Castles' own prefix reads on its stamps as on its range.
+    const [castlesRow] = (await list("area=Generalgouvernement&text=Castles&include_numbers=true")).items;
+    assert.deepEqual(castlesRow.stamps?.map((stamp) => stamp.catalogNumbers), [["Mi·GGX 1"], ["Mi·GGX 2"]]);
+    const [buildings] = (await list("area=Generalgouvernement&text=Buildings&include_numbers=true")).items;
+    assert.deepEqual(buildings.stamps, []);
+  });
+
+  it("pages up to 200 issues and refuses more, saying so in its own limit (#2170)", async () => {
+    assert.equal((await list("area=Poland&limit=200")).items.length, 4);
+    const over = await call(token, "/issues?area=Poland&limit=201");
+    assert.equal(over.status, 400);
+    assert.match((over.body as ApiErrorBody).error.message, /200/);
+    const document = buildOpenApiDocument(OPERATIONS, { appVersion: "test" }) as {
+      paths: Record<string, Record<string, { parameters: { name: string; description: string }[] }>>;
+    };
+    const limitOf = (path: string) =>
+      document.paths[path]?.get?.parameters.find((parameter) => parameter.name === "limit")?.description;
+    assert.match(limitOf("/api/v1/issues") ?? "", /1 to 200/);
+    assert.match(limitOf("/api/v1/holdings") ?? "", /1 to 100/);
   });
 
   it("serves a read-only token, and is in the document as a read", async () => {

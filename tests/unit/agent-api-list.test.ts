@@ -4,6 +4,7 @@ import {
   DEFAULT_LIST_LIMIT,
   LIST_PARAMETERS,
   MAX_LIST_LIMIT,
+  listParameters,
   listResponse,
   parseListWindow,
 } from "../../src/lib/agent-api/list";
@@ -47,6 +48,17 @@ describe("agent API list window", () => {
     assert.equal(error.code, "invalid_request");
     assert.match(error.message, new RegExp(String(MAX_LIST_LIMIT)));
     assert.equal(rejection(() => window("limit=0")).code, "invalid_request");
+  });
+
+  it("takes an operation's own larger cap, in the check and in the parameter it declares (#2170)", () => {
+    const [limit, cursor] = listParameters(200);
+    assert.match(limit.description, /1 to 200/);
+    assert.deepEqual(cursor, LIST_PARAMETERS[1]);
+    const raised = (query: string) =>
+      parseListWindow(parseParameters(listParameters(200), { path: {}, query: new URLSearchParams(query) }), 200);
+    assert.equal(raised("limit=200").limit, 200);
+    assert.match(rejection(() => raised("limit=201")).message, /200/);
+    assert.deepEqual(listParameters(), LIST_PARAMETERS);
   });
 
   it("tells an agent that invented a cursor to use the one it was given", () => {

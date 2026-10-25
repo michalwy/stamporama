@@ -26,32 +26,39 @@ export const DEFAULT_LIST_LIMIT = 25;
  * The most rows one call will ever return. It is a **hard** cap rather than a default an agent may
  * raise: the constraint being protected is the agent's context window, and an agent optimising its
  * own round trips is exactly the caller that would raise it to 5000 and then be unable to read the
- * answer.
+ * answer. An operation whose rows are short may state a larger cap of its own (`result.maxLimit`).
  */
 export const MAX_LIST_LIMIT = 100;
 
 /**
  * The window parameters, declared once and appended to every list operation by the OpenAPI
  * generator and by #709's tool generation. An operation does not restate them — that would be the
- * second place to edit that this whole registry exists to avoid.
+ * second place to edit that this whole registry exists to avoid. An operation raises its own cap
+ * through `result.maxLimit` and hands the same figure to `parseListWindow` (#2170: `list_issues`
+ * pages up to 200 short rows, an area's catalogue at a time).
  */
-export const LIST_PARAMETERS: readonly ParameterSpec[] = [
-  {
-    name: "limit",
-    in: "query",
-    type: "integer",
-    required: false,
-    description: `How many rows to return, 1 to ${MAX_LIST_LIMIT}; ${DEFAULT_LIST_LIMIT} when omitted.`,
-  },
-  {
-    name: "cursor",
-    in: "query",
-    type: "string",
-    required: false,
-    description:
-      "Where to continue from. Send back the `nextCursor` from the previous response; omit it for the first page.",
-  },
-];
+export function listParameters(maxLimit: number = MAX_LIST_LIMIT): readonly ParameterSpec[] {
+  return [
+    {
+      name: "limit",
+      in: "query",
+      type: "integer",
+      required: false,
+      description: `How many rows to return, 1 to ${maxLimit}; ${DEFAULT_LIST_LIMIT} when omitted.`,
+    },
+    {
+      name: "cursor",
+      in: "query",
+      type: "string",
+      required: false,
+      description:
+        "Where to continue from. Send back the `nextCursor` from the previous response; omit it for the first page.",
+    },
+  ];
+}
+
+/** The window parameters of a list at the shared cap. */
+export const LIST_PARAMETERS: readonly ParameterSpec[] = listParameters();
 
 export interface ListWindow {
   readonly limit: number;
@@ -71,11 +78,11 @@ export interface ListResponse<T> {
  * a malformed `limit` has been rejected as a non-integer before this sees it and what is left to
  * check is the range.
  */
-export function parseListWindow(params: ParsedParams): ListWindow {
+export function parseListWindow(params: ParsedParams, maxLimit: number = MAX_LIST_LIMIT): ListWindow {
   const requested = optionalInteger(params, "limit");
-  if (requested !== null && (requested < 1 || requested > MAX_LIST_LIMIT)) {
+  if (requested !== null && (requested < 1 || requested > maxLimit)) {
     throw invalidRequest(
-      `"limit" must be between 1 and ${MAX_LIST_LIMIT}. Ask for a smaller page and follow "nextCursor" for the rest.`
+      `"limit" must be between 1 and ${maxLimit}. Ask for a smaller page and follow "nextCursor" for the rest.`
     );
   }
   return { limit: requested ?? DEFAULT_LIST_LIMIT, offset: parseCursor(optionalString(params, "cursor")) };
