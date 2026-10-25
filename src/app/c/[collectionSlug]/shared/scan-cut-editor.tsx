@@ -162,6 +162,10 @@ interface Props {
   error: string | null;
   onCommit: (boxes: CutBox[]) => void;
   onClose: () => void;
+  /** Reviewing a cut detection committed with no editor (#2164): the editor opens on the committed
+   * boxes and this says they are fine as they stand, leaving the tiles exactly as they are. Committing
+   * instead re-cuts the card. Absent on any other cut. */
+  onAccept?: () => void;
 }
 
 /** What the next pointer-down will do. `select` is the resting state; the other modes are armed by
@@ -217,6 +221,7 @@ export function ScanCutEditor({
   error,
   onCommit,
   onClose,
+  onAccept,
 }: Props) {
   const [regions, setRegions] = useState<Region[]>(() => initialBoxes.map(regionOf));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -964,6 +969,11 @@ export function ScanCutEditor({
         <DialogSecondaryButton onClick={onClose} disabled={committing}>
           Cancel
         </DialogSecondaryButton>
+        {onAccept && (
+          <DialogSecondaryButton onClick={onAccept} disabled={committing}>
+            The cut is fine
+          </DialogSecondaryButton>
+        )}
         <DialogPrimaryButton
           type="button"
           onClick={() => onCommit(orderedBoxes(regions))}

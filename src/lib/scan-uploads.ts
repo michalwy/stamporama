@@ -12,6 +12,7 @@ import {
   assertScanOwner,
   ScanAuthError,
   ScanValidationError,
+  commitDetectedCut,
   uploadSheet,
   type ScanOwnerRef,
   type SheetSide,
@@ -178,6 +179,13 @@ export async function openScanUpload(
   const frontUploadId = await chosenFrontUpload(owner, input);
 
   const chunkBytes = uploadChunkBytes();
+  // *Commit detected cuts* (#2164), as the switch stands now — the moment the scan is added. Read
+  // here rather than sent: it is the collection's setting, and the scan keeps the answer it was
+  // added with however the switch moves before it is ready.
+  const { commitDetectedCuts } = await prisma.collection.findUniqueOrThrow({
+    where: { id: owner.collectionId },
+    select: { commitDetectedCuts: true },
+  });
   const upload = await prisma.scanUpload.create({
     data: {
       collectionId: owner.collectionId,
@@ -188,6 +196,7 @@ export async function openScanUpload(
       scanningProfileId: await chosenProfile(owner.collectionId, input.scanningProfileId),
       turnover: chosenTurnover(input.side, input.turnover),
       frontUploadId,
+      commitDetectedCut: commitDetectedCuts,
       mime: input.mime,
       totalBytes: input.totalBytes,
       chunkBytes,
@@ -270,6 +279,7 @@ interface UploadRow {
   scanningProfileId: string | null;
   turnover: string | null;
   frontUploadId: string | null;
+  commitDetectedCut: boolean;
   mime: string;
   totalBytes: number;
   chunkBytes: number;
@@ -290,6 +300,7 @@ const UPLOAD_SELECT = {
   scanningProfileId: true,
   turnover: true,
   frontUploadId: true,
+  commitDetectedCut: true,
   mime: true,
   totalBytes: true,
   chunkBytes: true,
@@ -496,8 +507,16 @@ export async function claimNextScanUpload(): Promise<string | null> {
 
 /** A scan left `preparing` by a process that stopped goes back to the front of the queue — its
  * place is unchanged, since `queuedAt` is. Safe because a preparation is all-or-nothing: the sheet
- * and the row's `done` are one transaction, so a scan interrupted before it was never half made. */
+ * and the row's `done` are one transaction, so a scan interrupted before it was never half made.
+ *
+ * **Except a scan that is already a card** (#2164): with *Commit detected cuts* on the row stays
+ * `preparing` past the sheet, while the cut is made, and names the sheet. Preparing it again would
+ * make a second batch, so it is done — its cut, if the stop came first, waits for the collector. */
 export async function requeueStalledScanUploads(): Promise<number> {
+  await prisma.scanUpload.updateMany({
+    where: { status: "preparing", sheetId: { not: null } },
+    data: { status: "done" },
+  });
   const { count } = await prisma.scanUpload.updateMany({
     where: { status: "preparing" },
     data: { status: "queued" },
@@ -518,6 +537,12 @@ export async function requeueStalledScanUploads(): Promise<number> {
  * sweep — it is how the page still open finds the card to cut. On failure the parts are **kept**:
  * a retry prepares them again without the scan being sent again. The failure itself is recorded by
  * {@link failScanUpload}, which the worker calls with whatever this throws.
+ *
+ * **With *Commit detected cuts* on** (#2164) the scan is cut from its detected boxes before the row
+ * is done, so the panel says *Preparing* until the card is cut and no page opens an editor on it in
+ * between. The row names its sheet inside the transaction all the same, which is what keeps a
+ * restart from preparing it twice. A cut that fails is logged and never fails the scan: the card
+ * is there, and waits for its cut as one detection found nothing on does.
  */
 export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet> {
   const upload = await prisma.scanUpload.findUniqueOrThrow({
@@ -570,7 +595,7 @@ export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet
       // this throwing is what rolls the sheet back rather than leaving a card nobody asked for.
       await tx.scanUpload.update({
         where: { id: upload.id, status: "preparing" },
-        data: { status: "done", sheetId, error: null },
+        data: { status: upload.commitDetectedCut ? "preparing" : "done", sheetId, error: null },
       });
       // The backs sent with this front (#2163) join the card it has just become.
       if (upload.side === "front") {
@@ -587,6 +612,18 @@ export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet
   );
 
   await rm(uploadDir(upload.id), { recursive: true, force: true });
+
+  if (upload.commitDetectedCut) {
+    try {
+      await commitDetectedCut(upload.collection.ownerId, sheet.id);
+    } catch (err) {
+      console.error(`[scan-uploads] cutting scan ${upload.id} from its detected boxes failed`, err);
+    }
+    await prisma.scanUpload.updateMany({
+      where: { id: upload.id, status: "preparing" },
+      data: { status: "done" },
+    });
+  }
   return sheet;
 }
 

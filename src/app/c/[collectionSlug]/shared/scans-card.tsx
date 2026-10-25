@@ -22,6 +22,7 @@ import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dia
 import {
   commitCutAction,
   deleteBatchesAction,
+  markCutReviewedAction,
   markTilesAction,
   pairTilesAction,
   proposeCutAction,
@@ -30,6 +31,7 @@ import {
   setBackTurnoverAction,
   setBatchKindAction,
   setBatchLabelAction,
+  setCommitDetectedCutsAction,
 } from "@/app/actions/scans";
 import {
   BACK_TURNOVERS,
@@ -63,6 +65,7 @@ import {
   matchesTileFilter,
   parseTileFilter,
   reachesFinishedBatches,
+  showsSetAsideBatches,
   tilesInView,
   type TileFilter,
 } from "@/lib/scan-tile-filter";
@@ -112,6 +115,7 @@ import {
 import {
   isScanUploadPending,
   isScanUploadShown,
+  newlyDoneUploads,
   newlyPreparedSheets,
   scanCardTitle,
   scanUploadStatusText,
@@ -197,6 +201,11 @@ interface Props {
    * the other two, because the chip decides which batches the strip fetches at all and a count
    * read off the fetched batches would therefore settle after it. */
   discardedTileCount: number;
+  /** Cards on this order cut from their detected boxes and not reviewed since (#2164) — the
+   * *Cut not reviewed* chip, server-rendered beside the tile counts for the same reason. */
+  unreviewedCutCount: number;
+  /** The collection's *Commit detected cuts* switch (#2164), as the order was read. */
+  commitDetectedCuts: boolean;
   scanSheetCount: number;
   /** The order as the panel of scans being added names it (#2099): *Order #12*. */
   documentName: string;
@@ -246,6 +255,24 @@ interface EditorTarget {
   sheet: ScanCutEditorSheet;
   initialBoxes: CutBox[];
   frontTileCount: number | null;
+  /** Reviewing a cut detection committed with no editor (#2164): the editor is open on the
+   * committed front boxes and nothing has been thrown away yet. Committing re-cuts the card and then
+   * opens the back on its committed boxes; *The cut is fine* leaves everything as it is. */
+  review?: CutReview;
+}
+
+/** What a review of a detected cut carries past the re-cut it may end in (#2164) — read off the
+ * tiles before they go, as a re-cut's previous boxes are. */
+interface CutReview {
+  batchNo: number;
+  /** The back's committed boxes, to open the back on once the front is cut again; null when the
+   * card has no back cut. */
+  back: { sheet: ScanCutEditorSheet; initialBoxes: CutBox[] } | null;
+  /** Copies whose back the re-cut keeps out of the pairing — fronts with no back among them still
+   * count towards the back's fronts. */
+  copiesWithoutBack: number;
+  /** Whether a re-cut would take parked or discarded tiles with it, which is asked first. */
+  asks: boolean;
 }
 
 export function ScansCard({
@@ -256,6 +283,8 @@ export function ScansCard({
   unidentifiedTileCount,
   parkedTileCount,
   discardedTileCount,
+  unreviewedCutCount,
+  commitDetectedCuts,
   scanSheetCount,
   documentName,
   canIdentify,
@@ -315,6 +344,7 @@ export function ScansCard({
     unidentified: unidentifiedTileCount,
     parked: parkedTileCount,
     discarded: discardedTileCount,
+    unreviewed: unreviewedCutCount,
   });
   const filtered = isNarrowed(filter);
   /** Write one narrowing into the address bar, keeping every other parameter (`?lot=` on the order
@@ -390,6 +420,9 @@ export function ScansCard({
    * for the sitting — unlike the name, it is usually the same for every card of an evening. Offered
    * only when there is more than one profile, so a collector with one scanner is asked nothing. */
   const [newProfileId, setNewProfileId] = useState<string | null>(scanning.defaultProfileId);
+  /** *Commit detected cuts* (#2164), the collection's switch — shown as pressed at once and written
+   * behind it, since the next scan added reads it from the server. */
+  const [quickCut, setQuickCut] = useState(commitDetectedCuts);
   /** A detection pass in flight. Its own state rather than the transition's: it is the one wait in
    * this section that happens *before* a dialog opens, so the button that started it has to say so. */
   const [detecting, setDetecting] = useState(false);
@@ -401,6 +434,9 @@ export function ScansCard({
    * correcting a cut and drawing one again. */
   const [confirm, setConfirm] = useState<
     | { kind: "recut"; batchNo: number; reopen: EditorTarget | null }
+    /** Committing a reviewed cut (#2164) on a card holding parked or discarded tiles: it is a re-cut,
+     * asked the way one is, and then the boxes in the editor are committed. */
+    | { kind: "reviewRecut"; batchNo: number; boxes: CutBox[]; review: CutReview }
     | { kind: "delete"; batchNo: number }
     /** Changing what kind of card a batch is, on a batch that has already been cut (#1195). The
      * kind decides how the pieces are found, so the tiles standing there were found the other way
@@ -836,9 +872,15 @@ export function ScansCard({
       if (isScanUploadPending(u.status)) watchedUploads.current.add(u.id);
     }
     const ready = newlyPreparedSheets(watchedUploads.current, uploads);
+    // A scan cut in the background (#2164) opens no editor, but its tiles count in the order's
+    // header — so the order is read again, as a commit made here would have it read.
+    const cutInBackground = newlyDoneUploads(watchedUploads.current, uploads).some(
+      (u) => u.commitDetectedCut
+    );
     for (const u of uploads) {
       if (u.status === "done" || u.status === "failed") watchedUploads.current.delete(u.id);
     }
+    if (cutInBackground) refresh();
     if (ready.length === 0) return;
     // The editor open on another card of the batch: these wait their turn in the walk (#1568).
     if (editor) {
@@ -878,26 +920,82 @@ export function ScansCard({
 
   const commit = (boxes: CutBox[]) => {
     if (!editor) return;
+    const review = editor.review;
+    // A reviewed cut committed is a re-cut (#2164), and one that takes parked or discarded tiles
+    // with it is asked first, as the Re-cut button asks.
+    if (review?.asks) {
+      setConfirm({ kind: "reviewRecut", batchNo: review.batchNo, boxes, review });
+      return;
+    }
+    setError(null);
+    startTransition(() => commitBoxes(editor, boxes));
+  };
+
+  /** Commit the editor's boxes — after the re-cut, when they are a reviewed detected cut (#2164). */
+  const commitBoxes = async (target: EditorTarget, boxes: CutBox[]) => {
+    const review = target.review;
+    if (review) {
+      const recut = await recutBatchAction(ownerRef, review.batchNo);
+      if (recut.status === "error") {
+        setError(recut.message);
+        return;
+      }
+    }
+    const result = await commitCutAction(target.sheet.id, boxes);
+    if (result.status === "error") {
+      setError(result.message);
+      // The re-cut has happened, so the editor is an ordinary cut of an uncut sheet from here.
+      if (review) setEditor({ ...target, review: undefined });
+      return;
+    }
+    setEditor(null);
+    setReport(result.report);
+    refresh();
+    // A reviewed card's back is cut again too, opening on the boxes it had (#2055, #2164).
+    if (review?.back) {
+      setEditor({
+        sheet: review.back.sheet,
+        initialBoxes: review.back.initialBoxes,
+        frontTileCount: result.report.created + review.copiesWithoutBack,
+      });
+      return;
+    }
+    // A front just cut whose back is already in (#2163) goes on to that back — the two sides of
+    // one card are one act, however the back arrived.
+    if (result.report.side === "front") {
+      const back = batches.find((b) => b.batchNo === result.report.batchNo)?.back;
+      if (back && !back.cut && !readyToCut.current.includes(back.id)) {
+        readyToCut.current = [back.id, ...readyToCut.current];
+      }
+    }
+    // On to the next card of the batch that became ready meanwhile (#1568).
+    openNextReady(result.report);
+  };
+
+  /** *The cut is fine* (#2164): the card's detected cut stands, and its mark goes. */
+  const acceptCut = (batchNo: number) => {
     setError(null);
     startTransition(async () => {
-      const result = await commitCutAction(editor.sheet.id, boxes);
+      const result = await markCutReviewedAction(ownerRef, batchNo);
       if (result.status === "error") {
         setError(result.message);
         return;
       }
       setEditor(null);
-      setReport(result.report);
       refresh();
-      // A front just cut whose back is already in (#2163) goes on to that back — the two sides of
-      // one card are one act, however the back arrived.
-      if (result.report.side === "front") {
-        const back = batches.find((b) => b.batchNo === result.report.batchNo)?.back;
-        if (back && !back.cut && !readyToCut.current.includes(back.id)) {
-          readyToCut.current = [back.id, ...readyToCut.current];
-        }
+    });
+  };
+
+  /** Turn *Commit detected cuts* on or off (#2164); a refusal puts the switch back. */
+  const changeQuickCut = (on: boolean) => {
+    setQuickCut(on);
+    setError(null);
+    startTransition(async () => {
+      const result = await setCommitDetectedCutsAction(collectionId, on);
+      if (result.status === "error") {
+        setQuickCut(!on);
+        setError(result.message);
       }
-      // On to the next card of the batch that became ready meanwhile (#1568).
-      openNextReady(result.report);
     });
   };
 
@@ -1012,6 +1110,10 @@ export function ScansCard({
           setError(set.message);
           return;
         }
+      }
+      if (target.kind === "reviewRecut") {
+        if (editor) await commitBoxes(editor, target.boxes);
+        return;
       }
       if (target.kind === "removeBack") {
         const removed = await removeBackScanAction(ownerRef, target.batchNo);
@@ -1198,6 +1300,26 @@ export function ScansCard({
             <Icon name="excluded" size="sm" /> {discardedTileCount} discarded
           </FilterChip>
         )}
+        {/* **The cards cut with no editor** (#2164), counted as cards: each was cut from its
+            detected boxes and is still to be looked at. In the *this needs you* hue, since a wrong
+            box found now is a stamp not yet broken out of the stockbook. */}
+        {unreviewedCutCount > 0 && (
+          <FilterChip
+            on={filter === "unreviewed"}
+            hint={
+              filter === "unreviewed"
+                ? "Showing only the cards whose cut is not reviewed — click to show every card"
+                : "Cards cut from their detected boxes without the editor — click to show just those"
+            }
+            onClick={() => {
+              setFilterChoice(filterChoice === "unreviewed" ? "all" : "unreviewed");
+              if (filter !== "unreviewed") setOpen(true);
+            }}
+          >
+            <Icon name="scan" size="sm" /> {unreviewedCutCount}{" "}
+            {unreviewedCutCount === 1 ? "cut" : "cuts"} not reviewed
+          </FilterChip>
+        )}
         {/* **How large the tiles are** (#1922) — beside the chips that narrow them, on the one line
             every card's strip hangs from, and only while there is a strip to see. One choice for
             every card of the parcel and every order after it: it is about reading a face value off
@@ -1259,6 +1381,30 @@ export function ScansCard({
             ))}
           </select>
         </Tooltip>
+        {/* **Commit detected cuts** (#2164): the quick mode for a sitting of many cards. On, every
+            scan added is cut from its detected boxes as soon as it is ready, with no editor, and the
+            card is marked *Cut not reviewed* to be looked at later. The collection's, so the next
+            sitting starts the way this one ended. */}
+        <Tooltip content="Cut each scan from the boxes found on it as soon as it is ready, without the cut editor. The card is marked Cut not reviewed, to correct later. A scan with nothing found waits for its cut.">
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-secondary)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={quickCut}
+              disabled={pending}
+              onChange={(e) => changeQuickCut(e.target.checked)}
+            />
+            Commit detected cuts
+          </label>
+        </Tooltip>
         {/* Several at once (#1568): each file a card of its own, in the order chosen. */}
         <UploadButton
           label="Add card scans"
@@ -1294,6 +1440,12 @@ export function ScansCard({
 
       {filter === "waiting" && (
         <Banner tone="info">Showing only the tiles still waiting to be identified.</Banner>
+      )}
+      {filter === "unreviewed" && (
+        <Banner tone="info">
+          Showing only the cards cut from their detected boxes without the editor. Review the cut to
+          correct the boxes, or say the cut is fine.
+        </Banner>
       )}
       {/* Worth a sentence rather than only a pressed chip: this is the list the collector came back
           for, and what it is *for* — one trip to the colour key instead of thirty — is the reason
@@ -1421,7 +1573,7 @@ export function ScansCard({
         // almost entirely on cards that are finished with — a card is *finished* precisely because
         // every tile on it reached an end, and a discard is one of the two ends. Left in force, the
         // pull list would answer the press with a blank screen on the ordinary case.
-        .filter((b) => showDone || b.doneAt == null || reachesFinishedBatches(filter))
+        .filter((b) => showDone || b.doneAt == null || showsSetAsideBatches(filter))
         .map((batch) => (
         <BatchSection
           key={batch.batchNo}
@@ -1473,6 +1625,11 @@ export function ScansCard({
           onUploadBack={(f, turnover) => upload([f], "back", batch.batchNo, turnover)}
           onSetTurnover={(to) => changeTurnover(batch.batchNo, to)}
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
+          onReviewCut={(target) => {
+            setError(null);
+            setEditor(target);
+          }}
+          onAcceptCut={() => acceptCut(batch.batchNo)}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
           onRemoveBack={() =>
             setConfirm({ kind: "removeBack", batchNo: batch.batchNo, replaceWith: null })
@@ -1628,6 +1785,7 @@ export function ScansCard({
           committing={pending}
           error={error}
           onCommit={commit}
+          onAccept={editor.review ? () => acceptCut(editor.review!.batchNo) : undefined}
           onClose={() => {
             setEditor(null);
             setError(null);
@@ -1642,7 +1800,7 @@ export function ScansCard({
           title={
             confirm.kind === "sheetKind"
               ? `Cut this batch as ${confirm.to === "album" ? "an album page" : "a stockbook card"}?`
-              : confirm.kind === "recut"
+              : confirm.kind === "recut" || confirm.kind === "reviewRecut"
                 ? "Re-cut this batch?"
                 : confirm.kind === "removeBack"
                   ? confirm.replaceWith
@@ -1653,7 +1811,7 @@ export function ScansCard({
           actionLabel={
             confirm.kind === "sheetKind"
               ? "Change and re-cut"
-              : confirm.kind === "recut"
+              : confirm.kind === "recut" || confirm.kind === "reviewRecut"
                 ? "Re-cut"
                 : confirm.kind === "removeBack"
                   ? confirm.replaceWith
@@ -1679,7 +1837,7 @@ export function ScansCard({
                   </>
                 )}
               </>
-            ) : confirm.kind === "recut" ? (
+            ) : confirm.kind === "recut" || confirm.kind === "reviewRecut" ? (
               <>
                 The batch&rsquo;s tiles and their images are thrown away. The scans themselves are
                 kept, so the cut can be drawn again over the same card.
@@ -2139,6 +2297,8 @@ function BatchSection({
   onUploadBack,
   onSetTurnover,
   onRecut,
+  onReviewCut,
+  onAcceptCut,
   onDelete,
   onRemoveBack,
   onReplaceBack,
@@ -2193,6 +2353,10 @@ function BatchSection({
   /** Handed the editor target to reopen once the tiles are gone — the previous cut, read off the
    * tiles while they still exist. Null when there is no front scan to reopen on. */
   onRecut: (reopen: EditorTarget | null) => void;
+  /** Open the editor on the cut detection committed (#2164), nothing thrown away until a commit. */
+  onReviewCut: (target: EditorTarget) => void;
+  /** *The cut is fine* (#2164): the mark goes and the tiles stay exactly as they are. */
+  onAcceptCut: () => void;
   onDelete: () => void;
   /** Take the back scan off the batch (#1915); the parent confirms. */
   onRemoveBack: () => void;
@@ -2342,6 +2506,9 @@ function BatchSection({
             folded or not, for the same reason the name is: on a collapsed batch this line is the
             whole of it. */}
         <BatchKind kind={batch.kind} busy={busy} onSet={onSetKind} />
+        {/* Cut from its detected boxes with no editor (#2164). On the batch line, which is the
+            whole of a folded batch, so the mark is never behind a caret. */}
+        {batch.cutUnreviewed && <span style={WARNING_CHIP}>Cut not reviewed</span>}
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
           {held} {held === 1 ? "tile" : "tiles"}
           {backOnly.length > 0 && ` · ${backOnly.length} unpaired ${backOnly.length === 1 ? "back" : "backs"}`}
@@ -2439,6 +2606,60 @@ function BatchSection({
             disabled={busy}
           >
             {detecting ? "Finding the stamps…" : "Review the back cut"}
+          </SmallButton>
+        )}
+        {/* **Review the cut** (#2164) opens the editor on what detection committed, and only a
+            commit re-cuts — so looking costs nothing. Not where a re-cut cannot happen: a card of
+            nothing but copies, or a scan the sweep has taken; *The cut is fine* is left there. */}
+        {open &&
+          batch.cutUnreviewed &&
+          batch.front?.cut &&
+          batch.tiles.some((t) => !isLockedTile(t)) &&
+          !scansPurged && (
+            <SmallButton
+              onClick={() =>
+                onReviewCut({
+                  sheet: editorSheet(batch.front!),
+                  // The re-cut's own previous boxes, marks and all — see Re-cut below.
+                  initialBoxes: frontTilesHeld.flatMap((t) =>
+                    t.frontBox && !isLockedTile(t)
+                      ? [{ ...t.frontBox, mark: t.mark, markedAt: t.markedAt }]
+                      : []
+                  ),
+                  frontTileCount: null,
+                  review: {
+                    batchNo: batch.batchNo,
+                    back: batch.back?.cut
+                      ? {
+                          sheet: editorSheet(batch.back),
+                          // A paired tile's mark is the front box's, so only a back on no tile
+                          // carries its own back into the back's cut.
+                          initialBoxes: batch.tiles.flatMap((t) =>
+                            t.backBox && !isLockedTile(t)
+                              ? [
+                                  t.frontBox == null
+                                    ? { ...t.backBox, mark: t.mark, markedAt: t.markedAt }
+                                    : { ...t.backBox },
+                                ]
+                              : []
+                          ),
+                        }
+                      : null,
+                    copiesWithoutBack: batch.tiles.filter(
+                      (t) => isLockedTile(t) && t.frontBox != null && t.backBox == null
+                    ).length,
+                    asks: batch.tiles.some((t) => t.state === "parked" || t.state === "discarded"),
+                  },
+                })
+              }
+              disabled={busy}
+            >
+              <Icon name="visible" size="sm" /> Review the cut
+            </SmallButton>
+          )}
+        {open && batch.cutUnreviewed && (
+          <SmallButton onClick={onAcceptCut} disabled={busy}>
+            <Icon name="check" size="sm" /> The cut is fine
           </SmallButton>
         )}
         {/* Not on a card where every tile is a copy (#2055): a re-cut keeps those, so there is

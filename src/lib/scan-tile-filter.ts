@@ -20,16 +20,29 @@
  * pieces he rejected here. Every tile it shows is one card to pull, read with a stamp in the other
  * hand — which is what decides that the tiles keep their sheet order and that their pictures stop
  * receding while it is on (`scans-card.tsx` draws both).
+ *
+ * The fifth, `unreviewed` (#2164), narrows to **cards** rather than to tile states: the cards cut
+ * from their detected boxes with no editor and not looked at since. Every tile of such a card
+ * matches, read off the tile's own `cutUnreviewed` (the batch's answer), so the strip's selection,
+ * its batch boxes and an arrival all keep asking one question of one tile.
  */
 
 /** The state a tile is in, as the strip reads one — `scan_tile.state`. */
 export interface FilterableTile {
   state: string;
+  /** Whether the card the tile is on carries *Cut not reviewed* (#2164). Absent reads as no. */
+  cutUnreviewed?: boolean;
 }
 
-export type TileFilter = "all" | "waiting" | "parked" | "discarded";
+export type TileFilter = "all" | "waiting" | "parked" | "discarded" | "unreviewed";
 
-export const TILE_FILTERS: readonly TileFilter[] = ["all", "waiting", "parked", "discarded"];
+export const TILE_FILTERS: readonly TileFilter[] = [
+  "all",
+  "waiting",
+  "parked",
+  "discarded",
+  "unreviewed",
+];
 
 /** How many tiles each chip is counting. A chip with nothing to count is not drawn, and the filter
  * it would apply retires — see `effectiveTileFilter`. */
@@ -37,6 +50,8 @@ export interface TileFilterCounts {
   unidentified: number;
   parked: number;
   discarded: number;
+  /** Cards, not tiles: the cuts not reviewed (#2164). Absent reads as none. */
+  unreviewed?: number;
 }
 
 /** The address-bar name for this narrowing (#844): a filter that reaches the screen reaches the
@@ -63,6 +78,8 @@ export function matchesTileFilter(tile: FilterableTile, filter: TileFilter): boo
       // a copy and `parked` is still to be answered, so nothing else can end up under this chip and
       // the chip can be named after exactly what it shows.
       return tile.state === "discarded";
+    case "unreviewed":
+      return tile.cutUnreviewed === true;
   }
 }
 
@@ -100,6 +117,7 @@ export function effectiveTileFilter(choice: TileFilter, counts: TileFilterCounts
   if (choice === "waiting" && counts.unidentified === 0) return "all";
   if (choice === "parked" && counts.parked === 0) return "all";
   if (choice === "discarded" && counts.discarded === 0) return "all";
+  if (choice === "unreviewed" && (counts.unreviewed ?? 0) === 0) return "all";
   return choice;
 }
 
@@ -121,4 +139,17 @@ export function isNarrowed(filter: TileFilter): boolean {
  */
 export function reachesFinishedBatches(filter: TileFilter): boolean {
   return filter === "discarded";
+}
+
+/**
+ * Whether this narrowing brings the set-aside batches back (#853, #2164) — the worked-through cards
+ * behind *N worked-through batches*, whose toggle is not drawn while a chip is pressed.
+ *
+ * `discarded` for the reason above. `unreviewed` because a card is worked through by identifying
+ * it, not by looking at its cut: a card identified to the last tile can still carry *Cut not
+ * reviewed*, and hiding it would answer the chip with a blank strip. Unlike `discarded` it changes
+ * nothing else — the batches it shows fold as usual and their tiles draw their states.
+ */
+export function showsSetAsideBatches(filter: TileFilter): boolean {
+  return reachesFinishedBatches(filter) || filter === "unreviewed";
 }

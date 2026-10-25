@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import {
   commitCut,
   deleteBatches,
+  markCutReviewed,
   pairTilesManually,
   pickBox,
   proposeCut,
@@ -15,6 +16,7 @@ import {
   setBatchKind,
   setBackTurnover,
   setBatchLabel,
+  setCommitDetectedCuts,
   setTileMarks,
   turnTileSide,
   unpairTileBack,
@@ -724,6 +726,41 @@ export async function setBatchLabelAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to name the card. Please try again.",
+    };
+  }
+}
+
+/** Turn *Commit detected cuts* on or off for the collection (#2164): with it on, every scan added
+ * is cut from its detected boxes as soon as it is ready, with no editor. */
+export async function setCommitDetectedCutsAction(
+  collectionId: string,
+  on: boolean
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await setCommitDetectedCuts(session.user.id, collectionId, on);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to change the setting. Please try again.",
+    };
+  }
+}
+
+/** Say a card's detected cut is fine as it stands (#2164) — the *Cut not reviewed* mark goes. */
+export async function markCutReviewedAction(
+  owner: ScanOwnerRef,
+  batchNo: number
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await markCutReviewed(session.user.id, owner, batchNo);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to mark the cut reviewed. Please try again.",
     };
   }
 }

@@ -682,7 +682,10 @@ async function assertMarksInCollection(
 export async function commitCut(
   ownerId: string,
   sheetId: string,
-  boxes: readonly CutBox[]
+  boxes: readonly CutBox[],
+  /** `unreviewed`: the boxes are detection's, committed with no editor (#2164), so the sheet is
+   * marked *Cut not reviewed*. Any other commit is the collector's own and clears the mark. */
+  options: { unreviewed?: boolean } = {}
 ): Promise<CutReport> {
   const owner = await assertSheetOwner(ownerId, sheetId);
 
@@ -743,8 +746,9 @@ export async function commitCut(
         )
       : [];
 
+  const unreviewed = options.unreviewed ?? false;
   return sheet.side === "front"
-    ? commitFrontCut({ owner, sheetId, batchNo: sheet.batchNo, ordered, crops })
+    ? commitFrontCut({ owner, sheetId, batchNo: sheet.batchNo, ordered, crops, unreviewed })
     : commitBackCut({
         owner,
         sheetId,
@@ -754,6 +758,7 @@ export async function commitCut(
         turn,
         ordered,
         crops,
+        unreviewed,
       });
 }
 
@@ -765,8 +770,9 @@ async function commitFrontCut(args: {
   batchNo: number;
   ordered: CutBox[];
   crops: Crops;
+  unreviewed: boolean;
 }): Promise<CutReport> {
-  const { owner, sheetId, batchNo, ordered, crops } = args;
+  const { owner, sheetId, batchNo, ordered, crops, unreviewed } = args;
   const { collectionId } = owner;
   const scope = scanOwnerWhere(owner);
   const now = new Date();
@@ -817,7 +823,10 @@ async function commitFrontCut(args: {
       }
       // The sheet is cut again (#2055) — and a re-cut that kept only copies, with nothing new
       // drawn, may have been the card's last open work.
-      await tx.scanSheet.update({ where: { id: sheetId }, data: { recutPending: false } });
+      await tx.scanSheet.update({
+        where: { id: sheetId },
+        data: { recutPending: false, cutUnreviewed: unreviewed },
+      });
       await settleBatchDone(tx, scope, batchNo);
     });
   } catch (err) {
@@ -850,8 +859,9 @@ async function commitBackCut(args: {
   turn: QuarterTurn;
   ordered: CutBox[];
   crops: Crops;
+  unreviewed: boolean;
 }): Promise<CutReport> {
-  const { owner, sheetId, batchNo, sheet, turnover, turn, ordered, crops } = args;
+  const { owner, sheetId, batchNo, sheet, turnover, turn, ordered, crops, unreviewed } = args;
   const { collectionId } = owner;
   const scope = scanOwnerWhere(owner);
   const now = new Date();
@@ -995,7 +1005,10 @@ async function commitBackCut(args: {
             : photoData(r, collectionId, "back", sheetId, profileId),
         });
       }
-      await tx.scanSheet.update({ where: { id: sheetId }, data: { recutPending: false } });
+      await tx.scanSheet.update({
+        where: { id: sheetId },
+        data: { recutPending: false, cutUnreviewed: unreviewed },
+      });
       // A back left on the strip is work waiting on a card that may have been finished with, and a
       // card whose last tiles took their backs is finished with — the new back sheet included.
       await settleBatchDone(tx, scope, batchNo);
@@ -1251,6 +1264,75 @@ export async function proposeCut(ownerId: string, sheetId: string): Promise<Box[
   // A re-cut around copies (#2055): their stamps are on the scan and detection finds them, but they
   // are locked boxes in the editor, not proposals — a second box over one would cut a copy again.
   return outsideLocked(proposed, await lockedBoxesOn(sheetId, sheet.side));
+}
+
+/**
+ * Cut a scan from its detected boxes with no editor (#2164) — the quick mode, run by the background
+ * preparation as soon as a scan added with *Commit detected cuts* on is ready.
+ *
+ * The proposal is committed exactly as the editor would have opened on it, and the sheet is marked
+ * *Cut not reviewed*, which is where the corrections the collector chose to defer are found again.
+ * A back pairs by the usual rules, a count mismatch included — every back to the unpaired strip.
+ *
+ * **Null when nothing is committed**, and the scan waits for its cut as one added without the switch
+ * does: detection found no box, the sheet is already cut, or it is a back whose front is not — a back
+ * cut against no fronts would send every piece to the strip for want of a front cut a moment later.
+ */
+export async function commitDetectedCut(
+  ownerId: string,
+  sheetId: string
+): Promise<CutReport | null> {
+  const owner = await assertSheetOwner(ownerId, sheetId);
+  const sheet = await prisma.scanSheet.findUniqueOrThrow({
+    where: { id: sheetId },
+    select: {
+      batchNo: true,
+      side: true,
+      recutPending: true,
+      _count: { select: { frontTiles: true, backTiles: true } },
+    },
+  });
+  if (isSheetCut(sheet.side, sheet._count, sheet.recutPending)) return null;
+  if (sheet.side === "back") {
+    const front = await prisma.scanSheet.findFirst({
+      where: { ...scanOwnerWhere(owner), batchNo: sheet.batchNo, side: "front" },
+      select: { side: true, recutPending: true, _count: { select: { frontTiles: true, backTiles: true } } },
+    });
+    if (!front || !isSheetCut(front.side, front._count, front.recutPending)) return null;
+  }
+  const boxes = await proposeCut(ownerId, sheetId);
+  if (boxes.length === 0) return null;
+  return commitCut(ownerId, sheetId, boxes, { unreviewed: true });
+}
+
+/**
+ * Say a batch's detected cut is fine as it stands (#2164): the *Cut not reviewed* mark goes from both
+ * sheets and nothing else changes. Committing the cut again by hand clears it too, sheet by sheet.
+ */
+export async function markCutReviewed(
+  ownerId: string,
+  ref: ScanOwnerRef,
+  batchNo: number
+): Promise<void> {
+  const owner = await assertScanOwner(ownerId, ref);
+  await prisma.scanSheet.updateMany({
+    where: { ...scanOwnerWhere(owner), batchNo, cutUnreviewed: true },
+    data: { cutUnreviewed: false },
+  });
+}
+
+/** Turn *Commit detected cuts* on or off for a collection (#2164). The scans already added keep the
+ * answer they were added with. */
+export async function setCommitDetectedCuts(
+  ownerId: string,
+  collectionId: string,
+  on: boolean
+): Promise<void> {
+  await assertScanCollectionOwner(ownerId, collectionId);
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { commitDetectedCuts: on },
+  });
 }
 
 /** The boxes on a sheet that belong to tiles a re-cut keeps (#2055) — the copies'. */
@@ -2239,6 +2321,12 @@ async function clearBatchTiles(owner: ScanOwner, batchNo: number): Promise<numbe
       data: { recutPending: true },
     });
   }
+  // The cut is being drawn again by hand, so what detection committed is no longer waiting to be
+  // looked at (#2164): each sheet is uncut until the collector commits it.
+  await prisma.scanSheet.updateMany({
+    where: { ...scope, batchNo, cutUnreviewed: true },
+    data: { cutUnreviewed: false },
+  });
   // The batch is being drawn again, so it is no longer finished with (#567) — clearing the stamp
   // is what keeps #578 from sweeping away the original a re-cut is about to be taken from. A batch
   // whose tiles were all *discarded* is exactly the one that reaches here already stamped.
@@ -2628,6 +2716,8 @@ export interface ScanSheetData {
   scanningProfileId: string | null;
   /** How a back sheet's backs were made (#1555); `in_place` on a front, which has none. */
   turnover: BackTurnover;
+  /** Cut from its detected boxes with no editor and not looked at since (#2164). */
+  cutUnreviewed: boolean;
 }
 
 export interface ScanTileData {
@@ -2748,6 +2838,9 @@ export interface ScanTileData {
    * (#567): the parcel holds something its description never announced. Information rather than a
    * problem to hide — always false on a lot that came from no auction. */
   outsideDescription: boolean;
+  /** Whether the card this tile is on carries *Cut not reviewed* (#2164) — the batch's answer, on the
+   * tile so the strip's one filter vocabulary can narrow to those cards (`scan-tile-filter.ts`). */
+  cutUnreviewed: boolean;
 }
 
 export interface ScanBatchData {
@@ -2767,6 +2860,9 @@ export interface ScanBatchData {
   /** When the last tile of this batch left `unidentified` (#567), or null while any is still
    * waiting. Read from the batch's sheets, which is where it is stamped. */
   doneAt: string | null;
+  /** *Cut not reviewed* (#2164): either sheet was cut from its detected boxes with no editor and
+   * has not been looked at since. */
+  cutUnreviewed: boolean;
 }
 
 export interface ScansData {
@@ -2800,6 +2896,7 @@ async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]
         error: true,
         sheetId: true,
         queuedAt: true,
+        commitDetectedCut: true,
       },
       orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
     }),
@@ -2817,6 +2914,7 @@ async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]
     label: row.label,
     error: row.error,
     sheetId: row.sheetId,
+    commitDetectedCut: row.commitDetectedCut,
     ahead: ahead.get(row.id) ?? null,
   }));
 }
@@ -2966,6 +3064,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         scanningProfileId: true,
         turnover: true,
         recutPending: true,
+        cutUnreviewed: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "asc" },
@@ -3115,6 +3214,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         back: null,
         tiles: [],
         doneAt: null,
+        cutUnreviewed: false,
       };
       batches.set(batchNo, b);
     }
@@ -3133,6 +3233,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       purged: s.purgedAt != null,
       scanningProfileId: s.scanningProfileId,
       turnover: asBackTurnover(s.turnover),
+      cutUnreviewed: s.cutUnreviewed,
     };
     const batch = batchOf(s.batchNo);
     if (data.side === "front") batch.front = data;
@@ -3141,13 +3242,15 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
     // (#587) is written the same way and read the same way.
     if (s.batchDoneAt) batch.doneAt = s.batchDoneAt.toISOString();
     if (s.label) batch.label = s.label;
+    if (s.cutUnreviewed) batch.cutUnreviewed = true;
     // The front's reading wins where a batch somehow holds two: the front is the sheet the cut is
     // proposed on and the one the collector is looking at when they correct the kind.
     if (isSheetKind(s.kind) && (data.side === "front" || batch.front == null)) batch.kind = s.kind;
   }
 
   for (const t of tiles) {
-    batchOf(t.batchNo).tiles.push({
+    const batch = batchOf(t.batchNo);
+    batch.tiles.push({
       id: t.id,
       position: t.position,
       state: (t.state as ScanTileState) ?? "unidentified",
@@ -3207,6 +3310,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       // undescribed. The lines are the whole parcel's, since the card is the whole parcel's too.
       outsideDescription:
         describedStampIds.size > 0 && t.item != null && !describedStampIds.has(t.item.stampId),
+      // Every sheet has been read by now, so the batch already says whether its cut is unreviewed.
+      cutUnreviewed: batch.cutUnreviewed,
     });
   }
 

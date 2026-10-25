@@ -7,6 +7,7 @@ import {
   matchesTileFilter,
   parseTileFilter,
   reachesFinishedBatches,
+  showsSetAsideBatches,
   tilesInView,
   type TileFilter,
   type TileFilterCounts,
@@ -80,6 +81,33 @@ describe("card-scan tile filter (#567, #597, #853)", () => {
   it("says when the strip is narrowed at all", () => {
     assert.equal(isNarrowed("all"), false);
     assert.equal(isNarrowed("discarded"), true);
+  });
+
+  it("narrows to the cards whose detected cut is not reviewed, every tile of them (#2164)", () => {
+    const tiles = [
+      { id: "t1", state: "unidentified", cutUnreviewed: true },
+      { id: "t2", state: "consumed", cutUnreviewed: true },
+      { id: "t3", state: "unidentified", cutUnreviewed: false },
+      { id: "t4", state: "discarded" },
+    ];
+    assert.deepEqual(
+      tilesInView(tiles, "unreviewed").map((t) => t.id),
+      ["t1", "t2"]
+    );
+    assert.equal(parseTileFilter("unreviewed"), "unreviewed");
+    // The chip counts cards and retires with them, as the others do with their tiles.
+    assert.equal(effectiveTileFilter("unreviewed", counts()), "all");
+    assert.equal(effectiveTileFilter("unreviewed", counts({ unreviewed: 2 })), "unreviewed");
+  });
+
+  it("brings the set-aside batches back for the discards and the unreviewed cuts only (#2164)", () => {
+    assert.equal(showsSetAsideBatches("discarded"), true);
+    // A card identified to its last tile can still carry the mark.
+    assert.equal(showsSetAsideBatches("unreviewed"), true);
+    // …without becoming a pull list: its batches fold and draw their states as usual.
+    assert.equal(reachesFinishedBatches("unreviewed"), false);
+    assert.equal(showsSetAsideBatches("waiting"), false);
+    assert.equal(showsSetAsideBatches("all"), false);
   });
 
   it("names one address-bar parameter for the whole choice (#844)", () => {

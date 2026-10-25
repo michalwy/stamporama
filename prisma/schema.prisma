@@ -59,6 +59,10 @@ model Collection {
   // choice for the next back: a collector who has moved to turning whole cards over turns every
   // card that way. Written whenever a back is added or its choice is changed.
   lastBackTurnover String @default("in_place")
+  // Whether card scans added here are cut from their detected boxes as soon as they are ready, with
+  // no cut editor (#2164) — the switch beside *Add card scans*, remembered per collection. Each
+  // upload takes it as it stood when the scan was added (`ScanUpload.commitDetectedCut`).
+  commitDetectedCuts Boolean @default(false)
   // How long this collection's closed offers keep their generated listing images (#577), holding
   // **exactly** what `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` holds — `off`/`never` for keep for
   // ever, `0` to purge at the next sweep, otherwise days — so one parser reads both and the two
@@ -4248,6 +4252,10 @@ model ScanSheet {
    * Set by the re-cut on the batch's sheets, cleared by this sheet's next commit. While it stands the
    * batch is not finished with, so the retention sweep cannot take the scan being cut. */
   recutPending   Boolean  @default(false)
+  /** Cut from its detected boxes with no editor (#2164), and not looked at since: the card shows
+   * *Cut not reviewed* while either sheet carries it. Cleared by this sheet's next commit by hand, by
+   * a re-cut of the batch, and by *The cut is fine*. */
+  cutUnreviewed  Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -4488,6 +4496,9 @@ model ScanUpload {
   /** How a back's backs were made (#1555), chosen beside the button and carried to the sheet at
    * finalize. Null on a front, and on a back sent without one, which takes the collection's last. */
   turnover       String?
+  /** Cut from its detected boxes as soon as it is ready, with no editor (#2164) — the collection's
+   * switch as it stood when the scan was added. */
+  commitDetectedCut Boolean @default(false)
   mime           String
   /** The size the client declared, checked against `MAX_UPLOAD_BYTES` before a byte is sent — a
    * scan too large is refused at the open rather than after 200 MB have crossed the wire. */

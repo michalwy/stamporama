@@ -119,6 +119,8 @@ export interface ScanUploadState {
   id: string;
   status: ScanUploadStatus;
   sheetId: string | null;
+  /** Added with *Commit detected cuts* on (#2164): the preparation cuts it, so no editor opens. */
+  commitDetectedCut?: boolean;
 }
 
 /**
@@ -128,14 +130,26 @@ export interface ScanUploadState {
  * Only those the page **saw** queued or preparing: a scan that was ready before the page was opened
  * waits as a card with *Review the front cut* and is reported in the notifications, rather than
  * throwing an editor over whatever the collector came to the page to do.
+ *
+ * **Never a scan added with *Commit detected cuts* on** (#2164): the preparation has already cut it
+ * from its detected boxes, and one it found nothing on waits for its cut as a card.
  */
 export function newlyPreparedSheets(
   watched: ReadonlySet<string>,
   uploads: readonly ScanUploadState[]
 ): string[] {
-  return uploads
-    .filter((u) => watched.has(u.id) && u.status === "done" && u.sheetId != null)
+  return newlyDoneUploads(watched, uploads)
+    .filter((u) => !u.commitDetectedCut)
     .map((u) => u.sheetId as string);
+}
+
+/** The uploads this page watched that have just become cards, whichever way they were cut — what
+ * tells the page to read the order again when a scan was cut in the background (#2164). */
+export function newlyDoneUploads<T extends ScanUploadState>(
+  watched: ReadonlySet<string>,
+  uploads: readonly T[]
+): T[] {
+  return uploads.filter((u) => watched.has(u.id) && u.status === "done" && u.sheetId != null);
 }
 
 /** A scan on its way to being a card, as the Card scans section draws it (#1567). */
