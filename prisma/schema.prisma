@@ -4519,16 +4519,24 @@ model ScanUpload {
   queuedAt       DateTime?
   /** The sheet a finished preparation made: how a page still open finds the card to cut. */
   sheetId        String?  @unique
+  /** A back uploaded together with its front (#2163): the front's upload, whose card it joins. The
+   * front's batch number exists only once the front is prepared, so it is written onto `batchNo` in
+   * that transaction, and the worker leaves the back queued while the front is still on its way.
+   * `SetNull`: a front discarded first leaves the back with no card, which its preparation says. */
+  frontUploadId  String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: SetNull)
   sheet      ScanSheet? @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  frontUpload ScanUpload?  @relation("ScanUploadBacks", fields: [frontUploadId], references: [id], onDelete: SetNull)
+  backUploads ScanUpload[] @relation("ScanUploadBacks")
 
   @@index([collectionId])
   @@index([purchaseId])
   @@index([updatedAt])
   @@index([status, queuedAt])
+  @@index([frontUploadId])
   @@map("scan_upload")
 }
 

@@ -157,6 +157,34 @@ describe("removing a batch's back scan (#1915)", () => {
     await rm(DATA_DIR, { recursive: true, force: true });
   });
 
+  it("refuses to cut a back before its front, and pairs it once the front is cut (#2163)", async () => {
+    const purchase = await createPurchase(userId, collectionId, {
+      currency: "EUR",
+      purchasedAt: "2026-02-01",
+    });
+    await createLot(userId, purchase.id, 100);
+    const purchaseId = purchase.id;
+    const front = await uploadSheet(userId, { purchaseId }, {
+      source: await card(FRONT),
+      mime: "image/png",
+      side: "front",
+    });
+    // A back sent with its front can be in before the front is cut.
+    const back = await uploadSheet(userId, { purchaseId }, {
+      source: await card(FRONT),
+      mime: "image/png",
+      side: "back",
+      batchNo: front.batchNo,
+      turnover: "in_place",
+    });
+    await assert.rejects(() => commitCut(userId, back.id, FRONT), /Cut the front of this card first/);
+    assert.equal(await prisma.scanTile.count({ where: { backSheetId: back.id } }), 0);
+
+    await commitCut(userId, front.id, FRONT);
+    const report = await commitCut(userId, back.id, FRONT);
+    assert.equal(report.paired, FRONT.length);
+  });
+
   it("takes the back off every tile and the copy, and leaves the front, its cut and its tiles", async () => {
     const { purchaseId, batchNo, frontSheetId, tileIds } = await cutBatch();
     const { backSheetId, report } = await addBack(purchaseId, batchNo, FRONT);

@@ -100,7 +100,15 @@ import {
   discardSheetUpload,
   retrySheetPreparation,
 } from "./upload-sheet-chunks";
-import { enqueueScans, onScanSent, useQueuedScans } from "./scan-upload-queue";
+import { enqueueCardPairs, enqueueScans, onScanSent, useQueuedScans } from "./scan-upload-queue";
+import { usePersistentString } from "./lot-view-prefs";
+import {
+  pairAlternating,
+  sortByFileName,
+  swapPair,
+  toggleNoBack,
+  type ScanPair,
+} from "@/lib/alternating-scan-pairs";
 import {
   isScanUploadPending,
   isScanUploadShown,
@@ -410,6 +418,13 @@ export function ScansCard({
   const [deletingScans, setDeletingScans] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /** How *Add card scans* takes the files chosen (#2163): each a front of its own card, or fronts
+   * and backs scanned alternately and paired by file name. Remembered for the collection, since a
+   * collector who scans both sides does it every sitting. */
+  const [addModeStored, setAddMode] = usePersistentString(`${ADD_MODE_KEY}:${collectionId}`, "fronts");
+  const addMode: AddMode = addModeStored === "alternating" ? "alternating" : "fronts";
+  /** The files waiting in the pairs list before anything uploads (#2163). */
+  const [pairingFiles, setPairingFiles] = useState<File[] | null>(null);
 
   const batches = data?.batches ?? [];
   /** Scans that did not become cards (#1567, #1568): could not be prepared, or never sent because
@@ -719,6 +734,39 @@ export function ScansCard({
     if (!open) setOpen(true);
   };
 
+  /**
+   * The files chosen or dropped on *Add card scans* — sent as fronts at once, or, scanned front and
+   * back alternately (#2163), shown as pairs first: a scan skipped at the scanner shifts every pair
+   * after it, and that is caught in the list rather than on thirty cards.
+   */
+  const addCardScans = (files: readonly File[]) => {
+    if (files.length === 0) return;
+    if (addMode === "alternating") setPairingFiles([...files]);
+    else upload(files, "front");
+  };
+
+  /** The pairs as the list left them (#2163): one card per front, its back right behind it, every
+   * back made the one way asked for the batch. Named as fronts chosen together are. */
+  const uploadPairs = (pairs: readonly ScanPair<File>[], turnover: BackTurnover) => {
+    setPairingFiles(null);
+    if (pairs.length === 0) return;
+    setError(null);
+    enqueueCardPairs({
+      collectionId,
+      purchaseId,
+      documentName,
+      pairs,
+      labels: batchLabelsForFiles(
+        newLabel,
+        pairs.map((p) => p.front.name)
+      ),
+      scanningProfileId: newProfileId,
+      turnover,
+    });
+    setNewLabel("");
+    if (!open) setOpen(true);
+  };
+
   /** A file of this order's batch is in the server's queue (#1568): watch it, so the editor opens on
    * it when it is ready, and read the order's scans again to draw it there. Subscribed only while the
    * section is on screen — a file sent while the collector is elsewhere is found as a scan being
@@ -745,18 +793,39 @@ export function ScansCard({
    * cut*. Every scan seen waiting is watched, so a reload or a visit elsewhere and back still opens
    * it when it is ready; one that was ready before the page was opened is not.
    */
-  /** Open the editor on the next ready card of the walk that is still uncut, if any. */
-  const openNextReady = () => {
-    while (readyToCut.current.length > 0) {
-      const sheetId = readyToCut.current.shift() as string;
-      const batch = batches.find((b) => b.front?.id === sheetId || b.back?.id === sheetId);
-      const sheet = batch?.front?.id === sheetId ? batch.front : batch?.back;
-      if (!batch || !sheet || sheet.cut) continue;
-      void openProposed(
-        editorSheetOf(batch, sheet),
-        sheet.side === "back" ? frontsAwaitingBack(batch) : null
-      );
-      return;
+  /**
+   * Open the editor on the next ready card of the walk that is still uncut, if any.
+   *
+   * **A back waits for its front** (#2163): sent together, the back can be ready while the front is
+   * still uncut, and cut first it would find nothing to pair with. It keeps its place in the walk and
+   * opens once the front is cut — `justCut` being that front's cut, which the batches read before it
+   * do not show yet.
+   */
+  const openNextReady = (justCut?: CutReport) => {
+    const waiting: string[] = [];
+    try {
+      while (readyToCut.current.length > 0) {
+        const sheetId = readyToCut.current.shift() as string;
+        const batch = batches.find((b) => b.front?.id === sheetId || b.back?.id === sheetId);
+        const sheet = batch?.front?.id === sheetId ? batch.front : batch?.back;
+        if (!batch || !sheet || sheet.cut) continue;
+        if (sheet.side === "back") {
+          const frontJustCut = justCut?.side === "front" && justCut.batchNo === batch.batchNo;
+          if (!frontJustCut && !batch.front?.cut) {
+            waiting.push(sheetId);
+            continue;
+          }
+          void openProposed(
+            editorSheetOf(batch, sheet),
+            frontJustCut ? justCut.frontWithoutBack.length : frontsAwaitingBack(batch)
+          );
+          return;
+        }
+        void openProposed(editorSheetOf(batch, sheet), null);
+        return;
+      }
+    } finally {
+      readyToCut.current = [...readyToCut.current, ...waiting];
     }
   };
 
@@ -819,8 +888,16 @@ export function ScansCard({
       setEditor(null);
       setReport(result.report);
       refresh();
+      // A front just cut whose back is already in (#2163) goes on to that back — the two sides of
+      // one card are one act, however the back arrived.
+      if (result.report.side === "front") {
+        const back = batches.find((b) => b.batchNo === result.report.batchNo)?.back;
+        if (back && !back.cut && !readyToCut.current.includes(back.id)) {
+          readyToCut.current = [back.id, ...readyToCut.current];
+        }
+      }
       // On to the next card of the batch that became ready meanwhile (#1568).
-      openNextReady();
+      openNextReady(result.report);
     });
   };
 
@@ -998,7 +1075,7 @@ export function ScansCard({
         if (!carriesFiles(e)) return;
         e.preventDefault();
         setDropping(false);
-        upload(Array.from(e.dataTransfer.files), "front");
+        addCardScans(Array.from(e.dataTransfer.files));
       }}
       style={{
         border: dropping
@@ -1167,13 +1244,28 @@ export function ScansCard({
             </select>
           </Tooltip>
         )}
+        {/* What the files chosen are (#2163): fronts, or fronts and backs scanned alternately. */}
+        <Tooltip content="Fronts only: each file is a card. Fronts and backs, alternating: the files sorted by name are front, back, front, back — the pairs are shown to check before anything uploads.">
+          <select
+            value={addMode}
+            onChange={(e) => setAddMode(e.target.value)}
+            aria-label="What the card scans being added are"
+            style={{ ...LABEL_INPUT_STYLE, width: "auto" }}
+          >
+            {ADD_MODES.map((m) => (
+              <option key={m} value={m}>
+                {ADD_MODE_LABEL[m]}
+              </option>
+            ))}
+          </select>
+        </Tooltip>
         {/* Several at once (#1568): each file a card of its own, in the order chosen. */}
         <UploadButton
           label="Add card scans"
           busy={detecting}
           busyLabel="Finding the stamps…"
           multiple
-          onFiles={(files) => upload(files, "front")}
+          onFiles={addCardScans}
         />
       </header>
 
@@ -1359,7 +1451,17 @@ export function ScansCard({
           lastBackTurnover={lastBackTurnover}
           backOnItsWay={
             queued.some(
-              (q) => q.side === "back" && q.batchNo === batch.batchNo && q.state !== "refused"
+              (q) =>
+                q.side === "back" &&
+                q.state !== "refused" &&
+                (q.batchNo === batch.batchNo ||
+                  // A back sent with its front (#2163) and still in this tab's queue: its card is
+                  // the one the front's upload became.
+                  (q.frontUploadId != null &&
+                    batch.front != null &&
+                    (data?.uploads ?? []).some(
+                      (u) => u.id === q.frontUploadId && u.sheetId === batch.front?.id
+                    )))
             ) ||
             uploadCards.some(
               (c) =>
@@ -1416,9 +1518,18 @@ export function ScansCard({
             busy={detecting}
             busyLabel="Finding the stamps…"
             multiple
-            onFiles={(files) => upload(files, "front")}
+            onFiles={addCardScans}
           />
         </div>
+      )}
+
+      {pairingFiles && (
+        <AlternatingPairsDialog
+          files={pairingFiles}
+          lastBackTurnover={lastBackTurnover}
+          onAdd={uploadPairs}
+          onClose={() => setPairingFiles(null)}
+        />
       )}
 
       {dialogTiles.length > 0 && (
@@ -2314,7 +2425,9 @@ function BatchSection({
             onFiles={([file]) => onUploadBack(file, newBackTurnover)}
           />
         )}
-        {open && batch.back && !batch.back.cut && (
+        {/* Not before the front is cut (#2163): a back sent with its front can be in first, and its
+            pieces are paired with the stamps cut from the front. */}
+        {open && batch.back && !batch.back.cut && batch.front?.cut && (
           <SmallButton
             // How many pieces the **front of the card** holds, never how many of them are on
             // screen (#863): since #647 this count is not a report but the thing that decides
@@ -2695,6 +2808,117 @@ const PRESSABLE_CHIP: React.CSSProperties = {
   alignItems: "center",
   gap: "0.25rem",
 };
+
+const ADD_MODE_KEY = "stamporama:scans:addMode";
+const ADD_MODES = ["fronts", "alternating"] as const;
+type AddMode = (typeof ADD_MODES)[number];
+const ADD_MODE_LABEL: Record<AddMode, string> = {
+  fronts: "Fronts only",
+  alternating: "Fronts and backs, alternating",
+};
+
+/**
+ * The pairs, before anything uploads (#2163): the files sorted by name, each front beside the file
+ * taken as its back. A back skipped at the scanner puts every pair after it one file off, so a front
+ * can be said to have no back — shifting the rest up — and a pair scanned back first can be swapped.
+ * How the backs were made is asked here once, for every card.
+ */
+function AlternatingPairsDialog({
+  files,
+  lastBackTurnover,
+  onAdd,
+  onClose,
+}: {
+  files: readonly File[];
+  lastBackTurnover: BackTurnover;
+  onAdd: (pairs: ScanPair<File>[], turnover: BackTurnover) => void;
+  onClose: () => void;
+}) {
+  const [order, setOrder] = useState<File[]>(() => sortByFileName(files));
+  const [noBack, setNoBack] = useState<ReadonlySet<File>>(new Set());
+  const [turnover, setTurnover] = useState<BackTurnover>(lastBackTurnover);
+  const pairs = pairAlternating(order, noBack);
+  const backs = pairs.filter((p) => p.back != null).length;
+  const cell: React.CSSProperties = {
+    padding: "0.375rem 0.5rem",
+    borderBottom: "1px solid var(--color-border)",
+    fontSize: "0.8125rem",
+    textAlign: "left",
+    overflowWrap: "anywhere",
+  };
+
+  return (
+    <DialogShell title="Fronts and backs" onClose={onClose} maxWidth="52rem">
+      <DialogBody>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+            Sorted by file name, each front followed by its back. Check the pairs before they are
+            uploaded.
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem" }}>
+            <span>How the backs are scanned</span>
+            <BackTurnoverSelect
+              value={turnover}
+              busy={false}
+              label="How the backs of these cards are scanned"
+              onChange={setTurnover}
+            />
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ color: "var(--color-text-muted)" }}>
+                <th style={{ ...cell, width: "3rem" }}>Card</th>
+                <th style={cell}>Front</th>
+                <th style={cell}>Back</th>
+                <th style={{ ...cell, width: "12rem" }} aria-label="Corrections" />
+              </tr>
+            </thead>
+            <tbody>
+              {pairs.map((pair, i) => (
+                <tr key={`${i}:${pair.front.name}`}>
+                  <td style={{ ...cell, color: "var(--color-text-muted)" }}>{i + 1}</td>
+                  <td style={cell}>{pair.front.name}</td>
+                  <td style={cell}>
+                    {pair.back ? pair.back.name : <Muted>No back</Muted>}
+                  </td>
+                  <td style={cell}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <TickBox
+                        state={noBack.has(pair.front) ? "on" : "off"}
+                        label={`${pair.front.name} has no back`}
+                        onToggle={() => setNoBack((s) => toggleNoBack(s, pair.front))}
+                      />
+                      <span>No back</span>
+                      {pair.back && (
+                        <SmallButton
+                          onClick={() => {
+                            const next = swapPair(order, noBack, pair);
+                            setOrder(next.order);
+                            setNoBack(next.noBack);
+                          }}
+                        >
+                          Swap
+                        </SmallButton>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </DialogBody>
+      <DialogActions
+        actionLabel={`Add ${pairs.length} ${pairs.length === 1 ? "card" : "cards"}${
+          backs > 0 ? `, ${backs} with a back` : ""
+        }`}
+        disabled={pairs.length === 0}
+        onCancel={onClose}
+        onAction={() => onAdd(pairs, turnover)}
+      />
+    </DialogShell>
+  );
+}
 
 /**
  * How a card's backs were made (#1555) — each stamp turned over in place, or the whole card turned

@@ -88,6 +88,8 @@ describe("the panel of scans being added (#2099)", () => {
   it("calls a scan by its card: a back by its batch, a front by its name", () => {
     assert.equal(scanCardTitle({ side: "back", batchNo: 4, label: "Klaser" }), "Back of batch 4");
     assert.equal(scanCardTitle({ side: "front", batchNo: 4, label: "Klaser" }), "New card · Klaser");
+    // A back sent with its front (#2163) has no batch until the front is a card.
+    assert.equal(scanCardTitle({ side: "back", batchNo: null, label: null }), "Back of a new card");
     assert.equal(scanCardTitle({ side: "front", batchNo: null, label: null }), "New card");
   });
 

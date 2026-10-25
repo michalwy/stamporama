@@ -129,11 +129,15 @@ describe("chunked card scan upload (#590)", () => {
   }
 
   /** Send every part of a file, without finalizing. */
-  async function sendParts(bytes: Buffer, opts: { side?: "front" | "back"; batchNo?: number } = {}) {
+  async function sendParts(
+    bytes: Buffer,
+    opts: { side?: "front" | "back"; batchNo?: number; frontUploadId?: string } = {}
+  ) {
     const opened = await openScanUpload(userId, { purchaseId }, {
       mime: "image/png",
       side: opts.side ?? "front",
       batchNo: opts.batchNo,
+      frontUploadId: opts.frontUploadId,
       totalBytes: bytes.byteLength,
     });
     for (let i = 0; i < opened.chunks; i++) {
@@ -336,6 +340,108 @@ describe("chunked card scan upload (#590)", () => {
     await assert.rejects(() => prepareScanUpload(opened.id));
     assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), sheetsBefore);
     await rm(path.join(DATA_DIR, "scan-uploads", opened.id), { recursive: true, force: true });
+  });
+
+  it("gives a back sent with its front the card the front becomes (#2163)", async () => {
+    const bytes = await card();
+    const front = await sendParts(bytes);
+    const back = await sendParts(bytes, { side: "back", frontUploadId: front.id });
+    await finalizeScanUpload(userId, front.id);
+    await finalizeScanUpload(userId, back.id);
+    assert.equal(
+      (await prisma.scanUpload.findUniqueOrThrow({ where: { id: back.id } })).batchNo,
+      null,
+      "no card until the front is prepared"
+    );
+
+    const frontSheet = await prepareNext(front.id);
+    const row = await prisma.scanUpload.findUniqueOrThrow({ where: { id: back.id } });
+    assert.equal(row.batchNo, frontSheet.batchNo, "written in the front's own transaction");
+
+    const backSheet = await prepareNext(back.id);
+    assert.equal(backSheet.batchNo, frontSheet.batchNo);
+    assert.equal(backSheet.side, "back");
+  });
+
+  it("holds a back while its front is still arriving, then prepares the front first (#2163)", async () => {
+    const bytes = await card();
+    const front = await sendParts(bytes);
+    const back = await sendParts(bytes, { side: "back", frontUploadId: front.id });
+    // The front's send failed part-way and the back went on ahead of it.
+    await finalizeScanUpload(userId, back.id);
+    assert.equal(await claimNextScanUpload(), null, "the back waits for its front");
+
+    await finalizeScanUpload(userId, front.id);
+    const frontSheet = await prepareNext(front.id);
+    const backSheet = await prepareNext(back.id);
+    assert.equal(backSheet.batchNo, frontSheet.batchNo);
+  });
+
+  it("says so when a back's front did not become a card, and joins it after a retry (#2163)", async () => {
+    const bytes = await card();
+    const front = await sendParts(bytes);
+    const back = await sendParts(bytes, { side: "back", frontUploadId: front.id });
+    await finalizeScanUpload(userId, front.id);
+    await finalizeScanUpload(userId, back.id);
+
+    const part = path.join(DATA_DIR, "scan-uploads", front.id, "part-000000");
+    const good = await readFile(part);
+    await writeFile(part, Buffer.alloc(good.byteLength));
+    await assert.rejects(() => prepareNext(front.id));
+
+    // The front failed, so the back takes its turn — and says why it has no card.
+    await assert.rejects(() => prepareNext(back.id), /Its front did not become a card/);
+    const failed = await prisma.scanUpload.findUniqueOrThrow({ where: { id: back.id } });
+    assert.equal(failed.status, "failed");
+    assert.equal(await stagingExists(back.id), true, "the back's parts are kept");
+
+    await writeFile(part, good);
+    await retryScanUpload(userId, front.id);
+    const frontSheet = await prepareNext(front.id);
+    await retryScanUpload(userId, back.id);
+    const backSheet = await prepareNext(back.id);
+    assert.equal(backSheet.batchNo, frontSheet.batchNo);
+  });
+
+  it("says a back has no card once its front was discarded (#2163)", async () => {
+    const bytes = await card();
+    const front = await sendParts(bytes);
+    const back = await sendParts(bytes, { side: "back", frontUploadId: front.id });
+    await abortScanUpload(userId, front.id);
+    assert.equal(
+      (await prisma.scanUpload.findUniqueOrThrow({ where: { id: back.id } })).frontUploadId,
+      null
+    );
+    await finalizeScanUpload(userId, back.id);
+    await assert.rejects(() => prepareNext(back.id), /Its front was discarded/);
+    await abortScanUpload(userId, back.id);
+  });
+
+  it("refuses a front's upload named anywhere but on a back of the same order (#2163)", async () => {
+    const bytes = await card();
+    const front = await sendParts(bytes);
+    const open = (input: { side: "front" | "back"; batchNo?: number; frontUploadId: string }, order = purchaseId) =>
+      openScanUpload(userId, { purchaseId: order }, {
+        mime: "image/png",
+        totalBytes: bytes.byteLength,
+        ...input,
+      });
+    await assert.rejects(() => open({ side: "front", frontUploadId: front.id }), ScanValidationError);
+    await assert.rejects(
+      () => open({ side: "back", batchNo: 1, frontUploadId: front.id }),
+      ScanValidationError
+    );
+    await assert.rejects(() => open({ side: "back", frontUploadId: "nope" }), ScanValidationError);
+    const otherOrder = await newOrder();
+    await assert.rejects(
+      () => open({ side: "back", frontUploadId: front.id }, otherOrder),
+      ScanValidationError
+    );
+    // A back of a back is not a card either.
+    const back = await sendParts(bytes, { side: "back", frontUploadId: front.id });
+    await assert.rejects(() => open({ side: "back", frontUploadId: back.id }), ScanValidationError);
+    await abortScanUpload(userId, back.id);
+    await abortScanUpload(userId, front.id);
   });
 
   it("raises no notification for a prepared card waiting to be cut (#1675)", async () => {
