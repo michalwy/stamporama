@@ -1,16 +1,16 @@
 /**
  * The **Attach existing copies…** picker's sort (#2147): catalogue number, copy number, date
- * added or catalogue value, each either way. Pure, so the dialog and the unit suite read one
- * definition; the picker is one unpaginated read, so the order is applied client-side over the
- * fetched rows, beside the filters (`attach-picker-filters.ts`).
+ * added or catalogue value, each either way. Pure, so the server read and the unit suite read one
+ * definition; the order is applied when the picker's list is read (#2179, `attach-picker-plan.ts`),
+ * before it is cut into pages, beside the filters (`attach-picker-filters.ts`).
  *
  * **Catalogue number is catalogue order**, not the catalogue number as text: area (the rail's
  * order), year, issue (as the Issues list orders them — by its catalogue sort key, then name),
  * then the stamp's place in the issue's tree, the order the issue's own page draws it in
  * (`flattenMemberTree`). A copy is placed by its stamp — a multi-stamp piece by its leading stamp,
  * which is what the row's area, year and issue already describe. The issue's key and the stamp's
- * place are read server-side into {@link AttachCatalogueOrder}; the area's rank is the client's,
- * which holds the tree.
+ * place are read into {@link AttachCatalogueOrder}; the area's rank is the rail's, read down the
+ * tree by {@link areaRailOrder}.
  *
  * A copy missing a key — no area, no year, no issue, no value — sorts **last in either
  * direction**, the rule `copy-sort.ts` already keeps for the lot views, so blanks never lead.
@@ -97,7 +97,7 @@ function compareCatalogue(
  * `copies` in the chosen order, without mutating the input. Every key ends on the copy number, so
  * two copies of one stamp — or two with no value — keep a fixed order between them.
  *
- * `areaOrder` is the area rail read down the page (`flattenAreaTree`); an area it does not hold
+ * `areaOrder` is the area rail read down the page ({@link areaRailOrder}); an area it does not hold
  * sorts with the copies of no area.
  */
 export function sortAttachableCopies<T extends AttachSortCopy>(
@@ -125,4 +125,27 @@ export function sortAttachableCopies<T extends AttachSortCopy>(
 
 export function isAttachSortKey(value: unknown): value is AttachSortKey {
   return typeof value === "string" && (ATTACH_SORT_KEYS as readonly string[]).includes(value);
+}
+
+/**
+ * The area rail read down the page: each area followed by its sub-areas, siblings in the order the
+ * tree lists them. The order `flattenAreaTree` draws the rail in, which the catalogue sort ranks an
+ * area by — kept here so the server read places areas exactly where the rail shows them.
+ */
+export function areaRailOrder(areas: readonly { id: string; parentId: string | null }[]): string[] {
+  const children = new Map<string | null, string[]>();
+  for (const a of areas) {
+    const list = children.get(a.parentId) ?? [];
+    list.push(a.id);
+    children.set(a.parentId, list);
+  }
+  const order: string[] = [];
+  const visit = (parentId: string | null) => {
+    for (const id of children.get(parentId) ?? []) {
+      order.push(id);
+      visit(id);
+    }
+  };
+  visit(null);
+  return order;
 }

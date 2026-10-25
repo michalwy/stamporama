@@ -3,8 +3,10 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
   allocateItemNumbers,
+  buildItemFilterWhere,
   dispositionFilterWhere,
-  listItemsPaginated,
+  getItemListItems,
+  readItemListKeys,
   listUnpricedItemIds,
   lotCopyFilterWhere,
   valuateItemsByIds,
@@ -52,8 +54,17 @@ import {
 import type { PurchaseExpenseData, PurchaseSupplyLineData } from "./purchases";
 import { formatUnitCost } from "./supply-stock";
 import { formatItemNo } from "./item-number";
-import type { AttachState } from "./attach-picker-filters";
-import type { AttachCatalogueOrder } from "./attach-picker-sort";
+import {
+  attachOnPurchase,
+  type AttachReadQuery,
+  type AttachState,
+} from "./attach-picker-filters";
+import { areaRailOrder, type AttachCatalogueOrder } from "./attach-picker-sort";
+import { planAttachPicker, type AttachPlan, type AttachYearFacet } from "./attach-picker-plan";
+import { readCollectionAreas } from "./areas";
+import { buildAreaVendorMaps } from "./area-vendor";
+import { loadIssuePrefixMap } from "./issue-prefix";
+import { catalogMatchKey } from "./catalog-number";
 import { flattenMemberTree } from "./issue-member-order";
 import { closedLotsMessage, summarizeCopiesMove } from "./copies-move";
 
@@ -714,10 +725,10 @@ export type AttachableCopy = ItemListItem & {
  * Where each copy's stamp stands in the catalogue (#2147), keyed by copy id: its issue's sort key
  * and its place in that issue's tree, read down the page as the issue's own page draws it. The
  * row's `issueId` and `stampId` already follow a multi-stamp piece's leading stamp, so the piece
- * sorts by it. Three reads over the issues and stamps of the page, whatever its size.
+ * sorts by it. Three reads over the issues and stamps of the copies, whatever their number.
  */
 async function readCatalogueOrder(
-  items: readonly ItemListItem[]
+  items: readonly { id: string; issueId: string | null; stampId: string }[]
 ): Promise<Map<string, AttachCatalogueOrder>> {
   const issueIds = [...new Set(items.flatMap((i) => (i.issueId ? [i.issueId] : [])))];
   const stampIds = [...new Set(items.map((i) => i.stampId))];
@@ -739,10 +750,12 @@ async function readCatalogueOrder(
             stamp: { select: { parentId: true } },
           },
         }),
-    prisma.stamp.findMany({
-      where: { id: { in: stampIds } },
-      select: { id: true, primaryCatalogSortKey: true },
-    }),
+    stampIds.length === 0
+      ? []
+      : prisma.stamp.findMany({
+          where: { id: { in: stampIds } },
+          select: { id: true, primaryCatalogSortKey: true },
+        }),
   ]);
   const issueKey = new Map(issues.map((i) => [i.id, i.primaryCatalogSortKey]));
   const stampKey = new Map(stamps.map((s) => [s.id, s.primaryCatalogSortKey]));
@@ -773,70 +786,153 @@ async function readCatalogueOrder(
   );
 }
 
-/** How many rows `listAttachableCopies` reads at a time — a chunk size, not a limit (#2156). */
-const ATTACHABLE_READ_PAGE = 1000;
+const NO_CATALOGUE_ORDER: AttachCatalogueOrder = {
+  issueSortKey: null,
+  memberRank: null,
+  stampSortKey: null,
+};
+
+/** How many copies one page of the attach picker carries (#2179). */
+export const ATTACHABLE_PAGE_SIZE = 50;
+
+/** What the attach picker asks of its list: the area rail and the state chips, and every other
+ * filter, the year, the search and the sort (#2179). Anything left out is no narrowing — the held
+ * copies in catalogue order. */
+export interface AttachableCopiesQuery extends Partial<AttachReadQuery> {
+  areaIds?: string[] | null;
+  states?: readonly AttachState[];
+}
+
+/** One page of the attach picker's list (#2179), with what the whole list holds: how many copies,
+ *  and how many per issued year over every filter but the year. */
+export interface AttachableCopiesPage {
+  items: AttachableCopy[];
+  nextCursor: string | null;
+  total: number;
+  yearFacets: AttachYearFacet[];
+}
+
+/**
+ * The copies the filters hold, in the chosen order, as ids (#2179). Every filter a `where` can say
+ * narrows the read itself; the search, the year and the order are applied to what it returns by
+ * `planAttachPicker`, over a narrow read of the keys they need, and nothing is enriched here.
+ * `onlyIds` restricts the read to those copies — the hidden-ticks count's question.
+ */
+async function planAttachableCopies(
+  ownerId: string,
+  lotId: string,
+  query: AttachableCopiesQuery,
+  onlyIds?: readonly string[]
+): Promise<AttachPlan & { collectionId: string; catalogueOrder: Map<string, AttachCatalogueOrder> | null }> {
+  const { collectionId } = await assertLotOwner(ownerId, lotId);
+  const where = await buildItemFilterWhere(collectionId, {
+    attachableToLotId: lotId,
+    holdingStates: query.states && query.states.length > 0 ? query.states : ["held"],
+    areaIds: query.areaIds ?? undefined,
+    conditionIds: query.conditionIds,
+    certificateStatusIds: query.certificateStatusIds,
+    formatIds: query.formatIds,
+    ...(onlyIds ? { ids: [...onlyIds] } : {}),
+  });
+  // A lot always belongs to a purchase, so *on a purchase* is *on a lot*.
+  const onPurchase = attachOnPurchase(query.purchase ?? []);
+  const keys = await readItemListKeys(
+    onPurchase === null ? where : { AND: [where, { lotId: onPurchase ? { not: null } : null }] }
+  );
+  const sortBy = query.sortBy ?? "catalogue";
+  const search = query.search ?? "";
+  // Each extra read only when its answer is asked for: the tree for the catalogue order and the
+  // search's catalogue keys, the issues for the catalogue order, the valuation for the value order.
+  const needsAreas = sortBy === "catalogue" || search.trim() !== "";
+  const [areas, prefixes, catalogueOrder, values] = await Promise.all([
+    needsAreas ? readCollectionAreas(collectionId) : [],
+    search.trim() ? loadIssuePrefixMap(collectionId) : undefined,
+    sortBy === "catalogue" ? readCatalogueOrder(keys) : null,
+    sortBy === "value" ? valuateItemsByIds(collectionId, keys.map((k) => k.id)) : null,
+  ]);
+  const { vendorMapFor } = buildAreaVendorMaps(areas, prefixes);
+  const candidates = keys.map((k) => ({
+    ...k,
+    value: { baseAmount: values?.get(k.id)?.baseAmount ?? null },
+    catalogueOrder: catalogueOrder?.get(k.id) ?? NO_CATALOGUE_ORDER,
+  }));
+  const plan = planAttachPicker(
+    candidates,
+    { year: query.year ?? null, search, sortBy, sortDir: query.sortDir ?? "asc" },
+    areaRailOrder(areas),
+    (c) => {
+      const vm = vendorMapFor(c.areaId, c.issueId);
+      return c.catalogNumbers.map((cn) => {
+        const v = vm.get(cn.catalogVendorId);
+        return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
+      });
+    }
+  );
+  return { ...plan, collectionId, catalogueOrder };
+}
 
 /** The copies an open lot could take on (#388): every copy in the collection that is not already
- * on it and not frozen into a closed lot's cost split. Unpaginated like the offer composition
- * picker it mirrors — the dialog filters client-side over an area/year scope the collector picks.
+ * on it and not frozen into a closed lot's cost split — **one page of them** (#2179), narrowed and
+ * ordered by everything the picker asks, with the list's total and its year facet.
  *
  * `states` picks which copies are read at all (#2121): the held ones by default, which is what
  * #388 offered, and the sold, traded and written-off ones on request — a copy that left before
  * its receipt was recorded still needs a cost, or its sale's profit stays incomplete (#2120,
- * #1875). */
+ * #1875).
+ *
+ * The whole matching set is ordered before it is cut — a narrow read of the keys the search, the
+ * year and the sort need — and only the page is enriched into rows. The dialog once read every
+ * copy in the area and narrowed them itself; a single capped read of that lost copies (#2156), and
+ * reading it all grew with the collection at every opening. */
 export async function listAttachableCopies(
   ownerId: string,
   lotId: string,
-  opts: {
-    areaIds?: string[] | null;
-    search?: string;
-    year?: number | "none";
-    states?: readonly AttachState[];
-  } = {}
-): Promise<AttachableCopy[]> {
-  const { collectionId } = await assertLotOwner(ownerId, lotId);
-  // Every page, not the first one (#2156): the dialog searches, facets and filters what this
-  // returns, so a row cut off here is a copy the picker says does not exist. One capped page,
-  // oldest first, dropped the newest held copies as soon as the sold ones were asked for beside
-  // them — the held read alone fitted, the union did not.
-  const items: ItemListItem[] = [];
-  let offset = 0;
-  for (;;) {
-    const page = await listItemsPaginated(ownerId, collectionId, {
-      attachableToLotId: lotId,
-      holdingStates: opts.states && opts.states.length > 0 ? opts.states : ["held"],
-      areaIds: opts.areaIds ?? undefined,
-      search: opts.search,
-      year: opts.year,
-      sortDir: "asc",
-      offset,
-      pageSize: ATTACHABLE_READ_PAGE,
-    });
-    items.push(...page.items);
-    if (page.nextCursor === null) break;
-    offset += ATTACHABLE_READ_PAGE;
-  }
+  query: AttachableCopiesQuery = {},
+  page: { offset?: number; pageSize?: number } = {}
+): Promise<AttachableCopiesPage> {
+  const plan = await planAttachableCopies(ownerId, lotId, query);
+  const offset = page.offset ?? 0;
+  const pageSize = page.pageSize ?? ATTACHABLE_PAGE_SIZE;
+  const pageIds = plan.ids.slice(offset, offset + pageSize);
+  const items = await getItemListItems(ownerId, plan.collectionId, pageIds);
   const soldIds = items.filter((i) => i.sold).map((i) => i.id);
-  const sales =
+  const [sales, catalogueOrder] = await Promise.all([
     soldIds.length === 0
       ? []
-      : await prisma.saleLineItem.findMany({
+      : prisma.saleLineItem.findMany({
           where: { itemId: { in: soldIds } },
           select: { itemId: true, saleLine: { select: { sale: { select: { id: true, saleNo: true } } } } },
-        });
+        }),
+    plan.catalogueOrder ?? readCatalogueOrder(items),
+  ]);
   const saleByItem = new Map(
     sales.map((s) => [s.itemId, { saleId: s.saleLine.sale.id, saleNo: s.saleLine.sale.saleNo }])
   );
-  const catalogueOrder = await readCatalogueOrder(items);
-  return items.map((item) => ({
-    ...item,
-    soldOn: saleByItem.get(item.id) ?? null,
-    catalogueOrder: catalogueOrder.get(item.id) ?? {
-      issueSortKey: null,
-      memberRank: null,
-      stampSortKey: null,
-    },
-  }));
+  return {
+    items: items.map((item) => ({
+      ...item,
+      soldOn: saleByItem.get(item.id) ?? null,
+      catalogueOrder: catalogueOrder.get(item.id) ?? NO_CATALOGUE_ORDER,
+    })),
+    nextCursor: offset + pageSize < plan.ids.length ? String(offset + pageSize) : null,
+    total: plan.ids.length,
+    yearFacets: plan.yearFacets,
+  };
+}
+
+/** How many of these ticked copies the picker's filters hold (#2179) — the rest are the ones the
+ * Attach button says are hidden (#1046). Asked of the server because a tick can be on a copy no
+ * page has loaded yet, and that copy is not hidden; read over the ticked copies alone. */
+export async function countAttachableAmong(
+  ownerId: string,
+  lotId: string,
+  query: AttachableCopiesQuery,
+  itemIds: readonly string[]
+): Promise<number> {
+  if (itemIds.length === 0) return 0;
+  // The order is not asked, so the cheapest key is sorted by.
+  const plan = await planAttachableCopies(ownerId, lotId, { ...query, sortBy: "copyNo" }, itemIds);
+  return plan.ids.length;
 }
 
 /** A copy that cannot be attached, with the reason a person can act on (#388). */

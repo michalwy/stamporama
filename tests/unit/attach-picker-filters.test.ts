@@ -3,64 +3,79 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_ATTACH_FILTERS,
   effectiveAttachStates,
-  matchesAttachFilters,
+  attachOnPurchase,
   parseAttachFilters,
+  parseAttachYear,
+  readAttachQuery,
   readAttachStates,
   serializeAttachFilters,
   toggleValue,
-  type AttachFilterCopy,
+  writeAttachQuery,
   type AttachPickerFilters,
 } from "../../src/lib/attach-picker-filters";
 
 // The Attach existing copies picker's own filters (#2121): condition, certificate and format with
-// their null sentinels, the purchase chips, and the state the server reads (#2120).
+// their null sentinels, the purchase chips, and the state (#2120) — all of them read by the server,
+// which the query string carries them to (#2179).
 
-const copy = (over: Partial<AttachFilterCopy> = {}): AttachFilterCopy => ({
-  conditionId: "mint",
-  certificateStatusId: null,
-  formatId: null,
-  purchase: null,
-  ...over,
-});
 const withFilters = (over: Partial<AttachPickerFilters>): AttachPickerFilters => ({
   ...DEFAULT_ATTACH_FILTERS,
   ...over,
 });
 
-describe("matchesAttachFilters (#2121)", () => {
-  it("passes every copy with no filter set", () => {
-    assert.ok(matchesAttachFilters(copy(), DEFAULT_ATTACH_FILTERS));
-    assert.ok(matchesAttachFilters(copy({ purchase: { id: "p" } }), DEFAULT_ATTACH_FILTERS));
+describe("the picker's query string (#2179)", () => {
+  it("carries every filter, the year, the search and the sort to the route and back", () => {
+    const params = new URLSearchParams();
+    writeAttachQuery(
+      params,
+      withFilters({
+        conditionIds: ["mint", "used"],
+        certificateStatusIds: ["none"],
+        formatIds: ["single", "pair"],
+        purchase: ["on"],
+        sortBy: "value",
+        sortDir: "desc",
+      }),
+      "1950",
+      "#809"
+    );
+    assert.deepEqual(readAttachQuery(params, params.get("search") ?? undefined), {
+      conditionIds: ["mint", "used"],
+      certificateStatusIds: ["none"],
+      formatIds: ["single", "pair"],
+      purchase: ["on"],
+      sortBy: "value",
+      sortDir: "desc",
+      year: 1950,
+      search: "#809",
+    });
   });
 
-  it("narrows by condition", () => {
-    const f = withFilters({ conditionIds: ["used"] });
-    assert.ok(!matchesAttachFilters(copy(), f));
-    assert.ok(matchesAttachFilters(copy({ conditionId: "used" }), f));
+  it("reads no year, no search and an unknown sort as every year, nothing typed and catalogue order", () => {
+    const params = new URLSearchParams();
+    writeAttachQuery(params, DEFAULT_ATTACH_FILTERS, null, "  ");
+    assert.equal(params.get("year"), null);
+    assert.equal(params.get("search"), null);
+    params.set("sort", "nonsense");
+    const read = readAttachQuery(params, undefined);
+    assert.equal(read.year, null);
+    assert.equal(read.search, "");
+    assert.equal(read.sortBy, "catalogue");
+    assert.equal(read.sortDir, "asc");
   });
 
-  it("reads No certificate and Single as values, alone or beside a real one", () => {
-    const none = withFilters({ certificateStatusIds: ["none"] });
-    assert.ok(matchesAttachFilters(copy(), none));
-    assert.ok(!matchesAttachFilters(copy({ certificateStatusId: "cert" }), none));
-    const both = withFilters({ certificateStatusIds: ["none", "cert"] });
-    assert.ok(matchesAttachFilters(copy({ certificateStatusId: "cert" }), both));
-
-    const single = withFilters({ formatIds: ["single"] });
-    assert.ok(matchesAttachFilters(copy(), single));
-    assert.ok(!matchesAttachFilters(copy({ formatId: "pair" }), single));
-    assert.ok(matchesAttachFilters(copy({ formatId: "pair" }), withFilters({ formatIds: ["pair"] })));
+  it("reads the no-year facet as its own value", () => {
+    assert.equal(parseAttachYear("none"), "none");
+    assert.equal(parseAttachYear("1950"), 1950);
+    assert.equal(parseAttachYear("abc"), null);
+    assert.equal(parseAttachYear(null), null);
   });
 
-  it("separates the copies on no purchase from those on one, and shows both with both or neither lit", () => {
-    const loose = copy();
-    const filed = copy({ purchase: { id: "p" } });
-    const none = withFilters({ purchase: ["none"] });
-    const on = withFilters({ purchase: ["on"] });
-    const both = withFilters({ purchase: ["none", "on"] });
-    assert.ok(matchesAttachFilters(loose, none) && !matchesAttachFilters(filed, none));
-    assert.ok(matchesAttachFilters(filed, on) && !matchesAttachFilters(loose, on));
-    assert.ok(matchesAttachFilters(loose, both) && matchesAttachFilters(filed, both));
+  it("narrows by purchase only when exactly one chip is lit", () => {
+    assert.equal(attachOnPurchase([]), null);
+    assert.equal(attachOnPurchase(["none", "on"]), null);
+    assert.equal(attachOnPurchase(["on"]), true);
+    assert.equal(attachOnPurchase(["none"]), false);
   });
 });
 

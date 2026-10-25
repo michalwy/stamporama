@@ -134,11 +134,16 @@ describe("attachItemsToLot (#388)", () => {
   const offeredUnder = async (states: State[]) =>
     new Set(
       (
-        await listAttachableCopies(userId, targetLotId, {
-          // The route's reading of the chips: none lit asks for every state.
-          states: states.length === 0 ? ["held", "gone", "disposed"] : states,
-        })
-      ).map((i) => i.id)
+        await listAttachableCopies(
+          userId,
+          targetLotId,
+          {
+            // The route's reading of the chips: none lit asks for every state.
+            states: states.length === 0 ? ["held", "gone", "disposed"] : states,
+          },
+          { pageSize: 100_000 }
+        )
+      ).items.map((i) => i.id)
     );
 
   after(async () => {
@@ -237,7 +242,7 @@ describe("attachItemsToLot (#388)", () => {
     const alreadyHere = await addCopy(targetLotId);
 
     const offered = new Set(
-      (await listAttachableCopies(userId, targetLotId)).map((i) => i.id)
+      (await listAttachableCopies(userId, targetLotId, {}, { pageSize: 100_000 })).items.map((i) => i.id)
     );
     assert.ok(offered.has(unlinked), "an unlinked copy is attachable");
     assert.ok(offered.has(onOpenLot), "a copy on another open lot is attachable (with consent)");
@@ -247,7 +252,7 @@ describe("attachItemsToLot (#388)", () => {
 
   it("reports the owning purchase on an offered copy, so the dialog can name what it leaves", async () => {
     const onOpenLot = await addCopy(otherOpenLotId);
-    const rows = await listAttachableCopies(userId, targetLotId);
+    const { items: rows } = await listAttachableCopies(userId, targetLotId, {}, { pageSize: 100_000 });
     const row = rows.find((r) => r.id === onOpenLot);
     assert.ok(row, "the copy is offered");
     assert.ok(row.purchase, "it carries its purchase (#387)");
@@ -263,7 +268,11 @@ describe("attachItemsToLot (#388)", () => {
     const kept = await addCopy(null);
 
     const ids = async (states?: ("held" | "gone" | "disposed")[]) =>
-      new Set((await listAttachableCopies(userId, targetLotId, { states })).map((i) => i.id));
+      new Set(
+        (
+          await listAttachableCopies(userId, targetLotId, { states }, { pageSize: 100_000 })
+        ).items.map((i) => i.id)
+      );
     const held = await ids();
     assert.ok(held.has(kept) && !held.has(written), "held is the default");
     const disposed = await ids(["disposed"]);
@@ -325,7 +334,7 @@ describe("attachItemsToLot (#388)", () => {
     const ofFirst = await copyOf(first.id);
     const ofVariant = await copyOf(variant.id);
 
-    const rows = await listAttachableCopies(userId, targetLotId);
+    const { items: rows } = await listAttachableCopies(userId, targetLotId, {}, { pageSize: 100_000 });
     const order = (id: string) => rows.find((r) => r.id === id)?.catalogueOrder;
     assert.deepEqual(order(ofFirst), {
       issueSortKey: "0000000100",

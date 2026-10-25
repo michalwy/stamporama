@@ -390,9 +390,9 @@ describe("sale profit and loss (#168)", () => {
     ).id;
 
     // Held is the picker's default and leaves it out; the sold state offers it, naming its sale.
-    const held = await listAttachableCopies(userId, lot);
+    const held = (await listAttachableCopies(userId, lot)).items;
     assert.ok(!held.some((r) => r.id === sold));
-    const gone = await listAttachableCopies(userId, lot, { states: ["gone"] });
+    const gone = (await listAttachableCopies(userId, lot, { states: ["gone"] })).items;
     const row = gone.find((r) => r.id === sold);
     assert.ok(row, "the sold copy is offered under the sold state");
     assert.equal(row.soldOn?.saleId, saleId);

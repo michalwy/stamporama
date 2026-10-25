@@ -9,10 +9,10 @@
  * where **none lit means every value**, so the picker never opens on an empty list because of a
  * chip nobody can see the meaning of.
  *
- * The state is the one filter resolved on the **server**: it decides which rows are fetched at all,
- * and a picker that fetched every sold and written-off copy to show the held ones would spend its
- * page on rows it hides. The other four narrow the fetched rows client-side, as the year facet and
- * the search already do.
+ * **Every filter is resolved on the server** (#2179), with the year, the search and the sort: the
+ * dialog sends them on the query string ({@link writeAttachQuery}, {@link readAttachQuery}) and
+ * receives one page of the narrowed, ordered list at a time, rather than every copy in the area to
+ * narrow in the browser.
  *
  * The sort (#2147, `attach-picker-sort.ts`) is stored in the same value, so the picker reopens in
  * the order it was left in, as it does with the filters it was left with.
@@ -129,31 +129,64 @@ export function toggleValue<T extends string>(list: readonly T[], value: T): T[]
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-/** One multi-select axis whose null is a value under `sentinel`. Empty is no filter. */
-function matchesNullable(id: string | null, ids: readonly string[], sentinel: string): boolean {
-  if (ids.length === 0) return true;
-  return ids.includes(id ?? sentinel);
+/** The year facet's value: one year, `"none"` for the copies of no year, or null for every year. */
+export type AttachYear = number | "none" | null;
+
+/** Everything the picker narrows and orders its list by, beside the area rail and the state. */
+export interface AttachReadQuery {
+  conditionIds: string[];
+  certificateStatusIds: string[];
+  formatIds: string[];
+  purchase: AttachPurchaseValue[];
+  sortBy: AttachSortKey;
+  sortDir: AttachSortDir;
+  year: AttachYear;
+  search: string;
 }
 
-/** The fields of a copy the client-side filters read. */
-export interface AttachFilterCopy {
-  conditionId: string;
-  certificateStatusId: string | null;
-  formatId: string | null;
-  purchase: { id: string } | null;
+/** The year as the facet stores it (`"1950"`, `"none"`, or null) read as a filter value. */
+export function parseAttachYear(raw: string | null | undefined): AttachYear {
+  if (raw === "none") return "none";
+  return raw && /^\d+$/.test(raw) ? parseInt(raw, 10) : null;
 }
 
-/** Whether a fetched copy passes the client-side filters — every axis but the state, which the
- *  server has already applied. */
-export function matchesAttachFilters(copy: AttachFilterCopy, filters: AttachPickerFilters): boolean {
-  if (filters.conditionIds.length > 0 && !filters.conditionIds.includes(copy.conditionId)) {
-    return false;
-  }
-  if (!matchesNullable(copy.certificateStatusId, filters.certificateStatusIds, "none")) return false;
-  if (!matchesNullable(copy.formatId, filters.formatIds, "single")) return false;
-  if (filters.purchase.length === 1) {
-    const onOne = copy.purchase != null;
-    if (filters.purchase[0] === "on" ? !onOne : onOne) return false;
-  }
-  return true;
+/** Put the picker's filters, year, search and sort on a query string (#2179). The state and the
+ *  area go on beside them, as they always have. */
+export function writeAttachQuery(
+  params: URLSearchParams,
+  filters: AttachPickerFilters,
+  year: string | null,
+  search: string
+): void {
+  for (const id of filters.conditionIds) params.append("condition", id);
+  for (const id of filters.certificateStatusIds) params.append("certificate", id);
+  for (const id of filters.formatIds) params.append("format", id);
+  for (const value of filters.purchase) params.append("purchase", value);
+  params.set("sort", filters.sortBy);
+  params.set("dir", filters.sortDir);
+  const y = parseAttachYear(year);
+  if (y !== null) params.set("year", String(y));
+  if (search.trim()) params.set("search", search);
+}
+
+/** {@link writeAttachQuery} read back. An unrecognised sort is catalogue order, ascending; the
+ *  search is the caller's to trim (the route reads it through `readSearchParam`). */
+export function readAttachQuery(sp: URLSearchParams, search: string | undefined): AttachReadQuery {
+  const sortBy = sp.get("sort");
+  return {
+    conditionIds: sp.getAll("condition").filter(Boolean),
+    certificateStatusIds: sp.getAll("certificate").filter(Boolean),
+    formatIds: sp.getAll("format").filter(Boolean),
+    purchase: oneOf(sp.getAll("purchase"), ATTACH_PURCHASE_VALUES),
+    sortBy: isAttachSortKey(sortBy) ? sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
+    sortDir: sp.get("dir") === "desc" ? "desc" : "asc",
+    year: parseAttachYear(sp.get("year")),
+    search: search ?? "",
+  };
+}
+
+/** The purchase chips as a narrowing: true for the copies on a purchase, false for those on none,
+ *  null when both or neither chip is lit. */
+export function attachOnPurchase(purchase: readonly AttachPurchaseValue[]): boolean | null {
+  return purchase.length === 1 ? purchase[0] === "on" : null;
 }

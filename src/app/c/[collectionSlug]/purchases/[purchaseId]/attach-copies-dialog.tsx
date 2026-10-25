@@ -2,7 +2,12 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import {
   PICKER_DIALOG_HEIGHT,
   DialogShell,
@@ -13,37 +18,26 @@ import {
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
-import type { AttachableCopy } from "@/lib/lots";
+import type { AttachableCopiesPage, AttachableCopy } from "@/lib/lots";
 import {
   ATTACH_PURCHASE_LABEL,
   ATTACH_PURCHASE_VALUES,
   ATTACH_STATES,
   ATTACH_STATE_LABEL,
   effectiveAttachStates,
-  matchesAttachFilters,
   parseAttachFilters,
   serializeAttachFilters,
   toggleValue,
+  writeAttachQuery,
   type AttachPickerFilters,
-  type AttachState,
 } from "@/lib/attach-picker-filters";
-import {
-  ATTACH_SORT_KEYS,
-  ATTACH_SORT_LABEL,
-  isAttachSortKey,
-  sortAttachableCopies,
-} from "@/lib/attach-picker-sort";
-import { catalogMatchKey } from "@/lib/catalog-number";
-import { copyMatchesSearch } from "@/lib/copy-search";
-import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
+import { ATTACH_SORT_KEYS, ATTACH_SORT_LABEL, isAttachSortKey } from "@/lib/attach-picker-sort";
+import { hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { summarizeRelink, untickOrder, type TickedCopy } from "@/lib/attach-relink";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
-import {
-  flattenAreaTree,
-  resolveAreaFilterIds,
-} from "@/app/c/[collectionSlug]/shared/area-helpers";
+import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SortControl } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import {
@@ -67,6 +61,9 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { FILTER_WIDTH } from "@/app/c/[collectionSlug]/inventory/copies-filter-controls";
+import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -131,34 +128,74 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
-/** The copies this lot could take on (#388). Unpaginated — the dialog scopes by area/year and
- * filters the rest client-side, exactly as the offer composition picker does. The state (#2121) is
- * the one filter sent to the server, since it decides which copies are read at all. */
+/** The copies this lot could take on (#388), a page at a time (#2179). Everything the picker
+ * narrows and orders by — the area rail, the state chips, the other filters, the year, the search
+ * and the sort — travels on `query` and is applied where the copies are read; each page carries the
+ * list's total and its year facet. */
 function useAttachableCopies(
   collectionId: string,
   lotId: string,
   areaIds: string[] | null,
-  states: AttachState[],
+  query: string,
   areaSelection: AreaSelection
 ) {
-  return useQuery<AttachableCopy[]>({
-    queryKey: ["purchases", collectionId, "attachable", lotId, areaIds, states] as const,
+  return useInfiniteQuery<
+    AttachableCopiesPage,
+    Error,
+    InfiniteData<AttachableCopiesPage, string | null>,
+    readonly unknown[],
+    string | null
+  >({
+    queryKey: ["purchases", collectionId, "attachable", lotId, areaIds, query] as const,
     // An area added from the rail's `＋` must not blank the list the collector is ticking in (#977).
-    ...keepRowsAcrossTreeChange<AttachableCopy[]>(areaSelection, [
+    ...keepRowsAcrossTreeChange<InfiniteData<AttachableCopiesPage, string | null>>(areaSelection, [
       "purchases",
       collectionId,
       "attachable",
       lotId,
+      query,
     ]),
-    queryFn: async () => {
-      const params = new URLSearchParams();
+    initialPageParam: null,
+    getNextPageParam: (last) => last.nextCursor,
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams(query);
       for (const id of areaIds ?? []) params.append("areaId", id);
-      for (const state of states) params.append("state", state);
+      if (pageParam) params.set("cursor", pageParam);
       const res = await fetch(
         `/api/collections/${collectionId}/purchases/lots/${lotId}/attachable-copies?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to load copies");
-      return (await res.json()).items;
+      return res.json();
+    },
+  });
+}
+
+/** How many of `ids` — ticks on copies no loaded page holds — the picker's filters hold (#2179).
+ * Such a tick is hidden only if the filters leave its copy out; one further down the list, not yet
+ * scrolled to, is not. Asked of the server, which is where the filters are applied. */
+function useTicksInFilter(
+  collectionId: string,
+  lotId: string,
+  areaIds: string[] | null,
+  query: string,
+  ids: string[]
+) {
+  return useQuery<number>({
+    queryKey: ["purchases", collectionId, "attachable", lotId, "ticked", areaIds, query, ids] as const,
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const params = new URLSearchParams(query);
+      for (const id of areaIds ?? []) params.append("areaId", id);
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/lots/${lotId}/attachable-copies?${params.toString()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to count ticked copies");
+      return (await res.json()).matching;
     },
   });
 }
@@ -175,7 +212,9 @@ function useAttachableCopies(
  * and whether it is still held — the copies that have been sold or written off are offered too
  * (#2120), because a copy that left before its receipt was recorded still needs a cost. Beside them,
  * the sort (#2147): catalogue order by default, so the copies come in the order a receipt or an album
- * lists them. Filters and sort are remembered per collection, as the area and year are.
+ * lists them. Filters and sort are remembered per collection, as the area and year are. All of them
+ * — with the area, the year and the search — are applied where the copies are read, and the list
+ * arrives a page at a time as it is scrolled (#2179), so opening it costs the same on any collection.
  *
  * A copy that already belongs to **another** purchase is offered but never moved silently — the
  * footer names the orders being left and the move has to be confirmed, because reassigning a copy
@@ -249,41 +288,38 @@ export function AttachCopiesDialog({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: copies = [], isLoading } = useAttachableCopies(collectionId, lotId, areaIds, states, {
-    areaId,
-    includeSubAreas,
-  });
+  // The search is sent once typing pauses: every keystroke would otherwise be a read.
+  const debouncedSearch = useDebouncedValue(search);
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    for (const state of states) params.append("state", state);
+    writeAttachQuery(params, filters, year, debouncedSearch);
+    return params.toString();
+  }, [states, filters, year, debouncedSearch]);
+  const {
+    data,
+    isLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useAttachableCopies(collectionId, lotId, areaIds, query, { areaId, includeSubAreas });
+  const visibleCopies = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+  // Counted where the copies are read, over the current filters (#2179): what the list holds, not
+  // what has been loaded of it.
+  const yearFacets = data?.pages[0]?.yearFacets ?? [];
+  // Whether anything beyond the area and the state narrows the list — what tells an empty list
+  // that matches nothing from one with nothing to offer.
+  const narrowed =
+    debouncedSearch.trim() !== "" ||
+    year !== null ||
+    filters.conditionIds.length > 0 ||
+    filters.certificateStatusIds.length > 0 ||
+    filters.formatIds.length > 0 ||
+    filters.purchase.length === 1;
+  const loadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
-  const areaOrder = useMemo(() => flattenAreaTree(areas).map(({ area }) => area.id), [areas]);
-
-  const yearFacets = useMemo(() => {
-    const counts = new Map<number | null, number>();
-    for (const c of copies) counts.set(c.issuedYear, (counts.get(c.issuedYear) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([y, count]) => ({ year: y, count }))
-      .sort((a, b) => (a.year === null ? 1 : b.year === null ? -1 : a.year - b.year));
-  }, [copies]);
-
-  const visibleCopies = useMemo(() => {
-    const raw = search.trim();
-    const y = year === "none" ? "none" : year ? Number(year) : null;
-    const matching = copies.filter((c) => {
-      if (!matchesAttachFilters(c, filters)) return false;
-      if (y === "none" && c.issuedYear !== null) return false;
-      if (typeof y === "number" && c.issuedYear !== y) return false;
-      // The one copy search a picker runs (#2136): `#123` is that copy alone, anything else its
-      // stamp, issue, location ref, catalogue number or — bare — its own number.
-      return copyMatchesSearch(c, raw, () => {
-        const vm = vendorMapFor(c.areaId, c.issueId);
-        return c.catalogNumbers.map((cn) => {
-          const v = vm.get(cn.catalogVendorId);
-          return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
-        });
-      });
-    });
-    // Re-sorting reorders the rows and nothing else: a tick is keyed by copy, never by position.
-    return sortAttachableCopies(matching, filters.sortBy, filters.sortDir, areaOrder);
-  }, [copies, filters, year, search, vendorMapFor, areaOrder]);
 
   function toggle(item: ItemListItem) {
     setSelected((prev) => {
@@ -294,7 +330,10 @@ export function AttachCopiesDialog({
     });
   }
 
-  const allVisibleIds = visibleCopies.map((c) => c.id);
+  // *All* ticks the rows **loaded so far** and says so (#2179), as the Offers list's does: the rest
+  // of the list has not been read, and a tick on a copy nobody has seen is not the collector's.
+  // Scrolling further and ticking again takes the rest.
+  const allVisibleIds = useMemo(() => visibleCopies.map((c) => c.id), [visibleCopies]);
   const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id));
   function toggleAll(on: boolean) {
     setSelected((prev) => {
@@ -310,10 +349,28 @@ export function AttachCopiesDialog({
   const selectedIds = useMemo(() => [...selected.keys()], [selected]);
 
   // A picker submits the whole selection and says how many rows its filters are hiding (#1046).
-  // The area rail and the state are resolved server-side and the rest client-side, so what is
-  // subtracted is the rows on screen rather than any one filter.
-  const hiddenTicks = countHiddenTicks(selected.keys(), new Set(allVisibleIds));
-  const hiddenNote = hiddenTicksSuffix(hiddenTicks);
+  // A tick on a loaded row is in view; one on a row no page holds is hidden only if the filters
+  // leave it out, which the server answers — it may simply be further down the list (#2179).
+  const unloadedTicks = useMemo(() => {
+    const loaded = new Set(allVisibleIds);
+    return selectedIds.filter((id) => !loaded.has(id)).sort();
+  }, [selectedIds, allVisibleIds]);
+  const { data: unloadedInFilter } = useTicksInFilter(
+    collectionId,
+    lotId,
+    areaIds,
+    query,
+    unloadedTicks
+  );
+  // The count is known once the list and the answer about its unloaded ticks are both in; until
+  // then the last known count stands, so the button does not flicker while a page or a filter loads.
+  const freshHidden =
+    data && (unloadedTicks.length === 0 || unloadedInFilter !== undefined)
+      ? Math.max(0, unloadedTicks.length - (unloadedInFilter ?? 0))
+      : null;
+  const [settledHidden, setSettledHidden] = useState(0);
+  if (freshHidden !== null && freshHidden !== settledHidden) setSettledHidden(freshHidden);
+  const hiddenNote = hiddenTicksSuffix(freshHidden ?? settledHidden);
 
   // The selected copies that would be taken off another purchase — read off the **selection**, so a
   // tick made under an area the rail has since left is still counted and its order still named
@@ -388,26 +445,35 @@ export function AttachCopiesDialog({
               gap: "0.75rem",
             }}
           >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-secondary)",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                cursor: "pointer",
-              }}
+            <Tooltip
+              content={
+                allSelected
+                  ? "Deselect all"
+                  : `Select the ${visibleCopies.length} ${visibleCopies.length === 1 ? "copy" : "copies"} loaded so far`
+              }
             >
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(e) => toggleAll(e.target.checked)}
-                disabled={visibleCopies.length === 0}
-              />
-              All
-            </label>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-secondary)",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                  disabled={visibleCopies.length === 0}
+                  aria-label="Select all loaded copies"
+                />
+                All
+              </label>
+            </Tooltip>
             <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -417,11 +483,12 @@ export function AttachCopiesDialog({
             />
           </div>
 
-          {/* The picker's own filters (#2121). The state chips decide which copies are read at
-              all — the held ones by default, the sold, traded and written-off ones for a receipt
-              recorded after they left (#2120); the purchase chips separate the copies on no
-              purchase from those already filed against one. Neither set lit is every value. The
-              sort closes the row (#2147), the Copies list's control, remembered with the filters. */}
+          {/* The picker's own filters (#2121), applied where the copies are read (#2179). The state
+              chips decide which copies are offered — the held ones by default, the sold, traded and
+              written-off ones for a receipt recorded after they left (#2120); the purchase chips
+              separate the copies on no purchase from those already filed against one. Neither set
+              lit is every value. The sort closes the row (#2147), the Copies list's control,
+              remembered with the filters. */}
           <div
             style={{
               padding: "0.5rem 1rem",
@@ -511,7 +578,7 @@ export function AttachCopiesDialog({
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
-                {copies.length === 0
+                {!narrowed
                   ? "No copies available to attach. A copy already on this lot, or on a lot that has been closed, is not offered — reopen that lot first. Sold and written-off copies are under their own chips."
                   : "No copies match your filter."}
               </p>
@@ -559,6 +626,11 @@ export function AttachCopiesDialog({
                 );
               })
             )}
+            <InfiniteScrollSentinel
+              onLoadMore={loadMore}
+              hasMore={!!hasNextPage}
+              isLoading={isFetchingNextPage}
+            />
           </div>
         </div>
       </div>
