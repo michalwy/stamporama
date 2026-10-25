@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition, type CSSProperties, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DialogShell, DialogBody, DialogActions, ConfirmDialog, LabelWithError } from "@/app/dialog-shell";
@@ -11,6 +12,8 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { PhotoLightbox, THUMB_OBJECT_FIT, ThumbPreview } from "@/app/photo-viewer";
 import { useToast } from "@/app/toast-provider";
+import { useEscapeLayer } from "@/app/escape-stack";
+import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { formatInstant, fromLocalInputValue, toLocalInputValue } from "../auctions/auction-format";
 import { formatEntityNo } from "@/lib/quick-jump";
 import {
@@ -24,10 +27,15 @@ import type { ConversationEntryData, ConversationLogView } from "@/lib/conversat
 import type { ConversationAttachmentData } from "@/lib/conversation-attachments";
 import type { ConversationActionState } from "@/app/actions/conversation-log";
 
-// The *Conversation* card (#2149, ADR-0073): the log of what was said with a buyer. One component for
+// The *Conversation* panel (#2149, ADR-0073): the log of what was said with a buyer. One component for
 // a sale's screen — its entries, and on a switch the buyer's whole history — and a contact's page,
 // where every entry with them is listed with the sale it names. The collector adds, corrects and
 // deletes entries here; the Assistant writes them through the agent API, and its entries say so.
+//
+// It was a card at the foot of the page, and a longer exchange made the page one long scroll (#2153).
+// Now a *Conversation (N)* button in the record's header opens it at the side, over the page: a fixed
+// share of the window, the full height, scrolling on its own, so the sale and what was said about it
+// are read together and nothing under it moves. It closes with its ✕ or Escape.
 //
 // An entry's files (#2150) — pictures and PDFs — are shown under it: a picture as a thumbnail that
 // enlarges in the shared lightbox, a PDF as its name; a PDF opens in a new tab, as the file itself.
@@ -67,6 +75,47 @@ const ADD_BUTTON: CSSProperties = {
 
 const FIELD_GAP: CSSProperties = { marginTop: "0.875rem" };
 
+/** Over the page and the scan-uploads panel (90), under the dialogs opened from it (100). */
+const PANEL_Z_INDEX = 95;
+
+const PANEL: CSSProperties = {
+  position: "fixed",
+  top: 0,
+  right: 0,
+  bottom: 0,
+  width: "36vw",
+  minWidth: "26rem",
+  zIndex: PANEL_Z_INDEX,
+  display: "flex",
+  flexDirection: "column",
+  background: "var(--color-bg-elevated)",
+  borderLeft: "1px solid var(--color-border)",
+  boxShadow: "-0.5rem 0 1.5rem rgb(0 0 0 / 0.12)",
+};
+
+const PANEL_ROW: CSSProperties = {
+  padding: "0.75rem 1.25rem",
+  display: "flex",
+  alignItems: "center",
+  gap: "0.625rem",
+  flexWrap: "wrap",
+};
+
+const CLOSE_BUTTON: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0.25rem",
+  border: "none",
+  borderRadius: "0.375rem",
+  background: "transparent",
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
+};
+
+const SALE_PANEL_OPEN_KEY = "stamporama:conversation-panel:sale";
+const CONTACT_PANEL_OPEN_KEY = "stamporama:conversation-panel:contact";
+
 export const conversationKeys = {
   all: (collectionId: string) => ["conversation", collectionId] as const,
   log: (collectionId: string, contactId: string, saleId: string | null) =>
@@ -92,7 +141,7 @@ type Dialog =
   | { kind: "delete"; entry: ConversationEntryData }
   | { kind: "removeFile"; attachment: ConversationAttachmentData };
 
-/** Where the card reads an attachment's bytes; `thumb` is a picture's thumbnail. */
+/** Where the panel reads an attachment's bytes; `thumb` is a picture's thumbnail. */
 export function conversationAttachmentUrl(collectionId: string, attachmentId: string, thumb = false): string {
   return `/api/collections/${collectionId}/conversation-attachments/${attachmentId}${thumb ? "?variant=thumb" : ""}`;
 }
@@ -110,7 +159,7 @@ async function uploadAttachment(collectionId: string, entryId: string, file: Fil
   throw new Error(body?.error ?? `"${file.name}" could not be attached.`);
 }
 
-interface ConversationLogCardProps {
+interface ConversationButtonProps {
   collectionId: string;
   collectionSlug: string;
   /** The buyer whose log this is. */
@@ -120,7 +169,46 @@ interface ConversationLogCardProps {
   saleId?: string;
 }
 
-export function ConversationLogCard({ collectionId, collectionSlug, contactId, saleId }: ConversationLogCardProps) {
+/**
+ * *Conversation (N)* in a record's header (#2153), and the panel it opens at the side. N is what the
+ * panel opens on — this sale's entries on a sale, every entry on a contact — and a log with none
+ * reads plain *Conversation*. Whether the panel was left open is remembered, one flag for sales and
+ * one for contacts, so moving to the next sale finds it open again.
+ */
+export function ConversationButton({
+  buttonStyle,
+  ...props
+}: ConversationButtonProps & { buttonStyle: CSSProperties }) {
+  const { collectionId, contactId, saleId } = props;
+  const [open, setOpen] = usePersistedFlag(saleId ? SALE_PANEL_OPEN_KEY : CONTACT_PANEL_OPEN_KEY);
+  const { data } = useConversationLog(collectionId, contactId, saleId ?? null);
+  const count = data?.total ?? 0;
+
+  return (
+    <>
+      <Tooltip content="What was said with the buyer — opens at the side of the page">
+        <button type="button" aria-pressed={open} onClick={() => setOpen(!open)} style={buttonStyle}>
+          <Icon name="conversation" size="sm" /> {count > 0 ? `Conversation (${count})` : "Conversation"}
+        </button>
+      </Tooltip>
+      {/* `open` is false until hydration, so `document` is there whenever this runs. Keyed by the
+          record, so the next sale opens on its own entries rather than the last one's switch. */}
+      {open &&
+        createPortal(
+          <ConversationPanel key={`${contactId}:${saleId ?? ""}`} {...props} onClose={() => setOpen(false)} />,
+          document.body
+        )}
+    </>
+  );
+}
+
+function ConversationPanel({
+  collectionId,
+  collectionSlug,
+  contactId,
+  saleId,
+  onClose,
+}: ConversationButtonProps & { onClose: () => void }) {
   const [wholeHistory, setWholeHistory] = useState(false);
   const shownSaleId = saleId && !wholeHistory ? saleId : null;
   const { data, isError } = useConversationLog(collectionId, contactId, shownSaleId);
@@ -134,6 +222,12 @@ export function ConversationLogCard({ collectionId, collectionSlug, contactId, s
   const [uploading, setUploading] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<{ entryId: string; index: number } | null>(null);
+  // An entry's `⋮` menu keeps its own Escape listener; while one is up the panel steps out of the
+  // escape stack, or one Escape would close the menu and the panel under it (#361). It stays out
+  // while a dialog or the lightbox it opened is up too: the menu closing as *Edit entry* opens its
+  // dialog would otherwise put the panel back on the stack above that dialog.
+  const [openMenus, setOpenMenus] = useState<ReadonlySet<string>>(new Set());
+  useEscapeLayer(onClose, openMenus.size === 0 && dialog.kind === "none" && viewing === null);
 
   async function attachFiles(entryId: string, files: File[]) {
     setUploadError(null);
@@ -183,113 +277,124 @@ export function ConversationLogCard({ collectionId, collectionSlug, contactId, s
     : [];
 
   return (
-    <section
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.75rem",
-        background: "var(--color-bg-elevated)",
-      }}
-    >
-      <div
-        style={{
-          padding: "0.75rem 1.25rem",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.625rem",
-          borderBottom: entries.length > 0 ? "1px solid var(--color-border)" : undefined,
-        }}
-      >
-        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>Conversation</span>
-        {data && <span style={CHIP}>{total}</span>}
-        {uploading > 0 && <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>Uploading…</span>}
-        {saleId && (
-          <span style={{ display: "flex", gap: "0.375rem" }}>
-            <FilterChip label="This sale" active={!wholeHistory} onClick={() => setWholeHistory(false)} />
-            <FilterChip label="All with this buyer" active={wholeHistory} onClick={() => setWholeHistory(true)} />
-          </span>
-        )}
-        {data && entries.length === 0 && (
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            What was agreed with the buyer — copies, price, shipping, payment, address.
-          </span>
-        )}
-        <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          onClick={() => {
-            setError(undefined);
-            setDialog({ kind: "add" });
+    <>
+      <aside aria-label="Conversation" className="side-panel" style={PANEL}>
+        <div style={{ ...PANEL_ROW, borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>Conversation</span>
+          {data && <span style={CHIP}>{total}</span>}
+          {uploading > 0 && <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>Uploading…</span>}
+          <span style={{ flex: 1 }} />
+          <Tooltip content="Close the conversation (Esc)">
+            <button type="button" aria-label="Close" onClick={onClose} style={CLOSE_BUTTON}>
+              <Icon name="close" size="sm" />
+            </button>
+          </Tooltip>
+        </div>
+        <div style={{ ...PANEL_ROW, borderBottom: entries.length > 0 ? "1px solid var(--color-border)" : undefined }}>
+          {saleId && (
+            <span style={{ display: "flex", gap: "0.375rem" }}>
+              <FilterChip label="This sale" active={!wholeHistory} onClick={() => setWholeHistory(false)} />
+              <FilterChip label="All with this buyer" active={wholeHistory} onClick={() => setWholeHistory(true)} />
+            </span>
+          )}
+          <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={() => {
+              setError(undefined);
+              setDialog({ kind: "add" });
+            }}
+            disabled={isPending || !data}
+            style={ADD_BUTTON}
+          >
+            <Icon name="add" size="sm" /> Add entry
+          </button>
+        </div>
+
+        <input
+          ref={fileInput}
+          type="file"
+          accept={CONVERSATION_ATTACHMENT_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            e.target.value = "";
+            if (attachTo && files.length > 0) void attachFiles(attachTo, files);
           }}
-          disabled={isPending || !data}
-          style={ADD_BUTTON}
-        >
-          <Icon name="add" size="sm" /> Add entry
-        </button>
-      </div>
+        />
 
-      <input
-        ref={fileInput}
-        type="file"
-        accept={CONVERSATION_ATTACHMENT_ACCEPT}
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          e.target.value = "";
-          if (attachTo && files.length > 0) void attachFiles(attachTo, files);
-        }}
-      />
+        {/* The log scrolls here, on its own; the header with *Add entry* stays put. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          {uploadError && (
+            <p role="alert" style={{ margin: 0, padding: "0.5rem 1.25rem 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+              {uploadError}
+            </p>
+          )}
 
-      {uploadError && (
-        <p role="alert" style={{ margin: 0, padding: "0.5rem 1.25rem 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-          {uploadError}
-        </p>
-      )}
+          {isError && (
+            <p style={{ margin: 0, padding: "0.75rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+              The conversation log could not be loaded just now.
+            </p>
+          )}
 
-      {isError && (
-        <p style={{ margin: 0, padding: "0.75rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-          The conversation log could not be loaded just now.
-        </p>
-      )}
+          {data && entries.length === 0 && (
+            <p style={{ margin: 0, padding: "0.75rem 1.25rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              What was agreed with the buyer — copies, price, shipping, payment, address.
+            </p>
+          )}
 
-      {entries.length > 0 && (
-        <ul style={{ listStyle: "none", margin: 0, padding: "0.25rem 0" }}>
-          {entries.map((entry, i) => (
-            <EntryRow
-              key={entry.id}
-              entry={entry}
-              first={i === 0}
-              collectionId={collectionId}
-              collectionSlug={collectionSlug}
-              showSale={shownSaleId === null}
-              busy={isPending || uploading > 0}
-              onAttach={() => {
-                setAttachTo(entry.id);
-                fileInput.current?.click();
-              }}
-              onView={(index) => setViewing({ entryId: entry.id, index })}
-              onRemoveFile={(attachment) => {
-                setError(undefined);
-                setDialog({ kind: "removeFile", attachment });
-              }}
-              onEdit={() => {
-                setError(undefined);
-                setDialog({ kind: "edit", entry });
-              }}
-              onDelete={() => {
-                setError(undefined);
-                setDialog({ kind: "delete", entry });
-              }}
-            />
-          ))}
-        </ul>
-      )}
-      {total > entries.length && (
-        <p style={{ margin: 0, padding: "0.5rem 1.25rem 0.75rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          The newest {entries.length} of {total} entries.
-        </p>
-      )}
+          {entries.length > 0 && (
+            <ul style={{ listStyle: "none", margin: 0, padding: "0.25rem 0" }}>
+              {entries.map((entry, i) => (
+                <EntryRow
+                  key={entry.id}
+                  entry={entry}
+                  first={i === 0}
+                  collectionId={collectionId}
+                  collectionSlug={collectionSlug}
+                  showSale={shownSaleId === null}
+                  busy={isPending || uploading > 0}
+                  onMenuOpenChange={(open) =>
+                    setOpenMenus((ids) => {
+                      if (open === ids.has(entry.id)) return ids;
+                      const next = new Set(ids);
+                      if (open) next.add(entry.id);
+                      else next.delete(entry.id);
+                      return next;
+                    })
+                  }
+                  onAttach={() => {
+                    setAttachTo(entry.id);
+                    fileInput.current?.click();
+                  }}
+                  onView={(index) => setViewing({ entryId: entry.id, index })}
+                  onRemoveFile={(attachment) => {
+                    setError(undefined);
+                    setDialog({ kind: "removeFile", attachment });
+                  }}
+                  onEdit={() => {
+                    setError(undefined);
+                    setDialog({ kind: "edit", entry });
+                  }}
+                  onDelete={() => {
+                    setError(undefined);
+                    setDialog({ kind: "delete", entry });
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+          {total > entries.length && (
+            <p style={{ margin: 0, padding: "0.5rem 1.25rem 0.75rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              The newest {entries.length} of {total} entries.
+            </p>
+          )}
+        </div>
+      </aside>
 
+      {/* The dialogs are the panel's siblings, not its children: drawn inside it they would rank
+          within its stacking context, and the slide-in's transform would anchor them to it. */}
       {data && dialog.kind === "add" && (
         <EntryDialog
           title="Add conversation entry"
@@ -377,7 +482,7 @@ export function ConversationLogCard({ collectionId, collectionSlug, contactId, s
           onClose={() => setViewing(null)}
         />
       )}
-    </section>
+    </>
   );
 }
 
@@ -392,6 +497,7 @@ function EntryRow({
   collectionSlug,
   showSale,
   busy,
+  onMenuOpenChange,
   onEdit,
   onDelete,
   onAttach,
@@ -402,10 +508,11 @@ function EntryRow({
   first: boolean;
   collectionId: string;
   collectionSlug: string;
-  /** Whether to name the entry's sale — not while the card shows one sale's entries only. */
+  /** Whether to name the entry's sale — not while the panel shows one sale's entries only. */
   showSale: boolean;
   /** Something is being saved or uploaded; no new upload starts meanwhile. */
   busy: boolean;
+  onMenuOpenChange: (open: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onAttach: () => void;
@@ -475,6 +582,7 @@ function EntryRow({
       </div>
       <RowActionsMenu
         ariaLabel="Entry actions"
+        onOpenChange={onMenuOpenChange}
         actions={[
           { key: "edit", label: "Edit entry", icon: "edit", onSelect: onEdit },
           { key: "attach", label: "Attach files", icon: "attachment", disabled: busy, onSelect: onAttach },

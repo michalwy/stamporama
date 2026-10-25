@@ -104,6 +104,7 @@ import {
   Merge,
   Replace,
   MessageSquare,
+  MessagesSquare,
   Minus,
   Package,
   Paperclip,
@@ -327,6 +328,9 @@ const GLYPHS = {
   /** What the partner said back through the shared link (#641). Told apart from `notes`, which is
    *  the collector's own writing about their own record: this is somebody else talking. */
   feedback: MessageSquare,
+  /** What was said with a buyer — the conversation log's button and panel (#2153). Two speech
+   *  bubbles against `feedback`'s one: a back-and-forth, not one reply. */
+  conversation: MessagesSquare,
   location: MapPin,
   shipping: Truck,
   parcel: Package,

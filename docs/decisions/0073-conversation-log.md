@@ -58,6 +58,11 @@ A **Conversation** card on a sale's screen (while the sale has a buyer) lists th
 with *All with this buyer* switching to the whole history; the same card on the contact's page lists
 every entry, each naming its sale. The collector adds, edits and deletes entries in it.
 
+*Amended by #2153 (2026-10-25):* the card grew with every entry and turned the sale's screen into a
+long scroll, so the log is no longer on the page. A *Conversation (N)* button in the sale's header —
+and the contact's — opens it in a panel at the side, over the page, holding everything the card did.
+Whether it was left open is remembered, so it stays open from one sale to the next.
+
 ### 6. The agent API covers it whole
 
 `list_conversation_entries` (read and search — buyer, sale, channel, words, days),
