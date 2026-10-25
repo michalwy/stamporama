@@ -16,6 +16,7 @@ describe("attachItemsToLot (#388)", () => {
   let targetLotId: string;
   let otherOpenLotId: string;
   let closedLotId: string;
+  let platformId: string;
   let nextItemNo = 1;
 
   async function addCopy(
@@ -97,9 +98,56 @@ describe("attachItemsToLot (#388)", () => {
       select: { id: true },
     });
     closedLotId = shut.id;
+    platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
   });
 
+  let nextSaleNo = 1;
+  /** One sale carrying the given copies — what makes a copy *gone* in the picker's terms. */
+  async function sell(itemIds: string[]) {
+    const no = nextSaleNo++;
+    const offer = await prisma.offer.create({
+      data: { collectionId, offerNo: no, platformId, currency: "EUR", price: "1.00" },
+    });
+    const offerSet = await prisma.offerSet.create({ data: { offerId: offer.id } });
+    const sale = await prisma.sale.create({
+      data: { collectionId, saleNo: no, platformId, soldAt: new Date("2026-03-01"), currency: "EUR" },
+    });
+    const line = await prisma.saleLine.create({
+      data: { saleId: sale.id, offerId: offer.id, offerSetId: offerSet.id, price: "1.00" },
+    });
+    await prisma.saleLineItem.createMany({
+      data: itemIds.map((itemId) => ({ saleLineId: line.id, itemId })),
+    });
+  }
+
+  type State = "held" | "gone" | "disposed";
+  const COMBINATIONS: State[][] = [
+    [],
+    ["held"],
+    ["gone"],
+    ["disposed"],
+    ["held", "gone"],
+    ["held", "disposed"],
+    ["gone", "disposed"],
+    ["held", "gone", "disposed"],
+  ];
+  const offeredUnder = async (states: State[]) =>
+    new Set(
+      (
+        await listAttachableCopies(userId, targetLotId, {
+          // The route's reading of the chips: none lit asks for every state.
+          states: states.length === 0 ? ["held", "gone", "disposed"] : states,
+        })
+      ).map((i) => i.id)
+    );
+
   after(async () => {
+    // A sale line item restricts deleting its copy, so the sales go first.
+    await prisma.saleLineItem.deleteMany({ where: { item: { collectionId } } });
+    await prisma.saleLine.deleteMany({ where: { sale: { collectionId } } });
+    await prisma.sale.deleteMany({ where: { collectionId } });
+    await prisma.offerSet.deleteMany({ where: { offer: { collectionId } } });
+    await prisma.offer.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
   });
@@ -293,5 +341,61 @@ describe("attachItemsToLot (#388)", () => {
       memberRank: null,
       stampSortKey: null,
     });
+  });
+  it("lists exactly the union of the lit state chips, and every copy with none lit (#2156)", async () => {
+    const held = await addCopy(null);
+    const sold = await addCopy(null);
+    await sell([sold]);
+    const written = await addCopy(null);
+    await prisma.item.update({
+      where: { id: written },
+      data: { disposedAt: new Date("2026-03-01"), disposalReason: "lost" },
+    });
+
+    const single = {
+      held: await offeredUnder(["held"]),
+      gone: await offeredUnder(["gone"]),
+      disposed: await offeredUnder(["disposed"]),
+    };
+    assert.ok(single.held.has(held) && single.gone.has(sold) && single.disposed.has(written));
+    for (const states of COMBINATIONS) {
+      const lit: State[] = states.length === 0 ? ["held", "gone", "disposed"] : states;
+      const union = new Set(lit.flatMap((s) => [...single[s]]));
+      assert.deepEqual(
+        [...(await offeredUnder(states))].sort(),
+        [...union].sort(),
+        `chips [${states.join(", ") || "none"}]`
+      );
+    }
+  });
+
+  it("lists a new held copy beside more sold copies than one read page holds (#2156)", async () => {
+    // Older than everything else and more than a page: the read is oldest first, so a single
+    // capped page ends before the held copy whenever the sold ones are asked for beside it.
+    const firstNo = nextItemNo;
+    const count = 1001;
+    await prisma.item.createMany({
+      data: Array.from({ length: count }, () => ({
+        collectionId,
+        itemNo: nextItemNo++,
+        stampId,
+        conditionId,
+        deliveryState: "delivered",
+        createdAt: new Date("2020-01-01"),
+      })),
+    });
+    const bulk = await prisma.item.findMany({
+      where: { collectionId, itemNo: { gte: firstNo, lt: nextItemNo } },
+      select: { id: true },
+    });
+    assert.equal(bulk.length, count);
+    await sell(bulk.map((i) => i.id));
+    const held = await addCopy(null);
+
+    for (const states of [[], ["held"], ["held", "gone"], ["held", "gone", "disposed"]] as State[][]) {
+      assert.ok((await offeredUnder(states)).has(held), `held copy under [${states.join(", ") || "none"}]`);
+    }
+    const goneAndHeld = await offeredUnder(["held", "gone"]);
+    assert.ok(bulk.every((i) => goneAndHeld.has(i.id)), "and every sold copy beside it");
   });
 });

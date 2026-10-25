@@ -759,6 +759,9 @@ async function readCatalogueOrder(
   );
 }
 
+/** How many rows `listAttachableCopies` reads at a time — a chunk size, not a limit (#2156). */
+const ATTACHABLE_READ_PAGE = 1000;
+
 /** The copies an open lot could take on (#388): every copy in the collection that is not already
  * on it and not frozen into a closed lot's cost split. Unpaginated like the offer composition
  * picker it mirrors — the dialog filters client-side over an area/year scope the collector picks.
@@ -778,15 +781,27 @@ export async function listAttachableCopies(
   } = {}
 ): Promise<AttachableCopy[]> {
   const { collectionId } = await assertLotOwner(ownerId, lotId);
-  const { items } = await listItemsPaginated(ownerId, collectionId, {
-    attachableToLotId: lotId,
-    holdingStates: opts.states && opts.states.length > 0 ? opts.states : ["held"],
-    areaIds: opts.areaIds ?? undefined,
-    search: opts.search,
-    year: opts.year,
-    sortDir: "asc",
-    pageSize: 1000,
-  });
+  // Every page, not the first one (#2156): the dialog searches, facets and filters what this
+  // returns, so a row cut off here is a copy the picker says does not exist. One capped page,
+  // oldest first, dropped the newest held copies as soon as the sold ones were asked for beside
+  // them — the held read alone fitted, the union did not.
+  const items: ItemListItem[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await listItemsPaginated(ownerId, collectionId, {
+      attachableToLotId: lotId,
+      holdingStates: opts.states && opts.states.length > 0 ? opts.states : ["held"],
+      areaIds: opts.areaIds ?? undefined,
+      search: opts.search,
+      year: opts.year,
+      sortDir: "asc",
+      offset,
+      pageSize: ATTACHABLE_READ_PAGE,
+    });
+    items.push(...page.items);
+    if (page.nextCursor === null) break;
+    offset += ATTACHABLE_READ_PAGE;
+  }
   const soldIds = items.filter((i) => i.sold).map((i) => i.id);
   const sales =
     soldIds.length === 0
