@@ -29,6 +29,7 @@ describe("the picker's query string (#2179)", () => {
     writeAttachQuery(
       params,
       withFilters({
+        dispositions: ["forSale", "forTrade"],
         conditionIds: ["mint", "used"],
         certificateStatusIds: ["none"],
         formatIds: ["single", "pair"],
@@ -40,6 +41,7 @@ describe("the picker's query string (#2179)", () => {
       "#809"
     );
     assert.deepEqual(readAttachQuery(params, params.get("search") ?? undefined), {
+      dispositions: ["forSale", "forTrade"],
       conditionIds: ["mint", "used"],
       certificateStatusIds: ["none"],
       formatIds: ["single", "pair"],
@@ -79,6 +81,18 @@ describe("the picker's query string (#2179)", () => {
   });
 });
 
+describe("the disposition filter (#2180)", () => {
+  it("opens on every copy, and drops marks it does not know from the route and from storage", () => {
+    assert.deepEqual(DEFAULT_ATTACH_FILTERS.dispositions, []);
+    const params = new URLSearchParams("disposition=forSale&disposition=sold&disposition=forSale");
+    assert.deepEqual(readAttachQuery(params, undefined).dispositions, ["forSale"]);
+    assert.deepEqual(
+      parseAttachFilters(JSON.stringify({ dispositions: ["inCollection", "kept"] })).dispositions,
+      ["inCollection"]
+    );
+  });
+});
+
 describe("the state filter (#2120)", () => {
   it("opens on the held copies", () => {
     assert.deepEqual(DEFAULT_ATTACH_FILTERS.states, ["held"]);
@@ -99,7 +113,12 @@ describe("the state filter (#2120)", () => {
 
 describe("remembered filters (#2121)", () => {
   it("round-trips, keeping an emptied state set as every state", () => {
-    const f = withFilters({ conditionIds: ["a"], purchase: ["none"], states: [] });
+    const f = withFilters({
+      dispositions: ["forTrade"],
+      conditionIds: ["a"],
+      purchase: ["none"],
+      states: [],
+    });
     assert.deepEqual(parseAttachFilters(serializeAttachFilters(f)), f);
   });
 
