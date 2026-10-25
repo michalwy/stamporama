@@ -169,7 +169,8 @@ import {
   updateStampsOperation,
 } from "./operations/catalog-edits";
 import { createSubtypeOperation, updateSubtypeOperation } from "./operations/subtypes";
-import { deleteStampVariantOperation, moveStampVariantOperation } from "./operations/variant-tree";
+import { deleteStampOperation, deleteStampVariantOperation, moveStampVariantOperation } from "./operations/variant-tree";
+import { deleteIssueOperation, moveStampToIssueOperation } from "./operations/issue-tree";
 import { setStampColnectIdOperation, setStampColnectIdsOperation } from "./operations/colnect-ids";
 import {
   deletePriceObservationOperation,
@@ -324,6 +325,9 @@ export const OPERATIONS: readonly Operation[] = [
   updateSubtypeOperation,
   moveStampVariantOperation,
   deleteStampVariantOperation,
+  deleteStampOperation,
+  moveStampToIssueOperation,
+  deleteIssueOperation,
   setStampColnectIdOperation,
   setStampColnectIdsOperation,
   listCatalogEditionsOperation,

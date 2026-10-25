@@ -66,10 +66,11 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // actions before they write: the spec parse, the same-span rule, the dialog's stamp cap, the year
 // bounds, and the duplicate check — each read here so its refusal is written for an agent.
 //
-// **Nothing is deleted and nothing is moved** (#1438): no issue or stamp is deleted, no stamp moves
-// between issues or under another parent, and nothing is reordered — a new stamp takes the issue's
-// order as the dialogs' generation gives it. Those are decisions for the screen, and
-// `tests/unit/agent-api-operation-boundary.test.ts` keeps them out of every operation module.
+// **Nothing is deleted and nothing is moved here** (#1438): this module deletes, moves and reorders
+// nothing — a new stamp takes the issue's order as the dialogs' generation gives it. The moves and
+// deletes later issues allowed live in their own modules — the variant tree in `variant-tree.ts`
+// (#2140, #2171), a stamp between issues and an empty issue in `issue-tree.ts` (#2169, #2172) — and
+// `tests/unit/agent-api-operation-boundary.test.ts` keeps every other one out of every module.
 //
 // **An edit restates what it does not change.** `updateIssue` and `updateStampWithCatalog` replace
 // the name, the year and — for a stamp — every catalogue number, because that is what an edit dialog

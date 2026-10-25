@@ -52,3 +52,13 @@ export function variantHeldMessage(stamp: string, holders: VariantHolders): stri
   if (phrases.length === 0) return null;
   return `${stamp} is not deleted: it is named by ${phrases.join(", ")}. A variant is deleted only when nothing names it — the collector settles those first, or deletes it on the stamp's screen. Nothing was changed.`;
 }
+
+/**
+ * The refusal for a base stamp something holds (#2171), or null when nothing does. The same list
+ * as a variant's, with its own variants on it: a base stamp is deleted only when it stands alone.
+ */
+export function baseStampHeldMessage(stamp: string, holders: VariantHolders): string | null {
+  const phrases = variantHolderPhrases(holders);
+  if (phrases.length === 0) return null;
+  return `${stamp} is not deleted: it is named by ${phrases.join(", ")}. A base stamp is deleted only when nothing names it — the collector settles those first, or deletes it on the stamp's screen. Nothing was changed.`;
+}

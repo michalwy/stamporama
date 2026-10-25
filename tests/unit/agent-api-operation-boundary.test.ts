@@ -616,17 +616,20 @@ describe("the agent API's operation modules (#2139)", () => {
  * **#2140 lifted it for the variant tree, and for exactly its operations**: moving a stamp under
  * another parent and deleting a stamp (`reparentStampNode`, `deleteStamp`) left this map for
  * {@link VARIANT_TREE_WRITES}. Only a variant is deleted there, and that is the handler's refusal,
- * not something an import can show — so the two may be reached from that module alone.
+ * not something an import can show — so the two may be reached from that module alone. #2171 added
+ * a base stamp nothing names to the same module's deletes, through the same `deleteStamp`.
+ *
+ * **#2169 and #2172 lifted it for a stamp moved to another issue of its area and an empty issue
+ * deleted**: `moveStampNode` and `deleteIssue` left this map for {@link ISSUE_TREE_WRITES}. Merging
+ * two issues, taking a stamp out of its issue and reordering the stamp tree stay here.
  */
 const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["deleteCatalogVendor", { module: "src/lib/catalog.ts", why: "deletes a catalogue, with every book, edition and price in it" }],
   ["deleteCatalogName", { module: "src/lib/catalog.ts", why: "deletes a catalogue book, with its editions and their prices" }],
   ["deleteCatalogEdition", { module: "src/lib/catalog.ts", why: "deletes a catalogue edition, with every price recorded in it" }],
-  ["deleteIssue", { module: "src/lib/issues.ts", why: "deletes an issue" }],
   ["deleteStampCatalogNumber", { module: "src/lib/stamps.ts", why: "takes a catalogue number off a stamp" }],
   ["removeStampFromIssue", { module: "src/lib/issues.ts", why: "takes a stamp out of its issue" }],
   ["mergeIssues", { module: "src/lib/issues.ts", why: "folds one issue into another and deletes it" }],
-  ["moveStampNode", { module: "src/lib/issues.ts", why: "moves a stamp to another issue" }],
   ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
   ["reorderChecklists", { module: "src/lib/checklists.ts", why: "rewrites the collector's order of an issue's checklists" }],
   ["deleteCollectionArea", { module: "src/lib/areas.ts", why: "deletes an area" }],
@@ -646,7 +649,7 @@ describe("the agent API's operation modules (#1438)", () => {
     assert.deepEqual(
       breaches,
       [],
-      `The agent creates and corrects issues, stamps and variants, and never deletes, moves or reorders one (#1438).\n  ${breaches.join("\n  ")}`
+      `The agent creates and corrects issues, stamps and variants, and deletes, moves or reorders one only where a later issue allowed it (#1438).\n  ${breaches.join("\n  ")}`
     );
   });
 
@@ -699,6 +702,47 @@ describe("the agent API's operation modules (#2140)", () => {
 
   it("names only real exports", () => {
     for (const [name, module] of VARIANT_TREE_WRITES) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+  });
+});
+
+/**
+ * **The writes across issues the agent may make, and the one module that may make them** (#2169,
+ * #2172). The collector allowed a stamp, with its variants, to be moved to another issue of its
+ * area, and an issue with no stamps to be deleted — the Issues row's own `moveStampNode` and the
+ * issue's own `deleteIssue`. `deleteIssue` deletes an issue's stamps with it on the screen, so only
+ * the module that refuses an issue with stamps, and tells the write to refuse one too, may reach it.
+ */
+const ISSUE_TREE_WRITES = new Map<string, string>([
+  ["moveStampNode", "src/lib/issues.ts"],
+  ["deleteIssue", "src/lib/issues.ts"],
+]);
+
+describe("the agent API's operation modules (#2169, #2172)", () => {
+  it("move a stamp between issues and delete an issue only in the issue-tree module", () => {
+    const treeModule = path.join(AGENT_API, "operations/issue-tree.ts");
+    const fromDomain = importedBindings(treeModule)
+      .filter((binding) => binding.from === "../../issues")
+      .map((binding) => binding.name);
+    assert.deepEqual(fromDomain.sort(), [...ISSUE_TREE_WRITES.keys()].sort());
+
+    const elsewhere: string[] = [];
+    for (const file of operationModules()) {
+      if (file === treeModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (ISSUE_TREE_WRITES.has(name)) elsewhere.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(elsewhere, [], "writes across issues belong to operations/issue-tree.ts alone (#2169, #2172)");
+  });
+
+  it("names only real exports", () => {
+    for (const [name, module] of ISSUE_TREE_WRITES) {
       assert.match(
         readFileSync(path.join(ROOT, module), "utf8"),
         new RegExp(`export async function ${name}\\(`),

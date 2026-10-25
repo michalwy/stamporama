@@ -4,15 +4,16 @@ import { reparentStampNode } from "../../issues";
 import { deleteStamp } from "../../stamps";
 import { invalidRequest, notFound } from "../errors";
 import { optionalBoolean, optionalString, requiredString } from "../params";
-import { variantHeldMessage, type VariantHolders } from "../variant-tree";
+import { baseStampHeldMessage, variantHeldMessage, type VariantHolders } from "../variant-tree";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { loadStampLabels, resolveStampRefs, stampIdFromRef, type StampLabel } from "./stamp-refs";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 
 // The variant tree (#2140): move a stamp under another stamp of its issue, bring a variant up to
-// stand on its own, and delete a variant nothing names. It lifts #1438's *nothing is deleted or
-// moved* for the variant tree and for nothing else — base stamps, issues and catalogue numbers are
-// still never deleted here, and no stamp moves between issues or is reordered.
+// stand on its own, and delete a variant nothing names — and, since #2171, a base stamp nothing
+// names. It lifts #1438's *nothing is deleted or moved* for the variant tree and for those deletes:
+// catalogue numbers are still never deleted here, and a stamp moves between issues only through
+// `issue-tree.ts` (#2169).
 //
 // **Each is the stamp screen's own write.** A move is `reparentStampNode`, the tree row's *Move under
 // another stamp…*, so its rules are the screen's: the parent is a member of the same issue, no stamp
@@ -23,7 +24,8 @@ import type { Operation, OperationContext, ParsedParams } from "../types";
 // **The delete refuses more than the screen does**, and that is the collector's decision
 // (2026-10-24): the screen takes a variant's copies, wants and price observations with it, and an
 // agent must never take a record with a stamp it created by mistake. `variant-tree.ts` holds the list
-// and the sentence.
+// and the sentence. A base stamp (#2171) is refused on the same list — its own variants on it — so
+// `delete_stamp` deletes exactly one stamp, as `delete_stamp_variant` does.
 
 /** A stamp as these answers name it. */
 export interface AgentTreeStamp extends StampLabel {
@@ -259,7 +261,7 @@ export async function deleteStampVariantFromParams(
   const named = treeStamp(labels, stamp.id);
   if (stamp.parentId === null) {
     throw invalidRequest(
-      `${spoken(named)} is a base stamp, not a variant, and a base stamp is never deleted through this API. The collector deletes it on the stamp's screen.`
+      `${spoken(named)} is a base stamp, not a variant. Delete it with \`delete_stamp\`, which deletes a base stamp nothing names.`
     );
   }
   const message = variantHeldMessage(spoken(named), await loadVariantHolders(context, stamp.id));
@@ -296,7 +298,7 @@ export const deleteStampVariantOperation: Operation = {
   method: "DELETE",
   path: "/stamps/{stamp_id}",
   description:
-    "Delete a variant created by mistake. Only a variant — a stamp filed under another — is deleted, and only when nothing names it: a variant with copies, offers, wants, auction lot lines, price observations, trade lines or variants of its own is refused with what holds it, for the collector to settle first. Its catalogue numbers, catalogue prices, translations, checklist places and photos go with it. A base stamp or an issue is never deleted here.",
+    "Delete a variant created by mistake. Only a variant — a stamp filed under another — is deleted, and only when nothing names it: a variant with copies, offers, wants, auction lot lines, price observations, trade lines or variants of its own is refused with what holds it, for the collector to settle first. Its catalogue numbers, catalogue prices, translations, checklist places and photos go with it. A base stamp is deleted with `delete_stamp`, an empty issue with `delete_issue`.",
   writes: true,
   parameters: [STAMP_ID_PARAMETER],
   result: {
@@ -305,4 +307,71 @@ export const deleteStampVariantOperation: Operation = {
       "`deleted`, the variant as it was — its id, short number, name, catalogue numbers, the `parent` it was filed under and its `issueIds` — and `removedWithIt`, how many catalogue prices, translations, checklist places and photos went with it.",
   },
   handler: async (context, params) => deleteStampVariantFromParams(context, params),
+};
+
+// ── Deleting a base stamp (#2171) ──────────────────────────────────────────
+
+export async function deleteStampFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{
+  deleted: AgentTreeStamp & { issueIds: string[] };
+  checklistsLeft: { checklistId: string; name: string; issueId: string | null }[];
+  removedWithIt: { cataloguePrices: number; translations: number; checklistPlaces: number; photos: number };
+}> {
+  const stamp = await loadTreeStamp(context, await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id"));
+  const labels = await loadStampLabels(context, [stamp.id]);
+  const named = treeStamp(labels, stamp.id);
+  if (stamp.parentId !== null) {
+    throw invalidRequest(`${spoken(named)} is a variant, filed under another stamp. Delete it with \`delete_stamp_variant\`.`);
+  }
+  // Its own variants are on the list: a base stamp is deleted only when it stands alone.
+  const message = baseStampHeldMessage(spoken(named), await loadVariantHolders(context, stamp.id));
+  if (message) throw invalidRequest(message);
+
+  const [cataloguePrices, counts, places] = await Promise.all([
+    prisma.stampCatalogPrice.count({ where: { stampId: stamp.id } }),
+    prisma.stamp.findUniqueOrThrow({
+      where: { id: stamp.id },
+      select: { _count: { select: { translations: true, checklistEntries: true, photos: true } } },
+    }),
+    prisma.checklistStamp.findMany({
+      where: { stampId: stamp.id },
+      select: { checklist: { select: { id: true, name: true, issueId: true } } },
+      orderBy: { checklist: { name: "asc" } },
+    }),
+  ]);
+  // `reparent`, as for a variant: with no variants under it, it deletes this one stamp, and a
+  // variant added between the check above and this write is brought up rather than taken.
+  await deleteStamp(context.ownerId, stamp.id, "reparent");
+  return {
+    deleted: { ...named, issueIds: stamp.issueMemberships.map((row) => row.issueId) },
+    checklistsLeft: places.map((place) => ({
+      checklistId: place.checklist.id,
+      name: place.checklist.name,
+      issueId: place.checklist.issueId,
+    })),
+    removedWithIt: {
+      cataloguePrices,
+      translations: counts._count.translations,
+      checklistPlaces: counts._count.checklistEntries,
+      photos: counts._count.photos,
+    },
+  };
+}
+
+export const deleteStampOperation: Operation = {
+  name: "delete_stamp",
+  method: "DELETE",
+  path: "/stamps/{stamp_id}/base",
+  description:
+    "Delete a base stamp — one filed under no other — created by mistake, and only when nothing names it: a stamp with copies, offers, wants, auction lot lines, price observations, trade lines or variants of its own is refused with what holds it, for the collector to settle first. It leaves its issues and checklists; its catalogue numbers, catalogue prices, translations, photos, size and Colnect ID go with it. A variant is deleted with `delete_stamp_variant`, an empty issue with `delete_issue`.",
+  writes: true,
+  parameters: [STAMP_ID_PARAMETER],
+  result: {
+    kind: "object",
+    description:
+      "`deleted`, the stamp as it was — its id, short number, name, catalogue numbers and the `issueIds` it was filed under; `checklistsLeft`, each checklist it was on, by id, name and issue; and `removedWithIt`, how many catalogue prices, translations, checklist places and photos went with it.",
+  },
+  handler: async (context, params) => deleteStampFromParams(context, params),
 };

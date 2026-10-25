@@ -58,7 +58,7 @@ import {
   type ChecklistKind,
 } from "./checklist-kind";
 import { parseEntityNoSearch } from "./quick-jump";
-import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
+import { checkSiblingGroup, siblingsOf, sortOrderAssignments } from "./issue-member-order";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
 import type { UmbrellaPricesPolicy, UmbrellaWithOwnPrices } from "./umbrella-prices-question";
 import { getStampSizePresetPair, type StampSizePresetPair } from "./stamp-size-presets";
@@ -2620,7 +2620,10 @@ export async function setIssueCatalogRange(
 export async function deleteIssue(
   ownerId: string,
   collectionId: string,
-  issueId: string
+  issueId: string,
+  /** Refuse, inside the transaction, an issue that has any stamp (#2172): a caller that checked it
+   *  empty must not take stamps added since. The screen deletes them with it. */
+  options: { onlyIfEmpty?: boolean } = {}
 ): Promise<void> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -2631,6 +2634,7 @@ export async function deleteIssue(
       where: { issueId },
       select: { stampId: true },
     });
+    if (options.onlyIfEmpty && members.length > 0) throw new Error("The issue has stamps.");
 
     if (members.length > 0) {
       const stampIds = members.map((m) => m.stampId);
@@ -2941,13 +2945,35 @@ export async function removeStampFromIssue(
   });
 }
 
+/** What {@link moveStampNode} may also do, for a caller that asks (#2169). The screen asks neither. */
+export interface MoveStampNodeOptions {
+  /** Where the stamp lands among its siblings in the target issue's tree, 0-based — its sibling
+   *  group there is renumbered densely around it. Omitted, it lands at the end, as on the screen. */
+  position?: number;
+  /** Carry the moved stamps' checklist places over: each leaves the source issue's checklists, and
+   *  the stamp itself — with any variant that was on a standard checklist there — joins the target's
+   *  first standard checklist, created from the issue's name when it has none. */
+  moveChecklistPlaces?: boolean;
+}
+
+/** What a move did, for a caller that reports it. The screen ignores it. */
+export interface MovedStampNode {
+  /** The stamp and the variants that came with it, the stamp first. */
+  stampIds: string[];
+  /** Each source checklist the moved stamps left, with the ones that left it. Empty unless asked. */
+  checklistsLeft: { checklistId: string; stampIds: string[] }[];
+  /** The target checklist they joined, null unless asked. `created` when the move created it. */
+  checklistJoined: { checklistId: string; created: boolean; stampIds: string[] } | null;
+}
+
 export async function moveStampNode(
   ownerId: string,
   collectionId: string,
   issueId: string,
   stampId: string,
-  targetIssueId: string
-): Promise<void> {
+  targetIssueId: string,
+  options: MoveStampNodeOptions = {}
+): Promise<MovedStampNode> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   const { collectionId: targetCollection } = await resolveIssueArea(targetIssueId);
@@ -2976,7 +3002,7 @@ export async function moveStampNode(
 
   const stampIds = collectSubtree(stampId);
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     // The subtree lands at the end of the target issue, keeping its own internal order (#549) —
     // arriving stamps are the newest members there, whatever position they held where they came
     // from, and a position is a statement about one issue's tree.
@@ -2987,6 +3013,61 @@ export async function moveStampNode(
         data: { issueId: targetIssueId, sortOrder: base + i },
       });
     }
+
+    // A position asked for (#2169) is one among the stamp's new siblings: the group it joined is
+    // renumbered densely with it at that place, and every other group keeps its values.
+    if (options.position !== undefined) {
+      const members = await tx.issueMember.findMany({
+        where: { issueId: targetIssueId },
+        select: { stampId: true, sortOrder: true, stamp: { select: { parentId: true } } },
+        orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+      });
+      const orderable = members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId }));
+      const ids = new Set(orderable.map((m) => m.stampId));
+      const moving = orderable.find((m) => m.stampId === stampId)!;
+      const parent = moving.parentId && ids.has(moving.parentId) ? moving.parentId : null;
+      const group = siblingsOf(orderable, parent).map((m) => m.stampId).filter((id) => id !== stampId);
+      group.splice(Math.max(0, Math.min(options.position, group.length)), 0, stampId);
+      for (const { stampId: sid, sortOrder } of sortOrderAssignments(group)) {
+        await tx.issueMember.update({
+          where: { issueId_stampId: { issueId: targetIssueId, stampId: sid } },
+          data: { sortOrder },
+        });
+      }
+    }
+
+    if (!options.moveChecklistPlaces) return { stampIds, checklistsLeft: [], checklistJoined: null };
+
+    const places = await tx.checklistStamp.findMany({
+      where: { stampId: { in: stampIds }, checklist: { collectionId, issueId } },
+      select: { checklistId: true, stampId: true, checklist: { select: { kind: true } } },
+    });
+    const left = new Map<string, string[]>();
+    for (const place of places) left.set(place.checklistId, [...(left.get(place.checklistId) ?? []), place.stampId]);
+    await tx.checklistStamp.deleteMany({
+      where: { stampId: { in: stampIds }, checklist: { collectionId, issueId } },
+    });
+
+    // The stamp itself always joins; a variant only when it was on a standard checklist of the
+    // source — new variants join no checklist, so one that was on none stays on none (2026-10-25).
+    const onStandard = new Set(places.filter((p) => p.checklist.kind === "standard").map((p) => p.stampId));
+    const joining = stampIds.filter((sid) => sid === stampId || onStandard.has(sid));
+    const existed = await tx.checklist.findFirst({
+      where: { collectionId, issueId: targetIssueId, kind: "standard" },
+      select: { id: true },
+    });
+    const checklistId = await ensureIssueChecklist(tx, collectionId, targetIssueId);
+    const last = await tx.checklistStamp.aggregate({ where: { checklistId }, _max: { sortOrder: true } });
+    const after = (last._max.sortOrder ?? -1) + 1;
+    await tx.checklistStamp.createMany({
+      data: joining.map((sid, i) => ({ checklistId, stampId: sid, sortOrder: after + i })),
+      skipDuplicates: true,
+    });
+    return {
+      stampIds,
+      checklistsLeft: [...left].map(([id, ids]) => ({ checklistId: id, stampIds: ids })),
+      checklistJoined: { checklistId, created: existed === null, stampIds: joining },
+    };
   });
 }
 
