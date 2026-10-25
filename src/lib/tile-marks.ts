@@ -12,7 +12,9 @@
  * what a key typed on a focused tile means, and how the identification step is seeded from it.
  *
  * Each half is independent and optional: a tile can be marked with a condition, a certificate, both
- * or neither. "No certificate" is not a mark — it is a tile not marked with one.
+ * or neither. "No certificate" is not stored as a mark — it is a tile not marked with one — but a tile
+ * marked with a condition and no certificate is identified with none (#2159): see
+ * {@link markedCertificate}.
  *
  * **Faults** (#1558) are the mark's third part: any number of the collection's faults (#1557), seen
  * with the piece in hand as the condition is. They follow the halves' rules except where a fault is
@@ -390,6 +392,23 @@ export const SEED_ORIGIN_LABEL: Record<SeedOrigin, string> = {
   repeated: "as repeated",
 };
 
+/**
+ * The certificate a tile's mark answers for identification (#2159), from the mark's halves as the
+ * dialog knows them (an id the collection no longer holds already read as null):
+ *
+ * - **a marked certificate** is that certificate;
+ * - **a marked condition and no certificate** is *none*, `""` — marking the condition and leaving the
+ *   certificate empty says the piece has none, and the last used certificate would put another
+ *   tile's *Guarantee* on it;
+ * - **neither** is null: the tile says nothing about it, and the field falls back as it always did.
+ */
+export function markedCertificate(
+  mark: { conditionId: string | null; certificateStatusId: string | null } | null | undefined
+): string | null {
+  if (mark?.certificateStatusId) return mark.certificateStatusId;
+  return mark?.conditionId ? "" : null;
+}
+
 export interface FieldSeed {
   value: string;
   origin: SeedOrigin | null;
@@ -408,13 +427,16 @@ export interface FieldSeed {
  *   choice or a repeated identification's — and the tiles that **are** marked keep their marks, the
  *   shared answer applying to the rest. The step says how many keep what.
  *
- * A value is labelled only when there is one: an empty field was not seeded from anywhere.
+ * **Null is unmarked; `""` is marked *none*** — the certificate of a tile marked with a condition
+ * only (#2159, {@link markedCertificate}). Presence decides, never content, so a marked *none* opens
+ * the field empty and labelled, and a tile marked *none* among others keeps it. A fallback is labelled
+ * only when there is one: an empty fallback was not seeded from anywhere.
  */
 export function seedField(
   pieces: readonly { tileId: string; marked: string | null }[],
   fallback: { value: string; origin: SeedOrigin }
 ): FieldSeed {
-  const marked = pieces.filter((p) => p.marked);
+  const marked = pieces.filter((p) => p.marked !== null);
   if (
     pieces.length > 0 &&
     marked.length === pieces.length &&
@@ -505,7 +527,8 @@ export function seedTags(pieces: readonly { tileId: string; tagIds: readonly str
 export interface TileOwnAnswer {
   tileId: string;
   conditionId?: string;
-  certificateStatusId?: string;
+  /** Null is a tile that keeps **no** certificate (#2159) — absent is one that takes the step's. */
+  certificateStatusId?: string | null;
   /** The faults the tile keeps (#1558), in place of the step's shared ones. */
   faultIds?: string[];
   /** The tags the tile keeps (#1599) — **added** to the step's, never in place of them. */
@@ -525,7 +548,7 @@ export function keeperAnswers(
     return a;
   };
   for (const k of condition.keepers) entry(k.tileId).conditionId = k.value;
-  for (const k of certificate.keepers) entry(k.tileId).certificateStatusId = k.value;
+  for (const k of certificate.keepers) entry(k.tileId).certificateStatusId = k.value || null;
   for (const k of faults?.keepers ?? []) entry(k.tileId).faultIds = [...k.faultIds];
   for (const k of tags?.keepers ?? []) entry(k.tileId).tagIds = [...k.tagIds];
   return [...byTile.values()];
@@ -562,6 +585,8 @@ export function parseTileOwnAnswers(raw: unknown): TileOwnAnswer[] {
     if (typeof r.conditionId === "string" && r.conditionId) answer.conditionId = r.conditionId;
     if (typeof r.certificateStatusId === "string" && r.certificateStatusId) {
       answer.certificateStatusId = r.certificateStatusId;
+    } else if (r.certificateStatusId === null) {
+      answer.certificateStatusId = null;
     }
     if (Array.isArray(r.faultIds)) {
       const faultIds = [
@@ -575,7 +600,12 @@ export function parseTileOwnAnswers(raw: unknown): TileOwnAnswer[] {
       ];
       if (tagIds.length > 0) answer.tagIds = tagIds;
     }
-    if (answer.conditionId || answer.certificateStatusId || answer.faultIds || answer.tagIds) {
+    if (
+      answer.conditionId ||
+      answer.certificateStatusId !== undefined ||
+      answer.faultIds ||
+      answer.tagIds
+    ) {
       out.push(answer);
     }
   }

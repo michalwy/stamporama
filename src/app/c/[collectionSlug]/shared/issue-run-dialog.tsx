@@ -76,7 +76,7 @@ import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchase
 import { ReplacesButton } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
 import { REPLACING_DISPOSITION } from "@/lib/replacement-rules";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
-import { markFaultIds, markTagIds, sameFaults } from "@/lib/tile-marks";
+import { markFaultIds, markTagIds, markedCertificate, sameFaults } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
 import { tagEntryKey, type TagEntry } from "@/lib/tag-entry";
 import { FaultEntryField } from "./fault-entry-field";
@@ -333,7 +333,8 @@ export function IssueRunDialog({
    * **A tile's marks start here** (#1550): the condition and certificate marked before identifying
    * become that tile's own details, so its row says *own condition* as an override does, and a tile
    * without marks follows the run's shared value. They are ordinary overrides from then on — changed
-   * or taken back on the row like any other.
+   * or taken back on the row like any other. A tile marked with a condition and no certificate holds
+   * *no certificate* of its own (#2159, `markedCertificate`), not the run's.
    */
   const [overrides, setOverrides] = useState<ReadonlyMap<string, RunCopyOverrides>>(() => {
     const seeded = new Map<string, RunCopyOverrides>();
@@ -342,9 +343,14 @@ export function IssueRunDialog({
       const conditionId = p.mark?.conditionId;
       const certificateStatusId = p.mark?.certificateStatusId;
       if (conditionId && conditions.some((c) => c.id === conditionId)) own.conditionId = conditionId;
-      if (certificateStatusId && certificateStatuses.some((c) => c.id === certificateStatusId)) {
-        own.certificateStatusId = certificateStatusId;
-      }
+      const certificate = markedCertificate({
+        conditionId: own.conditionId ?? null,
+        certificateStatusId:
+          certificateStatusId && certificateStatuses.some((c) => c.id === certificateStatusId)
+            ? certificateStatusId
+            : null,
+      });
+      if (certificate !== null) own.certificateStatusId = certificate;
       if (Object.keys(own).length > 0) seeded.set(p.tileId, own);
     }
     return seeded;
@@ -1237,7 +1243,7 @@ export function IssueRunDialog({
                   (ownDetails?.conditionId !== undefined &&
                     ownDetails.conditionId === piece.mark?.conditionId) ||
                   (ownDetails?.certificateStatusId !== undefined &&
-                    ownDetails.certificateStatusId === piece.mark?.certificateStatusId) ||
+                    ownDetails.certificateStatusId === markedCertificate(piece.mark)) ||
                   faultsFromMarks ||
                   tagsFromMarks;
                 const isActive = piece.tileId === active?.tileId;

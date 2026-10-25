@@ -1121,16 +1121,22 @@ discarded shows no mark any more — the copy's own condition is what counts fro
 **What identifying does with them.** A mark only **seeds** the identification — the copy takes what
 you confirm there. Every identification dialog opens with the tile's marked condition and
 certificate, labelled **marked on the tile**; a tile with no marks opens with your last used choices,
-labelled **last used**, as before. Change a field and its label goes, since the value is then your
-own answer.
+labelled **last used**, as before. **A tile marked with a condition and no certificate is identified
+with no certificate** — the certificate field shows *None*, labelled **marked on the tile** — never
+with the last used one: marking the condition and leaving the certificate empty says the piece has
+none. A tile marked with a certificate only opens with that certificate and your last used condition.
+Change a field and its label goes, since the value is then your own answer.
 
 - **Several tiles identified as one stamp**: when they are all marked alike, the step opens on that
   mark and your answer applies to all of them. When only some are marked, or their marks differ, the
   marked tiles **keep their marks** and the condition and certificate you give apply to the rest —
-  the step says so before anything is created (*3 tiles keep their marked MNG*).
+  the step says so before anything is created (*3 tiles keep their marked MNG*). A tile marked with a
+  condition only counts as marked *None* for the certificate (*1 tile keeps no certificate, as
+  marked*).
 - **A run identified as the stamps of a checklist**: each marked tile's marks become its own details,
   so its row says *own condition* — *marked on the tile* — exactly as an override does, and tiles
-  without marks follow the run's shared value.
+  without marks follow the run's shared value. A tile marked with a condition only has *no
+  certificate* of its own, whatever certificate the run gives the rest.
 
 **Faults in identification.** Every identification dialog asks for the new copy's **Faults**, the
 same field the copy's own dialog has: pick from your list, or type a new name and press Enter (it is
