@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files and #2167 an area's issues; both wrappers exist and the registry carries **one hundred and eighteen operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues and #2173/#2174/#2175 three batch forms of single writes; both wrappers exist and the registry carries **one hundred and twenty-one operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #1168's bid recommendation, and #1037's catalog-number
-resolver. Eighteen counts are quoted
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #1168's bid recommendation, and #1037's catalog-number
+resolver. Nineteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173).
 
-**Seventy-five of them write** since #2150 added two — #2167's read left it there; *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Seventy-eight of them write** since #2173, #2174 and #2175 added one each; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -133,8 +133,9 @@ src/lib/agent-api/
   purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
-  catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438)
-  colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445)
+  catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438); the batch caps (#2174, #2175)
+  colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445); a batch's pairs (#2173)
+  batch.ts          a batch's cap, its two item grammars, the per-item answer (#2173, #2174, #2175)
   translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
   checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
   catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
@@ -164,9 +165,9 @@ src/lib/agent-api/
     purchases.ts    the eleven purchase operations (#1390)               ← server-side
     sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
     stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
-    catalog-edits.ts  the five catalogue writes (#1438)                  ← server-side
+    catalog-edits.ts  the five catalogue writes (#1438), update_stamps / create_issues (#2174, #2175)  ← server-side
     variant-tree.ts   move_stamp_variant / delete_stamp_variant (#2140)  ← server-side
-    colnect-ids.ts  set_stamp_colnect_id (#1445)                        ← server-side
+    colnect-ids.ts  set_stamp_colnect_id (#1445), set_stamp_colnect_ids (#2173)  ← server-side
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
     checklists.ts   the eight checklist operations (#1512)              ← server-side
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
@@ -180,7 +181,7 @@ src/lib/agent-api/
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `variant-tree.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `variant-tree.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -2009,6 +2010,8 @@ where until then the resolver could find a number and nothing could add one.
 | `add_stamp_variants` | yes | the *Add variant range* dialog (#722), with its subtype (#1000) |
 | `update_issue` | yes | the name, the year, the translated names, a catalogue's declared range, its own prefix in a catalogue (#1606) |
 | `update_stamp` | yes | the name, translated names, date, catalogue numbers and attributes (#71, #736), and a variant's subtype (#2138) |
+| `create_issues` | yes | up to 25 `create_issue`s in one call (#2175) — *Many at once*, below |
+| `update_stamps` | yes | up to 100 stamps' catalogue numbers in one call, on `update_stamp`'s rules (#2174) |
 
 **Every write is the app's own.** `createIssue`, `addStampRangeToIssue`, `addVariantRangeToStamp`,
 `updateIssue` and `updateStampWithCatalog` are the issue form's, the two range dialogs' and the two
@@ -2236,6 +2239,66 @@ in step* (#689). `set_stamp_colnect_id` is exempted **by name, with its reason**
 `tests/integration/agent-api-trades.test.ts`, rather than by narrowing the word list or renaming the
 operation to slip past it: it sends nothing, claims nothing about a list and clears no report, and
 `markColnectApplied` stays out through the import guard.
+
+### Many at once (#2173, #2174, #2175)
+
+**Three batch forms of single writes**, filed together on 2026-10-25 from the assistant's list of
+operations it needed — completing about 1,900 series had taken some 6,500 single
+`set_stamp_colnect_id` calls:
+
+| operation | writes | the single call it repeats | per call |
+| --- | --- | --- | --- |
+| `set_stamp_colnect_ids` (`POST /stamp-colnect-ids`) | yes | `set_stamp_colnect_id`, setting or changing | 100 pairs |
+| `update_stamps` (`PATCH /stamps`) | yes | `update_stamp`, catalogue numbers only | 100 stamps |
+| `create_issues` (`POST /issues/batch`) | yes | `create_issue`, whole | 25 issues |
+
+**A batch is its single call said many times, and nothing more**, and one session built all three so
+the shape is one (`batch.ts`). Every item follows the single call's rules exactly — the same reading
+of an ID, the same catalogue and run checks, the same duplicate refusal whatever the duplicate
+setting, the same parser for an issue's fields — because each goes through the single call's own
+code: `writeStampColnectId` is `set_stamp_colnect_id`'s body after its parameters are read,
+`stampCatalogNumberWrites` is `update_stamp`'s catalogue-number half, and an issue is handed to
+`parseParameters` with `create_issue`'s own declarations and then to `createIssueFromParams`.
+**Items are applied in the order sent, one after another**, so a later item sees what an earlier one
+wrote: an ID or a number one item takes is refused on the next as held, naming the first. **The same
+stamp named twice is refused the second time** (#2173's decision, kept for #2174), whether or not the
+first was written — the second would otherwise be a silent overwrite of a refusal's subject.
+
+**One refused item stops nothing, and every item is answered on its own** (#1540's rule for price
+cells, #2149's for conversation entries): `index` (0-based), and for the two short grammars the
+`entry` as sent, then the single call's answer — `written` or `unchanged`; `created` — or `refused`
+with the single call's own sentence as `reason` and the ids it names in `accepted`. The counts of
+every status head the answer, a zero stated. **A defect inside one item refuses that item with a
+sentence saying to send it alone** and is logged, rather than failing the call: the items before it
+are already written, and a bare `internal_error` would hide which. Its own message is never relayed
+(`errorResponseBody`'s rule). The batch as a whole is still refused outright when it is empty or over
+its cap — a hard cap, as `MAX_LIST_LIMIT` is.
+
+**An item is one string** (#706: a parameter is a scalar or a string list). A pair and an update are
+`name=value` pairs separated by `;`, as a price cell is — `stamp=Mi 301; colnect_id=1133075`,
+`stamp=st 123; catalog_numbers=Mi: 124a, Fi: 456` — the update's numbers split on commas, which no
+single stamp's number carries (in the issue form's syntax a comma separates numbers). **An issue is a
+field per line**, as a conversation entry is, the fields being `create_issue`'s parameter names and a
+list field repeated a line per value (`catalog_numbers=Mi: 500-505` then `catalog_numbers=Fi: …`),
+because a catalogue's numbers carry commas and an issue carries several lists; the values stay text
+and `create_issue`'s parser types them, so an item means exactly what the same body sent to
+`create_issue` means. A stamp is named in a batch as everywhere else — an id, `st 123`, or a
+catalogue number naming only it — through `resolveStampRefsEach`, which answers per reference
+rather than refusing the call and runs the resolver once for the whole batch.
+
+**What each batch leaves out is the single call's to keep.** `set_stamp_colnect_ids` sets and
+changes; a clear stays `set_stamp_colnect_id`'s, since nobody clears a catalogue's IDs in bulk.
+`update_stamps` is catalogue numbers only, as #2174 scoped it; *unchanged* is every number sent being
+the one the stamp already had, and the duplicate check runs on every number sent either way, as
+`update_stamp`'s always has. Its answer names the numbers a write took off in `replaced`, as the
+single Colnect call names the ID it replaced. `create_issues` answers each created issue in
+`create_issue`'s shape; `createIssue` writes in one transaction, so a refused issue leaves nothing of
+itself. **`update_stamp` was refactored, not changed**: its catalogue-number half moved into
+`stampCatalogNumberWrites` and behaves as before. `set_stamp_colnect_ids` is exempted from #712's
+`colnect` name guard by name, beside `set_stamp_colnect_id` and for its reason, and
+`create_issues` and `update_stamps` joined the exact list of `/issues` and `/stamps` writes in
+`agent-api-catalog-edits.test.ts`; `tests/integration/agent-api-batch-writes.test.ts` drives all
+three.
 
 ## Pricing the catalogue
 
@@ -2952,7 +3015,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and eighteen operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and twenty-one operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2982,9 +3045,10 @@ and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`; #2139 added `
 `move_stamp_variant` and `delete_stamp_variant`; #2149 added `list_conversation_entries`,
 `add_conversation_entries`, `update_conversation_entry`, `move_conversation_entry` and
 `delete_conversation_entry`; #2150 added `attach_conversation_files` and
-`remove_conversation_attachment`; #2167 added `list_issues`.
+`remove_conversation_attachment`; #2167 added `list_issues`; #2173 added `set_stamp_colnect_ids`, #2174
+`update_stamps` and #2175 `create_issues`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167, and *one hundred and eighteen* from #2167 until #2173. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

@@ -379,7 +379,8 @@ describe("the want, checklist and trade operations (#712)", () => {
       //   - `set_stamp_colnect_id` (#1445) writes `Stamp.colnectId` in this collection, the one field
       //     the collector's own item-ID box writes (#741). It sends nothing, claims nothing about a
       //     list, and clears no report — `markColnectApplied` stays forbidden by the import guard.
-      const exempt = new Set(["set_stamp_colnect_id"]);
+      //   - `set_stamp_colnect_ids` (#2173) is the same write for many stamps, on the same reasons.
+      const exempt = new Set(["set_stamp_colnect_id", "set_stamp_colnect_ids"]);
       const offenders = OPERATIONS.filter((operation) => {
         if (exempt.has(operation.name)) return false;
         const words = operation.name.split("_");

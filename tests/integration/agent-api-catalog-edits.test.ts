@@ -57,7 +57,17 @@ async function refused(token: string, method: Method, path: string, body?: unkno
 type CreatedIssue = AgentIssueDetail & { createdStamps: AgentCreatedStamp[] };
 type Created = { createdStamps: AgentCreatedStamp[] };
 
-const CATALOG_OPERATIONS = ["create_issue", "add_issue_stamps", "add_stamp_variants", "update_issue", "update_stamp"];
+// `create_issues` and `update_stamps` are #2175's and #2174's batch forms of two of them, driven in
+// `agent-api-batch-writes.test.ts`, and they publish nothing the single calls do not.
+const CATALOG_OPERATIONS = [
+  "create_issue",
+  "create_issues",
+  "add_issue_stamps",
+  "add_stamp_variants",
+  "update_issue",
+  "update_stamp",
+  "update_stamps",
+];
 
 describe("the catalogue writes (#1438)", () => {
   let userId: string;
@@ -676,6 +686,8 @@ describe("the catalogue writes (#1438)", () => {
         ["POST", `/stamps/${heldStamp}/variants`],
         ["PATCH", `/issues/${issue.id}`],
         ["PATCH", `/stamps/${heldStamp}`],
+        ["POST", "/issues/batch"],
+        ["PATCH", "/stamps"],
       ];
       for (const [method, path] of calls) {
         const err = await refused(readOnlyToken, method, path, { name: "x" });

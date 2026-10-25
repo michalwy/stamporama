@@ -27,7 +27,13 @@ import { getStampSizePresets } from "../../stamp-size-presets";
 import { getStampCatalogNumber, updateStampWithCatalog } from "../../stamps";
 import type { TranslationValueMap } from "../../translations";
 import { resolvedCatalogues } from "../area-reads";
+import { checkBatchSize, countStatuses, parseLineFields, parsePairFields, refusalOf, refused, type BatchRefusal } from "../batch";
 import {
+  ISSUE_ENTRY_EXAMPLE,
+  MAX_ISSUES_PER_CALL,
+  MAX_STAMP_NUMBER_UPDATES,
+  STAMP_UPDATE_EXAMPLE,
+  STAMP_UPDATE_FIELDS,
   checkDatePart,
   checkTranslationLanguage,
   duplicateCatalogNumbers,
@@ -35,16 +41,17 @@ import {
   parseKeyedEntries,
   parseTranslatedNames,
   prefixCollisions,
+  splitCatalogNumberList,
   type DuplicateHolder,
   type PrefixCollision,
 } from "../catalog-edits";
-import { invalidRequest, notFound } from "../errors";
-import { optionalBoolean, optionalInteger, optionalString, requiredString, stringList } from "../params";
+import { invalidRequest, isApiError, notFound } from "../errors";
+import { optionalBoolean, optionalInteger, optionalString, parseParameters, requiredString, stringList } from "../params";
 import { presetVocabularyEntry } from "../size-reads";
 import { acceptedNames, resolveVocabularyValue, type VocabularyEntry, type VocabularyName } from "../vocabulary";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { readIssue, readStamp } from "./records";
-import { loadStampLabels, stampNoOf, stampIdFromRef } from "./stamp-refs";
+import { loadStampLabels, resolveStampRefsEach, stampNoOf, stampIdFromRef } from "./stamp-refs";
 import type { AgentIssueDetail, AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
@@ -937,6 +944,46 @@ const ATTRIBUTE_FIELD: Record<StampAttributeKind, "colorId" | "watermarkId" | "p
   printing: "printingId",
 };
 
+type LoadedStamp = Awaited<ReturnType<typeof loadStamp>>;
+
+/**
+ * The stamp's catalogue numbers after `catalog_numbers` is applied — `update_stamp`'s rules, which
+ * `update_stamps` (#2174) applies to each of its stamps: a number only in a catalogue the stamp's
+ * area keeps, one number per catalogue and never a run, a catalogue not named keeping its number,
+ * and a number another stamp has refused naming it, whatever the duplicate setting — checked for
+ * every number sent, a number the stamp already has included, as the single call always has.
+ * `changed` is false when every number sent is the one the stamp already has.
+ */
+async function stampCatalogNumberWrites(
+  context: OperationContext,
+  world: CatalogueWorld,
+  stamp: LoadedStamp,
+  entries: readonly string[]
+): Promise<{ numbers: Map<string, string>; changed: boolean }> {
+  const numbers = new Map(stamp.catalogNumbers.map((row) => [row.catalogVendorId, row.number]));
+  const areaId = (stamp.stampAreaLinks.find((link) => link.isPrimary) ?? stamp.stampAreaLinks[0])?.collectionAreaId;
+  if (!areaId) {
+    throw invalidRequest("The stamp belongs to no area, so it has no catalogues to hold a number. The collector files it under an area first.");
+  }
+  const sent: { catalogVendorId: string; number: string }[] = [];
+  let changed = false;
+  for (const { key, value } of parseKeyedEntries(entries, "catalog_numbers", "catalogue", "Mi: 123a")) {
+    const catalogVendorId = resolveAreaCatalogue(world, areaId, key, "catalog_numbers");
+    const spec = parseCatalogNumberSpec(value);
+    if (!("error" in spec) && spec.numbers.length > 1) {
+      throw invalidRequest(
+        `"catalog_numbers" entry "${key}: ${value}" is a run of ${spec.numbers.length} numbers, and a stamp has one number in each catalogue. Send its own number; new stamps are added with \`add_issue_stamps\`.`
+      );
+    }
+    if (numbers.get(catalogVendorId)?.trim() !== value) changed = true;
+    sent.push({ catalogVendorId, number: value });
+    numbers.set(catalogVendorId, value);
+  }
+  const groups = await findCatalogDuplicatesForStamp(context.ownerId, context.collectionId, stamp.id, sent);
+  if (groups.length > 0) throw duplicateCatalogNumbers(groups);
+  return { numbers, changed };
+}
+
 export async function updateStampFromParams(
   context: OperationContext,
   params: ParsedParams
@@ -1003,28 +1050,10 @@ export async function updateStampFromParams(
     );
   }
 
-  const catalogNumbers = new Map(stamp.catalogNumbers.map((row) => [row.catalogVendorId, row.number]));
-  const sent: { catalogVendorId: string; number: string }[] = [];
-  if (entries.length > 0) {
-    const areaId = (stamp.stampAreaLinks.find((link) => link.isPrimary) ?? stamp.stampAreaLinks[0])?.collectionAreaId;
-    if (!areaId) {
-      throw invalidRequest("The stamp belongs to no area, so it has no catalogues to hold a number. The collector files it under an area first.");
-    }
-    const world = await loadCatalogueWorld(context);
-    for (const { key, value } of parseKeyedEntries(entries, "catalog_numbers", "catalogue", "Mi: 123a")) {
-      const catalogVendorId = resolveAreaCatalogue(world, areaId, key, "catalog_numbers");
-      const spec = parseCatalogNumberSpec(value);
-      if (!("error" in spec) && spec.numbers.length > 1) {
-        throw invalidRequest(
-          `"catalog_numbers" entry "${key}: ${value}" is a run of ${spec.numbers.length} numbers, and a stamp has one number in each catalogue. Send its own number; new stamps are added with \`add_issue_stamps\`.`
-        );
-      }
-      sent.push({ catalogVendorId, number: value });
-      catalogNumbers.set(catalogVendorId, value);
-    }
-    const groups = await findCatalogDuplicatesForStamp(context.ownerId, context.collectionId, stamp.id, sent);
-    if (groups.length > 0) throw duplicateCatalogNumbers(groups);
-  }
+  const catalogNumbers =
+    entries.length > 0
+      ? (await stampCatalogNumberWrites(context, await loadCatalogueWorld(context), stamp, entries)).numbers
+      : new Map(stamp.catalogNumbers.map((row) => [row.catalogVendorId, row.number]));
 
   const restated = (field: "issued_year" | "issued_month" | "issued_day", current: number | null) =>
     cleared.has(field) ? null : (date[field] ?? current);
@@ -1096,4 +1125,192 @@ export const updateStampOperation: Operation = {
       "The stamp as `get_stamp` now reads it, and `ownPricesKept`: null unless a changed subtype made this the base stamp's first variant while the base stamp carried catalogue prices of its own — then their `priceCount` and `editions`, which were left in place and now override the value rolled up from the variants.",
   },
   handler: async (context, params) => updateStampFromParams(context, params),
+};
+
+// ── Many at once: update_stamps (#2174) and create_issues (#2175) ─────────
+
+// **Each is its single call said many times, in the order sent** (`batch.ts`): an item follows
+// `update_stamp`'s or `create_issue`'s rules exactly, is answered on its own, and a refused one stops
+// nothing. Because the items are applied one after another, a later one sees what an earlier one
+// wrote — a number one stamp takes is refused on the next as a duplicate, naming the first.
+
+/** One stamp of `update_stamps`, answered. */
+export type AgentStampNumbersAnswer =
+  | {
+      readonly index: number;
+      readonly entry: string;
+      readonly status: "written" | "unchanged";
+      readonly stampId: string;
+      readonly stampNo: number;
+      /** The stamp's catalogue numbers after the call, as the collector reads them. */
+      readonly catalogNumbers: readonly string[];
+      /** The numbers the write took off — each catalogue's former number — so they can be put back. */
+      readonly replaced?: readonly string[];
+    }
+  | (BatchRefusal & { readonly entry: string });
+
+export interface AgentStampNumbersBatch {
+  readonly written: number;
+  readonly unchanged: number;
+  readonly refused: number;
+  readonly updates: readonly AgentStampNumbersAnswer[];
+}
+
+export async function updateStampNumbersFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentStampNumbersBatch> {
+  const entries = stringList(params, "updates");
+  checkBatchSize(entries, "updates", MAX_STAMP_NUMBER_UPDATES, "update", STAMP_UPDATE_EXAMPLE);
+  const parsed = entries.map((entry) => parsePairFields(entry, STAMP_UPDATE_FIELDS, STAMP_UPDATE_EXAMPLE));
+  const [stamps, world] = await Promise.all([
+    resolveStampRefsEach(context, parsed.flatMap((p) => (p.ok ? [p.fields.get("stamp")!] : []))),
+    loadCatalogueWorld(context),
+  ]);
+
+  const seen = new Map<string, number>();
+  const updates: AgentStampNumbersAnswer[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const p = parsed[index];
+    if (!p.ok) {
+      updates.push({ ...refused(index, p.reason), entry });
+      continue;
+    }
+    const resolved = stamps.get(p.fields.get("stamp")!.trim())!;
+    if ("reason" in resolved) {
+      updates.push({ ...refused(index, resolved.reason, resolved.accepted), entry });
+      continue;
+    }
+    const earlier = seen.get(resolved.stampId);
+    if (earlier !== undefined) {
+      updates.push({
+        ...refused(index, `It names the same stamp as the update at index ${earlier}, which was answered first. Send each stamp once.`, [resolved.stampId]),
+        entry,
+      });
+      continue;
+    }
+    seen.set(resolved.stampId, index);
+    try {
+      const stamp = await loadStamp(context, resolved.stampId);
+      const sent = splitCatalogNumberList(p.fields.get("catalog_numbers")!);
+      const before = await loadStampLabels(context, [stamp.id]);
+      const { numbers, changed } = await stampCatalogNumberWrites(context, world, stamp, sent);
+      if (changed) {
+        // The stamp form's write, restating what it would otherwise overwrite — the name, the date and
+        // every other catalogue's number — as `update_stamp` does; nothing else is handed to it.
+        await updateStampWithCatalog(context.ownerId, stamp.id, {
+          name: stamp.name,
+          issuedYear: stamp.issuedYear,
+          issuedMonth: stamp.issuedMonth,
+          issuedDay: stamp.issuedDay,
+          catalogNumbers: [...numbers].map(([catalogVendorId, number]) => ({ catalogVendorId, number })),
+        });
+      }
+      const labels = changed ? await loadStampLabels(context, [stamp.id]) : before;
+      const now = labels.get(stamp.id)?.catalogNumbers ?? [];
+      const gone = (before.get(stamp.id)?.catalogNumbers ?? []).filter((label) => !now.includes(label));
+      updates.push({
+        index,
+        entry,
+        status: changed ? "written" : "unchanged",
+        stampId: stamp.id,
+        stampNo: stampNoOf(labels, stamp.id),
+        catalogNumbers: now,
+        ...(gone.length > 0 ? { replaced: gone } : {}),
+      });
+    } catch (err) {
+      if (!isApiError(err)) console.error("[api/v1] update_stamps update failed", err);
+      updates.push({ ...refusalOf(index, err), entry });
+    }
+  }
+  return { ...countStatuses(updates, ["written", "unchanged", "refused"] as const), updates };
+}
+
+export const updateStampsOperation: Operation = {
+  name: "update_stamps",
+  method: "PATCH",
+  path: "/stamps",
+  description:
+    "Correct the catalogue numbers of many stamps in one call — up to 100, as when a catalogue's numbering is checked against the stamps here. Each update names a stamp and its numbers, and follows `update_stamp`'s rules for catalogue numbers exactly: only the catalogues named change, each among those the stamp's area keeps, one number per catalogue, and a number another stamp already has is refused naming that stamp. Each stamp is answered on its own — written, unchanged when it already had every number sent, or refused with the reason — and a refused stamp does not stop the others. Updates are applied in the order sent. Anything else about a stamp is `update_stamp`'s.",
+  writes: true,
+  parameters: [
+    {
+      name: "updates",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: `One stamp per entry, at most ${MAX_STAMP_NUMBER_UPDATES}, as \`name=value\` pairs separated by \`;\`: ${STAMP_UPDATE_EXAMPLE}. \`stamp\` is the stamp's id, its short number (\`st 123\`) or a catalogue number naming only it; \`catalog_numbers\` its number in each catalogue named, \`catalogue: number\`, separated by commas.`,
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The counts `written`, `unchanged` and `refused`, and `updates` in the order sent — each with its `index` and the `entry` as sent, and then `status` `written` or `unchanged` with the `stampId`, `stampNo`, its `catalogNumbers` as they now read and `replaced` with the numbers a write took off, or `status: refused` with the `reason` and, where it names stamps, their ids in `accepted`.",
+  },
+  handler: async (context, params) => updateStampNumbersFromParams(context, params),
+};
+
+/** One issue of `create_issues`, answered. */
+export type AgentIssueCreateAnswer =
+  | {
+      readonly index: number;
+      readonly status: "created";
+      readonly issue: AgentIssueDetail & { readonly createdStamps: AgentCreatedStamp[] };
+    }
+  | BatchRefusal;
+
+export interface AgentIssueBatch {
+  readonly created: number;
+  readonly refused: number;
+  readonly issues: readonly AgentIssueCreateAnswer[];
+}
+
+export async function createIssuesFromParams(context: OperationContext, params: ParsedParams): Promise<AgentIssueBatch> {
+  const entries = stringList(params, "issues");
+  checkBatchSize(entries, "issues", MAX_ISSUES_PER_CALL, "issue", ISSUE_ENTRY_EXAMPLE);
+  const issues: AgentIssueCreateAnswer[] = [];
+  for (const [index, entry] of entries.entries()) {
+    const fields = parseLineFields(entry, createIssueOperation.parameters, ISSUE_ENTRY_EXAMPLE);
+    if (!fields.ok) {
+      issues.push(refused(index, fields.reason));
+      continue;
+    }
+    try {
+      // `create_issue`'s own parser and handler: an issue here is exactly the body that call takes.
+      // `createIssue` writes in one transaction, so a refusal anywhere leaves nothing of it behind.
+      const one = parseParameters(createIssueOperation.parameters, {
+        path: {},
+        query: new URLSearchParams(),
+        body: fields.body,
+      });
+      issues.push({ index, status: "created", issue: await createIssueFromParams(context, one) });
+    } catch (err) {
+      if (!isApiError(err)) console.error("[api/v1] create_issues issue failed", err);
+      issues.push(refusalOf(index, err));
+    }
+  }
+  return { ...countStatuses(issues, ["created", "refused"] as const), issues };
+}
+
+export const createIssuesOperation: Operation = {
+  name: "create_issues",
+  method: "POST",
+  path: "/issues/batch",
+  description: `Create up to ${MAX_ISSUES_PER_CALL} issues in one call — a catalogue entered series by series. Each issue is exactly what \`create_issue\` takes, written a field per line, and follows its rules: the area, the year, the name, each catalogue's numbers generating the stamps, the issue's own prefixes. Each issue is created on its own and answered on its own — created, with its record and its stamps, or refused with the reason, leaving nothing of it behind — and a refused issue does not stop the others. Issues are created in the order sent, so a number one issue generates is refused on a later one as a duplicate. Call \`resolve_catalog_numbers\` first, and never create what it finds. Nothing created here can be deleted through this API.`,
+  writes: true,
+  parameters: [
+    {
+      name: "issues",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: `One issue per entry, at most ${MAX_ISSUES_PER_CALL}, a field per line as \`name=value\`: ${ISSUE_ENTRY_EXAMPLE}. The fields are \`create_issue\`'s parameters, meaning what they mean there — \`area\`, \`year\`, \`name\`, \`names\`, \`catalog_numbers\`, \`stamps_from\`, \`generate_stamps\`, \`size_preset\`, \`prefixes\` —, a list (\`names\`, \`catalog_numbers\`, \`stamps_from\`, \`prefixes\`) taking one value a line, its line repeated.`,
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The counts `created` and `refused`, and `issues` in the order sent — each with its `index`, and then `status: created` with the `issue` as `create_issue` answers it (the record as `get_issue` reads it and `createdStamps`), or `status: refused` with the `reason` and, where it names stamps, their ids in `accepted`.",
+  },
+  handler: async (context, params) => createIssuesFromParams(context, params),
 };
