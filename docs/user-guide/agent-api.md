@@ -267,6 +267,13 @@ It **cannot delete a preset** or change their order — that stays in Settings.
 On **issues and stamps** — the catalogue itself — it can enter a series it reads on a catalogue
 page, a dealer's list or Colnect, so that you do not type in what it could have. It can:
 
+- **list the issues of an area** — what you already have catalogued there, whether you hold any of it
+  or not — in the order the *Issues* list shows them, with or without the areas under it, narrowed to
+  some years and to a name or a catalogue number as the list's search box narrows it. Each issue
+  comes with its year, its name in your languages, its area, the range it declares in each
+  catalogue, any prefix of its own, how many stamps it has, and how many copies you hold of them in
+  each condition. So an assistant entering *Generalgouvernement 1940* can see first which of its
+  series are already there. A **read only** token can do this;
 - **create an issue** in one of your areas, with its year, its name and each catalogue's numbers,
   written the way the *Add issue* form takes them — `Mi: 100-105, 107`, or `2895A-2897A,
   2895B-2897B`. The numbers declare the issue's range and create its stamps, one per number, matched
