@@ -18,7 +18,9 @@ import { openScanUpload } from "@/lib/scan-uploads";
  *
  * `side=front` with no `batchNo` opens a new batch and `side=back` names the batch its front is in,
  * exactly as the single-request route did — the questions the upload answers are unchanged, they
- * are just asked at the start instead of alongside the bytes.
+ * are just asked at the start instead of alongside the bytes. A back sent together with its front
+ * (#2163) names the front's upload (`frontUploadId`) instead, since the front has no batch until it
+ * is prepared.
  */
 export async function POST(
   request: NextRequest,
@@ -44,6 +46,7 @@ export async function POST(
     label?: unknown;
     scanningProfileId?: unknown;
     turnover?: unknown;
+    frontUploadId?: unknown;
     totalBytes?: unknown;
   };
 
@@ -74,6 +77,9 @@ export async function POST(
     typeof input.scanningProfileId === "string" && input.scanningProfileId ? input.scanningProfileId : null;
   // How a back's backs were made (#1555). Absent takes the way the collection made its last one.
   const turnover = typeof input.turnover === "string" && input.turnover ? input.turnover : null;
+  // A back sent together with its front (#2163) names the front's upload instead of a batch.
+  const frontUploadId =
+    typeof input.frontUploadId === "string" && input.frontUploadId ? input.frontUploadId : null;
 
   try {
     const opened = await openScanUpload(session.user.id, { purchaseId }, {
@@ -83,6 +89,7 @@ export async function POST(
       label,
       scanningProfileId,
       turnover,
+      frontUploadId,
       totalBytes: input.totalBytes,
     });
     return NextResponse.json(opened, { status: 201 });

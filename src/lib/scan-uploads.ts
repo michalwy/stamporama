@@ -23,6 +23,8 @@ import {
   asScanUploadStatus,
   canDiscardScanUpload,
   canRetryScanUpload,
+  isScanUploadOnItsWay,
+  SCAN_UPLOAD_ON_ITS_WAY,
   SCAN_UPLOAD_STALL_MS,
   SWEEPABLE_SCAN_UPLOAD_STATUSES,
   type ScanUploadStatus,
@@ -149,6 +151,9 @@ export async function openScanUpload(
     scanningProfileId?: string | null;
     /** How a back's backs were made (#1555), carried to the sheet at finalize. */
     turnover?: string | null;
+    /** A back sent together with its front (#2163): the front's upload, in place of a batch number
+     * the front does not have yet. */
+    frontUploadId?: string | null;
     totalBytes: number;
   }
 ): Promise<OpenedScanUpload> {
@@ -170,6 +175,8 @@ export async function openScanUpload(
     throw new ScanValidationError(`Unsupported image type: ${input.mime}`);
   }
 
+  const frontUploadId = await chosenFrontUpload(owner, input);
+
   const chunkBytes = uploadChunkBytes();
   const upload = await prisma.scanUpload.create({
     data: {
@@ -180,6 +187,7 @@ export async function openScanUpload(
       label: input.label ?? null,
       scanningProfileId: await chosenProfile(owner.collectionId, input.scanningProfileId),
       turnover: chosenTurnover(input.side, input.turnover),
+      frontUploadId,
       mime: input.mime,
       totalBytes: input.totalBytes,
       chunkBytes,
@@ -218,6 +226,38 @@ function chosenTurnover(side: SheetSide, chosen: string | null | undefined): str
   return chosen;
 }
 
+/**
+ * The front a back is sent together with (#2163), checked at the open. Only a back names one, and
+ * never beside a batch number — it names the front *because* the front has no batch yet. The front
+ * must be one of the same order's, still on its way to being a card: a back opened against a front
+ * that already failed or was closed would only wait for a card that is not coming.
+ */
+async function chosenFrontUpload(
+  owner: { collectionId: string; purchaseId: string },
+  input: { side: SheetSide; batchNo?: number; frontUploadId?: string | null }
+): Promise<string | null> {
+  if (!input.frontUploadId) return null;
+  if (input.side !== "back" || input.batchNo != null) {
+    throw new ScanValidationError("Only a back sent with its front names the front's upload.");
+  }
+  const front = await prisma.scanUpload.findUnique({
+    where: { id: input.frontUploadId },
+    select: { collectionId: true, purchaseId: true, side: true, status: true },
+  });
+  if (
+    !front ||
+    front.collectionId !== owner.collectionId ||
+    front.purchaseId !== owner.purchaseId ||
+    front.side !== "front"
+  ) {
+    throw new ScanValidationError("The front this back belongs to was not found.");
+  }
+  if (!isScanUploadOnItsWay(asScanUploadStatus(front.status))) {
+    throw new ScanValidationError("The front this back belongs to is no longer being added.");
+  }
+  return input.frontUploadId;
+}
+
 // ── Receiving a chunk ─────────────────────────────────────────────────────────────────────────
 
 interface UploadRow {
@@ -229,6 +269,7 @@ interface UploadRow {
   label: string | null;
   scanningProfileId: string | null;
   turnover: string | null;
+  frontUploadId: string | null;
   mime: string;
   totalBytes: number;
   chunkBytes: number;
@@ -248,6 +289,7 @@ const UPLOAD_SELECT = {
   label: true,
   scanningProfileId: true,
   turnover: true,
+  frontUploadId: true,
   mime: true,
   totalBytes: true,
   chunkBytes: true,
@@ -424,11 +466,22 @@ function progressOf(upload: Pick<UploadRow, "id" | "status" | "error" | "sheetId
 // ── The worker's half ─────────────────────────────────────────────────────────────────────────
 
 /** Take the scan that has waited longest and mark it being prepared, or null when none is waiting.
- * Conditional on the status it was read at, so two passes can never claim the same scan. */
+ * Conditional on the status it was read at, so two passes can never claim the same scan.
+ *
+ * **A back sent with its front waits for it** (#2163): its batch number is written when the front
+ * becomes a card, so while the front is still arriving or in the queue — sent again after a failed
+ * send, say, and now behind its own back — the back is passed over. Once the front is a card, failed
+ * or gone, the back takes its turn, and its preparation says so if there is no card to join. */
 export async function claimNextScanUpload(): Promise<string | null> {
   for (;;) {
     const next = await prisma.scanUpload.findFirst({
-      where: { status: "queued" },
+      where: {
+        status: "queued",
+        OR: [
+          { frontUploadId: null },
+          { frontUpload: { is: { status: { notIn: [...SCAN_UPLOAD_ON_ITS_WAY] } } } },
+        ],
+      },
       orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
       select: { id: true },
     });
@@ -471,6 +524,16 @@ export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet
     where: { id: uploadId },
     select: { ...UPLOAD_SELECT, collection: { select: { ownerId: true } } },
   });
+  // A back sent with its front (#2163) is given the front's batch when the front becomes a card. Still
+  // without one, there is no card for it: said in words, and the parts kept, so once the front is
+  // tried again and made a card this back is too.
+  if (upload.side === "back" && upload.batchNo == null) {
+    throw new ScanValidationError(
+      upload.frontUploadId
+        ? "Its front did not become a card. Try the front again, then this back."
+        : "Its front was discarded, so this back has no card to join."
+    );
+  }
   const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
 
   const scan = assembledPath(upload.id);
@@ -509,6 +572,17 @@ export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet
         where: { id: upload.id, status: "preparing" },
         data: { status: "done", sheetId, error: null },
       });
+      // The backs sent with this front (#2163) join the card it has just become.
+      if (upload.side === "front") {
+        const { batchNo } = await tx.scanSheet.findUniqueOrThrow({
+          where: { id: sheetId },
+          select: { batchNo: true },
+        });
+        await tx.scanUpload.updateMany({
+          where: { frontUploadId: upload.id, batchNo: null },
+          data: { batchNo },
+        });
+      }
     }
   );
 

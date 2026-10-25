@@ -858,8 +858,16 @@ async function commitBackCut(args: {
 
   const frontSheet = await prisma.scanSheet.findFirstOrThrow({
     where: { ...scope, batchNo, side: "front" },
-    select: { width: true, height: true },
+    select: { width: true, height: true, _count: { select: { frontTiles: true } } },
   });
+  // A back sent together with its front (#2163) can be ready before the front is cut, and cut first
+  // it would find no front to pair with and send every back to the strip. Asked for in that order, the
+  // answer is to cut the front.
+  if (frontSheet._count.frontTiles === 0) {
+    throw new ScanValidationError(
+      "Cut the front of this card first: its backs are paired with the stamps cut from it."
+    );
+  }
 
   // Only front tiles that still have no back take part: a batch's back scan can be cut more than
   // once across re-cuts, and a tile already carrying a back is not looking for one. A tile that has

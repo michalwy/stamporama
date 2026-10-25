@@ -75,6 +75,8 @@ export async function openSheetUpload(input: {
   scanningProfileId?: string | null;
   /** How a back's backs were made (#1555); null takes the collection's last. */
   turnover?: string | null;
+  /** A back sent together with its front (#2163): the front's upload, in place of `batchNo`. */
+  frontUploadId?: string | null;
 }): Promise<OpenedSheetUpload> {
   const res = await fetch(`${scansApiBase(input.collectionId, input.purchaseId)}/uploads`, {
     method: "POST",
@@ -86,6 +88,7 @@ export async function openSheetUpload(input: {
       label: input.label ?? null,
       scanningProfileId: input.scanningProfileId ?? null,
       turnover: input.turnover ?? null,
+      frontUploadId: input.frontUploadId ?? null,
       totalBytes: input.file.size,
     }),
   }).catch(() => null);

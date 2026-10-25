@@ -36,6 +36,10 @@ import {
  * tab that could not say so, the files it holds are kept alive once a minute and the server takes
  * silence for closure (`SCAN_UPLOAD_STALL_MS`).
  *
+ * **Fronts and backs together** (#2163): a sitting scanned alternately goes up as front, back, front,
+ * back — each back right behind its front, naming the front's upload, since the front has no card
+ * number until the server has prepared it. The server holds the back until then.
+ *
  * **Drawn by the panel of scans being added** (#2099), on every screen, not by the Card scans
  * section: the batch carries on wherever the collector goes, so its progress goes with them.
  */
@@ -63,6 +67,8 @@ export interface QueuedScan {
   side: "front" | "back";
   batchNo: number | null;
   label: string | null;
+  /** A back sent with its front (#2163): the front's upload, once the front is opened. */
+  frontUploadId: string | null;
   state: QueuedScanState;
   /** Pieces acknowledged over pieces expected, while uploading (and where a failure stopped). */
   fraction: number;
@@ -70,6 +76,8 @@ export interface QueuedScan {
 }
 
 interface Entry extends QueuedScan {
+  /** A back sent with its front (#2163): the front's entry, whose upload it names when opened. */
+  frontKey: string | null;
   file: File;
   scanningProfileId: string | null;
   turnover: string | null;
@@ -139,6 +147,35 @@ function unsent(): Entry[] {
   return entries.filter((e) => e.state !== "refused");
 }
 
+interface QueueTarget {
+  collectionId: string;
+  purchaseId: string;
+  documentName: string;
+  scanningProfileId: string | null;
+}
+
+function entryOf(
+  target: QueueTarget,
+  file: File,
+  fields: Pick<Entry, "side" | "batchNo" | "label" | "turnover" | "frontKey">
+): Entry {
+  return {
+    key: `scan-${++nextKey}`,
+    collectionId: target.collectionId,
+    purchaseId: target.purchaseId,
+    documentName: target.documentName,
+    fileName: file.name,
+    ...fields,
+    frontUploadId: null,
+    state: "opening",
+    fraction: 0,
+    error: null,
+    file,
+    scanningProfileId: target.scanningProfileId,
+    upload: null,
+  };
+}
+
 /**
  * Add files to the queue, in the order given — several fronts at once, or one back.
  *
@@ -157,30 +194,76 @@ export function enqueueScans(input: {
   scanningProfileId: string | null;
   turnover: string | null;
 }): void {
-  const added: Entry[] = input.files.map((file, i) => ({
-    key: `scan-${++nextKey}`,
-    collectionId: input.collectionId,
-    purchaseId: input.purchaseId,
-    documentName: input.documentName,
-    fileName: file.name,
-    side: input.side,
-    batchNo: input.batchNo ?? null,
-    label: input.labels[i] ?? null,
-    state: "opening",
-    fraction: 0,
-    error: null,
-    file,
-    scanningProfileId: input.scanningProfileId,
-    turnover: input.turnover,
-    upload: null,
-  }));
+  addEntries(
+    input.files.map((file, i) =>
+      entryOf(input, file, {
+        side: input.side,
+        batchNo: input.batchNo ?? null,
+        label: input.labels[i] ?? null,
+        turnover: input.turnover,
+        frontKey: null,
+      })
+    )
+  );
+}
+
+/**
+ * Add cards scanned front and back alternately (#2163), each pair as its front followed by its back,
+ * so a card's two files go up one after the other and the cards are numbered in the pairs' order.
+ *
+ * `labels` is one per pair, for its front: the back joins the front's card and takes its name. Every
+ * back carries the same `turnover`, asked once for the whole batch.
+ */
+export function enqueueCardPairs(input: {
+  collectionId: string;
+  purchaseId: string;
+  documentName: string;
+  pairs: readonly { front: File; back: File | null }[];
+  labels: readonly (string | null)[];
+  scanningProfileId: string | null;
+  turnover: string | null;
+}): void {
+  addEntries(
+    input.pairs.flatMap((pair, i) => {
+      const front = entryOf(input, pair.front, {
+        side: "front",
+        batchNo: null,
+        label: input.labels[i] ?? null,
+        turnover: null,
+        frontKey: null,
+      });
+      if (!pair.back) return [front];
+      const back = entryOf(input, pair.back, {
+        side: "back",
+        batchNo: null,
+        label: null,
+        turnover: input.turnover,
+        frontKey: front.key,
+      });
+      return [front, back];
+    })
+  );
+}
+
+function addEntries(added: Entry[]): void {
   if (added.length === 0) return;
   joinRound(added.length);
   entries = [...entries, ...added];
   installPageHooks();
   emit();
   void (async () => {
+    // The uploads opened so far, by entry — held here rather than read back from the queue, which a
+    // small front may already have left by the time its back is opened.
+    const opened = new Map<string, string>();
     for (const entry of added) {
+      // A back opened behind its front names the front's upload (#2163). A front the server refused
+      // has none, and its back has no card to join.
+      const frontUploadId = entry.frontKey ? (opened.get(entry.frontKey) ?? null) : null;
+      if (entry.frontKey && !frontUploadId) {
+        leaveRound();
+        patch(entry.key, { state: "refused", error: "Its front was not accepted." });
+        continue;
+      }
       try {
         const upload = await openSheetUpload({
           collectionId: entry.collectionId,
@@ -191,8 +274,10 @@ export function enqueueScans(input: {
           label: entry.label,
           scanningProfileId: entry.scanningProfileId,
           turnover: entry.turnover,
+          frontUploadId,
         });
-        patch(entry.key, { state: "waiting", upload });
+        opened.set(entry.key, upload.id);
+        patch(entry.key, { state: "waiting", upload, frontUploadId });
         void pump();
       } catch (err) {
         leaveRound();
@@ -374,6 +459,7 @@ function toScan(e: Entry): QueuedScan {
     side: e.side,
     batchNo: e.batchNo,
     label: e.label,
+    frontUploadId: e.frontUploadId,
     state: e.state,
     fraction: e.fraction,
     error: e.error,

@@ -61,6 +61,14 @@ export function canRetryScanUpload(status: ScanUploadStatus): boolean {
   return status === "failed";
 }
 
+/** Sent or being sent and not yet a card, failed or closed — what a back sent with its front waits
+ * on (#2163) before it is prepared. */
+export const SCAN_UPLOAD_ON_ITS_WAY: readonly ScanUploadStatus[] = ["uploading", "queued", "preparing"];
+
+export function isScanUploadOnItsWay(status: ScanUploadStatus): boolean {
+  return SCAN_UPLOAD_ON_ITS_WAY.includes(status);
+}
+
 /** Still on its way to being a card — the states the section keeps asking about. */
 export function isScanUploadPending(status: ScanUploadStatus): boolean {
   return status === "queued" || status === "preparing";
@@ -166,6 +174,8 @@ export function scanCardTitle(scan: {
   label: string | null;
 }): string {
   if (scan.side === "back" && scan.batchNo != null) return `Back of batch ${scan.batchNo}`;
+  // A back sent with its front (#2163) has a batch only once the front is a card.
+  if (scan.side === "back") return "Back of a new card";
   return scan.label ? `New card · ${scan.label}` : "New card";
 }
 

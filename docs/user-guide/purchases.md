@@ -767,8 +767,29 @@ not even the half-sent one — and the next time you open the order, each says i
 section **Not uploaded — the page was closed before it was sent**, so you know which to choose again. **Dismiss** clears the
 note.
 
-Back scans are still added one at a time, from the batch's own **Add back scan**, since the app has
-to know which card each back belongs to.
+#### Fronts and backs together
+
+If you scan each card **front, back, front, back**, you can add the whole sitting in one go. Set the
+choice beside **Add card scans** to **Fronts and backs, alternating** (it stays that way until you set
+it back to **Fronts only**), then choose the files or drop them on the section.
+
+Before anything uploads, a list shows **the pairs**: the files **sorted by name**, the first a front,
+the second its back, the third the next front, and so on — *scan 2* comes before *scan 10*. Check it
+there, since one skipped scan puts every pair after it one file off:
+
+- **No back** on a front says that card has no back scan; every pair after it moves up by one file.
+- **Swap** exchanges a pair's front and back, for a card scanned back first.
+- With an odd number of files, the last front has no back.
+
+**How the backs are scanned** is asked once in the list, for every card, set to the collection's last
+answer as **Add back scan** sets it (see *Backs* below). **Add N cards** sends them: each front with
+its back right behind it, one card per front, numbered in the order of the list and named as fronts
+chosen together are. In the panel of scans being added a back is *Back of a new card* until its
+front has become a card. Each card is cut as usual — the front first, then its back, which the editor
+opens on next; a back is never cut before its front. If a front cannot be prepared, its back says so;
+**Try again** on the front, then on the back.
+
+Otherwise back scans are added one at a time, from the batch's own **Add back scan**.
 
 #### Naming a card
 
@@ -903,7 +924,9 @@ image arrives; the card stays on screen throughout.
 #### Backs
 
 Scan the card again with the stamps turned over, then use **Add back scan** on the batch and cut it
-the same way. Beside the button, say **how the backs were made**:
+the same way — or add fronts and backs together (see *Fronts and backs together* above), when the
+back joins its card by itself and is cut once its front is. Beside the button, say **how the backs
+were made**:
 
 - **Each stamp turned over in place** — every stamp turned where it lies, the card not lifted. Each
   back sits where its front did.
