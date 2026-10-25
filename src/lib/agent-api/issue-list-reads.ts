@@ -6,6 +6,18 @@
 
 import { compact } from "./collection-reads";
 import { invalidRequest } from "./errors";
+import { stampTreeOrder } from "./missing-catalog-prices";
+
+/** One stamp of an issue with its catalogue numbers, as `include_numbers` lists it (#2170). */
+export interface AgentIssueStamp {
+  readonly stampId: string;
+  readonly stampNo: number;
+  /** Its numbers in every catalogue, labelled as everywhere else, the area's primary catalogue first. */
+  readonly catalogNumbers: readonly string[];
+  readonly isVariant: boolean;
+  /** The stamp it is a variant of; absent on a stamp that is no one's variant. */
+  readonly parentStampId?: string;
+}
 
 /** Copies held of an issue's stamps in one condition. */
 export interface AgentHeldInCondition {
@@ -34,6 +46,9 @@ export interface AgentIssueListRow {
   readonly heldCopies: number;
   /** The same copies by condition, in the collection's order of conditions; only conditions held. */
   readonly heldByCondition: readonly AgentHeldInCondition[];
+  /** Every stamp filed under the issue with its numbers, in the issue's order — only with
+   *  `include_numbers`, and then including the stamps outside its declared ranges. */
+  readonly stamps?: readonly AgentIssueStamp[];
   readonly path: string;
 }
 
@@ -55,6 +70,8 @@ export interface IssueListRowExtras {
   /** Catalogue abbreviation per vendor id. */
   readonly abbrOf: ReadonlyMap<string, string>;
   readonly held: { readonly heldCopies: number; readonly heldByCondition: readonly AgentHeldInCondition[] };
+  /** The issue's stamps, already told by {@link issueStamps}; left out without `include_numbers`. */
+  readonly stamps?: readonly AgentIssueStamp[];
   readonly path: string;
 }
 
@@ -84,8 +101,40 @@ export function issueListRow(row: IssueListRowSource, extras: IssueListRowExtras
     requiredCount: row.requiredCount,
     heldCopies: extras.held.heldCopies,
     heldByCondition: [...extras.held.heldByCondition],
+    stamps: extras.stamps ? [...extras.stamps] : undefined,
     path: extras.path,
   });
+}
+
+/** One member of an issue, as {@link issueStamps} reads it. */
+export interface IssueStampSource {
+  readonly id: string;
+  readonly stampNo: number;
+  readonly parentId: string | null;
+  /** Its `IssueMember.sortOrder` in this issue — the collector's order among its siblings (#549). */
+  readonly sortOrder: number;
+  readonly sortKey: string | null;
+  /** Its catalogue numbers, already labelled. */
+  readonly catalogNumbers: readonly string[];
+}
+
+/**
+ * An issue's stamps in the issue's order — the variant tree depth first, each sibling group in the
+ * collector's order, as `find_missing_catalogue_prices` tells an issue's stamps — every member,
+ * whether or not its numbers fall in the issue's declared ranges. That is the point of #2170: a stamp
+ * filed under an issue but numbered outside its range is exactly the one an assistant otherwise
+ * collides with.
+ */
+export function issueStamps(members: readonly IssueStampSource[]): AgentIssueStamp[] {
+  return stampTreeOrder(members).map((member) =>
+    compact({
+      stampId: member.id,
+      stampNo: member.stampNo,
+      catalogNumbers: [...member.catalogNumbers],
+      isVariant: member.parentId !== null,
+      parentStampId: member.parentId ?? undefined,
+    })
+  );
 }
 
 /**

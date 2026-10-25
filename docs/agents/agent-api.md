@@ -171,7 +171,7 @@ src/lib/agent-api/
     checklists.ts   the eight checklist operations (#1512)              ← server-side
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
     missing-catalog-prices.ts  find_missing_catalogue_prices (#2110)     ← server-side
-    issue-list.ts   list_issues (#2167)                                 ← server-side
+    issue-list.ts   list_issues (#2167, #2170)                          ← server-side
     areas.ts        the six area operations (#1539)                     ← server-side
     auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
     shipping.ts     the fourteen carrier, option, supply and use operations (#1910)  ← server-side
@@ -215,7 +215,11 @@ follows from that, and each looks arbitrary without it.
 - **A hard default limit with a cursor on every list.** `DEFAULT_LIST_LIMIT` is 25 and
   `MAX_LIST_LIMIT` is 100, and the cap is **hard**: a request above it is refused rather than
   clamped. Clamping would hand back fewer rows than asked for with nothing saying so, which is the
-  same failure `total` exists to prevent one level down.
+  same failure `total` exists to prevent one level down. An operation whose rows are short may state
+  a larger cap of its own as `result.maxLimit` and hand the same figure to `parseListWindow`; the
+  route, the OpenAPI document and the MCP tool then declare `limit` from `listParameters(maxLimit)`,
+  so the parameter an agent reads and the check it meets cannot differ. `list_issues` is the one
+  (200, #2170).
 - **Every list response states the full `total`.** This is the convention that is not obvious and it
   is the important one. An agent handed twenty-five rows and no total cannot tell a page from the
   whole collection, so it answers confidently about a slice. Build the envelope with `listResponse`,
@@ -2366,7 +2370,7 @@ area, `list_holdings` covers only what is held, `list_checklists` narrows to one
 
 | operation | writes | what it is for |
 | --- | --- | --- |
-| `list_issues` | no | an `area`'s issues (with its sub-areas unless `sub_areas` is false), narrowed by `year_from`/`year_to` and `text`, in the Issues list's order, each with its range, own prefixes, counts and held copies by condition |
+| `list_issues` | no | an `area`'s issues (with its sub-areas unless `sub_areas` is false), narrowed by `year_from`/`year_to`, `catalogue` and `text`, in the Issues list's order, each with its number, range, own prefixes, counts and held copies by condition — and with `include_numbers` every stamp's numbers; pages up to 200 |
 
 **It is the screen's own read**: `listIssuesPaginated` over the screen's filter, in the screen's
 default order (year, then the leading catalogue's number, then name), and `countIssues` over the same
@@ -2386,6 +2390,27 @@ spelling `update_issue` takes, `memberCount` and `requiredCount` the row's two c
 pure `heldByCondition`. A copy is linked to one stamp, so summing over an issue's members counts each
 copy once. Catalogue totals stay `get_issue`'s: they are per checklist and per condition, and a list
 row carrying them would spend an agent's context on figures it did not ask for.
+
+**#2170 added what an assistant completing a catalogue still read off the screen.** Most of its
+refused writes came from stamps filed under an issue but numbered outside its declared range, which
+no row showed. Settled with the collector on 2026-10-25:
+
+- **`catalogue`** narrows to the issues with numbers in that catalogue — a declared range in it, or a
+  stamp of the issue numbered in it (`IssueListFilterOpts.numberedInVendorId`, which unlike the
+  screen's `catalogVendorId` filters alone). Resolved against the catalogue vocabulary by name,
+  abbreviation or id, an unknown one refused with the names.
+- **Pages run to 200 issues** — the one operation with a cap of its own (`ISSUE_LIST_MAX_LIMIT`,
+  through `result.maxLimit`; see the list conventions above).
+- **`include_numbers: true`** adds `stamps` to every row: each stamp filed under the issue, variants
+  included, with `stampId`, `stampNo`, `catalogNumbers` in every catalogue, `isVariant` and, on a
+  variant, `parentStampId` — **the stamps outside the declared range included**, since they are the
+  point. The order is the issue's: the variant tree depth first, each sibling group by
+  `IssueMember.sortOrder` and then the catalogue (`stampTreeOrder`, `find_missing_catalogue_prices`'
+  own), and a variant whose parent is filed elsewhere is told as a root and still marked. The numbers
+  are labelled as everywhere else (`loadCatalogLabelling`), against the stamp's own area — its issue's
+  where it has none — and **the row's issue**, so an issue's own prefix (#377) reads on its stamps as
+  it reads on its range. Without the input `stamps` is absent and the call answers as before.
+- `issueNo` was already on every row (#2167); a call with none of the new inputs is unchanged.
 
 ## Changing checklists
 

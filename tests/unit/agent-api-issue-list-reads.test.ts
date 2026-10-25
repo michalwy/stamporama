@@ -4,6 +4,7 @@ import {
   checkIssueListNarrowing,
   heldByCondition,
   issueListRow,
+  issueStamps,
   ownPrefixes,
 } from "../../src/lib/agent-api/issue-list-reads";
 import { isApiError } from "../../src/lib/agent-api/errors";
@@ -127,5 +128,63 @@ describe("checkIssueListNarrowing", () => {
     refused({ area: "Poland", text: null, yearFrom: 1945, yearTo: 1940 });
     checkIssueListNarrowing({ area: "Poland", text: null, yearFrom: 1940, yearTo: 1940 });
     checkIssueListNarrowing({ area: "Poland", text: null, yearFrom: 1940, yearTo: null });
+  });
+});
+
+describe("issueStamps (#2170)", () => {
+  const member = (id: string, sortOrder: number, parentId: string | null = null, catalogNumbers = [`Mi ${id}`]) => ({
+    id,
+    stampNo: sortOrder + 100,
+    parentId,
+    sortOrder,
+    sortKey: null,
+    catalogNumbers,
+  });
+
+  it("tells every member in the issue's order, each variant under its parent, marked as one", () => {
+    const told = issueStamps([
+      member("305", 0),
+      member("300a", 2, "300"),
+      member("300", 1, null, ["Mi 300", "Fi 280"]),
+    ]);
+    assert.deepEqual(told, [
+      { stampId: "305", stampNo: 100, catalogNumbers: ["Mi 305"], isVariant: false },
+      { stampId: "300", stampNo: 101, catalogNumbers: ["Mi 300", "Fi 280"], isVariant: false },
+      { stampId: "300a", stampNo: 102, catalogNumbers: ["Mi 300a"], isVariant: true, parentStampId: "300" },
+    ]);
+  });
+
+  it("marks a variant whose parent is filed elsewhere, and tells it as a root", () => {
+    assert.deepEqual(issueStamps([member("b", 1), member("a1", 0, "elsewhere")]).map((stamp) => stamp.stampId), ["a1", "b"]);
+    assert.equal(issueStamps([member("a1", 0, "elsewhere")])[0].isVariant, true);
+  });
+
+  it("keeps a stamp with no number, its numbers an empty list", () => {
+    assert.deepEqual(issueStamps([member("x", 0, null, [])])[0].catalogNumbers, []);
+  });
+});
+
+describe("issueListRow's stamps (#2170)", () => {
+  const source = {
+    id: "i1",
+    issueNo: 3,
+    name: "Warsaw",
+    nameByLanguage: {},
+    year: 1938,
+    catalogPrefixes: [],
+    memberCount: 0,
+    requiredCount: 0,
+  };
+  const extras = {
+    area: "Poland",
+    catalogRanges: [],
+    abbrOf: new Map<string, string>(),
+    held: { heldCopies: 0, heldByCondition: [] },
+    path: "/c/x/issues/i1",
+  };
+
+  it("leaves stamps out unless they were asked for, and keeps an empty list when they were", () => {
+    assert.equal("stamps" in issueListRow(source, extras), false);
+    assert.deepEqual(issueListRow(source, { ...extras, stamps: [] }).stamps, []);
   });
 });

@@ -1062,6 +1062,9 @@ export interface IssueListFilterOpts {
   searchCatalogNumber?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** Narrow to the issues with numbers in this catalogue (#2170): a declared range in it, or a stamp
+   *  of the issue numbered in it. Unlike {@link catalogVendorId} it filters alone. */
+  numberedInVendorId?: string;
   /** Restrict to a single year. A number matches `issue.year`; `"none"`
    *  matches issues with no year. Omitted means no year filter. */
   year?: number | "none";
@@ -1148,6 +1151,16 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
         { catalogNumbers: { some: { ...vendorClause, firstNumber: opts.catalogNumber } } },
         { catalogNumbers: { some: { ...vendorClause, lastNumber: opts.catalogNumber } } },
         { members: { some: { stamp: { catalogNumbers: { some: { ...vendorClause, number: opts.catalogNumber } } } } } },
+      ],
+    });
+  }
+
+  if (opts.numberedInVendorId) {
+    const vendorId = opts.numberedInVendorId;
+    conditions.push({
+      OR: [
+        { catalogNumbers: { some: { catalogVendorId: vendorId } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { catalogVendorId: vendorId } } } } } },
       ],
     });
   }

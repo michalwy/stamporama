@@ -3,7 +3,7 @@ import { assertAgentApiScope, resolveAgentApiCaller } from "@/lib/route-auth";
 import { errorResponseBody, invalidRequest, methodNotAllowed, unauthorized, unknownOperation } from "@/lib/agent-api/errors";
 import { parseParameters } from "@/lib/agent-api/params";
 import { allowedMethods, matchPath, pickMethod } from "@/lib/agent-api/registry";
-import { LIST_PARAMETERS } from "@/lib/agent-api/list";
+import { listParameters } from "@/lib/agent-api/list";
 import type { HttpMethod } from "@/lib/agent-api/types";
 
 // The whole of `/api/v1` (#706) — one dispatcher over the operation registry, rather than a route
@@ -78,7 +78,7 @@ async function handle(
 
     const specs =
       operation.result.kind === "list"
-        ? [...operation.parameters, ...LIST_PARAMETERS]
+        ? [...operation.parameters, ...listParameters(operation.result.maxLimit)]
         : operation.parameters;
     const params = parseParameters(specs, {
       path: pathValues,

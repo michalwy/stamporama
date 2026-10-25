@@ -71,7 +71,12 @@ export interface OperationContext {
  */
 export type OperationResult =
   | { readonly kind: "object"; readonly description: string }
-  | { readonly kind: "list"; readonly description: string };
+  | {
+      readonly kind: "list";
+      readonly description: string;
+      /** The most rows one call may ask for, when it is not `MAX_LIST_LIMIT` (#2170). */
+      readonly maxLimit?: number;
+    };
 
 export interface Operation {
   /**
