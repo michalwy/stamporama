@@ -3,7 +3,7 @@
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   DialogActions,
   DialogSecondaryButton,
@@ -36,6 +36,7 @@ import {
   runPriceSubjects,
   runStart,
   runTileTags,
+  runValueKeys,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -50,7 +51,16 @@ import {
   type RunDetailField,
   type RunRow,
   type RunTileOwnTags,
+  type RunVariantSlot,
+  type RunVariantsOf,
 } from "@/lib/issue-run";
+import {
+  cellMark,
+  parseCellAmount,
+  summarizeUmbrellaCell,
+  type UmbrellaCellSummary,
+} from "@/lib/variant-price-cells";
+import type { VariantPriceRow } from "@/lib/variant-prices";
 import {
   useCollectionFormats,
   useInvalidateInventory,
@@ -111,6 +121,7 @@ import {
 import { TextInput } from "./text-input";
 import { usePersistedFlag } from "./use-persisted-flag";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { useVariantPriceGrid } from "./use-variant-price-grid";
 import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { markedChecklistName } from "@/lib/checklist-kind";
 
@@ -128,7 +139,8 @@ import { markedChecklistName } from "@/lib/checklist-kind";
  * the tools a single tile has (#585's viewer, #598's measuring, #625's watermark) — never a reduced
  * version for the bulk case, since telling `240a` from `240b` is the same act on the fifth tile of a
  * set as on a tile alone. The run, which is the sequence and every answer in it at a glance, with each
- * catalogue value typed on its own row (#1229). And the tile in hand: its stamp — the checklist's
+ * catalogue value typed on its own row (#1229) — an umbrella's row asking for its variants' (#2161).
+ * And the tile in hand: its stamp — the checklist's
  * first, then the rest of its issues' — marked by what was read off it (#740), and its own copy
  * details.
  *
@@ -534,8 +546,46 @@ export function IssueRunDialog({
   const withoutCondition = assignments.filter((_, i) => !resolved[i].conditionId);
 
   // ── Catalogue values (#1220's scope change, #593's rules) ───────────────────────────────────
-  /** The prices this run can record — one per stamp × condition × certificate, never per tile. */
-  const priceSubjects = runPriceSubjects(assignments, resolved);
+  /** The umbrellas the run lands on, each read as the variant grid's own subtree (#2161) — the tree
+   * the single tile's section prices (#1337), so the two agree on which stamps are an umbrella's
+   * variants, in which order, and which of them a catalogue prices directly. */
+  const umbrellaIds = [
+    ...new Set(
+      assignments.flatMap((a) =>
+        a.stampId && memberById.get(a.stampId)?.isUmbrella ? [a.stampId] : []
+      )
+    ),
+  ];
+  const umbrellaTrees = useQueries({
+    queries: umbrellaIds.map((stampId) => ({
+      queryKey: ["issueRunVariantTree", stampId] as const,
+      queryFn: async (): Promise<VariantPriceRow[]> => {
+        const { getVariantPriceGridAction } = await import("@/app/actions/variant-prices");
+        const r = await getVariantPriceGridAction({ kind: "stamp", stampId, subtree: true });
+        if (r.status === "error") throw new Error(r.message);
+        return r.grid.rows;
+      },
+    })),
+  });
+  const treeOf = new Map<string, VariantPriceRow[]>();
+  const treeErrorOf = new Map<string, string>();
+  umbrellaIds.forEach((id, i) => {
+    const rows = umbrellaTrees[i]?.data;
+    if (rows) treeOf.set(id, rows);
+    const error = umbrellaTrees[i]?.error;
+    if (error) treeErrorOf.set(id, error.message);
+  });
+  /** Every stamp under an umbrella, in tree order — empty while its tree is being read, so the row
+   * asks for nothing meanwhile rather than for a price of the umbrella. */
+  const variantsOf: RunVariantsOf = (stampId) => {
+    if (!memberById.get(stampId)?.isUmbrella) return null;
+    return (treeOf.get(stampId) ?? [])
+      .filter((r) => r.stampId !== stampId)
+      .map((r) => ({ stampId: r.stampId, identified: r.identified }));
+  };
+  /** The prices this run can record — one per stamp × condition × certificate, never per tile, and
+   * on an umbrella's row its variants' (#2161). */
+  const priceSubjects = runPriceSubjects(assignments, resolved, variantsOf);
   const priceSubjectsKey = priceSubjects.map((s) => s.key).join(",");
   /** One read for the whole run — the offer grid's bulk context (#720), which answers the primary
    * catalogue, its latest edition and what is on file at the single for every subject at once. */
@@ -599,12 +649,32 @@ export function IssueRunDialog({
    * first — and of the tiles sharing a stamp × condition × certificate only the first in run order
    * carries one, the rest showing its figure. All of them read and write `typedPrices` by subject.
    */
-  const valueSlots = runValueSlots(assignments, resolved);
+  const valueSlots = runValueSlots(assignments, resolved, variantsOf);
   const valueFields = valueSlots.map((slot) => priceField(slot.key));
-  /** The editable fields in run order — what Tab walks. */
-  const valueKeys = valueSlots.flatMap((slot, i) =>
-    slot.key && slot.entryIndex === i && valueFields[i] ? [slot.key] : []
-  );
+  /** The editable fields in run order — what Tab walks: an umbrella's row walks its variants. */
+  const valueKeys = runValueKeys(valueSlots, (key) => priceField(key) != null);
+  /**
+   * What an umbrella is worth in one condition and certificate, off the run's own fields (#2161):
+   * a figure recorded on it plainly, else the lowest of its variants' as typed or on file, and how
+   * many variants are still unpriced — `summarizeUmbrellaCell`, the single tile's section's own rule,
+   * so the two cannot disagree. Null while its tree is being read.
+   */
+  const umbrellaValue = (umbrellaId: string, treeRootId: string, d: RunCopyDetails) => {
+    const rows = treeOf.get(treeRootId);
+    if (!rows) return null;
+    const amountOf = (id: string) =>
+      priceField(catalogValueSubjectKey(id, d.conditionId, d.certificateStatusId))?.value.amount ??
+      "";
+    return summarizeUmbrellaCell({
+      rows,
+      umbrellaId,
+      own: amountOf(umbrellaId),
+      amountOf: (id) => parseCellAmount(amountOf(id)),
+      markOf: (id) => cellMark(amountOf(id)),
+    });
+  };
+  // Written from the full grid (#2161): the run's read is stale once it closes having saved.
+  const fullGrid = useVariantPriceGrid({ onSaved: () => void prices.refetch() });
   const priceInputs = useRef(new Map<string, HTMLInputElement | null>());
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   /** Tab walks the values and nothing else, and off the last one lands on Identify (#726). */
@@ -627,11 +697,37 @@ export function IssueRunDialog({
     input?.focus();
     input?.select();
   }
-  const runCatalogs = new Set(valueFields.flatMap((f) => (f ? [f.value.catalogNameId] : [])));
-  const runCatalog = runCatalogs.size === 1 ? valueFields.find((f) => f != null)?.catalog : undefined;
-  const valuesMissing = valueSlots.filter(
-    (slot, i) => slot.entryIndex === i && valueFields[i]?.value.amount.trim() === ""
-  ).length;
+  /** What every value field of the run is wired with — a row's own, or a variant's under an
+   * umbrella's row: typed by subject, walked by Tab. */
+  const fieldProps = (key: string | null): RunFieldProps => ({
+    disabled: isPending || savingPrices,
+    inputRef: (el) => {
+      if (key) priceInputs.current.set(key, el);
+    },
+    onChange: (v) => {
+      if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
+    },
+    onKeyDown: (e) => {
+      if (key) tabThroughValues(e, key);
+    },
+  });
+  const subjectFields = priceSubjects.map((s) => priceField(s.key));
+  const runCatalogs = new Set(subjectFields.flatMap((f) => (f ? [f.value.catalogNameId] : [])));
+  const runCatalog =
+    runCatalogs.size === 1 ? subjectFields.find((f) => f != null)?.catalog : undefined;
+  /** The rows still without a value — on an umbrella's row, while none of its variants is priced
+   * (#2161); a row whose fields are not read yet is not counted. */
+  const valuesMissing = valueSlots.filter((slot, i) => {
+    if (slot.entryIndex !== i) return false;
+    const stampId = assignments[i].stampId;
+    if (slot.variants && stampId) {
+      const asked = slot.variants.some((v) => v.entryIndex !== null && priceField(v.key));
+      return asked && umbrellaValue(stampId, stampId, resolved[i])?.value == null;
+    }
+    return valueFields[i]?.value.amount.trim() === "";
+  }).length;
+  /** Whether any row asks for an umbrella's variants — what the note above the run then says. */
+  const asksForVariants = valueSlots.some((slot) => slot.variants && slot.variants.length > 0);
 
   const describe = (field: RunDetailField, d: RunCopyDetails): string => {
     switch (field) {
@@ -925,12 +1021,20 @@ export function IssueRunDialog({
           };
         });
 
+  /** Whether the values are still being read — the run's, or an umbrella's tree (#2161), whose row
+   * asks for nothing until it is in. */
+  const valuesReading =
+    prices.isLoading ||
+    (prices.isFetching && valueKeys.length === 0) ||
+    umbrellaTrees.some((q) => q.isLoading);
+  /** Whether any subject of the run can be recorded at all — a primary catalogue with an edition. */
+  const anyValueField = subjectFields.some((f) => f != null);
   /** Whether the run's values note is drawn, which the run's counts then sit beside. */
   const valuesNoteShown =
     priceSubjects.length > 0 &&
-    !(prices.isLoading || (prices.isFetching && valueKeys.length === 0)) &&
+    !valuesReading &&
     !prices.isError &&
-    valueKeys.length > 0;
+    anyValueField;
   /** The tiles still without a stamp (#1523) and the tiles on an umbrella (#1247), counted at the top
    * so a long run need not be scrolled to find them. */
   const runCounts =
@@ -1177,13 +1281,13 @@ export function IssueRunDialog({
               )}
               {/* The values are typed on the rows below (#1229); what the rows cannot say goes here. */}
               {priceSubjects.length > 0 ? (
-                prices.isLoading || (prices.isFetching && valueKeys.length === 0) ? (
+                valuesReading ? (
                   <p style={MUTED}>Reading the catalog values on file…</p>
                 ) : prices.isError ? (
                   <p style={{ ...MUTED, color: "var(--color-error)" }}>
                     The catalog values on file could not be read: {prices.error.message}
                   </p>
-                ) : valueKeys.length === 0 ? (
+                ) : !anyValueField ? (
                   <p style={MUTED}>
                     This checklist&rsquo;s area has no primary catalog with an edition to record a
                     value on.
@@ -1193,6 +1297,8 @@ export function IssueRunDialog({
                     Type each catalog value on its row and press Tab for the next; Tab from the last
                     goes to <em>Identify</em>. Tiles of one stamp in one condition share a value, typed
                     on the first of them.
+                    {asksForVariants &&
+                      " A tile on an umbrella asks for its variants’ prices under its row, and shows the lowest of them."}
                     {valuesMissing > 0 && (
                       <span style={{ color: "var(--color-warning)" }}>
                         {" "}
@@ -1275,6 +1381,8 @@ export function IssueRunDialog({
                 const field = valueFields[i];
                 const label = labelOf(a.stampId) ?? "…";
                 const named = chipsOf(a.stampId);
+                const umbrella = onUmbrella.has(a.tileId);
+                const subjectLabel = `${condition?.abbreviation ?? ""}${certificate ? ` ${certificate.abbreviation}` : ""}`;
                 return (
                   // The row's frame holds both of its lines (#1583): the tile, its stamp and value
                   // above, and below them what is already held of that stamp beside the tile's
@@ -1418,24 +1526,23 @@ export function IssueRunDialog({
                           )}
                         </span>
                       </button>
-                      <RowValue
-                        entry={slot.key != null && slot.entryIndex === i}
-                        entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
-                        amount={field?.value.amount ?? null}
-                        currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
-                        label={`#${i + 1} ${label} ${condition?.abbreviation ?? ""}${certificate ? ` ${certificate.abbreviation}` : ""} catalog value`}
-                        disabled={isPending || savingPrices}
-                        inputRef={(el) => {
-                          if (slot.key) priceInputs.current.set(slot.key, el);
-                        }}
-                        onChange={(v) => {
-                          const key = slot.key;
-                          if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
-                        }}
-                        onKeyDown={(e) => {
-                          if (slot.key) tabThroughValues(e, slot.key);
-                        }}
-                      />
+                      {umbrella ? (
+                        // Not a field (#2161): the umbrella's figure follows from its variants'.
+                        <UmbrellaValue
+                          value={a.stampId && field ? umbrellaValue(a.stampId, a.stampId, d) : null}
+                          entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
+                          currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
+                        />
+                      ) : (
+                        <RowValue
+                          entry={slot.key != null && slot.entryIndex === i}
+                          entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
+                          amount={field?.value.amount ?? null}
+                          currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
+                          label={`#${i + 1} ${label} ${subjectLabel} catalog value`}
+                          {...fieldProps(slot.key)}
+                        />
+                      )}
                       <Tooltip content="Take this tile out of the run — nothing is deleted, and it stays ticked on the card">
                         <button
                           type="button"
@@ -1449,6 +1556,31 @@ export function IssueRunDialog({
                         </button>
                       </Tooltip>
                     </div>
+                    {/* An umbrella's variants, priced on its row (#2161) as the single tile prices
+                        them (#1337): a field per variant down the tree, under the row and lined up
+                        with its value, so Tab goes through them and on to the next row. */}
+                    {/* Only where the umbrella has a catalogue to be priced in, as a row's field. */}
+                    {slot.variants && a.stampId && field && (
+                      <RunVariantPrices
+                        rows={treeOf.get(a.stampId) ?? null}
+                        error={treeErrorOf.get(a.stampId) ?? null}
+                        rootId={a.stampId}
+                        variants={slot.variants}
+                        index={i}
+                        summary={umbrellaValue(a.stampId, a.stampId, d)}
+                        valueOf={(vkey) => priceField(vkey)?.value.amount ?? null}
+                        currencyOf={(vkey) =>
+                          runCatalog ? null : (priceField(vkey)?.catalog?.currency ?? null)
+                        }
+                        umbrellaValueOf={(id) => umbrellaValue(id, a.stampId as string, d)}
+                        labelOf={(row) => `#${i + 1} ${row.label} ${subjectLabel} catalog value`}
+                        fieldProps={fieldProps}
+                        onFullGrid={() =>
+                          fullGrid.open({ kind: "stamp", stampId: a.stampId as string, subtree: true })
+                        }
+                        disabled={isPending}
+                      />
+                    )}
                     {/* What is already held of the row's stamp, worded as the single tile's line
                         (#562), and the tile's disposition beside it (#1583): keeping or selling the
                         piece is decided here, on the row. Gone with the stamp. Copies this run creates
@@ -1922,6 +2054,8 @@ export function IssueRunDialog({
           />,
           document.body
         )}
+      {/* An umbrella row's *Full grid…* (#2161) — the grid portals itself out of the panel. */}
+      {fullGrid.dialog}
     </>
   );
 }
@@ -1999,6 +2133,17 @@ function RunPicture({
   );
 }
 
+/** The column a run row's value takes, and an umbrella's variants' under it (#2161). */
+const ROW_VALUE_WIDTH = "9.5rem";
+
+/** What a value field of the run is wired with (`fieldProps` in the dialog). */
+interface RunFieldProps {
+  disabled: boolean;
+  inputRef: (el: HTMLInputElement | null) => void;
+  onChange: (value: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
 /**
  * A run row's catalogue value (#1229).
  *
@@ -2026,16 +2171,12 @@ function RowValue({
   /** Named per row only where the run's catalogs differ; otherwise it is in the heading. */
   currency: string | null;
   label: string;
-  disabled: boolean;
-  inputRef: (el: HTMLInputElement | null) => void;
-  onChange: (value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-}) {
+} & RunFieldProps) {
   const empty = amount != null && amount.trim() === "";
   return (
     <span
       style={{
-        width: "9.5rem",
+        width: ROW_VALUE_WIDTH,
         flexShrink: 0,
         display: "flex",
         alignItems: "center",
@@ -2086,6 +2227,215 @@ function RowValue({
         </>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * An umbrella's value on the run (#2161) — on the umbrella's own row, and on an umbrella further
+ * down its tree. **Text, not a field**, as in the single tile's section (#1337, #627): a figure
+ * recorded on the umbrella plainly, else the lowest of its variants' `≈`-marked. A row sharing an
+ * earlier row's umbrella names the row its variants are typed on.
+ */
+function UmbrellaValue({
+  value,
+  entryTurn,
+  currency,
+}: {
+  /** Null while the umbrella's tree is being read. */
+  value: UmbrellaCellSummary | null;
+  entryTurn: number | null;
+  currency: string | null;
+}) {
+  const figure = value?.value ?? null;
+  return (
+    <span
+      style={{
+        width: ROW_VALUE_WIDTH,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        fontSize: "0.75rem",
+      }}
+    >
+      {value && (
+        <>
+          <Tooltip
+            content={
+              figure === null
+                ? "None of this umbrella's variants is priced here yet."
+                : value.rolledUp
+                  ? "The lowest price among this umbrella's variants — computed, not recorded."
+                  : "Recorded on this umbrella directly, so it overrides the lowest-variant figure. Change it in the full grid."
+            }
+          >
+            <span
+              style={{
+                width: "6.5rem",
+                flexShrink: 0,
+                boxSizing: "border-box",
+                padding: "0 0.5rem",
+                textAlign: "right",
+                fontSize: "0.875rem",
+                fontVariantNumeric: "tabular-nums",
+                fontStyle: value.rolledUp ? "italic" : undefined,
+                color:
+                  figure === null
+                    ? "var(--color-warning)"
+                    : value.rolledUp
+                      ? "var(--color-text-muted)"
+                      : "var(--color-text-secondary)",
+              }}
+            >
+              {figure === null ? "—" : value.rolledUp ? `≈${figure}` : figure}
+            </span>
+          </Tooltip>
+          {entryTurn != null ? (
+            <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>as #{entryTurn}</span>
+          ) : (
+            currency && <span style={{ color: "var(--color-text-muted)" }}>{currency}</span>
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
+/** The take-out ×'s room, kept empty — so a field under a row lines up with the row's own. */
+function TakeOutSpacer() {
+  return (
+    <span aria-hidden style={{ ...TAKE_OUT_BUTTON, visibility: "hidden" }}>
+      <Icon name="close" size="sm" />
+    </span>
+  );
+}
+
+/**
+ * An umbrella's variants, priced on the umbrella's row of the run (#2161) — the single tile's
+ * section (#1337) in the run's shape. One line per stamp down the tree, indented as the tree is and
+ * labelled by its catalogue number, each with a field in the row's value column for the row's
+ * condition and certificate; an umbrella further down shows what its own variants roll up to. A
+ * variant whose price an earlier row already asks for shows it and names that row, as a sharing row
+ * does. Above them, how many variants are still unpriced and **Full grid…** for every other
+ * condition, certificate and format — out of the Tab order, so Tab goes from one variant's price to
+ * the next and on to the next row.
+ */
+function RunVariantPrices({
+  rows,
+  error,
+  rootId,
+  variants,
+  index,
+  summary,
+  valueOf,
+  currencyOf,
+  umbrellaValueOf,
+  labelOf,
+  fieldProps,
+  onFullGrid,
+  disabled,
+}: {
+  /** The umbrella's tree as the grid reads it; null while it is being read. */
+  rows: readonly VariantPriceRow[] | null;
+  /** Why the tree could not be read, where it could not. */
+  error: string | null;
+  rootId: string;
+  variants: readonly RunVariantSlot[];
+  /** The row's own index in the run. */
+  index: number;
+  summary: UmbrellaCellSummary | null;
+  valueOf: (key: string) => string | null;
+  currencyOf: (key: string) => string | null;
+  umbrellaValueOf: (stampId: string) => UmbrellaCellSummary | null;
+  labelOf: (row: VariantPriceRow) => string;
+  fieldProps: (key: string) => RunFieldProps;
+  onFullGrid: () => void;
+  disabled: boolean;
+}) {
+  const rootDepth = rows?.find((r) => r.stampId === rootId)?.depth ?? 0;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.125rem",
+        // Under the stamp, past the row's number and its two pictures, as the held line below.
+        padding: `0 0.25rem 0.375rem calc(3.25rem + 2 * ${RUN_PICTURE} + 0.25rem)`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          fontSize: "0.75rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        <span style={{ flex: 1, minWidth: 0 }}>
+          {error && !rows ? (
+            <span style={{ color: "var(--color-error)" }}>Its variants could not be read: {error}</span>
+          ) : !rows
+            ? "Reading its variants…"
+            : summary && summary.variantCount > 0
+              ? summary.unpricedCount === 0
+                ? `Variant prices · all ${summary.variantCount} priced`
+                : `Variant prices · ${summary.unpricedCount} of ${summary.variantCount} unpriced`
+              : "Variant prices"}
+        </span>
+        <Tooltip content="Every condition, certificate and format of this tree, and the umbrella's own override.">
+          <DialogSecondaryButton
+            onClick={onFullGrid}
+            disabled={disabled || !rows}
+            // Out of the Tab order: nothing sits between two values (#1223).
+            tabIndex={-1}
+            style={{ minHeight: "1.5rem", padding: "0 0.5rem", fontSize: "0.75rem" }}
+          >
+            <Icon name="prices" size="xs" /> Full grid…
+          </DialogSecondaryButton>
+        </Tooltip>
+        <TakeOutSpacer />
+      </div>
+      {rows &&
+        variants.map((v) => {
+          const row = rows.find((r) => r.stampId === v.stampId);
+          if (!row) return null;
+          return (
+            <div key={v.stampId} style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  paddingLeft: `${Math.max(0, row.depth - rootDepth - 1) * 1.1}rem`,
+                  fontSize: "0.8125rem",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>{row.label}</span>
+                {row.name && <span style={{ color: "var(--color-text-muted)" }}> {row.name}</span>}
+                {!row.identified && (
+                  <span style={{ color: "var(--color-text-muted)", fontStyle: "italic" }}> umbrella</span>
+                )}
+              </span>
+              {v.entryIndex === null ? (
+                <UmbrellaValue value={umbrellaValueOf(v.stampId)} entryTurn={null} currency={null} />
+              ) : (
+                <RowValue
+                  entry={v.entryIndex === index}
+                  entryTurn={v.entryIndex !== index ? v.entryIndex + 1 : null}
+                  amount={valueOf(v.key)}
+                  currency={currencyOf(v.key)}
+                  label={labelOf(row)}
+                  {...fieldProps(v.key)}
+                />
+              )}
+              <TakeOutSpacer />
+            </div>
+          );
+        })}
+    </div>
   );
 }
 

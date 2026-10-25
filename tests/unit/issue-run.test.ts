@@ -16,6 +16,7 @@ import {
   runPriceSubjects,
   runStart,
   runTileTags,
+  runValueKeys,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -558,6 +559,107 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
       assert.deepEqual(entries(run, [{ conditionId: "mint" }]), [0, 1, 1]);
       // Changing it back makes the second tile's field the shared kind again.
       assert.deepEqual(entries(run, [{ conditionId: "used" }]), [0, 0, 0]);
+    });
+
+    describe("a row on an umbrella prices its variants (#2161)", () => {
+      // u ── u1, u2 (an umbrella of its own) ── u2a, u2b
+      const tree = new Map([
+        [
+          "u",
+          [
+            { stampId: "u1", identified: true },
+            { stampId: "u2", identified: false },
+            { stampId: "u2a", identified: true },
+            { stampId: "u2b", identified: true },
+          ],
+        ],
+        [
+          "u2",
+          [
+            { stampId: "u2a", identified: true },
+            { stampId: "u2b", identified: true },
+          ],
+        ],
+      ]);
+      const variantsOf = (id: string) => tree.get(id) ?? null;
+      const resolvedFor = (run: ReturnType<typeof assignInTurn>, overrides: ReadonlyArray<Partial<RunCopyDetails> | undefined> = []) =>
+        run.map((_, i) => resolveRunCopyDetails(shared, overrides[i]));
+      const stampsOf = (keys: readonly string[], subjects: ReturnType<typeof runPriceSubjects>) =>
+        keys.map((k) => subjects.find((s) => s.key === k)?.stampId);
+
+      it("asks for every variant down the tree on the umbrella's row, and never for the umbrella", () => {
+        const run = assignInTurn(["t1", "t2"], ["s1", "u"]);
+        const resolved = resolvedFor(run);
+        const slots = runValueSlots(run, resolved, variantsOf);
+        assert.equal(slots[0].variants, null);
+        assert.deepEqual(
+          slots[1].variants?.map((v) => [v.stampId, v.entryIndex]),
+          // An umbrella further down rolls up, so it is never typed into.
+          [["u1", 1], ["u2", null], ["u2a", 1], ["u2b", 1]]
+        );
+        const subjects = runPriceSubjects(run, resolved, variantsOf);
+        // The umbrella's own subject is read, for a figure recorded on it; its variants follow it.
+        assert.deepEqual(
+          subjects.map((s) => s.stampId),
+          ["s1", "u", "u1", "u2", "u2a", "u2b"]
+        );
+        // Tab: the plain row's value, then the variants' fields in tree order, nothing else.
+        assert.deepEqual(
+          stampsOf(runValueKeys(slots, () => true), subjects),
+          ["s1", "u1", "u2a", "u2b"]
+        );
+      });
+
+      it("asks for the variants in the row's own condition and certificate", () => {
+        const run = assignInTurn(["t1"], ["u"]);
+        const [slot] = runValueSlots(run, resolvedFor(run, [{ certificateStatusId: "cert" }]), variantsOf);
+        const [subject] = runPriceSubjects(
+          assignInTurn(["t1"], ["u1"]),
+          resolvedFor(run, [{ certificateStatusId: "cert" }])
+        );
+        assert.equal(slot.variants?.[0].key, subject.key);
+      });
+
+      it("asks a second row of the same umbrella nothing, and one in another condition again", () => {
+        const run = assignInTurn(["t1", "t2", "t3"], ["u", "u", "u"]);
+        const slots = runValueSlots(run, resolvedFor(run, [undefined, undefined, { conditionId: "mint" }]), variantsOf);
+        assert.deepEqual(slots.map((s) => s.entryIndex), [0, 0, 2]);
+        assert.equal(slots[1].variants, null);
+        assert.deepEqual(slots[2].variants?.map((v) => v.entryIndex), [2, null, 2, 2]);
+        assert.equal(runValueKeys(slots, () => true).length, 6);
+      });
+
+      it("asks for a variant once, wherever it comes up first", () => {
+        // A tile on a variant directly, then one on the umbrella, then one on the umbrella below it.
+        const run = assignInTurn(["t1", "t2", "t3"], ["u2a", "u", "u2"]);
+        const slots = runValueSlots(run, resolvedFor(run), variantsOf);
+        assert.deepEqual(slots[1].variants?.map((v) => [v.stampId, v.entryIndex]), [
+          ["u1", 1],
+          ["u2", null],
+          ["u2a", 0],
+          ["u2b", 1],
+        ]);
+        assert.deepEqual(slots[2].variants?.map((v) => v.entryIndex), [0, 1]);
+        const subjects = runPriceSubjects(run, resolvedFor(run), variantsOf);
+        assert.deepEqual(
+          stampsOf(runValueKeys(slots, () => true), subjects),
+          ["u2a", "u1", "u2b"]
+        );
+      });
+
+      it("asks for nothing on the row while the umbrella's tree is being read", () => {
+        const run = assignInTurn(["t1"], ["u"]);
+        const slots = runValueSlots(run, resolvedFor(run), () => []);
+        assert.deepEqual(slots[0].variants, []);
+        assert.deepEqual(runValueKeys(slots, () => true), []);
+      });
+
+      it("leaves out a variant with nothing to record on", () => {
+        const run = assignInTurn(["t1"], ["u2"]);
+        const slots = runValueSlots(run, resolvedFor(run), variantsOf);
+        const [, a] = runPriceSubjects(run, resolvedFor(run), variantsOf);
+        assert.deepEqual(runValueKeys(slots, (key) => key !== a.key).length, 1);
+      });
     });
 
     describe("Tab", () => {

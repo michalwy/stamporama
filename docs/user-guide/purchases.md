@@ -1704,6 +1704,26 @@ so you can copy a column of numbers off the catalogue page without selecting any
   in amber**; the note above the run counts them.
 - `1,50` and `1.50` are both accepted. The figure is always the single's, whatever format you file
   the piece as.
+- **An umbrella in the run asks for its variants' prices**, as identifying a single tile does,
+  because the catalogue prices each variant rather than the stamp. Under a row on a stamp with
+  variants of its own comes one line per variant down its tree, indented as the tree is and labelled
+  by its catalogue number, each with a price field lined up under the row's value — for the same
+  catalogue edition and the row's condition and certificate. The row itself shows what the variants
+  roll up to, read-only: the lowest of their prices, marked `≈` since it is computed, or a price
+  recorded on the umbrella directly shown plainly. An umbrella further down the tree shows its own
+  roll-up the same way. Above the variants it says how many are still unpriced, and **Full grid…**
+  opens the [variant price grid](variant-prices.md) for every other condition, certificate and format.
+  - **Tab goes through the variants' prices in order, then on to the next row**, with nothing in
+    between.
+  - Two tiles on the same umbrella in the same condition and certificate share its variants' prices:
+    the second row shows the umbrella's figure and says which row they are typed on (*as #1*). A
+    variant whose price an earlier row already asks for — a tile on that variant itself, say — shows
+    it the same way, so no price is asked for twice.
+  - The note above the run counts an umbrella's row as having **no value yet** while none of its
+    variants is priced, and still counts it *on an umbrella*.
+  - The variants' prices are saved with the rest of the run's values, before any copy is created.
+    The tile still becomes an unknown-variant copy of the umbrella, valued at the lowest of its
+    variants' prices.
 
 Values are saved before any copy is created; if saving one fails, nothing is created and you can
 correct it and confirm again.
@@ -2201,7 +2221,9 @@ a **Variant prices** section with a price field for each variant, right there in
   for pricing other conditions, certificates and formats, or for recording a price on the umbrella
   itself. What you save there shows up in the section when you close it.
 - The same applies when several tiles are identified as one stamp. A stamp without variants keeps
-  the single field, and a run of tiles identified as a set keeps its own values column.
+  the single field. In a run of tiles identified as a set, a tile on an umbrella asks for its
+  variants' prices under its own row — see *Catalogue values while the catalogue is open* in
+  [Working through the tiles](#working-through-the-tiles).
 
 The copies are
 linked to the lot and marked **Ordered** — purchased but
