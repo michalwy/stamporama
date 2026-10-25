@@ -701,8 +701,16 @@ describe("the catalogue writes (#1438)", () => {
     it("publishes exactly these catalogue writes, and nothing that deletes, moves or reorders an issue or a stamp", () => {
       // **`move_issue_to_area` is #1539's, not #1438's**: the collector allowed an issue to be moved to
       // another area, and `agent-api-areas.test.ts` pins it with the area operations. The two
-      // variant-tree operations are #2140's the same way, pinned in `agent-api-variant-tree.test.ts`.
-      const EXEMPT_WRITES = new Set(["move_issue_to_area", "move_stamp_variant", "delete_stamp_variant"]);
+      // variant-tree operations are #2140's the same way, pinned in `agent-api-variant-tree.test.ts`,
+      // and #2169's, #2171's and #2172's three, pinned in `agent-api-issue-tree.test.ts`.
+      const EXEMPT_WRITES = new Set([
+        "move_issue_to_area",
+        "move_stamp_variant",
+        "delete_stamp_variant",
+        "move_stamp_to_issue",
+        "delete_stamp",
+        "delete_issue",
+      ]);
       const catalogue = OPERATIONS.filter(
         (op) => /^\/(issues|stamps)(\/|$)/.test(op.path) && op.writes && !EXEMPT_WRITES.has(op.name)
       ).map((op) => op.name);
@@ -715,7 +723,9 @@ describe("the catalogue writes (#1438)", () => {
       // the catalogue. `agent-api-checklists.test.ts` pins the checklist operations exactly.
       // `move_issue_to_area` is exempted the same way (#1539): the collector allowed an issue to be
       // moved between areas, and #2140's two the same way: the collector allowed a stamp to be moved
-      // under another stamp of its issue and a variant nothing names to be deleted, and nothing else.
+      // under another stamp of its issue and a variant nothing names to be deleted, and #2169, #2171
+      // and #2172's the same way: a stamp moved to another issue of its area, a base stamp nothing
+      // names deleted and an issue with no stamps deleted — and nothing else.
       const exempt = new Set(["remove_checklist_stamps", ...EXEMPT_WRITES]);
       const destructive = OPERATIONS.filter(
         (op) =>

@@ -1,9 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { variantHeldMessage, variantHolderPhrases, type VariantHolders } from "../../src/lib/agent-api/variant-tree";
+import {
+  baseStampHeldMessage,
+  variantHeldMessage,
+  variantHolderPhrases,
+  type VariantHolders,
+} from "../../src/lib/agent-api/variant-tree";
 
-// The pure half of `delete_stamp_variant` (#2140): what keeps a variant from being deleted and the
-// sentence the refusal is. The operations are driven end to end in
+// The pure half of `delete_stamp_variant` (#2140) and `delete_stamp` (#2171): what keeps a stamp from
+// being deleted and the sentence the refusal is. The operations are driven end to end in
 // `tests/integration/agent-api-variant-tree.test.ts`.
 
 const NOTHING: VariantHolders = {
@@ -50,5 +55,21 @@ describe("variantHeldMessage", () => {
 
   it("names a single holder alone", () => {
     assert.deepEqual(variantHolderPhrases({ ...NOTHING, wants: 3 }), ["3 wants"]);
+  });
+});
+
+describe("baseStampHeldMessage (#2171)", () => {
+  it("is null when nothing names the base stamp", () => {
+    assert.equal(baseStampHeldMessage("Mi 240 (st 3)", NOTHING), null);
+  });
+
+  it("refuses a base stamp on the variant's list, its own variants on it", () => {
+    const message = baseStampHeldMessage("Mi 240 (st 3)", { ...NOTHING, copyNos: [5], variantNos: [8, 9] });
+    assert.ok(message);
+    assert.match(message, /^Mi 240 \(st 3\) is not deleted/);
+    assert.ok(message.includes("1 copy (#5)"), message);
+    assert.ok(message.includes("2 variants of its own (st 8, st 9)"), message);
+    assert.match(message, /A base stamp is deleted only when nothing names it/);
+    assert.match(message, /Nothing was changed\.$/);
   });
 });

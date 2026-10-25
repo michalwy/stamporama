@@ -341,10 +341,30 @@ screens:
 If a stamp that becomes a variant's parent had catalogue prices of its own, they are kept and the
 assistant is told so, exactly as when it adds variants.
 
-**What it cannot do on the catalogue is delete or move anything else.** It never deletes an issue or a
-base stamp, never takes a catalogue number off a stamp, never moves a stamp to another issue, never
-merges two issues, and never changes the order of an issue's stamps. Those stay on the issue's and the
-stamp's own screens, where everything it creates can be seen and corrected. Checklists, clearing a
+**It can move a stamp to another issue, and delete what was created by mistake**, the way *Move to
+another issue…* and *Delete* do on your screens:
+
+- **Move a stamp, with its variants, to another issue of the same area** — a stamp filed under the
+  wrong issue, or one your catalogue prints as a series of its own. It goes at the end of the other
+  issue's stamps, or at the place the assistant names. It leaves the old issue's checklists and joins
+  the new issue's own checklist, which is started for it if the issue has none; a variant joins it too
+  only if it was on such a checklist before. Its catalogue numbers, prices, copies, Colnect ID, size
+  and photos stay as they are. Where the new issue has a prefix of its own and the stamp's number
+  would then read as one another stamp already has, the move is refused, naming both. The assistant
+  can also have both issues' catalogue ranges worked out again from their stamps. An issue in another
+  area is refused, as on your screen, and so is a variant on its own: it moves with its base stamp.
+  Unlike your own *Move to another issue…*, the checklists follow the stamp.
+- **Delete a base stamp created by mistake**, but only when nothing names it — the same list as for a
+  variant, its own variants included. It is taken off its checklists, and the assistant is told which.
+- **Delete an empty issue** — one created without stamps and never filled, or one whose stamps have
+  all been moved away — with its empty checklists. An issue that still has a stamp is refused, saying
+  how many, and so is one whose checklist an album prints, naming the album.
+
+**What it cannot do on the catalogue is delete or move anything else.** It never deletes an issue that
+has stamps or a stamp anything names, never takes a catalogue number off a stamp, never takes a stamp
+out of an issue without moving it to another, never merges two issues, and never changes the order of
+an issue's stamps beyond placing one it moves. Those stay on the issue's and the stamp's own screens,
+where everything it creates can be seen and corrected. Checklists, clearing a
 catalogue price and areas are the other exceptions, below — moving an issue to another area among
 them.
 

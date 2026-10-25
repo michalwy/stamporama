@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues and #2173/#2174/#2175 three batch forms of single writes; both wrappers exist and the registry carries **one hundred and twenty-one operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted and #2172 an empty issue deleted; both wrappers exist and the registry carries **one hundred and twenty-four operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #1168's bid recommendation, and #1037's catalog-number
-resolver. Nineteen counts are quoted
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #1168's bid recommendation, and #1037's catalog-number
+resolver. Twenty counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172).
 
-**Seventy-eight of them write** since #2173, #2174 and #2175 added one each; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Eighty-one of them write** since #2169, #2171 and #2172 added three; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -146,7 +146,8 @@ src/lib/agent-api/
   shipping-reads.ts carriers, options, supplies and uses as told; amounts, "supply: quantity", naming a supply or service (#1910)
   sale-reads.ts     the sale row and record, the buyer, a sold set's price (#1949)
   conversation-log-reads.ts  an entry a field per line, naming a sale, an entry read back (#2149); a file the same way, base64 (#2150)
-  variant-tree.ts   what keeps a variant from being deleted, and the refusal (#2140)
+  variant-tree.ts   what keeps a variant or a base stamp from being deleted, and the refusals (#2140, #2171)
+  issue-tree.ts     an issue named in a sentence; the refusals for a move's prefix clash and an issue not empty (#2169, #2172)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -166,7 +167,8 @@ src/lib/agent-api/
     sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
     stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
     catalog-edits.ts  the five catalogue writes (#1438), update_stamps / create_issues (#2174, #2175)  ← server-side
-    variant-tree.ts   move_stamp_variant / delete_stamp_variant (#2140)  ← server-side
+    variant-tree.ts   move_stamp_variant / delete_stamp_variant (#2140), delete_stamp (#2171)  ← server-side
+    issue-tree.ts     move_stamp_to_issue (#2169) / delete_issue (#2172)  ← server-side
     colnect-ids.ts  set_stamp_colnect_id (#1445), set_stamp_colnect_ids (#2173)  ← server-side
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
     checklists.ts   the eight checklist operations (#1512)              ← server-side
@@ -181,7 +183,7 @@ src/lib/agent-api/
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `variant-tree.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `variant-tree.ts`, `issue-tree.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -2106,10 +2108,11 @@ ignores them).
 (`SUBTYPE_TRANSLATION_FIELDS` is `["name"]`), so #2138 and #2139 take and correct a name.
 
 **Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
-`CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteIssue`,
-`deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`, `moveStampNode`,
+`CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps
+`deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`,
 `reorderIssueMembers`, `reorderChecklists` and `deleteCollectionArea` out of every
-operation module — until #2140 it held `deleteStamp` and `reparentStampNode` too —, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
+operation module — until #2140 it held `deleteStamp` and `reparentStampNode` too, and until #2169 and
+#2172 `moveStampNode` and `deleteIssue` —, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
 writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-shaped name. New stamps
 take the issue's order as the dialogs' generation gives it (#549).
 
@@ -2161,6 +2164,14 @@ below. `reparentStampNode` and `deleteStamp` left the map for `VARIANT_TREE_WRIT
 name from the same name guard and the exact list of `/stamps` writes, and
 `agent-api-variant-tree.test.ts` pins them instead.
 
+**#2169, #2171 and #2172 lifted it for a stamp moved to another issue, a base stamp nothing names and
+an issue with no stamps** — see *Between issues* below. `moveStampNode` and `deleteIssue` left the map
+for `ISSUE_TREE_WRITES`, reachable from `operations/issue-tree.ts` alone; `delete_stamp` sits beside
+`delete_stamp_variant` and reaches `deleteStamp` through the same module. All three are exempted by
+name from the name guard and the exact list of `/issues` and `/stamps` writes, and
+`agent-api-issue-tree.test.ts` pins them instead. Merging issues, taking a stamp out of an issue,
+taking a number off a stamp and reordering the stamp tree stay in the map.
+
 **`resolveStampRefs` and `loadStampLabels` moved out of `sizes.ts` into `operations/stamp-refs.ts`**
 so the two modules share one way of naming a stamp and reading its numbers back.
 
@@ -2171,9 +2182,11 @@ stamp under another stamp of its issue, or with `top_level` brings a variant up 
 `delete_stamp_variant` (`DELETE /stamps/{stamp_id}`) deletes a variant nothing names. An assistant
 building a specialised catalogue makes and finds exactly these mistakes — a variant under the wrong
 stamp, a stamp that should be a variant of another, a variant created by mistake — and until #2140
-each had to wait for the collector on the stamp's screen. **Base stamps, issues and catalogue numbers
-are still never deleted**, nothing moves between issues and nothing is reordered: the rest of
-#1438's rule stands.
+each had to wait for the collector on the stamp's screen. *Base stamps, issues and catalogue numbers
+are still never deleted, nothing moves between issues* stood here until #2169, #2171 and #2172, and is
+quoted because it was true until they landed: a base stamp nothing names and an issue with no stamps
+are now deleted, and a stamp moves to another issue of its area — see *Between issues* below.
+Catalogue numbers are still never deleted and the tree is not reordered.
 
 **A move is the screen's own**, `reparentStampNode` — the Issues row's *Move under another stamp…*
 (#656) — so its rules are the screen's and are not restated: the parent is a member of the same
@@ -2198,9 +2211,82 @@ listing under it, wants, auction lot lines, price observations, trade lines or v
 refused**, with the copies, offers and variants named by number so the assistant can say which. The
 list and the sentence are pure in `variant-tree.ts`. What goes with a deleted variant is what is the
 stamp's own — its catalogue numbers, catalogue prices, translations, checklist places, photos — and
-the answer counts them in `removedWithIt`. A base stamp is refused outright, whatever holds it. The
+the answer counts them in `removedWithIt`. *A base stamp is refused outright, whatever holds it*
+was true until #2171: `delete_stamp_variant` still refuses one, now pointing at `delete_stamp`. The
 write is `deleteStamp` in `reparent` mode: with no variants under it, it deletes exactly what
 `cascade` would, and a variant added between the check and the write is moved up rather than taken.
+
+### Between issues (#2169, #2171, #2172)
+
+**Three operations, and all three write**: `move_stamp_to_issue` (`POST /stamps/{stamp_id}/issue`)
+moves a stamp, with its variants, to another issue; `delete_stamp` (`DELETE /stamps/{stamp_id}/base`)
+deletes a base stamp nothing names; `delete_issue` (`DELETE /issues/{issue_id}`) deletes an issue with
+no stamps. Completing a series from a specialised catalogue, an assistant meets stamps filed under the
+wrong issue and series the catalogue prints on their own, creates base stamps by mistake, and leaves
+issues empty once their stamps have moved — and until these each waited for the collector. They are
+in `operations/issue-tree.ts`, except `delete_stamp`, which shares `delete_stamp_variant`'s holder list
+in `operations/variant-tree.ts`; the refusal sentences are pure in `issue-tree.ts` and
+`variant-tree.ts`. **What the API still cannot do on the catalogue**: merge two issues, take a stamp out
+of an issue without moving it, take a catalogue number off a stamp, delete an issue that has stamps or
+a stamp anything names, and reorder an issue's stamps other than where a moved stamp lands.
+
+**A move is the screen's own**, `moveStampNode` — the Issues row's *Move to another issue…* (#54) —
+and **the collector kept the screen's area rule** (2026-10-25): the target is an issue of the same
+area, which is all the screen's picker offers. #2169 was written as *any area, as on the screen*; the
+tree said otherwise, and an issue of another area is refused, pointing at `move_issue_to_area` for a
+whole series. The stamp leaves the source with every variant filed under it there and lands at the end
+of the target's top level — or at `position`, 1-based among the target's top-level stamps, which
+`moveStampNode` now takes and renumbers the one sibling group for. **A variant is refused on its own**
+(one whose parent is a member of the source): the screen would move it out from under its base and
+leave it drawn as a root in the target with a parent the target cannot see, and the two-step way —
+`move_stamp_variant` `top_level`, then move — says the same thing visibly. `stamp_id` takes an id, a
+short number or a catalogue number; `from_issue_id` is needed only for a stamp filed under several
+issues, and one already filed under the target is refused, since `moveStampNode` would hit the
+membership's key.
+
+**The checklist places follow the stamp, which the screen's move does not do** (#2169). The screen
+moves only the `IssueMember` rows, so a moved stamp stays on the source issue's checklists — a stamp
+counted in a set of an issue it is no longer in. `moveStampNode` takes `moveChecklistPlaces`, and with
+it the moved stamps leave **every** source checklist, standard and specialised, and the stamp joins the
+target's first standard checklist (`ensureIssueChecklist`, created from the issue's name when there is
+none). **A variant joins it only if it was on a standard checklist of the source** — the collector's
+answer on 2026-10-25: a new variant joins no checklist, so one that was on none must not start
+counting. The answer lists each checklist left and the one joined, `created` when the move made it.
+The screen's move was left as it was; carrying its checklists over too is a product change of its own.
+
+**A number that reads differently under the target's prefix is refused before anything is written.**
+Same area, so the difference is an issue's own prefix (#377, #1606): every catalogue of the area whose
+resolved prefix differs between the two issues is checked — `findCatalogDuplicatesForCandidates` with
+the target as the prefix context — and the moved stamps never count against each other. The refusal
+names the moved stamp and the holder, the holders' ids in `accepted`, as `update_issue` refuses a prefix
+change. Under the same prefix nothing is checked, so a duplicate the collection already carries does
+not block an unrelated move.
+
+**`update_ranges` recomputes both issues' declared ranges with the catalogue-number grid's rule**
+(#1346): `refreshIssueDeclaredRange`, now exported, per catalogue of the area and any other the issue
+declares, from the issue's **standard checklists'** stamps — which is why the checklist places moving
+matters here too. An issue left with no checklist stamp keeps the ranges it declares, as on the grid:
+nothing in it defines one, and removing them would erase a declaration the numbers never contradicted.
+The answer states each catalogue whose range changed, `before` and `after`.
+
+**A base stamp is deleted on the variant's list, its own variants on it** (#2171). Nothing that names
+it — copies, offers, wants, auction lot lines, price observations, trade lines, variants — or it is
+refused naming them (`baseStampHeldMessage`); a variant is refused pointing at `delete_stamp_variant`.
+It is the same `deleteStamp` in `reparent` mode, so a variant added between the check and the write is
+brought up rather than taken. It leaves its issues and checklists, both cascaded, and the answer names
+each checklist it left. `delete_stamp` is under `/stamps/{stamp_id}/base` because
+`DELETE /stamps/{stamp_id}` was already `delete_stamp_variant`'s, and two operations differing only in
+whether the stamp has a parent should not be one path the agent cannot tell apart.
+
+**An issue is deleted only when it has no stamps** (#2172), refused otherwise saying how many and how
+many are variants. **One whose checklist an album prints is refused too**, naming the checklist and
+the albums: the delete cascades the checklists and each album's card for one, which `delete_checklist`
+refuses (#1512), so taking the same card by deleting the issue would be the back door. That is a rule
+this API adds; the screen's delete refuses nothing. The write is `deleteIssue`, the issue's *Delete*,
+told `onlyIfEmpty` so it refuses inside its transaction an issue that gained a stamp after the check —
+the screen's delete takes an issue's own stamps with it, and the agent's must never. Its checklists,
+declared ranges, own prefixes, translations, tags and format factors cascade, and the answer names the
+checklists and counts the ranges, prefixes, translations and tags.
 
 ### A stamp's Colnect ID
 
@@ -2792,9 +2878,11 @@ exist cannot be.
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
-  *Building the catalogue* above. **Checklists, catalogue prices, areas and the variant tree are the
-  exceptions** (#1512, #1540, #1539, #2140): it moves a stamp under another stamp of its issue, brings
-  a variant up, and deletes a variant nothing names — see *The variant tree* — deletes a checklist
+  *Building the catalogue* above. **Checklists, catalogue prices, areas, the variant tree and moves
+  between issues are the exceptions** (#1512, #1540, #1539, #2140, #2169, #2171, #2172): it moves a
+  stamp under another stamp of its issue, brings a variant up, and deletes a variant nothing names —
+  see *The variant tree* — moves a stamp with its variants to another issue of its area, deletes a
+  base stamp nothing names and an issue with no stamps — see *Between issues* — deletes a checklist
   no album prints and sets the order of its stamps —
   see *Changing checklists* — clears one cell's price as the grid does and never deletes a catalogue,
   a book or an edition — see *Pricing the catalogue* — and moves and orders areas and moves an issue
@@ -2815,7 +2903,7 @@ exist cannot be.
 
 Do not add a publish-shaped, send-shaped, bid-shaped or copy-touching operation to the
 registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, deletes a sale or moves one through payment
-and shipping, or deletes, moves or reorders an issue or a stamp beyond moving an issue to another area. *Two boundaries* was this
+and shipping, or deletes, moves or reorders an issue or a stamp beyond moving an issue to another area, the variant tree's two writes and #2169's, #2171's and #2172's three. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
@@ -3040,7 +3128,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and twenty-one operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and twenty-four operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -3071,9 +3159,10 @@ and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`; #2139 added `
 `add_conversation_entries`, `update_conversation_entry`, `move_conversation_entry` and
 `delete_conversation_entry`; #2150 added `attach_conversation_files` and
 `remove_conversation_attachment`; #2167 added `list_issues`; #2173 added `set_stamp_colnect_ids`, #2174
-`update_stamps` and #2175 `create_issues`.
+`update_stamps` and #2175 `create_issues`; #2169 added `move_stamp_to_issue`, #2171 `delete_stamp` and #2172
+`delete_issue`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167, and *one hundred and eighteen* from #2167 until #2173. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167, and *one hundred and eighteen* from #2167 until #2173, and *one hundred and twenty-one* from #2173 until #2169, #2171 and #2172. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

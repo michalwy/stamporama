@@ -254,9 +254,10 @@ export async function setIssueStampCatalogNumber(
  * The issue's declared range for one catalogue, recomputed from the numbers its checklist stamps
  * now carry (`recomputeDeclaredRange`). An issue with **no checklist stamps at all** is left alone:
  * nothing in it defines a range, and removing one on that account would erase a declaration the
- * numbers never contradicted.
+ * numbers never contradicted. Exported for the agent API's `move_stamp_to_issue` (#2169), which
+ * recomputes both issues' ranges by this rule when asked.
  */
-async function refreshIssueDeclaredRange(
+export async function refreshIssueDeclaredRange(
   collectionId: string,
   issueId: string,
   catalogVendorId: string
