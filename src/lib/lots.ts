@@ -829,6 +829,10 @@ async function planAttachableCopies(
     attachableToLotId: lotId,
     holdingStates: query.states && query.states.length > 0 ? query.states : ["held"],
     areaIds: query.areaIds ?? undefined,
+    // Each ticked mark is its own `AND`ed term, as on the Copies list (#2180, #846).
+    ...(query.dispositions?.includes("inCollection") ? { inCollection: true } : {}),
+    ...(query.dispositions?.includes("forSale") ? { forSale: true } : {}),
+    ...(query.dispositions?.includes("forTrade") ? { forTrade: true } : {}),
     conditionIds: query.conditionIds,
     certificateStatusIds: query.certificateStatusIds,
     formatIds: query.formatIds,

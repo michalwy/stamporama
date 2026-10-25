@@ -1,13 +1,17 @@
 /**
- * The **Attach existing copies…** picker's own filters (#2121): condition, certificate, format,
- * whether a copy is on a purchase, and whether it is still held (#2120). Pure, so the dialog, its
- * route and the unit suite read one definition.
+ * The **Attach existing copies…** picker's own filters (#2121): disposition (#2180), condition,
+ * certificate, format, whether a copy is on a purchase, and whether it is still held (#2120). Pure,
+ * so the dialog, its route and the unit suite read one definition.
  *
  * Condition, certificate and format are the Copies list's multi-selects, with its two sentinels
  * (`"none"` for no certificate, `"single"` for no format — null *is* a value on both axes,
  * ADR-0006 §2, ADR-0020). The purchase and state filters are chips: a set of independent toggles
  * where **none lit means every value**, so the picker never opens on an empty list because of a
  * chip nobody can see the meaning of.
+ *
+ * The disposition is the Copies list's multi-select too (#846), and reads as it does there: the three
+ * are independent marks a copy carries, not values of one axis, so ticking two asks for the copies
+ * carrying **both** — and none ticked is every copy.
  *
  * **Every filter is resolved on the server** (#2179), with the year, the search and the sort: the
  * dialog sends them on the query string ({@link writeAttachQuery}, {@link readAttachQuery}) and
@@ -32,6 +36,17 @@ export const ATTACH_STATE_LABEL: Record<AttachState, string> = {
   disposed: "No longer held",
 };
 
+/** The disposition marks (#2180), named by the copy's own flags as the Copies list's URL names
+ *  them. */
+export const ATTACH_DISPOSITIONS = ["inCollection", "forSale", "forTrade"] as const;
+export type AttachDisposition = (typeof ATTACH_DISPOSITIONS)[number];
+
+export const ATTACH_DISPOSITION_LABEL: Record<AttachDisposition, string> = {
+  inCollection: "In collection",
+  forSale: "For sale",
+  forTrade: "For trade",
+};
+
 /** Whether a copy is on a purchase: `none` the copies on no lot, `on` those on one. */
 export const ATTACH_PURCHASE_VALUES = ["none", "on"] as const;
 export type AttachPurchaseValue = (typeof ATTACH_PURCHASE_VALUES)[number];
@@ -42,6 +57,8 @@ export const ATTACH_PURCHASE_LABEL: Record<AttachPurchaseValue, string> = {
 };
 
 export interface AttachPickerFilters {
+  /** The marks a copy must carry, every one of them (#2180); empty is every copy. */
+  dispositions: AttachDisposition[];
   conditionIds: string[];
   /** Certificate status ids, `"none"` among them for the copies with no certificate. */
   certificateStatusIds: string[];
@@ -56,6 +73,7 @@ export interface AttachPickerFilters {
 /** What the picker opens on the first time: everything held, which is what #388 offered, in
  *  catalogue order. */
 export const DEFAULT_ATTACH_FILTERS: AttachPickerFilters = {
+  dispositions: [],
   conditionIds: [],
   certificateStatusIds: [],
   formatIds: [],
@@ -89,6 +107,7 @@ export function parseAttachFilters(raw: string | null): AttachPickerFilters {
   if (!parsed || typeof parsed !== "object") return DEFAULT_ATTACH_FILTERS;
   const o = parsed as Record<string, unknown>;
   return {
+    dispositions: oneOf(o.dispositions, ATTACH_DISPOSITIONS),
     conditionIds: stringList(o.conditionIds),
     certificateStatusIds: stringList(o.certificateStatusIds),
     formatIds: stringList(o.formatIds),
@@ -134,6 +153,7 @@ export type AttachYear = number | "none" | null;
 
 /** Everything the picker narrows and orders its list by, beside the area rail and the state. */
 export interface AttachReadQuery {
+  dispositions: AttachDisposition[];
   conditionIds: string[];
   certificateStatusIds: string[];
   formatIds: string[];
@@ -158,6 +178,7 @@ export function writeAttachQuery(
   year: string | null,
   search: string
 ): void {
+  for (const d of filters.dispositions) params.append("disposition", d);
   for (const id of filters.conditionIds) params.append("condition", id);
   for (const id of filters.certificateStatusIds) params.append("certificate", id);
   for (const id of filters.formatIds) params.append("format", id);
@@ -174,6 +195,7 @@ export function writeAttachQuery(
 export function readAttachQuery(sp: URLSearchParams, search: string | undefined): AttachReadQuery {
   const sortBy = sp.get("sort");
   return {
+    dispositions: oneOf(sp.getAll("disposition"), ATTACH_DISPOSITIONS),
     conditionIds: sp.getAll("condition").filter(Boolean),
     certificateStatusIds: sp.getAll("certificate").filter(Boolean),
     formatIds: sp.getAll("format").filter(Boolean),

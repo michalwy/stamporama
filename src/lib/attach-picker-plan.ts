@@ -4,10 +4,10 @@
  * as ids, so the read can enrich only the page being drawn. Pure, so the server read and the unit
  * suite share one definition.
  *
- * The filters a `where` can say (area, state, condition, certificate, format, purchase) have already
- * narrowed the candidates; this applies the rest exactly as the dialog once did over the rows it
- * held: the search is `copyMatchesSearch` (#2136), the year is the stamp's issued year, and the
- * order is `sortAttachableCopies` (#2147). **The year facet is counted over every filter but the
+ * The filters a `where` can say (area, state, disposition, condition, certificate, format, purchase)
+ * have already narrowed the candidates; this applies the rest exactly as the dialog once did over
+ * the rows it held: the search is `copyMatchesSearch` (#2136), the year is the stamp's issued year,
+ * and the order is `sortAttachableCopies` (#2147). **The year facet is counted over every filter but the
  * year itself**, so a year's count says what choosing it would list, and the other years stay
  * reachable once one is chosen.
  */

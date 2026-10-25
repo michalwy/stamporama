@@ -9,7 +9,8 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import {
-  PICKER_DIALOG_HEIGHT,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
   DialogShell,
   DialogFooter,
   DialogPrimaryButton,
@@ -20,6 +21,8 @@ import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import type { AttachableCopiesPage, AttachableCopy } from "@/lib/lots";
 import {
+  ATTACH_DISPOSITIONS,
+  ATTACH_DISPOSITION_LABEL,
   ATTACH_PURCHASE_LABEL,
   ATTACH_PURCHASE_VALUES,
   ATTACH_STATES,
@@ -60,7 +63,8 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
-import { FILTER_WIDTH } from "@/app/c/[collectionSlug]/inventory/copies-filter-controls";
+import { FILTER_WIDTH, NO_SHRINK } from "@/app/c/[collectionSlug]/inventory/copies-filter-controls";
+import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
@@ -208,13 +212,17 @@ function useTicksInFilter(
  * Modelled on the offer composition picker: area tree + year facets on the left, a text-filterable
  * list of eligible copies on the right, each a checkbox row rendered with `InventoryItemRow` so a
  * copy reads the same here as everywhere else. Above the list, the picker's own filters (#2121):
- * condition, certificate and format as the Copies list draws them, whether a copy is on a purchase,
+ * disposition (#2180), condition, certificate and format as the Copies list draws them, whether a
+ * copy is on a purchase,
  * and whether it is still held — the copies that have been sold or written off are offered too
  * (#2120), because a copy that left before its receipt was recorded still needs a cost. Beside them,
  * the sort (#2147): catalogue order by default, so the copies come in the order a receipt or an album
  * lists them. Filters and sort are remembered per collection, as the area and year are. All of them
  * — with the area, the year and the search — are applied where the copies are read, and the list
  * arrives a page at a time as it is scrolled (#2179), so opening it costs the same on any collection.
+ *
+ * It takes the whole window (#2181), as the dialogs whose work is looking do (#1388): its rows are
+ * full copy rows, and every rem past the area tree's fixed column goes to them.
  *
  * A copy that already belongs to **another** purchase is offered but never moved silently — the
  * footer names the orders being left and the move has to be confirmed, because reassigning a copy
@@ -312,6 +320,7 @@ export function AttachCopiesDialog({
   const narrowed =
     debouncedSearch.trim() !== "" ||
     year !== null ||
+    filters.dispositions.length > 0 ||
     filters.conditionIds.length > 0 ||
     filters.certificateStatusIds.length > 0 ||
     filters.formatIds.length > 0 ||
@@ -411,8 +420,8 @@ export function AttachCopiesDialog({
     <DialogShell
       title={`Attach existing copies to ${lotLabel}`}
       onClose={onClose}
-      maxWidth="min(96vw, 100rem)"
-      height={PICKER_DIALOG_HEIGHT}
+      maxWidth={DIALOG_MAX_WIDTH}
+      height={DIALOG_MAX_HEIGHT}
     >
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <ListFilterSidebar
@@ -519,6 +528,30 @@ export function AttachCopiesDialog({
               />
             ))}
             <span aria-hidden style={DIVIDER_STYLE} />
+            {/* Disposition (#2180), the Copies list's control and its reading (#846): three marks a
+                copy carries at once, so two ticked asks for the copies carrying both. */}
+            <Tooltip
+              style={NO_SHRINK}
+              content="For sale, For trade and In collection are three marks a copy can carry at once, not three kinds of copy. Tick two and you get the copies carrying both."
+            >
+              <FilterSlot width={FILTER_WIDTH.dispositions}>
+                <MultiSelectFilter
+                  fullWidth
+                  options={ATTACH_DISPOSITIONS.map((d) => ({
+                    id: d,
+                    label: ATTACH_DISPOSITION_LABEL[d],
+                    tint: dispositionTint(d),
+                  }))}
+                  selected={filters.dispositions}
+                  onChange={(ids) =>
+                    setFilters({ dispositions: ATTACH_DISPOSITIONS.filter((d) => ids.includes(d)) })
+                  }
+                  allLabel="Any disposition"
+                  itemNoun="dispositions"
+                  ariaLabel="Filter by disposition"
+                />
+              </FilterSlot>
+            </Tooltip>
             <FilterSlot width={FILTER_WIDTH.conditions}>
               <MultiSelectFilter
                 fullWidth

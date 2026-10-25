@@ -2609,8 +2609,9 @@ Intake *creates* copies. Sometimes the copy is already there — you entered a p
 before recording the receipt, or you filed one under the wrong order. Use the lot's **⋮** menu →
 **Attach existing copies…**.
 
-The dialog is the same picker used elsewhere: areas and years down the left, a searchable list
-of copies on the right, tick the ones you want. **Your ticks survive the search, the area tree and
+The dialog takes the whole window, so as many copies as fit are on screen at once. It is the same
+picker used elsewhere: areas and years down the left, a searchable list of copies on the right, tick
+the ones you want. **Your ticks survive the search, the area tree and
 the year facets**, so you can gather copies from several searches and attach them in one go; when
 some of what you have ticked is off screen the button says so — **Attach 7 copies (3 hidden by
 these filters)** — and with everything on screen it stays a plain **Attach 7 copies**. A ticked
@@ -2659,6 +2660,9 @@ Above the list sits a row of filters, in any combination:
 - **Not on a purchase**, **On a purchase** — the copies on no purchase yet, or those already filed
   against one. With neither lit (or both), both kinds are listed. A copy on a purchase names it on
   its row.
+- **Disposition** — *In collection*, *For sale*, *For trade* — as on the Copies list. The three are
+  marks a copy can carry at once, not three kinds of copy, so ticking two lists the copies carrying
+  **both**. With none ticked, every copy is listed.
 - **Condition**, **certificate** and **format**, as on the Copies list. *No certificate* and *Single*
   can be ticked like any other value. The certificate and format filters appear only when your
   collection defines certificate statuses or formats.

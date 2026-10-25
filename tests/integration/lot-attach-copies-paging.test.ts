@@ -135,6 +135,9 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
           certificateStatusId: i % 4 === 0 ? certId : null,
           formatId: i % 6 === 0 ? pairId : null,
           lotId: i % 3 === 0 ? otherLotId : null,
+          inCollection: i % 3 !== 1,
+          forSale: i % 4 === 1 || i % 4 === 2,
+          forTrade: i % 5 === 2,
           deliveryState: "delivered",
           locationRef: i === 7 ? "Shelf Q9" : null,
           createdAt: new Date(Date.UTC(2026, 0, 1, 0, (i * 29) % COUNT)),
@@ -199,7 +202,7 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
     }
   });
 
-  it("narrows by condition, certificate, format and purchase as the dialog's filters did", async () => {
+  it("narrows by condition, certificate, format, purchase and disposition as the dialog's filters did", async () => {
     const all = await everything({});
     const ids = (rows: AttachableCopy[]) => rows.map((r) => r.id).sort();
     const cases: [AttachableCopiesQuery, (c: AttachableCopy) => boolean][] = [
@@ -211,6 +214,14 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
       [{ purchase: ["on"] }, (c) => c.purchase !== null],
       [{ purchase: ["none"] }, (c) => c.purchase === null],
       [{ purchase: ["none", "on"] }, () => true],
+      // Disposition (#2180): each ticked mark must be carried, as on the Copies list (#846).
+      [{ dispositions: ["forSale"] }, (c) => c.forSale],
+      [{ dispositions: ["inCollection"] }, (c) => c.inCollection],
+      [{ dispositions: ["forSale", "forTrade"] }, (c) => c.forSale && c.forTrade],
+      [
+        { dispositions: ["forTrade"], conditionIds: [mintId] },
+        (c) => c.forTrade && c.conditionId === mintId,
+      ],
     ];
     for (const [query, keep] of cases) {
       const narrowed = await everything(query);
@@ -264,6 +275,12 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
     const ticked = [...used, ...mint].map((c) => c.id);
     assert.equal(await countAttachableAmong(userId, lotId, { conditionIds: [usedId] }, ticked), 3);
     assert.equal(await countAttachableAmong(userId, lotId, {}, ticked), 5);
+    // A disposition hides ticks as every other filter does (#2180).
+    const forSale = all.filter((c) => ticked.includes(c.id) && c.forSale).length;
+    assert.equal(
+      await countAttachableAmong(userId, lotId, { dispositions: ["forSale"] }, ticked),
+      forSale
+    );
     assert.equal(
       await countAttachableAmong(userId, lotId, { search: `#${used[0].itemNo}` }, ticked),
       1
