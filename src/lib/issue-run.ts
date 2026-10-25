@@ -585,31 +585,59 @@ export interface RunPriceSubject {
 }
 
 /**
+ * One stamp under an umbrella, as the run prices it (#2161): every row of the umbrella's tree below
+ * it, in tree order. `identified` is the grid's own — no variant children of its own, a row the
+ * catalogue prices directly — and only those take a field; an umbrella further down is read for its
+ * own recorded figure and otherwise rolls up.
+ */
+export interface RunUmbrellaVariant {
+  stampId: string;
+  identified: boolean;
+}
+
+/**
+ * The tree under a stamp, or null when the stamp is not an umbrella. An umbrella whose tree is still
+ * being read answers an empty list: no field yet, and not the umbrella's own field meanwhile.
+ */
+export type RunVariantsOf = (stampId: string) => readonly RunUmbrellaVariant[] | null;
+
+const noVariants: RunVariantsOf = () => null;
+
+/**
  * The prices a run can record, once each, in the order of the run.
  *
  * **Keyed on stamp × condition × certificate, never on the tile** — a catalogue price is a fact about
  * the stamp in that condition, so two tiles of one stamp in one condition are one figure, typed on
  * either. A tile with no stamp yet, or no condition to record against, has nothing to price. The
  * format is deliberately not in the key: the figure is the single's, as in #593.
+ *
+ * **A tile on an umbrella prices its variants** (#2161): after the umbrella's own subject — read for
+ * a figure recorded on it directly, never typed — comes every stamp of its tree in the same condition
+ * and certificate, so the run's one read and one write reach them as they reach any other row.
  */
 export function runPriceSubjects(
   assignments: readonly RunAssignment[],
-  resolved: readonly RunCopyDetails[]
+  resolved: readonly RunCopyDetails[],
+  variantsOf: RunVariantsOf = noVariants
 ): RunPriceSubject[] {
   const seen = new Set<string>();
   const out: RunPriceSubject[] = [];
-  for (const [i, a] of assignments.entries()) {
-    const d = resolved[i];
-    if (!a.stampId || !d?.conditionId) continue;
-    const key = catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId);
-    if (seen.has(key)) continue;
+  const add = (stampId: string, d: RunCopyDetails) => {
+    const key = catalogValueSubjectKey(stampId, d.conditionId, d.certificateStatusId);
+    if (seen.has(key)) return;
     seen.add(key);
     out.push({
       key,
-      stampId: a.stampId,
+      stampId,
       conditionId: d.conditionId,
       certificateStatusId: d.certificateStatusId || null,
     });
+  };
+  for (const [i, a] of assignments.entries()) {
+    const d = resolved[i];
+    if (!a.stampId || !d?.conditionId) continue;
+    add(a.stampId, d);
+    for (const v of variantsOf(a.stampId) ?? []) add(v.stampId, d);
   }
   return out;
 }
@@ -623,6 +651,23 @@ export interface RunValueSlot {
   key: string | null;
   /** The index, in the run, of the tile whose row carries the editable field for `key`: this tile's
    * own index where it carries it, the first earlier tile sharing the subject where it does not. */
+  entryIndex: number | null;
+  /**
+   * For the row an umbrella's values are typed on (#2161): one entry per stamp of its tree, in tree
+   * order. Null on any other row — a stamp that is no umbrella, and a row sharing an earlier row's
+   * umbrella, which is asked nothing twice.
+   */
+  variants: RunVariantSlot[] | null;
+}
+
+/** One stamp of an umbrella's tree on the umbrella's row (#2161). */
+export interface RunVariantSlot {
+  stampId: string;
+  /** The variant's subject in the row's condition and certificate. */
+  key: string;
+  /** The index, in the run, of the row whose field this variant's price is typed in — this row's own
+   * where it is the first to ask for it — or null for an umbrella further down the tree, which is
+   * never typed into: it rolls up. */
   entryIndex: number | null;
 }
 
@@ -638,19 +683,56 @@ export interface RunValueSlot {
  * Re-derived from the resolved details on every render, so **the field follows the combination**: a
  * tile whose condition or certificate is changed away from the tile above it gets a field of its own,
  * and one changed onto a subject an earlier tile already carries loses it.
+ *
+ * **A row on an umbrella asks for its variants' prices instead** (#2161), the single tile's rule
+ * (#1337): its entry row carries a field per variant down the tree. The variants' subjects take part
+ * in the same *first in run order* rule as the rows', so a variant is asked once however it comes up —
+ * under two umbrellas of one tree, or under an umbrella and on a row of its own.
  */
 export function runValueSlots(
   assignments: readonly RunAssignment[],
-  resolved: readonly RunCopyDetails[]
+  resolved: readonly RunCopyDetails[],
+  variantsOf: RunVariantsOf = noVariants
 ): RunValueSlot[] {
   const entries = new Map<string, number>();
-  return assignments.map((a, i) => {
-    const d = resolved[i];
-    if (!a.stampId || !d?.conditionId) return { key: null, entryIndex: null };
-    const key = catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId);
+  const entryOf = (key: string, i: number) => {
     const entryIndex = entries.get(key) ?? i;
     entries.set(key, entryIndex);
-    return { key, entryIndex };
+    return entryIndex;
+  };
+  return assignments.map((a, i) => {
+    const d = resolved[i];
+    if (!a.stampId || !d?.conditionId) return { key: null, entryIndex: null, variants: null };
+    const key = catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId);
+    const entryIndex = entryOf(key, i);
+    const tree = variantsOf(a.stampId);
+    const variants =
+      tree && entryIndex === i
+        ? tree.map((v) => {
+            const vkey = catalogValueSubjectKey(v.stampId, d.conditionId, d.certificateStatusId);
+            return { stampId: v.stampId, key: vkey, entryIndex: v.identified ? entryOf(vkey, i) : null };
+          })
+        : null;
+    return { key, entryIndex, variants };
+  });
+}
+
+/**
+ * The editable fields in run order — what Tab walks (#1223): a row's own field, or on an umbrella's
+ * row its variants' fields down the tree and never the umbrella's (#2161). A field typed on an earlier
+ * row is not visited again, and `hasField` leaves out a subject with nothing to record on (no primary
+ * catalogue, or its read not in yet).
+ */
+export function runValueKeys(
+  slots: readonly RunValueSlot[],
+  hasField: (key: string) => boolean
+): string[] {
+  return slots.flatMap((slot, i) => {
+    if (!slot.key || slot.entryIndex !== i) return [];
+    if (slot.variants) {
+      return slot.variants.flatMap((v) => (v.entryIndex === i && hasField(v.key) ? [v.key] : []));
+    }
+    return hasField(slot.key) ? [slot.key] : [];
   });
 }
 
