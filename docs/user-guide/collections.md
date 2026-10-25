@@ -495,6 +495,14 @@ The selection is **cleared when you leave the Issues list** for another screen. 
 
 The selection is what bulk actions on stamps act on — see [Applying a size to stamps you select](#applying-a-size-to-stamps-you-select).
 
+#### Moving a stamp to another issue
+
+**Move to another issue…** in a stamp's **⋮** menu on the **Issues** list moves it, with its variants and child stamps, to another issue of the same area. It lands at the end of the new issue's top level, its own branch below it in the order it had.
+
+**Its checklist places move with it.** The stamp and its variants leave every checklist of the issue they left, and the stamp joins the new issue's [standard checklist](#standard-and-specialised-checklists) at its end — the first one, or one started for it and named after the issue when the issue has none. A variant joins it too only if it was on a standard checklist before; one that was on none, or only on a specialised one, joins none. A [checklist that spans several issues](#checklists-that-span-several-issues) is not the old issue's, and keeps the stamp wherever it goes.
+
+Stamps moved before this was so had stayed on their old issue's checklists, counted in a set of an issue they were no longer in. They were cleaned up by the same rule when the app was updated; the release note says how to see, before updating, which stamps that took off which checklists.
+
 #### Filing a stamp under a different one
 
 Sometimes a stamp turns out to be filed in the wrong place: it sits at the top level of its issue but is really a sub-variant of another stamp there, or it hangs under the wrong base. **Reassign to another parent…** in the stamp's **⋮** menu on the **Issues** list fixes that. Pick the stamp it should hang under from the issue's own tree — indented, so you can see the shape you are joining — or **No parent (top level)** to bring it back out.
