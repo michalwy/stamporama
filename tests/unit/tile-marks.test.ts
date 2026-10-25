@@ -8,6 +8,7 @@ import {
   keeperAnswers,
   keeperGroups,
   keyPatch,
+  markedCertificate,
   markKeys,
   matchMarkKey,
   mergedMark,
@@ -240,6 +241,46 @@ describe("seedField — what the identification step opens on", () => {
     );
     assert.equal(seed.origin, "last-used");
     assert.equal(seed.keepers.length, 2);
+  });
+});
+
+describe("a condition marked with no certificate is marked none (#2159)", () => {
+  const lastUsed = { value: "guarantee", origin: "last-used" as const };
+  it("reads the certificate a mark answers", () => {
+    assert.equal(markedCertificate(mark("mnh", "cert")), "cert");
+    assert.equal(markedCertificate(mark(null, "cert")), "cert", "a certificate alone is still marked");
+    assert.equal(markedCertificate(mark("mnh")), "", "a condition alone is none");
+    assert.equal(markedCertificate(mark(null)), null);
+    assert.equal(markedCertificate(null), null, "an unmarked tile says nothing");
+  });
+  it("opens a tile marked MNH only with no certificate, labelled, whatever was used last", () => {
+    const seed = seedField([{ tileId: "t1", marked: markedCertificate(mark("mnh")) }], lastUsed);
+    assert.deepEqual(seed, { value: "", origin: "marked", keepers: [] });
+  });
+  it("still opens an unmarked tile on the last used certificate", () => {
+    const seed = seedField([{ tileId: "t1", marked: markedCertificate(null) }], lastUsed);
+    assert.deepEqual(seed, { value: "guarantee", origin: "last-used", keepers: [] });
+  });
+  it("lets a tile marked none keep it among others, and sends it as a null of its own", () => {
+    const seed = seedField(
+      [
+        { tileId: "t1", marked: "" },
+        { tileId: "t2", marked: null },
+        { tileId: "t3", marked: "cert" },
+      ],
+      lastUsed
+    );
+    assert.equal(seed.value, "guarantee");
+    assert.deepEqual(seed.keepers, [
+      { tileId: "t1", value: "" },
+      { tileId: "t3", value: "cert" },
+    ]);
+    const answers = keeperAnswers({ value: "", origin: null, keepers: [] }, seed);
+    assert.deepEqual(answers, [
+      { tileId: "t1", certificateStatusId: null },
+      { tileId: "t3", certificateStatusId: "cert" },
+    ]);
+    assert.deepEqual(parseTileOwnAnswers(JSON.stringify(answers)), answers);
   });
 });
 

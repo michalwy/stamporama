@@ -68,6 +68,7 @@ import {
   keeperGroups,
   markFaultIds,
   markTagIds,
+  markedCertificate,
   sameFaults,
   seedFaults,
   seedField,
@@ -479,7 +480,9 @@ function IntakeConditionDialog({
   // Ahead of both, on the scan-tile chain, the tiles' own **marks** (#1550): given with the card in
   // hand, they are the better answer than another tile's or the last one. `seedField` is the rule —
   // every tile marked alike opens on the mark; otherwise the field opens as before and the marked
-  // tiles keep theirs. Decided once, as the step opens: a mark only seeds the dialog.
+  // tiles keep theirs. Decided once, as the step opens: a mark only seeds the dialog. A tile marked
+  // with a condition and no certificate is marked *none* for the certificate (#2159,
+  // `markedCertificate`), so the last used one never lands on it.
   const [seeds] = useState(() => {
     const fallbackOrigin: SeedOrigin = prefill ? "repeated" : "last-used";
     const lastCondition = prefill ? prefill.conditionId : readLast(LS_LAST_CONDITION, collectionId);
@@ -516,7 +519,10 @@ function IntakeConditionDialog({
       certificate: seedField(
         pieces.map((p) => ({
           tileId: p.tileId,
-          marked: known(p.mark?.certificateStatusId, certificateStatuses),
+          marked: markedCertificate({
+            conditionId: known(p.mark?.conditionId, conditions),
+            certificateStatusId: known(p.mark?.certificateStatusId, certificateStatuses),
+          }),
         })),
         fallback.certificate
       ),
@@ -559,6 +565,9 @@ function IntakeConditionDialog({
       return `${count} ${count === 1 ? "tile keeps its" : "tiles keep their"} marked ${abbr}`;
     }),
     ...keeperGroups(seeds.certificate.keepers).map(({ value, count }) => {
+      if (!value) {
+        return `${count} ${count === 1 ? "tile keeps" : "tiles keep"} no certificate, as marked`;
+      }
       const abbr = certificateStatuses.find((c) => c.id === value)?.abbreviation ?? "certificate";
       return `${count} ${count === 1 ? "tile keeps its" : "tiles keep their"} marked ${abbr}`;
     }),

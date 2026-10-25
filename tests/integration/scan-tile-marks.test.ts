@@ -438,6 +438,28 @@ describe("tile marks (#1550)", () => {
     );
   });
 
+  it("lets a tile marked with a condition only keep no certificate, the rest taking the step's (#2159)", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    const copies = await identifyTilesAsNewCopies(userId, [a.id, b.id], {
+      stampId,
+      conditionId: mnh,
+      certificateStatusId: cert,
+      tileAnswers: [{ tileId: a.id, conditionId: mng, certificateStatusId: null }],
+    });
+    const items = await prisma.item.findMany({
+      where: { id: { in: copies.map((c) => c.itemId) } },
+      select: { id: true, conditionId: true, certificateStatusId: true },
+    });
+    const of = (itemId: string) => items.find((i) => i.id === itemId)!;
+    assert.equal(of(copies[0].itemId).conditionId, mng);
+    assert.equal(of(copies[0].itemId).certificateStatusId, null, "its own none is not filled in");
+    assert.equal(of(copies[1].itemId).certificateStatusId, cert, "the rest take the step's");
+  });
+
   it("refuses an own answer for a tile not being identified, or from another collection", async () => {
     const purchaseId = await newOrder();
     const front = await upload(purchaseId, "front");

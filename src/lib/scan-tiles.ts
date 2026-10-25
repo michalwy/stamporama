@@ -279,7 +279,11 @@ export async function identifyTilesAsNewCopies(
       const [copy] = await intakeStamps(ownerId, target, {
         ...shared,
         conditionId: answer?.conditionId ?? shared.conditionId,
-        certificateStatusId: answer?.certificateStatusId ?? shared.certificateStatusId,
+        // Null is the tile's own *no certificate* (#2159), never a gap for the shared one to fill.
+        certificateStatusId:
+          answer?.certificateStatusId !== undefined
+            ? answer.certificateStatusId
+            : shared.certificateStatusId,
       });
       copies.push(copy);
     }
