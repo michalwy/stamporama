@@ -353,7 +353,7 @@ another issue…* and *Delete* do on your screens:
   would then read as one another stamp already has, the move is refused, naming both. The assistant
   can also have both issues' catalogue ranges worked out again from their stamps. An issue in another
   area is refused, as on your screen, and so is a variant on its own: it moves with its base stamp.
-  Unlike your own *Move to another issue…*, the checklists follow the stamp.
+  The checklists follow the stamp, as they do on your own *Move to another issue…*.
 - **Delete a base stamp created by mistake**, but only when nothing names it — the same list as for a
   variant, its own variants included. It is taken off its checklists, and the assistant is told which.
 - **Delete an empty issue** — one created without stamps and never filled, or one whose stamps have

@@ -26,9 +26,9 @@ import type { Operation, OperationContext, ParsedParams } from "../types";
 //
 // **Each is the screen's own write.** A move is `moveStampNode`, the Issues row's *Move to another
 // issue…* (#54), and the collector kept its area rule on 2026-10-25: the target is an issue of the
-// same area. What the operation adds, asked for by #2169, is two things the screen's move does not
-// do — the stamps' checklist places follow them (`moveChecklistPlaces`), and a position — and one it
-// does not check: a number that reads differently under the target's own prefix (#377) and is
+// same area. The stamps' checklist places follow them (`moveChecklistPlaces`), asked for by #2169
+// and on the screen too since #2184. What the operation adds is a position, which the screen's move
+// does not take, and one check it does not make: a number that reads differently under the target's own prefix (#377) and is
 // already another stamp's is refused before anything is written. A delete is `deleteIssue`, the
 // issue's *Delete*, told to refuse an issue that has gained a stamp since it was checked
 // (`onlyIfEmpty`), so it can never take one.

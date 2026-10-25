@@ -2945,14 +2945,16 @@ export async function removeStampFromIssue(
   });
 }
 
-/** What {@link moveStampNode} may also do, for a caller that asks (#2169). The screen asks neither. */
+/** What {@link moveStampNode} may also do, for a caller that asks (#2169). The screen asks for the
+ *  checklist places (#2184), never a position. */
 export interface MoveStampNodeOptions {
   /** Where the stamp lands among its siblings in the target issue's tree, 0-based — its sibling
    *  group there is renumbered densely around it. Omitted, it lands at the end, as on the screen. */
   position?: number;
   /** Carry the moved stamps' checklist places over: each leaves the source issue's checklists, and
    *  the stamp itself — with any variant that was on a standard checklist there — joins the target's
-   *  first standard checklist, created from the issue's name when it has none. */
+   *  first standard checklist, created from the issue's name when it has none. A checklist spanning
+   *  issues is not the source issue's and keeps them. */
   moveChecklistPlaces?: boolean;
 }
 

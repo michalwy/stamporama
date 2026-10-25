@@ -635,7 +635,11 @@ export async function moveStampNodeAction(
     return { status: "error", message: "Please select a target issue." };
   }
   try {
-    await moveStampNode(session.user.id, collectionId, issueId, stampId, targetIssueId);
+    // The stamp's checklist places follow it (#2184), as the agent API's move does (#2169): left on
+    // the source issue's checklists, it would be counted in a set of an issue it is no longer in.
+    await moveStampNode(session.user.id, collectionId, issueId, stampId, targetIssueId, {
+      moveChecklistPlaces: true,
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to move stamp. Please try again." };
