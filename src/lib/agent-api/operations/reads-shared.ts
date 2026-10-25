@@ -1,6 +1,10 @@
 import "server-only";
 import { prisma } from "../../db";
 import { makeCatalogLabeller, type CatalogLabelling } from "../../collection-search";
+import { formatIssueCatalogNumber } from "../../catalog-range";
+import { buildAreaPrefixNodes, effectivePrefixFor } from "../../area-prefix";
+import { loadIssuePrefixMap } from "../../issue-prefix";
+import type { IssuePrefixMap } from "../../area-vendor";
 import { buildLocationPath, type LocationPathNode } from "../../location-path";
 import { notFound } from "../errors";
 import type { OperationContext } from "../types";
@@ -102,4 +106,61 @@ export async function loadLocationPaths(collectionId: string): Promise<LocationP
     select: { id: true, name: true, parentId: true },
   });
   return { pathFor: (locationId) => buildLocationPath(locations, locationId) };
+}
+
+/** What an issue's row needs beyond the Issues list's own read model: its declared ranges spelled,
+ *  its area named, and the per-issue prefixes behind both. */
+export interface IssueLabelling {
+  /** Catalogue abbreviation per vendor id. */
+  readonly abbrOf: ReadonlyMap<string, string>;
+  readonly issuePrefixes: IssuePrefixMap;
+  readonly areaName: (areaId: string) => string | null;
+  /** The declared range per catalogue, `Mi·PL 1298–302`. */
+  readonly catalogRanges: (issue: {
+    readonly id: string;
+    readonly collectionAreaId: string;
+    readonly catalogNumbers: readonly { readonly catalogVendorId: string; readonly firstNumber: string; readonly lastNumber: string | null }[];
+  }) => string[];
+}
+
+/**
+ * The labelling `get_issue` and `list_issues` (#2167) share, loaded once per read.
+ *
+ * The declared range is a **span** per vendor rather than a number, so it does not go through the
+ * stamp labeller: `formatIssueCatalogNumber` is the app's own spelling of one (`Mi·PL 1298–302`),
+ * and the prefix under it is the ordinary three-level walk — the issue's own override, then the
+ * nearest area that states one (#675).
+ */
+export async function loadIssueLabelling(collectionId: string): Promise<IssueLabelling> {
+  const [vendors, areas, issuePrefixes] = await Promise.all([
+    prisma.catalogVendor.findMany({ where: { collectionId }, select: { id: true, abbreviation: true } }),
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        catalogPrefix: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+      },
+    }),
+    loadIssuePrefixMap(collectionId),
+  ]);
+  const abbrOf = new Map(vendors.map((vendor) => [vendor.id, vendor.abbreviation]));
+  const nodes = buildAreaPrefixNodes(areas);
+  const names = new Map(areas.map((area) => [area.id, area.name]));
+  return {
+    abbrOf,
+    issuePrefixes,
+    areaName: (areaId) => names.get(areaId) ?? null,
+    catalogRanges: (issue) =>
+      issue.catalogNumbers.map((range) =>
+        formatIssueCatalogNumber(
+          range.firstNumber,
+          range.lastNumber,
+          abbrOf.get(range.catalogVendorId) ?? "",
+          effectivePrefixFor(issue.collectionAreaId, range.catalogVendorId, nodes, issue.id, issuePrefixes)
+        )
+      ),
+  };
 }

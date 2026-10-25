@@ -1,9 +1,6 @@
 import "server-only";
 import { prisma } from "../../db";
-import { formatIssueCatalogNumber } from "../../catalog-range";
-import { effectivePrefixFor, buildAreaPrefixNodes } from "../../area-prefix";
 import { readCollectionAreas } from "../../areas";
-import { loadIssuePrefixMap } from "../../issue-prefix";
 import { getIssueListItem } from "../../issues";
 import { listItemsPaginated } from "../../items";
 import { getStampListItem } from "../../stamps";
@@ -16,6 +13,7 @@ import {
   collectionPath,
   loadCatalogLabelling,
   loadCollectionHeader,
+  loadIssueLabelling,
   loadLocationPaths,
 } from "./reads-shared";
 import type { AgentCopyDetail, AgentIssueDetail, AgentStampDetail } from "../collection-reads";
@@ -105,55 +103,22 @@ export async function readIssue(
   });
   if (!issue) throw notFoundRecord("issue", issueId, "search_collection");
 
-  // The declared range is a **span** per vendor rather than a number, so it does not go through the
-  // stamp labeller: `formatIssueCatalogNumber` is the app's own spelling of one (`Mi·PL 1298–302`),
-  // and the prefix under it is the ordinary three-level walk — the issue's own override, then the
-  // nearest area that states one (#675).
-  const [vendors, areas, issuePrefixes, areaTree] = await Promise.all([
-    prisma.catalogVendor.findMany({
-      where: { collectionId: context.collectionId },
-      select: { id: true, abbreviation: true, name: true },
-    }),
-    prisma.collectionArea.findMany({
-      where: { collectionId: context.collectionId },
-      select: {
-        id: true,
-        name: true,
-        parentId: true,
-        catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
-      },
-    }),
-    loadIssuePrefixMap(context.collectionId),
+  const [labelling, areaTree] = await Promise.all([
+    loadIssueLabelling(context.collectionId),
     readCollectionAreas(context.collectionId),
   ]);
-  const abbrOf = new Map(vendors.map((vendor) => [vendor.id, vendor.abbreviation]));
-  const nodes = buildAreaPrefixNodes(areas);
 
   return issueDetail(context.collectionId, issue, {
-    catalogRanges: issue.catalogNumbers.map((range) =>
-      formatIssueCatalogNumber(
-        range.firstNumber,
-        range.lastNumber,
-        abbrOf.get(range.catalogVendorId) ?? "",
-        effectivePrefixFor(
-          issue.collectionAreaId,
-          range.catalogVendorId,
-          nodes,
-          issue.id,
-          issuePrefixes
-        )
-      )
-    ),
+    catalogRanges: labelling.catalogRanges(issue),
     // The issue's own prefix per catalogue beside the one it resolves to (#1606), so an agent can tell
     // an override from an inherited prefix and send the first back through `update_issue`.
     catalogues: issueCatalogues(
       areaTree,
       issue.collectionAreaId,
-      { catalogues: abbrOf, books: new Map() },
-      issuePrefixes.get(issue.id) ?? new Map()
+      { catalogues: labelling.abbrOf, books: new Map() },
+      labelling.issuePrefixes.get(issue.id) ?? new Map()
     ),
-    area: areas.find((area) => area.id === issue.collectionAreaId)?.name ?? null,
+    area: labelling.areaName(issue.collectionAreaId),
     path: collectionPath(header, `/issues/${issue.id}`),
   });
 }

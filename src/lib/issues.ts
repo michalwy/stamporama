@@ -1065,6 +1065,11 @@ export interface IssueListFilterOpts {
   /** Restrict to a single year. A number matches `issue.year`; `"none"`
    *  matches issues with no year. Omitted means no year filter. */
   year?: number | "none";
+  /** Restrict to a span of years, both ends included (#2167) — either end may be left open. An
+   *  issue with no year is outside every span. The screen narrows by one year; the agent API by a
+   *  span, because a catalogue period is entered a few years at a time. */
+  yearFrom?: number;
+  yearTo?: number;
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the list price column / issue totals. When
@@ -1149,6 +1154,15 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
 
   if (opts.year !== undefined) {
     conditions.push({ year: opts.year === "none" ? null : opts.year });
+  }
+
+  if (opts.yearFrom !== undefined || opts.yearTo !== undefined) {
+    conditions.push({
+      year: {
+        ...(opts.yearFrom !== undefined ? { gte: opts.yearFrom } : {}),
+        ...(opts.yearTo !== undefined ? { lte: opts.yearTo } : {}),
+      },
+    });
   }
 
   // The collector's own labels (#1182). Goes in the `AND` list rather than at the top level: under
@@ -1281,6 +1295,17 @@ export async function listIssuesPaginated(
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+/** How many issues {@link listIssuesPaginated} would list over every page, for the same filters —
+ *  the agent API's `total` (#2167). One `where` for both, so the count and the rows cannot disagree. */
+export async function countIssues(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<IssueListFilterOpts, "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId" | "displayFormatId">
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.issue.count({ where: buildIssueListWhere(collectionId, opts) });
 }
 
 /**
