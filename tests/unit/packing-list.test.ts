@@ -352,13 +352,21 @@ describe("buildPackingList over transaction lines", () => {
 // ── A sale divided by sold set (#2187) ────────────────────────────────────────
 
 function soldSet(position: number, over: Partial<PackingSet> = {}): PackingSet {
-  return { id: `set-${position}`, title: `Set ${position}`, offerNo: 7, price: "10.00 PLN", position, ...over };
+  return {
+    id: `set-${position}`,
+    title: `Set ${position}`,
+    numbers: null,
+    onNoOffer: false,
+    price: "10.00 PLN",
+    position,
+    ...over,
+  };
 }
 
 describe("buildPackingList by sold set", () => {
   it("makes one division per set, in the caller's order, carrying the set", () => {
     const first = soldSet(0, { title: "Chopin pair" });
-    const second = soldSet(1, { title: "Composers lot", offerNo: null });
+    const second = soldSet(1, { title: "Composers lot", onNoOffer: true });
     const list = buildPackingList(
       [copy({ set: second }), copy({ set: first }), copy({ set: second })],
       AREAS,

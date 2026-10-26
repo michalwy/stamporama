@@ -1,7 +1,6 @@
 "use client";
 
 import type { PackingListData, PackingListGroup } from "@/lib/packing-list";
-import { formatEntityNo } from "@/lib/quick-jump";
 import {
   PACKING_COLUMN,
   PackingSheet,
@@ -63,14 +62,10 @@ function packedNote(group: PackingListGroup): string | null {
   return group.packedCount > 0 ? `${group.packedCount} packed` : null;
 }
 
-/** A set's offer, as the sale screen's line names it — or that it went out on none (#2021). */
+/** That a set went out on no offer (#2021), as the sale screen's line says — the heading names the
+ *  offer of every other one (#2189). */
 function setNote(group: PackingListGroup): string | null {
-  const offer = group.set
-    ? group.set.offerNo != null
-      ? `offer ${formatEntityNo(group.set.offerNo)}`
-      : "on no offer"
-    : null;
-  return [offer, packedNote(group)].filter(Boolean).join(" · ") || null;
+  return [group.set?.onNoOffer ? "on no offer" : null, packedNote(group)].filter(Boolean).join(" · ") || null;
 }
 
 export function SalePackingSheet({
@@ -111,6 +106,7 @@ export function SalePackingSheet({
       tickTitle={(row) => (row.packed ? "Packed" : "Not packed")}
       groupNote={set ? setNote : packedNote}
       groupAside={set ? (group) => group.set?.price ?? null : undefined}
+      groupSubline={set ? (group) => group.set?.numbers ?? null : undefined}
     />
   );
 }

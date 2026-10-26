@@ -13,6 +13,7 @@ import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
 import { buildPackingList, packingSetOrder, type PackingSet } from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { saleLineHeading } from "@/lib/sale-line-name";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
@@ -70,15 +71,17 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
 
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
   const list = buildPackingList(copies, areas, locations, maps);
-  // Each set named as the sale screen names its line: the title, the offer, the price.
+  // Each set named as the sale screen names its line (#2189): the offer and its title, the set's
+  // numbers under it, the price.
   const positions = packingSetOrder(sale.lines);
   const sets = new Map<string, PackingSet>(
     sale.lines.map((line) => [
       line.id,
       {
         id: line.id,
-        title: line.setLabel,
-        offerNo: line.offerNo,
+        title: saleLineHeading(line.name),
+        numbers: line.name.numbers,
+        onNoOffer: line.offerSetId === null,
         price: `${line.price} ${sale.currency}`,
         position: positions.get(line.id) ?? 0,
       },
