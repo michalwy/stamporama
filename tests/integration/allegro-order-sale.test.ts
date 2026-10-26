@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer } from "../../src/lib/offers";
-import { getSaleDetail } from "../../src/lib/sales";
+import { getSaleDetail, moveSaleLines } from "../../src/lib/sales";
 import {
   recordAllegroOrderSale,
   fillBuyerDetailsFromOrder,
@@ -275,6 +275,41 @@ describe("recording an Allegro order as a sale (#463)", () => {
       worklist.orders.find((row) => row.orderId === "ORDER-REST"),
       undefined
     );
+  });
+
+  it("reads a sale split in two (#2204) as one claim on its order — both halves count, the first takes the rest", async () => {
+    const a = await offerWithOneSet("Split A");
+    const b = await offerWithOneSet("Split B");
+    const c = await offerWithOneSet("Split C");
+    await syncedOrder("ORDER-SPLIT", [a, b, c]);
+
+    const first = await recordAllegroOrderSale(userId, collectionId, "ORDER-SPLIT", header(), [
+      { offerId: a.offerId, offerSetId: a.setId, price: "10.00", itemIds: a.itemIds },
+      { offerId: b.offerId, offerSetId: b.setId, price: "10.00", itemIds: b.itemIds },
+    ]);
+    await prisma.sale.update({ where: { id: first.saleId }, data: { status: "ordered" } });
+    const lineB = await prisma.saleLine.findFirstOrThrow({ where: { saleId: first.saleId, offerId: b.offerId } });
+    const split = await moveSaleLines(userId, {
+      sourceSaleId: first.saleId,
+      lineIds: [lineB.id],
+      target: { newSale: true },
+    });
+    assert.equal(await prisma.sale.count({ where: { collectionId, externalRef: "ORDER-SPLIT" } }), 2);
+
+    // Still waiting only for C, linked to the first half.
+    const worklist = await getAllegroWorklist(userId, collectionId);
+    const order = worklist.orders.find((row) => row.orderId === "ORDER-SPLIT");
+    assert.ok(order);
+    assert.deepEqual(order.lines.map((line) => line.recorded), [true, true, false]);
+    assert.deepEqual(order.recordedSale, { id: first.saleId, saleNo: first.saleNo });
+
+    const rest = await recordAllegroOrderSale(userId, collectionId, "ORDER-SPLIT", header(), [
+      { offerId: c.offerId, offerSetId: c.setId, price: "10.00", itemIds: c.itemIds },
+    ]);
+    assert.equal(rest.saleId, first.saleId);
+    assert.notEqual(rest.saleId, split.targetSaleId);
+    const after = await getAllegroWorklist(userId, collectionId);
+    assert.equal(after.orders.find((row) => row.orderId === "ORDER-SPLIT"), undefined);
   });
 
   it("fills a buyer contact's blank full name and email from the order, and overwrites neither", async () => {

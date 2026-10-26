@@ -47,6 +47,10 @@ import { SaleAttachmentsCard } from "./sale-attachments-card";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
+import { MoveSaleSetsDialog } from "./move-sale-sets-dialog";
+import { saleMoveSourceRefusal } from "@/lib/sale-move-rules";
+import { saleLineHeading } from "@/lib/sale-line-name";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
@@ -127,6 +131,7 @@ type Dialog =
   | { kind: "paidTotal" }
   | { kind: "shipment"; mode: "sent" | "edit" }
   | { kind: "merge" }
+  | { kind: "moveSets"; lineIds: string[] }
   | { kind: "unpacked"; next: SaleStatus };
 
 interface SaleDetailPanelProps {
@@ -868,6 +873,13 @@ export function SaleDetailPanel({
           setError(undefined);
           setDialog({ kind: "chooseSet", lineId });
         }}
+        onMove={(lineIds) => {
+          // Refused here with the reason, before a dialog that could only fail (#2204): a sale
+          // already sent, or every set of it, is not split.
+          const refusal = saleMoveSourceRefusal(sale, lineIds.length, sale.lines.length);
+          setError(refusal ?? undefined);
+          if (!refusal) setDialog({ kind: "moveSets", lineIds });
+        }}
         onEditPrice={(lineId, price) =>
           run(async () => {
             const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
@@ -1113,6 +1125,41 @@ export function SaleDetailPanel({
               // This sale may be the one that went: the merged sale is the one to be on.
               if (result.id === sale.id) router.refresh();
               else router.push(`/c/${params.collectionSlug}/sales/${result.id}`);
+            });
+          }}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+      {dialog.kind === "moveSets" && (
+        <MoveSaleSetsDialog
+          collectionId={collectionId}
+          saleId={sale.id}
+          buyerName={sale.buyerName}
+          setNames={sale.lines
+            .filter((line) => dialog.lineIds.includes(line.id))
+            .map((line) => saleLineHeading(line.name))}
+          isPending={isPending}
+          error={error}
+          onSubmit={(targetSaleId) => {
+            setError(undefined);
+            startTransition(async () => {
+              const { moveSaleLinesAction } = await import("@/app/actions/sales");
+              const result = await moveSaleLinesAction(sale.id, dialog.lineIds, targetSaleId);
+              if (result.status !== "success") {
+                setError(result.message);
+                return;
+              }
+              invalidateAll(collectionId);
+              setDialog({ kind: "none" });
+              const sets = `${result.moved} ${result.moved === 1 ? "set" : "sets"}`;
+              toast({
+                message: result.created
+                  ? `${sets} moved to new sale ${formatEntityNo(result.targetSaleNo)}`
+                  : `${sets} moved to sale ${formatEntityNo(result.targetSaleNo)}`,
+                href: `/c/${params.collectionSlug}/sales/${result.targetSaleId}`,
+                linkLabel: "Open sale",
+              });
+              router.refresh();
             });
           }}
           onClose={() => setDialog({ kind: "none" })}

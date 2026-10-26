@@ -7,6 +7,7 @@ import {
   getSaleDetail,
   listSalesPaginated,
   listSellableOffers,
+  moveSaleLinesThroughApi,
   recordSaleLinesThroughApi,
   type ApiSaleTarget,
   type SaleStatus,
@@ -42,6 +43,7 @@ import {
   saleRecord,
   saleRow,
 } from "../sale-reads";
+import { parseSaleRef } from "../conversation-log-reads";
 import { readCollectionVocabulary } from "./vocabulary";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type { AgentBuyer, AgentSale, AgentSaleRow } from "../sale-reads";
@@ -62,6 +64,10 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // or a new one, through `recordSaleLinesThroughApi`, which runs the dialog's guards and writes the
 // lines and the *to review* marker (#1948) in one transaction. The sale waits for the collector's
 // *Confirm*, which nothing here can reach.
+//
+// **A third write, since #2204**: `move_sale_sets` moves sold sets to another sale of the same buyer —
+// a new one or an open one — through `moveSaleLinesThroughApi`, the sale screen's own move under its
+// rules, marking both sales *to review* in the move's transaction.
 //
 // **No deleting, and no moving a sale.** No operation removes a sale or a line, changes a sale's
 // status, its header, a line's price or set, or its packing, shipping or share link — those stay in
@@ -572,4 +578,92 @@ export const sellOfferSetOperation: Operation = {
   parameters: [OFFER_ID_PARAMETER, SET_ID_PARAMETER, ...SELL_PARAMETERS],
   result: SELL_RESULT,
   handler: async (context, params) => sell(context, params, requiredString(params, "setId")),
+};
+
+// ── move_sale_sets ───────────────────────────────────────────────────────────
+
+/** The word for *a new sale*, where the target of a move is named. */
+const NEW_SALE = "new";
+
+const MOVE_SALE_SETS_PARAMETERS: readonly ParameterSpec[] = [
+  { ...SALE_ID_PARAMETER, description: "The id of the sale the sets leave, from `list_sales`." },
+  {
+    name: "lines",
+    in: "body",
+    type: "string[]",
+    required: true,
+    description:
+      "The sold sets to move, by their line ids from `get_sale`'s `lines`. At least one, and never every line of the sale — moving everything is not a split.",
+  },
+  {
+    name: "to",
+    in: "body",
+    type: "string",
+    required: true,
+    description: `Where they go: \`${NEW_SALE}\` for a new sale for the same buyer, or the number (\`12\` or \`s12\`) or id of an open sale of the same buyer, marketplace and currency.`,
+  },
+];
+
+/** Both sales after a move: the one the sets left and the one they joined. */
+export interface AgentSaleMove {
+  from: AgentSale;
+  to: AgentSale;
+}
+
+export async function moveSaleSets(context: OperationContext, params: ParsedParams): Promise<AgentSaleMove> {
+  const saleId = requiredString(params, "saleId");
+  await assertSale(context, saleId);
+  const lineIds = stringList(params, "lines");
+  if (lineIds.length === 0) {
+    throw invalidRequest('Send the sets to move as "lines" — their line ids from `get_sale`. Nothing was moved.');
+  }
+
+  const toValue = requiredString(params, "to").trim();
+  let targetSaleId: string | null = null;
+  if (toValue.toLocaleLowerCase() !== NEW_SALE) {
+    const ref = parseSaleRef(toValue);
+    if (ref.kind === "none") {
+      throw invalidRequest(`"to" takes \`${NEW_SALE}\` or a sale's number or id. Nothing was moved.`);
+    }
+    const target = await prisma.sale.findFirst({
+      where: {
+        collectionId: context.collectionId,
+        collection: { ownerId: context.ownerId },
+        ...(ref.kind === "number" ? { saleNo: ref.saleNo } : { id: ref.id }),
+      },
+      select: { id: true },
+    });
+    if (!target) {
+      throw notFound(
+        `No sale ${ref.kind === "number" ? `numbered ${ref.saleNo}` : `with id "${ref.id}"`} is in this token's collection. \`list_sales\` with "buyer" lists the buyer's sales.`
+      );
+    }
+    targetSaleId = target.id;
+  }
+
+  const moved = await refusingDomainGuards(() =>
+    moveSaleLinesThroughApi(context.ownerId, context.collectionId, {
+      sourceSaleId: saleId,
+      lineIds,
+      target: targetSaleId ? { saleId: targetSaleId } : { newSale: true },
+    })
+  );
+  const [from, to] = await Promise.all([loadSale(context, moved.sourceSaleId), loadSale(context, moved.targetSaleId)]);
+  return { from, to };
+}
+
+export const moveSaleSetsOperation: Operation = {
+  name: "move_sale_sets",
+  method: "POST",
+  path: "/sales/{saleId}/lines/move",
+  description:
+    "Split a sale: move some of its sold sets to another sale of the same buyer — a new one, or an open one of theirs on the same marketplace and in the same currency — as the app's Move to another sale does. The sets keep their prices, copies and packing; nothing goes back to stock and no offer changes. The sale's own amounts — handling or total paid, commission, postage, shipping option, packing supplies — stay where they are, and a new sale starts with none, with the same buyer, order number and date. A sale already sent, or a move of every set, is refused. Both sales wait for the collector's review.",
+  writes: true,
+  parameters: MOVE_SALE_SETS_PARAMETERS,
+  result: {
+    kind: "object",
+    description:
+      "Both sales as they now stand, in `get_sale`'s shape: `from`, the sale the sets left, and `to`, the sale they joined or started — each marked `toReview` with what moved.",
+  },
+  handler: async (context, params) => moveSaleSets(context, params),
 };

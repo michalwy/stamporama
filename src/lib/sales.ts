@@ -69,6 +69,12 @@ import {
   type SaleMergeChoices,
   type SaleMergeSide,
 } from "./sale-merge-rules";
+import {
+  saleMoveSourceRefusal,
+  saleMoveTargetRefusal,
+  saleSetsMovedAction,
+  type SaleMoveSide,
+} from "./sale-move-rules";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -109,7 +115,10 @@ export type SaleBlockReason =
   | "not-in-stock"
   /** Two sales that cannot be merged (#2041): another platform or currency, or a parcel already
    *  sent — or a sum of postages in two currencies. */
-  | "cannot-merge";
+  | "cannot-merge"
+  /** Sold sets that cannot move to another sale (#2204): a sale already sent, every set of it, or a
+   *  target that is not another open sale of the same buyer, platform and currency. */
+  | "cannot-move";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -3032,6 +3041,223 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
     );
     return remainingSaleId;
   });
+}
+
+// ── Moving sold sets to another sale (#2204) ────────────────────────────────
+
+/** A sale as the *Move to another sale* dialog offers it. */
+export interface SaleMoveCandidate {
+  id: string;
+  saleNo: number;
+  soldAt: string;
+  status: string;
+  externalRef: string | null;
+  /** Sold sets on it. */
+  lineCount: number;
+}
+
+const SALE_MOVE_SELECT = {
+  id: true,
+  saleNo: true,
+  collectionId: true,
+  platformId: true,
+  currency: true,
+  buyerId: true,
+  status: true,
+  soldAt: true,
+  externalRef: true,
+  fxRateToBase: true,
+  collection: { select: { ownerId: true } },
+  _count: { select: { lines: true } },
+} as const;
+
+type SaleMoveRow = Prisma.SaleGetPayload<{ select: typeof SALE_MOVE_SELECT }>;
+
+function toSaleMoveSide(row: SaleMoveRow): SaleMoveSide {
+  return {
+    id: row.id,
+    saleNo: row.saleNo,
+    platformId: row.platformId,
+    currency: row.currency,
+    buyerId: row.buyerId,
+    status: row.status,
+  };
+}
+
+/**
+ * The sales this one's sets can move to (#2204), for the dialog: the buyer's other sales on the same
+ * platform, in the same currency, not yet sent — latest first. Empty for a sale with no buyer, whose
+ * sets go only to a new sale.
+ */
+export async function listSaleMoveTargets(ownerId: string, saleId: string): Promise<SaleMoveCandidate[]> {
+  const row = await prisma.sale.findUnique({ where: { id: saleId }, select: SALE_MOVE_SELECT });
+  if (!row || row.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  if (row.buyerId === null) return [];
+  const rows = await prisma.sale.findMany({
+    where: {
+      collectionId: row.collectionId,
+      buyerId: row.buyerId,
+      platformId: row.platformId,
+      currency: row.currency,
+      id: { not: row.id },
+      status: { in: [...UNSENT_SALE_STATUSES] },
+    },
+    orderBy: [{ soldAt: "desc" }, { saleNo: "desc" }],
+    select: SALE_MOVE_SELECT,
+  });
+  const source = toSaleMoveSide(row);
+  return rows
+    .filter((candidate) => saleMoveTargetRefusal(source, toSaleMoveSide(candidate)) === null)
+    .map((candidate) => ({
+      id: candidate.id,
+      saleNo: candidate.saleNo,
+      soldAt: candidate.soldAt.toISOString().slice(0, 10),
+      status: candidate.status,
+      externalRef: candidate.externalRef,
+      lineCount: candidate._count.lines,
+    }));
+}
+
+/** Where moved sets go: a sale already there, or a new one for the same buyer. */
+export type SaleMoveTarget = { saleId: string } | { newSale: true };
+
+/** What {@link moveSaleLines} is asked: which sale gives up which of its lines, and where they go. */
+export interface SaleMoveInput {
+  sourceSaleId: string;
+  lineIds: readonly string[];
+  target: SaleMoveTarget;
+}
+
+/** What a move did: the two sales, by id and number, and how many sets moved. */
+export interface SaleMoveResult {
+  sourceSaleId: string;
+  sourceSaleNo: number;
+  targetSaleId: string;
+  targetSaleNo: number;
+  /** A new sale was started for the sets. */
+  created: boolean;
+  /** The offer each moved set sold through, by number — null for a set on no offer. */
+  offerNos: (number | null)[];
+}
+
+/**
+ * Move ticked sold sets to another sale of the same buyer (#2204) — a new one, or an open one of
+ * theirs on the same platform and in the same currency. **The sets move as they are**: their prices,
+ * copies, packed state, a set still to be chosen and the offers they sold through, so nothing goes
+ * back to stock and no offer changes state.
+ *
+ * **The sale's own amounts stay on the source** — buyer handling or total paid, commission, postage,
+ * shipping option, packing supplies — since they belong to its parcel, and so do its files, its
+ * conversation (#2149) and its buyer link (#699). A new sale starts with none of them: the source's
+ * buyer, platform, currency, order number, date and frozen rate, status *Ordered*. A source whose
+ * buyer handling is worked out from a total paid re-settles on read, exactly as when a set is removed.
+ *
+ * Refused for a source already sent, for a move of every set (a split leaves something behind), and
+ * for a target that is not another open sale of the same buyer (`sale-move-rules.ts`). Both sales are
+ * locked first and read again, so what is checked is what is moved.
+ */
+export async function moveSaleLines(ownerId: string, input: SaleMoveInput): Promise<SaleMoveResult> {
+  return prisma.$transaction((tx) => moveSaleLinesIn(tx, ownerId, input));
+}
+
+/**
+ * {@link moveSaleLines} through the agent API (#2204): the same move under the same rules, and **both
+ * sales marked *to review*** (#1948) in the move's own transaction — the one it joined or started, and
+ * the one it took the sets from — each naming what moved.
+ */
+export async function moveSaleLinesThroughApi(
+  ownerId: string,
+  collectionId: string,
+  input: SaleMoveInput
+): Promise<SaleMoveResult> {
+  return prisma.$transaction(async (tx) => {
+    const source = await tx.sale.findUnique({ where: { id: input.sourceSaleId }, select: { collectionId: true } });
+    if (!source || source.collectionId !== collectionId) throw new Error("Sale not found or access denied.");
+    const moved = await moveSaleLinesIn(tx, ownerId, input);
+    await markSaleWrittenByApi(tx, moved.sourceSaleId, {
+      kind: "changed",
+      actions: [saleSetsMovedAction(moved.offerNos, { to: moved.targetSaleNo })],
+    });
+    await markSaleWrittenByApi(tx, moved.targetSaleId, {
+      kind: moved.created ? "created" : "changed",
+      actions: [saleSetsMovedAction(moved.offerNos, { from: moved.sourceSaleNo })],
+    });
+    return moved;
+  });
+}
+
+async function moveSaleLinesIn(
+  tx: DbTransaction,
+  ownerId: string,
+  input: SaleMoveInput
+): Promise<SaleMoveResult> {
+  const { sourceSaleId, target } = input;
+  const lineIds = [...new Set(input.lineIds)];
+  const targetSaleId = "saleId" in target ? target.saleId : null;
+  if (targetSaleId === sourceSaleId) {
+    throw new SaleActionBlockedError("cannot-move", "A sale cannot take its own sets.");
+  }
+  // In one order, so two moves between the same two sales queue rather than deadlock.
+  for (const id of [sourceSaleId, ...(targetSaleId ? [targetSaleId] : [])].sort()) {
+    await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${id} FOR UPDATE`;
+  }
+  const sourceRow = await tx.sale.findUnique({ where: { id: sourceSaleId }, select: SALE_MOVE_SELECT });
+  if (!sourceRow || sourceRow.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const lines = await tx.saleLine.findMany({
+    where: { id: { in: lineIds }, saleId: sourceSaleId },
+    select: { id: true, offer: { select: { offerNo: true } } },
+  });
+  if (lines.length !== lineIds.length) {
+    throw new SaleActionBlockedError(
+      "cannot-move",
+      "One or more of those sets are not on this sale any more. Reload the sale and tick them again."
+    );
+  }
+  const source = toSaleMoveSide(sourceRow);
+  const sourceRefusal = saleMoveSourceRefusal(source, lines.length, sourceRow._count.lines);
+  if (sourceRefusal) throw new SaleActionBlockedError("cannot-move", sourceRefusal);
+
+  let to: { id: string; saleNo: number };
+  if (targetSaleId) {
+    const targetRow = await tx.sale.findUnique({ where: { id: targetSaleId }, select: SALE_MOVE_SELECT });
+    if (!targetRow || targetRow.collectionId !== sourceRow.collectionId) {
+      throw new Error("Sale not found or access denied.");
+    }
+    const targetRefusal = saleMoveTargetRefusal(source, toSaleMoveSide(targetRow));
+    if (targetRefusal) throw new SaleActionBlockedError("cannot-move", targetRefusal);
+    to = { id: targetRow.id, saleNo: targetRow.saleNo };
+  } else {
+    // The same buyer, platform, currency, order number and date — and so the same frozen rate — and
+    // nothing of the parcel's: no amounts, no shipping option, no packing supplies.
+    to = await tx.sale.create({
+      data: {
+        collectionId: sourceRow.collectionId,
+        saleNo: await allocateEntityNumber(tx, sourceRow.collectionId, "sale"),
+        platformId: sourceRow.platformId,
+        buyerId: sourceRow.buyerId,
+        externalRef: sourceRow.externalRef,
+        soldAt: sourceRow.soldAt,
+        currency: sourceRow.currency,
+        fxRateToBase: sourceRow.fxRateToBase,
+        statusEvents: { create: { status: "ordered" } },
+      },
+      select: { id: true, saleNo: true },
+    });
+  }
+
+  await tx.saleLine.updateMany({ where: { id: { in: lineIds } }, data: { saleId: to.id } });
+  return {
+    sourceSaleId,
+    sourceSaleNo: sourceRow.saleNo,
+    targetSaleId: to.id,
+    targetSaleNo: to.saleNo,
+    created: targetSaleId === null,
+    offerNos: lines.map((line) => line.offer?.offerNo ?? null),
+  };
 }
 
 // ── Sold-set copies (packing view) ────────────────────────────────────────────
