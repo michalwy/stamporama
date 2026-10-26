@@ -413,34 +413,59 @@ the supplies are counted on the card and on the Packing supplies screen.
 
 #### The Packing supplies screen
 
-**Selling → Packing supplies** lists every supply with the quantity **on hand** and its **value**
-at FIFO cost in your base currency, and under it the supply's **batches**, oldest first: the intake
-document each came from (a link back to it), its date, how many it brought in and how many are left,
-what the batch cost in its own currency, and the unit cost and remaining value in your base currency.
-The total of all supplies on hand heads the screen. A batch bought in another currency with **no
-recorded exchange rate** has no base-currency cost; its supply then states no value rather than a sum
-that leaves it out, and says why. When sales have used more of a supply than you had, the supply says
-how many units they are waiting for — a purchase of it covers them.
+**Selling → Packing supplies** has two tabs: **Stock**, which it opens on, and **Register**.
 
-Under the batches, **Used** lists everything that took the supply, newest first: each sale that
-packed with it (a link to the sale) and each use outside sales with its note, with the date, the
-units and what they cost at their batches' unit costs.
+**Stock** is one row per supply, by name, with the quantity **on hand** and its **value** at FIFO
+cost in your base currency — *C6 envelope · 499*, *C5 envelope · 503* — and **Use…**. The total of
+all supplies on hand heads the screen. A supply never bought says so in its row. A batch bought in
+another currency with **no recorded exchange rate** has no base-currency cost; its supply then states
+no value (—) rather than a sum that leaves it out. When sales have used more of a supply than you had,
+the **Owed** column says how many units they are waiting for — a purchase of it covers them. Above
+the rows, a **name filter** and **On hand only** narrow the list; both are remembered and kept in the
+address.
+
+**Click a row** to open that supply's detail: its **batches**, oldest first — the intake document
+each came from (a link back to it), its date, how many it brought in and how many are left, what the
+batch cost in its own currency, and the unit cost and remaining value in your base currency — and
+under them, **Used**: everything that took the supply, newest first, each sale that packed with it (a
+link to the sale, with its buyer) and each use outside sales with its note, with the date, the units
+and what they cost at their batches' unit costs. The detail says why a value is missing or units are
+owed, and has its own **Use…**.
+
+#### The register
+
+**Register** lists every movement of every supply in one place, newest first: each **Bought** row (a
+supply line of a purchase order or opening balance, + units), each **Used on a sale** and each **Used
+outside sales** (− units). A row gives the date, the type, the supply, the units, the unit cost and
+the cost in your base currency, and the document — the purchase (*#135 NOWANO*) or the sale, as a
+link, or the note of a use outside sales, which keeps its **⋮** for correcting or deleting it.
+
+- **Filters**: one or more **supplies**, one or more **types**, a **From**/**To** date span, and a
+  **search** over documents, suppliers, buyers and notes. They are remembered and kept in the
+  address; while any narrows the register a band says so, with **Clear filters**.
+- **Narrowed to one supply**, a **Stock after** column shows the stock after each row, so the
+  on-hand figure can be traced. Units a sale used that were not in stock take it below zero — that is
+  what the supply owes until a purchase covers it.
+- **Totals** of what is shown head the table: how many movements, units in and their cost, units out
+  and their cost. **By month** groups the rows, each month with its own totals — narrow to *Used
+  outside sales* for what those uses cost each month.
 
 #### Using supplies outside sales
 
 Supplies do not only go into parcels — transport cards also hold stamps in your own storage. To keep
-the stock true, take those out with **Use…** on the supply's row of the Packing supplies screen: the
-**quantity**, the **date** (today unless you change it) and an optional **note** such as *storage*.
-They leave stock **oldest batch first**, exactly as a sale's do, and the use appears under **Used**
-with its cost. Its **⋮** menu lets you **Edit use** or **Delete use**; fewer units, or deleting it,
-returns them to the batches they came from.
+the stock true, take those out with **Use…** on the supply's row of the Packing supplies screen (or in
+its detail): the **quantity**, the **date** (today unless you change it) and an optional **note** such
+as *storage*. They leave stock **oldest batch first**, exactly as a sale's do, and the use appears
+under the supply's **Used** and in the register with its cost. Its **⋮** menu — in either place — lets
+you **Edit use** or **Delete use**; fewer units, or deleting it, returns them to the batches they came
+from.
 
 - **You cannot use more than is on hand.** Unlike a sale — where the parcel has already gone and the
   next purchase covers it — nothing is waiting here, so the dialog refuses and says how many there
   are. *Use…* is greyed out on a supply with nothing on hand.
-- **The cost is charged to no sale and no copy.** It is a cost of its own: **Used outside sales** at
-  the top of the screen totals it by **Month** or **Year**, with how many uses and units each period
-  holds. It does not appear on the Profit and loss screen.
+- **The cost is charged to no sale and no copy.** It is a cost of its own: narrow the **register** to
+  *Used outside sales* and switch on **By month** for what those uses cost each month, with how many
+  uses and units. It does not appear on the Profit and loss screen.
 - **A batch lowered or deleted later can leave a use short**, as it can a sale: the use is marked
   *incomplete* and the supply says how many units are missing, until a purchase covers them. You can
   still correct its note, date or a lower quantity, or delete it.

@@ -178,12 +178,22 @@ describe("packing supplies", () => {
     // The shelf's 5.00 EUR, and the purchase's 22.00 PLN at 0.25.
     assert.equal(envelope.valueBase, "10.50");
     assert.deepEqual(
-      envelope.batches.map((b) => [b.purchase.name, b.quantity, b.onHand, b.costTx, b.unitCostBase, b.valueBase]),
+      envelope.batches.map((b) => [
+        b.purchase.name,
+        b.quantity,
+        b.onHand,
+        b.costTx,
+        b.costBase,
+        b.unitCostBase,
+        b.valueBase,
+      ]),
       [
-        ["The shelf", 50, 50, "5.00", "0.1000", "5.00"],
-        [null, 100, 100, "22.00", "0.0550", "5.50"],
+        ["The shelf", 50, 50, "5.00", "5.00", "0.1000", "5.00"],
+        [null, 100, 100, "22.00", "5.50", "0.0550", "5.50"],
       ]
     );
+    // When each line was written — the register's order for two batches of one day (#2196).
+    assert.ok(envelope.batches.every((b) => !Number.isNaN(Date.parse(b.recordedAt))));
     const card = stock.supplies.find((s) => s.id === cardId)!;
     assert.deepEqual([card.onHand, card.valueBase, card.batches.length], [0, "0.00", 0]);
     assert.equal(stock.totalValueBase, "10.50");
@@ -207,6 +217,8 @@ describe("packing supplies", () => {
     const card = stock.supplies.find((s) => s.id === cardId)!;
     assert.equal(card.valueBase, null);
     assert.equal(card.unvaluedBatches, 1);
+    // Its cost in the base currency is not known either, so the register's *Bought* row states none.
+    assert.equal(card.batches.find((b) => b.id === line)?.costBase, null);
     assert.equal(stock.totalValueBase, null);
     await deletePurchaseSupplyLine(userId, line);
     await prisma.purchase.delete({ where: { id: noRate.id } });

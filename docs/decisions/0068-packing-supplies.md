@@ -179,7 +179,10 @@ migration's comment calls this §8: #1899's section took that number while the t
 - **Its cost is charged to no sale and no copy.** It is its units at their batches' unit costs,
   derived as a sale's are. The Supplies screen lists it in the supply's history beside the sales
   that used the supply, and states the total used outside sales **by month or year** as a cost of
-  its own (`src/lib/supply-own-use-rules.ts`). It is not on the profit-and-loss screen.
+  its own (`src/lib/supply-own-use-rules.ts`). It is not on the profit-and-loss screen. *Amended by
+  #2196:* that monthly table moved into the screen's register of every movement
+  (`src/lib/supply-register-rules.ts`), which, narrowed to uses outside sales and grouped by month,
+  states the same figures; the by-year grouping went with it.
 - **Using more than is on hand is refused** — unlike a sale, nothing waits on it. The use is
   written and settled in one transaction and rolled back if the rule left it short.
 - **A batch lowered or deleted later can still leave a use short**, exactly as it can a sale — the
