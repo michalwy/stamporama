@@ -6,9 +6,12 @@ import type { SaleCopyItem } from "../../src/lib/sales";
 import type { AreaVendorMaps } from "../../src/lib/area-vendor";
 import {
   buildPackingList,
+  NO_GROUP_LABEL,
   NO_LOCATION_LABEL,
+  packingSetOrder,
   type PackingCopy,
   type PackingLine,
+  type PackingSet,
   type PackingValue,
 } from "../../src/lib/packing-list";
 
@@ -42,7 +45,9 @@ let seq = 0;
 /** A sold copy, which is a {@link PackingCopy} by construction (#643) — the return type is the
  *  projection rather than `SaleCopyItem`, so this fixture is also the assertion that a sale's copies
  *  still satisfy it. `line` is the trade's half, absent on a sale. */
-function copy(over: Partial<SaleCopyItem> & { line?: PackingLine }): PackingCopy {
+function copy(
+  over: Partial<SaleCopyItem> & { line?: PackingLine; set?: PackingSet | null }
+): PackingCopy {
   seq += 1;
   return {
     id: `item-${seq}`,
@@ -341,5 +346,120 @@ describe("buildPackingList over transaction lines", () => {
       { grouping: "group" }
     );
     assert.equal(list.groups[0].rows[0].location, "Szafa 1 › Klaser A");
+  });
+});
+
+// ── A sale divided by sold set (#2187) ────────────────────────────────────────
+
+function soldSet(position: number, over: Partial<PackingSet> = {}): PackingSet {
+  return { id: `set-${position}`, title: `Set ${position}`, offerNo: 7, price: "10.00 PLN", position, ...over };
+}
+
+describe("buildPackingList by sold set", () => {
+  it("makes one division per set, in the caller's order, carrying the set", () => {
+    const first = soldSet(0, { title: "Chopin pair" });
+    const second = soldSet(1, { title: "Composers lot", offerNo: null });
+    const list = buildPackingList(
+      [copy({ set: second }), copy({ set: first }), copy({ set: second })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set" }
+    );
+    assert.deepEqual(
+      list.groups.map((g) => g.location),
+      ["Chopin pair", "Composers lot"]
+    );
+    assert.deepEqual(list.groups[1].set, second);
+    assert.equal(list.groups[1].copyCount, 2);
+  });
+
+  it("orders a set's copies by location, then ref, unfiled last", () => {
+    const set = soldSet(0);
+    const list = buildPackingList(
+      [
+        copy({ set, stampId: "a", locationId: null, locationRef: null }),
+        copy({ set, stampId: "b", locationId: "pudlo", locationRef: "A1" }),
+        copy({ set, stampId: "c", locationId: "klaser", locationRef: "A20" }),
+        copy({ set, stampId: "d", locationId: "klaser", locationRef: "A3" }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set" }
+    );
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => [r.location, r.locationRef]),
+      [
+        ["Pudło 2", "A1"],
+        ["Szafa 1 › Klaser A", "A3"],
+        ["Szafa 1 › Klaser A", "A20"],
+        [null, null],
+      ]
+    );
+  });
+
+  it("merges identical copies within a set, never across two", () => {
+    const first = soldSet(0);
+    const second = soldSet(1);
+    const list = buildPackingList(
+      [copy({ set: first }), copy({ set: first }), copy({ set: second })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set" }
+    );
+    assert.deepEqual(
+      list.groups.map((g) => g.rows.map((r) => r.quantity)),
+      [[2], [1]]
+    );
+  });
+
+  it("keeps one ref in two locations apart inside a set", () => {
+    const set = soldSet(0);
+    const list = buildPackingList(
+      [copy({ set, locationId: "klaser" }), copy({ set, locationId: "pudlo" })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set" }
+    );
+    assert.equal(list.groups[0].rows.length, 2);
+  });
+
+  it("puts a copy on no set in a trailing division", () => {
+    const list = buildPackingList(
+      [copy({ set: null }), copy({ set: soldSet(3), stampId: "x" })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set" }
+    );
+    assert.deepEqual(
+      list.groups.map((g) => g.location),
+      ["Set 3", NO_GROUP_LABEL]
+    );
+    assert.equal(list.groups[1].set, null);
+  });
+
+  it("leaves the set off every division of a sheet by location", () => {
+    const list = buildPackingList([copy({ set: soldSet(0) })], AREAS, LOCATIONS, MAPS);
+    assert.equal(list.groups[0].set, null);
+  });
+});
+
+describe("packingSetOrder", () => {
+  it("keeps the sale's line order, with an offer's sets one after another", () => {
+    const order = packingSetOrder([
+      { id: "a", offerId: "o1" },
+      { id: "b", offerId: "o2" },
+      { id: "c", offerId: null },
+      { id: "d", offerId: "o1" },
+      { id: "e", offerId: null },
+    ]);
+    assert.deepEqual(
+      [...order.entries()].sort((x, y) => x[1] - y[1]).map(([id]) => id),
+      ["a", "d", "b", "c", "e"]
+    );
   });
 });

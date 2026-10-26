@@ -21,6 +21,11 @@ import { compareLocationRef } from "./location-ref";
 // shelf ref, same ticked state) collapse into one row with a quantity, so a run of duplicates is one
 // line to tick rather than five identical ones.
 //
+// A sale's sheet can instead be divided by **sold set** (#2187): one division per set the buyer took,
+// so a parcel packed down the sheet goes out with its sets apart. The set's copies still read in shelf
+// order — by location, then ref — so a set is picked down the shelf all the same, and a merge never
+// crosses two sets, because each set is its own bucket.
+//
 // A sheet the partner reads is the same shaping with the shelf taken out of it: the divisions are the
 // transaction's own (a trade's sections), and the rows inside them read by catalogue number, because
 // a walk along somebody else's shelves is not a thing the reader can do.
@@ -78,6 +83,44 @@ export interface PackingLine {
 }
 
 /**
+ * The sold set a copy left in, on a sheet divided by set (#2187).
+ *
+ * Named as the sale's own line names it — its title, the offer it went through and its price — so a
+ * packed set can be matched to the buyer's order. The price arrives **formatted** with its currency,
+ * because the sheet prints it as the sale screen does and has no currency of its own to add.
+ */
+export interface PackingSet {
+  /** The sale line's id — a set is a line. */
+  id: string;
+  title: string;
+  /** The offer the set was sold through (#416), or null for a set sold off no offer (#2021) or one
+   *  whose offer has since been deleted. */
+  offerNo: number | null;
+  /** The line's price as printed (`25.00 PLN`). */
+  price: string;
+  /** Where the set's section sits on the sheet — the caller's order (see {@link packingSetOrder}). */
+  position: number;
+}
+
+/**
+ * The order a sale's sets are printed in (#2187): the sale's line order, except that sets sold
+ * through one offer sit one after another — where that offer's first set falls. A set on no offer is
+ * a run of its own.
+ */
+export function packingSetOrder(
+  lines: readonly { id: string; offerId: string | null }[]
+): Map<string, number> {
+  const runs = new Map<string, string[]>();
+  for (const line of lines) {
+    const run = line.offerId ?? `line:${line.id}`;
+    const ids = runs.get(run);
+    if (ids) ids.push(line.id);
+    else runs.set(run, [line.id]);
+  }
+  return new Map([...runs.values()].flat().map((id, position) => [id, position]));
+}
+
+/**
  * What a printable row is built from — satisfied by a sale's sold copies (`SaleCopyItem`) and by a
  * trade's give lines alike, structurally and without either side naming the other.
  *
@@ -109,6 +152,8 @@ export interface PackingCopy {
   offerNo?: number | null;
   /** The line this copy is promised on, where the sheet is per-line. Absent for a sale. */
   line?: PackingLine | null;
+  /** The sold set this copy left in, read by the sheet divided by set. Absent elsewhere. */
+  set?: PackingSet | null;
 }
 
 export interface PackingListRow {
@@ -162,9 +207,11 @@ export interface PackingListGroup {
   /** Location id, `__none__` for the unfiled section, or the group name on a sheet divided by the
    *  transaction's own structure. */
   key: string;
-  /** Heading: the full location path (`Szafa 1 › Klaser A`), the group's name, or the label for the
-   *  rows neither places. */
+  /** Heading: the full location path (`Szafa 1 › Klaser A`), the group's name, the set's title, or
+   *  the label for the rows none of them places. */
   location: string;
+  /** The sold set this division is, on a sheet divided by set; null on any other. */
+  set: PackingSet | null;
   rows: PackingListRow[];
   copyCount: number;
   packedCount: number;
@@ -196,16 +243,18 @@ export interface PackingListOptions {
    * `location` is the packing walk: one division per shelf, the unfiled ones trailing, headings in
    * shelf order. `group` is the transaction's own division (a trade section) — used where the reader
    * has never seen the shelves, so the headings keep the caller's own order rather than being
-   * collated, because that order is the agreement's.
+   * collated, because that order is the agreement's. `set` is a sale's sold sets (#2187), in the
+   * order the copies' {@link PackingSet.position} gives, each set's rows by location then ref.
    */
-  grouping?: "location" | "group";
+  grouping?: "location" | "group" | "set";
   /** Heading for the rows the grouping does not place. Defaults to {@link NO_LOCATION_LABEL} under
    *  `location` and {@link NO_GROUP_LABEL} under `group`. */
   ungroupedLabel?: string;
   /**
    * Row order inside a division: `shelf` by in-location ref (the identifier read off the shelf),
    * `catalog` by catalogue number. A sheet that prints no refs must not be ordered by them — a
-   * reader cannot follow an order they cannot see.
+   * reader cannot follow an order they cannot see. A sheet divided by set always reads by location,
+   * then ref — its divisions are not shelves, so the location is part of the walk.
    */
   rowOrder?: "shelf" | "catalog";
 }
@@ -213,6 +262,7 @@ export interface PackingListOptions {
 interface Bucket {
   key: string;
   location: string;
+  set: PackingSet | null;
   rows: Map<string, PackingListRow>;
 }
 
@@ -226,7 +276,9 @@ export function buildPackingList(
 ): PackingListData {
   const grouping = options.grouping ?? "location";
   const byGroup = grouping === "group";
-  const ungrouped = options.ungroupedLabel ?? (byGroup ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
+  const bySet = grouping === "set";
+  const ungrouped =
+    options.ungroupedLabel ?? (byGroup || bySet ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
   const rowOrder = options.rowOrder ?? "shelf";
 
   const buckets = new Map<string, Bucket>();
@@ -235,21 +287,30 @@ export function buildPackingList(
   for (const copy of copies) {
     const locationPath = buildLocationPath(locations, copy.locationId);
     const group = byGroup ? (copy.line?.group ?? null) : null;
-    const bucketKey = byGroup ? (group ?? "__none__") : (copy.locationId ?? "__none__");
+    const set = bySet ? (copy.set ?? null) : null;
+    const bucketKey = bySet
+      ? (set?.id ?? "__none__")
+      : byGroup
+        ? (group ?? "__none__")
+        : (copy.locationId ?? "__none__");
     let bucket = buckets.get(bucketKey);
     if (!bucket) {
       bucket = {
         key: bucketKey,
-        location: (byGroup ? group : locationPath) ?? ungrouped,
+        location: (bySet ? (set?.title ?? null) : byGroup ? group : locationPath) ?? ungrouped,
+        set,
         rows: new Map(),
       };
       buckets.set(bucketKey, bucket);
     }
     // Copies only merge when nothing distinguishes them on paper — a half-packed pair stays two
     // rows so each half can be ticked on its own. A copy that carries a **line** never merges: the
-    // line is what a verdict is recorded against, and its id in the key is what says so.
+    // line is what a verdict is recorded against, and its id in the key is what says so. On a sheet
+    // divided by set a division holds several shelves, so the location is in the key too — one ref
+    // in two boxes is two places to go.
     const rowKey = [
       copy.line?.id ?? "",
+      bySet ? (copy.locationId ?? "") : "",
       copy.stampId,
       copy.conditionId,
       copy.certificateStatusId ?? "",
@@ -288,7 +349,11 @@ export function buildPackingList(
     });
   }
 
-  const compareRows = rowOrder === "catalog" ? compareByCatalog : compareByShelf;
+  const compareRows = bySet
+    ? compareByLocation
+    : rowOrder === "catalog"
+      ? compareByCatalog
+      : compareByShelf;
   const groups: PackingListGroup[] = Array.from(buckets.values()).map((bucket) => {
     const rows = Array.from(bucket.rows.values()).sort(compareRows);
     // The numbers a row carries read as a list on paper, so they read ascending (#474) — the copy
@@ -300,6 +365,7 @@ export function buildPackingList(
     return {
       key: bucket.key,
       location: bucket.location,
+      set: bucket.set,
       rows,
       copyCount: rows.reduce((sum, r) => sum + r.quantity, 0),
       packedCount: rows.reduce((sum, r) => sum + (r.packed ? r.quantity : 0), 0),
@@ -309,8 +375,10 @@ export function buildPackingList(
       valueMissing: rows.reduce((sum, r) => sum + (r.line && !r.line.value ? 1 : 0), 0),
     };
   });
-  // Shelf order is the collation; the transaction's own order is the caller's, and is left alone.
-  if (!byGroup) groups.sort(compareGroups);
+  // Shelf order is the collation; the transaction's own order is the caller's, and is left alone;
+  // a sale's sets go where the caller placed them, a copy on no set trailing.
+  if (bySet) groups.sort(compareSets);
+  else if (!byGroup) groups.sort(compareGroups);
 
   return {
     groups,
@@ -338,6 +406,24 @@ function compareGroups(a: PackingListGroup, b: PackingListGroup): number {
   if (a.key === "__none__") return b.key === "__none__" ? 0 : 1;
   if (b.key === "__none__") return -1;
   return COLLATOR.compare(a.location, b.location);
+}
+
+/** Sets in the caller's order; copies on no set trail. */
+function compareSets(a: PackingListGroup, b: PackingListGroup): number {
+  if (!a.set) return b.set ? 1 : 0;
+  if (!b.set) return -1;
+  return a.set.position - b.set.position;
+}
+
+/** Rows by location path (unfiled last), then as {@link compareByShelf}. */
+function compareByLocation(a: PackingListRow, b: PackingListRow): number {
+  if (a.location !== b.location) {
+    if (a.location === null) return 1;
+    if (b.location === null) return -1;
+    const byLocation = COLLATOR.compare(a.location, b.location);
+    if (byLocation !== 0) return byLocation;
+  }
+  return compareByShelf(a, b);
 }
 
 /** Rows by in-location ref (prefix then number, blanks last), then catalog label, then condition. */
