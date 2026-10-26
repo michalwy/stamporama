@@ -22,9 +22,10 @@ import {
 } from "@/lib/checklist-kind";
 import { formControl } from "@/app/control-style";
 
-const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+export const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
 
-const INPUT_STYLE: React.CSSProperties = {
+/** The name field's look, shared with the issue's checklist editor (#2206). */
+export const CHECKLIST_NAME_INPUT_STYLE: React.CSSProperties = {
   ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
@@ -51,9 +52,10 @@ const KIND_HINT: Record<ChecklistKind, string> = {
 };
 
 /**
- * A checklist's name, with its translations (#1308), and its type (#1617) — the one form every door
- * that names a checklist opens: an issue's checklist editor (#531), the Checklists screen and the
- * Issues list's *Add to checklist…* (#1416).
+ * A checklist's name, with its translations (#1308), and its type (#1617) — the form the Checklists
+ * screen and the Issues list's *Add to checklist…* (#1416) name a checklist in. An issue's own
+ * checklist editor holds the same fields in place and saves each as it is left (#2206), so the type
+ * choice and the ⚠ below are exported for it.
  *
  * A repeated name is **advisory**, #178's rule for a duplicate issue name: the collector may have a
  * reason, and the list behind the form already says what is there. `siblings` is that list — the
@@ -107,12 +109,7 @@ export function ChecklistNameDialog({
 
   // Two checklists with the same name are indistinguishable everywhere they are listed — the badge
   // tooltip, the filter, the stamp form's boxes, the price-details entries, a picker.
-  const duplicateName =
-    nameText.trim() !== "" &&
-    siblings.some(
-      (c) =>
-        c.id !== initial?.id && c.name.trim().toLowerCase() === nameText.trim().toLowerCase()
-    );
+  const duplicateName = isDuplicateChecklistName(nameText, siblings, initial?.id);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -146,40 +143,12 @@ export function ChecklistNameDialog({
                 defaultValue={initial?.name ?? ""}
                 disabled={isPending}
                 placeholder={placeholder}
-                style={{ ...INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
+                style={{ ...CHECKLIST_NAME_INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
                 onChange={(e) => setNameText(e.target.value)}
                 {...NO_AUTOFILL}
               />
               {duplicateName && (
-                <span
-                  style={{
-                    position: "absolute",
-                    right: "0.5rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    display: "inline-flex",
-                  }}
-                >
-                  <Tooltip
-                    align="end"
-                    content={
-                      <span>
-                        A checklist called{" "}
-                        <span style={{ fontWeight: 600 }}>{nameText.trim()}</span> is already{" "}
-                        {siblingsLabel}. You can still save it, but the two will read alike wherever
-                        checklists are listed.
-                      </span>
-                    }
-                  >
-                    <span
-                      role="img"
-                      aria-label={`A checklist with this name is already ${siblingsLabel}`}
-                      style={{ color: "var(--color-warning)", lineHeight: 1, cursor: "help" }}
-                    >
-                      <Icon name="warning" size="sm" />
-                    </span>
-                  </Tooltip>
-                </span>
+                <DuplicateChecklistNameMark name={nameText} siblingsLabel={siblingsLabel} />
               )}
             </div>
             {titleLanguages.length > 0 && (
@@ -196,47 +165,7 @@ export function ChecklistNameDialog({
               />
             )}
           </div>
-          <fieldset style={{ border: "none", padding: 0, margin: "1rem 0 0" }}>
-            <legend
-              style={{
-                padding: 0,
-                marginBottom: "0.35rem",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Type
-            </legend>
-            <div style={{ display: "flex", gap: "1.25rem" }}>
-              {CHECKLIST_KINDS.map((k) => (
-                <label
-                  key={k}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                    fontSize: "0.875rem",
-                    color: "var(--color-text-primary)",
-                    cursor: isPending ? "default" : "pointer",
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="kind"
-                    value={k}
-                    checked={kind === k}
-                    onChange={() => setKind(k)}
-                    disabled={isPending}
-                  />
-                  {CHECKLIST_KIND_LABELS[k]}
-                </label>
-              ))}
-            </div>
-            <p style={{ margin: "0.35rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-              {KIND_HINT[kind]}
-            </p>
-          </fieldset>
+          <ChecklistKindField kind={kind} onChange={setKind} disabled={isPending} />
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Saving…" : "Save"}
@@ -246,5 +175,110 @@ export function ChecklistNameDialog({
         />
       </form>
     </DialogShell>
+  );
+}
+
+/** Whether `name` is already another of `siblings`' name — the ⚠'s test, advisory only. */
+export function isDuplicateChecklistName(
+  name: string,
+  siblings: readonly { id: string; name: string }[],
+  ownId: string | undefined
+): boolean {
+  const typed = name.trim().toLowerCase();
+  return typed !== "" && siblings.some((c) => c.id !== ownId && c.name.trim().toLowerCase() === typed);
+}
+
+/** The ⚠ inside the name field when the name is already taken nearby, with what it means. */
+export function DuplicateChecklistNameMark({
+  name,
+  siblingsLabel,
+}: {
+  name: string;
+  siblingsLabel: string;
+}) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        right: "0.5rem",
+        top: "50%",
+        transform: "translateY(-50%)",
+        display: "inline-flex",
+      }}
+    >
+      <Tooltip
+        align="end"
+        content={
+          <span>
+            A checklist called <span style={{ fontWeight: 600 }}>{name.trim()}</span> is already{" "}
+            {siblingsLabel}. You can still save it, but the two will read alike wherever checklists
+            are listed.
+          </span>
+        }
+      >
+        <span
+          role="img"
+          aria-label={`A checklist with this name is already ${siblingsLabel}`}
+          style={{ color: "var(--color-warning)", lineHeight: 1, cursor: "help" }}
+        >
+          <Icon name="warning" size="sm" />
+        </span>
+      </Tooltip>
+    </span>
+  );
+}
+
+/** A checklist's type (#1617): the two choices and the line saying what the picked one is for. */
+export function ChecklistKindField({
+  kind,
+  onChange,
+  disabled,
+}: {
+  kind: ChecklistKind;
+  onChange: (kind: ChecklistKind) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <fieldset style={{ border: "none", padding: 0, margin: "1rem 0 0" }}>
+      <legend
+        style={{
+          padding: 0,
+          marginBottom: "0.35rem",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          color: "var(--color-text-primary)",
+        }}
+      >
+        Type
+      </legend>
+      <div style={{ display: "flex", gap: "1.25rem" }}>
+        {CHECKLIST_KINDS.map((k) => (
+          <label
+            key={k}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "0.875rem",
+              color: "var(--color-text-primary)",
+              cursor: disabled ? "default" : "pointer",
+            }}
+          >
+            <input
+              type="radio"
+              name="kind"
+              value={k}
+              checked={kind === k}
+              onChange={() => onChange(k)}
+              disabled={disabled}
+            />
+            {CHECKLIST_KIND_LABELS[k]}
+          </label>
+        ))}
+      </div>
+      <p style={{ margin: "0.35rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+        {KIND_HINT[kind]}
+      </p>
+    </fieldset>
   );
 }

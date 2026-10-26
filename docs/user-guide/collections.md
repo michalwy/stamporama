@@ -798,17 +798,28 @@ Specialised checklists are many and rarely needed day to day, so **only standard
 
 **What already uses a specialised checklist keeps working with the switch off.** An album entry built on one stays in its album and is printed, a run of tiles identified on one goes on, and the wants made from one stay on your want list. The entry's own screen names the checklist and marks it *specialised*. Saving a stamp while the switch is off leaves its places on specialised checklists exactly as they were — the form could not show them, so it does not change them.
 
-You set the type when you add a checklist, in the same form as its name, and can change it later: **Rename…** shows the type beside the name, and the checklist's **⋮** menu offers **Make specialised** or **Make standard** — in an issue's checklists editor and on the **Checklists** screen alike. Changing it moves nothing else: its stamps, its order and everything built on it stay as they are.
+You set the type when you add a checklist, beside its name, and can change it later: an issue's checklists editor shows the type under the name, and the checklist's **⋮** menu offers **Make specialised** or **Make standard** — in that editor and on the **Checklists** screen alike. Changing it moves nothing else: its stamps, its order and everything built on it stay as they are.
 
 ### Managing an issue's checklists
 
-Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **Checklists** card of the issue's own detail page — both open the same editor. From there you can:
+Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **Checklists** card of the issue's own detail page — both open the same editor, on the issue's first checklist. A checklist's branch on the Issues list opens it too, with that checklist picked: **Edit checklist…** in the branch's **⋮** menu.
 
-- **Add** a checklist, give it a name (*Basic set*, *Imperforate*, *With tabs*) and choose its [type](#standard-and-specialised-checklists) — **Standard** unless you pick **Specialised**.
-- **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed, each row carrying the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
-- **Order stamps…** — drag the ⠿ grip to say what order the set reads in. It starts in catalog order, which is what every screen showed before, so nothing moves until you change it; change it where the catalogue's numbering is not how the set is laid out. Each drop is saved as you make it, and every screen that lists the checklist follows the order — the copies an intake creates from a whole set, the lines an auction lot or a trade takes it as, the stamps a set is still missing.
-- **Rename** a checklist, change its type (**Make specialised** / **Make standard**), or **Delete** it. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures. If the checklist is in an [album](albums.md), the confirmation names the album: it loses its card for the checklist.
-- **Translate** a checklist's name with the 🌐 button beside it, when adding or renaming one. It is what an [album](albums.md#the-language-is-the-albums-own-and-it-changes-the-plan) printed in that language calls the checklist. A checklist still named after its issue needs nothing here: it uses the issue's own translation unless you give it one of its own.
+The editor is one dialog in two halves. **On the left**, the issue's checklists; **on the right**, the one you picked — its name, its type and its stamps. **Every change is saved as you make it** — a tick, a drag, a type, the checklists' order; a name or a translation when you leave its field — so there is nothing to save at the end, only **Close**.
+
+On the left you can:
+
+- **Add** a checklist with **+ Add checklist**. It appears at the end of the list as *New checklist*, picked at once, with an empty name field and the type **Standard**. It is saved the moment you give it a name; until then you can already choose its type and tick its stamps, and **⋮ → Discard** drops it. An issue with no checklist yet opens with the list empty and **+ Add checklist** as the one thing to do.
+- **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default — the first **standard** one, since a specialised checklist is never what *the issue's set* means. With specialised checklists switched off, reordering the ones shown leaves the hidden ones where they were. The **Show specialised checklists** chip above the list is the same switch as everywhere else.
+- Open a checklist's **⋮** for **Apply size…**, **Make specialised** / **Make standard**, or **Delete**. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures. If the checklist is in an [album](albums.md), the confirmation names the album: it loses its card for the checklist.
+
+On the right:
+
+- **Name** — *Basic set*, *Imperforate*, *With tabs*. A checklist cannot be left without one: clearing the field puts the name back.
+- **Translate** the name with the 🌐 button beside it. It is what an [album](albums.md#the-language-is-the-albums-own-and-it-changes-the-plan) printed in that language calls the checklist. A checklist still named after its issue needs nothing here: it uses the issue's own translation unless you give it one of its own.
+- **Type** — [**Standard** or **Specialised**](#standard-and-specialised-checklists).
+- **Stamps**, in **one list**. At the top, the stamps on the checklist **in the order the set reads**, numbered, each with the ⠿ grip to drag it and a tick to take it off. Below them, under **Not on this checklist**, the rest of the issue's stamp tree, indented as on the issue's own rows and unticked; **ticking one puts it at the end** of the checklist's order. A stamp that is on the checklist but has a variant that is not stays in the tree, dimmed and ticked, so the variant reads under the number it hangs from. Every row carries the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
+
+  The order starts as catalog order, so nothing moves until you change it; change it where the catalogue's numbering is not how the set is laid out. Every screen that lists the checklist follows the order — the copies an intake creates from a whole set, the lines an auction lot or a trade takes it as, the stamps a set is still missing.
 
 Names are **labels, not identifiers**: the same name may repeat freely across issues, and *Imperforate* on two different series is two unrelated checklists that never meet on one screen. Within **one** issue a repeated name is allowed too, but the field shows a **⚠** saying so — two checklists called the same thing read alike everywhere they are listed, and you can still save it if that is what you meant.
 - **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default — the first **standard** one, since a specialised checklist is never what *the issue's set* means. With specialised checklists switched off, reordering the ones shown leaves the hidden ones where they were.
@@ -855,7 +866,7 @@ A checklist's branch has its own **⋮** menu with the issue's actions that make
 - **Add copy** offers only this checklist's stamps to pick from; **View copies** and **View offers** list the copies and offers of its stamps; **Show valuation** opens its own valuation.
 - **Price variants…** and **Edit catalog numbers…** open the grids over this checklist's stamps, with any stamp they hang under for context.
 - **Add missing to want list…** and **Apply size…** work on this checklist, as from the issue's checklists editor.
-- The checklist's own: **Choose stamps…**, **Order stamps…**, **Rename…** (with its translations) and **Delete checklist**, which asks first and says what uses it.
+- The checklist's own: **Edit checklist…**, which opens the issue's checklists editor with this checklist picked — its name and translations, its type, its stamps and their order — and **Delete checklist**, which asks first and says what uses it.
 
 What belongs to the issue as a whole — moving or merging it, recomputing its declared range, its format multipliers, editing or deleting it, opening its page — stays on the issue's own row. While **Reorder** is on, the tree is shown whole, without branches.
 
@@ -1182,7 +1193,7 @@ When you add a range of stamps to an issue with **Add stamp range…**, the dial
 #### Applying a size to an issue or a checklist
 
 For a series already entered — forty overprints of one design — open **⋮ → Apply size…** on the
-issue's row in the Issues list, or on a checklist's row in that issue's **Checklists…** editor.
+issue's row in the Issues list, or on a checklist's **⋮** in that issue's **Checklists…** editor.
 
 1. Type the **Width (mm)** and **Height (mm)**, or press **Fill from a preset** to fill both from the
    same filterable list. A size that occurs in this one series and nowhere else needs no preset:
