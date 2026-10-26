@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition, type CSSProperties, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   DialogShell,
   DialogBody,
@@ -10,56 +10,34 @@ import {
   ConfirmDialog,
   LabelWithError,
 } from "@/app/dialog-shell";
-import { Icon } from "@/app/icons";
-import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { ListSearchBox, useDebouncedSearch } from "@/app/c/[collectionSlug]/shared/list-search-box";
+import { clickIsTheRows, ROW_OPEN_STYLE } from "@/app/c/[collectionSlug]/shared/row-open";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { DETAIL_BUTTON } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { INPUT_STYLE } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
-import type { SuppliesStock, SupplyStockData, SupplyUseEntry } from "@/lib/packing-supplies";
-import { isPeriodGranularity, type PeriodGranularity } from "@/lib/profit-and-loss-rules";
-import { describeUncostedSupplies } from "@/lib/supply-stock";
-import { ownUseCostByPeriod, ownUseCostTotal } from "@/lib/supply-own-use-rules";
+import type { SuppliesStock, SupplyStockData } from "@/lib/packing-supplies";
+import { CARD, CELL, HEAD, NUM, TABLE, type OwnUse } from "./supplies-shared";
+import { SupplyDetailDialog, SupplyUseButton } from "./supply-detail-dialog";
+import { SupplyRegister } from "./supply-register";
+import { filterSupplySummary, type SuppliesTab } from "./supplies-view-params";
+import { useSuppliesView } from "./use-supplies-view";
 
-// The packing supplies' stock (#1897, ADR-0068): per supply, what is on hand, what it is worth at
-// FIFO cost, the batches it is made of with the intake document each came from, and — since #1900 —
-// its history: the sales that packed with it and the uses without a sale, which are recorded here.
-// What was used outside sales is a cost of its own, charged to no sale and no copy, and the screen
-// states it by period.
-
-const NUM: CSSProperties = { textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-const CELL: CSSProperties = { padding: "0.375rem 0.75rem", borderTop: "1px solid var(--color-border)" };
-const HEAD: CSSProperties = {
-  padding: "0.375rem 0.75rem",
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  textTransform: "uppercase",
-  letterSpacing: "0.03em",
-  color: "var(--color-text-muted)",
-  textAlign: "left",
-};
-const SUBHEAD: CSSProperties = {
-  margin: 0,
-  padding: "0.75rem 1.25rem 0.25rem",
-  fontSize: "0.8125rem",
-  fontWeight: 600,
-  color: "var(--color-text-secondary)",
-};
-const CARD: CSSProperties = {
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.75rem",
-  background: "var(--color-bg-elevated)",
-};
-
-type OwnUse = Extract<SupplyUseEntry, { kind: "own" }>;
+// The Packing supplies screen (#1897, ADR-0068). It opens on a **summary** — one row per supply with
+// what is on hand and its value at FIFO cost (#2195) — whose row opens that supply's batches and uses
+// in a dialog, and its **register** tab lists every movement, in and out, for all supplies (#2196).
+// Uses without a sale (#1900) are recorded here with *Use…*, and corrected from either tab's ⋮.
 
 type Dialog =
   | { kind: "none" }
   | { kind: "use"; supplyId: string }
   | { kind: "edit"; use: OwnUse }
   | { kind: "delete"; use: OwnUse; supplyName: string };
+
+const TABS: { key: SuppliesTab; label: string }[] = [
+  { key: "summary", label: "Stock" },
+  { key: "register", label: "Register" },
+];
 
 interface SuppliesPanelProps {
   collectionId: string;
@@ -73,8 +51,15 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
+  /** The supply whose detail is open — kept apart from {@link dialog}, which can stack on it. */
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>();
   const base = `/c/${collectionSlug}`;
+  const knownSupplies = useMemo(() => new Set(stock.supplies.map((s) => s.id)), [stock]);
+  const { tab, setTab, view, setView, clearRegister } = useSuppliesView(collectionId, `${base}/supplies`, knownSupplies);
+  const detail = detailId ? stock.supplies.find((s) => s.id === detailId) : undefined;
+  // Over the detail dialog, a dialog it opened paints above it.
+  const stackedZ = detail ? 110 : undefined;
 
   function run(fn: () => Promise<{ status: string; message?: string }>) {
     setError(undefined);
@@ -114,7 +99,7 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
           </span>
         )}
       </div>
-      <p style={{ margin: "0 0 1.5rem", fontSize: "0.9375rem", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
+      <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem", color: "var(--color-text-muted)", lineHeight: 1.6 }}>
         Each supply line of a purchase order is a batch, costed at its price plus its share of the
         order&apos;s shipping. Supplies leave stock oldest batch first — on a sale, or with{" "}
         <em>Use…</em> when they go elsewhere.{" "}
@@ -124,21 +109,74 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
       {stock.supplies.length === 0 ? (
         <p style={{ color: "var(--color-text-muted)" }}>No packing supplies yet.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <OwnUseCosts stock={stock} />
-          {stock.supplies.map((supply) => (
-            <SupplySection
-              key={supply.id}
-              supply={supply}
-              baseCurrency={stock.baseCurrency}
-              base={base}
+        <>
+          <div
+            role="tablist"
+            aria-label="Packing supplies"
+            style={{ display: "flex", borderBottom: "1px solid var(--color-border)", marginBottom: "1rem" }}
+          >
+            {TABS.map((t) => {
+              const active = t.key === tab;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  style={{
+                    padding: "0.625rem 1rem",
+                    fontSize: "0.875rem",
+                    fontWeight: active ? 600 : 400,
+                    color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+                    cursor: "pointer",
+                    marginBottom: "-1px",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          {tab === "summary" ? (
+            <SupplySummary
+              stock={stock}
+              name={view.name}
+              onHandOnly={view.onHand}
+              onName={(name) => setView({ name })}
+              onOnHandOnly={(onHand) => setView({ onHand })}
               isPending={isPending}
-              onUse={() => open({ kind: "use", supplyId: supply.id })}
-              onEdit={(use) => open({ kind: "edit", use })}
-              onDelete={(use) => open({ kind: "delete", use, supplyName: supply.name })}
+              onOpen={(id) => setDetailId(id)}
+              onUse={(id) => open({ kind: "use", supplyId: id })}
             />
-          ))}
-        </div>
+          ) : (
+            <SupplyRegister
+              stock={stock}
+              base={base}
+              view={view}
+              setView={setView}
+              clearRegister={clearRegister}
+              onEdit={(use) => open({ kind: "edit", use })}
+              onDelete={(use, supplyName) => open({ kind: "delete", use, supplyName })}
+            />
+          )}
+        </>
+      )}
+
+      {detail && (
+        <SupplyDetailDialog
+          supply={detail}
+          baseCurrency={stock.baseCurrency}
+          base={base}
+          isPending={isPending}
+          onUse={() => open({ kind: "use", supplyId: detail.id })}
+          onEdit={(use) => open({ kind: "edit", use })}
+          onDelete={(use) => open({ kind: "delete", use, supplyName: detail.name })}
+          onClose={() => setDetailId(null)}
+        />
       )}
 
       {dialog.kind === "use" && (
@@ -150,6 +188,7 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
           today={today}
           isPending={isPending}
           error={error}
+          zIndexBase={stackedZ}
           onClose={close}
           onSubmit={(fd) =>
             run(async () => {
@@ -170,6 +209,7 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
           today={today}
           isPending={isPending}
           error={error}
+          zIndexBase={stackedZ}
           onClose={close}
           onSubmit={(fd) =>
             run(async () => {
@@ -189,6 +229,7 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
           variant="destructive"
           isPending={isPending}
           error={error}
+          zIndexBase={stackedZ}
           onClose={close}
           onConfirm={() =>
             run(async () => {
@@ -202,293 +243,151 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
   );
 }
 
-/** A figure that leaves units out is marked incomplete, as a sale's supplies are (#1898). */
-function CostFigure({
-  cost,
-  baseCurrency,
-}: {
-  cost: { costBase: string | number; shortUnits: number; unratedUnits: number };
-  baseCurrency: string;
-}) {
-  const amount = typeof cost.costBase === "number" ? cost.costBase.toFixed(2) : cost.costBase;
-  const uncosted = describeUncostedSupplies(cost);
-  if (!uncosted) return <>{`${amount} ${baseCurrency}`}</>;
-  return (
-    <>
-      {`${amount} ${baseCurrency}`}
-      <Tooltip content={`Incomplete: ${uncosted} — they cost nothing here until a purchase of the supply covers them`}>
-        <span style={{ marginLeft: "0.5rem", color: "var(--color-warning)" }}>incomplete</span>
-      </Tooltip>
-    </>
-  );
-}
-
-/** What was used outside sales, by month or year — a cost of its own (#1900). */
-function OwnUseCosts({ stock }: { stock: SuppliesStock }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const periodParam = searchParams.get("period");
-  const granularity: PeriodGranularity = isPeriodGranularity(periodParam) ? periodParam : "month";
-
-  const entries = useMemo(
-    () =>
-      stock.supplies.flatMap((s) =>
-        s.history
-          .filter((h): h is OwnUse => h.kind === "own")
-          .map((h) => ({
-            usedOn: h.usedOn,
-            quantity: h.quantity,
-            costBase: Number(h.costBase),
-            shortUnits: h.shortUnits,
-            unratedUnits: h.unratedUnits,
-          }))
-      ),
-    [stock]
-  );
-  if (entries.length === 0) return null;
-  const periods = ownUseCostByPeriod(entries, granularity);
-  const total = ownUseCostTotal(entries);
-
-  function setGranularity(g: PeriodGranularity) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (g === "month") params.delete("period");
-    else params.set("period", g);
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
-
-  const ccy = stock.baseCurrency;
-  return (
-    <section style={CARD}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1.25rem" }}>
-        <Tooltip content="Supplies taken out of stock without a sale — charged to no sale and no copy">
-          <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>Used outside sales</span>
-        </Tooltip>
-        <FilterChip label="Month" active={granularity === "month"} onClick={() => setGranularity("month")} />
-        <FilterChip label="Year" active={granularity === "year"} onClick={() => setGranularity("year")} />
-      </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-        <thead>
-          <tr>
-            <th style={HEAD}>{granularity === "month" ? "Month" : "Year"}</th>
-            <th style={{ ...HEAD, ...NUM }}>Uses</th>
-            <th style={{ ...HEAD, ...NUM }}>Units</th>
-            <th style={{ ...HEAD, ...NUM }}>Cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          {periods.map((p) => (
-            <tr key={p.key}>
-              <td style={CELL}>{p.label}</td>
-              <td style={{ ...CELL, ...NUM }}>{p.uses}</td>
-              <td style={{ ...CELL, ...NUM }}>{p.quantity}</td>
-              <td style={{ ...CELL, ...NUM }}>
-                <CostFigure cost={p} baseCurrency={ccy} />
-              </td>
-            </tr>
-          ))}
-          <tr style={{ fontWeight: 600 }}>
-            <td style={CELL}>Total</td>
-            <td style={{ ...CELL, ...NUM }}>{entries.length}</td>
-            <td style={{ ...CELL, ...NUM }}>{total.quantity}</td>
-            <td style={{ ...CELL, ...NUM }}>
-              <CostFigure cost={total} baseCurrency={ccy} />
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function SupplySection({
-  supply,
-  baseCurrency,
-  base,
+/** The stock summary (#2195): one row per supply, by name, with what is on hand, its value, what it
+ *  owes and *Use…*; a row opens the supply's detail. */
+function SupplySummary({
+  stock,
+  name,
+  onHandOnly,
+  onName,
+  onOnHandOnly,
   isPending,
+  onOpen,
   onUse,
-  onEdit,
-  onDelete,
 }: {
-  supply: SupplyStockData;
-  baseCurrency: string;
-  base: string;
+  stock: SuppliesStock;
+  name: string;
+  onHandOnly: boolean;
+  onName: (name: string) => void;
+  onOnHandOnly: (onHand: boolean) => void;
   isPending: boolean;
-  onUse: () => void;
-  onEdit: (use: OwnUse) => void;
-  onDelete: (use: OwnUse) => void;
+  onOpen: (supplyId: string) => void;
+  onUse: (supplyId: string) => void;
 }) {
+  const ccy = stock.baseCurrency;
+  const [localName, setLocalName] = useDebouncedSearch(name, onName);
+  const rows = filterSupplySummary(stock.supplies, { name, onHand: onHandOnly });
+  const owes = stock.supplies.some((s) => s.shortUnits + s.ownShortUnits > 0);
+
   return (
-    <section style={CARD}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "1rem", padding: "0.75rem 1.25rem" }}>
-        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{supply.name}</span>
-        <span style={{ flex: 1 }} />
-        <span style={{ ...NUM, color: "var(--color-text-secondary)" }}>{supply.onHand} on hand</span>
-        <span style={{ ...NUM, minWidth: "8rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          {supply.valueBase != null ? `${supply.valueBase} ${baseCurrency}` : "—"}
-        </span>
-        <Tooltip
-          content={
-            supply.onHand === 0
-              ? "Nothing on hand to use"
-              : "Take supplies out of stock without a sale — e.g. cards for your own storage"
-          }
-        >
-          <button
-            type="button"
-            onClick={onUse}
-            disabled={isPending || supply.onHand === 0}
-            style={{
-              ...DETAIL_BUTTON,
-              alignSelf: "center",
-              cursor: supply.onHand === 0 ? "not-allowed" : "pointer",
-              opacity: supply.onHand === 0 ? 0.6 : 1,
-            }}
-          >
-            <Icon name="remove" size="sm" /> Use…
-          </button>
-        </Tooltip>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <ListSearchBox
+          value={localName}
+          onChange={setLocalName}
+          placeholder="Filter by name…"
+          label="Filter supplies by name"
+          width="16rem"
+        />
+        <FilterChip label="On hand only" active={onHandOnly} toggle onClick={() => onOnHandOnly(!onHandOnly)} />
       </div>
-      {supply.shortUnits > 0 && (
-        <p style={{ margin: 0, padding: "0 1.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-warning, var(--color-text-muted))" }}>
-          {supply.shortUnits} used on sales but not in stock — those sales&apos; shipping lacks their
-          cost until a purchase of this supply covers them.
-        </p>
-      )}
-      {supply.ownShortUnits > 0 && (
-        <p style={{ margin: 0, padding: "0 1.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-warning, var(--color-text-muted))" }}>
-          {supply.ownShortUnits} used outside sales but no longer in stock — a batch they came from
-          was lowered or deleted, and the next purchase of this supply covers them.
-        </p>
-      )}
-      {supply.unvaluedBatches > 0 && (
-        <p style={{ margin: 0, padding: "0 1.25rem 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          {supply.unvaluedBatches} batch{supply.unvaluedBatches === 1 ? "" : "es"} bought in another
-          currency without a rate into {baseCurrency}, so the value is not stated.
-        </p>
-      )}
-      {supply.batches.length === 0 ? (
-        <p style={{ margin: 0, padding: "0 1.25rem 0.75rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-          Never bought — add it as a supply line of a purchase order.
-        </p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-          <thead>
-            <tr>
-              <th style={HEAD}>Bought on</th>
-              <th style={HEAD}>Date</th>
-              <th style={{ ...HEAD, ...NUM }}>Bought</th>
-              <th style={{ ...HEAD, ...NUM }}>On hand</th>
-              <th style={{ ...HEAD, ...NUM }}>Batch cost</th>
-              <th style={{ ...HEAD, ...NUM }}>Unit cost</th>
-              <th style={{ ...HEAD, ...NUM }}>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {supply.batches.map((batch) => (
-              <tr key={batch.id}>
-                <td style={CELL}>
-                  <EntityNoChip entity="purchase" no={batch.purchase.purchaseNo} prefix="p" />{" "}
-                  <Link href={`${base}/purchases/${batch.purchase.id}`}>
-                    {batch.purchase.name ??
-                      (batch.purchase.kind === "opening_balance" ? "Opening balance" : "Purchase")}
-                  </Link>
-                  {batch.purchase.kind === "opening_balance" && (
-                    <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                      opening balance
-                    </span>
-                  )}
-                </td>
-                <td style={{ ...CELL, whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>
-                  {batch.purchase.purchasedAt}
-                </td>
-                <td style={{ ...CELL, ...NUM }}>{batch.quantity}</td>
-                <td style={{ ...CELL, ...NUM }}>{batch.onHand}</td>
-                <td style={{ ...CELL, ...NUM, color: "var(--color-text-secondary)" }}>
-                  {batch.costTx} {batch.currency}
-                </td>
-                <td style={{ ...CELL, ...NUM }}>
-                  {batch.unitCostBase != null ? `${batch.unitCostBase} ${baseCurrency}` : "—"}
-                </td>
-                <td style={{ ...CELL, ...NUM }}>
-                  {batch.valueBase != null ? `${batch.valueBase} ${baseCurrency}` : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {supply.history.length > 0 && (
-        <>
-          <h3 style={SUBHEAD}>Used</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+      <section style={CARD}>
+        {rows.length === 0 ? (
+          <p style={{ margin: 0, padding: "0.75rem 1.25rem", color: "var(--color-text-muted)" }}>
+            No supply matches these filters.
+          </p>
+        ) : (
+          <table style={TABLE}>
             <thead>
               <tr>
-                <th style={HEAD}>Date</th>
-                <th style={HEAD}>Used on</th>
-                <th style={{ ...HEAD, ...NUM }}>Units</th>
-                <th style={{ ...HEAD, ...NUM }}>Cost</th>
-                <th style={{ ...HEAD, width: "2.5rem" }} aria-label="Actions" />
+                <th style={HEAD}>Supply</th>
+                <th style={{ ...HEAD, ...NUM }}>On hand</th>
+                <th style={{ ...HEAD, ...NUM }}>Value</th>
+                {owes && <th style={{ ...HEAD, ...NUM }}>Owed</th>}
+                <th style={{ ...HEAD, width: "1%" }} aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
-              {supply.history.map((entry) => (
-                <tr key={`${entry.kind}:${entry.id}`}>
-                  <td style={{ ...CELL, whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>
-                    {entry.usedOn}
-                  </td>
-                  <td style={CELL}>
-                    {entry.kind === "sale" ? (
-                      <>
-                        <EntityNoChip entity="sale" no={entry.sale.saleNo} prefix="s" />{" "}
-                        <Link href={`${base}/sales/${entry.sale.id}`}>Sale on {entry.sale.platformName}</Link>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ color: "var(--color-text-primary)" }}>Outside sales</span>
-                        {entry.note && (
-                          <span style={{ marginLeft: "0.5rem", color: "var(--color-text-muted)" }}>
-                            {entry.note}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td style={{ ...CELL, ...NUM }}>{entry.quantity}</td>
-                  <td style={{ ...CELL, ...NUM }}>
-                    <CostFigure cost={entry} baseCurrency={baseCurrency} />
-                  </td>
-                  <td style={{ ...CELL, padding: "0.25rem 0.75rem" }}>
-                    {entry.kind === "own" && (
-                      <RowActionsMenu
-                        ariaLabel={`Use of ${supply.name} on ${entry.usedOn} actions`}
-                        actions={[
-                          {
-                            key: "edit",
-                            label: "Edit use",
-                            icon: "edit",
-                            onSelect: () => onEdit(entry),
-                          },
-                          {
-                            key: "delete",
-                            label: "Delete use",
-                            icon: "delete",
-                            danger: true,
-                            separatorBefore: true,
-                            onSelect: () => onDelete(entry),
-                          },
-                        ]}
-                      />
-                    )}
-                  </td>
-                </tr>
+              {rows.map((supply) => (
+                <SummaryRow
+                  key={supply.id}
+                  supply={supply}
+                  baseCurrency={ccy}
+                  owes={owes}
+                  isPending={isPending}
+                  onOpen={() => onOpen(supply.id)}
+                  onUse={() => onUse(supply.id)}
+                />
               ))}
             </tbody>
           </table>
-        </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SummaryRow({
+  supply,
+  baseCurrency,
+  owes,
+  isPending,
+  onOpen,
+  onUse,
+}: {
+  supply: SupplyStockData;
+  baseCurrency: string;
+  owes: boolean;
+  isPending: boolean;
+  onOpen: () => void;
+  onUse: () => void;
+}) {
+  const owed = supply.shortUnits + supply.ownShortUnits;
+  return (
+    <tr
+      style={ROW_OPEN_STYLE}
+      onClick={(event) => {
+        if (clickIsTheRows(event)) onOpen();
+      }}
+    >
+      <td style={CELL}>
+        <button
+          type="button"
+          onClick={onOpen}
+          style={{
+            border: "none",
+            background: "none",
+            padding: 0,
+            font: "inherit",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          {supply.name}
+        </button>
+        {supply.batches.length === 0 && (
+          <span style={{ marginLeft: "0.75rem", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            never bought
+          </span>
+        )}
+      </td>
+      <td style={{ ...CELL, ...NUM }}>{supply.onHand}</td>
+      <td style={{ ...CELL, ...NUM, fontWeight: 600 }}>
+        {supply.valueBase != null ? (
+          `${supply.valueBase} ${baseCurrency}`
+        ) : (
+          <Tooltip
+            content={`${supply.unvaluedBatches} batch${supply.unvaluedBatches === 1 ? "" : "es"} bought in another currency without a rate into ${baseCurrency}`}
+          >
+            <span>—</span>
+          </Tooltip>
+        )}
+      </td>
+      {owes && (
+        <td style={{ ...CELL, ...NUM }}>
+          {owed > 0 && (
+            <Tooltip content="Used more than there was — the next purchase of this supply covers them">
+              <span style={{ color: "var(--color-warning)" }}>{owed}</span>
+            </Tooltip>
+          )}
+        </td>
       )}
-    </section>
+      <td style={{ ...CELL, padding: "0.25rem 0.75rem" }}>
+        <SupplyUseButton supply={supply} isPending={isPending} onUse={onUse} />
+      </td>
+    </tr>
   );
 }
 
@@ -501,6 +400,7 @@ function OwnUseDialog({
   today,
   isPending,
   error,
+  zIndexBase,
   onClose,
   onSubmit,
 }: {
@@ -512,6 +412,7 @@ function OwnUseDialog({
   today: string;
   isPending: boolean;
   error: string | undefined;
+  zIndexBase?: number;
   onClose: () => void;
   onSubmit: (fd: FormData) => void;
 }) {
@@ -520,7 +421,7 @@ function OwnUseDialog({
     onSubmit(new FormData(e.currentTarget));
   }
   return (
-    <DialogShell title={title} onClose={onClose} maxWidth="28rem">
+    <DialogShell title={title} onClose={onClose} maxWidth="28rem" zIndexBase={zIndexBase}>
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>

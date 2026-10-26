@@ -176,11 +176,13 @@ describe("packing supplies used without a sale", () => {
   });
 
   it("is listed beside the sales that used the supply, newest first", async () => {
+    const buyerId = (await prisma.contact.create({ data: { collectionId, name: "Jan Kowalski", buyer: true } })).id;
     const saleId = (
       await prisma.sale.create({
         data: {
           collectionId,
           platformId,
+          buyerId,
           saleNo: 8601,
           soldAt: new Date("2026-03-05T00:00:00.000Z"),
           currency: "EUR",
@@ -199,7 +201,12 @@ describe("packing supplies used without a sale", () => {
     );
     const sale = history[0];
     assert.ok(sale.kind === "sale");
-    assert.deepEqual([sale.sale.id, sale.sale.saleNo, sale.sale.platformName], [saleId, 8601, "Delcampe"]);
+    // The buyer is what the register's search finds the sale by (#2196).
+    assert.deepEqual(
+      [sale.sale.id, sale.sale.saleNo, sale.sale.platformName, sale.sale.buyerName],
+      [saleId, 8601, "Delcampe", "Jan Kowalski"]
+    );
+    assert.ok(history.every((h) => !Number.isNaN(Date.parse(h.recordedAt))));
   });
 
   it("a lowered batch can leave the use short, as it can a sale, and only deepening it is refused", async () => {

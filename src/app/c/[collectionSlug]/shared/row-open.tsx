@@ -57,7 +57,9 @@ export const ROW_OPEN_STYLE: CSSProperties = { cursor: "pointer" };
 const ROW_CONTROL =
   'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="menuitem"], [role="checkbox"], [contenteditable="true"]';
 
-function clickIsTheRows(event: MouseEvent<HTMLElement>): boolean {
+/** Whether a click on a row was the row's own — nothing on it wanted it (see {@link useRowOpen}).
+ *  Exported for a row that opens a dialog rather than a page (the Packing supplies summary, #2195). */
+export function clickIsTheRows(event: MouseEvent<HTMLElement>): boolean {
   if (event.defaultPrevented) return false;
   const row = event.currentTarget;
   const target = event.target;

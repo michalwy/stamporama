@@ -271,9 +271,15 @@ export interface SupplyBatchData {
   };
   quantity: number;
   onHand: number;
+  /** When the line was written (ISO): the order of two batches of one day, here and in the register
+   *  (#2196). */
+  recordedAt: string;
   /** The batch's own currency, and its whole cost there: line price + shipping share (2 dp). */
   currency: string;
   costTx: string;
+  /** The whole batch's cost in the base currency (2 dp) — what the register's *Bought* row says it
+   *  brought in (#2196) — or null when the purchase has no rate into it. */
+  costBase: string | null;
   /** One unit's cost in the base currency (4 dp), or null when the purchase has no rate into it. */
   unitCostBase: string | null;
   /** What is left of the batch, base currency (2 dp), or null when its cost is unknown there. */
@@ -293,8 +299,11 @@ export type SupplyUseEntry =
       id: string;
       /** yyyy-mm-dd — the sale's date. */
       usedOn: string;
+      /** When the entry was written (ISO): the order of two uses of one day. */
+      recordedAt: string;
       quantity: number;
-      sale: { id: string; saleNo: number; platformName: string };
+      /** `buyerName` is what the register's search finds a sale by (#2196); null when unknown. */
+      sale: { id: string; saleNo: number; platformName: string; buyerName: string | null };
     })
   | (SupplyUseCost & {
       kind: "own";
@@ -302,6 +311,7 @@ export type SupplyUseEntry =
       id: string;
       supplyId: string;
       usedOn: string;
+      recordedAt: string;
       quantity: number;
       note: string | null;
     });
@@ -381,7 +391,15 @@ export async function getSuppliesStock(
           id: true,
           quantity: true,
           createdAt: true,
-          sale: { select: { id: true, saleNo: true, soldAt: true, platform: { select: { name: true } } } },
+          sale: {
+            select: {
+              id: true,
+              saleNo: true,
+              soldAt: true,
+              platform: { select: { name: true } },
+              buyer: { select: { name: true } },
+            },
+          },
           uses: { select: { batchId: true, quantity: true } },
         },
       },
@@ -460,32 +478,35 @@ export async function getSuppliesStock(
     };
     // Newest first; two uses of one day by when they were written.
     const history: SupplyUseEntry[] = [
-      ...supply.saleLines.map((l) => ({
-        at: l.createdAt.toISOString(),
-        entry: {
-          kind: "sale" as const,
+      ...supply.saleLines.map(
+        (l): SupplyUseEntry => ({
+          kind: "sale",
           id: l.id,
           usedOn: l.sale.soldAt.toISOString().slice(0, 10),
+          recordedAt: l.createdAt.toISOString(),
           quantity: l.quantity,
-          sale: { id: l.sale.id, saleNo: l.sale.saleNo, platformName: l.sale.platform.name },
+          sale: {
+            id: l.sale.id,
+            saleNo: l.sale.saleNo,
+            platformName: l.sale.platform.name,
+            buyerName: l.sale.buyer?.name ?? null,
+          },
           ...costOf(l.quantity, l.uses),
-        },
-      })),
-      ...supply.ownUses.map((u) => ({
-        at: u.createdAt.toISOString(),
-        entry: {
-          kind: "own" as const,
+        })
+      ),
+      ...supply.ownUses.map(
+        (u): SupplyUseEntry => ({
+          kind: "own",
           id: u.id,
           supplyId: supply.id,
           usedOn: u.usedAt.toISOString().slice(0, 10),
+          recordedAt: u.createdAt.toISOString(),
           quantity: u.quantity,
           note: u.note,
           ...costOf(u.quantity, u.takes),
-        },
-      })),
-    ]
-      .sort((a, b) => b.entry.usedOn.localeCompare(a.entry.usedOn) || b.at.localeCompare(a.at))
-      .map((h) => h.entry);
+        })
+      ),
+    ].sort((a, b) => b.usedOn.localeCompare(a.usedOn) || b.recordedAt.localeCompare(a.recordedAt));
     const shortOf = (kind: SupplyUseEntry["kind"]) =>
       history.filter((h) => h.kind === kind).reduce((sum, h) => sum + h.shortUnits, 0);
     if (stock.valueBase == null) anyUnvalued = true;
@@ -505,8 +526,10 @@ export async function getSuppliesStock(
           purchase: own.purchase,
           quantity: b.quantity,
           onHand: b.onHand,
+          recordedAt: own.createdAt,
           currency: own.currency,
           costTx: own.costTx,
+          costBase: own.costBase?.toFixed(2) ?? null,
           unitCostBase: b.unitCostBase == null ? null : formatUnitCost(b.unitCostBase),
           valueBase: b.valueBase?.toFixed(2) ?? null,
         };
