@@ -56,6 +56,7 @@ export async function createLocationAction(
   try {
     await createLocation(session.user.id, collectionId, {
       name,
+      code: str(formData, "code"),
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       assignable: bool(formData, "assignable"),
@@ -80,6 +81,7 @@ export async function updateLocationAction(
   try {
     await updateLocation(session.user.id, locationId, {
       name,
+      code: str(formData, "code"),
       parentId: optionalStr(formData, "parentId"),
       description: optionalStr(formData, "description"),
       assignable: bool(formData, "assignable"),

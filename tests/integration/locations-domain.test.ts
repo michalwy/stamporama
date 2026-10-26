@@ -237,3 +237,88 @@ describe("deleteLocation guards", () => {
     assert.ok(!remaining.some((l) => l.id === child.id));
   });
 });
+
+describe("location codes (#2191)", () => {
+  let f: Awaited<ReturnType<typeof seedFixtures>>;
+  before(async () => {
+    f = await seedFixtures(`codes-${Date.now()}`);
+  });
+  after(() => cleanup(f.userId));
+
+  async function codeOf(id: string): Promise<string> {
+    return (await getLocations(f.userId, f.collectionId)).find((l) => l.id === id)!.code;
+  }
+
+  it("generates a code from the path when none is given, numbering a clash", async () => {
+    const segment = await createLocation(f.userId, f.collectionId, {
+      name: "Segment A",
+      assignable: false,
+    });
+    const shelf = await createLocation(f.userId, f.collectionId, {
+      name: "Shelf B",
+      parentId: segment.id,
+      assignable: false,
+    });
+    const book = await createLocation(f.userId, f.collectionId, {
+      name: "Stockbook X",
+      parentId: shelf.id,
+      code: "",
+    });
+    const twin = await createLocation(f.userId, f.collectionId, {
+      name: "Stockbook Xenia",
+      parentId: shelf.id,
+    });
+    assert.equal(await codeOf(segment.id), "A");
+    assert.equal(await codeOf(shelf.id), "AB");
+    assert.equal(await codeOf(book.id), "ABX");
+    assert.equal(await codeOf(twin.id), "ABX2");
+  });
+
+  it("stores a typed code upper-cased and refuses one in use, naming its location", async () => {
+    const box = await createLocation(f.userId, f.collectionId, { name: "Box", code: " k1 " });
+    assert.equal(await codeOf(box.id), "K1");
+    await assert.rejects(
+      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "K1" }),
+      /Code K1 is already used by Box\./
+    );
+    await assert.rejects(
+      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "abx" }),
+      /Code ABX is already used by Segment A › Shelf B › Stockbook X\./
+    );
+    await assert.rejects(
+      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "TOOLONG" }),
+      /at most 6/
+    );
+  });
+
+  it("keeps the code through a rename and a move, and changes it only when asked", async () => {
+    const drawer = await createLocation(f.userId, f.collectionId, { name: "Drawer 7" });
+    const tray = await createLocation(f.userId, f.collectionId, { name: "Tray" });
+    assert.equal(await codeOf(drawer.id), "7");
+
+    await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id });
+    assert.equal(await codeOf(drawer.id), "7");
+
+    await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id, code: "7" });
+    assert.equal(await codeOf(drawer.id), "7");
+
+    await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id, code: "d8" });
+    assert.equal(await codeOf(drawer.id), "D8");
+
+    await assert.rejects(
+      () => updateLocation(f.userId, drawer.id, { name: "Drawer 8", code: "K1" }),
+      /Code K1 is already used by Box\./
+    );
+    await assert.rejects(
+      () => updateLocation(f.userId, drawer.id, { name: "Drawer 8", code: "" }),
+      /Code is required/
+    );
+    assert.equal(await codeOf(drawer.id), "D8");
+  });
+
+  it("lets two collections use the same code", async () => {
+    const other = await seedFixtures(`codes-other-${Date.now()}`);
+    await createLocation(other.userId, other.collectionId, { name: "Box", code: "K1" });
+    await cleanup(other.userId);
+  });
+});

@@ -68,7 +68,7 @@ describe("offer description + private note (#266, #267)", () => {
       data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 0 },
     });
     const location = await prisma.location.create({
-      data: { collectionId, name: "Stockbook A", assignable: true },
+      data: { collectionId, code: "L1", name: "Stockbook A", assignable: true },
     });
 
     const mkStamp = async (name: string, number: string, year: number) => {

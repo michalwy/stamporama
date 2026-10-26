@@ -113,7 +113,7 @@ describe("Add-to-offer picker targets (#867)", () => {
     });
     await prisma.issueMember.create({ data: { issueId: issue.id, stampId: stamp.id } });
 
-    const location = await prisma.location.create({ data: { collectionId, name: "Album 1" } });
+    const location = await prisma.location.create({ data: { collectionId, code: "L1", name: "Album 1" } });
     listed = (await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true })).id;
     await prisma.item.update({
       where: { id: listed },

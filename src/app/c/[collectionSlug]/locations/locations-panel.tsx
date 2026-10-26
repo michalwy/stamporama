@@ -24,6 +24,13 @@ import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-s
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { buildLocationPath } from "@/lib/location-path";
+import {
+  LOCATION_CODE_MAX_LENGTH,
+  locationPathNames,
+  normalizeLocationCode,
+  suggestLocationCode,
+} from "@/lib/location-code";
 
 // Persisted collapse state for the location management tree, consistent with the area
 // management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
@@ -73,10 +80,21 @@ const badgeStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+// The code beside a location's name (#2191), drawn the way it will be printed so it can be learnt.
+const codeStyle: React.CSSProperties = {
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSize: "0.8125rem",
+  fontWeight: 600,
+  color: "var(--color-text-secondary)",
+  whiteSpace: "nowrap",
+};
+
 // ── LocationForm ────────────────────────────────────────────────────────────
 
 interface LocationFormProps {
   defaultName?: string;
+  /** The saved code when editing; absent when adding, where the field proposes one (#2191). */
+  defaultCode?: string;
   defaultParentId?: string | null;
   defaultDescription?: string | null;
   defaultAssignable?: boolean;
@@ -87,6 +105,7 @@ interface LocationFormProps {
 
 function LocationForm({
   defaultName,
+  defaultCode,
   defaultParentId,
   defaultDescription,
   defaultAssignable = true,
@@ -116,20 +135,62 @@ function LocationForm({
   );
 
   const [parentId, setParentId] = useState(defaultParentId ?? "");
+  const [name, setName] = useState(defaultName ?? "");
+
+  // A new location is offered the code its path would be given, following the name and the parent
+  // until the collector types one of their own; an existing one keeps its code (#2191).
+  const others = useMemo(
+    () => locations.filter((l) => l.id !== currentLocationId),
+    [locations, currentLocationId]
+  );
+  const suggestedCode = useMemo(
+    () =>
+      suggestLocationCode(
+        locationPathNames(others, parentId || null, name),
+        new Set(others.map((l) => l.code))
+      ),
+    [others, parentId, name]
+  );
+  const [typedCode, setTypedCode] = useState<string | null>(defaultCode ?? null);
+  const code = typedCode ?? suggestedCode;
+  const holder = others.find((l) => l.code === normalizeLocationCode(code));
+  const codeError = holder
+    ? `Used by ${buildLocationPath(locations, holder.id) ?? holder.name}`
+    : undefined;
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-location-name">Name</LabelWithError>
-        <TextInput
-          id="f-location-name"
-          name="name"
-          defaultValue={defaultName}
-          disabled={isPending}
-          placeholder="e.g. Klaser A"
-          style={INPUT_STYLE}
-          required
-        />
+      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <LabelWithError htmlFor="f-location-name">Name</LabelWithError>
+          <TextInput
+            id="f-location-name"
+            name="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={isPending}
+            placeholder="e.g. Klaser A"
+            style={INPUT_STYLE}
+            required
+          />
+        </div>
+        <div style={{ width: "9rem", flexShrink: 0 }}>
+          <LabelWithError htmlFor="f-location-code" error={codeError}>
+            Code
+          </LabelWithError>
+          <TextInput
+            id="f-location-code"
+            name="code"
+            value={code}
+            onChange={(e) => setTypedCode(e.target.value.toUpperCase())}
+            disabled={isPending}
+            maxLength={LOCATION_CODE_MAX_LENGTH}
+            pattern="[A-Za-z0-9]+"
+            autoComplete="off"
+            style={{ ...INPUT_STYLE, ...codeStyle, fontSize: "0.875rem" }}
+            required
+          />
+        </div>
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
@@ -371,6 +432,8 @@ export function LocationsPanel({
                 {location.name}
               </span>
 
+              <span style={codeStyle}>{location.code}</span>
+
               {!location.assignable && <span style={badgeStyle}>Grouping</span>}
 
               {location.itemCount > 0 && (
@@ -472,6 +535,7 @@ export function LocationsPanel({
             <DialogBody>
               <LocationForm
                 defaultName={dialog.location.name}
+                defaultCode={dialog.location.code}
                 defaultParentId={dialog.location.parentId}
                 defaultDescription={dialog.location.description}
                 defaultAssignable={dialog.location.assignable}

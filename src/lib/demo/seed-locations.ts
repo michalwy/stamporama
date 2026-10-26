@@ -1,5 +1,6 @@
 import "server-only";
 import type { DbTransaction } from "@/lib/db";
+import { suggestLocationCode } from "@/lib/location-code";
 
 // Storage locations demo data (#56): a physical storage tree (cabinets → stockbooks/
 // boxes) plus assignment of a fraction of the seeded copies to assignable locations,
@@ -60,24 +61,30 @@ export async function seedLocations(
   const rng = mulberry32(0x4c4f_4341);
 
   const assignableIds: string[] = [];
+  // Codes the way the Locations screen would have proposed them (#2191).
+  const codes = new Set<string>();
 
   async function insertNode(
     node: LocationNode,
-    parentId: string | null
+    parentId: string | null,
+    parentPath: string[]
   ): Promise<void> {
     const assignable = node.assignable ?? true;
+    const path = [...parentPath, node.name];
+    const code = suggestLocationCode(path, codes);
+    codes.add(code);
     const location = await tx.location.create({
-      data: { collectionId, name: node.name, parentId, assignable },
+      data: { collectionId, name: node.name, code, parentId, assignable },
       select: { id: true },
     });
     if (assignable) assignableIds.push(location.id);
     for (const child of node.children ?? []) {
-      await insertNode(child, location.id);
+      await insertNode(child, location.id, path);
     }
   }
 
   for (const root of TREE) {
-    await insertNode(root, null);
+    await insertNode(root, null, []);
   }
 
   if (assignableIds.length === 0) return;

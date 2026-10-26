@@ -78,8 +78,8 @@ describe("the Held filter on the Copies list (#1932)", () => {
     pair = (
       await prisma.stampFormat.create({ data: { collectionId, name: "Pair", abbreviation: "pr", sortOrder: 1 } })
     ).id;
-    boxId = (await prisma.location.create({ data: { collectionId, name: "Box", assignable: true } })).id;
-    albumId = (await prisma.location.create({ data: { collectionId, name: "Album", assignable: true } })).id;
+    boxId = (await prisma.location.create({ data: { collectionId, code: "L1", name: "Box", assignable: true } })).id;
+    albumId = (await prisma.location.create({ data: { collectionId, code: "L2", name: "Album", assignable: true } })).id;
 
     const areaId = (await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } })).id;
     for (const name of ["A", "B", "C", "D"]) {

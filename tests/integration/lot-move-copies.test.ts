@@ -68,7 +68,7 @@ describe("moveItemsToLot (#1918)", () => {
     conditionId = condition.id;
     const stamp = await prisma.stamp.create({ data: { collectionId, name: "Chopin 1949" } });
     stampId = stamp.id;
-    const location = await prisma.location.create({ data: { collectionId, name: "Box 1" } });
+    const location = await prisma.location.create({ data: { collectionId, code: "L1", name: "Box 1" } });
     locationId = location.id;
 
     const purchase = await createPurchase(userId, collectionId, {

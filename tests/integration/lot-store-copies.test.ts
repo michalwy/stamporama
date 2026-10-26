@@ -140,11 +140,11 @@ describe("storing sorted copies (#565/#571)", () => {
     }
 
     const box = await prisma.location.create({
-      data: { collectionId, name: "Stock box", assignable: true },
+      data: { collectionId, code: "L1", name: "Stock box", assignable: true },
     });
     boxId = box.id;
     const album = await prisma.location.create({
-      data: { collectionId, name: "Album", assignable: true },
+      data: { collectionId, code: "L2", name: "Album", assignable: true },
     });
     albumId = album.id;
   });
@@ -216,7 +216,7 @@ describe("storing sorted copies (#565/#571)", () => {
 
   it("counts the refs a location holds, the card it is up to, and the next one", async () => {
     const location = await prisma.location.create({
-      data: { collectionId, name: `Counter box ${Date.now()}`, assignable: true },
+      data: { collectionId, code: "L3", name: `Counter box ${Date.now()}`, assignable: true },
     });
     const lotId = await arrivedLot();
     const first = await addCopies(lotId, 2);
@@ -252,7 +252,7 @@ describe("storing sorted copies (#565/#571)", () => {
 
   it("offers nothing for a location nothing has ever been ref'd in", async () => {
     const location = await prisma.location.create({
-      data: { collectionId, name: `Blank album ${Date.now()}`, assignable: true },
+      data: { collectionId, code: "L4", name: `Blank album ${Date.now()}`, assignable: true },
     });
     const lotId = await arrivedLot();
     const ids = await addCopies(lotId, 1);
@@ -382,7 +382,7 @@ describe("storing sorted copies (#565/#571)", () => {
 
   it("tallies which copies of a selection already sit on each ref of a location (#1535)", async () => {
     const location = await prisma.location.create({
-      data: { collectionId, name: `Figure box ${Date.now()}`, assignable: true },
+      data: { collectionId, code: "L5", name: `Figure box ${Date.now()}`, assignable: true },
     });
     const lotId = await arrivedLot();
     const ids = await addCopies(lotId, 5);

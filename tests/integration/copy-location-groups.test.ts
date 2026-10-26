@@ -46,17 +46,17 @@ describe("location groups", () => {
 
     cupboardId = (
       await prisma.location.create({
-        data: { collectionId, name: "Szafa 1", assignable: true },
+        data: { collectionId, code: "L1", name: "Szafa 1", assignable: true },
       })
     ).id;
     klaserAId = (
       await prisma.location.create({
-        data: { collectionId, name: "Klaser A", parentId: cupboardId, assignable: true },
+        data: { collectionId, code: "L2", name: "Klaser A", parentId: cupboardId, assignable: true },
       })
     ).id;
     klaserBId = (
       await prisma.location.create({
-        data: { collectionId, name: "Klaser B", parentId: cupboardId, assignable: true },
+        data: { collectionId, code: "L3", name: "Klaser B", parentId: cupboardId, assignable: true },
       })
     ).id;
 

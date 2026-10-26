@@ -70,8 +70,8 @@ describe("the Complete filter on the Copies list (#1884)", () => {
       })
     ).id;
     const areaId = (await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } })).id;
-    boxId = (await prisma.location.create({ data: { collectionId, name: "Box", assignable: true } })).id;
-    albumId = (await prisma.location.create({ data: { collectionId, name: "Album", assignable: true } })).id;
+    boxId = (await prisma.location.create({ data: { collectionId, code: "L1", name: "Box", assignable: true } })).id;
+    albumId = (await prisma.location.create({ data: { collectionId, code: "L2", name: "Album", assignable: true } })).id;
 
     let issueNo = 9800;
     let year = 1960;
