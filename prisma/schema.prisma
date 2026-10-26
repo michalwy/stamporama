@@ -185,6 +185,8 @@ model Collection {
   sales           Sale[]
   conversationEntries ConversationEntry[]
   conversationAttachments ConversationAttachment[]
+  // The collector's own files about a sale (#2198): shipment photos, posting receipts.
+  saleAttachments SaleAttachment[]
   shippingOptions ShippingOption[]
   carriers        Carrier[]
   carrierServices CarrierService[]
@@ -6017,6 +6019,8 @@ model Sale {
   statusEvents  SaleStatusEvent[]
   // What was said with the buyer about this sale (#2149) — see `ConversationEntry`.
   conversationEntries ConversationEntry[]
+  // The collector's own files about the sale (#2198) — see `SaleAttachment`.
+  attachments   SaleAttachment[]
   /** The buyer's link for choosing their own copy (#699), or none. At most one — see
    *  {@link SaleShareToken}. */
   shareToken    SaleShareToken?
@@ -6255,6 +6259,41 @@ model ConversationAttachment {
   @@index([entryId, createdAt])
   @@index([collectionId])
   @@map("conversation_attachment")
+}
+
+// A file the collector keeps with a sale (#2198): a photo of the packed parcel and what went into it,
+// the posting receipt, a tracking slip — what settles a dispute about a lost or damaged parcel. An
+// image (JPEG, PNG, WebP) or a PDF, as it came; mostly taken on the phone at the post office.
+//
+// **The sale's own**, apart from the conversation log's files (`ConversationAttachment`) and from any
+// copy's or offer's photos, and built the same way as the log's: the bytes as uploaded
+// (`storageKey`), what kind they are read from the bytes, a WebP thumbnail for an image (`thumbKey`),
+// all under `<collectionId>/sale/<uuid>/` through `src/lib/storage/`. **The cascade drops rows, never
+// files**: deleting the sale deletes the bytes explicitly (`sale-attachments.ts`); merging it into
+// another sale moves its files to that one.
+model SaleAttachment {
+  id             String   @id @default(cuid())
+  collectionId   String
+  saleId         String
+  // The file's name as it was sent, cleaned of path separators and control characters.
+  fileName       String
+  // image/jpeg | image/png | image/webp | application/pdf — read from the bytes.
+  contentType    String
+  sizeBytes      Int
+  storageBackend String
+  storageKey     String
+  // An image's thumbnail; null for a PDF.
+  thumbKey       String?
+  widthPx        Int?
+  heightPx       Int?
+  createdAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  sale       Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId, createdAt])
+  @@index([collectionId])
+  @@map("sale_attachment")
 }
 
 // One line of a sale (ADR-0013): the offer set that went, the offer it sold through, its line

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCarriers } from "@/lib/carriers";
 import { listSalesAwaitingFulfilment } from "@/lib/sales";
+import { listAttachmentsOfSales } from "@/lib/sale-attachments";
 import { phoneSaleGroups } from "@/lib/phone-sales-rules";
 import { PhoneScreen } from "@/app/phone-screen";
 import { PhoneSalesList } from "./phone-sales-list";
@@ -31,6 +32,12 @@ export default async function PhoneSalesPage({ params }: PhoneSalesPageProps) {
     // Short list — what *Mark sent* picks the carrier from (#491).
     getCarriers(session.user.id, collection.id),
   ]);
+  // Each sale's own files (#2198), shown on its row with *Add photo*.
+  const attachmentsBySale = await listAttachmentsOfSales(
+    session.user.id,
+    collection.id,
+    sales.map((sale) => sale.id)
+  );
 
   return (
     <PhoneScreen title="Sales to do" fullAppHref={`/c/${collectionSlug}/sales`}>
@@ -38,6 +45,7 @@ export default async function PhoneSalesPage({ params }: PhoneSalesPageProps) {
         collectionId={collection.id}
         groups={phoneSaleGroups(sales)}
         carriers={carriers.map((c) => ({ id: c.id, name: c.name }))}
+        attachmentsBySale={attachmentsBySale}
       />
     </PhoneScreen>
   );

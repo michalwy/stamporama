@@ -108,6 +108,14 @@ desktop-only.
 - **Mark paid asks nothing** — the desk's total-paid prompt (#443) is skippable, and the phone skips
   it, since the issue settled that *sent* is the one step that takes input and the amounts stay at the
   desk (decided in writing #2007).
+- **Add photo** on each row (#2198, `phone-sale-attachments.tsx`) keeps pictures with the sale — its
+  attachments on the desk. A file input with `multiple` and **no `capture`**, so the phone offers its
+  own choice of camera or gallery (the issue's *camera or gallery*), where #2011's `PhoneCameraButton`
+  forces the camera; `accept="image/*"` for #2011's reason. Each picture is posted straight to the
+  sale's upload route (`uploadSaleAttachments`, one at a time so one refusal does not hold back the
+  rest) — no staging, since the sale already exists. Thumbnails come from `listAttachmentsOfSales`,
+  one read for the page, kept out of `listSalesAwaitingFulfilment` so the Dashboard does not pay for
+  them. A tap opens the file; **removing is the desk's**. Hidden while the row asks a question.
 
 ## Offers (#2008)
 
@@ -283,6 +291,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Start a purchase, completed at the desk | #2006 |
 | Photos on a purchase, from the phone's camera | #2011 |
 | Sales to do: paid, packed, sent | #2007 |
+| Photos on a sale, from the camera or the gallery | #2198 |
 | Offers: list, offer screen, pause / resume / withdraw | #2008 |
 | Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |

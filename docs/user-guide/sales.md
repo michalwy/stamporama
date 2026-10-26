@@ -755,6 +755,27 @@ amount) and a **link** to where the conversation can be found. Entries are liste
   with the previous buyer and no longer name the sale; the same happens when the sale is deleted,
   or merged into a sale of a different buyer.
 
+## Attachments
+
+A sale can keep **your own files about it** — a photo of the packed parcel and what went into it,
+the posting receipt, a tracking slip. They are what settles a dispute about a lost or damaged
+parcel, so they are kept with the sale rather than somewhere on your phone.
+
+- **⋮ → Add attachments** in the sale's header picks files: pictures (JPEG, PNG or WebP) and PDFs,
+  as many as you need and several at a time, each as large as a photo may be (200 MB). Once the
+  sale has one, an **Attachments** card shows them under the header, with its own **Add
+  attachments** button.
+- **A picture** is a thumbnail that enlarges when you hover it; a click opens it full size, where the
+  arrows step through the sale's other pictures and **Remove** takes it off the sale and deletes it.
+- **A PDF** is an icon with its name; a click opens it in a new tab, and its **×** removes it.
+- **From the phone**, [Sales to do](phone.md#sales-to-do) adds photos straight from the camera or
+  the gallery — at the packing table or the post office — and they appear here at once. An
+  [AI assistant](agent-api.md) can add files too.
+- **They are the sale's alone**: not the [conversation's](#the-conversation-with-the-buyer) files,
+  and never a copy's or an offer's photos. Adding or removing one changes nothing else on the sale.
+  When the sale is [merged](#merging-two-sales) into another, its files move with it; when it is
+  [deleted](#deleting), they are deleted with it.
+
 ## What the assistant recorded — *To review · API*
 
 When an [AI assistant](agent-api.md) records a sale for you (see [what it can do on sales](agent-api.md#what-it-can-do-and-what-it-will-not)), or adds a sold offer to one you already
@@ -795,7 +816,7 @@ buyer bid from two accounts and asked for everything to go together, in one parc
    one of them.
 
 **Merge** then moves every sold set — with its price, its packed marks and any set still to be
-chosen — and every packing supply the other sale used, and the [conversation
+chosen — every packing supply the other sale used, its [attachments](#attachments), and the [conversation
 entries](#the-conversation-with-the-buyer) about it when the remaining sale is with the same buyer.
 Nothing is sold or withdrawn twice: the copies stay sold and the offers stay *Sold*. The totals, profit and [message to the
 buyer](#message-to-the-buyer) follow at once. If the other sale was recorded by an assistant and you
@@ -805,8 +826,8 @@ review* too.
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
-available again, returns any offers it marked sold to **Active**, and returns its packing supplies
-to stock.
+available again, returns any offers it marked sold to **Active**, returns its packing supplies
+to stock, and deletes its [attachments](#attachments).
 
 ## Finding a sale
 

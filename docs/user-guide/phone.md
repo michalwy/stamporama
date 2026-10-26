@@ -110,9 +110,16 @@ included. On the way, the phone asks what the desk would ask:
   service suggests comes pre-selected — and the **tracking number**. **Skip** marks it sent without a
   number; you can add one on the sale at the desk later.
 
+**Add photo** on each row keeps pictures with the sale — the packed parcel, what went into it, the
+posting receipt. The phone asks whether to take one with the **camera** or pick from the
+**gallery**, where you can choose several at once; each goes up to the sale as soon as it is picked
+and shows on the row as a thumbnail, which opens full size when tapped. They are the sale's
+[attachments](sales.md#attachments) on the desk, where they can also be removed. Add the posting
+receipt before **Mark sent**: a sent sale leaves this list.
+
 **Mark paid** asks nothing on the phone: the total the buyer paid, which the desk offers to record at
-that moment, is entered at the desk. Everything else on a sale — its lines, amounts, shipping and
-corrections to its status — stays at the desk; **Full app** opens the Sales list.
+that moment, is entered at the desk. Everything else on a sale — its lines, amounts, shipping,
+corrections to its status and removing its photos — stays at the desk; **Full app** opens the Sales list.
 
 ## Offers
 

@@ -176,7 +176,12 @@ describe("the sale operations (#1949)", () => {
 
   it("deletes no sale and moves none — no such operation exists", () => {
     // The boundary as absence: nothing named for a delete, a status, payment or shipping of a sale.
+    // One write is named for a sale and lets it be: adding the collector's own files to it (#2198),
+    // which changes no line, amount or status. Named exactly, so anything else written under
+    // `/sales` is still caught.
+    const ADDS_FILES_ONLY = ["add_sale_attachments"];
     const offenders = OPERATIONS.filter((operation) => {
+      if (ADDS_FILES_ONLY.includes(operation.name)) return false;
       const words = operation.name.split("_");
       // An auction house's sale (#1627) is the auction register's, not a sale of the collector's.
       const aboutSales =

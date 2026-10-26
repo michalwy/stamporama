@@ -38,6 +38,8 @@ import { NOT_TRADED_AWAY } from "./trade-exit";
 import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
+import { deleteConversationAttachmentBytes } from "./conversation-attachments";
+import { saleAttachmentRefs } from "./sale-attachments";
 import { buildTrackingUrl } from "./tracking-rules";
 import { keepConversationWithBuyer } from "./conversation-log";
 import { readShareAddress, type ShareAddress } from "./share-address";
@@ -2801,7 +2803,8 @@ export async function salesToReview(
 
 /** Delete a sale (ADR-0013). Cascades its lines + line items, so the copies become available
  * again (their sold state is derived), and its packing-supply lines, which return to stock (#1898).
- * Offers the sale marked `sold` revert to `active`. */
+ * Offers the sale marked `sold` revert to `active`. Its own files (#2198) go with it: the cascade
+ * drops their rows, and their bytes are deleted once the delete went through. */
 export async function deleteSale(ownerId: string, saleId: string): Promise<void> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -2815,6 +2818,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
     throw new Error("Sale not found or access denied.");
   }
   const offerIds = [...new Set(sale.lines.map((l) => l.offerId).filter((id): id is string => !!id))];
+  const attachments = await saleAttachmentRefs({ saleId });
 
   await prisma.$transaction(async (tx) => {
     await tx.sale.delete({ where: { id: saleId } });
@@ -2837,6 +2841,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
       await markListingContentChanged(offerIds, tx);
     }
   });
+  await deleteConversationAttachmentBytes(attachments);
 }
 
 // ── Merge (#2041) ───────────────────────────────────────────────────────────
@@ -2958,8 +2963,8 @@ export interface SaleMergeInput {
  * The lines move as they are — price, packed copies, a set still to be chosen — so nothing is sold
  * twice and no offer changes state: every set that was sold is still sold, on the remaining sale. The
  * supply lines move with the units they took, and are settled again because the remaining sale's
- * date is the one their first-in-first-out order now reads. The other sale's buyer link (#699), if
- * it had one, goes with it.
+ * date is the one their first-in-first-out order now reads. The other sale's own files (#2198) move
+ * too. The other sale's buyer link (#699), if it had one, goes with it.
  *
  * Both sales are locked first and read again, so what is checked is what is merged.
  */
@@ -2995,6 +3000,12 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
 
     await tx.saleLine.updateMany({ where: { saleId: otherSaleId }, data: { saleId: remainingSaleId } });
     await tx.saleSupplyLine.updateMany({
+      where: { saleId: otherSaleId },
+      data: { saleId: remainingSaleId },
+    });
+    // The other sale's own files — a receipt, a photo of what was packed — are the parcel's, and the
+    // parcel is now the remaining sale's (#2198).
+    await tx.saleAttachment.updateMany({
       where: { saleId: otherSaleId },
       data: { saleId: remainingSaleId },
     });

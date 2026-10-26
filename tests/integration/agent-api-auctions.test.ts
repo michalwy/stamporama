@@ -389,11 +389,18 @@ describe("auction reads (#1036)", () => {
     // order the collector already bought, which the agent is allowed to write; the watchlist's lots
     // are what it only reads. `lot` alone cannot tell the two apart, so a name about a purchase is
     // judged by its other words — `add_purchase_auction_lot` would still be caught.
+    //
+    // **Nor is a sale's own file** (#2198). `add_sale_attachments` keeps a shipment photo with one of
+    // the collector's own sales, which the agent is allowed to write; `sale` alone cannot tell that
+    // sale from an auction house's, so a name about attachments is judged by its other words —
+    // `add_auction_sale_attachments` would still be caught.
     const writeShaped = (name: string) => {
       const words = name.split("_");
       const auctionWords = words.includes("purchase")
         ? words.filter((word) => word !== "lot" && word !== "lots")
-        : words;
+        : words.includes("attachments")
+          ? words.filter((word) => word !== "sale" && word !== "sales")
+          : words;
       return WRITE_VERBS.has(words[0]) && auctionWords.some((word) => AUCTION_WORDS.has(word));
     };
 

@@ -17,6 +17,8 @@ import { saleDashboardItem } from "@/lib/dashboard-sales-rules";
 import { phoneSaleStep, type PhoneSaleGroup, type SaleToDo } from "@/lib/phone-sales-rules";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { asksAboutUnpackedCopies, asksForShipment, type SaleStatus } from "@/lib/sale-status";
+import type { SaleAttachmentData } from "@/lib/sale-attachments";
+import { PhoneSaleAttachments } from "./phone-sale-attachments";
 
 /**
  * The phone's sales to do (#2007): the Dashboard's three groups, a row per sale with its buyer and
@@ -70,9 +72,11 @@ interface PhoneSalesListProps {
   collectionId: string;
   groups: PhoneSaleGroup<SaleToDo>[];
   carriers: Carrier[];
+  /** Each sale's own files (#2198), by sale id. */
+  attachmentsBySale: Record<string, SaleAttachmentData[]>;
 }
 
-export function PhoneSalesList({ collectionId, groups, carriers }: PhoneSalesListProps) {
+export function PhoneSalesList({ collectionId, groups, carriers, attachmentsBySale }: PhoneSalesListProps) {
   const router = useRouter();
   const { invalidateAll } = useInvalidateSales();
   const { toast } = useToast();
@@ -147,7 +151,9 @@ export function PhoneSalesList({ collectionId, groups, carriers }: PhoneSalesLis
             group.sales.map((sale) => (
               <SaleRow
                 key={sale.id}
+                collectionId={collectionId}
                 sale={sale}
+                attachments={attachmentsBySale[sale.id] ?? []}
                 carriers={carriers}
                 question={question?.saleId === sale.id ? question : null}
                 error={error?.saleId === sale.id ? error.message : null}
@@ -196,7 +202,9 @@ export function PhoneSalesList({ collectionId, groups, carriers }: PhoneSalesLis
 }
 
 interface SaleRowProps {
+  collectionId: string;
   sale: SaleToDo;
+  attachments: SaleAttachmentData[];
   carriers: Carrier[];
   question: Question | null;
   error: string | null;
@@ -210,7 +218,9 @@ interface SaleRowProps {
 }
 
 function SaleRow({
+  collectionId,
   sale,
+  attachments,
   carriers,
   question,
   error,
@@ -294,6 +304,9 @@ function SaleRow({
           {error}
         </p>
       )}
+
+      {/* The sale's own files (#2198): the parcel's photos, the posting receipt. */}
+      {!question && <PhoneSaleAttachments collectionId={collectionId} saleId={sale.id} attachments={attachments} />}
     </div>
   );
 }
