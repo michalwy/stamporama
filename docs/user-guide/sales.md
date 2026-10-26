@@ -608,7 +608,8 @@ laid out as a walk through your shelves:
   counts. The **order number** beside it is a different thing: that one is the *marketplace's*
   number for the same sale. When the sale records a **shipping option**, it prints there too, so
   the sheet says how the parcel goes out; sales without one simply don't show the field.
-- One **section per storage [location](locations.md)**, in shelf order, with the copies filed
+- One **section per storage [location](locations.md)**, in shelf order (or per sold set — see
+  [Grouping by sold set](#grouping-by-sold-set)), with the copies filed
   nowhere in a trailing **No location** section.
 - Inside a section, one line per copy: a **tick box** plus whichever of the columns below you
   turned on. Lines are ordered by the in-location **ref** — what you read off the shelf.
@@ -618,6 +619,28 @@ laid out as a walk through your shelves:
 - Copies that are indistinguishable while packing — same stamp, same condition, same certificate
   status, same ref, same packed state — collapse into a **single line with a quantity**, so five of
   the same stamp are one line to tick rather than five.
+
+### Grouping by sold set
+
+When a buyer took several sets — two series, a lot and a single — a sheet by shelf interleaves them,
+and a parcel packed down the page goes out with the sets mixed together. The **Group by** switch at
+the head of the chips row turns the sheet into **one section per sold set** instead:
+
+- Each section is headed by the set's **title**, the **offer** it was sold through (or *on no
+  offer*, for a [set sold off no offer](#selling-copies-that-are-on-no-offer)) and, at the far end, its
+  **price** — the same three things the sale screen's line shows, so a packed set can be matched
+  to the buyer's order.
+- The sections follow the order of the sale's lines, except that **sets sold through one offer sit
+  one after another**.
+- Inside a set, the copies are in **location, then ref** order, so a set is still picked down the
+  shelf. Since the heading no longer says where a copy is, every line prints its **Location** beside
+  its **Ref**, and both stay on while the sheet is by set — your own choice for **Ref** comes back
+  when you switch to *Location*.
+- Identical copies merge into one line **only within a set** — never across two sets, so each set's
+  count is right on paper.
+
+The switch starts on **Location** and is remembered the same way as the columns: once, for every
+sale.
 
 ### Choosing the columns
 

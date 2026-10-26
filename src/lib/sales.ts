@@ -2221,6 +2221,9 @@ export interface SaleDetailLine {
   offerSetId: string | null;
   setLabel: string;
   offerId: string | null;
+  /** The number (#416) of {@link offerId}, or null with it — what the packing list divided by set
+   *  names the set's offer by (#2187). */
+  offerNo: number | null;
   price: string;
   /** The line sale price converted to the base currency at the frozen rate (#208), or null when the
    * sale is already in base or no rate is known. */
@@ -2492,6 +2495,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           id: true,
           offerSetId: true,
           offerId: true,
+          offer: { select: { offerNo: true } },
           price: true,
           setChoicePending: true,
           setChosenByBuyerAt: true,
@@ -2551,6 +2555,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       offerSetId: l.offerSetId,
       setLabel: setLbl,
       offerId: l.offerId,
+      offerNo: l.offer?.offerNo ?? null,
       price: Number(l.price).toFixed(2),
       priceBase:
         sale.currency === baseCurrency || sale.fxRateToBase == null
@@ -2999,6 +3004,9 @@ export interface SaleCopyItem extends ItemListItem {
    * offer is later deleted (`SetNull`), and a historical sale then has no listing to name. Printed
    * on the packing list (#474) as the reference the marketplace correspondence is about. */
   offerNo: number | null;
+  /** The sale line (sold set) this copy left on — what the packing list divided by set reads
+   *  (#2187). */
+  saleLineId: string;
 }
 
 /** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) and the offer
@@ -3007,12 +3015,21 @@ async function withPacked(items: ItemListItem[]): Promise<SaleCopyItem[]> {
   if (items.length === 0) return [];
   const rows = await prisma.saleLineItem.findMany({
     where: { itemId: { in: items.map((i) => i.id) } },
-    select: { itemId: true, packed: true, saleLine: { select: { offer: { select: { offerNo: true } } } } },
+    select: {
+      itemId: true,
+      packed: true,
+      saleLine: { select: { id: true, offer: { select: { offerNo: true } } } },
+    },
   });
   const byId = new Map(rows.map((r) => [r.itemId, r]));
   return items.map((i) => {
     const row = byId.get(i.id);
-    return { ...i, packed: row?.packed ?? false, offerNo: row?.saleLine.offer?.offerNo ?? null };
+    return {
+      ...i,
+      packed: row?.packed ?? false,
+      offerNo: row?.saleLine.offer?.offerNo ?? null,
+      saleLineId: row?.saleLine.id ?? "",
+    };
   });
 }
 

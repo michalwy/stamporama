@@ -231,6 +231,55 @@ const CHIP: React.CSSProperties = {
   cursor: "pointer",
 };
 
+/** The caption of a row of screen-only chips (*Columns*, a sheet's own *Group by*). */
+export function SheetChipsLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        fontSize: "0.6875rem",
+        fontWeight: 600,
+        color: "var(--color-text-muted)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** One screen-only toggle chip over the sheet — a column, or a sheet's own switch. */
+export function SheetChip({
+  on,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        ...CHIP,
+        cursor: disabled ? "default" : "pointer",
+        fontWeight: on ? 600 : 500,
+        color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+        borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+        background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 const BOX: React.CSSProperties = {
   display: "inline-block",
   width: "0.9rem",
@@ -247,6 +296,13 @@ export interface PackingSheetProps {
   list: PackingListData;
   /** This printout's columns, in print order. */
   columns: readonly PackingColumnSpec[];
+  /** Columns printed whatever the stored selection says — their chip is drawn on and cannot be
+   *  pressed. For a division that no longer says what the column does (a sale by set, #2187, has no
+   *  shelf in its headings). The stored selection is left alone, so leaving that division restores
+   *  the collector's own choice. */
+  pinnedColumns?: readonly string[];
+  /** Screen-only controls drawn at the head of the chips row — a sheet's own switch (#2187). */
+  controls?: React.ReactNode;
   /** Where this printout's column selection is remembered. **Versioned** by the caller: a stored
    *  list names the columns that existed when it was saved, so a column added later would silently
    *  never appear for anyone who had ever touched the chips. */
@@ -275,6 +331,9 @@ export interface PackingSheetProps {
   /** A word under the heading's counts, per division — what a sheet wants to say about a section
    *  that is not a copy count. */
   groupNote?: (group: PackingListGroup) => string | null;
+  /** Drawn at the heading's far end, per division — a figure the division is matched by (a sold
+   *  set's price, #2187). */
+  groupAside?: (group: PackingListGroup) => string | null;
   /** Drawn under a row, spanning the table — a verdict's reason, a remark. */
   rowNote?: (row: PackingListRow) => string | null;
 }
@@ -283,6 +342,8 @@ export function PackingSheet({
   collectionId,
   list,
   columns,
+  pinnedColumns = [],
+  controls,
   prefKey,
   empty,
   groupIcon = "location",
@@ -292,13 +353,16 @@ export function PackingSheet({
   rowActions,
   busyKey,
   groupNote,
+  groupAside,
   rowNote,
 }: PackingSheetProps) {
   const [raw, setRaw] = usePersistentString(prefKey, defaultPackingColumns(columns));
   const selected = new Set(raw.split(",").filter(Boolean));
-  const enabled = columns.filter((c) => selected.has(c.key));
+  const pinned = new Set(pinnedColumns);
+  const enabled = columns.filter((c) => selected.has(c.key) || pinned.has(c.key));
 
-  /** Flip one column, rewriting the stored list in the sheet's own column order. */
+  /** Flip one column, rewriting the stored list in the sheet's own column order. A pinned column is
+   *  written as it was stored, not as it prints. */
   function toggle(key: string) {
     const next = new Set(selected);
     if (next.has(key)) next.delete(key);
@@ -321,35 +385,15 @@ export function PackingSheet({
         className="no-print"
         style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "1rem 0 0", flexWrap: "wrap" }}
       >
-        <span
-          style={{
-            fontSize: "0.6875rem",
-            fontWeight: 600,
-            color: "var(--color-text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-          }}
-        >
-          Columns
-        </span>
+        {controls}
+        <SheetChipsLabel>Columns</SheetChipsLabel>
         {columns.map((column) => {
-          const on = selected.has(column.key);
+          const locked = pinned.has(column.key);
+          const on = locked || selected.has(column.key);
           return (
-            <button
-              key={column.key}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggle(column.key)}
-              style={{
-                ...CHIP,
-                fontWeight: on ? 600 : 500,
-                color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-                borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-                background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-              }}
-            >
+            <SheetChip key={column.key} on={on} disabled={locked} onClick={() => toggle(column.key)}>
               {on && <Icon name="check" size="xs" />} {column.label}
-            </button>
+            </SheetChip>
           );
         })}
       </div>
@@ -367,6 +411,7 @@ export function PackingSheet({
           rowActions={rowActions}
           busyKey={busyKey}
           groupNote={groupNote}
+          groupAside={groupAside}
           rowNote={rowNote}
         />
       ))}
@@ -385,12 +430,14 @@ interface SectionProps {
   rowActions?: (row: PackingListRow) => RowAction[];
   busyKey?: string | null;
   groupNote?: (group: PackingListGroup) => string | null;
+  groupAside?: (group: PackingListGroup) => string | null;
   rowNote?: (row: PackingListRow) => string | null;
 }
 
 /** One division as a section: its heading, then its copies as tick rows. */
-function PackingSection({ ctx, icon, group, columns, groupNote, ...rest }: SectionProps) {
+function PackingSection({ ctx, icon, group, columns, groupNote, groupAside, ...rest }: SectionProps) {
   const note = groupNote?.(group) ?? null;
+  const aside = groupAside?.(group) ?? null;
   return (
     <section style={{ marginTop: "1.25rem" }}>
       <h2
@@ -413,6 +460,11 @@ function PackingSection({ ctx, icon, group, columns, groupNote, ...rest }: Secti
           {group.copyCount} {group.copyCount === 1 ? "copy" : "copies"}
           {note ? ` · ${note}` : ""}
         </span>
+        {aside && (
+          <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+            {aside}
+          </span>
+        )}
       </h2>
       {/* Auto layout (the browser default): every column takes exactly the width its content
           needs, so a sheet without long series names stays tight instead of holding empty space. */}
@@ -449,7 +501,7 @@ function CopyRow({
   rowActions,
   busyKey,
   rowNote,
-}: Omit<SectionProps, "group" | "icon" | "groupNote"> & { row: PackingListRow }) {
+}: Omit<SectionProps, "group" | "icon" | "groupNote" | "groupAside"> & { row: PackingListRow }) {
   const checked = ticks === "source" && row.packed;
   const busy = busyKey === row.key;
   const actions = rowActions?.(row) ?? null;

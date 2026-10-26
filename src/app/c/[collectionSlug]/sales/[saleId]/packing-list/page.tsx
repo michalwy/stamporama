@@ -11,7 +11,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
-import { buildPackingList } from "@/lib/packing-list";
+import { buildPackingList, packingSetOrder, type PackingSet } from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
@@ -43,9 +43,11 @@ function formatDate(d: Date): string {
 
 /**
  * Printable packing list for a sale (#330): the sold copies as a paper checklist, sectioned by
- * storage location so the sheet is a walk-order through the shelves. Everything is server-rendered
- * — no filters, no toggles, no lazy loading — because the artifact is the printout; the interactive
- * packing view lives on the sale detail screen. App chrome (`.no-print`) drops out on paper.
+ * storage location so the sheet is a walk-order through the shelves — or by sold set (#2187), so a
+ * parcel of several sets is packed with its sets apart. Everything is server-rendered — no filters,
+ * no lazy loading — because the artifact is the printout; the interactive packing view lives on the
+ * sale detail screen. Both divisions are built here and the sheet's switch only picks one, so
+ * switching is not a round trip. App chrome (`.no-print`) drops out on paper.
  */
 export default async function PackingListPage({ params }: PackingListPageProps) {
   const { collectionSlug, saleId } = await params;
@@ -66,11 +68,28 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
     listSaleCopies(session.user.id, saleId),
   ]);
 
-  const list = buildPackingList(
-    copies,
+  const maps = buildAreaVendorMaps(areas, issuePrefixes);
+  const list = buildPackingList(copies, areas, locations, maps);
+  // Each set named as the sale screen names its line: the title, the offer, the price.
+  const positions = packingSetOrder(sale.lines);
+  const sets = new Map<string, PackingSet>(
+    sale.lines.map((line) => [
+      line.id,
+      {
+        id: line.id,
+        title: line.setLabel,
+        offerNo: line.offerNo,
+        price: `${line.price} ${sale.currency}`,
+        position: positions.get(line.id) ?? 0,
+      },
+    ])
+  );
+  const bySet = buildPackingList(
+    copies.map((c) => ({ ...c, set: sets.get(c.saleLineId) ?? null })),
     areas,
     locations,
-    buildAreaVendorMaps(areas, issuePrefixes)
+    maps,
+    { grouping: "set" }
   );
   const status = saleStatusMeta(sale.status);
 
@@ -136,7 +155,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </div>
       </header>
 
-      <SalePackingSheet collectionId={collection.id} list={list} />
+      <SalePackingSheet collectionId={collection.id} byLocation={list} bySet={bySet} />
 
       {/* The legend closes the document — it is read once, after the last row, so it stays in the
           flow rather than repeating at the foot of every page. */}
