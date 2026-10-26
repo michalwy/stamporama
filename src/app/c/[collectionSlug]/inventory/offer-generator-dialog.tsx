@@ -36,6 +36,7 @@ import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-of
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useCollectionFormats } from "./use-inventory-query";
 import { SELECT_STRIP } from "./inventory-copy-list";
@@ -55,6 +56,11 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // A complete set may mix conditions, certificates or formats (#2102), with Series from Singles' own
 // switches (#1265), and with one on, the collector says which sets come first. The switches belong to
 // Complete sets: Singles is sent no mixing, so it lists what it always listed.
+//
+// A checklist of a single stamp can count as a complete set (#2202), so a collector listing complete
+// series only does not lose every one-stamp issue. The switch starts on and is remembered in this
+// browser. Unlike mixing it travels with both modes: a copy it makes a set is no longer a single, so
+// running both passes still lists that copy once.
 //
 // On Facebook, a pass whose offers are not yet up can put the offers it creates into one new post
 // (#2030), as its lots in the preview's order — the batch gathered from the start, with no *Post
@@ -114,6 +120,9 @@ const PRIORITIES: { value: MixPriority; label: string; hint: string }[] = [
     hint: "Sets are formed in the usual order, pure or mixed.",
   },
 ];
+
+/** Where the one-stamp switch is remembered (#2202): a standing preference, not a pass's. */
+const ONE_STAMP_SETS_KEY = "stamporama:offer-generator:one-stamp-sets";
 
 const FIELDSET: React.CSSProperties = {
   border: "none",
@@ -234,6 +243,7 @@ export function OfferGeneratorDialog({
   const [packaging, setPackaging] = useState<GeneratorPackaging>("multi");
   const [mixing, setMixing] = useState<SeriesMixing>(NO_MIXING);
   const [priority, setPriority] = useState<MixPriority>("same-first");
+  const [oneStampSets, setOneStampSets] = usePersistedFlag(ONE_STAMP_SETS_KEY, true);
   // An axis the collection defines nothing on has one value, so its switch is not drawn (#1265's rule).
   const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const { data: formats = [] } = useCollectionFormats(collectionId);
@@ -259,13 +269,14 @@ export function OfferGeneratorDialog({
       packaging,
       mixing: mode === "checklists" ? mixing : NO_MIXING,
       priority,
+      oneStampSets,
       itemIds: input.kind === "ticked" ? input.itemIds : null,
       filters: input.kind === "filtered" ? input.filters : "",
       targets,
       skip: [] as string[],
       facebook,
     }),
-    [platformId, state, mode, packaging, mixing, priority, input, targets, facebook]
+    [platformId, state, mode, packaging, mixing, priority, oneStampSets, input, targets, facebook]
   );
   // The preview's query never carries the ticks: a tick changes what is written, not the plan.
   const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
@@ -403,6 +414,18 @@ export function OfferGeneratorDialog({
                   onPriority={setPriority}
                 />
               )}
+              <label style={{ ...OPTION, alignItems: "center", marginTop: "0.25rem" }}>
+                <input
+                  type="checkbox"
+                  checked={oneStampSets}
+                  onChange={(e) => setOneStampSets(e.target.checked)}
+                  disabled={isPending}
+                />
+                <span>
+                  One-stamp series count as complete sets{" "}
+                  <span style={HINT}>— a copy of the stamp is then a set, not a single.</span>
+                </span>
+              </label>
             </fieldset>
             <fieldset style={FIELDSET}>
               <legend style={LEGEND}>How to pack identical sets</legend>

@@ -1437,8 +1437,17 @@ Two choices:
   - **Complete sets** — every [checklist](collections.md#checklists) the copies complete becomes a set holding one
     copy of each of its stamps. By default a set is one condition, one certificate status and one
     format: a checklist that could only be completed by mixing them forms no set. A variant fills its
-    parent's place when the parent itself is missing, and a checklist of a single stamp is not a set.
-    Where one copy could complete two checklists, the checklist that comes first on the issue gets it.
+    parent's place when the parent itself is missing. Where one copy could complete two checklists,
+    the checklist that comes first on the issue gets it.
+
+    **One-stamp series count as complete sets** — beside *What to list*, on when the dialog first
+    opens and remembered in this browser afterwards. On, a checklist of a single stamp is a complete
+    series like any other: each copy of its stamp is a set of its own, offered with the other complete
+    sets and under the same rules — one condition, certificate and format (or mixed, as below), a
+    variant filling its parent's place, identical sets packed together. So if you list only complete
+    series, *Complete sets* alone covers your one-stamp issues too. Off, a checklist of a single stamp
+    is not a set and its copies are left to *Singles*, as before. The switch decides what both choices
+    list: on, *Singles* no longer offers those copies, so running both still makes one offer of each.
 
     **A set may mix** — the same switches as on [Series from Singles](offers.md#series-from-singles):
     **Conditions**, **Certificates** and **Formats**, each on its own (*Certificates* and *Formats*

@@ -229,6 +229,41 @@ describe("offer generator (#1287)", () => {
     assert.equal(singles.lines.length, 3);
   });
 
+  it("offers a one-stamp checklist with the complete sets when the switch is on, and not as a single (#2202)", async () => {
+    const [s1, s2, lone] = await stamps(3);
+    await checklist([s1, s2]);
+    const issue = await prisma.issue.create({
+      data: { collectionId, issueNo: ++nextIssueNo, collectionAreaId: areaId, name: "Copernicus", year: 1960 },
+    });
+    await prisma.checklist.create({
+      data: { collectionId, issueId: issue.id, name: "Copernicus", stamps: { create: [{ stampId: lone, sortOrder: 0 }] } },
+    });
+    const loneA = await copy(lone);
+    const loneB = await copy(lone);
+    const copies = [await copy(s1), await copy(s2), loneA, loneB];
+    const on = { oneStampSets: true };
+
+    const series = await previewOfferGeneration(userId, collectionId, ticked(copies, on));
+    assert.equal(series.lines.length, 2, "the two-stamp series and the one-stamp one");
+    const loneLine = series.lines.find((line) => line.sets[0][0].stampId === lone);
+    assert.ok(loneLine);
+    assert.equal(loneLine.kind, "series");
+    assert.equal(loneLine.title, "Copernicus", "the issue once where the checklist bears its name (#2104)");
+    assert.equal(loneLine.sets.length, 2, "identical sets packed into one offer");
+    assert.equal(series.otherModeCopies, 0);
+    const singles = await previewOfferGeneration(userId, collectionId, ticked(copies, { ...on, mode: "singles" }));
+    assert.equal(singles.lines.length, 0, "a copy in a complete set is never a single");
+
+    // Off, the dialog behaves as before: the one-stamp checklist is left to Singles.
+    const off = await previewOfferGeneration(userId, collectionId, ticked(copies));
+    assert.equal(off.lines.length, 1);
+    assert.equal(off.otherModeCopies, 2);
+
+    await commitOfferGeneration(userId, collectionId, ticked(copies, on), series.fingerprint);
+    const [made] = await offersHolding([loneA]);
+    assert.deepEqual(made.sets.map((set) => set.items.map((i) => i.itemId)).flat().sort(), [loneA, loneB].sort());
+  });
+
   it("makes one set of a checklist complete only across conditions when they may mix, naming the mix (#2102)", async () => {
     const [s1, s2, s3] = await stamps(3);
     await checklist([s1, s2, s3]);

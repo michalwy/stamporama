@@ -10,7 +10,7 @@
 //   filling its parent's slot (#661), over one condition, certificate status and format at a time
 //   (`combinationOf` under no mixing, #1265) — unless the collector lets a set mix an axis, with the
 //   switches Series from Singles has (`SeriesMixing`, #2102). A checklist of one stamp is not a series
-//   (#1257).
+//   (#1257) — unless the collector counts one-stamp series as complete sets (#2202).
 // - *A similar offer already exists* is `collidingItemIdsByOffer`, the rule the Copies list warns with
 //   (#732) — the same function, handed the same members, not a second reading of it.
 // - *Available* is decided in SQL before this runs (`listableOnPlatformFilters`, #758/#759); what is
@@ -54,6 +54,9 @@ export const MIX_PRIORITIES: readonly MixPriority[] = ["same-first", "free"];
 
 /** The query parameter the priority travels in; only *mix freely* is written, the default is not. */
 export const MIX_PRIORITY_PARAM = "mixPriority";
+
+/** The query parameter the one-stamp switch travels in (#2202); written only when on. */
+export const ONE_STAMP_SETS_PARAM = "oneStampSets";
 
 function mixesAny(mixing: SeriesMixing): boolean {
   return mixing.condition || mixing.certificate || mixing.format;
@@ -204,6 +207,9 @@ function takeSets(
  * conditions, certificates or formats forms no set and its copies stay singles; perforated and
  * imperforate are simply two checklists.
  *
+ * A checklist of a single stamp is no series (#1257) — unless `oneStampSets` (#2202): then a copy of its
+ * stamp is a complete set of its own, under every rule above, and so never a single.
+ *
  * **Mixing** (#2102) stops splitting on the axes it names. Under *same value first* the pass above runs
  * unchanged and a second one, mixing, is asked of what it left — leaning each mixed set to the value
  * most of it shares; under *mix freely* only the mixing pass runs. Either way the sets come out
@@ -217,9 +223,11 @@ export function assembleSets(
   copies: readonly GeneratorCopy[],
   checklists: readonly LotChecklist[],
   mixing: SeriesMixing = NO_MIXING,
-  priority: MixPriority = "same-first"
+  priority: MixPriority = "same-first",
+  oneStampSets = false
 ): { sets: GeneratedSet[]; singles: GeneratedSet[] } {
-  const series = checklists.filter((checklist) => new Set(checklist.stampIds).size >= MIN_SERIES_STAMPS);
+  const minStamps = oneStampSets ? 1 : MIN_SERIES_STAMPS;
+  const series = checklists.filter((checklist) => new Set(checklist.stampIds).size >= minStamps);
   const pool = copies.filter((copy) => !copy.multiStamp);
   const mixed = mixesAny(mixing);
   const sets: GeneratedSet[] = [];
@@ -319,6 +327,8 @@ export interface GeneratorPlanInput {
   mixing?: SeriesMixing;
   /** Which sets come first while some axis is mixed; absent, *same value first*. */
   priority?: MixPriority;
+  /** Whether a checklist of a single stamp counts as a complete set (#2202); absent, it does not. */
+  oneStampSets?: boolean;
   /** Every copy of every set of the platform's open offers that holds one of the pool's stamps — the
    *  members `collidingItemIdsByOffer` compares whole compositions over (#732). */
   members: readonly OfferMemberCopy[];
@@ -350,7 +360,13 @@ function inActiveBidding(offer: GeneratorOffer): boolean {
  * whose only matches are in active bidding becomes a new offer instead (#334).
  */
 export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
-  const { sets, singles } = assembleSets(input.copies, input.checklists, input.mixing, input.priority);
+  const { sets, singles } = assembleSets(
+    input.copies,
+    input.checklists,
+    input.mixing,
+    input.priority,
+    input.oneStampSets
+  );
   const listed = input.mode === "checklists" ? sets : singles;
   const otherModeCopies =
     input.mode === "checklists" ? singles.length : sets.reduce((n, set) => n + set.copies.length, 0);
@@ -671,6 +687,9 @@ export interface GeneratorRequest {
    *  no mixing — the pass as it always was. */
   mixing?: SeriesMixing;
   priority?: MixPriority;
+  /** Whether a one-stamp checklist counts as a complete set (#2202). It decides what both modes list,
+   *  so it travels with either. Absent, it does not — the pass as it always was. */
+  oneStampSets?: boolean;
   itemIds: string[] | null;
   filters: string;
   targets: Record<string, string>;
@@ -695,6 +714,7 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
     if (mixing[axis]) params.set(SERIES_MIXING_PARAMS[axis], "true");
   }
   if (mixesAny(mixing) && request.priority === "free") params.set(MIX_PRIORITY_PARAM, "free");
+  if (request.oneStampSets) params.set(ONE_STAMP_SETS_PARAM, "true");
   if (request.itemIds !== null) params.set("ids", request.itemIds.join(","));
   else if (request.filters) params.set("filters", request.filters);
   const targets = Object.entries(request.targets)
@@ -735,6 +755,7 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
       format: sp.get(SERIES_MIXING_PARAMS.format) === "true",
     },
     priority: sp.get(MIX_PRIORITY_PARAM) === "free" ? "free" : "same-first",
+    oneStampSets: sp.get(ONE_STAMP_SETS_PARAM) === "true",
     itemIds: sp.has("ids") ? (ids ?? "").split(",").filter(Boolean) : null,
     filters: sp.get("filters") ?? "",
     targets,
