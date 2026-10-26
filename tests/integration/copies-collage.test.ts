@@ -53,6 +53,23 @@ describe("a one-off collage of ticked copies (#2052)", () => {
     collageLabelPercent: 0,
   };
 
+  /** This collection's photos, whichever owner they hang on. The database is shared with every other
+   * integration file running at the same moment, and a count of the whole table measures their
+   * photos too (#2199). A photo always has an owner, so one the collage stored would be counted. */
+  function collectionPhotoCount(): Promise<number> {
+    return prisma.photo.count({
+      where: {
+        OR: [
+          { item: { collectionId } },
+          { stamp: { collectionId } },
+          { offer: { collectionId } },
+          { tile: { collectionId } },
+          { purchase: { collectionId } },
+        ],
+      },
+    });
+  }
+
   function request(overrides: Partial<CopiesCollageRequest> = {}): CopiesCollageRequest {
     return {
       itemIds,
@@ -162,7 +179,7 @@ describe("a one-off collage of ticked copies (#2052)", () => {
   });
 
   it("draws the copies as one set onto one image, within the platform's edge, and stores nothing", async () => {
-    const photosBefore = await prisma.photo.count();
+    const photosBefore = await collectionPhotoCount();
     const offersBefore = await prisma.offer.count({ where: { collectionId } });
     const filesBefore = await storedFiles();
 
@@ -181,7 +198,7 @@ describe("a one-off collage of ticked copies (#2052)", () => {
     assert.deepEqual(made.missing, []);
     assert.equal(made.copyCount, 3);
 
-    assert.equal(await prisma.photo.count(), photosBefore, "no photo row");
+    assert.equal(await collectionPhotoCount(), photosBefore, "no photo row");
     assert.equal(await prisma.offer.count({ where: { collectionId } }), offersBefore, "no offer");
     assert.deepEqual(await storedFiles(), filesBefore, "no bytes");
   });

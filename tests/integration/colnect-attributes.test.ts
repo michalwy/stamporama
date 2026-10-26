@@ -229,7 +229,7 @@ describe("Colnect stamp-attribute sync", () => {
     const stored = await attributesOf(s.stamps.unmappable);
     assert.equal(stored.colorId, null);
     assert.equal(stored.watermarkId, s.lozenges);
-    assert.equal(await prisma.stampColor.count({ where: { name: "Vermilion" } }), 0);
+    assert.equal(await prisma.stampColor.count({ where: { collectionId: s.collectionId, name: "Vermilion" } }), 0);
   });
 
   it("fills the stamp the user picked when confirming a match", async () => {
