@@ -127,7 +127,8 @@ starts empty and has to be typed — there is no offer to take an asking price f
 
 Each pick is a set of its own, so open **Add copies** again for the next one; a sale can hold any
 number of them beside sets from offers. On the **Sold units** list such a set reads *on no offer*
-beside its copy count, is named by its copies, and its price can be edited in place like any other.
+beside its copy count, is named by its copies (or the name you gave it) rather than by an offer, and
+its price can be edited in place like any other.
 It appears nowhere in **Offers**, and on the [packing list](#printing-a-packing-list) its **Offer**
 column reads `—`.
 
@@ -480,6 +481,20 @@ you still advance the status yourself, it never changes on its own.
 
 Remove a sold set from its card's **⋮** menu (its copies become available again).
 
+### How a sold set is named
+
+**A sold set is named by the offer it sold through** — its number and title, flag included where
+the title carries one (`#2848 · 🇵🇱 Polska: Zestaw znaczków kasowanych`) — and the name is a
+**link to that offer**. The set's **catalogue numbers** follow on a muted second line, cut to one
+line; hover it to read them in full.
+
+- **When the offer held several sets and this sale took only some**, the name says which:
+  `#2848 · <offer title> — set 2 of 5`, followed by the set's own name where it has one. A sale that
+  took every set of the offer leaves this out.
+- The offer's title is read **as it is now**: retitle the offer and the sale follows.
+- A [set sold off no offer](#selling-copies-that-are-on-no-offer), and a set whose offer has since
+  been deleted, keeps the set's own name, with no link.
+
 ### Choosing which set left
 
 An offer listed at quantity 3 holds three sets, and a buyer who takes one has said *one of these*,
@@ -626,10 +641,10 @@ When a buyer took several sets — two series, a lot and a single — a sheet by
 and a parcel packed down the page goes out with the sets mixed together. The **Group by** switch at
 the head of the chips row turns the sheet into **one section per sold set** instead:
 
-- Each section is headed by the set's **title**, the **offer** it was sold through (or *on no
-  offer*, for a [set sold off no offer](#selling-copies-that-are-on-no-offer)) and, at the far end, its
-  **price** — the same three things the sale screen's line shows, so a packed set can be matched
-  to the buyer's order.
+- Each section is [named as the sale screen names the set](#how-a-sold-set-is-named) — the
+  **offer**'s number and title, with the set's catalogue numbers on a muted line under it (or the
+  set's own name and *on no offer*, for a [set sold off no offer](#selling-copies-that-are-on-no-offer))
+  — and carries its **price** at the far end, so a packed set can be matched to the buyer's order.
 - The sections follow the order of the sale's lines, except that **sets sold through one offer sit
   one after another**.
 - Inside a set, the copies are in **location, then ref** order, so a set is still picked down the

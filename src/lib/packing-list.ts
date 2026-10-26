@@ -85,17 +85,20 @@ export interface PackingLine {
 /**
  * The sold set a copy left in, on a sheet divided by set (#2187).
  *
- * Named as the sale's own line names it — its title, the offer it went through and its price — so a
- * packed set can be matched to the buyer's order. The price arrives **formatted** with its currency,
- * because the sheet prints it as the sale screen does and has no currency of its own to add.
+ * Named as the sale's own line names it — the offer it went through and its title, the set's
+ * catalogue numbers under it (#2189), and its price — so a packed set can be matched to the buyer's
+ * order. The price arrives **formatted** with its currency, because the sheet prints it as the sale
+ * screen does and has no currency of its own to add.
  */
 export interface PackingSet {
   /** The sale line's id — a set is a line. */
   id: string;
+  /** The line's heading (`#2848 · <offer title>`), or the set's own label where it names no offer. */
   title: string;
-  /** The offer the set was sold through (#416), or null for a set sold off no offer (#2021) or one
-   *  whose offer has since been deleted. */
-  offerNo: number | null;
+  /** The set's catalogue numbers, printed muted under the heading; null where the heading says them. */
+  numbers: string | null;
+  /** Sold off no offer (#2021) — not merely an offer since deleted, which has no number either. */
+  onNoOffer: boolean;
   /** The line's price as printed (`25.00 PLN`). */
   price: string;
   /** Where the set's section sits on the sheet — the caller's order (see {@link packingSetOrder}). */

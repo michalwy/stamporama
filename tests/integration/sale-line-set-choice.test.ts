@@ -388,4 +388,53 @@ describe("choosing which set left on a sale line (#697)", () => {
     await patchOffer(userId, offerId, { name: null });
     assert.equal((await listSaleLineSetOptions(userId, lineId))!.offerLabel, derived);
   });
+
+  // A sale line is named by the offer it sold through (#2189), its title read live, and says which
+  // of the offer's sets it is only when the sale took fewer than all of them.
+  it("names a line by its offer, and says which set only on a partial sale", async () => {
+    const { offerId, setIds } = await quantityOffer(3);
+    const { offerNo } = await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { offerNo: true } });
+    await patchOffer(userId, offerId, { name: "🇵🇱 Polska: Zestaw" });
+    const line = async (setId: string) => ({
+      offerId,
+      offerSetId: setId,
+      price: "5.00",
+      itemIds: (await setItemIds(setId)).map((r) => r.itemId),
+    });
+
+    const partial = await sale();
+    await addSaleLines(userId, partial, [await line(setIds[1])]);
+    const [one] = (await getSaleDetail(userId, partial))!.lines;
+    assert.equal(one.name.offerNo, offerNo);
+    assert.equal(one.name.title, "🇵🇱 Polska: Zestaw — set 2 of 3");
+
+    // Retitled since: the sale follows.
+    await patchOffer(userId, offerId, { name: "🇵🇱 Polska: Zestaw kasowany" });
+    assert.equal(
+      (await getSaleDetail(userId, partial))!.lines[0].name.title,
+      "🇵🇱 Polska: Zestaw kasowany — set 2 of 3"
+    );
+
+    // The rest of the offer in one sale — 2 of the 3, still partial — and then a fresh offer whose
+    // every set leaves together, which needs no saying.
+    const whole = await quantityOffer(2);
+    const all = await sale();
+    await addSaleLines(userId, all, [await line(setIds[0]), await line(setIds[2])]);
+    await addSaleLines(
+      userId,
+      all,
+      await Promise.all(
+        whole.setIds.map(async (setId) => ({
+          offerId: whole.offerId,
+          offerSetId: setId,
+          price: "5.00",
+          itemIds: (await setItemIds(setId)).map((r) => r.itemId),
+        }))
+      )
+    );
+    const titles = (await getSaleDetail(userId, all))!.lines.map((l) => l.name.title);
+    assert.ok(titles.includes("🇵🇱 Polska: Zestaw kasowany — set 1 of 3"));
+    assert.ok(titles.includes("🇵🇱 Polska: Zestaw kasowany — set 3 of 3"));
+    assert.equal(titles.filter((t) => !t.includes(" — set ")).length, 2);
+  });
 });

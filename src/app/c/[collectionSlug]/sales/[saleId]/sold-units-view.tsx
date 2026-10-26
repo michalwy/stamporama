@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleCopyRef, SaleDetailLine } from "@/lib/sales";
+import { saleLineHeading } from "@/lib/sale-line-name";
 import { describeEstimated, describeLeftOut, explainWithoutCost, type UnitProfit } from "@/lib/sale-profit";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -967,6 +969,7 @@ function SoldUnitCard({
   onEditPrice: (price: string) => void;
   onChooseSet: () => void;
 }) {
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const { sentinelRef, stuck } = useStuck(0);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
 
@@ -1016,9 +1019,30 @@ function SoldUnitCard({
           bleed={{ top: "0.75rem", bottom: "0.75rem", left: "1rem", right: "0.3125rem" }}
         />
         <div style={{ minWidth: 0, flex: 1 }}>
+          {/* Named by the offer it sold through, and leading back to it (#2189); a set on no offer,
+              or whose offer has gone, keeps its own label. The click is stopped so following the
+              link does not first collapse the card. */}
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {line.setLabel}
+            {line.offerId && line.name.offerNo !== null ? (
+              <Link
+                href={`/c/${collectionSlug}/offers/${line.offerId}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{ color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                {saleLineHeading(line.name)}
+              </Link>
+            ) : (
+              line.name.title
+            )}
           </div>
+          {/* The set's catalogue numbers, cut to one line and in full on hover. */}
+          {line.name.numbers && (
+            <Tooltip content={line.name.numbers} maxWidth="32rem" style={{ display: "flex", minWidth: 0, maxWidth: "100%" }}>
+              <div style={{ minWidth: 0, marginTop: "0.125rem", fontSize: "0.75rem", color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {line.name.numbers}
+              </div>
+            </Tooltip>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}

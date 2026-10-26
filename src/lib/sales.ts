@@ -8,6 +8,7 @@ import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
+import { offerSetOrdinal, saleLineName, type SaleLineName } from "./sale-line-name";
 import { isSellableOfferState, SELLABLE_OFFER_STATES, shipmentGoingBy } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
 import {
@@ -2224,6 +2225,9 @@ export interface SaleDetailLine {
   /** The number (#416) of {@link offerId}, or null with it — what the packing list divided by set
    *  names the set's offer by (#2187). */
   offerNo: number | null;
+  /** What the line is called (#2189): its offer's number and title, with the set's catalogue numbers
+   *  as a second line — or the set's own label on a set that names no offer. */
+  name: SaleLineName;
   price: string;
   /** The line sale price converted to the base currency at the frozen rate (#208), or null when the
    * sale is already in base or no rate is known. */
@@ -2495,7 +2499,22 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           id: true,
           offerSetId: true,
           offerId: true,
-          offer: { select: { offerNo: true } },
+          offer: {
+            select: {
+              offerNo: true,
+              // The title as it reads now (#2189), and the sets it is derived from when there is
+              // none — which also say which of them a line is.
+              name: true,
+              sets: {
+                orderBy: OFFER_SETS_ORDER_BY,
+                select: {
+                  id: true,
+                  title: true,
+                  items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
+                },
+              },
+            },
+          },
           price: true,
           setChoicePending: true,
           setChosenByBuyerAt: true,
@@ -2547,15 +2566,38 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
   );
   const refsOf = (ids: readonly string[]): SaleCopyRef[] =>
     ids.map((itemId) => ({ itemId, label: copyLabelById.get(itemId) ?? "" }));
+  // How many of each offer's sets this sale took: a line says which set it is only when not all.
+  const soldHereByOffer = new Map<string, number>();
+  for (const l of sale.lines) {
+    if (l.offerId) soldHereByOffer.set(l.offerId, (soldHereByOffer.get(l.offerId) ?? 0) + 1);
+  }
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
-    const setLbl = labeller.set(l.offerSet ?? copiesAsLabelSet(l.items));
+    const labelSet = l.offerSet ?? copiesAsLabelSet(l.items);
+    const setLbl = labeller.set(labelSet);
     const net = resolved.netOf(l.id);
+    const ordinal =
+      l.offer && l.offerId && l.offerSetId
+        ? offerSetOrdinal(
+            l.offer.sets.map((s) => s.id),
+            l.offerSetId,
+            soldHereByOffer.get(l.offerId) ?? 0
+          )
+        : null;
     return {
       id: l.id,
       offerSetId: l.offerSetId,
       setLabel: setLbl,
       offerId: l.offerId,
       offerNo: l.offer?.offerNo ?? null,
+      name: saleLineName({
+        setLabel: setLbl,
+        setNumbers: labeller.set({ ...labelSet, title: null }),
+        offer: l.offer && {
+          offerNo: l.offer.offerNo,
+          title: offerDisplayLabel(l.offer.name, l.offer.sets, labeller),
+          set: ordinal && { ...ordinal, ownName: l.offerSet?.title?.trim() || null },
+        },
+      }),
       price: Number(l.price).toFixed(2),
       priceBase:
         sale.currency === baseCurrency || sale.fxRateToBase == null
