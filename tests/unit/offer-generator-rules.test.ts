@@ -205,6 +205,58 @@ describe("assembleSets with mixing (#2102)", () => {
   });
 });
 
+describe("one-stamp series as complete sets (#2202)", () => {
+  const one: LotChecklist = { checklistId: "one", stampIds: ["s9"] };
+
+  it("makes a copy of a one-stamp checklist's stamp a set of its own, never a single", () => {
+    const { sets, singles } = assembleSets([copy("c1", "s9"), copy("c2", "s1"), copy("c3", "s2")], [pair, one], undefined, undefined, true);
+    assert.deepEqual(ids(sets), [["c2", "c3"], ["c1"]]);
+    assert.deepEqual(sets[1].checklistId, "one");
+    assert.equal(singles.length, 0);
+  });
+
+  it("leaves the checklist to the singles with the switch off, as before", () => {
+    const { sets, singles } = assembleSets([copy("c1", "s9")], [one], undefined, undefined, false);
+    assert.equal(sets.length, 0);
+    assert.deepEqual(ids(singles), [["c1"]]);
+  });
+
+  it("follows a set's rules: a variant fills the place, one condition per set", () => {
+    const { sets } = assembleSets(
+      [copy("v", "s9v", { chain: ["s9v", "s9"] }), copy("mh", "s9", { conditionId: "mh" })],
+      [one],
+      undefined,
+      undefined,
+      true
+    );
+    assert.deepEqual(ids(sets), [["mh"], ["v"]]);
+    assert.deepEqual(sets.map((set) => set.combination.conditionId), ["mh", "mnh"]);
+  });
+
+  it("packs identical one-stamp sets into one offer, and lists the copy once across both modes", () => {
+    const copies = [copy("a", "s9"), copy("b", "s9"), copy("c", "s1")];
+    const sets = plan({ copies, checklists: [pair, one], oneStampSets: true });
+    assert.deepEqual(sets.lines.map((line) => ids(line.sets)), [[["a"], ["b"]]]);
+    assert.equal(sets.otherModeCopies, 1);
+    const singles = plan({ copies, checklists: [pair, one], oneStampSets: true, mode: "singles" });
+    assert.deepEqual(singles.lines.map((line) => ids(line.sets)), [[["c"]]]);
+    const before = plan({ copies, checklists: [pair, one], mode: "singles" });
+    assert.equal(before.lines.length, 2);
+  });
+
+  it("adds to an existing offer of exactly that stamp", () => {
+    const { lines } = plan({
+      copies: [copy("a", "s9")],
+      checklists: [one],
+      oneStampSets: true,
+      members: members("o1", "set1", ["s9"]),
+      offers: new Map([["o1", offer("o1", 7)]]),
+    });
+    assert.deepEqual(lines[0].target, { kind: "existing", offerId: "o1" });
+    assert.equal(lines[0].resultingSetCount, 2);
+  });
+});
+
 describe("planOffers with mixing (#2102)", () => {
   const conditions = { condition: true, certificate: false, format: false };
 
@@ -528,6 +580,7 @@ describe("the generator request (#1287)", () => {
       packaging: "separate" as const,
       mixing: { condition: false, certificate: false, format: false },
       priority: "same-first" as const,
+      oneStampSets: false,
       itemIds: ["i1", "i2"],
       filters: "",
       targets: { abc: "o1" },
@@ -559,6 +612,11 @@ describe("the generator request (#1287)", () => {
     assert.equal(mixedParams.get("mixConditions"), "true");
     assert.equal(mixedParams.has("mixCertificates"), false);
     assert.deepEqual(parseGeneratorRequest(mixedParams), { ...mixed, skip: ["l1", "l2"] });
+    // The one-stamp switch (#2202), written only when on.
+    const oneStamp = { ...request, oneStampSets: true };
+    assert.equal(generatorRequestParams(oneStamp).get("oneStampSets"), "true");
+    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(oneStamp)), { ...oneStamp, skip: ["l1", "l2"] });
+    assert.equal(generatorRequestParams(request).has("oneStampSets"), false);
     // No mixing, no priority: the default address is the one it always was.
     assert.equal(generatorRequestParams({ ...request, priority: "free" }).has("mixPriority"), false);
   });

@@ -197,6 +197,7 @@ async function readGeneratorState(
     packaging: input.packaging,
     mixing: input.mixing,
     priority: input.priority,
+    oneStampSets: input.oneStampSets,
     members,
     offers,
     targets: input.targets,
