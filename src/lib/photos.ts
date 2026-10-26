@@ -1219,13 +1219,13 @@ async function deletePhotoBytesForOwner(owner: PhotoOwner): Promise<void> {
  * A storage figure that left the biggest files out would be the one number an operator sizing a
  * volume must not be given. The aggregate is written here rather than imported from
  * `scan-sheets.ts`, which already imports this module. The files attached to conversation log
- * entries (#2150) are counted for the same reason. */
+ * entries (#2150) and a sale's own files (#2198) are counted for the same reason. */
 export async function getCollectionPhotoStorageBytes(
   ownerId: string,
   collectionId: string
 ): Promise<number> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [copyPhotos, stampPhotos, offerPhotos, tilePhotos, purchasePhotos, scanSheets, attachments] = await Promise.all([
+  const [copyPhotos, stampPhotos, offerPhotos, tilePhotos, purchasePhotos, scanSheets, attachments, saleFiles] = await Promise.all([
     prisma.photo.aggregate({
       where: { item: { collectionId } },
       _sum: { sizeBytes: true },
@@ -1257,6 +1257,11 @@ export async function getCollectionPhotoStorageBytes(
       where: { collectionId },
       _sum: { sizeBytes: true },
     }),
+    // A sale's own files (#2198), for the same reason.
+    prisma.saleAttachment.aggregate({
+      where: { collectionId },
+      _sum: { sizeBytes: true },
+    }),
   ]);
   return (
     (copyPhotos._sum.sizeBytes ?? 0) +
@@ -1265,7 +1270,8 @@ export async function getCollectionPhotoStorageBytes(
     (tilePhotos._sum.sizeBytes ?? 0) +
     (purchasePhotos._sum.sizeBytes ?? 0) +
     (scanSheets._sum.sizeBytes ?? 0) +
-    (attachments._sum.sizeBytes ?? 0)
+    (attachments._sum.sizeBytes ?? 0) +
+    (saleFiles._sum.sizeBytes ?? 0)
   );
 }
 

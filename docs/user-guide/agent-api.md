@@ -178,7 +178,11 @@ finding which went and to whom. It can:
 - **sell an offer** — every set it still has — **or one set of it**, at the price the assistant
   read (the winning bid, the price paid), into the buyer's sale you already have open or a new one on
   the day it sold. It is refused wherever **Sell** would refuse, and it never adds to a sale that has
-  already been sent.
+  already been sent;
+- **list a sale's [attachments](sales.md#attachments)** — your photos of the parcel, the posting
+  receipt — and fetch them, which a **read only** token can do too, and **add** pictures and PDFs to
+  a sale. Adding a file changes nothing else on the sale and does not mark it for review; removing
+  one stays on the sale's own screen.
 
 Every sale it records or adds to is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
 until you confirm it. **It cannot delete a sale or move one along** — no *Paid*, *Packed* or *Sent*,

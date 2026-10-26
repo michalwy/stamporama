@@ -1199,3 +1199,35 @@ describe("the agent API's operation modules (#2149)", () => {
     }
   });
 });
+
+/**
+ * **A sale's own files are the agent's to add, not to remove** (#2198): the one write is the sale
+ * screen's own, reached from its own module, and removing a file stays the collector's.
+ */
+describe("the agent API's operation modules (#2198)", () => {
+  const saleFilesModule = path.join(AGENT_API, "operations/sale-attachments.ts");
+
+  it("reach a sale's file write from their own module only, and never the removal", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (name === "removeSaleAttachment") misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        if (name === "addSaleAttachments" && file !== saleFilesModule) {
+          misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        }
+      }
+    }
+    assert.deepEqual(misplaced, [], `A sale's file write belongs to operations/sale-attachments.ts.\n  ${misplaced.join("\n  ")}`);
+    assert.ok(
+      importedBindings(saleFilesModule).some((binding) => binding.name === "addSaleAttachments"),
+      "the walk did not see `addSaleAttachments` in operations/sale-attachments.ts"
+    );
+  });
+
+  it("names only real exports", () => {
+    const domain = readFileSync(path.join(ROOT, "src/lib/sale-attachments.ts"), "utf8");
+    for (const name of ["addSaleAttachments", "removeSaleAttachment"]) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of sale-attachments.ts any more`);
+    }
+  });
+});

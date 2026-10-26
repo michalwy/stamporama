@@ -40,6 +40,7 @@ import { parseAmount, parsePrice } from "@/lib/sale-rules";
 import { assertCollectionOwner } from "@/lib/platform-category";
 import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
 import { sellPhoneOffer, type PhoneOfferSaleInput } from "@/lib/phone-offers";
+import { removeSaleAttachment } from "@/lib/sale-attachments";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
@@ -425,6 +426,17 @@ export async function deleteSaleAction(saleId: string): Promise<SaleActionState>
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the sale.");
+  }
+}
+
+/** Remove one of a sale's own files and delete it (#2198). Adding them is the upload route's. */
+export async function removeSaleAttachmentAction(attachmentId: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await removeSaleAttachment(session.user.id, attachmentId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to remove the file.");
   }
 }
 

@@ -33,3 +33,11 @@ export function agentPhotoUrl(
 export function agentConversationAttachmentUrl(collectionId: string, attachmentId: string): string {
   return `/api/collections/${encodeURIComponent(collectionId)}/conversation-attachments/${encodeURIComponent(attachmentId)}`;
 }
+
+/**
+ * A sale's own file (#2198) — a shipment photo, a posting receipt — on the sale attachment route,
+ * which takes the same bearer token, so a *read only* token fetches it, as an entry's files (#2150).
+ */
+export function agentSaleAttachmentUrl(collectionId: string, attachmentId: string): string {
+  return `/api/collections/${encodeURIComponent(collectionId)}/sale-attachments/${encodeURIComponent(attachmentId)}`;
+}

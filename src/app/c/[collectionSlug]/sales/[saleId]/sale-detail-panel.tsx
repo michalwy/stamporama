@@ -43,6 +43,9 @@ import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
+import { SaleAttachmentsCard } from "./sale-attachments-card";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
@@ -139,6 +142,8 @@ interface SaleDetailPanelProps {
   areas: CollectionAreaData[];
   locations: LocationData[];
   issueHeaderById: Record<string, IssueHeader>;
+  /** The sale's own files (#2198), oldest first. */
+  attachments: SaleAttachmentData[];
 }
 
 export function SaleDetailPanel({
@@ -150,6 +155,7 @@ export function SaleDetailPanel({
   areas,
   locations,
   issueHeaderById,
+  attachments,
 }: SaleDetailPanelProps) {
   const router = useRouter();
   const params = useParams<{ collectionSlug: string }>();
@@ -158,6 +164,8 @@ export function SaleDetailPanel({
   const [isPending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
+  // The Attachments card's file input, which the header's `⋮ → Add attachments` opens (#2198).
+  const attachmentInput = useRef<HTMLInputElement>(null);
 
   const soldDate = formatDate(sale.soldAt);
 
@@ -382,6 +390,21 @@ export function SaleDetailPanel({
               </button>
             </Tooltip>
           )}
+          <RowActionsMenu
+            ariaLabel="Sale actions"
+            actions={[
+              {
+                key: "add-attachments",
+                label: "Add attachments",
+                icon: "attachment",
+                disabled: isPending,
+                onSelect: () => {
+                  setError(undefined);
+                  attachmentInput.current?.click();
+                },
+              },
+            ]}
+          />
         </div>
         <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
           <span style={CHIP}>{soldDate}</span>
@@ -776,6 +799,19 @@ export function SaleDetailPanel({
         myShippingBase={sale.myShippingBase}
         baseCurrency={sale.baseCurrency}
         dictionary={packingSupplies}
+        isPending={isPending}
+        error={error}
+        run={run}
+        clearError={() => setError(undefined)}
+      />
+
+      {/* The sale's own files (#2198): shipment photos, the posting receipt. Drawn once there is
+          one; mounted regardless, because the header's *Add attachments* opens its file input. */}
+      <SaleAttachmentsCard
+        collectionId={collectionId}
+        saleId={sale.id}
+        attachments={attachments}
+        inputRef={attachmentInput}
         isPending={isPending}
         error={error}
         run={run}
