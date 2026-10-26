@@ -224,9 +224,10 @@ describe("specialised checklists (#1617)", () => {
     assert.deepEqual((await getChecklist(userId, collectionId, basicId))?.stampIds, [b]);
     assert.deepEqual((await getChecklist(userId, collectionId, shadesId))?.stampIds, [a, c]);
     // With the switch on the form offered both, so an untick of either is meant — and a stamp that
-    // stays keeps its place in the set (#764).
+    // stays keeps its place in the set (#764). *Basic* follows the issue's order (#2208), so `a`
+    // rejoins it at its place there, ahead of `b`.
     await setStampChecklistsForIssue(userId, collectionId, issueId, a, [basicId, shadesId], true);
-    assert.deepEqual((await getChecklist(userId, collectionId, basicId))?.stampIds, [b, a]);
+    assert.deepEqual((await getChecklist(userId, collectionId, basicId))?.stampIds, [a, b]);
     assert.deepEqual((await getChecklist(userId, collectionId, shadesId))?.stampIds, [a, c]);
     await setStampChecklistsForIssue(userId, collectionId, issueId, a, [basicId], true);
     assert.deepEqual((await getChecklist(userId, collectionId, shadesId))?.stampIds, [c]);

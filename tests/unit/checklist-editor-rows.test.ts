@@ -4,6 +4,7 @@ import {
   moveInOrder,
   restOfTreeRows,
   tickStamp,
+  treeReading,
   untickStamp,
   type StampTreeBranch,
 } from "../../src/lib/checklist-editor-rows";
@@ -66,6 +67,14 @@ describe("tickStamp / untickStamp", () => {
     assert.deepEqual(tickStamp(["b", "a"], "b"), ["b", "a"]);
   });
 
+  it("puts a ticked stamp at its place in the issue's order on a checklist following it (#2208)", () => {
+    assert.deepEqual(tickStamp(["309", "310"], "309AP", ["309", "309A", "309AP", "310"]), [
+      "309",
+      "309AP",
+      "310",
+    ]);
+  });
+
   it("leaves the others in their places when one is taken off", () => {
     assert.deepEqual(untickStamp(["c", "a", "b"], "a"), ["c", "b"]);
   });
@@ -81,5 +90,11 @@ describe("moveInOrder", () => {
     const order = ["a", "b"];
     moveInOrder(order, 0, 1);
     assert.deepEqual(order, ["a", "b"]);
+  });
+});
+
+describe("treeReading (#2208)", () => {
+  it("reads the tree down the page: a stamp, then its variants under it, then the next stamp", () => {
+    assert.deepEqual(treeReading(TREE), ["309", "309A", "309AP", "310"]);
   });
 });

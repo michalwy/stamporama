@@ -58,7 +58,7 @@ import {
   type StampCopyCountMaps,
   type StampCopyCounts,
 } from "./copy-counts";
-import { putStampOnChecklists } from "./checklists";
+import { putStampOnChecklists, syncChecklistsToIssueOrder } from "./checklists";
 import { asChecklistKind, shownChecklists, type ChecklistKind } from "./checklist-kind";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
 import { refreshCandidateCopiesTx } from "./item-candidates";
@@ -325,12 +325,16 @@ export async function deleteStamp(
         where: { parentId: stampId },
         data: { parentId: stamp.parentId },
       });
+      const issues = await tx.issueMember.findMany({ where: { stampId }, select: { issueId: true } });
       await clearStampFromCopiesTx(tx, stampId);
       await tx.stamp.delete({ where: { id: stampId } });
       deletedIds.push(stampId);
       // The children moved up a level, which can join or split the variant trees a candidate set
       // spans (#1651).
       await refreshCandidateCopiesTx(tx, collectionId);
+      // ...and changes how the issue's tree reads down the page, which a checklist following the
+      // issue reads too (#2208).
+      await syncChecklistsToIssueOrder(tx, issues.map((m) => m.issueId));
     });
   } else {
     await prisma.$transaction(async (tx) => {

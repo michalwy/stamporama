@@ -6,6 +6,7 @@ import {
   CHECKLIST_STAMP_ORDER,
   createChecklist,
   deleteChecklist,
+  followIssueOrder,
   getChecklistUsage,
   renameChecklist,
   reorderChecklistStamps,
@@ -41,11 +42,12 @@ import {
 
 // Checklists through the agent API (#1512): list and read them, create one on an issue or spanning
 // several (#1416), rename it and set its translations, add stamps, remove stamps, set their order
-// (#764), and delete one nothing prints.
+// (#764), put an issue's checklist back to following the issue's order (#2208), and delete one
+// nothing prints.
 //
 // **Every write is the app's own**, and the screens' rules hold unchanged: `createChecklist`,
-// `renameChecklist`, `setChecklistStamps`, `reorderChecklistStamps` and `deleteChecklist` are the
-// editors' writes; an add goes through `addStampsToSpanningChecklist` or, on an issue's own checklist,
+// `renameChecklist`, `setChecklistStamps`, `reorderChecklistStamps`, `followIssueOrder` and
+// `deleteChecklist` are the editors' writes; an add goes through `addStampsToSpanningChecklist` or, on an issue's own checklist,
 // `addStampsToIssueChecklist`, which admits only that issue's stamps as its editor does. A checklist
 // printed on an album card changes as it would from the screen: the card reports the difference
 // (#778) at read time, and nothing is reprinted.
@@ -109,6 +111,7 @@ async function describeChecklists(context: OperationContext, ids: readonly strin
         id: true,
         name: true,
         kind: true,
+        ownOrder: true,
         issueId: true,
         issue: { select: { id: true, name: true, year: true } },
         translations: { select: { language: true, name: true } },
@@ -167,6 +170,7 @@ async function describeChecklists(context: OperationContext, ids: readonly strin
           nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
           issue: row.issue,
           coversIssues,
+          ownOrder: row.ownOrder,
           stampCount: row._count.stamps,
           albums: albums.get(id) ?? [],
         },
@@ -220,7 +224,7 @@ export const listChecklistsOperation: Operation = {
   method: "GET",
   path: "/checklists",
   description:
-    "The collection's checklists — each a named set of stamps that counts as one complete unit — with the issue each belongs to, or, for one spanning issues, every issue its stamps come from. The ones spanning issues come first, then each issue's own in the order the Issues list reads. Only standard checklists are listed unless `include_specialised` is sent or `type` asks for specialised ones. A row is the whole checklist but its stamps; `list_checklist_stamps` reads those in order, and `find_checklist_gaps` what is missing.",
+    "The collection's checklists — each a named set of stamps that counts as one complete unit — with the issue each belongs to, or, for one spanning issues, every issue its stamps come from. The ones spanning issues come first, then each issue's own in the order the Issues list reads. Only standard checklists are listed unless `include_specialised` is sent or `type` asks for specialised ones. A row is the whole checklist but its stamps; `list_checklist_stamps` reads those in order, and `find_checklist_gaps` what is missing. An issue's own checklist states `followsIssueOrder`: true while its stamps read in the issue's stamp order and follow it when the issue is reordered, false once it has an order of its own.",
   writes: false,
   parameters: [
     {
@@ -471,7 +475,7 @@ export const addChecklistStampsOperation: Operation = {
   method: "POST",
   path: "/checklists/{checklist_id}/stamps",
   description:
-    "Put stamps on a checklist. They join at the end of its order, in the order sent; one already on it stays where it is. An issue's own checklist holds only stamps filed under that issue, and any other is refused — use a checklist spanning issues for a set across several. A stamp that names nothing, or more than one stamp, refuses the whole call.",
+    "Put stamps on a checklist. They join at the end of its order, in the order sent — or, on an issue's own checklist that follows the issue's stamp order (`followsIssueOrder`), each at its place in that order; one already on it stays where it is. An issue's own checklist holds only stamps filed under that issue, and any other is refused — use a checklist spanning issues for a set across several. A stamp that names nothing, or more than one stamp, refuses the whole call.",
   writes: true,
   parameters: [
     CHECKLIST_ID_PARAMETER,
@@ -599,7 +603,7 @@ export const setChecklistOrderOperation: Operation = {
   method: "POST",
   path: "/checklists/{checklist_id}/order",
   description:
-    "Set the order a checklist's stamps read in — the collector's manual order, which an album page prints as a row. The stamps sent come first, in the order sent; any stamp on it that was not sent follows them, keeping its relative order. Send every stamp to set the whole order. Idempotent: a stamp not on the checklist, or an entry naming no single stamp, is reported and the rest are still placed. Nothing is added or removed.",
+    "Set the order a checklist's stamps read in — the collector's manual order, which an album page prints as a row. The stamps sent come first, in the order sent; any stamp on it that was not sent follows them, keeping its relative order. Send every stamp to set the whole order. On an issue's own checklist this gives it an order of its own, as dragging its stamps does on the screen: it stops following the issue's stamp order (`followsIssueOrder` turns false) until `follow_issue_order` puts it back. Idempotent: a stamp not on the checklist, or an entry naming no single stamp, is reported and the rest are still placed. Nothing is added or removed.",
   writes: true,
   parameters: [
     CHECKLIST_ID_PARAMETER,
@@ -611,6 +615,37 @@ export const setChecklistOrderOperation: Operation = {
       "`checklist` as `list_checklists` now states it, `placed` — how many stamps now lead the order as sent — `keptAfter`, how many were not sent and follow them, `notOnChecklist` and `notFound`. `list_checklist_stamps` reads the order back.",
   },
   handler: async (context, params) => setChecklistOrderFromParams(context, params),
+};
+
+export async function followIssueOrderFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{ checklist: AgentChecklist }> {
+  const checklist = await loadChecklist(context, requiredString(params, "checklist_id"));
+  if (checklist.issueId === null) {
+    throw invalidRequest(
+      `"${checklist.name}" spans issues and has no issue whose order it could follow; its order is always its own. Use \`set_checklist_order\` to change it.`
+    );
+  }
+  await followIssueOrder(context.ownerId, checklist.id);
+  return { checklist: await describeChecklist(context, checklist.id) };
+}
+
+export const followIssueOrderOperation: Operation = {
+  name: "follow_issue_order",
+  method: "POST",
+  path: "/checklists/{checklist_id}/order/follow-issue",
+  description:
+    "Put an issue's own checklist back to following the issue's stamp order — *Follow the issue's order* on the screen. Its stamps read at once as the issue's tree reads top to bottom, a stamp then its variants under it, and follow it whenever the issue is reordered; a stamp joining it takes its place in that order. Undoes the order of its own that `set_checklist_order` gave it. Idempotent: a checklist already following its issue is answered as it is. A checklist spanning issues has no issue to follow and is refused.",
+  writes: true,
+  parameters: [
+    CHECKLIST_ID_PARAMETER,
+  ],
+  result: {
+    kind: "object",
+    description: "`checklist` as `list_checklists` now states it, `followsIssueOrder` true. `list_checklist_stamps` reads the order back.",
+  },
+  handler: async (context, params) => followIssueOrderFromParams(context, params),
 };
 
 // ── Deleting ───────────────────────────────────────────────────────────────

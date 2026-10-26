@@ -7496,6 +7496,13 @@ model Checklist {
   // leaves specialised ones out unless the collector has switched them on (`checklist-kind.ts`);
   // a read naming one by id answers whatever its kind.
   kind         String   @default("standard")
+  // Whether its stamps read in an order of its own (#2208). An issue's checklist that has none
+  // **follows the issue's stamp order**, read flat down the issue's tree, and `ChecklistStamp.sortOrder`
+  // is kept written in that order by every write that changes the issue's tree or the checklist's
+  // stamps (`syncChecklistsToIssueOrder`) — so every reader of the order reads it unchanged. A drag
+  // of its stamps sets this; *Follow the issue's order* clears it. A checklist spanning issues has
+  // no issue to follow and is created with it set.
+  ownOrder     Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -7536,8 +7543,9 @@ model ChecklistStamp {
   // level over — and simpler, because a checklist is **flat** where the issue's stamp tree is not:
   // there are no sibling groups to keep apart, so a reorder densely renumbers the whole list. This
   // is the **collection-wide** answer to "in what order does this set read"; an album page may
-  // override it locally (#767), and the base order is this one. A stamp joining a checklist is
-  // appended at `max(sortOrder) + 1`. Backfilled in catalog-sort order, which is what every
+  // override it locally (#767), and the base order is this one. A stamp joining a checklist with an
+  // order of its own is appended at `max(sortOrder) + 1`; on one following its issue (#2208,
+  // `Checklist.ownOrder`) it takes its place in the issue's order. Backfilled in catalog-sort order, which is what every
   // surface fell back to before the column existed.
   sortOrder   Int    @default(0)
 

@@ -10,6 +10,7 @@ import {
   deleteChecklist,
   reorderChecklists,
   reorderChecklistStamps,
+  followIssueOrder,
   setChecklistStamps,
   getChecklistsForIssue,
   getRunChecklist,
@@ -240,6 +241,18 @@ export async function reorderChecklistStampsAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to reorder the stamps. Please try again." };
+  }
+}
+
+/** Put an issue's checklist back to reading in the issue's stamp order (#2208) — *Follow the issue's
+ *  order*, undoing the order of its own a drag gave it. */
+export async function followIssueOrderAction(checklistId: string): Promise<ChecklistActionState> {
+  const session = await getSession();
+  try {
+    await followIssueOrder(session.user.id, checklistId);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to put the checklist back in the issue's order." };
   }
 }
 

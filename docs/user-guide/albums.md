@@ -254,7 +254,11 @@ there, exactly as the pages would print it.
   from the [Checklists](collections.md#checklists-that-span-several-issues) screen: **⋮ → Add to
   album…** on its row.
 - **Own order** on a row means this album prints that checklist's stamps in an order of its own
-  rather than the one set on the checklist. **Follow the checklist's order** puts it back.
+  rather than the one set on the checklist. **Follow the checklist's order** puts it back. A row
+  following the checklist follows it whichever way the checklist gets its order — its own, or the
+  [issue's](collections.md#managing-an-issues-checklists) — so reordering an issue reorders the album
+  pages of every checklist following it. A printed page reports the change as it reports any other
+  change of order, and nothing is reprinted.
 - The select on each row says **how the checklist prints relative to its issue** — see below.
 
 ### Several checklists of one issue
