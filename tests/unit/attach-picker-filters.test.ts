@@ -13,6 +13,7 @@ import {
   writeAttachQuery,
   type AttachPickerFilters,
 } from "../../src/lib/attach-picker-filters";
+import { NO_LOCATION } from "../../src/lib/location-groups";
 
 // The Attach existing copies picker's own filters (#2121): condition, certificate and format with
 // their null sentinels, the purchase chips, and the state (#2120) — all of them read by the server,
@@ -34,11 +35,13 @@ describe("the picker's query string (#2179)", () => {
         certificateStatusIds: ["none"],
         formatIds: ["single", "pair"],
         purchase: ["on"],
+        locationId: "loc-stockbook",
         sortBy: "value",
         sortDir: "desc",
       }),
       "1950",
-      "#809"
+      "#809",
+      false
     );
     assert.deepEqual(readAttachQuery(params, params.get("search") ?? undefined), {
       dispositions: ["forSale", "forTrade"],
@@ -46,6 +49,8 @@ describe("the picker's query string (#2179)", () => {
       certificateStatusIds: ["none"],
       formatIds: ["single", "pair"],
       purchase: ["on"],
+      locationId: "loc-stockbook",
+      locationExact: true,
       sortBy: "value",
       sortDir: "desc",
       year: 1950,
@@ -78,6 +83,45 @@ describe("the picker's query string (#2179)", () => {
     assert.equal(attachOnPurchase(["none", "on"]), null);
     assert.equal(attachOnPurchase(["on"]), true);
     assert.equal(attachOnPurchase(["none"]), false);
+  });
+});
+
+describe("the location filter (#2209)", () => {
+  it("opens on every location, and sends nothing until one is picked", () => {
+    assert.equal(DEFAULT_ATTACH_FILTERS.locationId, "");
+    const params = new URLSearchParams();
+    writeAttachQuery(params, DEFAULT_ATTACH_FILTERS, null, "", false);
+    assert.equal(params.get("location"), null);
+    assert.equal(params.get("locationExact"), null);
+    const read = readAttachQuery(params, undefined);
+    assert.equal(read.locationId, null);
+    assert.equal(read.locationExact, false);
+  });
+
+  it("brings the nested locations unless this location only is set", () => {
+    const withSubs = new URLSearchParams();
+    writeAttachQuery(withSubs, withFilters({ locationId: "loc-a" }), null, "", true);
+    assert.deepEqual(
+      [readAttachQuery(withSubs, undefined).locationId, readAttachQuery(withSubs, undefined).locationExact],
+      ["loc-a", false]
+    );
+    const only = new URLSearchParams();
+    writeAttachQuery(only, withFilters({ locationId: "loc-a" }), null, "", false);
+    assert.equal(readAttachQuery(only, undefined).locationExact, true);
+  });
+
+  it("asks for the unfiled copies as their own value, which nothing is nested in", () => {
+    const params = new URLSearchParams();
+    writeAttachQuery(params, withFilters({ locationId: NO_LOCATION }), null, "", false);
+    const read = readAttachQuery(params, undefined);
+    assert.equal(read.locationId, NO_LOCATION);
+    assert.equal(read.locationExact, false);
+  });
+
+  it("is remembered with the other filters, and anything unreadable is every location", () => {
+    const f = withFilters({ locationId: "loc-a" });
+    assert.equal(parseAttachFilters(serializeAttachFilters(f)).locationId, "loc-a");
+    assert.equal(parseAttachFilters(JSON.stringify({ locationId: 42 })).locationId, "");
   });
 });
 
@@ -118,6 +162,7 @@ describe("remembered filters (#2121)", () => {
       conditionIds: ["a"],
       purchase: ["none"],
       states: [],
+      locationId: NO_LOCATION,
     });
     assert.deepEqual(parseAttachFilters(serializeAttachFilters(f)), f);
   });

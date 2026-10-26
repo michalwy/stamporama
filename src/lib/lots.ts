@@ -836,6 +836,11 @@ async function planAttachableCopies(
     conditionIds: query.conditionIds,
     certificateStatusIds: query.certificateStatusIds,
     formatIds: query.formatIds,
+    // The Copies list's location filter (#2209): the subtree unless `locationExact`, and
+    // `NO_LOCATION` the copies filed nowhere — resolved by the same `buildItemFilterWhere`.
+    ...(query.locationId
+      ? { locationId: query.locationId, locationExact: query.locationExact || undefined }
+      : {}),
     ...(onlyIds ? { ids: [...onlyIds] } : {}),
   });
   // A lot always belongs to a purchase, so *on a purchase* is *on a lot*.

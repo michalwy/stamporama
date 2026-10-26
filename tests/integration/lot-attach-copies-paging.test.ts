@@ -10,6 +10,7 @@ import {
 import { createPurchase } from "../../src/lib/purchases";
 import { areaRailOrder, sortAttachableCopies } from "../../src/lib/attach-picker-sort";
 import { copyMatchesSearch } from "../../src/lib/copy-search";
+import { NO_LOCATION } from "../../src/lib/location-groups";
 
 // The Attach existing copies picker reads its list a page at a time, with every filter, the year,
 // the search and the sort applied where the copies are read (#2179). The rows and their order must
@@ -25,6 +26,7 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
   let certId: string;
   let pairId: string;
   let areaIds: { europe: string; poland: string; germany: string };
+  let locationIds: { box: string; stockbook: string };
   const COUNT = 120;
 
   before(async () => {
@@ -80,6 +82,13 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
         data: { collectionId, name: "Pair", abbreviation: "P", sortOrder: 0 },
       })
     ).id;
+
+    // A box holding copies of its own, with a stockbook nested inside it (#2209).
+    const box = await prisma.location.create({ data: { collectionId, name: "Box", code: "BOX" } });
+    const stockbook = await prisma.location.create({
+      data: { collectionId, name: "Stockbook", code: "SB", parentId: box.id },
+    });
+    locationIds = { box: box.id, stockbook: stockbook.id };
 
     const purchase = await createPurchase(userId, collectionId, {
       currency: "EUR",
@@ -139,6 +148,7 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
           forSale: i % 4 === 1 || i % 4 === 2,
           forTrade: i % 5 === 2,
           deliveryState: "delivered",
+          locationId: [null, box.id, stockbook.id][i % 3 === 0 ? 0 : i % 5 === 0 ? 1 : 2],
           locationRef: i === 7 ? "Shelf Q9" : null,
           createdAt: new Date(Date.UTC(2026, 0, 1, 0, (i * 29) % COUNT)),
         },
@@ -257,6 +267,41 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
     assert.deepEqual(in1951.yearFacets, page.yearFacets, "choosing a year leaves the others counted");
     const noYear = await listAttachableCopies(userId, lotId, { year: "none" });
     assert.equal(noYear.total, all.filter((c) => c.issuedYear === null).length);
+  });
+
+  it("narrows by location, the nested ones included unless this location only is set (#2209)", async () => {
+    const all = await everything({});
+    const ids = (rows: AttachableCopy[]) => rows.map((r) => r.id).sort();
+    const { box, stockbook } = locationIds;
+    const cases: [AttachableCopiesQuery, (c: AttachableCopy) => boolean][] = [
+      [{ locationId: box }, (c) => c.locationId === box || c.locationId === stockbook],
+      [{ locationId: box, locationExact: true }, (c) => c.locationId === box],
+      [{ locationId: stockbook }, (c) => c.locationId === stockbook],
+      [{ locationId: NO_LOCATION }, (c) => c.locationId === null],
+      [
+        { locationId: box, conditionIds: [usedId], search: "stamp 1" },
+        (c) =>
+          (c.locationId === box || c.locationId === stockbook) &&
+          c.conditionId === usedId &&
+          copyMatchesSearch(c, "stamp 1", () => []),
+      ],
+    ];
+    for (const [query, keep] of cases) {
+      const narrowed = await everything(query);
+      assert.ok(narrowed.length > 0, JSON.stringify(query));
+      assert.deepEqual(ids(narrowed), ids(all.filter(keep)), JSON.stringify(query));
+    }
+    // The page's total and the hidden-ticks count follow it as they follow the other filters.
+    const inBox = all.filter((c) => c.locationId === box);
+    assert.equal(
+      (await listAttachableCopies(userId, lotId, { locationId: box, locationExact: true })).total,
+      inBox.length
+    );
+    const ticked = [all.find((c) => c.locationId === box)!, all.find((c) => c.locationId === null)!];
+    assert.equal(
+      await countAttachableAmong(userId, lotId, { locationId: box }, ticked.map((c) => c.id)),
+      1
+    );
   });
 
   it("narrows by the area rail", async () => {

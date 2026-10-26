@@ -42,7 +42,9 @@ import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-co
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SortControl } from "@/app/c/[collectionSlug]/shared/list-toolbar";
-import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
+import { SubtreeScopeToggle, useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
+import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
+import { NO_LOCATION } from "@/lib/location-groups";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -212,8 +214,8 @@ function useTicksInFilter(
  * Modelled on the offer composition picker: area tree + year facets on the left, a text-filterable
  * list of eligible copies on the right, each a checkbox row rendered with `InventoryItemRow` so a
  * copy reads the same here as everywhere else. Above the list, the picker's own filters (#2121):
- * disposition (#2180), condition, certificate and format as the Copies list draws them, whether a
- * copy is on a purchase,
+ * disposition (#2180), condition, certificate, format and location (#2209) as the Copies list draws
+ * them, whether a copy is on a purchase,
  * and whether it is still held — the copies that have been sold or written off are offered too
  * (#2120), because a copy that left before its receipt was recorded still needs a cost. Beside them,
  * the sort (#2147): catalogue order by default, so the copies come in the order a receipt or an album
@@ -270,7 +272,16 @@ export function AttachCopiesDialog({
     "attach-copies-filters",
     collectionId
   );
-  const filters = useMemo(() => parseAttachFilters(storedFilters), [storedFilters]);
+  const filters = useMemo(() => {
+    const parsed = parseAttachFilters(storedFilters);
+    // A remembered location that has since been deleted is every location, not an empty list
+    // nobody can see the reason for (#2209).
+    const known =
+      parsed.locationId === "" ||
+      parsed.locationId === NO_LOCATION ||
+      locations.some((l) => l.id === parsed.locationId);
+    return known ? parsed : { ...parsed, locationId: "" };
+  }, [storedFilters, locations]);
   const setFilters = (patch: Partial<AttachPickerFilters>) =>
     storeFilters(serializeAttachFilters({ ...filters, ...patch }));
   const states = useMemo(() => effectiveAttachStates(filters.states), [filters.states]);
@@ -291,6 +302,9 @@ export function AttachCopiesDialog({
   const { invalidateList } = useInvalidateInventory();
 
   const [includeSubAreas] = useSubtreeScope("area");
+  // The Copies list's way of reading the location tree (#2209), shared with it as the area's is.
+  const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
+  const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   const areaIds = useMemo(
     () => resolveAreaFilterIds(areas, areaId, includeSubAreas),
     [areas, areaId, includeSubAreas]
@@ -301,9 +315,9 @@ export function AttachCopiesDialog({
   const query = useMemo(() => {
     const params = new URLSearchParams();
     for (const state of states) params.append("state", state);
-    writeAttachQuery(params, filters, year, debouncedSearch);
+    writeAttachQuery(params, filters, year, debouncedSearch, includeSubLocations);
     return params.toString();
-  }, [states, filters, year, debouncedSearch]);
+  }, [states, filters, year, debouncedSearch, includeSubLocations]);
   const {
     data,
     isLoading,
@@ -324,6 +338,7 @@ export function AttachCopiesDialog({
     filters.conditionIds.length > 0 ||
     filters.certificateStatusIds.length > 0 ||
     filters.formatIds.length > 0 ||
+    filters.locationId !== "" ||
     filters.purchase.length === 1;
   const loadMore = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
@@ -592,6 +607,31 @@ export function AttachCopiesDialog({
                   allLabel="All formats"
                   itemNoun="formats"
                   ariaLabel="Filter by format"
+                />
+              </FilterSlot>
+            )}
+            {/* Location (#2209), the Copies list's control and its reading: a location brings the
+                ones nested in it unless *this location only* is set, *Not filed* is the copies
+                filed nowhere, and the dropdown stays open on a pick (#846). */}
+            {locations.length > 0 && (
+              <FilterSlot width={FILTER_WIDTH.location}>
+                <LocationTreeSelect
+                  locations={locations}
+                  locationTree={locationTree}
+                  name="attach-location-filter"
+                  selectedId={filters.locationId}
+                  onSelectedIdChange={(id) => setFilters({ locationId: id })}
+                  noneOptionLabel="All locations"
+                  extraOption={{ id: NO_LOCATION, label: "Not filed" }}
+                  filterActive={filters.locationId !== ""}
+                  closeOnSelect={false}
+                  panelFooter={
+                    <SubtreeScopeToggle
+                      axis="location"
+                      includeDescendants={includeSubLocations}
+                      onChange={setIncludeSubLocations}
+                    />
+                  }
                 />
               </FilterSlot>
             )}

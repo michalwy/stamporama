@@ -2691,6 +2691,11 @@ Above the list sits a row of filters, in any combination:
 - **Condition**, **certificate** and **format**, as on the Copies list. *No certificate* and *Single*
   can be ticked like any other value. The certificate and format filters appear only when your
   collection defines certificate statuses or formats.
+- **Location**, as on the Copies list — pick a box or a stockbook to list only what is filed there.
+  A location brings every location nested inside it; switch to **this location only** at the foot of
+  the dropdown to leave those out. **Not filed** lists the copies filed nowhere. The dropdown stays
+  open after a pick. The location you pick here is the picker's own: it does not narrow the Copies
+  list, nor the Copies list's this one. The filter appears only when your collection has locations.
 
 At the end of the row, **Sort** puts the list in order — by **Catalogue number** (the order a
 catalogue or an album lists them: area, year, issue, then the stamp's place in its issue, a piece
