@@ -24,6 +24,7 @@ const ROW: ChecklistRow = {
     { id: "i1", name: "Grosik", year: 1928 },
     { id: "i2", name: null, year: null },
   ],
+  ownOrder: true,
   stampCount: 12,
   albums: [],
 };
@@ -56,6 +57,13 @@ describe("agentChecklist", () => {
     assert.equal(stated.coversIssues, undefined, "an anchored checklist does not restate what it covers");
     assert.deepEqual(stated.translatedNames, { de: "Satz" });
     assert.deepEqual(stated.albums, ["Poland I"]);
+  });
+
+  it("says whether an issue's own checklist follows the issue's order, and says nothing on a spanning one (#2208)", () => {
+    const issue = { id: "i1", name: "Grosik", year: 1928 };
+    assert.equal(agentChecklist({ ...ROW, issue, ownOrder: false }, "/c/x/issues/i1").followsIssueOrder, true);
+    assert.equal(agentChecklist({ ...ROW, issue, ownOrder: true }, "/c/x/issues/i1").followsIssueOrder, false);
+    assert.equal(agentChecklist(ROW, "/c/x/checklists").followsIssueOrder, undefined);
   });
 });
 

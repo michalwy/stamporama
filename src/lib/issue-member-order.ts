@@ -135,6 +135,22 @@ export function flattenMemberTree(
   return out;
 }
 
+/**
+ * A checklist that follows its issue's order (#2208): its stamps in the order the issue's tree reads
+ * down the page ({@link flattenMemberTree}), keeping only the ones on the checklist. A stamp on it
+ * that the tree does not reach — one that is not a member of the issue — reads after the issue's,
+ * in the order it already had, so nothing on the checklist is ever dropped.
+ */
+export function checklistInIssueOrder(
+  issueReading: readonly string[],
+  checklistStampIds: readonly string[]
+): string[] {
+  const on = new Set(checklistStampIds);
+  const placed = issueReading.filter((id) => on.has(id));
+  const reached = new Set(placed);
+  return [...placed, ...checklistStampIds.filter((id) => !reached.has(id))];
+}
+
 /** Move one element of a list, the way a drop does: `to` is the index it ends up at. */
 export function moveInOrder<T>(items: readonly T[], from: number, to: number): T[] {
   const next = [...items];

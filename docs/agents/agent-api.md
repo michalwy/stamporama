@@ -2614,9 +2614,9 @@ no row showed. Settled with the collector on 2026-10-25:
 
 ## Changing checklists
 
-**Eight operations, six of which write** (#1512): a checklist created on an issue or spanning several
-(#1416), renamed and translated, its stamps added, taken off and put in order (#764), and one no album
-prints deleted — *make a checklist of the watermark Y stamps of this issue*, *take the reprints out of
+**Nine operations, seven of which write** (#1512, #2208): a checklist created on an issue or spanning
+several (#1416), renamed and translated, its stamps added, taken off and put in order (#764), an
+issue's checklist put back to following the issue's order (#2208), and one no album prints deleted — *make a checklist of the watermark Y stamps of this issue*, *take the reprints out of
 this one*. What a checklist is, and how completeness and gaps are computed, did not change.
 
 | operation | writes | what it is for |
@@ -2625,9 +2625,10 @@ this one*. What a checklist is, and how completeness and gaps are computed, did 
 | `list_checklist_stamps` | no | one checklist's stamps in their order, paged, with the checklist (`GET /checklists/{checklist_id}/stamps`) |
 | `create_checklist` | yes | an empty checklist on an issue, or without `issue_id` spanning issues, of the `type` sent (standard by default) |
 | `update_checklist` | yes | its name, translated names and `type`, only what is sent |
-| `add_checklist_stamps` | yes | stamps appended in the order sent |
+| `add_checklist_stamps` | yes | stamps appended in the order sent; on a checklist following its issue, each at its place in the issue's order |
 | `remove_checklist_stamps` | yes | stamps taken off, the stamps kept (`POST …/stamps/remove`) |
-| `set_checklist_order` | yes | the stamps sent first, the rest after them as they were (`POST …/order`) |
+| `set_checklist_order` | yes | the stamps sent first, the rest after them as they were; an issue's checklist then has an order of its own (`POST …/order`) |
+| `follow_issue_order` | yes | an issue's checklist back to following the issue's stamp order (`POST …/order/follow-issue`) |
 | `delete_checklist` | yes | a checklist no album prints |
 
 **The reads answer what `get_issue` and `find_checklist_gaps` did not**: `get_issue` names an issue's
@@ -2672,6 +2673,23 @@ album is the one thing there is to refuse on.
 collection would now produce, at read time, so a membership or order change made here shows up on a
 printed card exactly as one made on the screen, and nothing is reprinted.
 
+### Following the issue's order (#2208)
+
+**An issue's checklist follows the issue's stamp order until it is given one of its own**
+(`Checklist.ownOrder`, `catalog-and-stamps.md`). Every checklist row states it as `followsIssueOrder`
+on an issue's own checklist — true while it follows, false once it has an order of its own — and
+leaves it out on one spanning issues, which has no issue to follow; `agentChecklist` derives it from
+the row. **`set_checklist_order` gives the checklist an order of its own**, because it is
+`reorderChecklistStamps`, the editor's drag, and the drag is what sets the flag. **`follow_issue_order`
+is the new write that puts it back**: `followIssueOrder`, the editor's *Follow the issue's order*,
+which clears the flag and rewrites the order in the issue's at once; calling it on a checklist that
+already follows changes nothing and answers the row, and a spanning checklist is refused before the
+write. An add (`addStampsToIssueChecklist`) and the editor's tick (`setChecklistStamps`) on a
+following checklist place each stamp at its place in the issue's order rather than the end, and a
+move of a stamp into the issue (`move_stamp_to_issue`) or out of its parent (`move_stamp_variant`)
+reorders the following checklists it touches — all through `syncChecklistsToIssueOrder`, so nothing
+in the operation modules knows the rule.
+
 ### A checklist's type (#1617)
 
 **Every checklist an operation returns carries its `type`, `standard` or `specialised`** — ADR-0031
@@ -2707,7 +2725,8 @@ specialised, which is the collector's decision about their own data rather than 
 
 **The boundary moved by exactly these operations.** `CHECKLIST_WRITES` in
 `tests/unit/agent-api-operation-boundary.test.ts` pins the checklist writes `operations/checklists.ts`
-imports and fails if any other operation module imports one; `reorderChecklists` joined
+imports and fails if any other operation module imports one — `followIssueOrder` joined it with #2208,
+and its name pattern learned `follow`; `reorderChecklists` joined
 `CATALOG_BOUNDARY`. `tests/integration/agent-api-checklists.test.ts` pins the exact list of operations
 under `/checklists`.
 

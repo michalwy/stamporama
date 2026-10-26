@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  checklistInIssueOrder,
   checkSiblingGroup,
   effectiveParentId,
   moveInOrder,
@@ -100,5 +101,21 @@ describe("moveInOrder", () => {
 
   it("leaves the list alone when nothing moves", () => {
     assert.deepEqual(moveInOrder(["a", "b", "c"], 1, 1), ["a", "b", "c"]);
+  });
+});
+
+describe("checklistInIssueOrder (#2208)", () => {
+  const READING = ["a", "b", "b1", "b2"];
+
+  it("reads a checklist's stamps as the issue's tree reads, keeping only those on it", () => {
+    assert.deepEqual(checklistInIssueOrder(READING, ["b2", "a", "b"]), ["a", "b", "b2"]);
+  });
+
+  it("puts a stamp the tree does not reach after the issue's, in the order it had", () => {
+    assert.deepEqual(checklistInIssueOrder(READING, ["y", "b1", "x", "a"]), ["a", "b1", "y", "x"]);
+  });
+
+  it("answers an empty checklist with nothing", () => {
+    assert.deepEqual(checklistInIssueOrder(READING, []), []);
   });
 });

@@ -8,6 +8,7 @@ import {
   type ChecklistKind,
 } from "./checklist-kind";
 import type { RunChecklist } from "./issue-run";
+import { checklistInIssueOrder, flattenMemberTree } from "./issue-member-order";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -27,6 +28,12 @@ import {
 // A checklist is *standard* or *specialised* (#1617, `checklist-kind.ts`): every read here that
 // lists checklists takes `includeSpecialised` and leaves specialised ones out without it, and a read
 // naming one by id answers whatever its kind.
+//
+// An issue's checklist **follows the issue's stamp order** until it is given an order of its own
+// (#2208, `Checklist.ownOrder`). Following is stored, not computed on read: every write that changes
+// the issue's tree or such a checklist's stamps ends with {@link syncChecklistsToIssueOrder}, which
+// rewrites its `sortOrder` in the issue's order — so album pages, intakes, lots, trades and gaps,
+// which all read `sortOrder`, follow the issue without knowing it.
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const col = await prisma.collection.findUnique({
@@ -59,6 +66,9 @@ export interface ChecklistData {
    *  in its own language reads. */
   nameByLanguage: Record<string, string>;
   sortOrder: number;
+  /** Its stamps read in the issue's order (#2208): an issue's checklist never given an order of its
+   *  own. False for one that has one, and always for a checklist spanning issues. */
+  followsIssueOrder: boolean;
   /** Stamps on the checklist — the set completeness, the price total and the range are all read
    *  against — **in the order the set reads** (#764), which an album page then prints as a row. */
   stampIds: string[];
@@ -69,6 +79,7 @@ const CHECKLIST_SELECT = {
   issueId: true,
   name: true,
   kind: true,
+  ownOrder: true,
   translations: { select: { language: true, name: true } },
   sortOrder: true,
   stamps: { select: { stampId: true, sortOrder: true } },
@@ -122,6 +133,7 @@ function toChecklistData(row: {
   issueId: string | null;
   name: string;
   kind: string;
+  ownOrder: boolean;
   translations: { language: string; name: string | null }[];
   sortOrder: number;
   stamps: { stampId: string; sortOrder: number }[];
@@ -133,8 +145,61 @@ function toChecklistData(row: {
     kind: asChecklistKind(row.kind),
     nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
     sortOrder: row.sortOrder,
+    followsIssueOrder: row.issueId !== null && !row.ownOrder,
     stampIds: orderedChecklistStampIds(row.stamps),
   };
+}
+
+/**
+ * Write the order of every checklist of these issues that follows its issue (#2208): its stamps as
+ * the issue's tree reads down the page, any stamp the tree does not reach after them
+ * ({@link checklistInIssueOrder}). Only the rows whose place changes are written.
+ *
+ * Called at the end of every write that can change an issue's tree — a reorder, a stamp added, moved
+ * in, moved out or reparented — or the stamps on one of its checklists, on the caller's transaction
+ * client; not owner-checked, since every caller has authorized the collection. A null id (a checklist
+ * spanning issues) is skipped.
+ */
+export async function syncChecklistsToIssueOrder(
+  tx: DbTransaction,
+  issueIds: readonly (string | null)[]
+): Promise<void> {
+  const ids = [...new Set(issueIds.filter((id): id is string => id !== null))];
+  if (ids.length === 0) return;
+  const checklists = await tx.checklist.findMany({
+    where: { issueId: { in: ids }, ownOrder: false },
+    select: { id: true, issueId: true, stamps: { select: { stampId: true, sortOrder: true } } },
+  });
+  if (checklists.length === 0) return;
+  const members = await tx.issueMember.findMany({
+    where: { issueId: { in: [...new Set(checklists.map((c) => c.issueId as string))] } },
+    select: { issueId: true, stampId: true, sortOrder: true, stamp: { select: { parentId: true } } },
+  });
+  const membersOf = new Map<string, { stampId: string; parentId: string | null; sortOrder: number }[]>();
+  for (const m of members) {
+    const member = { stampId: m.stampId, parentId: m.stamp.parentId, sortOrder: m.sortOrder };
+    const list = membersOf.get(m.issueId);
+    if (list) list.push(member);
+    else membersOf.set(m.issueId, [member]);
+  }
+  const readingOf = new Map<string, string[]>();
+  for (const checklist of checklists) {
+    const issueId = checklist.issueId as string;
+    let reading = readingOf.get(issueId);
+    if (!reading) {
+      reading = flattenMemberTree(membersOf.get(issueId) ?? []).map((r) => r.stampId);
+      readingOf.set(issueId, reading);
+    }
+    const heldAt = new Map(checklist.stamps.map((s) => [s.stampId, s.sortOrder]));
+    const ordered = checklistInIssueOrder(reading, orderedChecklistStampIds(checklist.stamps));
+    for (const [i, stampId] of ordered.entries()) {
+      if (heldAt.get(stampId) === i) continue;
+      await tx.checklistStamp.update({
+        where: { checklistId_stampId: { checklistId: checklist.id, stampId } },
+        data: { sortOrder: i },
+      });
+    }
+  }
 }
 
 /**
@@ -390,6 +455,9 @@ export async function createChecklist(
         issueId: input.issueId,
         name,
         kind: input.kind ?? DEFAULT_CHECKLIST_KIND,
+        // An issue's checklist follows the issue's order from the start (#2208); one spanning
+        // issues has no issue to follow.
+        ownOrder: input.issueId === null,
         sortOrder: (last?.sortOrder ?? -1) + 1,
       },
       select: { id: true },
@@ -505,6 +573,9 @@ export async function setChecklistStamps(
   // place, and the ones just ticked are appended in the order the tree offered them — ticking a
   // box is an answer about what the set contains, and it must not silently undo an order the
   // collector dragged into shape.
+  //
+  // On a checklist following its issue (#2208) the ones just ticked take their places in the issue's
+  // order instead, which the sync below writes.
   const before = await prisma.checklistStamp.findMany({
     where: { checklistId },
     select: { stampId: true, sortOrder: true },
@@ -515,17 +586,20 @@ export async function setChecklistStamps(
     ...orderedChecklistStampIds(before).filter((id) => kept.has(id)),
     ...valid.filter((id) => !held.has(id)),
   ];
-  await prisma.$transaction([
-    prisma.checklistStamp.deleteMany({ where: { checklistId } }),
-    ...(ordered.length > 0
-      ? [
-          prisma.checklistStamp.createMany({
-            data: ordered.map((stampId, i) => ({ checklistId, stampId, sortOrder: i })),
-            skipDuplicates: true,
-          }),
-        ]
-      : []),
-  ]);
+  const { issueId } = await prisma.checklist.findUniqueOrThrow({
+    where: { id: checklistId },
+    select: { issueId: true },
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.checklistStamp.deleteMany({ where: { checklistId } });
+    if (ordered.length > 0) {
+      await tx.checklistStamp.createMany({
+        data: ordered.map((stampId, i) => ({ checklistId, stampId, sortOrder: i })),
+        skipDuplicates: true,
+      });
+    }
+    await syncChecklistsToIssueOrder(tx, [issueId]);
+  });
 }
 
 /**
@@ -599,7 +673,8 @@ export async function addStampsToIssueChecklist(
 }
 
 /** The additive half both adds share: `stampIds` in the order given, restricted to `valid`, appended
- *  after the checklist's last stamp; one already on it keeps its place. */
+ *  after the checklist's last stamp; one already on it keeps its place. On an issue's checklist that
+ *  follows the issue (#2208) the new ones then take their places in the issue's order. */
 async function appendChecklistStamps(
   checklistId: string,
   stampIds: string[],
@@ -620,6 +695,11 @@ async function appendChecklistStamps(
       data: joining.map((stampId, i) => ({ checklistId, stampId, sortOrder: last + 1 + i })),
       skipDuplicates: true,
     });
+    const { issueId } = await tx.checklist.findUniqueOrThrow({
+      where: { id: checklistId },
+      select: { issueId: true },
+    });
+    await syncChecklistsToIssueOrder(tx, [issueId]);
     return joining.length;
   });
 }
@@ -650,6 +730,10 @@ export async function getChecklistUsage(
  * apart: the whole list is densely renumbered. Ids that are not on this checklist are ignored
  * rather than rejected, and members the client left out keep their relative order at the end — a
  * stale list must be able to move what it names without dropping what it never saw.
+ *
+ * **Setting the order gives the checklist an order of its own** (#2208): an issue's checklist that
+ * followed the issue stops following it, as a drag of its stamps does on the screen, until
+ * {@link followIssueOrder} puts it back.
  */
 export async function reorderChecklistStamps(
   ownerId: string,
@@ -669,14 +753,36 @@ export async function reorderChecklistStamps(
     ...named,
     ...orderedChecklistStampIds(members).filter((id) => !namedSet.has(id)),
   ];
-  await prisma.$transaction(
-    ordered.map((stampId, i) =>
+  await prisma.$transaction([
+    prisma.checklist.update({ where: { id: checklistId }, data: { ownOrder: true } }),
+    ...ordered.map((stampId, i) =>
       prisma.checklistStamp.update({
         where: { checklistId_stampId: { checklistId, stampId } },
         data: { sortOrder: i },
       })
-    )
-  );
+    ),
+  ]);
+}
+
+/**
+ * Put an issue's checklist back to following the issue's stamp order (#2208) — *Follow the issue's
+ * order* in its editor, and the agent API's write for it. Its stamps are rewritten in the issue's
+ * order at once. A checklist spanning issues has no issue to follow and is refused.
+ */
+export async function followIssueOrder(ownerId: string, checklistId: string): Promise<void> {
+  const collectionId = await resolveChecklistCollection(checklistId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const { issueId } = await prisma.checklist.findUniqueOrThrow({
+    where: { id: checklistId },
+    select: { issueId: true },
+  });
+  if (issueId === null) {
+    throw new Error("A checklist spanning issues has no issue order to follow.");
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.checklist.update({ where: { id: checklistId }, data: { ownOrder: false } });
+    await syncChecklistsToIssueOrder(tx, [issueId]);
+  });
 }
 
 /**
@@ -713,8 +819,8 @@ export async function putStampOnChecklists(
   }
   // Where this stamp already sits on a checklist, it keeps its place (#764): editing a stamp is not
   // a statement about the set's order, and the rows go through a delete/insert only because the
-  // membership is written as a set. A checklist it joins now appends it at the end — the same rule
-  // `IssueMember` follows, and the only position that cannot be wrong.
+  // membership is written as a set. A checklist with an order of its own that it joins now appends
+  // it at the end — the same rule `IssueMember` follows, and the only position that cannot be wrong.
   const [before, ends] = await Promise.all([
     tx.checklistStamp.findMany({
       where: { stampId, checklist: { collectionId, issueId, ...shown } },
@@ -743,6 +849,9 @@ export async function putStampOnChecklists(
       skipDuplicates: true,
     });
   }
+  // On a checklist following the issue (#2208), a stamp joining it takes its place in the issue's
+  // order rather than the end.
+  await syncChecklistsToIssueOrder(tx, [issueId]);
 }
 
 /** {@link putStampOnChecklists} for a caller with no transaction of its own. */

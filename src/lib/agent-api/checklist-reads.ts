@@ -33,6 +33,9 @@ export interface AgentChecklist {
   readonly issue?: AgentChecklistIssue;
   /** On a checklist spanning issues only: every issue one of its stamps is filed under. */
   readonly coversIssues?: readonly AgentChecklistIssue[];
+  /** On an issue's own checklist only (#2208): its stamps read in the issue's stamp order and follow
+   *  it when the issue is reordered — false once `set_checklist_order` gave it an order of its own. */
+  readonly followsIssueOrder?: boolean;
   readonly stampCount: number;
   /** The albums printing it (#755) — why `delete_checklist` would refuse. Absent when none do. */
   readonly albums?: readonly string[];
@@ -46,6 +49,8 @@ export interface ChecklistRow {
   readonly nameByLanguage: Readonly<Record<string, string>>;
   readonly issue: { readonly id: string; readonly name: string | null; readonly year: number | null } | null;
   readonly coversIssues: readonly { readonly id: string; readonly name: string | null; readonly year: number | null }[];
+  /** `Checklist.ownOrder` (#2208). */
+  readonly ownOrder: boolean;
   readonly stampCount: number;
   readonly albums: readonly string[];
 }
@@ -63,6 +68,7 @@ export function agentChecklist(row: ChecklistRow, path: string): AgentChecklist 
     spansIssues: row.issue === null,
     issue: row.issue ? issueOf(row.issue) : undefined,
     coversIssues: row.issue === null ? row.coversIssues.map(issueOf) : undefined,
+    followsIssueOrder: row.issue !== null ? !row.ownOrder : undefined,
     stampCount: row.stampCount,
     albums: row.albums.length > 0 ? [...row.albums] : undefined,
     path,

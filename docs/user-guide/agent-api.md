@@ -437,19 +437,25 @@ for you: *a checklist of the watermark Y stamps of this issue*, *a checklist of 
 1928–1932*, *take the reprints out of this one*. It can:
 
 - **list your checklists**, each with the issue it belongs to — or, for one spanning issues, every
-  issue its stamps come from — how many stamps it holds and which albums print it, and **read a
-  checklist's stamps in their order**. A **read only** token can do this much;
+  issue its stamps come from — how many stamps it holds, which albums print it and, for an issue's
+  own, whether it **follows the issue's order** — and **read a checklist's stamps in their order**. A
+  **read only** token can do this much;
 - **create a checklist** on an issue, or one spanning issues like the ones on the *Checklists* screen,
   and give it its [type](collections.md#standard-and-specialised-checklists) — a checklist of one
   stamp's colour variants is made *specialised*, an everyday set *standard*;
 - **rename one**, set or take off its name in your other languages, and change its type;
-- **add stamps** to it, at the end of its order. An issue's own checklist takes only that issue's
+- **add stamps** to it, at the end of its order — or, on a checklist following its issue's order, each
+  at its place in that order. An issue's own checklist takes only that issue's
   stamps, as its editor on the issue offers only those; a stamp of another issue is refused, and
   belongs on a checklist spanning issues;
 - **take stamps off** it. The stamps themselves stay in your catalogue and in their issue — only the
   set stops counting them;
 - **set the order** its stamps read in, the one an album page prints them in: the stamps it names
-  come first, in the order named, and any it leaves out follow them as they were;
+  come first, in the order named, and any it leaves out follow them as they were. On an issue's own
+  checklist this gives it an [order of its own](collections.md#managing-an-issues-checklists), as
+  dragging its stamps does;
+- **put an issue's checklist back to following the issue's order** — *Follow the issue's order* on
+  the screen. A checklist spanning issues has no issue to follow, and is refused;
 - **delete a checklist no album prints.** One that an album prints is refused, and the assistant is
   told which albums — take it out of them first, or delete it yourself on the screen, where the
   confirmation says what it takes with it.

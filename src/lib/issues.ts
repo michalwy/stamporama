@@ -50,7 +50,12 @@ import {
   type StampCopyCounts,
 } from "./copy-counts";
 import { allocateEntityNumber } from "./items";
-import { assertIssueChecklist, ensureIssueChecklist, putStampOnChecklists } from "./checklists";
+import {
+  assertIssueChecklist,
+  ensureIssueChecklist,
+  putStampOnChecklists,
+  syncChecklistsToIssueOrder,
+} from "./checklists";
 import {
   asChecklistKind,
   shownChecklists,
@@ -1891,6 +1896,8 @@ async function createRangeStamps(
       skipDuplicates: true,
     });
   }
+  // A checklist following the issue (#2208) reads the new stamps where the issue's tree has them.
+  await syncChecklistsToIssueOrder(tx, [issueId]);
 
   const catalogNumberRows: { stampId: string; catalogVendorId: string; number: string }[] = [];
   for (let i = 0; i < stampIds.length; i++) {
@@ -2443,6 +2450,8 @@ export async function addVariantTreeToStamp(
           data: { sortOrder },
         });
       }
+      // The levels just renumbered are read by every checklist following the issue (#2208).
+      await syncChecklistsToIssueOrder(tx, [issueId]);
       return ids;
     },
     { timeout: 60_000, maxWait: 10_000 }
@@ -2921,14 +2930,16 @@ export async function reorderIssueMembers(
   );
   if (!check.ok) throw new Error(check.reason);
 
-  await prisma.$transaction(
-    sortOrderAssignments(orderedStampIds).map(({ stampId, sortOrder }) =>
-      prisma.issueMember.update({
+  await prisma.$transaction(async (tx) => {
+    for (const { stampId, sortOrder } of sortOrderAssignments(orderedStampIds)) {
+      await tx.issueMember.update({
         where: { issueId_stampId: { issueId, stampId } },
         data: { sortOrder },
-      })
-    )
-  );
+      });
+    }
+    // Every checklist of the issue that follows it (#2208) reads in the new order.
+    await syncChecklistsToIssueOrder(tx, [issueId]);
+  });
 }
 
 export async function removeStampFromIssue(
@@ -3038,7 +3049,10 @@ export async function moveStampNode(
       }
     }
 
-    if (!options.moveChecklistPlaces) return { stampIds, checklistsLeft: [], checklistJoined: null };
+    if (!options.moveChecklistPlaces) {
+      await syncChecklistsToIssueOrder(tx, [issueId, targetIssueId]);
+      return { stampIds, checklistsLeft: [], checklistJoined: null };
+    }
 
     const places = await tx.checklistStamp.findMany({
       where: { stampId: { in: stampIds }, checklist: { collectionId, issueId } },
@@ -3065,6 +3079,9 @@ export async function moveStampNode(
       data: joining.map((sid, i) => ({ checklistId, stampId: sid, sortOrder: after + i })),
       skipDuplicates: true,
     });
+    // Both issues' trees changed; a checklist following either (#2208) reads it as it now stands —
+    // the joining stamps where the target's tree has them, not at the end.
+    await syncChecklistsToIssueOrder(tx, [issueId, targetIssueId]);
     return {
       stampIds,
       checklistsLeft: [...left].map(([id, ids]) => ({ checklistId: id, stampIds: ids })),
@@ -3187,6 +3204,8 @@ export async function reparentStampNode(
       where: { issueId_stampId: { issueId, stampId } },
       data: { sortOrder: await nextIssueSortOrder(tx, issueId) },
     });
+    // The tree reads differently down the page now (#2208).
+    await syncChecklistsToIssueOrder(tx, [issueId]);
     return umbrellas;
   });
 }
@@ -3342,6 +3361,7 @@ export async function mergeIssues(
       }
     }
     await tx.issue.delete({ where: { id: sourceIssueId } });
+    await syncChecklistsToIssueOrder(tx, [targetIssueId]);
   });
 }
 

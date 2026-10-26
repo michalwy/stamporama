@@ -767,6 +767,7 @@ const CHECKLIST_WRITES = [
   "addStampsToIssueChecklist",
   "setChecklistStamps",
   "reorderChecklistStamps",
+  "followIssueOrder",
   "deleteChecklist",
 ] as const;
 
@@ -777,7 +778,7 @@ describe("the agent API's operation modules (#1512)", () => {
     const fromChecklists = importedBindings(checklistModule)
       .filter((binding) => binding.from === "../../checklists")
       .map((binding) => binding.name);
-    const writes = fromChecklists.filter((name) => /^(create|rename|add|set|reorder|delete|remove|put|ensure)/.test(name));
+    const writes = fromChecklists.filter((name) => /^(create|rename|add|set|reorder|follow|delete|remove|put|ensure)/.test(name));
     assert.deepEqual([...writes].sort(), [...CHECKLIST_WRITES].sort());
 
     const elsewhere: string[] = [];

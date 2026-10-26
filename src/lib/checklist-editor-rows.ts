@@ -3,8 +3,11 @@
 //
 // The editor shows **one list, not two**: the checklist's own stamps first, in the order the set
 // reads (#764), and below them the rest of the issue's stamp tree, unticked. Ticking one of those
-// puts it at the end of the order — `setChecklistStamps`' rule for a stamp just ticked — and
-// unticking one above takes it off, leaving the others where they were.
+// puts it at the end of the order — `setChecklistStamps`' rule for a stamp just ticked — or, on a
+// checklist following the issue's order (#2208), at its place in that order; unticking one above
+// takes it off, leaving the others where they were.
+
+import { checklistInIssueOrder } from "./issue-member-order";
 
 /** A branch of the issue's stamp tree, as far as this rule reads it. */
 export interface StampTreeBranch<N extends { stampId: string }> {
@@ -43,9 +46,25 @@ export function restOfTreeRows<N extends { stampId: string }>(
   return rows;
 }
 
-/** The order once `stampId` is ticked: at the end, unless it is already on. */
-export function tickStamp(order: readonly string[], stampId: string): string[] {
-  return order.includes(stampId) ? [...order] : [...order, stampId];
+/**
+ * The order once `stampId` is ticked: at the end, unless it is already on. Given the issue's
+ * reading — on a checklist that follows the issue's order (#2208) — at its place in it instead.
+ */
+export function tickStamp(
+  order: readonly string[],
+  stampId: string,
+  issueReading?: readonly string[]
+): string[] {
+  const ticked = order.includes(stampId) ? [...order] : [...order, stampId];
+  return issueReading ? checklistInIssueOrder(issueReading, ticked) : ticked;
+}
+
+/** The issue's stamps as its tree reads down the page — the order a checklist following the issue
+ *  reads in (#2208), drawn from the same tree the editor shows. */
+export function treeReading<N extends { stampId: string }>(
+  tree: readonly StampTreeBranch<N>[]
+): string[] {
+  return tree.flatMap((branch) => [branch.node.stampId, ...treeReading(branch.children)]);
 }
 
 /** The order once `stampId` is unticked: the others keep their places. */

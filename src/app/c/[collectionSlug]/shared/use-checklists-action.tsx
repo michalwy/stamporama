@@ -20,6 +20,7 @@ import {
   deleteChecklistAction,
   reorderChecklistsAction,
   reorderChecklistStampsAction,
+  followIssueOrderAction,
   setChecklistStampsAction,
   setChecklistKindAction,
   type ChecklistActionState,
@@ -33,8 +34,11 @@ import {
   moveInOrder,
   restOfTreeRows,
   tickStamp,
+  treeReading,
   untickStamp,
 } from "@/lib/checklist-editor-rows";
+import { checklistInIssueOrder } from "@/lib/issue-member-order";
+import { Icon } from "@/app/icons";
 import type { RowAction } from "./row-actions-menu";
 import { RowActionsMenu } from "./row-actions-menu";
 import { buildStampTree, type VendorMap } from "./issue-view";
@@ -62,6 +66,7 @@ import { useInvalidateStampsAndIssues } from "./use-invalidate-stamps-and-issues
 import { SpecialisedChecklistsToggle, SpecialisedMark } from "./specialised-checklists";
 import { NO_AUTOFILL } from "./no-autofill";
 import { TextInput } from "./text-input";
+import { Tooltip } from "./tooltip";
 import { fillTranslationValues, type TranslationValues } from "./translations-dialog";
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
@@ -78,6 +83,10 @@ import { useTitleLanguages } from "./use-title-languages";
 // Order is the collector's, and it is load-bearing rather than cosmetic — the **first** checklist is
 // the one a single-checklist row shows its badge and total for, and the one a new stamp joins when
 // the stamp form's box is ticked. So the list is drag-reorderable through the shared kit.
+//
+// A checklist **follows the issue's stamp order** until it is given one of its own (#2208): a drag of
+// its stamps gives it one, marked *Own order*, and *Follow the issue's order* puts it back. While it
+// follows, a stamp ticked below takes its place in the issue's order rather than the end.
 //
 // A checklist is standard or specialised (#1617). The editor lists the specialised ones only while
 // they are switched on — the switch sits above the list — and a reorder with them off leaves them in
@@ -112,6 +121,16 @@ const COUNT_BADGE: React.CSSProperties = {
   borderRadius: "0.25rem",
   padding: "0.1rem 0.4rem",
   fontFamily: "monospace",
+  whiteSpace: "nowrap",
+};
+
+/** The mark of a checklist with an order of its own (#2208), as an album's card marks one (#767). */
+const OWN_ORDER_CHIP: React.CSSProperties = {
+  fontSize: "0.75rem",
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.25rem",
+  border: "1px solid var(--color-border)",
+  color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
 };
 
@@ -176,6 +195,8 @@ interface NewChecklist {
   kind: ChecklistKind;
   translations: TranslationValues | null;
   stampIds: string[];
+  /** Its stamps were dragged into an order of their own before it was written (#2208). */
+  ownOrder?: boolean;
   /** Its name has been sent; a second leaving of the field must not make a second checklist. */
   creating?: boolean;
 }
@@ -188,6 +209,8 @@ interface Subject {
   name: string;
   nameByLanguage: Record<string, string>;
   kind: ChecklistKind;
+  /** Reads in the issue's stamp order (#2208), rather than an order of its own. */
+  followsIssueOrder: boolean;
   stampIds: string[];
 }
 
@@ -312,13 +335,21 @@ export function ChecklistsDialog({
     pick?.kind === "new" ? undefined : picked ?? checklists[0];
   const subject: Subject | null =
     pick?.kind === "new" && draft
-      ? { id: null, name: "", nameByLanguage: {}, kind: draft.kind, stampIds: draft.stampIds }
+      ? {
+          id: null,
+          name: "",
+          nameByLanguage: {},
+          kind: draft.kind,
+          followsIssueOrder: !draft.ownOrder,
+          stampIds: draft.stampIds,
+        }
       : current
         ? {
             id: current.id,
             name: current.name,
             nameByLanguage: current.nameByLanguage,
             kind: current.kind,
+            followsIssueOrder: current.followsIssueOrder,
             stampIds: current.stampIds,
           }
         : null;
@@ -373,6 +404,7 @@ export function ChecklistsDialog({
               kind: latest.kind,
               nameByLanguage: latestTranslations ? nameByLanguageOf(latestTranslations) : {},
               sortOrder: Math.max(-1, ...list.map((c) => c.sortOrder)) + 1,
+              followsIssueOrder: !latest.ownOrder,
               stampIds: latest.stampIds,
             },
           ]);
@@ -385,6 +417,8 @@ export function ChecklistsDialog({
           }
           if (latest.stampIds.length > 0) {
             void write(() => setChecklistStampsAction(id, latest.stampIds));
+            // An order dragged in before it had a name is its own, and is kept (#2208).
+            if (latest.ownOrder) void write(() => reorderChecklistStampsAction(id, latest.stampIds));
           }
         }
       ).finally(() => setDraft((prev) => (prev?.creating ? { ...prev, creating: false } : prev)));
@@ -427,16 +461,32 @@ export function ChecklistsDialog({
   function changeStamps(stampIds: string[], how: "membership" | "order") {
     if (!subject) return;
     if (subject.id === null) {
-      setDraft((prev) => (prev ? { ...prev, stampIds } : prev));
+      setDraft((prev) =>
+        prev ? { ...prev, stampIds, ...(how === "order" ? { ownOrder: true } : {}) } : prev
+      );
       return;
     }
     const id = subject.id;
-    patchChecklist(id, { stampIds });
+    // A drag gives the checklist an order of its own (#2208).
+    patchChecklist(id, { stampIds, ...(how === "order" ? { followsIssueOrder: false } : {}) });
     void write(() =>
       how === "order"
         ? reorderChecklistStampsAction(id, stampIds)
         : setChecklistStampsAction(id, stampIds)
     );
+  }
+
+  /** Back to the issue's stamp order (#2208), shown at once in the order the issue's tree reads. */
+  function followIssue(issueReading: readonly string[]) {
+    if (!subject) return;
+    const stampIds = checklistInIssueOrder(issueReading, subject.stampIds);
+    if (subject.id === null) {
+      setDraft((prev) => (prev ? { ...prev, stampIds, ownOrder: false } : prev));
+      return;
+    }
+    const id = subject.id;
+    patchChecklist(id, { stampIds, followsIssueOrder: true });
+    void write(() => followIssueOrderAction(id));
   }
 
   async function close() {
@@ -650,6 +700,7 @@ export function ChecklistsDialog({
                 onTranslationsOpenChange={setTranslationsOpen}
                 onKind={changeKind}
                 onStamps={changeStamps}
+                onFollowIssue={followIssue}
               />
             ) : (
               <p style={{ fontSize: "0.9375rem", color: "var(--color-text-muted)", margin: 0 }}>
@@ -712,7 +763,8 @@ export function ChecklistsDialog({
  * The picked checklist: its name with its translations (#1308), its type (#1617), and its stamps in
  * **one list** — the checklist's own first, in the order the set reads (#764), each with the ⠿ grip
  * and a tick to take it off; below them the rest of the issue's tree, indented and unticked, where a
- * tick puts the stamp at the end of the order (`checklist-editor-rows.ts`).
+ * tick puts the stamp at the end of the order — or, while the checklist follows the issue's order
+ * (#2208), at its place in it (`checklist-editor-rows.ts`).
  */
 function ChecklistPane({
   collectionId,
@@ -728,6 +780,7 @@ function ChecklistPane({
   onTranslationsOpenChange,
   onKind,
   onStamps,
+  onFollowIssue,
 }: {
   collectionId: string;
   subject: Subject;
@@ -743,6 +796,7 @@ function ChecklistPane({
   onTranslationsOpenChange: (open: boolean) => void;
   onKind: (kind: ChecklistKind) => void;
   onStamps: (stampIds: string[], how: "membership" | "order") => void;
+  onFollowIssue: (issueReading: readonly string[]) => void;
 }) {
   // The typed name, mirrored so the duplicate check can read it. The input itself stays
   // uncontrolled; what is saved is read off it when it is left.
@@ -760,7 +814,11 @@ function ChecklistPane({
   const order = subject.stampIds;
   const onChecklist = new Set(order);
   const byStamp = new Map(members.map((m) => [m.stampId, m]));
-  const rest = restOfTreeRows(buildStampTree(members), onChecklist);
+  const tree = buildStampTree(members);
+  const rest = restOfTreeRows(tree, onChecklist);
+  const issueReading = treeReading(tree);
+  /** Where a ticked stamp lands: its place in the issue's order while the checklist follows it. */
+  const followed = subject.followsIssueOrder ? issueReading : undefined;
 
   const drag = useReorderList(
     order.length > 1,
@@ -828,15 +886,37 @@ function ChecklistPane({
           margin: "1.5rem 0 0.5rem",
         }}
       >
-        <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
-          Stamps
+        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+            Stamps
+          </span>
+          {!subject.followsIssueOrder && (
+            <Tooltip content="These stamps read in an order of their own, not the issue's">
+              <span style={OWN_ORDER_CHIP}>Own order</span>
+            </Tooltip>
+          )}
         </span>
-        <span style={COUNT_BADGE}>
-          {order.length}/{members.length}
+        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {!subject.followsIssueOrder && (
+            <Tooltip content="Back to the order of the issue's stamps, which this checklist then follows whenever the issue is reordered. Drag a stamp to set an order of its own again.">
+              <button
+                type="button"
+                onClick={() => onFollowIssue(issueReading)}
+                style={{ ...baseBtn, fontSize: "0.8125rem", padding: "0.2rem 0.6rem" }}
+              >
+                <Icon name="revert" size="sm" /> Follow the issue&apos;s order
+              </button>
+            </Tooltip>
+          )}
+          <span style={COUNT_BADGE}>
+            {order.length}/{members.length}
+          </span>
         </span>
       </div>
       <p style={{ ...HINT, marginBottom: "0.75rem" }}>
-        Drag the ⠿ grip to set the order the set reads in; a stamp ticked below joins at the end.
+        {subject.followsIssueOrder
+          ? "Reads in the issue's order; a stamp ticked below takes its place in it. Drag the ⠿ grip to give it an order of its own."
+          : "Drag the ⠿ grip to set the order the set reads in; a stamp ticked below joins at the end."}
       </p>
 
       {membersLoading ? (
@@ -944,7 +1024,7 @@ function ChecklistPane({
                       onStamps(
                         row.onChecklist
                           ? untickStamp(order, row.node.stampId)
-                          : tickStamp(order, row.node.stampId),
+                          : tickStamp(order, row.node.stampId, followed),
                         "membership"
                       )
                     }

@@ -71,6 +71,7 @@ const CHECKLIST_OPERATIONS = [
   "POST /checklists/{checklist_id}/stamps add_checklist_stamps",
   "POST /checklists/{checklist_id}/stamps/remove remove_checklist_stamps",
   "POST /checklists/{checklist_id}/order set_checklist_order",
+  "POST /checklists/{checklist_id}/order/follow-issue follow_issue_order",
   "DELETE /checklists/{checklist_id} delete_checklist",
 ];
 
@@ -208,22 +209,23 @@ describe("checklists through the agent API (#1512)", () => {
       assert.equal(created.issue?.issueId, grosik.issueId);
       assert.deepEqual(created.translatedNames, { de: "Geschnitten" });
       assert.equal(created.stampCount, 0);
+      assert.equal(created.followsIssueOrder, true, "an issue's new checklist follows the issue (#2208)");
     });
 
-    it("takes the issue's stamps, in the order sent, and reports one already on it", async () => {
+    it("takes the issue's stamps, each at its place in the issue's order while it follows it, and reports one already on it", async () => {
       const first = await ok<Added>(token, "POST", `/checklists/${imperforateId}/stamps`, { stamps: ["Mi 102", stamp["Mi·PL 100"]] });
       assert.deepEqual(first.added.map((row) => row.catalogNumbers[0]), ["Mi·PL 102", "Mi·PL 100"]);
       const again = await ok<Added>(token, "POST", `/checklists/${imperforateId}/stamps`, { stamps: ["Mi 100", "Mi 103"] });
       assert.deepEqual(again.added.map((row) => row.catalogNumbers[0]), ["Mi·PL 103"]);
       assert.deepEqual(again.alreadyOn.map((row) => row.catalogNumbers[0]), ["Mi·PL 100"]);
-      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 102", "Mi·PL 100", "Mi·PL 103"]);
+      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 100", "Mi·PL 102", "Mi·PL 103"]);
     });
 
     it("refuses a stamp of another issue, naming it, and adds nothing", async () => {
       const err = await refused(token, "POST", `/checklists/${imperforateId}/stamps`, { stamps: ["Mi 101", "Mi 200"] });
       assert.equal(err.error.code, "invalid_request");
       assert.match(err.error.message, /Mi·PL 200 is not/);
-      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 102", "Mi·PL 100", "Mi·PL 103"]);
+      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 100", "Mi·PL 102", "Mi·PL 103"]);
     });
 
     it("refuses a stamp the call cannot name, and adds nothing", async () => {
@@ -239,6 +241,7 @@ describe("checklists through the agent API (#1512)", () => {
       spanningId = created.checklistId;
       assert.equal(created.spansIssues, true);
       assert.equal(created.issue, undefined);
+      assert.equal(created.followsIssueOrder, undefined, "a spanning checklist has no issue to follow");
       const added = await ok<Added>(token, "POST", `/checklists/${spanningId}/stamps`, { stamps: ["Mi 201", "Mi 100"] });
       assert.equal(added.added.length, 2);
       assert.deepEqual(added.checklist.coversIssues?.map((issue) => issue.name), ["Grosik", "Later"]);
@@ -277,9 +280,10 @@ describe("checklists through the agent API (#1512)", () => {
       assert.deepEqual(await readStamps(spanningId), ["Mi·PL 100", "Mi·PL 201"]);
     });
 
-    it("sets a whole order, and sending it again changes nothing", async () => {
+    it("sets a whole order, giving an issue's checklist an order of its own, and sending it again changes nothing", async () => {
       const body = { stamps: ["Mi 103", "Mi 100", "Mi 102"] };
-      await ok<Ordered>(token, "POST", `/checklists/${imperforateId}/order`, body);
+      const ordered = await ok<Ordered>(token, "POST", `/checklists/${imperforateId}/order`, body);
+      assert.equal(ordered.checklist.followsIssueOrder, false);
       assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 103", "Mi·PL 100", "Mi·PL 102"]);
       const again = await ok<Ordered>(token, "POST", `/checklists/${imperforateId}/order`, body);
       assert.deepEqual([again.placed, again.keptAfter], [3, 0]);
@@ -305,6 +309,24 @@ describe("checklists through the agent API (#1512)", () => {
       assert.deepEqual(again.removed, []);
       assert.equal(again.notOnChecklist.length, 1);
       assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 103", "Mi·PL 102"]);
+    });
+  });
+
+  describe("following the issue's order (#2208)", () => {
+    it("puts an issue's checklist back in the issue's order, and answers one already following it as it is", async () => {
+      const followed = await ok<Named>(token, "POST", `/checklists/${imperforateId}/order/follow-issue`);
+      assert.equal(followed.checklist.followsIssueOrder, true);
+      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 102", "Mi·PL 103"]);
+      const again = await ok<Named>(token, "POST", `/checklists/${imperforateId}/order/follow-issue`);
+      assert.equal(again.checklist.followsIssueOrder, true);
+      assert.deepEqual(await readStamps(imperforateId), ["Mi·PL 102", "Mi·PL 103"]);
+    });
+
+    it("refuses a checklist spanning issues, and leaves its order alone", async () => {
+      const err = await refused(token, "POST", `/checklists/${spanningId}/order/follow-issue`);
+      assert.equal(err.error.code, "invalid_request");
+      assert.match(err.error.message, /spans issues/);
+      assert.deepEqual(await readStamps(spanningId), ["Mi·PL 100", "Mi·PL 201"]);
     });
   });
 
@@ -358,6 +380,7 @@ describe("checklists through the agent API (#1512)", () => {
         ["POST", `/checklists/${imperforateId}/stamps`],
         ["POST", `/checklists/${imperforateId}/stamps/remove`],
         ["POST", `/checklists/${imperforateId}/order`],
+        ["POST", `/checklists/${imperforateId}/order/follow-issue`],
         ["DELETE", `/checklists/${imperforateId}`],
       ];
       for (const [method, path] of calls) {
@@ -369,14 +392,14 @@ describe("checklists through the agent API (#1512)", () => {
       await ok<ListResponse<AgentChecklist>>(readOnlyToken, "GET", "/checklists");
     });
 
-    it("publishes exactly these checklist operations, six of them writing", () => {
+    it("publishes exactly these checklist operations, seven of them writing", () => {
       const checklist = OPERATIONS.filter((op) => /^\/checklists(\/|$)/.test(op.path)).map(
         (op) => `${op.method} ${op.path} ${op.name}`
       );
       assert.deepEqual(checklist.sort(), [...CHECKLIST_OPERATIONS].sort());
       assert.deepEqual(
         OPERATIONS.filter((op) => /^\/checklists(\/|$)/.test(op.path) && op.writes).map((op) => op.name).sort(),
-        ["add_checklist_stamps", "create_checklist", "delete_checklist", "remove_checklist_stamps", "set_checklist_order", "update_checklist"]
+        ["add_checklist_stamps", "create_checklist", "delete_checklist", "follow_issue_order", "remove_checklist_stamps", "set_checklist_order", "update_checklist"]
       );
     });
   });
