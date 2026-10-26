@@ -784,6 +784,8 @@ and it stays marked until you say you have looked. An assistant reading a market
 match the wrong buyer or a wrong price, and this is how you find what it wrote. Hover the chip to see
 what it did — *added offer #2680 at 15 PLN*, one entry per thing — and when it last wrote. Several
 writes before you confirm add up, so a sale it recorded and then added a second offer to names both.
+When it [moves sold sets](#moving-sold-sets-to-another-sale) between two sales, both are marked —
+*moved 2 sets (offer #2680) to sale #13* on one, *… from sale #12* on the other.
 
 - **The assistant cannot remove the mark.** Nothing it can ask for clears it.
 - **Editing the sale does not remove it either.** Correcting a price or moving the sale to *Paid* is
@@ -822,6 +824,37 @@ Nothing is sold or withdrawn twice: the copies stay sold and the offers stay *So
 buyer](#message-to-the-buyer) follow at once. If the other sale was recorded by an assistant and you
 had not [confirmed](#what-the-assistant-recorded--to-review--api) it, the merged sale is marked *To
 review* too.
+
+## Moving sold sets to another sale
+
+A buyer who bought several sets sometimes asks for part of them to wait and go in a later parcel.
+The sale is then split: those sets move to a sale of their own — or to another open sale of that
+buyer — and keep their prices. It is [merging](#merging-two-sales) the other way round, and the two
+undo each other: moved sets can be moved back the same way, or the two sales merged again.
+
+1. **Tick the sets** on the sale's screen — each sold set's card has a checkbox when the list is
+   grouped by **Lot** — and press **Move to another sale…** in the bar above them. For a single set,
+   **Move to another sale…** in its card's **⋮** menu does the same.
+2. **Choose where they go.** **A new sale** has the same buyer, platform, currency, order number and
+   date, and starts at *Ordered*. Or pick one of the buyer's **open sales** — on the same platform, in
+   the same currency, not yet sent.
+3. **Move.** A message names the sale they went to, with a link to it.
+
+- **The sets move as they are**: their prices, their copies and packed marks, a set still to be
+  chosen, and the offers they sold through. Nothing goes back to stock and no offer changes.
+- **The sale's own amounts stay where they were** — buyer handling or total paid, commission,
+  postage, shipping option and packing supplies — because they belong to its parcel. A new sale
+  starts with none of them; fill them in when that parcel goes. A sale whose buyer handling is worked
+  out from the total paid works it out again from the sets it has left, exactly as when a set is
+  removed.
+- **Its [attachments](#attachments) and [conversation](#the-conversation-with-the-buyer) stay too.**
+  An entry about the sets that moved can be moved to the new sale from its own **⋮ → Edit**, by
+  choosing that sale.
+- **A sale already *Sent* or *Delivered* is not split**, and **moving every set is refused** —
+  that is not a split; merge the two sales or edit this one instead. A sale with no buyer can only
+  move sets to a new sale.
+- **Both halves keep the order number.** On Allegro the worklist reads them together, so the order
+  is not offered again; anything still left on it is added to the first of the two.
 
 ## Deleting
 

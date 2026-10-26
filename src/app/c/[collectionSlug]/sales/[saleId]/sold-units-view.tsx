@@ -526,6 +526,8 @@ interface SoldUnitsViewProps {
   onEditPrice: (lineId: string, price: string) => void;
   /** Say which of the offer's interchangeable sets actually left on this line (#697). */
   onChooseSet: (lineId: string) => void;
+  /** *Move to another sale…* (#2204) for these lines — the ticked ones in view, or one card's. */
+  onMove: (lineIds: string[]) => void;
 }
 
 /** The sold-units list for the packing view (ADR-0012, #166): the same rich, sortable copy
@@ -545,6 +547,7 @@ export function SoldUnitsView({
   onRemove,
   onEditPrice,
   onChooseSet,
+  onMove,
 }: SoldUnitsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
@@ -571,6 +574,23 @@ export function SoldUnitsView({
     () => (setFilter === "pending" ? lines.filter((l) => l.setChoicePending) : lines),
     [lines, setFilter]
   );
+
+  // Ticked sold sets (#2204), for *Move to another sale…*. Only the Lot grouping draws the cards they
+  // are ticked on, and a filter never unticks: the bar acts on the ticked cards in view, and a tick
+  // on a line that has since left the sale simply stops counting.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
+  const tickedInView = useMemo(
+    () => (primary === "lot" ? visibleLines.filter((l) => ticked.has(l.id)).map((l) => l.id) : []),
+    [primary, visibleLines, ticked]
+  );
+  function toggleTicked(lineId: string) {
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(lineId)) next.delete(lineId);
+      else next.add(lineId);
+      return next;
+    });
+  }
 
   // Sold sets are collapsed by default (#2034, reversing #382's exemption for the packing view): a
   // sale of many sets was a long scroll on every visit. Which are open is remembered per sale, and a
@@ -701,6 +721,38 @@ export function SoldUnitsView({
         )}
       </div>
 
+      {tickedInView.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.5rem 1rem",
+            marginBottom: "0.75rem",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.75rem",
+            background: "var(--color-accent-soft)",
+          }}
+        >
+          <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}>
+            {tickedInView.length} sold {tickedInView.length === 1 ? "set" : "sets"} selected
+          </span>
+          <button type="button" onClick={() => setTicked(new Set())} style={{ ...TOOLBAR_CHIP, cursor: "pointer" }}>
+            Clear
+          </button>
+          <span style={{ flex: 1 }} />
+          <Tooltip content="Put these sets, with their prices, on a new sale for the same buyer or on an open sale of theirs">
+            <button
+              type="button"
+              onClick={() => onMove(tickedInView)}
+              style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600 }}
+            >
+              <Icon name="move" size="sm" /> Move to another sale…
+            </button>
+          </Tooltip>
+        </div>
+      )}
+
       {primary === "lot" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {visibleLines.map((line) => (
@@ -708,6 +760,9 @@ export function SoldUnitsView({
               key={line.id}
               currency={currency}
               line={line}
+              ticked={ticked.has(line.id)}
+              onTick={() => toggleTicked(line.id)}
+              onMove={() => onMove([line.id])}
               expanded={hydrated && expansion.isExpanded(line.id)}
               byIssue={byIssue}
               sortKey={sortKey}
@@ -947,6 +1002,9 @@ function UnitProfitLine({
 function SoldUnitCard({
   currency,
   line,
+  ticked,
+  onTick,
+  onMove,
   expanded,
   byIssue,
   sortKey,
@@ -959,6 +1017,9 @@ function SoldUnitCard({
 }: {
   currency: string;
   line: SaleDetailLine;
+  ticked: boolean;
+  onTick: () => void;
+  onMove: () => void;
   expanded: boolean;
   byIssue: boolean;
   sortKey: string;
@@ -983,12 +1044,17 @@ function SoldUnitCard({
   //
   // A set of copies on no offer (#2021) has no other set to be: it is the copies the collector
   // picked, so it offers only *Remove*.
+  //
+  // *Move to another sale…* (#2204) takes the set, priced and packed as it is, to another sale of the
+  // same buyer — the one-set form of the bar's action.
   const remove: RowAction = { key: "remove", label: "Remove", icon: "remove", danger: true, onSelect: onRemove };
+  const move: RowAction = { key: "move-sale", label: "Move to another sale…", icon: "move", onSelect: onMove };
   const actions: RowAction[] =
     line.offerSetId === null
-      ? [remove]
+      ? [move, { ...remove, separatorBefore: true }]
       : [
           { key: "choose-set", label: "Choose set", icon: "move", onSelect: onChooseSet },
+          move,
           { ...remove, separatorBefore: true },
         ];
 
@@ -1013,6 +1079,15 @@ function SoldUnitCard({
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
+        {/* The tick (#2204); its click is stopped so ticking does not also open the card. */}
+        <input
+          type="checkbox"
+          aria-label="Select this sold set"
+          checked={ticked}
+          onChange={onTick}
+          onClick={(e) => e.stopPropagation()}
+          style={{ flexShrink: 0, cursor: "pointer" }}
+        />
         <CaretCell
           expanded={expanded}
           onToggle={onToggle}

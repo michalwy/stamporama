@@ -167,21 +167,22 @@ describe("the sale operations (#1949)", () => {
     return { id, offerNo: offer.offerNo, setIds: offer.sets.map((set) => set.id) };
   }
 
-  it("carries the five operations, three of them writes", () => {
-    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set"];
+  it("carries the six operations, four of them writes", () => {
+    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets"];
     for (const name of names) assert.ok(OPERATIONS.some((operation) => operation.name === name), name);
     const writing = OPERATIONS.filter((operation) => names.includes(operation.name) && operation.writes).map((o) => o.name);
-    assert.deepEqual(writing.sort(), ["find_or_create_buyer", "sell_offer", "sell_offer_set"]);
+    assert.deepEqual(writing.sort(), ["find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set"]);
   });
 
   it("deletes no sale and moves none — no such operation exists", () => {
     // The boundary as absence: nothing named for a delete, a status, payment or shipping of a sale.
     // One write is named for a sale and lets it be: adding the collector's own files to it (#2198),
     // which changes no line, amount or status. Named exactly, so anything else written under
-    // `/sales` is still caught.
-    const ADDS_FILES_ONLY = ["add_sale_attachments"];
+    // `/sales` is still caught. A second moves sold sets to another open sale of the same buyer
+    // (#2204) — every line stays sold, on one sale or the other, and no status or amount changes.
+    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets"];
     const offenders = OPERATIONS.filter((operation) => {
-      if (ADDS_FILES_ONLY.includes(operation.name)) return false;
+      if (LEAVES_SALES_STANDING.includes(operation.name)) return false;
       const words = operation.name.split("_");
       // An auction house's sale (#1627) is the auction register's, not a sale of the collector's.
       const aboutSales =
@@ -431,6 +432,76 @@ describe("the sale operations (#1949)", () => {
       assert.equal((await refused(token, "GET", "/sales/nope")).status, 404);
       assert.match((await refused(token, "GET", "/sales?buyer=Nobody%20Here")).message, /find_or_create_buyer/);
       assert.equal((await refused(token, "GET", "/sales?status=lost")).status, 400);
+    });
+  });
+
+  // After the reads above, whose counts it would otherwise change.
+  describe("move_sale_sets (#2204)", () => {
+    it("splits a sale into a new one and back into an open one, both marked, under the screen's refusals", async () => {
+      await prisma.contact.create({ data: { collectionId, name: "Ola Przenosząca", buyer: true } });
+      const offer = await facebookOffer(3);
+      const source = await ok<AgentSale>(token, "POST", `/offers/${offer.id}/sale`, {
+        price: "4.50",
+        buyer: "Ola Przenosząca",
+        sold_at: "2026-10-20",
+      });
+      await prisma.sale.update({ where: { id: source.id }, data: { externalRef: "FB-7", commission: "1.00" } });
+      assert.equal(source.lines.length, 3);
+      const [first, second, third] = source.lines.map((line) => line.id);
+
+      // Two of the three to a new sale.
+      const split = await ok<{ from: AgentSale; to: AgentSale }>(token, "POST", `/sales/${source.id}/lines/move`, {
+        lines: [first, second],
+        to: "new",
+      });
+      assert.deepEqual(split.from.lines.map((line) => line.id), [third]);
+      assert.deepEqual(split.to.lines.map((line) => line.id).sort(), [first, second].sort());
+      assert.ok(split.to.lines.every((line) => line.price === "4.50"), "prices kept");
+      assert.equal(split.to.buyer?.name, "Ola Przenosząca");
+      assert.equal(split.to.externalRef, "FB-7");
+      assert.equal(split.to.soldAt, "2026-10-20");
+      assert.equal(split.to.currency, "EUR");
+      assert.equal(split.to.status, "ordered");
+      assert.equal(split.to.commission, null, "the new sale starts with no amounts");
+      assert.equal(split.from.commission, "1.00", "the source keeps its own");
+      assert.ok(split.to.toReview?.created, "the new sale is the API's");
+      assert.ok(split.to.toReview?.actions.some((action) => action === `moved 2 sets (offer #${offer.offerNo}) from sale #${source.saleNo}`));
+      assert.ok(split.from.toReview?.actions.some((action) => action === `moved 2 sets (offer #${offer.offerNo}) to sale #${split.to.saleNo}`));
+      assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offer.id } })).state, "sold", "no offer changes");
+
+      // One back into the open source, by its number.
+      const back = await ok<{ from: AgentSale; to: AgentSale }>(token, "POST", `/sales/${split.to.id}/lines/move`, {
+        lines: [first],
+        to: `s${source.saleNo}`,
+      });
+      assert.equal(back.to.id, source.id);
+      assert.equal(back.to.lines.length, 2);
+      assert.equal(back.from.lines.length, 1);
+
+      // Refused: every set, a sale of another buyer, a sent sale, a line not on the sale, nothing sent.
+      assert.match(
+        (await refused(token, "POST", `/sales/${split.to.id}/lines/move`, { lines: [second], to: "new" })).message,
+        /every sold set/
+      );
+      const other = await ok<ListResponse<AgentSaleRow>>(token, "GET", "/sales?buyer=Jan%20Nowak");
+      assert.match(
+        (await refused(token, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: other.items[0].id })).message,
+        /another buyer/
+      );
+      assert.match(
+        (await refused(token, "POST", `/sales/${source.id}/lines/move`, { lines: [second], to: "new" })).message,
+        /not on this sale/
+      );
+      assert.equal((await refused(token, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: "999999" })).status, 404);
+      assert.equal((await refused(token, "POST", `/sales/${source.id}/lines/move`, { lines: [], to: "new" })).status, 400);
+      await prisma.sale.update({ where: { id: source.id }, data: { status: "sent" } });
+      assert.match(
+        (await refused(token, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: "new" })).message,
+        /already been sent/
+      );
+      assert.equal((await refused(readOnlyToken, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: "new" })).status, 403);
+      // Every refusal left the lines where they were.
+      assert.equal((await getSaleDetail(userId, source.id))!.lines.length, 2);
     });
   });
 });

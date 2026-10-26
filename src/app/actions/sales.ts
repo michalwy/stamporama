@@ -24,10 +24,13 @@ import {
   confirmSaleReview,
   listSaleMergeCandidates,
   mergeSales,
+  listSaleMoveTargets,
+  moveSaleLines,
   isSaleStatus,
   SaleActionBlockedError,
   type SaleAmountField,
   type SaleMergeCandidate,
+  type SaleMoveCandidate,
   type SaleStatus,
 } from "@/lib/sales";
 import { isSaleMergePick, type SaleMergeChoices } from "@/lib/sale-merge-rules";
@@ -473,6 +476,49 @@ export async function mergeSalesAction(
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to merge the sales.");
+  }
+}
+
+// ── Moving sold sets to another sale (#2204) ─────────────────────────────────────────────────────
+
+/** The buyer's other open sales this sale's sets can move to, for the dialog. */
+export async function getSaleMoveTargetsAction(
+  saleId: string
+): Promise<{ status: "success"; candidates: SaleMoveCandidate[] } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", candidates: await listSaleMoveTargets(session.user.id, saleId) };
+  } catch (e) {
+    return fail(e, "Failed to load the sales to move to.");
+  }
+}
+
+/** Move the ticked sets of `saleId` to `targetSaleId`, or to a new sale when it is null. The sale
+ *  they went to comes back, for the toast's link. */
+export async function moveSaleLinesAction(
+  saleId: string,
+  lineIds: string[],
+  targetSaleId: string | null
+): Promise<
+  | { status: "success"; targetSaleId: string; targetSaleNo: number; created: boolean; moved: number }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const result = await moveSaleLines(session.user.id, {
+      sourceSaleId: saleId,
+      lineIds,
+      target: targetSaleId ? { saleId: targetSaleId } : { newSale: true },
+    });
+    return {
+      status: "success",
+      targetSaleId: result.targetSaleId,
+      targetSaleNo: result.targetSaleNo,
+      created: result.created,
+      moved: result.offerNos.length,
+    };
+  } catch (e) {
+    return fail(e, "Failed to move the sets.");
   }
 }
 

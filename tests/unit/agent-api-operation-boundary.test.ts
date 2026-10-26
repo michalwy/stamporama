@@ -1076,6 +1076,8 @@ describe("the agent API's operation modules (#1910)", () => {
  */
 const SALE_API_WRITES = new Map<string, string>([
   ["recordSaleLinesThroughApi", "src/lib/sales.ts"],
+  // Moving sold sets to another open sale of the same buyer (#2204), both sales marked.
+  ["moveSaleLinesThroughApi", "src/lib/sales.ts"],
   ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
 ]);
 
@@ -1086,7 +1088,7 @@ describe("the agent API's operation modules (#1949)", () => {
   const domain = readFileSync(path.join(ROOT, "src/lib/sales.ts"), "utf8");
   const salesWriters = [
     ...domain.matchAll(
-      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle|merge)[A-Za-z]*)\(/g
+      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle|merge|move)[A-Za-z]*)\(/g
     ),
   ].map((match) => match[1]);
 
@@ -1111,6 +1113,13 @@ describe("the agent API's operation modules (#1949)", () => {
     const marks = [...body.matchAll(/markSaleWrittenByApi\(tx,/g)].length;
     // Both branches — adding to a sale already there, and starting one — mark it.
     assert.equal(marks, 2, "`recordSaleLinesThroughApi` writes a sale without the to-review marker (#1948)");
+    // A move (#2204) writes two sales — the one the sets leave and the one they join — and marks both.
+    const moveBody = exportedFunctionBody(domain, "moveSaleLinesThroughApi");
+    assert.equal(
+      [...moveBody.matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      2,
+      "`moveSaleLinesThroughApi` writes a sale without the to-review marker (#1948)"
+    );
   });
 
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
@@ -1118,6 +1127,8 @@ describe("the agent API's operation modules (#1949)", () => {
     assert.ok(salesWriters.includes("deleteSale") && salesWriters.includes("setSaleStatus"));
     // Merging two sales (#2041) deletes one of them, so it is the collector's, like deleting.
     assert.ok(salesWriters.includes("mergeSales"));
+    // The screen's own move (#2204) writes no marker, so only its API form is open.
+    assert.ok(salesWriters.includes("moveSaleLines") && salesWriters.includes("moveSaleLinesThroughApi"));
     const closed = new Set([
       ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
       ...SALE_SHARE_WRITES,

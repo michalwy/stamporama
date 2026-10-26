@@ -221,12 +221,16 @@ export async function getAllegroOrderSalePrefill(
 
   // The sale the order may already partly be. Its lines are what tells the flow which of the
   // order's lines are done — matched on the offer, which is the only thing the two sides share.
-  const claimed = await prisma.sale.findFirst({
+  // A sale split in two (#2204) leaves both halves with the order's number: their lines together are
+  // what is done, and the first of them is the one the remainder goes to.
+  const claims = await prisma.sale.findMany({
     where: { collectionId, externalRef: orderId },
+    orderBy: { saleNo: "asc" },
     select: { id: true, saleNo: true, lines: { select: { offerId: true } } },
   });
+  const claimed = claims[0] ?? null;
   const recordedOfferIds = new Set(
-    (claimed?.lines ?? []).flatMap((line) => (line.offerId ? [line.offerId] : []))
+    claims.flatMap((sale) => sale.lines.flatMap((line) => (line.offerId ? [line.offerId] : [])))
   );
 
   // The sets still sellable, per offer. Read once for the whole platform rather than per line: a
@@ -414,6 +418,7 @@ export async function recordAllegroOrderSale(
 
   const existing = await prisma.sale.findFirst({
     where: { collectionId, externalRef: orderId },
+    orderBy: { saleNo: "asc" },
     select: { id: true, saleNo: true },
   });
 

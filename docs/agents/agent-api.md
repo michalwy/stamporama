@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted and #2198 a sale's own files; both wrappers exist and the registry carries **one hundred and twenty-six operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files and #2204 sold sets moved between sales; both wrappers exist and the registry carries **one hundred and twenty-seven operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #1168's bid recommendation, and #1037's catalog-number
 resolver. Twenty counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198) and *the registry carries one hundred and twenty-six operations* (from #2198 until #2204).
 
-**Eighty-two of them write** since #2198 added `add_sale_attachments` — its `list_sale_attachments` reads —; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Eighty-three of them write** since #2204 added `move_sale_sets`; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -944,7 +944,7 @@ specificity, which is what decides the order a `405` lists its methods in.
 
 ## Recording sales (#1949)
 
-**Five operations, finishing the offer workflow**: the collector's scenario is *list my Facebook
+**Five operations, finishing the offer workflow** (a sixth, `move_sale_sets`, came with #2204 — below): the collector's scenario is *list my Facebook
 offers → find what sold and to whom → record it*. Reading Facebook is the agent's own work, outside
 the app; `list_offers` already lists the offers, and these record the outcome.
 
@@ -992,6 +992,34 @@ first must mark the sale in both branches, and **every other writer of `sales.ts
 exports by verb, so one added later has to be placed — and the share link's are out of every
 operation module. `tests/integration/agent-api-sales.test.ts` drives the scenario through the real
 route and checks that no operation named for a sale deletes or moves one.
+
+### Moving sold sets to another sale (#2204)
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `move_sale_sets` | yes | split a sale: sets by line id to `new` or to an open sale of the same buyer, by number or id |
+
+**The screen's own move, under its rules.** `POST /sales/{saleId}/lines/move` takes `lines` (line ids
+from `get_sale`) and `to` (`new`, or a sale named as `move_conversation_entry` names one —
+`parseSaleRef`), and runs `moveSaleLinesThroughApi` in `sales.ts`: the same `moveSaleLinesIn` the
+sale screen's *Move to another sale…* runs, plus `markSaleWrittenByApi` on **both** sales in the same
+transaction — the one the sets joined or started (`created` when it is new) and the one they left,
+since taking lines off a sale is a write to it. Each marker names the move (`saleSetsMovedAction`:
+*moved 2 sets (offer #2680) to sale #13* / *… from sale #12*). The answer is both sales in
+`get_sale`'s shape, `from` and `to`.
+
+**The refusals are the screen's**, pure in `sale-move-rules.ts`: a source already sent, nothing or
+every set ticked (moving everything is not a split), and a target that is not another open sale of
+the same buyer, platform and currency — a sale with no buyer moves only to a new one. A line not on
+the source is refused rather than ignored. **It leaves every sale standing**, which is why the
+integration test's *deletes no sale and moves none* exempts it by name beside
+`add_sale_attachments`: every set stays sold, on one sale or the other, and no status or amount
+moves. The boundary test reads `move` as a writer's verb since #2204, so `moveSaleLines` — the
+screen's, unmarked — is closed and only `moveSaleLinesThroughApi` is open, required to mark twice.
+
+**A new sale carries the source's order number**, as the issue decided — so two sales can now claim
+one Allegro order. `allegro-worklist.ts` and `allegro-sale.ts` read every claiming sale's lines
+together and send the remainder to the first by number, so a split order is not offered again.
 
 ### A sale's own files (#2198)
 
@@ -3151,7 +3179,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries one hundred and twenty-six operations.** It was empty on #706, which shipped none; #708
+**The document carries one hundred and twenty-seven operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -3183,9 +3211,10 @@ and `sell_offer_set`; #2110 added `find_missing_catalogue_prices`; #2139 added `
 `delete_conversation_entry`; #2150 added `attach_conversation_files` and
 `remove_conversation_attachment`; #2167 added `list_issues`; #2173 added `set_stamp_colnect_ids`, #2174
 `update_stamps` and #2175 `create_issues`; #2169 added `move_stamp_to_issue`, #2171 `delete_stamp` and #2172
-`delete_issue`; #2198 added `list_sale_attachments` and `add_sale_attachments`.
+`delete_issue`; #2198 added `list_sale_attachments` and `add_sale_attachments`; #2204 added
+`move_sale_sets`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167, and *one hundred and eighteen* from #2167 until #2173, and *one hundred and twenty-one* from #2173 until #2169, #2171 and #2172, and *one hundred and twenty-four* from #2169, #2171 and #2172 until #2198. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635, and *eighty-four* from #1635 until #1910 — #1651 took it to eighty-five without saying so here — and *one hundred* from #1910 until #1949, and *one hundred and five* from #1949 until #2110, and *one hundred and six* from #2110 until #2139, and *one hundred and eight* from #2139 until #2140, and *one hundred and ten* from #2140 until #2149, and *one hundred and fifteen* from #2149 until #2150, and *one hundred and seventeen* from #2150 until #2167, and *one hundred and eighteen* from #2167 until #2173, and *one hundred and twenty-one* from #2173 until #2169, #2171 and #2172, and *one hundred and twenty-four* from #2169, #2171 and #2172 until #2198, and *one hundred and twenty-six* from #2198 until #2204. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

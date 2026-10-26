@@ -272,13 +272,22 @@ export async function getAllegroWorklist(
   // a line at a time — the order **stays here**, marked, with the rest still offered. The two sides
   // are compared on the offer, which is the only thing they share: `SaleLine.offerId` against the
   // offer each ordered line matched.
+  //
+  // A sale split in two (#2204) leaves both halves carrying the order's number, so an order may be
+  // claimed by several sales: what they account for is their lines together, and the first of them
+  // is the one the order links to.
   const claims = await prisma.sale.findMany({
     where: { collectionId, externalRef: { in: orderRows.map((row) => row.orderId) } },
+    orderBy: { saleNo: "asc" },
     select: { id: true, saleNo: true, externalRef: true, lines: { select: { offerId: true } } },
   });
-  const claimByOrder = new Map(
-    claims.flatMap((sale) => (sale.externalRef ? [[sale.externalRef, sale] as const] : []))
-  );
+  const claimByOrder = new Map<string, (typeof claims)[number]>();
+  for (const sale of claims) {
+    if (!sale.externalRef) continue;
+    const first = claimByOrder.get(sale.externalRef);
+    if (first) claimByOrder.set(sale.externalRef, { ...first, lines: [...first.lines, ...sale.lines] });
+    else claimByOrder.set(sale.externalRef, sale);
+  }
 
   const orders: WorklistOrder[] = orderRows.flatMap((row) => {
     const claim = claimByOrder.get(row.orderId) ?? null;
