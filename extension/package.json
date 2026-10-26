@@ -12,9 +12,9 @@
     "test": "tsx --test \"src/**/*.test.ts\" \"*.test.ts\""
   },
   "devDependencies": {
-    "@types/chrome": "0.3.5",
+    "@types/chrome": "0.3.6",
     "esbuild": "0.28.2",
-    "linkedom": "0.18.13",
+    "linkedom": "0.18.14",
     "tsx": "4.23.15",
     "typescript": "5.9.3"
   }
