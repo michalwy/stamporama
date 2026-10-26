@@ -8,6 +8,7 @@ import {
   buildPackingList,
   NO_GROUP_LABEL,
   NO_LOCATION_LABEL,
+  packingLocationLegend,
   packingSetOrder,
   type PackingCopy,
   type PackingLine,
@@ -35,9 +36,11 @@ const AREAS: CollectionAreaData[] = [
 ];
 
 const LOCATIONS: LocationData[] = [
-  { id: "szafa", name: "Szafa 1", parentId: null } as LocationData,
-  { id: "klaser", name: "Klaser A", parentId: "szafa" } as LocationData,
-  { id: "pudlo", name: "Pudło 2", parentId: null } as LocationData,
+  // Codes collate against their paths on purpose — `Pudło 2` is the first shelf and `ZZ`, `Szafa 1 ›
+  // Klaser A` the second and `AA` — so a sheet printing codes is seen to keep the paths' order.
+  { id: "szafa", name: "Szafa 1", parentId: null, code: "S1" } as LocationData,
+  { id: "klaser", name: "Klaser A", parentId: "szafa", code: "AA" } as LocationData,
+  { id: "pudlo", name: "Pudło 2", parentId: null, code: "ZZ" } as LocationData,
 ];
 
 let seq = 0;
@@ -469,5 +472,71 @@ describe("packingSetOrder", () => {
       [...order.entries()].sort((x, y) => x[1] - y[1]).map(([id]) => id),
       ["a", "d", "b", "c", "e"]
     );
+  });
+});
+
+// ── Location codes and their legend (#2192) ──────────────────────────────────
+
+describe("buildPackingList printing location codes", () => {
+  it("heads each location's section with its code, in the paths' shelf order", () => {
+    const list = buildPackingList(
+      [copy({ locationId: null, locationRef: null }), copy({ locationId: "pudlo" }), copy({ locationId: "klaser" })],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { locationLabel: "code" }
+    );
+    assert.deepEqual(
+      list.groups.map((g) => g.location),
+      ["ZZ", "AA", NO_LOCATION_LABEL]
+    );
+    assert.equal(list.groups[1].rows[0].location, "AA");
+    assert.equal(list.groups[1].rows[0].locationPath, "Szafa 1 › Klaser A");
+  });
+
+  it("prints codes in a set's rows, still ordered by path", () => {
+    const set = soldSet(0);
+    const list = buildPackingList(
+      [
+        copy({ set, stampId: "a", locationId: null, locationRef: null }),
+        copy({ set, stampId: "b", locationId: "pudlo", locationRef: "A1" }),
+        copy({ set, stampId: "c", locationId: "klaser", locationRef: "A2" }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set", locationLabel: "code" }
+    );
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.location),
+      ["ZZ", "AA", null]
+    );
+  });
+
+  it("prints paths unless asked for codes", () => {
+    const list = buildPackingList([copy({ locationId: "klaser" })], AREAS, LOCATIONS, MAPS);
+    assert.equal(list.groups[0].location, "Szafa 1 › Klaser A");
+  });
+});
+
+describe("packingLocationLegend", () => {
+  it("lists each location on the sheet once, code beside path, in shelf order", () => {
+    const legend = packingLocationLegend(
+      [
+        copy({ locationId: "pudlo" }),
+        copy({ locationId: null }),
+        copy({ locationId: "klaser" }),
+        copy({ locationId: "pudlo" }),
+      ],
+      LOCATIONS
+    );
+    assert.deepEqual(legend, [
+      { code: "ZZ", path: "Pudło 2" },
+      { code: "AA", path: "Szafa 1 › Klaser A" },
+    ]);
+  });
+
+  it("is empty for a sheet of unfiled copies", () => {
+    assert.deepEqual(packingLocationLegend([copy({ locationId: null })], LOCATIONS), []);
   });
 });

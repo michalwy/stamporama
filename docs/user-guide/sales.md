@@ -625,7 +625,8 @@ laid out as a walk through your shelves:
   the sheet says how the parcel goes out; sales without one simply don't show the field.
 - One **section per storage [location](locations.md)**, in shelf order (or per sold set — see
   [Grouping by sold set](#grouping-by-sold-set)), with the copies filed
-  nowhere in a trailing **No location** section.
+  nowhere in a trailing **No location** section. A section is headed by the location's
+  **short code** (`ABX`) alone, never its name — see [Location codes and the legend](#location-codes-and-the-legend).
 - Inside a section, one line per copy: a **tick box** plus whichever of the columns below you
   turned on. Lines are ordered by the in-location **ref** — what you read off the shelf.
   Refs of the usual `prefix + number` shape (`A100`, `A1200`, `B-3000`) sort **by prefix first,
@@ -648,7 +649,8 @@ the head of the chips row turns the sheet into **one section per sold set** inst
 - The sections follow the order of the sale's lines, except that **sets sold through one offer sit
   one after another**.
 - Inside a set, the copies are in **location, then ref** order, so a set is still picked down the
-  shelf. Since the heading no longer says where a copy is, every line prints its **Location** beside
+  shelf. Since the heading no longer says where a copy is, every line prints its **Location** — its
+  code — beside
   its **Ref**, and both stay on while the sheet is by set — your own choice for **Ref** comes back
   when you switch to *Location*.
 - Identical copies merge into one line **only within a set** — never across two sets, so each set's
@@ -656,6 +658,19 @@ the head of the chips row turns the sheet into **one section per sold set** inst
 
 The switch starts on **Location** and is remembered the same way as the columns: once, for every
 sale.
+
+### Location codes and the legend
+
+The sheet goes into the parcel, so it never prints your storage names: wherever it says where a copy
+is — a section heading, or the **Location** column of a sheet by set — it prints the location's
+[short code](locations.md) instead. *No location* is printed as it is.
+
+What the codes stand for is in the **legend**, shown above the sheet on screen: each code on this
+sale's list beside its location's full path, in shelf order, headed by the sale's number and date so
+it can be matched to its list. **Print legend**, beside **Print**, prints the legend on its own page;
+**Print** never includes it. Being a print of its own, the legend cannot end up on the back of the
+packing list's last sheet when you print double-sided — keep it, and put only the packing list in the
+parcel. A sale whose copies are all unfiled has no legend and no **Print legend**.
 
 ### Choosing the columns
 
