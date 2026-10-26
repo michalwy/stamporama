@@ -1668,9 +1668,9 @@ the stamp it has taken, named by its catalogue-number chips with the main catalo
 stamps first, then the other stamps of its issue — and **its own details**.
 
 - **When you ticked as many tiles as the checklist has stamps, the tiles take them in turn** — the
-  card holds the whole set. They go in the checklist's own order — the order its **Order stamps…**
-  screen shows, whether or not you ever rearranged it — the first tile you ticked the first stamp, the
-  second the second. Whatever the checklist holds is the sequence, **variants included**: a checklist
+  card holds the whole set. They go in the checklist's own order — the order its issue's
+  **Checklists…** editor shows, whether or not you ever rearranged it — the first tile you ticked
+  the first stamp, the second the second. Whatever the checklist holds is the sequence, **variants included**: a checklist
   of imperforate variants is a run of imperforate variants.
 - **When you ticked fewer, or more, the run starts with nothing assigned** — you have a scattering of
   the set, and taking turns would put almost every tile on a wrong stamp. The first tile is in hand,

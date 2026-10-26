@@ -256,8 +256,9 @@ Offers. Details, Checklists and Stamps are always there.
   catalog value. The figures are the ones the Issues list's checklist badge and the Completeness
   card show, so they always agree. **Click a checklist** to narrow the Stamps tree below to it;
   click it again to see every stamp. **Manage…** opens the checklist editor — the same one the
-  Issues list opens from the issue's **⋮ → Checklists…** — and the page picks up whatever you
-  changed as soon as you close it. An issue with no checklist says so, and **Manage…** is where you
+  Issues list opens from the issue's **⋮ → Checklists…**, with the checklists on the left and the
+  picked one's name, type and stamps on the right — and the page picks up whatever you changed as
+  soon as you close it. An issue with no checklist says so, and **Manage…** is where you
   create the first one.
 - **Completeness** — the breakdown described below.
 - **Catalog value** — averages across catalogs for the stamps on one

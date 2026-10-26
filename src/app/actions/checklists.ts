@@ -116,6 +116,12 @@ export async function listSpanningChecklistsAction(
   );
 }
 
+/** A created checklist's id comes back, so the issue's editor can go on filling the one it made
+ *  (#2206). */
+export type CreateChecklistActionState =
+  | { status: "success"; checklistId: string }
+  | { status: "error"; message: string };
+
 export async function createChecklistAction(
   collectionId: string,
   /** Null creates a checklist that spans issues (#1416). */
@@ -124,12 +130,17 @@ export async function createChecklistAction(
   translations?: TranslationValueMap,
   /** Standard unless chosen otherwise (#1617). */
   kind?: ChecklistKind
-): Promise<ChecklistActionState> {
+): Promise<CreateChecklistActionState> {
   const session = await getSession();
   try {
     if (kind !== undefined && !isChecklistKind(kind)) throw new Error("Unknown checklist type.");
-    await createChecklist(session.user.id, collectionId, { issueId, name, translations, kind });
-    return { status: "success" };
+    const checklistId = await createChecklist(session.user.id, collectionId, {
+      issueId,
+      name,
+      translations,
+      kind,
+    });
+    return { status: "success", checklistId };
   } catch (err) {
     return {
       status: "error",
