@@ -58,6 +58,9 @@ by the same rule.
 A code is only a label for the location: it is not part of a copy's **Ref** (`A147`), which is
 unchanged.
 
+The printed [packing list](sales.md#location-codes-and-the-legend) names locations by their codes,
+with a legend of what they stand for printed separately.
+
 ## Editing and deleting
 
 Every location row has a **⋮** menu with **Add sub-location**, **Edit**, and **Delete**.

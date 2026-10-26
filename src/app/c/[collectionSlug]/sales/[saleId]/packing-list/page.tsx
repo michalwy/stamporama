@@ -11,7 +11,13 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
-import { buildPackingList, packingSetOrder, type PackingSet } from "@/lib/packing-list";
+import {
+  buildPackingList,
+  packingLocationLegend,
+  packingSetOrder,
+  type PackingLegendEntry,
+  type PackingSet,
+} from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { saleLineHeading } from "@/lib/sale-line-name";
 import { saleStatusMeta } from "../../sale-status";
@@ -49,6 +55,10 @@ function formatDate(d: Date): string {
  * no lazy loading — because the artifact is the printout; the interactive packing view lives on the
  * sale detail screen. Both divisions are built here and the sheet's switch only picks one, so
  * switching is not a round trip. App chrome (`.no-print`) drops out on paper.
+ *
+ * Locations print as their short codes (#2192): the sheet goes into the parcel, and the paths are
+ * the collector's own storage names. They are explained by a legend shown above the sheet and
+ * printed on its own (`PrintButton`'s `part`), never with the sheet.
  */
 export default async function PackingListPage({ params }: PackingListPageProps) {
   const { collectionSlug, saleId } = await params;
@@ -70,7 +80,8 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
   ]);
 
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
-  const list = buildPackingList(copies, areas, locations, maps);
+  const list = buildPackingList(copies, areas, locations, maps, { locationLabel: "code" });
+  const legend = packingLocationLegend(copies, locations);
   // Each set named as the sale screen names its line (#2189): the offer and its title, the set's
   // numbers under it, the price.
   const positions = packingSetOrder(sale.lines);
@@ -92,7 +103,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
     areas,
     locations,
     maps,
-    { grouping: "set" }
+    { grouping: "set", locationLabel: "code" }
   );
   const status = saleStatusMeta(sale.status);
 
@@ -114,8 +125,18 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           For page numbers, enable “Headers and footers” in the print dialog.
         </span>
+        {legend.length > 0 && (
+          <PrintButton
+            part={{
+              label: "Print legend",
+              documentTitle: `Location legend ${formatEntityNo(sale.saleNo)}`,
+            }}
+          />
+        )}
         <PrintButton />
       </div>
+
+      <LocationLegend saleNo={sale.saleNo} soldAt={sale.soldAt} entries={legend} />
 
       {/* Sheet header — who and what this parcel is */}
       <header style={{ borderBottom: "2px solid var(--color-border-strong)", paddingBottom: "0.75rem" }}>
@@ -205,6 +226,72 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </span>
       </div>
     </Screen>
+  );
+}
+
+/** What the sheet's location codes stand for (#2192) — the collector's, kept out of the parcel. On
+ *  screen it sits above the sheet; on paper it is a page of its own (`.print-part`), headed so it
+ *  can be matched to its packing list. */
+function LocationLegend({
+  saleNo,
+  soldAt,
+  entries,
+}: {
+  saleNo: number;
+  soldAt: Date;
+  entries: PackingLegendEntry[];
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <section
+      className="print-part"
+      style={{
+        marginBottom: "1.25rem",
+        padding: "0.75rem 1rem",
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+      }}
+    >
+      <h2
+        style={{
+          margin: "0 0 0.5rem",
+          display: "flex",
+          alignItems: "baseline",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+          fontSize: "0.9375rem",
+          fontWeight: 600,
+          color: "var(--color-text-primary)",
+        }}
+      >
+        <span>Location legend {formatEntityNo(saleNo)}</span>
+        <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-text-secondary)" }}>
+          Sold {formatDate(soldAt)}
+        </span>
+      </h2>
+      <table style={{ borderCollapse: "collapse" }}>
+        <tbody>
+          {entries.map((entry) => (
+            <tr key={entry.code}>
+              <td
+                style={{
+                  padding: "0.125rem 1.25rem 0.125rem 0",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                {entry.code}
+              </td>
+              <td style={{ padding: "0.125rem 0", fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+                {entry.path}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

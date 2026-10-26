@@ -43,7 +43,7 @@ const COLUMNS: PackingColumnSpec[] = [
 // Divided by sold set (#2187) a section no longer says which shelf it is, so every line says it: the
 // location prints beside the ref, and neither can be turned off while the sheet is by set. The
 // location is **not** one of the stored columns — a sheet by shelf prints it in its headings — so
-// adding it here resets nobody's chips.
+// adding it here resets nobody's chips. Like the headings it prints the location's code (#2192).
 const SET_COLUMNS: PackingColumnSpec[] = COLUMNS.flatMap((c) =>
   c.key === PACKING_COLUMN.ref.key ? [PACKING_COLUMN.location, c] : [c]
 );

@@ -26,6 +26,11 @@ import { compareLocationRef } from "./location-ref";
 // order — by location, then ref — so a set is picked down the shelf all the same, and a merge never
 // crosses two sets, because each set is its own bucket.
 //
+// A sale's sheet names a location by its **short code** (#2191, #2192), not its path: the sheet goes
+// into the parcel, and the path is the collector's own storage names. The codes are explained by a
+// legend printed apart from it ({@link packingLocationLegend}). Shelf order is still the order of the
+// paths — a code is a label, and collating the labels would reorder the walk.
+//
 // A sheet the partner reads is the same shaping with the shelf taken out of it: the divisions are the
 // transaction's own (a trade's sections), and the rows inside them read by catalogue number, because
 // a walk along somebody else's shelves is not a thing the reader can do.
@@ -180,10 +185,14 @@ export interface PackingListRow {
   certificateStatusName: string | null;
   /** In-location identifier, or null when the copy has none. */
   locationRef: string | null;
-  /** Full location path of the copies behind the row, or null when they are filed nowhere. Carried
-   * on the row as well as on the group because a sheet divided by something *else* still wants to
-   * say where the piece is — and one divided by location does not print it twice. */
+  /** Where the copies behind the row are, as the sheet prints it — the full location path, or the
+   * location's code on a sheet that prints codes ({@link PackingListOptions.locationLabel}) — or null
+   * when they are filed nowhere. Carried on the row as well as on the group because a sheet divided
+   * by something *else* still wants to say where the piece is — and one divided by location does not
+   * print it twice. */
   location: string | null;
+  /** The full location path whatever the sheet prints: what shelf order collates. */
+  locationPath: string | null;
   /** Id of the first photo of the first copy behind the row (#112), or null when it has none —
    * the thumbnail column renders it. Merged copies share one thumbnail: they are the same stamp
    * in the same condition, so any of their photos identifies the piece to pull. */
@@ -210,9 +219,12 @@ export interface PackingListGroup {
   /** Location id, `__none__` for the unfiled section, or the group name on a sheet divided by the
    *  transaction's own structure. */
   key: string;
-  /** Heading: the full location path (`Szafa 1 › Klaser A`), the group's name, the set's title, or
-   *  the label for the rows none of them places. */
+  /** Heading: the full location path (`Szafa 1 › Klaser A`) or its code, the group's name, the set's
+   *  title, or the label for the rows none of them places. */
   location: string;
+  /** What the divisions of a sheet by location are collated by — the full path even where the
+   *  heading is a code. */
+  order: string;
   /** The sold set this division is, on a sheet divided by set; null on any other. */
   set: PackingSet | null;
   rows: PackingListRow[];
@@ -260,11 +272,24 @@ export interface PackingListOptions {
    * then ref — its divisions are not shelves, so the location is part of the walk.
    */
   rowOrder?: "shelf" | "catalog";
+  /**
+   * How a location is printed, in headings and rows alike: `path` (`Szafa 1 › Klaser A`), or `code`
+   * — the location's short code (#2192), for a sheet whose names are explained by a legend kept apart
+   * from it. The order is the paths' either way.
+   */
+  locationLabel?: "path" | "code";
+}
+
+/** One line of a sheet's location legend (#2192): a code beside the path it stands for. */
+export interface PackingLegendEntry {
+  code: string;
+  path: string;
 }
 
 interface Bucket {
   key: string;
   location: string;
+  order: string;
   set: PackingSet | null;
   rows: Map<string, PackingListRow>;
 }
@@ -283,12 +308,16 @@ export function buildPackingList(
   const ungrouped =
     options.ungroupedLabel ?? (byGroup || bySet ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
   const rowOrder = options.rowOrder ?? "shelf";
+  const byCode = options.locationLabel === "code";
+  const codes = new Map(locations.map((l) => [l.id, l.code]));
 
   const buckets = new Map<string, Bucket>();
   let currency: string | null = null;
 
   for (const copy of copies) {
     const locationPath = buildLocationPath(locations, copy.locationId);
+    const locationLabel =
+      byCode && copy.locationId ? (codes.get(copy.locationId) ?? locationPath) : locationPath;
     const group = byGroup ? (copy.line?.group ?? null) : null;
     const set = bySet ? (copy.set ?? null) : null;
     const bucketKey = bySet
@@ -298,9 +327,11 @@ export function buildPackingList(
         : (copy.locationId ?? "__none__");
     let bucket = buckets.get(bucketKey);
     if (!bucket) {
+      const heading = (bySet ? (set?.title ?? null) : byGroup ? group : locationLabel) ?? ungrouped;
       bucket = {
         key: bucketKey,
-        location: (bySet ? (set?.title ?? null) : byGroup ? group : locationPath) ?? ungrouped,
+        location: heading,
+        order: (bySet || byGroup ? null : locationPath) ?? heading,
         set,
         rows: new Map(),
       };
@@ -342,7 +373,8 @@ export function buildPackingList(
       conditionName: copy.conditionName,
       certificateStatusName: copy.certificateStatusName,
       locationRef: copy.locationRef,
-      location: locationPath,
+      location: locationLabel,
+      locationPath,
       photoId: copy.photos[0]?.id ?? null,
       itemNos: [copy.itemNo],
       offerNos: copy.offerNo == null ? [] : [copy.offerNo],
@@ -368,6 +400,7 @@ export function buildPackingList(
     return {
       key: bucket.key,
       location: bucket.location,
+      order: bucket.order,
       set: bucket.set,
       rows,
       copyCount: rows.reduce((sum, r) => sum + r.quantity, 0),
@@ -393,6 +426,26 @@ export function buildPackingList(
   };
 }
 
+/**
+ * The legend to a sheet that prints location codes (#2192): every location the copies are filed in,
+ * its code beside its full path, in shelf order. Unfiled copies add nothing — *No location* is
+ * printed as itself.
+ */
+export function packingLocationLegend(
+  copies: readonly Pick<PackingCopy, "locationId">[],
+  locations: readonly LocationData[]
+): PackingLegendEntry[] {
+  const byId = new Map(locations.map((l) => [l.id, l]));
+  const entries = new Map<string, PackingLegendEntry>();
+  for (const { locationId } of copies) {
+    if (!locationId || entries.has(locationId)) continue;
+    const location = byId.get(locationId);
+    const path = buildLocationPath(locations, locationId);
+    if (location && path) entries.set(locationId, { code: location.code, path });
+  }
+  return Array.from(entries.values()).sort((a, b) => COLLATOR.compare(a.path, b.path));
+}
+
 /** A copy as `catalogLabel` reads it: where it sits, and what it is numbered and called. The one
  *  place the projection's `stampName` and the labeller's `name` are bridged. */
 function catalogSubject(copy: PackingCopy): CatalogLabelSubject {
@@ -408,7 +461,7 @@ function catalogSubject(copy: PackingCopy): CatalogLabelSubject {
 function compareGroups(a: PackingListGroup, b: PackingListGroup): number {
   if (a.key === "__none__") return b.key === "__none__" ? 0 : 1;
   if (b.key === "__none__") return -1;
-  return COLLATOR.compare(a.location, b.location);
+  return COLLATOR.compare(a.order, b.order);
 }
 
 /** Sets in the caller's order; copies on no set trail. */
@@ -420,10 +473,10 @@ function compareSets(a: PackingListGroup, b: PackingListGroup): number {
 
 /** Rows by location path (unfiled last), then as {@link compareByShelf}. */
 function compareByLocation(a: PackingListRow, b: PackingListRow): number {
-  if (a.location !== b.location) {
-    if (a.location === null) return 1;
-    if (b.location === null) return -1;
-    const byLocation = COLLATOR.compare(a.location, b.location);
+  if (a.locationPath !== b.locationPath) {
+    if (a.locationPath === null) return 1;
+    if (b.locationPath === null) return -1;
+    const byLocation = COLLATOR.compare(a.locationPath, b.locationPath);
     if (byLocation !== 0) return byLocation;
   }
   return compareByShelf(a, b);

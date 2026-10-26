@@ -513,4 +513,14 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   .print-section-heading {
     break-after: avoid;
   }
+
+  /* A sheet's part printed on its own (#2192, a packing list's location legend): never on the
+     sheet's own print, and alone on the one `PrintButton` starts for it — which marks `<html>` with
+     `.printing-part` for the length of the print. Its own print rather than the sheet's last page,
+     so double-sided it cannot land on the back of the sheet's last leaf. The pinned footer is the
+     sheet's and goes with it. */
+  html:not(.printing-part) .print-part,
+  html.printing-part .print-sheet > :not(.print-part) {
+    display: none !important;
+  }
 }
