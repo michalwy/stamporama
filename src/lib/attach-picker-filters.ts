@@ -20,9 +20,16 @@
  *
  * The sort (#2147, `attach-picker-sort.ts`) is stored in the same value, so the picker reopens in
  * the order it was left in, as it does with the filters it was left with.
+ *
+ * The location (#2209) is the Copies list's location filter and reads as it does there: a location
+ * brings every location nested inside it unless *this location only* is set, and
+ * {@link NO_LOCATION} is the copies filed nowhere. The picked location is stored here, apart from
+ * the Copies list's own; the *+ sub-locations* switch is the shared way of reading the tree
+ * (`useSubtreeScope`), as the area rail's is.
  */
 
 import { isAttachSortKey, type AttachSortDir, type AttachSortKey } from "./attach-picker-sort";
+import { NO_LOCATION } from "./location-groups";
 
 /** Where a copy stands: still held, gone on a sale or a closed trade, or written off (#394).
  *  *Gone* is one value for a sale and a trade because the Copies list asks it as one question
@@ -66,6 +73,9 @@ export interface AttachPickerFilters {
   formatIds: string[];
   purchase: AttachPurchaseValue[];
   states: AttachState[];
+  /** A location id, {@link NO_LOCATION} for the copies filed nowhere, or `""` for every location
+   *  (#2209). */
+  locationId: string;
   sortBy: AttachSortKey;
   sortDir: AttachSortDir;
 }
@@ -79,6 +89,7 @@ export const DEFAULT_ATTACH_FILTERS: AttachPickerFilters = {
   formatIds: [],
   purchase: [],
   states: ["held"],
+  locationId: "",
   sortBy: "catalogue",
   sortDir: "asc",
 };
@@ -115,6 +126,7 @@ export function parseAttachFilters(raw: string | null): AttachPickerFilters {
     // A stored list with no recognised state is the default, not *every state*: only a list the
     // collector emptied themselves means that, and it is stored as `[]`.
     states: readStoredStates(o.states),
+    locationId: typeof o.locationId === "string" ? o.locationId : "",
     sortBy: isAttachSortKey(o.sortBy) ? o.sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
     sortDir: o.sortDir === "desc" ? "desc" : "asc",
   };
@@ -158,6 +170,10 @@ export interface AttachReadQuery {
   certificateStatusIds: string[];
   formatIds: string[];
   purchase: AttachPurchaseValue[];
+  /** A location id or {@link NO_LOCATION}; null for every location (#2209). */
+  locationId: string | null;
+  /** That location alone, without the locations nested inside it. */
+  locationExact: boolean;
   sortBy: AttachSortKey;
   sortDir: AttachSortDir;
   year: AttachYear;
@@ -171,18 +187,25 @@ export function parseAttachYear(raw: string | null | undefined): AttachYear {
 }
 
 /** Put the picker's filters, year, search and sort on a query string (#2179). The state and the
- *  area go on beside them, as they always have. */
+ *  area go on beside them, as they always have. `includeSubLocations` is the location's
+ *  *+ sub-locations* switch (#2209), which says nothing until a location is picked. */
 export function writeAttachQuery(
   params: URLSearchParams,
   filters: AttachPickerFilters,
   year: string | null,
-  search: string
+  search: string,
+  includeSubLocations = true
 ): void {
   for (const d of filters.dispositions) params.append("disposition", d);
   for (const id of filters.conditionIds) params.append("condition", id);
   for (const id of filters.certificateStatusIds) params.append("certificate", id);
   for (const id of filters.formatIds) params.append("format", id);
   for (const value of filters.purchase) params.append("purchase", value);
+  if (filters.locationId) {
+    params.set("location", filters.locationId);
+    // The unfiled bucket has nothing nested in it, so the switch is not sent with it.
+    if (!includeSubLocations && filters.locationId !== NO_LOCATION) params.set("locationExact", "1");
+  }
   params.set("sort", filters.sortBy);
   params.set("dir", filters.sortDir);
   const y = parseAttachYear(year);
@@ -194,12 +217,15 @@ export function writeAttachQuery(
  *  search is the caller's to trim (the route reads it through `readSearchParam`). */
 export function readAttachQuery(sp: URLSearchParams, search: string | undefined): AttachReadQuery {
   const sortBy = sp.get("sort");
+  const location = sp.get("location");
   return {
     dispositions: oneOf(sp.getAll("disposition"), ATTACH_DISPOSITIONS),
     conditionIds: sp.getAll("condition").filter(Boolean),
     certificateStatusIds: sp.getAll("certificate").filter(Boolean),
     formatIds: sp.getAll("format").filter(Boolean),
     purchase: oneOf(sp.getAll("purchase"), ATTACH_PURCHASE_VALUES),
+    locationId: location || null,
+    locationExact: !!location && sp.get("locationExact") === "1",
     sortBy: isAttachSortKey(sortBy) ? sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
     sortDir: sp.get("dir") === "desc" ? "desc" : "asc",
     year: parseAttachYear(sp.get("year")),
