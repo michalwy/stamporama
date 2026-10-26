@@ -39,13 +39,13 @@ async function seedFixtures(suffix: string) {
     data: { collectionId: collection.id, name: "Used", abbreviation: "U", sortOrder: 0 },
   });
   const album = await prisma.location.create({
-    data: { collectionId: collection.id, name: "Album", assignable: true },
+    data: { collectionId: collection.id, code: "L1", name: "Album", assignable: true },
   });
   const stock = await prisma.location.create({
-    data: { collectionId: collection.id, name: "Sale stock", assignable: true },
+    data: { collectionId: collection.id, code: "L2", name: "Sale stock", assignable: true },
   });
   const shelf = await prisma.location.create({
-    data: { collectionId: collection.id, name: "Shelf", assignable: false },
+    data: { collectionId: collection.id, code: "L3", name: "Shelf", assignable: false },
   });
   const platform = await prisma.platform.create({
     data: { collectionId: collection.id, name: "Delcampe", platformCurrency: "EUR" },

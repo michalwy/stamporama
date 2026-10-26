@@ -18,7 +18,7 @@ for example a cabinet holding several stockbooks:
 - **Safe** *(grouping)*
   - Certificates envelope
 
-To add one, click **+ Add location**, give it a name, optionally choose a **parent
+To add one, click **+ Add location**, give it a name and a [code](#location-codes), optionally choose a **parent
 location** and a **description**, and decide whether it **can hold copies**.
 
 Any location with children shows a **caret** to its left — click it to **collapse**
@@ -38,6 +38,25 @@ The **Can hold copies** checkbox is the key setting:
 
 You cannot mark a location as grouping-only while copies are still filed directly in it —
 move those copies first.
+
+## Location codes
+
+Every location has a short **code** — up to six letters and digits, such as `ABX` — shown beside
+its name on the Locations screen and in the location picker, where you can also search by it. A
+code stands in for the location's whole path where the path is too long, or too private, to print,
+so it stays the same however the location is renamed or moved: change it yourself in **Edit** when
+you want another one.
+
+When you add a location, a code is proposed from its path: the first letter of the **last word** of
+each name from the top down (`Segment A › Shelf B › Stockbook X` → `ABX`), or the whole word when
+it is a number (`Szafa 1 › Klaser A` → `1A`). If that code is already taken, a number is added
+(`ABX2`). Type over it to choose your own. Codes are unique within the collection and letter case
+does not matter — `abx` is saved as `ABX` — so a code another location already has is refused, and
+the dialog names the location that has it. Locations created before codes existed were given one
+by the same rule.
+
+A code is only a label for the location: it is not part of a copy's **Ref** (`A147`), which is
+unchanged.
 
 ## Editing and deleting
 

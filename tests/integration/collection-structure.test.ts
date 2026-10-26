@@ -117,10 +117,10 @@ describe("collection structure (#1401)", () => {
     );
     await make("asia", () => prisma.collectionArea.create({ data: { collectionId, name: "Asia" } }));
     await make("cabinet", () =>
-      prisma.location.create({ data: { collectionId, name: "Cabinet" } })
+      prisma.location.create({ data: { collectionId, code: "L1", name: "Cabinet" } })
     );
     await make("albumA", () =>
-      prisma.location.create({ data: { collectionId, name: "Album A", parentId: ids.cabinet } })
+      prisma.location.create({ data: { collectionId, code: "L2", name: "Album A", parentId: ids.cabinet } })
     );
     await make("birds", () => prisma.tag.create({ data: { collectionId, name: "birds" } }));
     await make("check", () => prisma.tag.create({ data: { collectionId, name: "to check" } }));

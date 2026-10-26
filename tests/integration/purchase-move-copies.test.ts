@@ -111,7 +111,7 @@ describe("moveCopiesToDocument (#2123)", () => {
       })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Chopin 1949" } })).id;
-    locationId = (await prisma.location.create({ data: { collectionId, name: "Box 1" } })).id;
+    locationId = (await prisma.location.create({ data: { collectionId, code: "L1", name: "Box 1" } })).id;
     platformId = (await prisma.platform.create({ data: { collectionId, name: "Delcampe" } })).id;
   });
 

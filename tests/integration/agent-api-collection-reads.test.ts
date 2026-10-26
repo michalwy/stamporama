@@ -161,11 +161,11 @@ describe("the collection reads (#710)", () => {
     ).id;
 
     drawerId = (
-      await prisma.location.create({ data: { collectionId, name: "Szafa 1", assignable: false } })
+      await prisma.location.create({ data: { collectionId, code: "L1", name: "Szafa 1", assignable: false } })
     ).id;
     shelfId = (
       await prisma.location.create({
-        data: { collectionId, name: "Klaser A", parentId: drawerId, assignable: true },
+        data: { collectionId, code: "L2", name: "Klaser A", parentId: drawerId, assignable: true },
       })
     ).id;
 

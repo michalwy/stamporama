@@ -95,7 +95,7 @@ describe("multi-stamp copies on the Copies list (#748)", () => {
       })
     ).id;
     boxId = (
-      await prisma.location.create({ data: { collectionId, name: "Box", assignable: true } })
+      await prisma.location.create({ data: { collectionId, code: "L1", name: "Box", assignable: true } })
     ).id;
     issueId = (
       await prisma.issue.create({

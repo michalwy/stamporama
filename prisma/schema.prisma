@@ -7272,6 +7272,10 @@ model Location {
   id           String   @id @default(cuid())
   collectionId String
   name         String
+  // A short label standing in for the whole path where the path is too long or too private to
+  // print (#2191): up to six letters and digits, stored upper-cased, unique within the collection.
+  // Generated from the path when none is given (`src/lib/location-code.ts`), then the collector's.
+  code         String
   parentId     String?
   description  String?
   // Grouping-only nodes (e.g. a cabinet) have `assignable = false`; leaf storage
@@ -7287,6 +7291,7 @@ model Location {
   children   Location[] @relation("LocationChildren")
   items      Item[]
 
+  @@unique([collectionId, code])
   @@index([collectionId])
   @@map("location")
 }

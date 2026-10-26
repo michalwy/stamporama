@@ -43,7 +43,7 @@ async function seedFixtures(suffix: string) {
     data: { collectionId: collection.id, name: "Germany" },
   });
   const album = await prisma.location.create({
-    data: { collectionId: collection.id, name: "Album", assignable: true },
+    data: { collectionId: collection.id, code: "L1", name: "Album", assignable: true },
   });
   return {
     userId: user.id,

@@ -58,6 +58,16 @@ Filtering the inventory by a location matches that location **and all its
 descendants** ("show everything in Cabinet 1" includes every stockbook inside it). The
 subtree is resolved server-side from one flat read of the collection's locations.
 
+### 6. Every location has a short, stable code (#2191)
+
+Added 2026-10-26. `Location.code` is up to six letters and digits, stored upper-cased and unique
+within the collection (`@@unique([collectionId, code])`, which is the case-insensitive rule because
+the value is normalized before it is written). It is a label standing in for the path where the
+path is too long or too private to print — the packing list (#2192) — and is therefore **stable**:
+a rename or a move keeps it, and only the collector changes it. A code is generated from the path
+where none is typed (`src/lib/location-code.ts`; existing locations were backfilled by the same
+rule in SQL). It is never part of `Item.locationRef`.
+
 ## Consequences
 
 - Locations get their own screen under the **Collection** section (not Settings):

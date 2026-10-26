@@ -140,10 +140,10 @@ describe("the collection vocabulary operation", () => {
     });
 
     const cabinet = await prisma.location.create({
-      data: { collectionId, name: "Cabinet", assignable: false },
+      data: { collectionId, code: "L1", name: "Cabinet", assignable: false },
     });
     await prisma.location.create({
-      data: { collectionId, name: "Stockbook A", parentId: cabinet.id, assignable: true },
+      data: { collectionId, code: "L2", name: "Stockbook A", parentId: cabinet.id, assignable: true },
     });
 
     const michel = await prisma.catalogVendor.create({
