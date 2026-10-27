@@ -708,6 +708,28 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   needing covers again (`OffersCoverWalk`'s `mode="all"`). *Publish…* is disabled while any lot's run
   is in flight, the lots named beside it; `publishFacebookPost` refuses the same (`offers.md`).
 
+- **A post being priced shows its totals in a bar pinned to the bottom of the window** (#2218, settled
+  with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as written).
+  `PostPriceTotalsBar` (`offers/posts/[postNo]/post-price-totals-bar.tsx`) under the lots, in one box with
+  the `<ol>` so `position: sticky; bottom: 0` holds it to the window's bottom edge only while some lot is
+  on screen; drawn while `prepareRows` is — so gone once the post is up — and nothing read for it: the
+  figures are `postPriceTotals` (`facebook-post-price-totals.ts`, pure, unit-tested) over the Prepare rows
+  already on screen. **Summed, not re-derived**: each lot's Catalogue, Estimated, Market and Cost are its
+  row's (`offerPriceFigures`, per set and already in the offer's currency), and the margins are
+  `priceMargin`'s, so signs and colours read as on a row — but **the prices are weighed against each
+  total**, not each figure against the cost as a row does: what the post brings in over its catalogue,
+  estimate, market and cost. **Nothing missing is a 0**: an unpriced lot leaves the price total, a lot
+  without a figure leaves that figure's total, each said *over N of M lots*; a margin is over the lots
+  with **both**, named in its hover when fewer. A cost of zero is a known cost, as on a row. An auction
+  counts by its starting price (`statedPrice`, moved here from `prepare-offer-parts.tsx`), and the price
+  column says *Starting prices* — *Prices and starting prices* in a mixed post. **Currency**: the first
+  lot's; a lot in another is counted apart and summed nowhere. **It follows typing**:
+  `PreparePriceField`'s `onDraft` reports the field's text on every change, a figure clicked in and
+  **Esc**; the panel keeps it per lot as a `PriceDraft` with the saved figure it was typed over, so a
+  draft left behind once the save settles — or *Use estimated price* moves the figure — stops counting
+  by itself, with no clean-up. Prepare is unchanged (it passes no `onDraft`). The unit test is
+  `tests/unit/facebook-post-price-totals.test.ts`.
+
 - **A Ready post, or one of its lots, goes back to Preparing from the post's screen** (#2115, settled
   with the collector on 2026-10-23; the issue's *to be confirmed* points implemented as written).
   `takeFacebookPostBackToPreparing` (`facebook-posts.ts`, by post id) through
