@@ -507,7 +507,12 @@ export async function readKitLots(collectionId: string, where: Prisma.OfferWhere
   });
 }
 
-export async function getFacebookOfferKit(offerId: string): Promise<FacebookOfferKit | null> {
+/** `lotOnly` reads the offer's own lot and no other (#2221) — what its post's screen refreshes one lot
+ *  by — the post-wide part, its layout included, still the whole post's. */
+export async function getFacebookOfferKit(
+  offerId: string,
+  { lotOnly = false }: { lotOnly?: boolean } = {}
+): Promise<FacebookOfferKit | null> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {
@@ -520,11 +525,15 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
   if (!offer?.facebookGroup) return null;
   const lots = await readKitLots(
     offer.collectionId,
-    offer.facebookPostId ? { facebookPostId: offer.facebookPostId } : { id: offerId }
+    offer.facebookPostId && !lotOnly ? { facebookPostId: offer.facebookPostId } : { id: offerId }
   );
+  const lotCount =
+    lotOnly && offer.facebookPostId
+      ? await prisma.offer.count({ where: { facebookPostId: offer.facebookPostId } })
+      : lots.length;
   // A post of one lot is written as an offer posted alone is (#1989): no lot number, so `{lot}` stays
   // empty and nothing is named as missing for it.
-  const alone = lots.length < 2;
+  const alone = lotCount < 2;
   if (alone) for (const lot of lots) lot.lotNo = null;
   const base = `/api/collections/${offer.collectionId}`;
   // The post reads as the group posts now — its own template, or the platform's it follows (#1661).
@@ -559,7 +568,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
         }
       : null,
     layout: facebookPostLayout(
-      offer.facebookPost && { layout: offer.facebookPost.layout, lotCount: lots.length },
+      offer.facebookPost && { layout: offer.facebookPost.layout, lotCount },
       settings
     ),
     lots,

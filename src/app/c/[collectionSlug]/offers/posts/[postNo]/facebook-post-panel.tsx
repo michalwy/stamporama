@@ -112,9 +112,12 @@ import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-po
 //   (Enter saves it and moves down to the next lot's), its title edited in place, and what still stops
 //   it from being marked ready, covers checked from the row. Above the lots, *Use estimated price*,
 //   *Check covers* and *Mark ready* act on every lot of the post; a lot that cannot be readied is named
-//   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`), so a price
-//   saved settles its own row and refreshes only the kit. Once the post is up the rows show what they
-//   showed before: pricing and readying belong to before.
+//   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`). Once the
+//   post is up the rows show what they showed before: pricing and readying belong to before.
+// - **One lot's change refreshes that lot** (#2221): a price, a title or the lot's own *Back to
+//   preparing* reads that lot again and writes it into the screen — its row, the kit the post's text and
+//   captions are drawn from, the totals — rather than every lot's figures, photos and texts. The moves
+//   on the whole post read it whole.
 // - **The post's totals** (#2218), in a bar pinned to the bottom of the window under the lots while they
 //   are priced: the lots' prices summed, and what they make against the lots' catalogue, estimated,
 //   market and cost figures summed. A price counts as soon as it is typed, before Enter; a lot without a
@@ -249,7 +252,7 @@ export function FacebookPostPanel({
 }) {
   const router = useRouter();
   const { data: screen, isLoading, isError } = useFacebookPostScreen(collectionId, postId);
-  const { invalidateAll, settlePostLotPrice } = useInvalidateOffers();
+  const { invalidateAll, settlePostLot, settlePostLotPrice } = useInvalidateOffers();
   // The lots as Prepare rows (#2031), asked only while the post is not up.
   const notUp = !!screen && !screen.kit.lots.some((l) => isFacebookLotPosted(l.state));
   const { data: prepare } = useFacebookPostLotsPrepare(collectionId, postId, notUp);
@@ -552,6 +555,21 @@ export function FacebookPostPanel({
     }, done);
   }
 
+  // One lot back to Preparing (#2115) is that lot's change alone, and settles only its row (#2221).
+  function backToPreparingLot(offerId: string, done: string) {
+    setError(undefined);
+    startTransition(async () => {
+      const { setOfferStateAction } = await import("@/app/actions/offers");
+      const result = await setOfferStateAction(offerId, "preparing");
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      await settlePostLot(collectionId, postId, offerId);
+      toast({ message: done });
+    });
+  }
+
   // Every Ready lot back to Preparing (#2115), each as its own *Back to preparing* leaves it.
   function backToPreparing() {
     setError(undefined);
@@ -662,7 +680,7 @@ export function FacebookPostPanel({
               key: "back-to-preparing",
               label: "Back to preparing",
               icon: "revert",
-              onSelect: () => setLotState(lot.offerId, "preparing", `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1} is back to Preparing`),
+              onSelect: () => backToPreparingLot(lot.offerId, `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1} is back to Preparing`),
             } as RowAction,
           ]
         : []),
@@ -1099,7 +1117,7 @@ export function FacebookPostPanel({
                           onPriceSaved={(field, value) =>
                             void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
                           }
-                          onPrepareChanged={() => void invalidateAll(collectionId)}
+                          onTitleChanged={() => void settlePostLot(collectionId, postId, lot.offerId)}
                           onCheckCovers={(mode) => {
                             const covers = prepareRows?.[lot.offerId]?.covers;
                             setCoverWalk({
@@ -1372,7 +1390,7 @@ function LotRow({
   onPriceEnter,
   onPriceDraft,
   onPriceSaved,
-  onPrepareChanged,
+  onTitleChanged,
   onCheckCovers,
 }: {
   /** The lot's number in the order drawn — its own, or the one a move just gave it (#1986). */
@@ -1407,8 +1425,8 @@ function LotRow({
   /** The lot's price as it is typed, for the post's totals (#2218). */
   onPriceDraft: (text: string) => void;
   onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
-  /** The title or the covers changed — the lots' rows are read again. */
-  onPrepareChanged: () => void;
+  /** The title was saved — the lot is read again, and only it (#2221). */
+  onTitleChanged: () => void;
   /** Opens the lot's covers walk: the photos not yet checked, or every one again (#2114). */
   onCheckCovers: (mode: "unchecked" | "all") => void;
 }) {
@@ -1474,7 +1492,7 @@ function LotRow({
                 <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ ...LINK, flexShrink: 0 }}>
                   <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
                 </Link>
-                <PrepareTitleField offer={prepare} onChanged={onPrepareChanged} inputWidth="24rem" />
+                <PrepareTitleField offer={prepare} onChanged={onTitleChanged} inputWidth="24rem" />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-start" }}>
                 <PreparePriceField

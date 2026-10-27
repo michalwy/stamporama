@@ -688,8 +688,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   its own — `GET …/facebook-posts/[postId]/prepare`, `offerKeys.facebookPostPrepare`, polled while a lot
   waits for its photos — and not a field of `FacebookPostScreen`, because each row costs a valuation and
   a photo-plan read: a saved price goes through `settlePostLotPrice`, which writes the lot's row in the
-  cache and marks every *other* offer read stale, the post's own screen included, so the kit's text
-  follows the figure without every lot's figures being rebuilt per Enter (#1894's rule). **The row's
+  cache at once and then settles the lot as below (#2221). **The row's
   parts are one component each**, `prepare/prepare-offer-parts.tsx` — `PrepareTitleField`,
   `PreparePriceField` (the compact `OfferPriceStrip` with the standing field), `PrepareReadiness` (the
   blockers, the photo half said as *Photos generated on Mark ready*, the covers as *Check covers (N)*) —
@@ -707,6 +706,31 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   flight — and the post's *Check covers*, once no lot has a photo left unchecked, walks every lot
   needing covers again (`OffersCoverWalk`'s `mode="all"`). *Publish…* is disabled while any lot's run
   is in flight, the lots named beside it; `publishFacebookPost` refuses the same (`offers.md`).
+
+- **A change saved from one lot's row refreshes that lot, not the post** (#2221, raised and settled
+  with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as written). Before
+  it, each saved price marked every offer read stale, so a post of forty lots read itself whole per
+  Enter — the kit and every lot's text status and untranslated names (`getFacebookPostScreen`), every
+  lot's photo plan, and on a captioned post every lot's upload plan (`readFacebookPostLotPhotos`). Now a
+  **price, a title, or the lot's own *Back to preparing*** goes through `settlePostLot`
+  (`use-offers-query.ts`): `GET …/facebook-posts/[postId]/lots/[offerId]` → `getFacebookPostLot`
+  (`facebook-posts.ts`) reads that lot alone — its kit lot (`getFacebookOfferKit`'s `lotOnly`, the
+  post-wide part and layout still the post's), its Prepare row, its text status, its untranslated names,
+  whether its title is hand-written, and the post's title (a post of one follows its offer's, #2116) —
+  and `withFacebookPostLot` / `withPrepareRow` (`facebook-post-lot-refresh.ts`, pure, unit-tested) write
+  it into the cached screen and rows. The post's text, the captions and the totals bar are drawn from
+  those, so they follow. Every other offer read is marked stale as `invalidateAll` would, **except** the
+  post's own three reads (`POST_SCREEN_READS`) and other offers' photo plans; the lot's own photo plan
+  and, captioned, its lot photo are read again. An answer overtaken by a later save of the same lot is
+  dropped; a 404 (the lot taken out meanwhile) falls back to `invalidateAll`. **Whole-post moves are
+  unchanged** — *Use estimated price*, *Mark ready*, *Check covers*, reordering, adding or taking out
+  lots, the layout, the title template — and still read everything. **Waiting for captioned photos**
+  asks after the lots still being drawn only: `useFacebookPostLotPhotos` no longer refetches the whole
+  query on an interval but asks `…/lot-photos?lots=` for `lotPhotosDrawing` every 2 s (not while the tab
+  is out of view, which refetches whole on return) and writes the answers in with `withLotPhotos`;
+  `syncFacebookPostLotPhotos(postId, only)` brings only those lots in line. The screen has no per-lot
+  *Mark ready* — the issue's word for the per-lot state move is the lot's *Back to preparing*. The
+  integration tests are in `facebook-post-prepare.test.ts` and `facebook-captioned-posts.test.ts`.
 
 - **A post being priced shows its totals in a bar pinned to the bottom of the window** (#2218, settled
   with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as written).

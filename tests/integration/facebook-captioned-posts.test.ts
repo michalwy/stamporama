@@ -380,6 +380,24 @@ describe("a captioned Facebook post (#1841)", () => {
     assert.equal(byOffer(await readFacebookPostLotPhotos(userId, postId), b).state.status, "generating");
   });
 
+  it("answers for the lots it is asked after alone, and brings only those in line (#2221)", async () => {
+    await updateFacebookGroup(userId, groupId, groupValues());
+    const a = await offer();
+    const b = await offer();
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b], "Test post");
+    await generate(a, "front");
+    await generate(b, "front");
+
+    // The screen's poll asks after the lots still being drawn: lot 1 alone, numbered as in the post.
+    const one = await readFacebookPostLotPhotos(userId, postId, [a]);
+    assert.deepEqual(one.map((l) => [l.offerId, l.lotNo, l.state.status]), [[a, 1, "generating"]]);
+    assert.equal(await prisma.facebookLotPhoto.count({ where: { offerId: b } }), 0, "lot 2 is not looked at");
+
+    const second = await readFacebookPostLotPhotos(userId, postId, [b]);
+    assert.deepEqual(second.map((l) => [l.offerId, l.lotNo]), [[b, 2]]);
+    assert.equal(await prisma.facebookLotPhoto.count({ where: { offerId: b } }), 1, "asked after, it is queued");
+  });
+
   it("keeps the photo a published post went up with, and drops a lot's when it leaves its post", async () => {
     await updateFacebookGroup(userId, groupId, groupValues());
     const a = await offer();

@@ -234,8 +234,15 @@ async function dropLotPhotos(offerIds: readonly string[]): Promise<number> {
  * what keeps a stale photo from ever being served; the writes that change what a photo is made of
  * call it too, so the photo is on its way before anyone looks. Not owner-checked: the callers have
  * done that, or are the worker. Null for a post that is gone.
+ *
+ * `only` brings just those lots in line and answers for them alone (#2221) — what the screen asks
+ * while some lots' photos are being drawn, and after one lot's row changed — since asking what each
+ * lot would be drawn from is a read of its upload plan.
  */
-export async function syncFacebookPostLotPhotos(postId: string): Promise<FacebookPostLotPhoto[] | null> {
+export async function syncFacebookPostLotPhotos(
+  postId: string,
+  only?: readonly string[]
+): Promise<FacebookPostLotPhoto[] | null> {
   const post = await readPostRow(postId);
   if (!post) return null;
   const wanted = (await postPhotoLayout(post)) === "captions";
@@ -243,6 +250,7 @@ export async function syncFacebookPostLotPhotos(postId: string): Promise<Faceboo
   const enqueue: string[] = [];
   const drop: string[] = [];
   for (const [index, lot] of post.lots.entries()) {
+    if (only && !only.includes(lot.id)) continue;
     const stored = lot.facebookLotPhoto;
     const posted = readFacebookFrozenLot(lot.facebookPostSnapshot) !== null;
     // What it would be drawn from now only matters where it can change the answer — not for a lot
@@ -324,10 +332,15 @@ async function readOwnedPost(ownerId: string, postId: string): Promise<PostRow> 
 }
 
 /** A captioned post's lot photos as its screen shows them (#1861), owner-checked — brought in line
- *  first, so what is shown is never stale. Empty for a post laid out in its text. */
-export async function readFacebookPostLotPhotos(ownerId: string, postId: string): Promise<FacebookPostLotPhoto[]> {
+ *  first, so what is shown is never stale. Empty for a post laid out in its text. `only` answers for
+ *  those lots alone (#2221). */
+export async function readFacebookPostLotPhotos(
+  ownerId: string,
+  postId: string,
+  only?: readonly string[]
+): Promise<FacebookPostLotPhoto[]> {
   const post = await readOwnedPost(ownerId, postId);
-  const lots = (await syncFacebookPostLotPhotos(postId)) ?? [];
+  const lots = (await syncFacebookPostLotPhotos(postId, only)) ?? [];
   return (await postPhotoLayout(post)) === "captions" ? lots : [];
 }
 
