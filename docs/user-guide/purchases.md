@@ -1774,6 +1774,11 @@ so you can copy a column of numbers off the catalogue page without selecting any
 - **Type straight into the field and press Tab for the next value**, Shift+Tab for the previous one.
   Nothing else is visited between two values, and **Tab from the last value goes to *Identify***,
   never to *Back*.
+- **The row you are typing on is the tile in hand.** Moving into a row's value — Tab, Shift+Tab or a
+  click in the field, and the same for a variant's price or a chip on the row — highlights that row,
+  shows its tile in the viewer on the left and its stamp on the right, so each value is checked
+  against the stamp it is for. The cursor stays in the field and nothing is assigned; Tab from the
+  last value to *Identify* leaves the last tile in hand. The **×** that takes a row out does not.
 - **One value per stamp in a condition and certificate.** Where several tiles share one, only the
   first of them in the run has the field; the others show the same value and say which row it is
   typed on (*as #1*), and Tab skips them. Give such a tile a condition or certificate of its own and

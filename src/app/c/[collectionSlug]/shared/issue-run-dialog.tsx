@@ -1387,8 +1387,13 @@ export function IssueRunDialog({
                   // The row's frame holds both of its lines (#1583): the tile, its stamp and value
                   // above, and below them what is already held of that stamp beside the tile's
                   // disposition — the two read together when deciding whether the piece is kept.
+                  // Focus landing anywhere in the row — its value by Tab, Shift+Tab or a click, a
+                  // variant's value, a disposition chip — takes its tile in hand (#2214), so the
+                  // highlighted row and the viewer always show the stamp being typed for. Nothing
+                  // else changes: the focus stays where it landed.
                   <div
                     key={a.tileId}
+                    onFocus={() => setActiveId(a.tileId)}
                     style={{
                       display: "flex",
                       flexDirection: "column",
@@ -1547,6 +1552,9 @@ export function IssueRunDialog({
                         <button
                           type="button"
                           onClick={() => takeOut(a.tileId)}
+                          // Not focused by the press, so taking a row out does not first take it in
+                          // hand and move the hand to its neighbour (#2214).
+                          onMouseDown={(e) => e.preventDefault()}
                           disabled={isPending}
                           tabIndex={-1}
                           aria-label={`Take #${i + 1} out of the run`}
