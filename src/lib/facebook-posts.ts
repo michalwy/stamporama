@@ -490,6 +490,62 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   };
 }
 
+/** One lot of a post as its screen shows it (#2221): what changes when a price, a title or the lot's
+ *  own state is saved from its row — written into the screen in place of reading the whole post. */
+export interface FacebookPostLotUpdate {
+  /** The post's title, which a post of one follows from its offer's (#2116). */
+  title: string | null;
+  lot: FacebookKitLot;
+  /** Its Prepare row; null once the post is up, or for a lot neither Preparing nor Ready. */
+  prepare: PrepareOffer | null;
+  /** Where its title and description stand (#1983); null once the post is up. */
+  text: OfferTextStatus | null;
+  /** The names its part of the post prints untranslated (#1889), as the screen's `translations` for
+   *  this lot alone; null once the post is up. */
+  translations: FacebookPostTranslations | null;
+  /** Whether its title was written by hand — its place in `lotTitles.handWritten` (#2033). */
+  handWritten: boolean;
+}
+
+/**
+ * One lot of a post, read as {@link getFacebookPostScreen} and {@link getFacebookPostLotsPrepare} read
+ * every lot (#2221): pricing a post of forty lots one after another re-read the whole post for each
+ * figure. The kit's lot is read alone, the post-wide part as the post has it. Null for an offer that
+ * is not a lot of this post — taken out, or the post gone.
+ */
+export async function getFacebookPostLot(
+  ownerId: string,
+  collectionId: string,
+  postId: string,
+  offerId: string
+): Promise<FacebookPostLotUpdate | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const post = await prisma.facebookPost.findFirst({
+    where: { id: postId, collectionId },
+    select: { title: true, lots: { select: { id: true, state: true, nameEdited: true } } },
+  });
+  const own = post?.lots.find((l) => l.id === offerId);
+  if (!post || !own) return null;
+  const kit = await getFacebookOfferKit(offerId, { lotOnly: true });
+  const lot = kit?.lots[0];
+  if (!kit || !lot) return null;
+  const posted = post.lots.some((l) => isFacebookLotPosted(l.state));
+  if (posted) return { title: post.title, lot, prepare: null, text: null, translations: null, handWritten: own.nameEdited };
+  const [prepare, text, translations] = await Promise.all([
+    readPrepareOffers(ownerId, collectionId, [offerId], ["preparing", "ready"]),
+    offersTextStatus(ownerId, collectionId, [offerId]),
+    facebookPostTranslations(ownerId, collectionId, kit),
+  ]);
+  return {
+    title: post.title,
+    lot,
+    prepare: prepare[0] ?? null,
+    text: text.get(offerId) ?? null,
+    translations,
+    handWritten: own.nameEdited,
+  };
+}
+
 async function facebookPostLotTitles(
   collectionId: string,
   platformId: string,

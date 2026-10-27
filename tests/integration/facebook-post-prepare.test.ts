@@ -11,7 +11,13 @@ import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import { createOffer, listPreparingOffers, patchOffer, setOfferState } from "../../src/lib/offers";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
-import { createFacebookPost, getFacebookPostLotsPrepare, publishOfferOrPost } from "../../src/lib/facebook-posts";
+import {
+  createFacebookPost,
+  getFacebookPostLot,
+  getFacebookPostLotsPrepare,
+  getFacebookPostScreen,
+  publishOfferOrPost,
+} from "../../src/lib/facebook-posts";
 
 // Bytes go through the filesystem backend, pointed at a throwaway directory (the photo tests' rule).
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-fb-post-prepare-"));
@@ -181,5 +187,62 @@ describe("a post's lots as Prepare rows (#2031)", () => {
     const post = await createFacebookPost(userId, collectionId, [a, b], "Mine");
     await assert.rejects(() => getFacebookPostLotsPrepare(userId, otherCollectionId, post.postId), /Post not found/);
     await assert.rejects(() => getFacebookPostLotsPrepare(otherUserId, collectionId, post.postId));
+  });
+
+  // Saving one lot's price, title or state refreshes that lot (#2221): it reads as the whole post's
+  // reads have it, so what the screen writes in is what reading the post again would have shown.
+  it("reads one lot as the post's screen and its Prepare rows read it", async () => {
+    const a = await preparing();
+    const b = await preparing();
+    const post = await createFacebookPost(userId, collectionId, [a, b], "One at a time");
+    await patchOffer(userId, b, { startingPrice: "7.00" });
+    await patchOffer(userId, b, { name: "Mercury, written by hand" });
+
+    const lot = await getFacebookPostLot(userId, collectionId, post.postId, b);
+    assert.ok(lot);
+    const screen = await getFacebookPostScreen(userId, post.postId);
+    const rows = await getFacebookPostLotsPrepare(userId, collectionId, post.postId);
+    assert.ok(screen && rows);
+    assert.deepEqual(lot.lot, screen.kit.lots[1], "the kit's lot, numbered as in the post");
+    assert.equal(lot.lot.lotNo, 2);
+    assert.equal(lot.lot.startingPrice, "7.00");
+    assert.deepEqual(lot.prepare, rows[b]);
+    assert.deepEqual(lot.text, screen.lotTexts?.[b]);
+    assert.equal(lot.handWritten, true);
+    assert.deepEqual(screen.lotTitles?.handWritten, [b]);
+    assert.equal(lot.title, "One at a time");
+    assert.equal(lot.translations?.language, screen.translations?.language);
+    assert.deepEqual(lot.translations?.byLot[b], screen.translations?.byLot[b]);
+  });
+
+  it("reads a post of one's lot as an offer posted alone, with the title it follows", async () => {
+    const a = await preparing();
+    const placed = await prisma.offer.findUniqueOrThrow({ where: { id: a }, select: { facebookPostId: true } });
+    assert.ok(placed.facebookPostId, "a Facebook offer is in a post of one from the moment it is made");
+    const lot = await getFacebookPostLot(userId, collectionId, placed.facebookPostId, a);
+    assert.ok(lot);
+    assert.equal(lot.lot.lotNo, null, "no lot number on a post of one");
+  });
+
+  it("reads only the lot once the post is up, and nothing for an offer that is not its lot", async () => {
+    const a = await preparing();
+    const b = await preparing();
+    for (const id of [a, b]) {
+      await patchOffer(userId, id, { startingPrice: "5.00" });
+      await setOfferState(userId, id, "ready");
+    }
+    const post = await createFacebookPost(userId, collectionId, [a, b], "Up already");
+    await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/203100/posts/3");
+    const lot = await getFacebookPostLot(userId, collectionId, post.postId, b);
+    assert.ok(lot);
+    assert.equal(lot.lot.state, "active");
+    assert.equal(lot.prepare, null);
+    assert.equal(lot.text, null);
+    assert.equal(lot.translations, null);
+
+    const outsider = await preparing();
+    assert.equal(await getFacebookPostLot(userId, collectionId, post.postId, outsider), null);
+    await assert.rejects(() => getFacebookPostLot(otherUserId, collectionId, post.postId, b));
+    assert.equal(await getFacebookPostLot(userId, otherCollectionId, post.postId, b).catch(() => null), null);
   });
 });

@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import {
+  focusManager,
   useInfiniteQuery,
   useQueries,
   useQuery,
   useQueryClient,
   type InfiniteData,
+  type QueryClient,
 } from "@tanstack/react-query";
 import {
   keepRowsAcrossTreeChange,
@@ -27,7 +30,8 @@ import type {
 } from "@/lib/offers";
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { OfferListContext } from "./list-context";
-import type { FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookPostListItem, FacebookPostLotUpdate, FacebookPostScreen } from "@/lib/facebook-posts";
+import { lotPhotosDrawing, withFacebookPostLot, withLotPhotos, withPrepareRow } from "@/lib/facebook-post-lot-refresh";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
@@ -157,6 +161,9 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
 /** How often a screen showing an offer that waits for its photos to turn Ready asks again (#1893). */
 const READY_WAIT_POLL_MS = 3_000;
 
+/** How often a captioned post's lots still being drawn are asked after (#1861). */
+const LOT_PHOTO_POLL_MS = 2_000;
+
 /** The Prepare screen's filters (#1894). `areaIds` is the area selection already expanded to its
  *  subtree (`resolveAreaFilterIds`). */
 export interface PrepareFilters {
@@ -250,10 +257,26 @@ export function useFacebookPostLotsPrepare(collectionId: string, postId: string,
   });
 }
 
-/** A captioned post's lot photos (#1861): each lot's stored photo, or where it stands — polled while
- *  any is still being generated, so each appears as soon as it is ready. Asked only while `enabled`. */
+/** Some of a post's lot photos read again (#2221), each written in place of the one the screen holds.
+ *  Not asked while the screen holds none: the next read of them is the whole post's anyway. */
+async function settleLotPhotos(queryClient: QueryClient, collectionId: string, postId: string, offerIds: string[]) {
+  const key = offerKeys.facebookLotPhotos(collectionId, postId);
+  if (offerIds.length === 0 || !queryClient.getQueryData(key)) return;
+  const res = await fetch(
+    `/api/collections/${collectionId}/facebook-posts/${postId}/lot-photos?lots=${offerIds.join(",")}`
+  );
+  if (!res.ok) return;
+  const fresh: FacebookPostLotPhoto[] = (await res.json()).lots;
+  queryClient.setQueryData<FacebookPostLotPhoto[]>(key, (all) => all && withLotPhotos(all, fresh));
+}
+
+/** A captioned post's lot photos (#1861): each lot's stored photo, or where it stands — and, while any
+ *  is still being generated, the lots being drawn asked after every two seconds, so each appears as
+ *  soon as it is ready. Only those lots (#2221): a lot already drawn has nothing new to say, and asking
+ *  after one costs a read of its upload plan. Asked only while `enabled`. */
 export function useFacebookPostLotPhotos(collectionId: string, postId: string | null, enabled: boolean) {
-  return useQuery<FacebookPostLotPhoto[]>({
+  const queryClient = useQueryClient();
+  const query = useQuery<FacebookPostLotPhoto[]>({
     queryKey: offerKeys.facebookLotPhotos(collectionId, postId ?? ""),
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/lot-photos`);
@@ -261,9 +284,19 @@ export function useFacebookPostLotPhotos(collectionId: string, postId: string | 
       return (await res.json()).lots;
     },
     enabled: enabled && postId !== null,
-    refetchInterval: (query) =>
-      query.state.data?.some((lot) => lot.state.status === "generating") ? 2000 : false,
   });
+  const drawing = enabled && postId !== null ? lotPhotosDrawing(query.data).join(",") : "";
+  // Each answer is new data, so the next ask is scheduled from it — until no lot is being drawn. Not in
+  // a tab out of view, as `refetchInterval` would not: coming back reads them all again anyway.
+  const { dataUpdatedAt } = query;
+  useEffect(() => {
+    if (!drawing || !postId) return;
+    const timer = setTimeout(() => {
+      if (focusManager.isFocused()) void settleLotPhotos(queryClient, collectionId, postId, drawing.split(","));
+    }, LOT_PHOTO_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [queryClient, collectionId, postId, drawing, dataUpdatedAt]);
+  return query;
 }
 
 /** The offers that could join a post as further lots (#1870), what *Add lots…* picks from. */
@@ -845,9 +878,8 @@ export function useInvalidateOffers() {
         predicate: (query) => query.queryKey[2] !== "prepare",
       });
     },
-    /** A price typed on a lot's row of a post's screen (#2031): {@link settlePreparePrice}'s rule over
-     *  the post's lots — written into the lot's row, every other offer read marked stale, the post's own
-     *  screen included, so its text reads the new figure. */
+    /** A price typed on a lot's row of a post's screen (#2031): written into the lot's row at once, as
+     *  {@link settlePreparePrice} does, and then the lot settled as any change to it is. */
     settlePostLotPrice: (
       collectionId: string,
       postId: string,
@@ -864,10 +896,51 @@ export function useInvalidateOffers() {
           [offerId]: field === "price" ? { ...offer, price: value ?? "0.00" } : { ...offer, startingPrice: value },
         };
       });
-      return queryClient.invalidateQueries({
-        queryKey: offerKeys.all(collectionId),
-        predicate: (query) => query.queryKey[2] !== "facebook-post-prepare" || query.queryKey[3] !== postId,
-      });
+      return settlePostLot(queryClient, collectionId, postId, offerId);
     },
+    settlePostLot: (collectionId: string, postId: string, offerId: string) =>
+      settlePostLot(queryClient, collectionId, postId, offerId),
   };
+}
+
+/** What the post's screen reads of the post as a whole (#2221) — written in place by
+ *  {@link settlePostLot} rather than read again. */
+const POST_SCREEN_READS = new Set<unknown>(["facebook-post", "facebook-post-prepare", "facebook-lot-photos"]);
+
+/** The last refresh asked of each lot, so an answer overtaken by a later one is dropped. */
+const lotRefreshes = new Map<string, number>();
+
+/**
+ * One lot of a post changed from its row on the post's screen — a price, a title, its own state (#2221):
+ * that lot read again and written into the screen — its row, the kit the post's text and captions are
+ * drawn from, its texts' status, its untranslated names — and, captioned, its photo. Every other offer
+ * read is marked stale, as `invalidateAll` would, except the post's own reads and the other offers'
+ * photo plans, which the one lot cannot have changed: refetching them read every lot of the post again
+ * for each price of a run typed down the list.
+ */
+async function settlePostLot(queryClient: QueryClient, collectionId: string, postId: string, offerId: string) {
+  const ask = (lotRefreshes.get(offerId) ?? 0) + 1;
+  lotRefreshes.set(offerId, ask);
+  void queryClient.invalidateQueries({
+    queryKey: offerKeys.all(collectionId),
+    predicate: ({ queryKey: [, , kind, id] }) =>
+      kind === "photo-plan" ? id === offerId : !(POST_SCREEN_READS.has(kind) && id === postId),
+  });
+  const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/lots/${offerId}`);
+  if (lotRefreshes.get(offerId) !== ask) return;
+  if (!res.ok) {
+    // Taken out of the post meanwhile, or the post gone: the screen is read whole.
+    await queryClient.invalidateQueries({ queryKey: offerKeys.all(collectionId) });
+    return;
+  }
+  const update: FacebookPostLotUpdate = await res.json();
+  queryClient.setQueryData<FacebookPostScreen>(
+    offerKeys.facebookPost(collectionId, postId),
+    (screen) => screen && withFacebookPostLot(screen, update)
+  );
+  queryClient.setQueryData<Record<string, PrepareOffer> | null>(
+    offerKeys.facebookPostPrepare(collectionId, postId),
+    (rows) => withPrepareRow(rows ?? null, offerId, update.prepare)
+  );
+  await settleLotPhotos(queryClient, collectionId, postId, [offerId]);
 }
