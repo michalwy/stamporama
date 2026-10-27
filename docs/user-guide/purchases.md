@@ -1639,7 +1639,9 @@ on the strip before you start, and use the list when you only discover the dupli
 several — or all — of one set's stamps, and walking each through the browse popup says *this set, the
 next value* once per stamp. Instead, **tick the tiles in the order the set reads**: while you tick,
 each box shows the tile's **turn** — *1*, *2*, *3* — in the order you clicked, so the pieces can lie
-anywhere on the card. Press **Work through N tiles**, then **As the stamps of a checklist…**.
+anywhere on the card. Press **Work through N tiles**, then **As the stamps of a checklist…** — on
+the right of the dialog's footer, directly before **Identify N tiles as one stamp**, since the two are
+the two answers to *what are these tiles*. A single tile has no such button.
 
 **A run is built on a checklist, not on an issue.** An issue often has several checklists —
 imperforate and perforated stamps collected separately, say — and each is identified separately too.
