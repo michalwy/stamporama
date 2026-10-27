@@ -932,19 +932,22 @@ export function TileIdentifyDialog({
           cancelDisabled={pending}
           onCancel={onClose}
           onAction={() => onIdentifyNew(pieces)}
+          // A set rather than a run of duplicates (#1220): the tiles take one checklist's stamps
+          // (#1225) in the order they were ticked. **Right beside the one-stamp primary** (#2216):
+          // the two are the two answers to *what are these tiles*, and on the left it stood among
+          // setting the pieces aside and throwing them away. A single tile has no run to give.
+          beforeAction={
+            count > 1 ? (
+              <DialogSecondaryButton
+                onClick={() => onIdentifyIssueRun(pieces)}
+                disabled={pending || !canIdentify}
+              >
+                <Icon name="list" size="sm" /> As the stamps of a checklist…
+              </DialogSecondaryButton>
+            ) : undefined
+          }
           leading={
             <>
-              {/* A set rather than a run of duplicates (#1220): the tiles take one checklist's stamps
-                  (#1225) in the order they were ticked. Beside the one-stamp confirm, since the two are the
-                  two answers a ticked run of pieces to identify has. */}
-              {count > 1 && (
-                <DialogSecondaryButton
-                  onClick={() => onIdentifyIssueRun(pieces)}
-                  disabled={pending || !canIdentify}
-                >
-                  <Icon name="list" size="sm" /> As the stamps of a checklist…
-                </DialogSecondaryButton>
-              )}
               {parked ? putBack : park}
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose

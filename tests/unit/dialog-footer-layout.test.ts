@@ -61,4 +61,16 @@ describe("dialog footer layout", () => {
     assert.match(actions, /style=\{DIALOG_FOOTER_ACTIONS\}/);
     assert.doesNotMatch(actions, /minWidth:\s*0/);
   });
+
+  it("keeps beforeAction and the action together as one wrapping pair, after Cancel (#2216)", () => {
+    const actions = body("DialogActions");
+    assert.match(
+      actions,
+      /<div style=\{DIALOG_FOOTER_ACTIONS\}>\s*\{beforeAction\}\s*\{actionButton\}\s*<\/div>/,
+    );
+    assert.ok(
+      actions.indexOf("{cancelLabel}") < actions.indexOf("{beforeAction}"),
+      "Cancel stands to the left of the pair",
+    );
+  });
 });

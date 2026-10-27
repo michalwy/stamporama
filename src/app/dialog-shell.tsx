@@ -482,6 +482,11 @@ type DialogActionsProps = {
    *  form. And the **other ways out**: a step back, or an alternative outcome (#567's *Discard*),
    *  which are neither the action nor cancelling and would otherwise crowd them. */
   leading?: ReactNode;
+  /** A second answer to the same question as the action, drawn between Cancel and the action as an
+   *  ordinary button — the identification dialog's *As the stamps of a checklist…* beside *Identify
+   *  N tiles as one stamp* (#2216). It and the action are one pair: in a footer too narrow for the
+   *  right-hand group the pair goes down a line together and Cancel stays where it was. */
+  beforeAction?: ReactNode;
   /** The action button, for a dialog whose Tab walk ends on it rather than on Cancel (#726, #1223). */
   actionRef?: Ref<HTMLButtonElement>;
 };
@@ -496,6 +501,7 @@ export function DialogActions({
   onCancel,
   onAction,
   leading,
+  beforeAction,
   actionRef,
 }: DialogActionsProps) {
   // Two groups, by role: the other ways out on the left, cancel and the action on the right. Each
@@ -504,6 +510,16 @@ export function DialogActions({
   // also what stops `leading` from setting the spacing by accident, which is what it did when it
   // was a bare `margin-right: auto` and its content sat in the same run as the buttons.
   const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
+  const actionButton = (
+    <ActionButton
+      ref={actionRef}
+      type={onAction ? "button" : "submit"}
+      onClick={onAction}
+      disabled={disabled}
+    >
+      {actionLabel}
+    </ActionButton>
+  );
   return (
     <DialogFooter error={error}>
       {leading != null && (
@@ -517,14 +533,14 @@ export function DialogActions({
         <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
           {cancelLabel}
         </DialogSecondaryButton>
-        <ActionButton
-          ref={actionRef}
-          type={onAction ? "button" : "submit"}
-          onClick={onAction}
-          disabled={disabled}
-        >
-          {actionLabel}
-        </ActionButton>
+        {beforeAction != null ? (
+          <div style={DIALOG_FOOTER_ACTIONS}>
+            {beforeAction}
+            {actionButton}
+          </div>
+        ) : (
+          actionButton
+        )}
       </div>
     </DialogFooter>
   );
