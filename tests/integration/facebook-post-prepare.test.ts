@@ -133,6 +133,9 @@ describe("a post's lots as Prepare rows (#2031)", () => {
     assert.deepEqual(Object.keys(rows).sort(), [a, b].sort());
     assert.equal(rows[a].startingPrice, null, "the unpriced lot reads as unpriced");
     assert.equal(rows[b].startingPrice, "4.00");
+    // Asked after some lots alone (#2222), it answers for them and no other.
+    assert.deepEqual(Object.keys((await getFacebookPostLotsPrepare(userId, collectionId, post.postId, [b])) ?? {}), [b]);
+    assert.deepEqual((await getFacebookPostLotsPrepare(userId, collectionId, post.postId, [b]))?.[b], rows[b]);
 
     // Row by construction: the lot reads exactly as its row on the Prepare screen does.
     const onPrepare = (await listPreparingOffers(userId, collectionId, { facebookGroupId: groupId })).items;

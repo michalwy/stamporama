@@ -587,7 +587,8 @@ show, and from the
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,
   each named by its lot; to download just that one, use the small download button that appears in the
   photo's corner when you point at it, which saves it under the same name it has in the download (a lot
-  with no photos to put up says so in its row) — then the lot number, the offer's number and title (linking to the
+  with no photos to put up says so in its row, and one whose photos are being made says **Generating
+  the photos…** until they appear — the screen opens quickly however many lots the post has) — then the lot number, the offer's number and title (linking to the
   offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
   a quick buy's price — its state, its listing link, and its sale once sold. A lot that can still be
   sold has a tick box at the very start of its row, before the photo — click anywhere in that strip,

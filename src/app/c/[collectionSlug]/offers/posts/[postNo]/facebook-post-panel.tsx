@@ -867,6 +867,7 @@ export function FacebookPostPanel({
         <FacebookPostKit
           collectionSlug={collectionSlug}
           kit={kit}
+          photos={screen.photos}
           selfOfferId={null}
           onChanged={() => invalidateAll(collectionId)}
           renderLots={(lotKit) => (

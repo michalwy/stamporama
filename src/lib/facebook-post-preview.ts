@@ -5,7 +5,7 @@ import { normalizeLanguage } from "./languages";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
 import { getFacebookOfferKit, type FacebookOfferKit } from "./facebook-auctions";
 import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
-import { readOfferUploadPlan } from "./offer-photo-generation";
+import { readOfferUploadPlans } from "./offer-photo-generation";
 import { isAuctionListing, type OfferListingType } from "./offer-rules";
 import { DEFAULT_CURRENCY_STYLE, writtenAmount } from "./template-amount";
 import {
@@ -125,9 +125,14 @@ async function lotPhotoIds(
     }
     return result;
   }
+  // Every lot's upload set in one read (#2222).
+  const plans = await readOfferUploadPlans(
+    ownerId,
+    kit.lots.map((lot) => lot.offerId)
+  );
   for (const lot of kit.lots) {
-    const plan = await readOfferUploadPlan(ownerId, lot.offerId);
-    result.set(lot.offerId, "reason" in plan ? [] : plan.images.map((image) => image.photoId));
+    const plan = plans.get(lot.offerId)?.plan;
+    result.set(lot.offerId, !plan || "reason" in plan ? [] : plan.images.map((image) => image.photoId));
   }
   return result;
 }

@@ -3,11 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookKitLot, FacebookOfferKit } from "@/lib/facebook-auctions";
-import {
-  facebookLotPhotoFileName,
-  facebookLotUploadPhotos,
-  isFacebookLotPosted,
-} from "@/lib/facebook-post-rules";
+import { facebookLotPhotoFileName, isFacebookLotPosted } from "@/lib/facebook-post-rules";
 import {
   FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
   FACEBOOK_MULTI_LOT_LAYOUTS,
@@ -23,9 +19,8 @@ import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format"
 import { formControl } from "@/app/control-style";
 import { Icon } from "@/app/icons";
 import { PhotoLightbox, THUMB_OBJECT_FIT, type ViewablePhoto } from "@/app/photo-viewer";
-import { useFacebookPostLotPhotos, useOfferPhotoPlans } from "../use-offers-query";
 import { lotPhotosNotReady } from "@/lib/facebook-lot-photo-rules";
-import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
+import type { FacebookPostLotPhoto, FacebookPostPhotos, FacebookTextLotPhotos } from "@/lib/facebook-lot-photos";
 import { renderFacebookKitPost } from "./facebook-kit-post";
 import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlug]/settings/facebook-settings-cases";
 
@@ -42,7 +37,8 @@ import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlu
 // Those are drawn in the post's one list of lots (#1863), each lot's row carrying its photos and
 // caption beside its state and actions; the post-wide part — layout, text, ZIP — stays above it.
 // A captioned lot's photo is stored once drawn (#1861): one still being drawn says so, and the ZIP
-// waits until every lot's is ready.
+// waits until every lot's is ready. The lots' photos come with the post's own read (#2222) — the
+// screen asks after a lot again only while its photos are being drawn — so the kit reads none itself.
 //
 // The text is rendered **here**, in the browser, because the closing time it states is a local time
 // and this is the one place the collector's zone is known (#490). It is Markdown limited to Facebook's
@@ -152,6 +148,7 @@ export function FacebookPostKit({
   selfOfferId,
   onChanged,
   renderLots,
+  photos,
 }: {
   collectionSlug: string;
   kit: FacebookOfferKit;
@@ -164,6 +161,8 @@ export function FacebookPostKit({
   /** A post's screen draws its list of lots here, under the post-wide part — one row for a post of
    *  one lot (#1989) — each row taking what the kit puts up for that lot (#1863). */
   renderLots?: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
+  /** The lots' photos, read with the post by its screen (#2222); undefined where none were read. */
+  photos?: FacebookPostPhotos;
 }) {
   const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,13 +179,10 @@ export function FacebookPostKit({
     captions,
   } = useMemo(() => renderFacebookKitPost(kit), [kit]);
   const captioned = layout === "captions";
-  const lotPhotos = useFacebookPostLotPhotos(kit.collectionId, kit.post?.id ?? null, captioned);
+  const lotPhotos = photos?.layout === "captions" ? photos.lots : undefined;
+  const textPhotos = photos?.layout === "text" ? photos.lots : undefined;
   // The ZIP of a captioned post is refused until every lot's photo is ready (#1861).
-  const zipWaits = captioned
-    ? lotPhotos.data
-      ? lotPhotosNotReady(lotPhotos.data)
-      : "Loading the lots' photos…"
-    : null;
+  const zipWaits = captioned ? (lotPhotos ? lotPhotosNotReady(lotPhotos) : "Loading the lots' photos…") : null;
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661),
@@ -380,7 +376,8 @@ export function FacebookPostKit({
           kit={kit}
           captioned={captioned}
           captions={captions}
-          lotPhotos={lotPhotos.data}
+          lotPhotos={lotPhotos}
+          textPhotos={textPhotos}
           showSource={showSource}
           renderLots={renderLots}
         />
@@ -407,6 +404,7 @@ function PostLots({
   captioned,
   captions,
   lotPhotos,
+  textPhotos,
   showSource,
   renderLots,
 }: {
@@ -415,16 +413,12 @@ function PostLots({
   captions: ReturnType<typeof renderFacebookKitPost>["captions"];
   /** A captioned post's stored lot photos (#1861); undefined while they load. */
   lotPhotos: FacebookPostLotPhoto[] | undefined;
+  /** A post laid out as text, each lot's upload set (#1848); undefined while they load. */
+  textPhotos: FacebookTextLotPhotos[] | undefined;
   showSource: boolean;
   renderLots: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
 }) {
   const { collectionId, lots } = kit;
-  // The text layout puts up each lot's upload set, read through its photo plan (#1848).
-  const plans = useOfferPhotoPlans(
-    collectionId,
-    lots.map((l) => l.offerId),
-    !captioned
-  );
   const [viewing, setViewing] = useState<number | null>(null);
 
   // Every photo the post puts up, in lot order (#1865): what the lightbox steps through, each named by
@@ -449,7 +443,7 @@ function PostLots({
         });
         return;
       }
-      const images = plans[index]?.data ? facebookLotUploadPhotos(plans[index].data.images) : [];
+      const images = textPhotos?.find((l) => l.offerId === lot.offerId)?.images ?? [];
       images.forEach((image, i) => {
         const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
         const of = images.length > 1 ? ` ${i + 1}` : "";
@@ -464,7 +458,7 @@ function PostLots({
       });
     });
     return photos;
-  }, [lots, captioned, lotPhotos, plans, collectionId]);
+  }, [lots, captioned, lotPhotos, textPhotos, collectionId]);
 
   function photo(key: string) {
     const index = postPhotos.findIndex((p) => p.key === key);
@@ -473,7 +467,6 @@ function PostLots({
   }
 
   function lotKit(lot: FacebookKitLot): FacebookLotKit {
-    const index = lots.findIndex((l) => l.offerId === lot.offerId);
     if (captioned) {
       const caption = captions.find((c) => c.offerId === lot.offerId);
       return {
@@ -504,9 +497,15 @@ function PostLots({
         ) : null,
       };
     }
-    const plan = plans[index];
     return {
-      photos: <TextLayoutPhotos offerId={lot.offerId} plan={plan} photo={photo} />,
+      photos: (
+        <TextLayoutPhotos
+          offerId={lot.offerId}
+          read={textPhotos !== undefined}
+          lot={textPhotos?.find((l) => l.offerId === lot.offerId)}
+          photo={photo}
+        />
+      ),
       caption: null,
     };
   }
@@ -606,24 +605,31 @@ function LotPhoto({
  */
 function TextLayoutPhotos({
   offerId,
-  plan,
+  read,
+  lot,
   photo,
 }: {
   offerId: string;
-  plan: ReturnType<typeof useOfferPhotoPlans>[number];
+  /** Whether the post's photos have been read — a lot missing from them could not be. */
+  read: boolean;
+  lot: FacebookTextLotPhotos | undefined;
   /** Draws one of the post's photos by its key, opening the lightbox on it. */
   photo: (key: string) => React.ReactNode;
 }) {
-  if (!plan.data) {
-    return plan.isError ? (
+  if (!lot) {
+    return read ? (
       <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>Its photos could not be read.</p>
     ) : (
       <p style={{ ...MUTED, margin: 0 }}>Loading the photos…</p>
     );
   }
-  const photos = facebookLotUploadPhotos(plan.data.images);
+  const photos = lot.images;
   if (photos.length === 0) {
-    return <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>No photos to put up.</p>;
+    return lot.status === "queued" || lot.status === "running" ? (
+      <p style={{ ...MUTED, margin: 0 }}>Generating the photos…</p>
+    ) : (
+      <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>No photos to put up.</p>
+    );
   }
   return (
     <ol style={LOT_PHOTOS}>

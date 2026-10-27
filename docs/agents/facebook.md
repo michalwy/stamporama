@@ -374,8 +374,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   no photos; an offer with nothing going up is *none* with the reason, its photo dropped; a ready photo
   of the current fingerprint is served; a failure on the current fingerprint stays *failed*, so a broken
   image is not retried in a loop; anything else is queued and shown as *generating*, never served
-  stale. Every read goes through it (`readFacebookPostLotPhotos` behind `GET …/facebook-posts/[postId]/lot-photos`,
-  which kicks the worker; `buildFacebookPostPhotos`), and so do the writes that change what a photo is
+  stale. Every read goes through it (`readFacebookPostLotPhotos`; `readFacebookPostPhotos`, the post
+  screen's read and `GET …/facebook-posts/[postId]/lot-photos`, which kicks the worker; `buildFacebookPostPhotos`), and so do the writes that change what a photo is
   made of: `createFacebookPost`, `setFacebookPostLayout`, the worker after an offer run succeeds
   (`refreshFacebookLotPhotosForOffer`), and Settings → Facebook's saves (`refreshFacebookLotPhotos` /
   `refreshFacebookGroupLotPhotos`, in the actions — `facebook-groups.ts` cannot import it,
@@ -389,8 +389,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the lot photo out** (`facebookLotPhoto: { is: null }` on its swap), since a published post keeps it.
   **The ZIP waits** (the collector, 2026-10-12): `lotPhotosNotReady` names the lots still generating or
   failed and `FacebookLotPhotosNotReadyError` is a 409; the kit greys **↓ Photos** with that sentence
-  as its tooltip. The kit reads the states through `useFacebookPostLotPhotos` (`offerKeys.facebookLotPhotos`,
-  polled every 2 s while any lot is generating) and `PostLots` hands each lot's row a `LotPhoto` — a
+  as its tooltip. The states come with the post's screen (`FacebookPostScreen.photos`, #2222), the lots
+  still generating asked after every 2 s, and `PostLots` hands each lot's row a `LotPhoto` — a
   ready photo from the ordinary photo route,
   downloading it as `fileName`; the per-lot drawing route is gone. The integration test is
   `tests/integration/facebook-captioned-posts.test.ts`.
@@ -468,11 +468,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   2026-10-12), so posting needs no lot opened. Photos are `PHOTO_SIZE` (18rem) drawn from the `full`
   variant — the 320px thumb is too small to tell stamps apart: captioned, each lot's one photo with its
   caption and *Copy*; as text (`TextLayoutPhotos`), the lot's upload set without captions. The text
-  layout reads each lot's photo plan client-side through `useOfferPhotoPlans` (`useQueries` under each
-  offer's own `offerKeys.photoPlan`, shared with the lot's Photos card) and keeps what
-  `facebookLotUploadPhotos` (pure, `facebook-post-rules.ts`: publish and not over the limit —
-  `readOfferUploadSet`'s filter) keeps; one photo downloads as `facebookLotPhotoFileName` names
-  it, which `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot
+  layout's upload sets come with the post (#2222: `FacebookTextLotPhotos`, read by `readOfferUploadPlans`
+  — publish and not over the limit, `readOfferUploadSet`'s filter); one photo downloads as
+  `facebookLotPhotoFileName` names it, which `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot
   with nothing to put up says so in its row. `FacebookOfferKit.collectionId` is what the photos are
   read through. An offer posted alone keeps its kit as it was: text and ZIP only.
 
@@ -685,9 +683,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`facebook-posts.ts`) reads the post's lots through `readPrepareOffers` (`offers.ts`, now exported
   and given the states to read — `preparing` and `ready` here, since a Ready lot is still repriced) and
   so through `buildPrepareOffers`, keyed by offer id; null once any lot is up (#1800). It is a read of
-  its own — `GET …/facebook-posts/[postId]/prepare`, `offerKeys.facebookPostPrepare`, polled while a lot
-  waits for its photos — and not a field of `FacebookPostScreen`, because each row costs a valuation and
-  a photo-plan read: a saved price goes through `settlePostLotPrice`, which writes the lot's row in the
+  its own — `GET …/facebook-posts/[postId]/prepare`, `offerKeys.facebookPostPrepare`, the lots waiting for
+  their photos asked after alone (#2222) — and not a field of `FacebookPostScreen`, because each row
+  costs a valuation: a saved price goes through `settlePostLotPrice`, which writes the lot's row in the
   cache at once and then settles the lot as below (#2221). **The row's
   parts are one component each**, `prepare/prepare-offer-parts.tsx` — `PrepareTitleField`,
   `PreparePriceField` (the compact `OfferPriceStrip` with the standing field), `PrepareReadiness` (the
@@ -720,17 +718,45 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   and `withFacebookPostLot` / `withPrepareRow` (`facebook-post-lot-refresh.ts`, pure, unit-tested) write
   it into the cached screen and rows. The post's text, the captions and the totals bar are drawn from
   those, so they follow. Every other offer read is marked stale as `invalidateAll` would, **except** the
-  post's own three reads (`POST_SCREEN_READS`) and other offers' photo plans; the lot's own photo plan
-  and, captioned, its lot photo are read again. An answer overtaken by a later save of the same lot is
+  post's own reads (`POST_SCREEN_READS`) and other offers' photo plans; the lot's own photo plan is read
+  again, and its photos come in the lot's update (#2222). An answer overtaken by a later save of the same lot is
   dropped; a 404 (the lot taken out meanwhile) falls back to `invalidateAll`. **Whole-post moves are
   unchanged** — *Use estimated price*, *Mark ready*, *Check covers*, reordering, adding or taking out
   lots, the layout, the title template — and still read everything. **Waiting for captioned photos**
-  asks after the lots still being drawn only: `useFacebookPostLotPhotos` no longer refetches the whole
-  query on an interval but asks `…/lot-photos?lots=` for `lotPhotosDrawing` every 2 s (not while the tab
-  is out of view, which refetches whole on return) and writes the answers in with `withLotPhotos`;
-  `syncFacebookPostLotPhotos(postId, only)` brings only those lots in line. The screen has no per-lot
+  asks after the lots still being drawn only: `…/lot-photos?lots=` for `lotPhotosDrawing` every 2 s (not
+  while the tab is out of view, which refetches whole on return), the answers written in with
+  `withLotPhotos`; `syncFacebookPostLotPhotos(postId, only)` brings only those lots in line. #2222 moved
+  this poll into `useFacebookPostScreen`, the photos being part of the screen. The screen has no per-lot
   *Mark ready* — the issue's word for the per-lot state move is the lot's *Back to preparing*. The
   integration tests are in `facebook-post-prepare.test.ts` and `facebook-captioned-posts.test.ts`.
+
+- **A post's screen opens at the cost of the post, not a read per lot** (#2222, raised with the collector
+  on 2026-10-27; the issue's *to be confirmed* points implemented as written). Before it, opening a post
+  of forty lots asked after each lot's photos apart — a photo-plan request per lot as text, and per lot
+  an upload-plan read for the captioned photos plus a photo-plan read for its Prepare row — and every one
+  of those rebuilt the offer's whole plan input (`readInputs`: sets, copies, scans, attachments, labels,
+  tile labels, the copies asked about for covers). Now **the plan inputs are read for many offers at
+  once**: `readInputsMany` (`offer-photo-generation.ts`) asks the offers, each collection's label
+  vocabulary, the sets gone (`excludedSetsForMany`: one sale read and one bidding read, the offer's own
+  bidding filtered out per offer), the tile labels (`readTileLabelsMany`, a copy mapper per listing
+  language) and the cover areas once for all of them — only the checklist slots stay per offer, read for
+  the few offers grouping by them, so a batch never changes the order a copy's checklists are met in. `readInputs`, `getOfferPhotoPlanState`,
+  `readOfferPhotoReadiness` and `readOfferUploadPlan` are the one-offer case of `readOfferPhotoPlanStates`,
+  `readOfferPhotoReadinessMany` and `readOfferUploadPlans`, so a batch cannot read an offer differently
+  from the offer's own screen. Their users: `buildPrepareOffers` (every Prepare page too — the chunks
+  of five and `PREPARE_PHOTO_READS` are gone), `syncFacebookPostLotPhotos` (`readLotPhotoSources`), the
+  buyer's preview, and `readFacebookPostPhotos` (`facebook-lot-photos.ts`) — **every lot's photos as
+  the screen shows them, in either layout**: `FacebookPostPhotos` is `captions` with the lot photos or
+  `text` with each lot's upload set and run status (`FacebookTextLotPhotos`). It rides on
+  `FacebookPostScreen.photos` and on `getFacebookPostLot`'s update, and answers `GET …/lot-photos?lots=`.
+  **Waiting asks after those lots only**: `useFacebookPostScreen` polls `lotPhotosDrawing` (a captioned
+  lot *generating*, a text lot's run *queued* or *running*) and `useFacebookPostLotsPrepare` polls
+  `…/prepare?lots=` for the rows waiting on photos (`readyAfterPhotos`, a photo-run blocker), both through
+  `useLotPoll` and written in place. `useOfferPhotoPlans`, `useFacebookPostLotPhotos`,
+  `offerKeys.facebookLotPhotos` and `facebookLotUploadPhotos` are gone. The offer's own Facebook card
+  needed nothing: it draws the kit only for an offer posted alone, and no lot's photos. The integration tests are in
+  `facebook-captioned-posts.test.ts`, `facebook-post-prepare.test.ts` and `offer-photo-generation.test.ts`
+  (the batch against each offer alone, bidding elsewhere included).
 
 - **A post being priced shows its totals in a bar pinned to the bottom of the window** (#2218, settled
   with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as written).

@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { OfferPhotoGenerationError } from "@/lib/offer-photo-generation";
-import { readFacebookPostLotPhotos } from "@/lib/facebook-lot-photos";
+import { readFacebookPostPhotos } from "@/lib/facebook-lot-photos";
+import { lotPhotosDrawing } from "@/lib/facebook-post-lot-refresh";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 
-// A captioned Facebook post's lot photos, as its screen shows them (#1861): per lot, the stored photo
-// to show, or that it is still being generated, failed, or has nothing to be drawn from. Reading it
-// queues whatever is missing or stale, so the screen polls it until every lot is ready. `?lots=` (offer
-// ids, comma-separated) answers for those lots alone (#2221): the poll asks after the lots still being
-// drawn, not every lot of the post. Owner-checked; empty for a post laid out in its text.
+// A post's lots' photos, as its screen shows them (#2222): captioned (#1861), per lot the stored photo
+// to show, or that it is still being generated, failed, or has nothing to be drawn from — reading it
+// queues whatever is missing or stale; laid out as text, each lot's upload set and where its own photo
+// run stands. The screen reads them with the post and asks here only after the lots still being drawn:
+// `?lots=` (offer ids, comma-separated) answers for those lots alone (#2221). Owner-checked.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string; postId: string }> }
@@ -21,15 +22,15 @@ export async function GET(
 
   const { postId } = await params;
   const only = request.nextUrl.searchParams.get("lots")?.split(",").filter(Boolean);
-  let lots;
+  let photos;
   try {
-    lots = await readFacebookPostLotPhotos(session.user.id, postId, only);
+    photos = await readFacebookPostPhotos(session.user.id, postId, only);
   } catch (err) {
     if (err instanceof OfferPhotoGenerationError) {
       return NextResponse.json({ error: err.message }, { status: 404 });
     }
     throw err;
   }
-  if (lots.some((lot) => lot.state.status === "generating")) kickOfferPhotoWorker();
-  return NextResponse.json({ lots });
+  if (lotPhotosDrawing(photos).length > 0) kickOfferPhotoWorker();
+  return NextResponse.json({ photos });
 }

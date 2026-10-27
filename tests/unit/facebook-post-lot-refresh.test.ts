@@ -8,7 +8,7 @@ import {
 } from "../../src/lib/facebook-post-lot-refresh";
 import type { FacebookKitLot } from "../../src/lib/facebook-auctions";
 import type { FacebookPostLotUpdate, FacebookPostScreen } from "../../src/lib/facebook-posts";
-import type { FacebookPostLotPhoto } from "../../src/lib/facebook-lot-photos";
+import type { FacebookPostLotPhoto, FacebookPostPhotos, FacebookTextLotPhotos } from "../../src/lib/facebook-lot-photos";
 import type { OfferTextStatus, PrepareOffer } from "../../src/lib/offers";
 import type { TitleFallback } from "../../src/lib/offer-title-template";
 
@@ -60,7 +60,12 @@ function screen(): FacebookPostScreen {
     lotTexts: { a: status(false), b: status(false) },
     lotTitles: { template: "{title}", handWritten: ["b"] },
     hasPreviewLink: false,
+    photos: { layout: "text", lots: [textPhotos("a", "none"), textPhotos("b", "ready")] },
   };
+}
+
+function textPhotos(offerId: string, status: FacebookTextLotPhotos["status"]): FacebookTextLotPhotos {
+  return { offerId, status, images: status === "ready" ? [{ photoId: `ph-${offerId}`, fileName: `${offerId}.jpg` }] : [] };
 }
 
 function update(over: Partial<FacebookPostLotUpdate> = {}): FacebookPostLotUpdate {
@@ -71,6 +76,7 @@ function update(over: Partial<FacebookPostLotUpdate> = {}): FacebookPostLotUpdat
     text: status(false),
     translations: { language: "en", gaps: [gap("x")], byLot: { a: ["stamp:x:name"] } },
     handWritten: false,
+    photos: { layout: "text", lots: [textPhotos("a", "queued")] },
     ...over,
   };
 }
@@ -85,6 +91,13 @@ describe("withFacebookPostLot", () => {
       after.kit.lots.map((l) => l.offerId),
       ["a", "b"]
     );
+  });
+
+  it("writes the lot's photos in, the other lots' as they were", () => {
+    const before = screen();
+    const after = withFacebookPostLot(before, update());
+    assert.deepEqual(after.photos, { layout: "text", lots: [textPhotos("a", "queued"), before.photos.lots[1]] });
+    assert.equal(after.photos.lots[1], before.photos.lots[1]);
   });
 
   it("takes the lot's text status and the post's title from the update", () => {
@@ -160,25 +173,54 @@ describe("the lots' photos", () => {
     fileName: `${offerId}.jpg`,
     state: (status === "ready" ? { status, photoId: `ph-${offerId}` } : { status }) as FacebookPostLotPhoto["state"],
   });
+  const captioned = (...lots: FacebookPostLotPhoto[]): FacebookPostPhotos => ({ layout: "captions", lots });
+  const text = (...lots: FacebookTextLotPhotos[]): FacebookPostPhotos => ({ layout: "text", lots });
 
   it("asks after the lots still being drawn, and only them", () => {
-    assert.deepEqual(lotPhotosDrawing([photo("a", "ready"), photo("b", "generating"), photo("c", "generating")]), [
+    assert.deepEqual(lotPhotosDrawing(captioned(photo("a", "ready"), photo("b", "generating"), photo("c", "generating"))), [
       "b",
       "c",
     ]);
     assert.deepEqual(lotPhotosDrawing(undefined), []);
   });
 
-  it("writes each answer in its lot's place, in lot order", () => {
-    const all = [photo("a", "ready"), photo("b", "generating")];
-    const after = withLotPhotos(all, [photo("b", "ready")]);
+  it("asks after the lots of a post laid out as text whose images are queued or being made", () => {
     assert.deepEqual(
-      after.map((p) => [p.offerId, p.state.status]),
+      lotPhotosDrawing(
+        text(
+          textPhotos("a", "ready"),
+          textPhotos("b", "queued"),
+          textPhotos("c", "running"),
+          textPhotos("d", "failed"),
+          textPhotos("e", "none")
+        )
+      ),
+      ["b", "c"]
+    );
+  });
+
+  it("writes each answer in its lot's place, in lot order", () => {
+    const all = captioned(photo("a", "ready"), photo("b", "generating"));
+    const after = withLotPhotos(all, captioned(photo("b", "ready")));
+    assert.ok(after.layout === "captions");
+    assert.deepEqual(
+      after.lots.map((p) => [p.offerId, p.state.status]),
       [
         ["a", "ready"],
         ["b", "ready"],
       ]
     );
-    assert.equal(after[0], all[0]);
+    assert.equal(after.lots[0], all.lots[0]);
+  });
+
+  it("writes a text lot's images in the same way", () => {
+    const all = text(textPhotos("a", "ready"), textPhotos("b", "running"));
+    const after = withLotPhotos(all, text(textPhotos("b", "ready")));
+    assert.deepEqual(after, text(textPhotos("a", "ready"), textPhotos("b", "ready")));
+  });
+
+  it("leaves the photos alone when the answer is in another layout than the screen holds", () => {
+    const all = text(textPhotos("a", "ready"));
+    assert.equal(withLotPhotos(all, captioned(photo("a", "ready"))), all);
   });
 });

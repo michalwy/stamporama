@@ -24,6 +24,10 @@ import {
   enqueueOfferPhotoGeneration,
   getOfferPhotoPlanState,
   OfferPhotoGenerationError,
+  readOfferPhotoReadiness,
+  readOfferPhotoReadinessMany,
+  readOfferUploadPlan,
+  readOfferUploadPlans,
   requeueStalledOfferPhotoGenerations,
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
@@ -1018,5 +1022,80 @@ describe("offer photo generation (#311)", () => {
     assert.equal(row.width, 300);
     assert.equal(row.originalWidth, 300);
     assert.equal(row.originalHeight, 200);
+  });
+
+  it("reads several offers at once as it reads each alone, a copy held by bidding elsewhere included (#2222)", async () => {
+    // Two copies with a front scan, one offer holding both, each its own set.
+    const itemIds: string[] = [];
+    for (const red of [60, 120]) {
+      const stamp = await prisma.stamp.create({ data: { collectionId, name: `Batched ${red}` } });
+      const item = await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true });
+      const upload = await stageUpload(userId, collectionId, { bytes: await scan(120, 160, red), mime: "image/png" });
+      await applyPhotoChangeSet(userId, item.id, {
+        add: [{ uploadId: upload.id, role: "front", title: null, sortOrder: 0 }],
+        update: [],
+        remove: [],
+      });
+      itemIds.push(item.id);
+    }
+    const newOffer = () =>
+      createOffer(userId, collectionId, {
+        platformId,
+        url: null,
+        price: "10.00",
+        currency: "EUR",
+        listingDate: null,
+        state: "preparing",
+      });
+    const selling = await newOffer();
+    const sets = [await addOfferSet(userId, selling, [itemIds[0]]), await addOfferSet(userId, selling, [itemIds[1]])];
+    await updateOfferPhotoConfig(userId, selling, {
+      photoSides: "front",
+      preferSingles: false,
+      photoLabelLeftTemplate: "{name}",
+      photoLabelRightTemplate: null,
+      collage: {
+        collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
+        collageRows: 2,
+        collageColumns: 2,
+        collageGapPercent: 8,
+        collageBackground: "#ffffff",
+        collageLabelPercent: 16,
+      },
+    });
+    // Another offer holding the first copy, in active bidding (#215): that copy's set leaves the selling
+    // offer's plan, and not the bidding offer's own.
+    const bidding = await newOffer();
+    await addOfferSet(userId, bidding, [itemIds[0]]);
+    await prisma.offer.update({ where: { id: bidding }, data: { state: "active", inActiveBidding: true } });
+    try {
+      const alone = await getOfferPhotoPlanState(userId, selling);
+      assert.deepEqual(
+        alone.plan.excludedSets.map((e) => [e.setId, e.reason]),
+        [[sets[0], "bidding"]]
+      );
+      assert.deepEqual((await getOfferPhotoPlanState(userId, bidding)).plan.excludedSets, [], "never its own");
+
+      const readiness = await readOfferPhotoReadinessMany([selling, bidding, offerId]);
+      assert.deepEqual(readiness.get(selling), await readOfferPhotoReadiness(selling));
+      assert.deepEqual(readiness.get(bidding), await readOfferPhotoReadiness(bidding));
+      assert.equal(readiness.get(selling)?.plannedCount, 1, "the one set left");
+
+      await enqueueOfferPhotoGeneration(userId, selling);
+      assert.equal(await claimNextOfferPhotoGeneration({ offerId: selling }), selling);
+      await runOfferPhotoGeneration(selling);
+      const plans = await readOfferUploadPlans(userId, [selling, bidding]);
+      const own = await readOfferUploadPlan(userId, selling);
+      assert.ok(!("reason" in own), "the selling offer has its image");
+      assert.deepEqual(plans.get(selling)?.plan, own);
+      assert.equal(plans.get(selling)?.status, "ready");
+      assert.deepEqual(plans.get(bidding)?.plan, await readOfferUploadPlan(userId, bidding));
+      assert.equal((await readOfferUploadPlans(`${userId}-other`, [selling])).size, 0, "somebody else's is absent");
+    } finally {
+      await prisma.offer.update({ where: { id: bidding }, data: { state: "preparing", inActiveBidding: false } });
+      await deleteOffer(userId, bidding);
+      await deleteOffer(userId, selling);
+    }
   });
 });

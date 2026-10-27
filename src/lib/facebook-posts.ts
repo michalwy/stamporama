@@ -13,7 +13,7 @@ import {
   setFrozenFacebookClosing,
 } from "./facebook-auctions";
 import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./facebook-group-rules";
-import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
+import { readFacebookPostPhotos, syncFacebookPostLotPhotos, type FacebookPostPhotos } from "./facebook-lot-photos";
 import {
   describeRefusedLots,
   facebookBackToReadyPlan,
@@ -340,14 +340,16 @@ export async function listFacebookLotCandidates(
  * so the post's screen prices and readies its own lots. Preparing and Ready lots alike: a Ready lot is
  * repriced there too. Null once any lot is up: pricing and readying belong to before (#1800).
  *
- * Read apart from {@link getFacebookPostScreen}, because each row costs a valuation and a photo-plan
- * read: a price typed and saved settles its own row in the browser and refreshes the screen's kit,
- * without rebuilding every lot's figures for each Enter.
+ * Read apart from {@link getFacebookPostScreen}, because each row costs a valuation: a price typed and
+ * saved settles its own row in the browser and refreshes the screen's kit, without rebuilding every
+ * lot's figures for each Enter. `only` answers for those lots alone (#2222) — what the screen asks
+ * after while their photos are being made.
  */
 export async function getFacebookPostLotsPrepare(
   ownerId: string,
   collectionId: string,
-  postId: string
+  postId: string,
+  only?: readonly string[]
 ): Promise<Record<string, PrepareOffer> | null> {
   const post = await prisma.facebookPost.findFirst({
     where: { id: postId, collectionId },
@@ -362,7 +364,7 @@ export async function getFacebookPostLotsPrepare(
   const rows = await readPrepareOffers(
     ownerId,
     post.collectionId,
-    post.lots.map((l) => l.id),
+    post.lots.map((l) => l.id).filter((id) => !only || only.includes(id)),
     ["preparing", "ready"]
   );
   return Object.fromEntries(rows.map((row) => [row.id, row]));
@@ -393,6 +395,8 @@ export interface FacebookPostScreen {
   /** Whether the post has a buyer's preview link (#2212) — which keeps *Preview for a buyer…* on its
    *  menu in a stage that would not offer it, so the link can still be withdrawn. */
   hasPreviewLink: boolean;
+  /** Every lot's photos (#2222) — read with the post, not asked after lot by lot. */
+  photos: FacebookPostPhotos;
 }
 
 /** The lots' titles as *Title template for all lots…* sees them (#2033). */
@@ -452,7 +456,10 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   });
   if (!post || post.lots.length === 0) return null;
   await assertCollectionOwner(ownerId, post.collectionId);
-  const kit = await getFacebookOfferKit(post.lots[0].id);
+  const [kit, photos] = await Promise.all([
+    getFacebookOfferKit(post.lots[0].id),
+    readFacebookPostPhotos(ownerId, post.id),
+  ]);
   if (!kit) return null;
   const lines = await prisma.saleLine.findMany({
     where: { offerId: { in: kit.lots.map((l) => l.offerId) } },
@@ -487,6 +494,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
         ),
     lotTitles: posted ? null : await facebookPostLotTitles(post.collectionId, post.lots[0].platform.id, kit),
     hasPreviewLink: previewLinks > 0,
+    photos,
   };
 }
 
@@ -505,6 +513,8 @@ export interface FacebookPostLotUpdate {
   translations: FacebookPostTranslations | null;
   /** Whether its title was written by hand — its place in `lotTitles.handWritten` (#2033). */
   handWritten: boolean;
+  /** Its photos, as the screen's `photos` for this lot alone (#2222). */
+  photos: FacebookPostPhotos;
 }
 
 /**
@@ -530,7 +540,10 @@ export async function getFacebookPostLot(
   const lot = kit?.lots[0];
   if (!kit || !lot) return null;
   const posted = post.lots.some((l) => isFacebookLotPosted(l.state));
-  if (posted) return { title: post.title, lot, prepare: null, text: null, translations: null, handWritten: own.nameEdited };
+  const photos = await readFacebookPostPhotos(ownerId, postId, [offerId]);
+  if (posted) {
+    return { title: post.title, lot, prepare: null, text: null, translations: null, handWritten: own.nameEdited, photos };
+  }
   const [prepare, text, translations] = await Promise.all([
     readPrepareOffers(ownerId, collectionId, [offerId], ["preparing", "ready"]),
     offersTextStatus(ownerId, collectionId, [offerId]),
@@ -543,6 +556,7 @@ export async function getFacebookPostLot(
     text: text.get(offerId) ?? null,
     translations,
     handWritten: own.nameEdited,
+    photos,
   };
 }
 

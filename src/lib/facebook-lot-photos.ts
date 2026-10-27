@@ -13,7 +13,8 @@ import {
   deleteVariants,
   OfferPhotoGenerationError,
   readFullBytes,
-  readOfferUploadPlan,
+  readOfferUploadPlans,
+  type OfferPhotoGenerationStatus,
   type OfferUploadPlanImage,
 } from "./offer-photo-generation";
 import { facebookPostLayout, readFacebookGroupSettings } from "./facebook-auctions";
@@ -63,15 +64,19 @@ export interface FacebookPostLotPhoto {
 }
 
 /** The offer's collage settings and its platform's output limits, as the joined image is drawn with. */
-async function readLotPhotoStyle(offerId: string): Promise<{
+interface LotPhotoStyle {
   collage: LotPhotoCollage;
   background: string;
   maxEdge: number | null;
   maxBytes: number | null;
-}> {
-  const offer = await prisma.offer.findUniqueOrThrow({
-    where: { id: offerId },
+}
+
+/** Each offer's {@link LotPhotoStyle}, by offer id, in one read. */
+async function readLotPhotoStyles(offerIds: readonly string[]): Promise<Map<string, LotPhotoStyle>> {
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] } },
     select: {
+      id: true,
       collageGridMode: true,
       collageGridShape: true,
       collageColumns: true,
@@ -80,34 +85,62 @@ async function readLotPhotoStyle(offerId: string): Promise<{
       platform: { select: { maxPhotoEdge: true, maxPhotoFileSizeMib: true } },
     },
   });
-  return {
-    collage: {
-      gridMode: normalizeCollageGridMode(offer.collageGridMode),
-      gridShape: normalizeCollageGridShape(offer.collageGridShape),
-      columns: offer.collageColumns ?? 1,
-      gapPercent: offer.collageGapPercent ?? 0,
-    },
-    background: offer.collageBackground ?? DEFAULT_BACKGROUND,
-    maxEdge: offer.platform?.maxPhotoEdge ?? null,
-    maxBytes: offer.platform?.maxPhotoFileSizeMib != null ? offer.platform.maxPhotoFileSizeMib * 1024 * 1024 : null,
-  };
+  return new Map(
+    offers.map((offer) => [
+      offer.id,
+      {
+        collage: {
+          gridMode: normalizeCollageGridMode(offer.collageGridMode),
+          gridShape: normalizeCollageGridShape(offer.collageGridShape),
+          columns: offer.collageColumns ?? 1,
+          gapPercent: offer.collageGapPercent ?? 0,
+        },
+        background: offer.collageBackground ?? DEFAULT_BACKGROUND,
+        maxEdge: offer.platform?.maxPhotoEdge ?? null,
+        maxBytes: offer.platform?.maxPhotoFileSizeMib != null ? offer.platform.maxPhotoFileSizeMib * 1024 * 1024 : null,
+      },
+    ])
+  );
 }
 
+type LotPhotoSource =
+  | { reason: string }
+  | { slug: string; images: OfferUploadPlanImage[]; style: LotPhotoStyle; fingerprint: string };
+
 /** What a lot's photo would be drawn from now, fingerprinted — or why there is nothing to draw. */
-async function readLotPhotoSource(ownerId: string, offerId: string) {
-  const plan = await readOfferUploadPlan(ownerId, offerId);
-  if ("reason" in plan) return plan;
-  const style = await readLotPhotoStyle(offerId);
-  const fingerprint = createHash("sha256")
-    .update(lotPhotoFingerprintPayload({ images: plan.images, ...style }))
-    .digest("hex");
-  return { ...plan, style, fingerprint };
+async function readLotPhotoSource(ownerId: string, offerId: string): Promise<LotPhotoSource> {
+  const source = (await readLotPhotoSources(ownerId, [offerId])).get(offerId);
+  if (!source) throw new OfferPhotoGenerationError("Offer not found or access denied.");
+  return source;
+}
+
+/** {@link readLotPhotoSource} for several lots at once, by offer id (#2222): their upload plans and
+ *  styles each read once for all of them. An offer that is not the owner's is absent. */
+async function readLotPhotoSources(
+  ownerId: string,
+  offerIds: readonly string[]
+): Promise<Map<string, LotPhotoSource>> {
+  const sources = new Map<string, LotPhotoSource>();
+  if (offerIds.length === 0) return sources;
+  const [plans, styles] = await Promise.all([readOfferUploadPlans(ownerId, offerIds), readLotPhotoStyles(offerIds)]);
+  for (const [offerId, { plan }] of plans) {
+    const style = styles.get(offerId);
+    if ("reason" in plan || !style) {
+      sources.set(offerId, "reason" in plan ? plan : { reason: "Offer not found." });
+      continue;
+    }
+    const fingerprint = createHash("sha256")
+      .update(lotPhotoFingerprintPayload({ images: plan.images, ...style }))
+      .digest("hex");
+    sources.set(offerId, { ...plan, style, fingerprint });
+  }
+  return sources;
 }
 
 /** The bytes a lot's photo is: its only image as it is, or its images joined. */
 async function drawLotPhoto(
   images: readonly (OfferUploadPlanImage & { bytes: Buffer })[],
-  style: Awaited<ReturnType<typeof readLotPhotoStyle>>
+  style: LotPhotoStyle
 ): Promise<{ mime: string; bytes: Buffer }> {
   const arrangement = arrangeFacebookLotPhoto(images, style.collage)!;
   if (arrangement.kind === "asIs") {
@@ -249,17 +282,26 @@ export async function syncFacebookPostLotPhotos(
   const result: FacebookPostLotPhoto[] = [];
   const enqueue: string[] = [];
   const drop: string[] = [];
-  for (const [index, lot] of post.lots.entries()) {
-    if (only && !only.includes(lot.id)) continue;
-    const stored = lot.facebookLotPhoto;
-    const posted = readFacebookFrozenLot(lot.facebookPostSnapshot) !== null;
-    // What it would be drawn from now only matters where it can change the answer — not for a lot
-    // that wants no photo, one being drawn, or a published one keeping the photo it went up with.
-    const settled =
-      !wanted ||
-      (stored !== null && ACTIVE_STATUSES.includes(stored.status)) ||
-      (posted && stored?.status === "ready" && stored.photoId !== null);
-    const current = settled ? { reason: "" } : await readLotPhotoSource(post.collection.ownerId, lot.id);
+  const lots = [...post.lots.entries()]
+    .filter(([, lot]) => !only || only.includes(lot.id))
+    .map(([index, lot]) => {
+      const stored = lot.facebookLotPhoto;
+      const posted = readFacebookFrozenLot(lot.facebookPostSnapshot) !== null;
+      // What it would be drawn from now only matters where it can change the answer — not for a lot
+      // that wants no photo, one being drawn, or a published one keeping the photo it went up with.
+      const settled =
+        !wanted ||
+        (stored !== null && ACTIVE_STATUSES.includes(stored.status)) ||
+        (posted && stored?.status === "ready" && stored.photoId !== null);
+      return { index, lot, stored, posted, settled };
+    });
+  // Every lot's source in one go (#2222), rather than a read of its upload plan each.
+  const sources = await readLotPhotoSources(
+    post.collection.ownerId,
+    lots.filter((l) => !l.settled).map((l) => l.lot.id)
+  );
+  for (const { index, lot, stored, posted, settled } of lots) {
+    const current = settled ? { reason: "" } : (sources.get(lot.id) ?? { reason: "Offer not found." });
     const decision = decideLotPhoto({
       wanted,
       posted,
@@ -342,6 +384,53 @@ export async function readFacebookPostLotPhotos(
   const post = await readOwnedPost(ownerId, postId);
   const lots = (await syncFacebookPostLotPhotos(postId, only)) ?? [];
   return (await postPhotoLayout(post)) === "captions" ? lots : [];
+}
+
+/** One lot's photos in a post laid out as text (#1848): its upload set, the very files the post's ZIP
+ *  carries — empty while it has none — and where its own photo run stands. */
+export interface FacebookTextLotPhotos {
+  offerId: string;
+  status: OfferPhotoGenerationStatus;
+  images: { photoId: string; fileName: string }[];
+}
+
+/** What a post's screen shows of its lots' photos (#2222), in lot order, read with the post: a
+ *  captioned post's one photo per lot (#1861), or each lot's upload set in a post laid out as text. */
+export type FacebookPostPhotos =
+  | { layout: "captions"; lots: FacebookPostLotPhoto[] }
+  | { layout: "text"; lots: FacebookTextLotPhotos[] };
+
+/**
+ * Every lot's photos as the post's screen shows them (#2222), owner-checked, in a few reads whatever
+ * the number of lots — the captioned photos brought in line first, as
+ * {@link readFacebookPostLotPhotos} does. `only` answers for those lots alone: what the screen asks
+ * after while their photos are being drawn.
+ */
+export async function readFacebookPostPhotos(
+  ownerId: string,
+  postId: string,
+  only?: readonly string[]
+): Promise<FacebookPostPhotos> {
+  const post = await readOwnedPost(ownerId, postId);
+  const captioned = (await syncFacebookPostLotPhotos(postId, only)) ?? [];
+  if ((await postPhotoLayout(post)) === "captions") return { layout: "captions", lots: captioned };
+  const offerIds = post.lots.map((lot) => lot.id).filter((id) => !only || only.includes(id));
+  const plans = await readOfferUploadPlans(ownerId, offerIds);
+  return {
+    layout: "text",
+    lots: offerIds.flatMap((offerId) => {
+      const read = plans.get(offerId);
+      if (!read) return [];
+      const images = "reason" in read.plan ? [] : read.plan.images;
+      return [
+        {
+          offerId,
+          status: read.status,
+          images: images.map((image) => ({ photoId: image.photoId, fileName: image.fileName })),
+        },
+      ];
+    }),
+  };
 }
 
 /**

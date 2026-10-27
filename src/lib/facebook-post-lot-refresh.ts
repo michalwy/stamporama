@@ -1,5 +1,5 @@
 import type { FacebookPostLotUpdate, FacebookPostScreen } from "./facebook-posts";
-import type { FacebookPostLotPhoto } from "./facebook-lot-photos";
+import type { FacebookPostPhotos } from "./facebook-lot-photos";
 import type { PrepareOffer } from "./offers";
 import { titleFallbackKey } from "./offer-title-template";
 
@@ -8,6 +8,8 @@ import { titleFallbackKey } from "./offer-title-template";
 // holds, rather than reading every lot's figures, photos and texts again. Everything another row shows
 // that the lot can change — the post's text and captions, drawn from the kit's lots; the totals, summed
 // from the Prepare rows; the untranslated names and the hand-written titles — is in what is written.
+// The lots' photos come with the post (#2222), and the lots whose photos are being drawn are asked
+// after alone and written in the same way.
 
 /** The screen with one lot's update written in. A lot no longer in the kit leaves it as it was. */
 export function withFacebookPostLot(screen: FacebookPostScreen, update: FacebookPostLotUpdate): FacebookPostScreen {
@@ -25,6 +27,7 @@ export function withFacebookPostLot(screen: FacebookPostScreen, update: Facebook
       screen.translations && update.translations
         ? withLotTranslations(screen.translations, id, update.translations)
         : screen.translations,
+    photos: withLotPhotos(screen.photos, update.photos),
     lotTitles: screen.lotTitles && {
       ...screen.lotTitles,
       handWritten: lots
@@ -66,16 +69,26 @@ export function withPrepareRow(
   return next;
 }
 
-/** The post's lot photos with the ones just read in their place — the rest as they were. */
-export function withLotPhotos(
-  all: readonly FacebookPostLotPhoto[],
-  fresh: readonly FacebookPostLotPhoto[]
-): FacebookPostLotPhoto[] {
-  const byId = new Map(fresh.map((p) => [p.offerId, p]));
-  return all.map((p) => byId.get(p.offerId) ?? p);
+/** The post's lot photos with the ones just read in their place — the rest as they were. Read in
+ *  another layout than the screen holds, they are left out: the post is read whole when it changes. */
+export function withLotPhotos(all: FacebookPostPhotos, fresh: FacebookPostPhotos): FacebookPostPhotos {
+  if (all.layout !== fresh.layout) return all;
+  if (all.layout === "captions" && fresh.layout === "captions") {
+    const byId = new Map(fresh.lots.map((p) => [p.offerId, p]));
+    return { layout: "captions", lots: all.lots.map((p) => byId.get(p.offerId) ?? p) };
+  }
+  if (all.layout === "text" && fresh.layout === "text") {
+    const byId = new Map(fresh.lots.map((p) => [p.offerId, p]));
+    return { layout: "text", lots: all.lots.map((p) => byId.get(p.offerId) ?? p) };
+  }
+  return all;
 }
 
-/** The lots whose photos are still being drawn — what the screen polls after, and only them. */
-export function lotPhotosDrawing(all: readonly FacebookPostLotPhoto[] | undefined): string[] {
-  return (all ?? []).filter((p) => p.state.status === "generating").map((p) => p.offerId);
+/** The lots whose photos are still being drawn — a captioned lot's photo, or a lot's own images in a
+ *  post laid out as text — what the screen polls after, and only them. */
+export function lotPhotosDrawing(photos: FacebookPostPhotos | undefined): string[] {
+  if (!photos) return [];
+  return photos.layout === "captions"
+    ? photos.lots.filter((p) => p.state.status === "generating").map((p) => p.offerId)
+    : photos.lots.filter((p) => p.status === "queued" || p.status === "running").map((p) => p.offerId);
 }
