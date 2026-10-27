@@ -937,3 +937,31 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   actions (#1777)), and **Post together** in the offers list's
   selection bar, offered while every ticked offer in view is a Facebook offer and numbering the lots
   in tick order; its toast links to the new post's screen (#1842).
+
+- **A post has a preview for a buyer** (#2212, decided with the collector on 2026-10-27): the post as
+  it will appear — its text, then each lot with its number, title, price and photos — as a printable
+  page (`offers/posts/[postNo]/preview`) and a link a buyer opens without an account (`/fb/[token]`,
+  `FacebookPostPreviewToken`), managed as a specification's link (#1760) is. **One read**,
+  `buildPreview` in `facebook-post-preview.ts`, for both. **The text is the post screen's own render**:
+  the kit (`getFacebookOfferKit`) goes to the browser and `renderFacebookKitPost` draws it — what
+  Publish would send, the frozen text once up (#1800), the captions in a captioned post — because the
+  sanitiser needs a DOM and the closing time a zone (#490). What leaves for the buyer is
+  `scrubbedKit`: offer ids become `lot-N` keys and the collection id, group id/url/settings, sort keys,
+  running bids and links are emptied. **Each lot's price is as the post states it** (frozen figures
+  once up), written with `writtenAmount` in the frozen lot's currency style. **The photos are the
+  ones that go up**: a captioned post's stored lot photo (#1861, via `syncFacebookPostLotPhotos`), else
+  each lot's upload set (`readOfferUploadPlan`) — the post's ZIP's own choice. The photo route checks
+  less than the page: any generated image of a lot of the post (`OfferPhotoEntry` or `FacebookLotPhoto`),
+  so a held-back image is servable if asked for — a plan read per photo was the price of matching the
+  page exactly. **The link stays live, so there is no contents hash**; what it shows is
+  `facebookPostPreviewStanding` (pure): `shown` for Ready, pending, up, and over with something sold;
+  `updating` for a post taken back to Preparing (shown again once Ready); `gone` for a post over with
+  nothing sold (withdrawn) or deleted. The token's `postId` is **set null** on the post's deletion
+  (a post of one whose offer joined another included, #2116), so the address says *no longer current*
+  rather than *not valid*, in the row's `language` — the post's, refreshed on each serve. The post's
+  link appears only once approved (`facebookPostPreviewLink` skips pending lots: a pending post's link
+  opens only for its author). A sold lot is *Sold* and a withdrawn one *No longer available*, both
+  dimmed. **Preview for a buyer…** is on the post screen's ⋮ when `canPreviewFacebookPost` (Ready,
+  pending, up) or the post has a link (`FacebookPostScreen.hasPreviewLink`), so a link can be withdrawn
+  in any stage. The page's words are `facebookPostPreviewLabels`, in the same languages as the
+  specification's (a unit test pins the two lists equal).

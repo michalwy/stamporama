@@ -39,6 +39,7 @@ import type { FacebookPostDeletion, FacebookTitleEdge, FacebookTitleWordsMode } 
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
+import { createFacebookPostPreviewToken, revokeFacebookPostPreviewToken } from "@/lib/facebook-post-preview";
 import { patchOffer } from "@/lib/offers";
 import { assertCollectionOwner } from "@/lib/platform-category";
 
@@ -373,4 +374,33 @@ export async function lookupFacebookBuyerAction(
   const session = await getSession();
   await assertCollectionOwner(session.user.id, collectionId);
   return lookupFacebookBuyer(collectionId, { name, profileUrl });
+}
+
+// ── The buyer's preview of a post (#2212) ─────────────────────────────────────────────────────────
+
+export type FacebookPostPreviewLinkActionState =
+  | { status: "success"; token: string }
+  | { status: "error"; message: string };
+
+/** Generate the post's preview link, replacing any it had — a post has one link, and asking for a new
+ *  one is asking for the old one to stop working. */
+export async function createFacebookPostPreviewLinkAction(postId: string): Promise<FacebookPostPreviewLinkActionState> {
+  const session = await getSession();
+  try {
+    const { token } = await createFacebookPostPreviewToken(session.user.id, postId);
+    return { status: "success", token };
+  } catch (err) {
+    return failure(err, "Failed to create the link. Please try again.");
+  }
+}
+
+/** Withdraw the link: from then on its address shows nothing of the post. */
+export async function revokeFacebookPostPreviewLinkAction(postId: string): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await revokeFacebookPostPreviewToken(session.user.id, postId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to withdraw the link. Please try again.");
+  }
 }

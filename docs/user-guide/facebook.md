@@ -750,6 +750,38 @@ A post with **any lot that has a sold set cannot be deleted**: the dialog names 
 offers only *Close*. An offer with a sold set is withdrawn, never deleted, because its sale must keep
 its record.
 
+#### Preview for a buyer
+
+A buyer after one period or area can see the next post before it goes up — useful while a post waits
+hours for the group's approval. **Preview for a buyer…**, in the **⋮** beside the title on the post's
+screen, shows the post **as it will appear**: its text, then every lot with its lot number, title,
+price — a quick buy's price, or an auction's starting price and closing time — and the photos that go
+up with it, larger on a click. In a post laid out in captions, each lot's caption is under its photos.
+A post of one offer is previewed the same way, with no lot number. It is offered once the post is
+**Ready**, and while it waits for approval or is up.
+
+It goes out two ways:
+
+- **Open the page** shows it as a page to print, or to keep as a PDF with *Save as PDF* in the print
+  dialog.
+- **Generate link** makes a link the buyer opens **without an account**. As with an offer's
+  specification link, the dialog has **Copy link**, **Open as the buyer sees it**, **New link** (the
+  old address stops working) and **Withdraw**, and says when the link was made and last opened. A post
+  has one link.
+
+**The link stays live.** Once the group approves the post, the page gains a link to the post in the
+group (a pending post's own link opens only for you, so it is never shown). A lot that sells — an
+auction won included — is marked **Sold**, its photos dimmed, without naming the buyer; a lot
+withdrawn from a post still up is marked **No longer available**. If you take the post back to
+**Preparing**, the link says the post is being updated and to ask you for a current one, and shows it
+again once it is Ready. Once the post is withdrawn or deleted, it says only that the offer is no longer
+current.
+
+Nothing else from your collection is on it: no copy numbers, references, locations, catalogue values,
+buyers or other offers, and no way into the app. The page's own words — *Lot*, *Price*, *Sold*, the
+notices — are in the post's language, in the languages a specification has them in, and English
+otherwise; the dialog says when the buyer will see them in English.
+
 ### A post with several lots in captions
 
 Some groups want single series or single stamps offered together as **one post with many photos**,

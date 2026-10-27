@@ -390,6 +390,9 @@ export interface FacebookPostScreen {
   lotTexts: Record<string, OfferTextStatus> | null;
   /** What *Title template for all lots…* works from (#2033), or null once the post is up. */
   lotTitles: FacebookPostLotTitles | null;
+  /** Whether the post has a buyer's preview link (#2212) — which keeps *Preview for a buyer…* on its
+   *  menu in a stage that would not offer it, so the link can still be withdrawn. */
+  hasPreviewLink: boolean;
 }
 
 /** The lots' titles as *Title template for all lots…* sees them (#2033). */
@@ -463,6 +466,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     if (!list.some((s) => s.id === line.sale.id)) list.push(line.sale);
   }
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
+  const previewLinks = await prisma.facebookPostPreviewToken.count({ where: { postId: post.id } });
   return {
     postId: post.id,
     postNo: post.postNo,
@@ -482,6 +486,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
           )
         ),
     lotTitles: posted ? null : await facebookPostLotTitles(post.collectionId, post.lots[0].platform.id, kit),
+    hasPreviewLink: previewLinks > 0,
   };
 }
 
