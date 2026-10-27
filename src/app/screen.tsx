@@ -38,6 +38,11 @@ export const SCREEN_CAPS = {
    * buyer will see.
    */
   specification: "60rem",
+  /**
+   * A Facebook post's preview for a buyer (#2212), a print sheet drawn at the width its link draws
+   * the same document (`fb/[token]/page.tsx`), so the collector previews what the buyer will see.
+   */
+  postPreview: "60rem",
 } as const;
 
 export type ScreenCap = keyof typeof SCREEN_CAPS;

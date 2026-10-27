@@ -18,6 +18,7 @@ import {
   type FacebookTitleWordsMode,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
+import { canPreviewFacebookPost } from "@/lib/facebook-post-preview-rules";
 import { languageLabel } from "@/lib/languages";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
@@ -58,6 +59,7 @@ import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
 import { useFacebookPostStillForSale } from "./post-ui-state";
+import { PostPreviewDialog } from "./post-preview-dialog";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -199,7 +201,8 @@ type Dialog =
   | { kind: "titleTemplate" }
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
   | { kind: "sell"; lots: FacebookKitLot[] }
-  | { kind: "deletePost" };
+  | { kind: "deletePost" }
+  | { kind: "preview" };
 
 /** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
 interface LotSkip {
@@ -695,10 +698,15 @@ export function FacebookPostPanel({
               onSave={rename}
             />
           </div>
-          {/* In any stage, as long as no lot has sold (#2060) — the dialog says so otherwise. */}
           <RowActionsMenu
             ariaLabel="Post actions"
             actions={[
+              // Once the post is Ready, and while it waits or is up (#2212) — or whenever it has a link,
+              // so the link can be withdrawn in any stage.
+              ...(canPreviewFacebookPost(lots) || screen.hasPreviewLink
+                ? [{ key: "preview", label: "Preview for a buyer…", icon: "share", onSelect: () => setDialog({ kind: "preview" }) } as RowAction]
+                : []),
+              // In any stage, as long as no lot has sold (#2060) — the dialog says so otherwise.
               { key: "delete", label: "Delete post…", icon: "delete", danger: true, onSelect: () => setDialog({ kind: "deletePost" }) },
             ]}
           />
@@ -1251,6 +1259,17 @@ export function FacebookPostPanel({
           offers={coverWalk.offers}
           mode={coverWalk.mode}
           onClose={() => setCoverWalk(null)}
+          onChanged={() => void invalidateAll(collectionId)}
+        />
+      )}
+
+      {dialog.kind === "preview" && (
+        <PostPreviewDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          postId={postId}
+          postNo={postNo}
+          onClose={() => setDialog({ kind: "none" })}
           onChanged={() => void invalidateAll(collectionId)}
         />
       )}

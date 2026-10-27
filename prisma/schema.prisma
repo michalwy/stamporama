@@ -217,6 +217,9 @@ model Collection {
   delcampeImportState DelcampeImportState?
   facebookGroups  FacebookGroup[]
   facebookPosts   FacebookPost[]
+  // Buyers' links to Facebook posts' previews (#2212), kept here too so a link outliving its post
+  // still goes with the collection.
+  facebookPostPreviewTokens FacebookPostPreviewToken[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
@@ -3018,11 +3021,55 @@ model FacebookPost {
   // Restrict, for the offers' own reason: a group with posts is where sales happened.
   group      FacebookGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
   lots       Offer[]       @relation("OfferFacebookPost")
+  /** The buyer's link to this post's preview (#2212), or none. At most one — see
+   * {@link FacebookPostPreviewToken}. */
+  previewToken FacebookPostPreviewToken?
 
   @@unique([collectionId, postNo])
   @@index([collectionId])
   @@index([groupId])
   @@map("facebook_post")
+}
+
+// **A buyer's link to a Facebook post's preview** (#2212) — the post as it will appear in the group,
+// its text and every lot with its number, title, price and photos, as a page a buyer opens without an
+// account while the group has yet to approve the post.
+//
+// `OfferSpecificationShareToken`'s shape (#1760) with the offer swapped for **one post**, and the
+// same security argument: the token names one post, and everything the page shows is that post's
+// preview — nothing else from the collection.
+//
+// **One row per post** (`postId` unique): a new link replaces the row, which is what revocation means.
+// **The link stays live** rather than promising one version of the post: it gains the post's link in
+// the group once that is approved and marks sold lots *Sold*. So unlike a specification link there is
+// no contents hash.
+//
+// **The post may go and the link stay**: `postId` is set null when the post is deleted (or a post of
+// one whose offer joined another, #2116), and the address then says that the offer is no longer
+// current — in `language`, the post's language as last read, since there is no post left to read it
+// from. `collectionId` carries the row away with its collection.
+//
+// The hash resolves a request and the seal is for display (#681), with the same best-effort sealing.
+model FacebookPostPreviewToken {
+  id           String  @id @default(cuid())
+  collectionId String
+  postId       String? @unique
+  // SHA-256 hex of the raw token (prefix "stmpf_"). The only form a lookup ever touches.
+  tokenHash    String  @unique
+  // The same raw token, sealed (`secret-box.ts`); null on an install with no key configured.
+  tokenSealed  String?
+  // The post's language when the link was made or last opened — what the notice speaks once the post
+  // is gone. Null is English.
+  language     String?
+  createdAt    DateTime  @default(now())
+  // When a buyer last opened it — the collector's one sign that the link reached anybody.
+  lastUsedAt   DateTime?
+
+  collection Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  post       FacebookPost? @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([collectionId])
+  @@map("facebook_post_preview_token")
 }
 
 // What was listed for a kind of stamp — the **key → category** register (#488; ADR-0026, generalised
