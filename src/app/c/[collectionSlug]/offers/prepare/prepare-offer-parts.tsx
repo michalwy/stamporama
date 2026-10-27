@@ -5,6 +5,7 @@ import type { PrepareOffer } from "@/lib/offers";
 import { isAuctionListing, pricingReadyFor } from "@/lib/offer-rules";
 import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { statedPrice, typedAmount } from "@/lib/facebook-post-price-totals";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -49,13 +50,6 @@ const PRICE_INPUT: React.CSSProperties = {
   fontWeight: 600,
   textAlign: "right",
 };
-
-/** The figure the seller states on this offer (#449) — the asking price of a quick buy, the starting
- *  price of an auction — as the field shows it: blank while there is none. */
-function statedPrice(offer: PrepareOffer): string {
-  if (isAuctionListing(offer.listingType)) return offer.startingPrice ?? "";
-  return offer.price === "0.00" ? "" : offer.price;
-}
 
 /**
  * The offer's title, edited in place as on the offer's own screen: editing starts from what is shown,
@@ -189,17 +183,24 @@ export const PreparePriceField = forwardRef<
     onEnter: () => void;
     /** A price was saved — the row's new stated figure, or null once cleared. */
     onSaved: (field: "price" | "startingPrice", value: string | null) => void;
+    /** The field's text as it is typed, or put back by **Esc** — for a post's totals (#2218), which
+     *  count a price before it is saved. */
+    onDraft?: (text: string) => void;
   }
->(function PreparePriceField({ offer, onEnter, onSaved }, ref) {
+>(function PreparePriceField({ offer, onEnter, onSaved, onDraft }, ref) {
   const auction = isAuctionListing(offer.listingType);
   const field = auction ? "startingPrice" : "price";
   const saved = statedPrice(offer);
   // The field's text, following the saved figure until it is typed in (adjusted during render).
-  const [draft, setDraft] = useState(saved);
+  const [draft, setDraftText] = useState(saved);
+  function setDraft(text: string) {
+    setDraftText(text);
+    onDraft?.(text);
+  }
   const [syncedFrom, setSyncedFrom] = useState(saved);
   if (syncedFrom !== saved) {
     setSyncedFrom(saved);
-    setDraft(saved);
+    setDraftText(saved);
   }
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -220,8 +221,7 @@ export const PreparePriceField = forwardRef<
   }
 
   // The figure the margin under the field is worked out from: what is being typed, once it is one.
-  const typed = Number(draft.trim());
-  const ownAmount = draft.trim() !== "" && Number.isFinite(typed) && typed > 0 ? typed.toFixed(2) : null;
+  const ownAmount = typedAmount(draft);
 
   return (
     <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.125rem" }}>

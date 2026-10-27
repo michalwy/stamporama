@@ -686,6 +686,17 @@ Above the lots, three buttons act on **every lot of the post**:
   done*). A lot that cannot be made ready is named under the buttons by its lot number, with its
   reason, and the others are marked ready.
 
+**The post's total** is pinned to the bottom of the window under the lots while they are priced, so it
+stays in view however far down the lots you have typed. It reads as a lot's price table does, summed:
+the lots' **Catalogue**, **Estimated**, **Market** and **Cost** figures added up, with what the lots'
+prices make against each under it, signed and coloured as on a lot's row, and the lots' **Prices**
+added up, or **Starting prices** for a post of auctions (an auction counts by its starting price here).
+A price counts as soon as it is typed, before **Enter**, and **Esc** takes it back out. A lot with no
+price yet is left out of the price total, and a lot without a figure — no market value, no cost — out
+of that figure's total; either says **over N of M lots** rather than counting the missing figure as 0.
+What the prices make against a figure is worked out over the lots that have both. The bar is gone once
+the post is up.
+
 **Publish…** waits while any lot's photos are being made again: it is held, and a line beside it names
 the lots, so the post never goes up with the old covers. It is offered again as soon as they are done.
 

@@ -60,6 +60,8 @@ import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
 import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
+import { PostPriceTotalsBar } from "./post-price-totals-bar";
+import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -113,6 +115,11 @@ import { PostPreviewDialog } from "./post-preview-dialog";
 //   with its reason. The rows are read apart from the screen (`getFacebookPostLotsPrepare`), so a price
 //   saved settles its own row and refreshes only the kit. Once the post is up the rows show what they
 //   showed before: pricing and readying belong to before.
+// - **The post's totals** (#2218), in a bar pinned to the bottom of the window under the lots while they
+//   are priced: the lots' prices summed, and what they make against the lots' catalogue, estimated,
+//   market and cost figures summed. A price counts as soon as it is typed, before Enter; a lot without a
+//   price or a figure is left out of that total and counted as *over N of M lots*. Gone once the post
+//   is up.
 // - **Covers on Ready lots** (#2114), until the post is up: a Ready lot's row offers *Review every
 //   photo*, and *Check covers* walks every lot's photos once none is left unchecked. The lot stays
 //   Ready and its photos are made again; *Publish…* waits while any lot's are being made.
@@ -251,6 +258,9 @@ export function FacebookPostPanel({
   const [coverWalk, setCoverWalk] = useState<CoverWalk | null>(null);
   // The lots' price fields, by offer id — Enter moves down them in lot order (#2031).
   const priceInputs = useRef(new Map<string, HTMLInputElement>());
+  // The prices being typed, by offer id, for the post's totals (#2218) — each with the saved figure it
+  // was typed over, so one left behind by a save no longer counts.
+  const [priceDrafts, setPriceDrafts] = useState<ReadonlyMap<string, PriceDraft>>(() => new Map());
   const { toast } = useToast();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
@@ -1045,58 +1055,70 @@ export function FacebookPostPanel({
                   </button>
                 </div>
               )}
-              <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
-                {lotsInView.map((lot, index) => {
-                  const { photos, caption } = lotKit(lot);
-                  return (
-                    <Fragment key={lot.offerId}>
-                      {showLineAt(drag, index) && <DropLine />}
-                      <LotRow
-                        lotNo={movedOrder ? index + 1 : (lot.lotNo ?? index + 1)}
-                        drag={drag}
-                        index={index}
-                        rowRef={(el) => {
-                          if (el) rowRefs.current.set(lot.offerId, el);
-                          else rowRefs.current.delete(lot.offerId);
-                        }}
-                        collectionId={collectionId}
-                        collectionSlug={collectionSlug}
-                        lot={lot}
-                        sales={screen.sales[lot.offerId] ?? []}
-                        photos={photos}
-                        caption={caption}
-                        untranslated={translations?.language ? untranslatedOf(lot) : []}
-                        language={translations?.language ?? null}
-                        onTranslated={refreshTexts}
-                        text={lotTexts?.[lot.offerId] ?? null}
-                        actions={lotActions(lot)}
-                        ticked={isTerminalState(lot.state) ? null : ticked.has(lot.offerId)}
-                        onToggleTicked={() => toggleTicked(lot.offerId)}
-                        prepare={prepareRows?.[lot.offerId] ?? null}
-                        priceRef={(el) => {
-                          if (el) priceInputs.current.set(lot.offerId, el);
-                          else priceInputs.current.delete(lot.offerId);
-                        }}
-                        onPriceEnter={() => focusAfter(lot.offerId)}
-                        onPriceSaved={(field, value) =>
-                          void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
-                        }
-                        onPrepareChanged={() => void invalidateAll(collectionId)}
-                        onCheckCovers={(mode) => {
-                          const covers = prepareRows?.[lot.offerId]?.covers;
-                          setCoverWalk({
-                            kind: "lot",
-                            offerId: lot.offerId,
-                            mode,
-                            includeOtherAreas: covers ? covers.photoCount === 0 : false,
-                          });
-                        }}
-                      />
-                    </Fragment>
-                  );
-                })}
-                {showLineAt(drag, lotsInView.length) && <DropLine />}
-              </ol>
+              {/* The lots and, under them, the post's totals (#2218) — one box, so the bar is pinned to the
+                  window's bottom edge only while some lot is on screen. */}
+              <div>
+                <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
+                  {lotsInView.map((lot, index) => {
+                    const { photos, caption } = lotKit(lot);
+                    return (
+                      <Fragment key={lot.offerId}>
+                        {showLineAt(drag, index) && <DropLine />}
+                        <LotRow
+                          lotNo={movedOrder ? index + 1 : (lot.lotNo ?? index + 1)}
+                          drag={drag}
+                          index={index}
+                          rowRef={(el) => {
+                            if (el) rowRefs.current.set(lot.offerId, el);
+                            else rowRefs.current.delete(lot.offerId);
+                          }}
+                          collectionId={collectionId}
+                          collectionSlug={collectionSlug}
+                          lot={lot}
+                          sales={screen.sales[lot.offerId] ?? []}
+                          photos={photos}
+                          caption={caption}
+                          untranslated={translations?.language ? untranslatedOf(lot) : []}
+                          language={translations?.language ?? null}
+                          onTranslated={refreshTexts}
+                          text={lotTexts?.[lot.offerId] ?? null}
+                          actions={lotActions(lot)}
+                          ticked={isTerminalState(lot.state) ? null : ticked.has(lot.offerId)}
+                          onToggleTicked={() => toggleTicked(lot.offerId)}
+                          prepare={prepareRows?.[lot.offerId] ?? null}
+                          priceRef={(el) => {
+                            if (el) priceInputs.current.set(lot.offerId, el);
+                            else priceInputs.current.delete(lot.offerId);
+                          }}
+                          onPriceEnter={() => focusAfter(lot.offerId)}
+                          onPriceDraft={(text) => {
+                            const row = prepareRows?.[lot.offerId];
+                            if (!row) return;
+                            setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
+                          }}
+                          onPriceSaved={(field, value) =>
+                            void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
+                          }
+                          onPrepareChanged={() => void invalidateAll(collectionId)}
+                          onCheckCovers={(mode) => {
+                            const covers = prepareRows?.[lot.offerId]?.covers;
+                            setCoverWalk({
+                              kind: "lot",
+                              offerId: lot.offerId,
+                              mode,
+                              includeOtherAreas: covers ? covers.photoCount === 0 : false,
+                            });
+                          }}
+                        />
+                      </Fragment>
+                    );
+                  })}
+                  {showLineAt(drag, lotsInView.length) && <DropLine />}
+                </ol>
+                {prepareRows && prepared.length > 0 && (
+                  <PostPriceTotalsBar totals={postPriceTotals(prepared, priceDrafts, prepared[0].currency)} />
+                )}
+              </div>
             </>
           )}
         />
@@ -1348,6 +1370,7 @@ function LotRow({
   prepare,
   priceRef,
   onPriceEnter,
+  onPriceDraft,
   onPriceSaved,
   onPrepareChanged,
   onCheckCovers,
@@ -1381,6 +1404,8 @@ function LotRow({
   prepare: PrepareOffer | null;
   priceRef: (el: HTMLInputElement | null) => void;
   onPriceEnter: () => void;
+  /** The lot's price as it is typed, for the post's totals (#2218). */
+  onPriceDraft: (text: string) => void;
   onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
   /** The title or the covers changed — the lots' rows are read again. */
   onPrepareChanged: () => void;
@@ -1452,7 +1477,13 @@ function LotRow({
                 <PrepareTitleField offer={prepare} onChanged={onPrepareChanged} inputWidth="24rem" />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                <PreparePriceField ref={priceRef} offer={prepare} onEnter={onPriceEnter} onSaved={onPriceSaved} />
+                <PreparePriceField
+                  ref={priceRef}
+                  offer={prepare}
+                  onEnter={onPriceEnter}
+                  onSaved={onPriceSaved}
+                  onDraft={onPriceDraft}
+                />
               </div>
               {lot.state === "preparing" && (
                 <PrepareReadiness offer={prepare} onCheckCovers={() => onCheckCovers("unchecked")} />
