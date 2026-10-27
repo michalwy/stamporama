@@ -7,6 +7,7 @@ import { findFacebookPostId } from "@/lib/facebook-posts";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 import { FacebookPostPanel } from "./facebook-post-panel";
 import { Screen } from "@/app/screen";
+import { getCollectionAreas } from "@/lib/areas";
 
 // A multi-lot Facebook post's own screen (#1842): every lot with its state, the post kit and the moves
 // the post makes as one. Under the list of posts (#1850), so the sidebar's Marketplaces → Facebook entry
@@ -33,7 +34,11 @@ export default async function FacebookPostPage({ params }: FacebookPostPageProps
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const postId = await findFacebookPostId(session.user.id, collection.id, postNo);
+  const [postId, areas] = await Promise.all([
+    findFacebookPostId(session.user.id, collection.id, postNo),
+    // The catalogue chips of *Fill catalogue values* (#2220), drawn from the areas' vendor maps.
+    getCollectionAreas(session.user.id, collection.id),
+  ]);
   if (!postId) notFound();
 
   // "Today" at request time, for *Sell*'s new-sale step — as the offer screen passes it.
@@ -45,6 +50,7 @@ export default async function FacebookPostPage({ params }: FacebookPostPageProps
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         baseCurrency={collection.baseCurrency}
+        areas={areas}
         postId={postId}
         today={today}
       />

@@ -29,6 +29,7 @@ import type {
   OfferListNeighbours,
 } from "@/lib/offers";
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
+import type { CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { OfferListContext } from "./list-context";
 import type { FacebookPostListItem, FacebookPostLotUpdate, FacebookPostScreen } from "@/lib/facebook-posts";
 import { lotPhotosDrawing, withFacebookPostLot, withLotPhotos, withPrepareRow } from "@/lib/facebook-post-lot-refresh";
@@ -107,6 +108,10 @@ export const offerKeys = {
    *  write to a lot refreshes its row. */
   facebookPostPrepare: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-post-prepare", postId] as const,
+  /** A post's copies as *Fill catalogue values* lines (#2220), while the post is not up — under the
+   *  offers key, so the save that writes the values refreshes them with the lots' figures. */
+  facebookPostCatalogueFill: (collectionId: string, postId: string) =>
+    ["offers", collectionId, "facebook-post-catalogue-fill", postId] as const,
   /** The Prepare screen's pages (#1894) — under the offers key, so every write to an offer refreshes
    *  the row it is on. */
   prepare: (collectionId: string, filters: PrepareFilters) =>
@@ -268,6 +273,20 @@ async function settleLotPhotos(queryClient: QueryClient, collectionId: string, p
   if (!res.ok) return;
   const fresh: FacebookPostLotPhoto[] = (await res.json()).lots;
   queryClient.setQueryData<FacebookPostLotPhoto[]>(key, (all) => all && withLotPhotos(all, fresh));
+}
+
+/** A post's copies as *Fill catalogue values* lines (#2220), keyed by the lot's offer id; null once the
+ *  post is up. Asked only while `enabled` — while the lots are priced. */
+export function useFacebookPostCatalogueFill(collectionId: string, postId: string, enabled: boolean) {
+  return useQuery<Record<string, CatalogueFillLine[]> | null>({
+    queryKey: offerKeys.facebookPostCatalogueFill(collectionId, postId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/catalogue-fill`);
+      if (!res.ok) throw new Error("Failed to load the post's catalogue values");
+      return (await res.json()).lots;
+    },
+    enabled,
+  });
 }
 
 /** A captioned post's lot photos (#1861): each lot's stored photo, or where it stands — and, while any

@@ -663,7 +663,9 @@ without opening an offer. Each lot's row carries:
   **Your price** — typed in the last column. **Enter** saves the price and moves to the next lot's,
   so a post is priced from top to bottom with the keyboard; **Tab** or a click elsewhere saves it too,
   **Esc** puts back what was saved, and a figure in the table clicked becomes the price. The post's
-  text follows the new price at once.
+  text follows the new price at once. A lot whose copies have no catalogue value shows `—` under
+  *Catalogue*; when there are values to type, the `—` is a link that opens **Fill catalogue values**
+  for that lot alone (below).
 - **What still stops it from being marked ready**, for a lot still being prepared: no price yet, a
   title or description too long for Facebook, a copy sold elsewhere, and so on, each named — or *Can
   be marked ready*. Photos still to be checked for symbols are **Check covers (N)**, which goes through
@@ -674,8 +676,21 @@ without opening an offer. Each lot's row carries:
   without stepping the lot back to preparing. The lot stays Ready and its photos are made again;
   while they are, the row says *Photos being generated — Publish waits for them*.
 
-Above the lots, three buttons act on **every lot of the post**:
+Above the lots, these buttons act on **every lot of the post**:
 
+- **Fill catalogue values (N)** lists every catalogue value the post's lots are missing in one window,
+  grouped by lot in the post's order, each group headed by its lot number and title, and typed down
+  one list — as on an auction lot. Each line shows the stamp's picture (larger on hover; the copy's own
+  when the stamp has none), its catalogue number, and its condition and certificate as coloured chips,
+  with one field. **Tab** and **Shift+Tab** move between the fields only, and Tab from the last reaches
+  **Save**; `-` records *does not exist* and `?` *not determinable*, as in any catalogue-value field. A
+  value is the single's, in the area's primary catalogue; a block or other multiple shows what it comes
+  to through its format's multiplier. A stamp held at one condition and certificate is asked once, in
+  the first lot holding it, and a later lot's copy it also prices is named by its lot. A copy whose
+  variant is not identified is not listed — its value comes from its variants — nor is a piece carrying
+  several stamps, valued at the figure recorded on it. **N** counts the values asked for, and the button
+  is not shown when none is missing. **Save** writes them all at once, and every lot's *Catalogue*,
+  *Estimated* and profit figures follow at once — so **Use estimated price** then has figures to use.
 - **Use estimated price** gives each lot that has no price yet its estimated value; lots with a price
   keep it.
 - **Check covers** goes through every lot's photos not yet checked for symbols, lot after lot, in one

@@ -10,6 +10,7 @@
 import type { CatalogPriceMark } from "./catalog-price-mark";
 import { parsePriceCellInput } from "./catalog-price-mark";
 import { roundAmount } from "./decimal-input";
+import type { PhotoSummary } from "./photos";
 
 /** The fields of a composition line the choice reads — `AuctionLotLineItem` satisfies it. */
 export interface FillableLotLine {
@@ -21,6 +22,34 @@ export interface FillableLotLine {
   unpriced: boolean;
   mark: CatalogPriceMark | null;
   unknownVariant: boolean;
+}
+
+/**
+ * What the window draws of a line besides the fields the choice reads — `AuctionLotLineItem`
+ * satisfies it, and a Facebook post's copies are read into it (#2220).
+ */
+export interface CatalogueFillLine extends FillableLotLine {
+  id: string;
+  stampName: string | null;
+  /** The leading catalog number, prefix-formatted. */
+  catalogLabel: string | null;
+  /** Ordered primary vendor first. */
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  areaId: string | null;
+  issueId: string | null;
+  issueName: string | null;
+  issueYear: number | null;
+  photos: PhotoSummary[];
+  conditionName: string;
+  conditionAbbreviation: string;
+  certificateStatusName: string | null;
+  certificateStatusAbbreviation: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
+  /** The multiplier from the single to the line's format, or null for the single and where none
+   *  applies. */
+  formatFactor: number | null;
+  quantity: number;
 }
 
 /** One value the dialog asks for, and the lot's lines it prices. */
@@ -88,4 +117,39 @@ export function multipliedCatalogueValue(typed: string, factor: number | null): 
   const cell = parsePriceCellInput(typed);
   if (cell.kind !== "amount") return null;
   return roundAmount(cell.amount * factor);
+}
+
+/** The lines of one lot of a Facebook post, as the window groups them (#2220). */
+export interface CatalogueFillGroup<L extends FillableLotLine> {
+  key: string;
+  /** What a line of this lot is called beside another lot's value — `Lot 3`. */
+  label: string;
+  /** The group's heading — the lot's number and title. */
+  title: string;
+  /** In the lot's own order. */
+  lines: L[];
+}
+
+/** A group with the values the window asks for under it. */
+export interface CatalogueFillSection<L extends FillableLotLine> {
+  group: CatalogueFillGroup<L>;
+  entries: CatalogueFillEntry<L>[];
+}
+
+/**
+ * The values to ask for across several lots, under the lot that **first** names each (#2220). A
+ * value is recorded at `stamp × condition × certificate`, so a stamp held by three lots of a post at
+ * one condition and certificate is asked once — in the first of them — and carries the other lots'
+ * lines with it. A group asking for nothing is left out.
+ */
+export function catalogueFillGroups<L extends FillableLotLine>(
+  groups: readonly CatalogueFillGroup<L>[]
+): CatalogueFillSection<L>[] {
+  const groupOf = new Map<L, CatalogueFillGroup<L>>();
+  for (const group of groups) for (const line of group.lines) groupOf.set(line, group);
+  const entries = catalogueFillEntries(groups.flatMap((group) => group.lines));
+  return groups.flatMap((group) => {
+    const own = entries.filter((entry) => groupOf.get(entry.lines[0]) === group);
+    return own.length > 0 ? [{ group, entries: own }] : [];
+  });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -19,13 +19,15 @@ import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-ve
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { issueLabel, orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { formatAmountInput } from "@/lib/decimal-input";
-import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
 import {
-  catalogueFillEntries,
+  catalogueFillGroups,
   catalogueFillKey,
   multipliedCatalogueValue,
   type CatalogueFillEntry,
+  type CatalogueFillGroup,
+  type CatalogueFillLine,
+  type CatalogueFillSection,
 } from "@/lib/lot-catalogue-fill";
 
 /**
@@ -48,10 +50,16 @@ import {
  * shows what the typed single comes to through the format's multiplier, or says it has none — then
  * the line stays unpriced whatever is typed, and the stamp's Prices tab is where a format's own
  * figure is entered (#343).
+ *
+ * **A Facebook post's lots** are typed down the same window (#2220), handed in as `groups`: one per
+ * lot, in the post's order, each headed by its number and title. A value is asked once, under the
+ * first lot that holds it (`catalogueFillGroups`), and a line of a later lot it also prices says
+ * which lot it is in.
  */
 export function AuctionLotCatalogValuesDialog({
   collectionId,
   lines,
+  groups,
   areaNameById,
   primaryVendorByArea,
   vendorMapFor,
@@ -60,7 +68,9 @@ export function AuctionLotCatalogValuesDialog({
 }: {
   collectionId: string;
   /** The lot's lines in its own order; the dialog picks the ones it asks for. */
-  lines: AuctionLotLineItem[];
+  lines?: CatalogueFillLine[];
+  /** Instead of {@link lines}: a Facebook post's lots, each its own group (#2220). */
+  groups?: CatalogueFillGroup<CatalogueFillLine>[];
   areaNameById: Map<string, string>;
   primaryVendorByArea: AreaVendorMaps["primaryVendorByArea"];
   vendorMapFor: AreaVendorMaps["vendorMapFor"];
@@ -70,7 +80,15 @@ export function AuctionLotCatalogValuesDialog({
 }) {
   // Taken once, when the dialog opens: a line priced by this dialog's own save must not drop out
   // of the list under the collector while the lot behind it refreshes.
-  const [entries] = useState(() => catalogueFillEntries(lines));
+  const [sections] = useState(() =>
+    catalogueFillGroups(groups ?? [{ key: "lot", label: "", title: "", lines: lines ?? [] }])
+  );
+  const grouped = groups !== undefined;
+  // Which lot each line is in, by its id — what a line priced under another lot's value is called.
+  const [lotOfLine] = useState(
+    () => new Map((groups ?? []).flatMap((group) => group.lines.map((line) => [line.id, group.label] as const)))
+  );
+  const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
   const subjects = useMemo(
     () =>
       entries.map((e) => ({
@@ -101,7 +119,11 @@ export function AuctionLotCatalogValuesDialog({
     <DialogShell title="Fill catalogue values" onClose={onClose} maxWidth="min(56rem, 95vw)">
       {entries.length === 0 ? (
         <DialogBody>
-          <p style={MUTED}>Every line of this lot already has a catalogue value.</p>
+          <p style={MUTED}>
+            {grouped
+              ? "Every copy of these lots already has a catalogue value."
+              : "Every line of this lot already has a catalogue value."}
+          </p>
         </DialogBody>
       ) : isLoading ? (
         <DialogBody>
@@ -116,7 +138,9 @@ export function AuctionLotCatalogValuesDialog({
       ) : data ? (
         <ValuesList
           collectionId={collectionId}
-          entries={entries}
+          sections={sections}
+          grouped={grouped}
+          lotOfLine={lotOfLine}
           catalogs={data.catalogs}
           context={data.rows}
           areaNameById={areaNameById}
@@ -133,7 +157,9 @@ export function AuctionLotCatalogValuesDialog({
 
 function ValuesList({
   collectionId,
-  entries,
+  sections,
+  grouped,
+  lotOfLine,
   catalogs,
   context,
   areaNameById,
@@ -143,7 +169,11 @@ function ValuesList({
   onSaved,
 }: {
   collectionId: string;
-  entries: CatalogueFillEntry<AuctionLotLineItem>[];
+  sections: CatalogueFillSection<CatalogueFillLine>[];
+  /** A post's lots, each under its heading (#2220), rather than one lot's lines. */
+  grouped: boolean;
+  /** The label of the lot each line is in, by line id; empty for one lot. */
+  lotOfLine: Map<string, string>;
   catalogs: BulkQuickPriceCatalog[];
   context: BulkQuickPriceRow[];
   areaNameById: Map<string, string>;
@@ -152,9 +182,10 @@ function ValuesList({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
   const byKey = useMemo(() => new Map(context.map((r) => [catalogueFillKey(r), r])), [context]);
   const catalogById = useMemo(() => new Map(catalogs.map((c) => [c.catalogNameId, c])), [catalogs]);
-  const primaryFor = (entry: CatalogueFillEntry<AuctionLotLineItem>) =>
+  const primaryFor = (entry: CatalogueFillEntry<CatalogueFillLine>) =>
     byKey.get(entry.key)?.primaryCatalogNameId ?? null;
 
   /** What the server holds — prefilled, as on #1223's list; a multiple with no multiplier is the
@@ -175,7 +206,8 @@ function ValuesList({
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const saveRef = useRef<HTMLButtonElement | null>(null);
 
-  /** Every field, in the lot's order; an entry with no primary catalogue has none. */
+  /** Every field, in the lot's order — the post's, lot after lot; an entry with no primary catalogue
+   *  has none. */
   const navOrder = useMemo(
     () => entries.flatMap((e) => (primaryFor(e) ? [e.key] : [])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,8 +314,8 @@ function ValuesList({
     >
       <DialogBody>
         <p style={{ ...MUTED, margin: "0 0 0.75rem" }}>
-          The lot&apos;s lines with no catalogue price, one value per stamp, condition and
-          certificate, recorded in the <strong>primary catalog</strong> as the{" "}
+          {grouped ? "The copies of these lots" : "The lot's lines"} with no catalogue price, one
+          value per stamp, condition and certificate{grouped ? ", asked in the first lot that holds it" : ""}, recorded in the <strong>primary catalog</strong> as the{" "}
           <strong>single&apos;s</strong> value. Tab moves to the next value; <code>-</code> is <em>does
           not exist</em> and <code>?</code> is <em>not determinable</em>.
         </p>
@@ -293,7 +325,7 @@ function ValuesList({
             <tr>
               <th style={TH_LEFT}>Stamp</th>
               <th style={TH_LEFT}>Condition</th>
-              <th style={TH_LEFT}>In the lot</th>
+              <th style={TH_LEFT}>{grouped ? "Copies" : "In the lot"}</th>
               <th style={TH_VALUE}>
                 <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
                   <span style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>
@@ -310,7 +342,16 @@ function ValuesList({
             </tr>
           </thead>
           <tbody>
-            {entries.map((entry) => {
+            {sections.map(({ group, entries: own }) => (
+              <Fragment key={group.key}>
+                {grouped && (
+                  <tr>
+                    <th colSpan={4} scope="rowgroup" style={TH_GROUP}>
+                      {group.title}
+                    </th>
+                  </tr>
+                )}
+            {own.map((entry) => {
               const line = entry.lines[0];
               const catalogNameId = primaryFor(entry);
               const catalog = catalogNameId ? catalogById.get(catalogNameId) : undefined;
@@ -383,6 +424,7 @@ function ValuesList({
                         <LineFormat
                           key={l.id}
                           line={l}
+                          lot={lotOfLine.get(l.id) !== group.label ? (lotOfLine.get(l.id) ?? null) : null}
                           typed={typed}
                           currency={catalog?.currency ?? null}
                         />
@@ -434,6 +476,8 @@ function ValuesList({
                 </tr>
               );
             })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </DialogBody>
@@ -460,14 +504,17 @@ function ValuesList({
  */
 function LineFormat({
   line,
+  lot,
   typed,
   currency,
 }: {
-  line: AuctionLotLineItem;
+  line: CatalogueFillLine;
+  /** The lot the line is in when it is not the one the value is asked under (#2220). */
+  lot: string | null;
   typed: string;
   currency: string | null;
 }) {
-  const what = `${line.formatAbbreviation ?? "single"} ×${line.quantity}`;
+  const what = `${lot ? `${lot} · ` : ""}${line.formatAbbreviation ?? "single"} ×${line.quantity}`;
   if (line.formatId === null) return <span>{what}</span>;
   if (line.formatFactor === null) {
     return (
@@ -543,6 +590,15 @@ const TH_VALUE: React.CSSProperties = {
   color: "var(--color-text-muted)",
   fontWeight: 500,
   whiteSpace: "nowrap",
+};
+
+/** A lot's heading over its values (#2220). */
+const TH_GROUP: React.CSSProperties = {
+  textAlign: "left",
+  padding: "0.75rem 0 0.25rem",
+  color: "var(--color-text-primary)",
+  fontWeight: 600,
+  borderTop: "1px solid var(--color-border-strong)",
 };
 
 const TD_STAMP: React.CSSProperties = {
