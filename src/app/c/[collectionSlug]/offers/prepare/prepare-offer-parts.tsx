@@ -186,8 +186,10 @@ export const PreparePriceField = forwardRef<
     /** The field's text as it is typed, or put back by **Esc** — for a post's totals (#2218), which
      *  count a price before it is saved. */
     onDraft?: (text: string) => void;
+    /** Makes a Catalogue drawn `—` the link to the window its missing values are typed in (#2220). */
+    onFillCatalogue?: () => void;
   }
->(function PreparePriceField({ offer, onEnter, onSaved, onDraft }, ref) {
+>(function PreparePriceField({ offer, onEnter, onSaved, onDraft, onFillCatalogue }, ref) {
   const auction = isAuctionListing(offer.listingType);
   const field = auction ? "startingPrice" : "price";
   const saved = statedPrice(offer);
@@ -235,6 +237,7 @@ export const PreparePriceField = forwardRef<
           setDraft(amount);
           save(amount);
         }}
+        onFillCatalogue={onFillCatalogue}
         priceEditor={
           <NumericInput
             ref={ref}

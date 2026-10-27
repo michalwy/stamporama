@@ -37,6 +37,17 @@ export interface OfferPriceTableOffer {
 }
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)" };
+/** A missing catalogue value that can be typed from here (#2220): the gap's amber, as a link. */
+const FILL_LINK: React.CSSProperties = {
+  padding: 0,
+  background: "none",
+  border: "none",
+  font: "inherit",
+  color: "var(--color-warning)",
+  textDecoration: "underline",
+  textUnderlineOffset: "2px",
+  cursor: "pointer",
+};
 const HEADING: React.CSSProperties = { ...MUTED, fontWeight: 500, justifySelf: "end" };
 
 const sets = (n: number) => `${n} set${n === 1 ? "" : "s"}`;
@@ -290,6 +301,9 @@ const STRIP_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estim
  * suggestion by its colour. Every price is a link writing the figure the seller states, as on the
  * table, and the margin under the offer's own price follows `ownAmount` — the figure being typed —
  * so what a price would give is read before it is saved.
+ *
+ * Given `onFillCatalogue`, a Catalogue drawn `—` is a link opening the window its missing values are
+ * typed in (#2220) — on a Facebook post's lot whose copies have values to type.
  */
 export function OfferPriceStrip({
   offer,
@@ -299,6 +313,7 @@ export function OfferPriceStrip({
   priceEditor,
   disabled,
   onApply,
+  onFillCatalogue,
 }: {
   offer: OfferPriceTableOffer;
   /** The stated figure as it stands in the field — typed or saved — or null while it is empty. */
@@ -308,6 +323,8 @@ export function OfferPriceStrip({
   priceEditor: React.ReactNode;
   disabled: boolean;
   onApply: (amount: string) => void;
+  /** Opens *Fill catalogue values* for this offer's copies; absent where there is nothing to type. */
+  onFillCatalogue?: () => void;
 }) {
   const rows = offerPriceRows({
     minimum: offer.platformMinimumPrice,
@@ -365,6 +382,12 @@ export function OfferPriceStrip({
             <span style={{ justifySelf: "end", whiteSpace: "nowrap" }}>
               {own ? (
                 priceEditor
+              ) : row.amount === null && row.key === "catalogue" && onFillCatalogue ? (
+                <Tooltip content="Type this lot's missing catalogue values" align="end">
+                  <button type="button" tabIndex={-1} onClick={onFillCatalogue} style={FILL_LINK}>
+                    —
+                  </button>
+                </Tooltip>
               ) : row.amount === null ? (
                 <span style={MUTED}>—</span>
               ) : linked ? (

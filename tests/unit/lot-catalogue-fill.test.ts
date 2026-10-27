@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   catalogueFillEntries,
+  catalogueFillGroups,
   multipliedCatalogueValue,
   needsCatalogueValue,
   type FillableLotLine,
@@ -114,5 +115,56 @@ describe("multipliedCatalogueValue", () => {
     assert.equal(multipliedCatalogueValue("-", 4), null);
     assert.equal(multipliedCatalogueValue("?", 4), null);
     assert.equal(multipliedCatalogueValue("abc", 4), null);
+  });
+});
+
+describe("catalogueFillGroups (#2220)", () => {
+  const group = (key: string, lines: Line[]) => ({ key, label: `Lot ${key}`, title: `Lot ${key} · t`, lines });
+
+  it("asks each value under its own lot, in the post's order", () => {
+    const sections = catalogueFillGroups([group("1", [line("a")]), group("2", [line("b"), line("c")])]);
+    assert.deepEqual(
+      sections.map((s) => [s.group.key, s.entries.map((e) => e.stampId)]),
+      [
+        ["1", ["stamp-a"]],
+        ["2", ["stamp-b", "stamp-c"]],
+      ]
+    );
+  });
+
+  it("asks a stamp held by several lots once, in the first, carrying the later lots' lines", () => {
+    const first = line("a1", { stampId: "s" });
+    const later = line("a2", { stampId: "s" });
+    const sections = catalogueFillGroups([group("1", [first]), group("2", [later, line("b")])]);
+    assert.deepEqual(
+      sections.map((s) => [s.group.key, s.entries.map((e) => e.lines.map((l) => l.id))]),
+      [
+        ["1", [["a1", "a2"]]],
+        ["2", [["b"]]],
+      ]
+    );
+  });
+
+  it("leaves out a lot with nothing to ask", () => {
+    const sections = catalogueFillGroups([
+      group("1", [line("a", { unpriced: false })]),
+      group("2", [line("b", { unknownVariant: true })]),
+      group("3", [line("c")]),
+    ]);
+    assert.deepEqual(
+      sections.map((s) => s.group.key),
+      ["3"]
+    );
+  });
+
+  it("asks nothing of a lot whose every value was asked in an earlier one", () => {
+    const sections = catalogueFillGroups([
+      group("1", [line("a1", { stampId: "s" })]),
+      group("2", [line("a2", { stampId: "s" })]),
+    ]);
+    assert.deepEqual(
+      sections.map((s) => s.group.key),
+      ["1"]
+    );
   });
 });

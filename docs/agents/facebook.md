@@ -754,6 +754,32 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   by itself, with no clean-up. Prepare is unchanged (it passes no `onDraft`). The unit test is
   `tests/unit/facebook-post-price-totals.test.ts`.
 
+- **A post's missing catalogue values are typed down one list — the whole post's, or one lot's**
+  (#2220, settled with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as
+  written; the multi-stamp exclusion and the copy-photo fallback are this task's own calls, flagged on the
+  issue). **The window is the auction lot's** (#2094): `AuctionLotCatalogValuesDialog`
+  (`auctions/auction-lot-catalog-values-dialog.tsx`) takes `groups` instead of `lines`, one
+  `CatalogueFillGroup` per lot, and draws each under a heading row; the choice and the per-value dedup
+  are `catalogueFillGroups` (`lot-catalogue-fill.ts`, pure, unit-tested) — `catalogueFillEntries` over the
+  whole post, each entry placed under the lot of its first line, so a stamp held by several lots is
+  asked once, in the first, and a later lot's line it prices says *Lot N · …*. The line type the window
+  reads is `CatalogueFillLine`, which `AuctionLotLineItem` satisfies structurally. **The lines** come from
+  `getFacebookPostCatalogueFill` (`facebook-post-catalogue-fill.ts`, its own route
+  `facebook-posts/[postId]/catalogue-fill`, query `useFacebookPostCatalogueFill` under the offers key, so
+  the save's `invalidateAll` refreshes it with the Prepare rows): every copy of every lot, set by set in
+  the offer's own order, valued by `valuateItemRows` over `copyValuationOf` — the copies list's
+  valuation, so a copy is missing a value here exactly when it is unpriced there. A copy with a
+  **candidate set** (#1651) is told to the window as `unknownVariant`, so it is left out with the
+  umbrellas; a **multi-stamp** piece (ADR-0044) is no line at all — it is valued at its recorded figure,
+  never the catalogue. The picture is the stamp's, the copy's own when the stamp has none. Null once any
+  lot is up, as the Prepare rows are. **Where it opens**: *Fill catalogue values (N)* first among the
+  pricing buttons, over the lots that have Prepare rows, shown only when N > 0; and a lot's Catalogue
+  `—` in the compact price strip — `OfferPriceStrip`'s optional `onFillCatalogue`, passed through
+  `PreparePriceField` — a link only when the lot's `catalogPrice` is null **and** it has values to type.
+  A lot with *some* sets valued shows a figure, not `—`, so its gaps are reached by the post's button
+  only. Prepare passes no `onFillCatalogue` and is unchanged. The page now reads the areas
+  (`getCollectionAreas`) for the window's catalogue chips.
+
 - **A Ready post, or one of its lots, goes back to Preparing from the post's screen** (#2115, settled
   with the collector on 2026-10-23; the issue's *to be confirmed* points implemented as written).
   `takeFacebookPostBackToPreparing` (`facebook-posts.ts`, by post id) through

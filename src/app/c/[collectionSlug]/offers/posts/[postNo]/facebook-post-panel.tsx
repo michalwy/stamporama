@@ -49,7 +49,12 @@ import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-di
 import { BackToReadyDialog, backToReadyDone } from "../../back-to-ready-dialog";
 import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
 import { SellOfferFlowDialog, type SellableOfferSubject } from "../../sell-offer-flow-dialog";
-import { useFacebookPostLotsPrepare, useFacebookPostScreen, useInvalidateOffers } from "../../use-offers-query";
+import {
+  useFacebookPostCatalogueFill,
+  useFacebookPostLotsPrepare,
+  useFacebookPostScreen,
+  useInvalidateOffers,
+} from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-walk";
 import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../../prepare/prepare-offer-parts";
@@ -62,6 +67,10 @@ import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
 import { PostPriceTotalsBar } from "./post-price-totals-bar";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
+import { catalogueFillEntries, type CatalogueFillGroup, type CatalogueFillLine } from "@/lib/lot-catalogue-fill";
+import type { CollectionAreaData } from "@/lib/areas";
+import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { AuctionLotCatalogValuesDialog } from "../../../auctions/auction-lot-catalog-values-dialog";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -212,7 +221,9 @@ type Dialog =
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
   | { kind: "sell"; lots: FacebookKitLot[] }
   | { kind: "deletePost" }
-  | { kind: "preview" };
+  | { kind: "preview" }
+  /** *Fill catalogue values* (#2220): the whole post's, or one lot's from its row. */
+  | { kind: "fillCatalogue"; groups: CatalogueFillGroup<CatalogueFillLine>[] };
 
 /** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
 interface LotSkip {
@@ -240,12 +251,15 @@ export function FacebookPostPanel({
   collectionId,
   collectionSlug,
   baseCurrency,
+  areas,
   postId,
   today,
 }: {
   collectionId: string;
   collectionSlug: string;
   baseCurrency: string;
+  /** For the catalogue chips of *Fill catalogue values* (#2220). */
+  areas: CollectionAreaData[];
   postId: string;
   /** Server-computed "today", for *Sell*'s new-sale step — as the offer screen passes it. */
   today: string;
@@ -257,6 +271,11 @@ export function FacebookPostPanel({
   const notUp = !!screen && !screen.kit.lots.some((l) => isFacebookLotPosted(l.state));
   const { data: prepare } = useFacebookPostLotsPrepare(collectionId, postId, notUp);
   const prepareRows = notUp ? (prepare ?? null) : null;
+  // The lots' copies as *Fill catalogue values* lines (#2220), asked while the lots are priced.
+  const { data: fill } = useFacebookPostCatalogueFill(collectionId, postId, notUp);
+  const fillLines = notUp ? (fill ?? null) : null;
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
   const [lotSkips, setLotSkips] = useState<LotSkip[]>([]);
   const [coverWalk, setCoverWalk] = useState<CoverWalk | null>(null);
   // The lots' price fields, by offer id — Enter moves down them in lot order (#2031).
@@ -481,6 +500,17 @@ export function FacebookPostPanel({
     const lot = lots.find((l) => l.offerId === offerId);
     return lot ? `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1}` : "A lot";
   };
+
+  // *Fill catalogue values* (#2220): one group per lot being priced, in the post's order — the lots the
+  // pricing tools work on, so N counts only what those lots are missing.
+  const fillGroupOf = (lot: FacebookKitLot): CatalogueFillGroup<CatalogueFillLine> => ({
+    key: lot.offerId,
+    label: lotNoOf(lot.offerId),
+    title: `${lotNoOf(lot.offerId)} · ${prepareRows?.[lot.offerId]?.name ?? lot.title}`,
+    lines: fillLines?.[lot.offerId] ?? [],
+  });
+  const fillGroups = prepareRows && fillLines ? lots.filter((l) => prepareRows[l.offerId]).map(fillGroupOf) : [];
+  const fillCount = catalogueFillEntries(fillGroups.flatMap((g) => g.lines)).length;
 
   function applyEstimates() {
     if (estimable.length === 0) return;
@@ -950,6 +980,17 @@ export function FacebookPostPanel({
                 <div
                   style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", margin: "0.75rem 0 0" }}
                 >
+                  {fillCount > 0 && (
+                    <Tooltip content="Type every missing catalogue value of the post's lots down one list, Tab to the next, saved at once.">
+                      <DialogSecondaryButton
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => setDialog({ kind: "fillCatalogue", groups: fillGroups })}
+                      >
+                        <Icon name="prices" size="sm" /> Fill catalogue values ({fillCount})
+                      </DialogSecondaryButton>
+                    </Tooltip>
+                  )}
                   <Tooltip
                     content={
                       estimable.length > 0
@@ -1118,6 +1159,13 @@ export function FacebookPostPanel({
                             void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
                           }
                           onTitleChanged={() => void settlePostLot(collectionId, postId, lot.offerId)}
+                          onFillCatalogue={(() => {
+                            // The `—` under Catalogue is a link only while the lot has values to type.
+                            if (!prepareRows?.[lot.offerId] || !fillLines) return undefined;
+                            const group = fillGroupOf(lot);
+                            if (catalogueFillEntries(group.lines).length === 0) return undefined;
+                            return () => setDialog({ kind: "fillCatalogue", groups: [group] });
+                          })()}
                           onCheckCovers={(mode) => {
                             const covers = prepareRows?.[lot.offerId]?.covers;
                             setCoverWalk({
@@ -1303,6 +1351,18 @@ export function FacebookPostPanel({
         />
       )}
 
+      {dialog.kind === "fillCatalogue" && (
+        <AuctionLotCatalogValuesDialog
+          collectionId={collectionId}
+          groups={dialog.groups}
+          areaNameById={areaNameById}
+          primaryVendorByArea={primaryVendorByArea}
+          vendorMapFor={vendorMapFor}
+          onClose={() => setDialog({ kind: "none" })}
+          onSaved={() => void invalidateAll(collectionId)}
+        />
+      )}
+
       {dialog.kind === "preview" && (
         <PostPreviewDialog
           collectionId={collectionId}
@@ -1391,6 +1451,7 @@ function LotRow({
   onPriceDraft,
   onPriceSaved,
   onTitleChanged,
+  onFillCatalogue,
   onCheckCovers,
 }: {
   /** The lot's number in the order drawn — its own, or the one a move just gave it (#1986). */
@@ -1427,6 +1488,8 @@ function LotRow({
   onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
   /** The title was saved — the lot is read again, and only it (#2221). */
   onTitleChanged: () => void;
+  /** Opens *Fill catalogue values* for this lot (#2220); absent while it has none to type. */
+  onFillCatalogue?: () => void;
   /** Opens the lot's covers walk: the photos not yet checked, or every one again (#2114). */
   onCheckCovers: (mode: "unchecked" | "all") => void;
 }) {
@@ -1501,6 +1564,7 @@ function LotRow({
                   onEnter={onPriceEnter}
                   onSaved={onPriceSaved}
                   onDraft={onPriceDraft}
+                  onFillCatalogue={onFillCatalogue}
                 />
               </div>
               {lot.state === "preparing" && (
