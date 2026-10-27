@@ -175,6 +175,8 @@ import {
   deleteOfferPhotoBytes,
   enqueueOfferPhotoGeneration,
   readOfferPhotoReadiness,
+  readOfferPhotoReadinessMany,
+  type OfferPhotoReadiness,
   type OfferPhotoCoverState,
   type OfferPhotoGenerationStatus,
 } from "./offer-photo-generation";
@@ -4165,12 +4167,8 @@ export interface PrepareOfferFilters {
   pageSize?: number;
 }
 
-/** How many offers a Prepare page holds. Each row asks the photo plan its own question (the ready
- *  gate's photo half and the covers), so a page is kept to what one screen shows. */
+/** How many offers a Prepare page holds — what one screen shows. */
 const PREPARE_PAGE_SIZE = 25;
-
-/** How many offers' photo plans are read at once — a page's worth all at once would crowd the pool. */
-const PREPARE_PHOTO_READS = 5;
 
 const PREPARE_SETS_SELECT = {
   ...LISTING_SETS_SELECT,
@@ -4318,7 +4316,7 @@ export async function readPrepareOffers(
 /**
  * Prepare rows over a page of offers, every lookup asked **once for the page** — the holdings,
  * estimates and COST estimates keyed by set across every offer, the item-ID derivation per platform
- * module, the condition map, the rates per currency — except the photo plan, which is per offer.
+ * module, the condition map, the rates per currency, and the photo plans (#2222).
  *
  * The price table's figures come from {@link offerPriceFigures}, the function the offer's own screen
  * reads, and the ready gate is assembled from the same parts {@link getOfferDetail} assembles it from,
@@ -4401,13 +4399,9 @@ async function buildPrepareOffers(
     }
   }
 
-  // The photo half of the ready gate (#311) and the covers (#1665), per offer — a few at a time.
-  const photoGates = new Map<string, OfferPhotoGate>();
-  for (let i = 0; i < rows.length; i += PREPARE_PHOTO_READS) {
-    const chunk = rows.slice(i, i + PREPARE_PHOTO_READS);
-    const answers = await Promise.all(chunk.map((row) => readOfferPhotoGate(row.id)));
-    chunk.forEach((row, j) => photoGates.set(row.id, answers[j]));
-  }
+  // The photo half of the ready gate (#311) and the covers (#1665), every row's in one read (#2222).
+  const readiness = await readOfferPhotoReadinessMany(rows.map((row) => row.id));
+  const photoGates = new Map(rows.map((row) => [row.id, photoGateOf(readiness.get(row.id))]));
 
   return rows.map((row) => {
     const platformModule = row.platform.platformModule;
@@ -4744,7 +4738,10 @@ const NO_COVERS: OfferPhotoCoverState = { needed: false, photoCount: 0, unchecke
 
 /** {@link readOfferPhotoBlockers} with the covers counted beside them (#2114), from the one read. */
 async function readOfferPhotoGate(offerId: string): Promise<OfferPhotoGate> {
-  const readiness = await readOfferPhotoReadiness(offerId);
+  return photoGateOf(await readOfferPhotoReadiness(offerId));
+}
+
+function photoGateOf(readiness: OfferPhotoReadiness | null | undefined): OfferPhotoGate {
   return readiness
     ? {
         blockers: [...evaluatePhotoReadiness(readiness), ...evaluateCoverReadiness(readiness.uncheckedCoverCount)],

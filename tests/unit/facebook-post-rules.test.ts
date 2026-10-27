@@ -28,7 +28,6 @@ import {
   parseFacebookPostNo,
   facebookLotPhotoFileName,
   facebookPostPhotoArchiveName,
-  facebookLotUploadPhotos,
   isFacebookLotPosted,
   isFacebookPendingPostUrl,
   parseBidIncrement,
@@ -937,17 +936,7 @@ describe("a multi-lot post's screen (#1842)", () => {
     }
   });
 
-  it("shows a lot's upload set, in upload order, under the name the post's ZIP gives it (#1848)", () => {
-    const images = [
-      { id: "a", publish: true, overLimit: false },
-      { id: "held", publish: false, overLimit: false },
-      { id: "b", publish: true, overLimit: false },
-      { id: "past", publish: true, overLimit: true },
-    ];
-    assert.deepEqual(
-      facebookLotUploadPhotos(images).map((i) => i.id),
-      ["a", "b"]
-    );
+  it("names a lot's photo as the post's ZIP does (#1848)", () => {
     assert.equal(facebookLotPhotoFileName(3, "penny-black-01.jpg"), "lot-03-penny-black-01.jpg");
     assert.equal(facebookLotPhotoFileName(12, "x.jpg"), "lot-12-x.jpg");
   });

@@ -13,7 +13,12 @@ import { stageUpload, applyPhotoChangeSet } from "../../src/lib/photos";
 import { createFacebookGroup, updateFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
 import { getFacebookOfferKit } from "../../src/lib/facebook-auctions";
-import { createFacebookPost, publishOfferOrPost, setFacebookPostLayout } from "../../src/lib/facebook-posts";
+import {
+  createFacebookPost,
+  getFacebookPostScreen,
+  publishOfferOrPost,
+  setFacebookPostLayout,
+} from "../../src/lib/facebook-posts";
 import {
   facebookPartsText,
   facebookPostSource,
@@ -24,6 +29,7 @@ import {
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
   purgeClosedOfferPhotos,
+  readOfferUploadPlan,
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
 import {
@@ -31,6 +37,7 @@ import {
   claimNextFacebookLotPhoto,
   FacebookLotPhotosNotReadyError,
   readFacebookPostLotPhotos,
+  readFacebookPostPhotos,
   runFacebookLotPhoto,
   type FacebookPostLotPhoto,
 } from "../../src/lib/facebook-lot-photos";
@@ -396,6 +403,52 @@ describe("a captioned Facebook post (#1841)", () => {
     const second = await readFacebookPostLotPhotos(userId, postId, [b]);
     assert.deepEqual(second.map((l) => [l.offerId, l.lotNo]), [[b, 2]]);
     assert.equal(await prisma.facebookLotPhoto.count({ where: { offerId: b } }), 1, "asked after, it is queued");
+  });
+
+  it("reads every lot's photos with the post, in either layout, and asks after some lots alone (#2222)", async () => {
+    await updateFacebookGroup(userId, groupId, groupValues());
+    const a = await offer();
+    const b = await offer();
+    const c = await offer();
+    const { postId } = await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
+    await generate(a, "front");
+    await generate(b, "both");
+
+    // Captioned: each lot's one photo, as the lot photos read it — c has nothing to be drawn from.
+    const screen = (await getFacebookPostScreen(userId, postId))!;
+    assert.equal(screen.photos.layout, "captions");
+    assert.deepEqual(screen.photos.lots, await readFacebookPostLotPhotos(userId, postId));
+    assert.deepEqual(
+      screen.photos.lots.map((l) => ("state" in l ? [l.offerId, l.state.status] : [])),
+      [
+        [a, "generating"],
+        [b, "generating"],
+        [c, "none"],
+      ]
+    );
+    await drawLotPhotos(a);
+    const one = await readFacebookPostPhotos(userId, postId, [a]);
+    assert.ok(one.layout === "captions");
+    assert.deepEqual(one.lots.map((l) => [l.offerId, l.state.status]), [[a, "ready"]]);
+
+    // Laid out as text: each lot's upload set, the very files its own plan uploads, and its run.
+    await setFacebookPostLayout(userId, postId, "text");
+    await enqueueOfferPhotoGeneration(userId, b);
+    const text = (await getFacebookPostScreen(userId, postId))!.photos;
+    assert.ok(text.layout === "text");
+    const uploads = async (offerId: string) => {
+      const plan = await readOfferUploadPlan(userId, offerId);
+      return "reason" in plan ? [] : plan.images.map((i) => ({ photoId: i.photoId, fileName: i.fileName }));
+    };
+    assert.deepEqual(text.lots, [
+      { offerId: a, status: "ready", images: await uploads(a) },
+      { offerId: b, status: "queued", images: await uploads(b) },
+      { offerId: c, status: "none", images: [] },
+    ]);
+    assert.equal(text.lots[0].images.length, 1);
+    assert.equal(text.lots[1].images.length, 2, "front and back, as generated");
+    assert.deepEqual(await readFacebookPostPhotos(userId, postId, [b]), { layout: "text", lots: [text.lots[1]] });
+    await assert.rejects(() => readFacebookPostPhotos(`${userId}-other`, postId), /Post not found/);
   });
 
   it("keeps the photo a published post went up with, and drops a lot's when it leaves its post", async () => {

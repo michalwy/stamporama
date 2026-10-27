@@ -524,27 +524,54 @@ export async function readTileLabels(
   templates: { left: string | null; right: string | null },
   language: string | null
 ): Promise<Map<string, TileLabelTexts>> {
-  const labels = new Map<string, TileLabelTexts>();
-  const left = templates.left?.trim() || null;
-  const right = templates.right?.trim() || null;
-  if ((!left && !right) || itemIds.length === 0) return labels;
+  return (await readTileLabelsMany(ownerId, collectionId, [{ itemIds, templates, language }]))[0];
+}
 
-  const [rows, mapCopy] = await Promise.all([
+/** {@link readTileLabels} for several offers of one collection at once (#2222), in the order asked:
+ *  their copies read in one go, and the copy mapper made once per listing language. */
+async function readTileLabelsMany(
+  ownerId: string,
+  collectionId: string,
+  asks: readonly {
+    itemIds: readonly string[];
+    templates: { left: string | null; right: string | null };
+    language: string | null;
+  }[]
+): Promise<Map<string, TileLabelTexts>[]> {
+  const wanted = asks.map(({ itemIds, templates }) => {
+    const left = templates.left?.trim() || null;
+    const right = templates.right?.trim() || null;
+    return (left || right) && itemIds.length > 0 ? { left, right } : null;
+  });
+  const itemIds = [...new Set(asks.flatMap((ask, i) => (wanted[i] ? ask.itemIds : [])))];
+  if (itemIds.length === 0) return asks.map(() => new Map());
+
+  const languages = [...new Set(asks.flatMap((ask, i) => (wanted[i] ? [ask.language] : [])))];
+  const [rows, mappers] = await Promise.all([
     prisma.item.findMany({
-      where: { id: { in: [...itemIds] }, collectionId },
+      where: { id: { in: itemIds }, collectionId },
       select: TITLE_COPY_SELECT,
     }),
-    makeTitleCopyMapper(ownerId, collectionId, language),
+    Promise.all(languages.map((language) => makeTitleCopyMapper(ownerId, collectionId, language))),
   ]);
-  for (const row of rows as TitleCopyRow[]) {
-    const copy = [mapCopy(row)];
-    const texts: TileLabelTexts = {
-      left: left ? renderTitleTemplate(left, copy).trim() : "",
-      right: right ? renderTitleTemplate(right, copy).trim() : "",
-    };
-    if (texts.left || texts.right) labels.set(row.id, texts);
-  }
-  return labels;
+  const rowById = new Map((rows as TitleCopyRow[]).map((row) => [row.id, row]));
+  return asks.map((ask, i) => {
+    const labels = new Map<string, TileLabelTexts>();
+    const templates = wanted[i];
+    if (!templates) return labels;
+    const mapCopy = mappers[languages.indexOf(ask.language)];
+    for (const itemId of ask.itemIds) {
+      const row = rowById.get(itemId);
+      if (!row) continue;
+      const copy = [mapCopy(row)];
+      const texts: TileLabelTexts = {
+        left: templates.left ? renderTitleTemplate(templates.left, copy).trim() : "",
+        right: templates.right ? renderTitleTemplate(templates.right, copy).trim() : "",
+      };
+      if (texts.left || texts.right) labels.set(row.id, texts);
+    }
+    return labels;
+  });
 }
 
 /**
@@ -626,9 +653,9 @@ interface GenerationInputs extends CollageRenderContext {
 const SIDE_ROLES = ["front", "back"];
 
 /**
- * The sets this offer can no longer sell (#315), by set id, in one batched lookup — the same
- * derivation the offers list and the detail screen use for "needs action" (ADR-0013 §4), applied to
- * the photo plan:
+ * The sets each offer can no longer sell (#315), by offer and set id, in one batched lookup for all of
+ * them (#2222) — the same derivation the offers list and the detail screen use for "needs action"
+ * (ADR-0013 §4), applied to the photo plan:
  *
  * - the set sold through **this** offer (it has its own sale line) — a multi-set offer stays active
  *   while its remaining sets are still for sale, and the sold one must leave the collages;
@@ -642,53 +669,73 @@ const SIDE_ROLES = ["front", "back"];
  * Empty for a terminal offer (sold / withdrawn): its images document a listing that is over, and
  * recomputing them against an empty composition would only declare them out of date forever.
  */
-async function excludedSetsFor(offer: {
-  id: string;
-  state: string;
-  sets: readonly {
+async function excludedSetsForMany(
+  offers: readonly {
     id: string;
-    saleLines: readonly unknown[];
-    items: readonly { itemId: string }[];
-  }[];
-}): Promise<Map<string, OfferPhotoExcludedReason>> {
-  const excluded = new Map<string, OfferPhotoExcludedReason>();
-  const state = isOfferState(offer.state) ? offer.state : "active";
-  if (isTerminalState(state)) return excluded;
+    state: string;
+    sets: readonly {
+      id: string;
+      saleLines: readonly unknown[];
+      items: readonly { itemId: string }[];
+    }[];
+  }[]
+): Promise<Map<string, Map<string, OfferPhotoExcludedReason>>> {
+  const byOffer = new Map<string, Map<string, OfferPhotoExcludedReason>>();
+  const open = offers.filter((offer) => !isTerminalState(isOfferState(offer.state) ? offer.state : "active"));
+  for (const offer of offers) byOffer.set(offer.id, new Map());
 
-  const itemIds = [...new Set(offer.sets.flatMap((s) => s.items.map((li) => li.itemId)))];
-  if (itemIds.length === 0) return excluded;
+  const itemIds = [...new Set(open.flatMap((o) => o.sets.flatMap((s) => s.items.map((li) => li.itemId))))];
+  if (itemIds.length === 0) return byOffer;
 
   const [soldRows, biddingRows] = await Promise.all([
     prisma.saleLineItem.findMany({
       where: { itemId: { in: itemIds } },
       select: { itemId: true, saleLine: { select: { offerSetId: true } } },
     }),
+    // Held by an offer in active bidding — another one than the offer asking, sorted out below.
     prisma.offerSetItem.findMany({
       where: {
         itemId: { in: itemIds },
-        offerSet: { offer: { id: { not: offer.id }, inActiveBidding: true, state: "active" } },
+        offerSet: { offer: { inActiveBidding: true, state: "active" } },
       },
-      select: { itemId: true },
+      select: { itemId: true, offerSet: { select: { offerId: true } } },
     }),
   ]);
   const soldViaSet = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
-  const biddingElsewhere = new Set(biddingRows.map((r) => r.itemId));
 
-  for (const set of offer.sets) {
-    if (set.saleLines.length > 0 || set.items.some((li) => soldViaSet.has(li.itemId))) {
-      excluded.set(set.id, "sold");
-      continue;
-    }
-    if (set.items.some((li) => biddingElsewhere.has(li.itemId))) {
-      excluded.set(set.id, "bidding");
+  for (const offer of open) {
+    const excluded = byOffer.get(offer.id)!;
+    const biddingElsewhere = new Set(
+      biddingRows.filter((r) => r.offerSet.offerId !== offer.id).map((r) => r.itemId)
+    );
+    for (const set of offer.sets) {
+      if (set.saleLines.length > 0 || set.items.some((li) => soldViaSet.has(li.itemId))) {
+        excluded.set(set.id, "sold");
+        continue;
+      }
+      if (set.items.some((li) => biddingElsewhere.has(li.itemId))) {
+        excluded.set(set.id, "bidding");
+      }
     }
   }
-  return excluded;
+  return byOffer;
 }
 
 async function readInputs(offerId: string): Promise<GenerationInputs | null> {
-  const offer = await prisma.offer.findUnique({
-    where: { id: offerId },
+  return (await readInputsMany([offerId])).get(offerId) ?? null;
+}
+
+/**
+ * Several offers' inputs, by offer id — a Facebook post's lots (#2222) — with every lookup they can
+ * share asked once for all of them: the offers themselves, each collection's label vocabulary, the
+ * sets that have gone, the tile labels and the copies asked about for covers. Only the checklist
+ * slots stay per offer, for the few that group by them. An offer that does not exist is absent.
+ */
+async function readInputsMany(offerIds: readonly string[]): Promise<Map<string, GenerationInputs>> {
+  const found = new Map<string, GenerationInputs>();
+  if (offerIds.length === 0) return found;
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: [...new Set(offerIds)] } },
     select: {
       id: true,
       name: true,
@@ -795,200 +842,227 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       },
     },
   });
-  if (!offer) return null;
+  if (offers.length === 0) return found;
 
-  const sourceById = new Map<string, SourcePhoto>();
-  // The offer's own label vocabulary (#379), so the photo card names a set exactly as the sets card
-  // above it does. Labels are display-only here — no stored image goes out of date over one.
-  const labeller = await makeOfferLabeller(offer.collectionId);
-  const labels: PlanLabels = { copies: new Map(), sets: new Map() };
-  // The checklist slots (#1673) are read only for an offer that groups by them: they cost a chain
-  // walk, and an offer that does not group must hash exactly as it did.
-  const checklistSlots = offer.photoGroupByChecklist
-    ? await loadChecklistSlots(
-        offer.collectionId,
-        offer.sets.flatMap((set) =>
-          set.items.map((li) => ({ itemId: li.itemId, stampId: li.item.stampId }))
-        )
-      )
-    : null;
-  const allSets: PlanSet[] = offer.sets.map((set) => ({
-    id: set.id,
-    sortOrder: set.sortOrder,
-    items: set.items.map((li): PlanCopy => {
-      const bySide = new Map(li.item.photos.map((p) => [p.role, p]));
-      labels.copies.set(li.itemId, labeller.copy(li.item.stamp));
-      for (const photo of li.item.photos) {
-        sourceById.set(photo.id, photo);
-      }
-      return {
-        itemId: li.itemId,
-        sortOrder: li.sortOrder,
-        catalogSortKey: li.item.stamp.primaryCatalogSortKey,
-        frontPhotoId: bySide.get("front")?.id ?? null,
-        backPhotoId: bySide.get("back")?.id ?? null,
-        ...(checklistSlots ? { checklists: checklistSlots.get(li.itemId) ?? [] } : {}),
-      };
-    }),
-  }));
-
-  // Labels cover **every** set, excluded ones included: a stored image rendered from a set that has
-  // since sold still has to be able to name it (#315), exactly as it names a set since removed.
-  for (const set of offer.sets) {
-    labels.sets.set(set.id, labeller.set(set));
-  }
-
-  // Sets that have gone leave the plan's inputs here (#315) — the engine, the fingerprint and the
-  // renderer all see the offer as what is still sellable, and nothing downstream needs to know.
-  const excluded = await excludedSetsFor(offer);
-  const sets = allSets.filter((set) => !excluded.has(set.id));
-  const excludedSets: OfferPhotoExcludedSet[] = offer.sets
-    .filter((set) => excluded.has(set.id))
-    .map((set) => ({
-      setId: set.id,
-      label: labels.sets.get(set.id) ?? REMOVED_LABEL,
-      reason: excluded.get(set.id)!,
-    }));
-
-  const hasCollage =
-    offer.collageRows != null &&
-    offer.collageColumns != null &&
-    offer.collageGapPercent != null &&
-    offer.collageBackground != null &&
-    offer.collageLabelPercent != null;
-  // The group template's numbers (#1673) are written as one group as well.
-  const hasGroupCollage =
-    offer.groupCollageRows != null &&
-    offer.groupCollageColumns != null &&
-    offer.groupCollageGapPercent != null &&
-    offer.groupCollageBackground != null &&
-    offer.groupCollageLabelPercent != null;
-
-  // The copies the offer can still sell: the members of the sets that survived the exclusion above.
-  // A manual attachment naming anything else is showing a stamp the buyer cannot get (#461).
-  const sellableItemIds = new Set(sets.flatMap((set) => set.items.map((copy) => copy.itemId)));
-
-  // Attachments (#313). Their photos join the source map so the renderer can read the bytes, and a
-  // `copy_photo`'s copy joins the label subjects — a copy attached on its own need not be one the
-  // collages already cover.
-  const attachments: PlanAttachment[] = [];
-  const attachmentTitles = new Map<string, string | null>();
-  const attachmentSources = new Map<string, AttachmentSource>();
-  for (const row of offer.photoAttachments) {
-    // One shape for all three modes: a manual collage (#331) is its tiles at its own width, and the
-    // single-image modes are one tile in one column — which is what the renderer has always made of
-    // them (#310, #312).
-    const source: AttachmentSource =
-      row.source === "upload"
-        ? "upload"
-        : row.source === "manual_collage"
-          ? "manual_collage"
-          : "copy_photo";
-    const photos = (
-      source === "manual_collage"
-        ? row.tiles.map((tile) => ({ photo: tile.photo, itemId: tile.itemId }))
-        : row.photo
-          ? [{ photo: row.photo, itemId: row.itemId }]
-          : []
-    ).filter((t) => t.itemId == null || sellableItemIds.has(t.itemId));
-    // A collage whose every tile lost its source scan — or whose every tile named a copy that has
-    // gone (#461) — plans nothing rather than an empty image.
-    if (photos.length === 0) continue;
-    attachments.push({
-      id: row.id,
-      position: row.sortOrder,
-      tiles: photos.map((t) => ({ photoId: t.photo.id, itemId: t.itemId })),
-      columns: source === "manual_collage" ? row.collageColumns ?? 1 : 1,
-    });
-    attachmentTitles.set(row.id, row.title);
-    attachmentSources.set(row.id, source);
-    for (const { photo } of photos) {
-      sourceById.set(photo.id, photo);
-    }
-  }
-  withDefaultScales(sourceById, offer.collection.defaultScanningProfile);
-
-  const labelSubjects = [
-    ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
-    ...attachments.flatMap((a) => a.tiles.flatMap((tile) => (tile.itemId ? [tile.itemId] : []))),
-  ];
-  const [tileLabels, askedItemIds] = await Promise.all([
-    readTileLabels(
-      offer.collection.ownerId,
-      offer.collectionId,
-      [...new Set(labelSubjects)],
-      { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
-      offer.platform.titleLanguage
+  const collectionIds = [...new Set(offers.map((o) => o.collectionId))];
+  const [labellers, excludedByOffer] = await Promise.all([
+    Promise.all(collectionIds.map(async (id) => [id, await makeOfferLabeller(id)] as const)).then(
+      (entries) => new Map(entries)
     ),
-    readCoverAskedItemIds(offer.collectionId, [...new Set(labelSubjects)]),
+    excludedSetsForMany(offers),
   ]);
-  // An attachment naming a copy the offer no longer sells leaves the plan with the copy (#461),
-  // exactly as the set it came from does (#315) — attaching one is guarded
-  // (`attachOfferCopyPhoto`), and a copy leaving the offer afterwards is now guarded here. Only the
-  // *plan* drops it: the row survives, so a set held back by bidding elsewhere brings its
-  // attachments back with it when it frees up.
 
-  return {
-    offerId: offer.id,
-    logLabel: `offer ${offer.id}`,
-    offerName: offer.name,
-    offerNo: offer.offerNo,
-    collectionId: offer.collectionId,
-    ownerId: offer.collection.ownerId,
-    sets,
-    excludedSets,
-    labels,
-    photoSides: normalizePhotoSides(offer.photoSides),
-    preferSingles: offer.photoPreferSingles,
-    photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
-    photoLabelRightTemplate: offer.photoLabelRightTemplate,
-    tileLabels,
-    uploadTileLabel: renderCopylessTileLabel({
-      left: offer.photoLabelLeftTemplate,
-      right: offer.photoLabelRightTemplate,
-    }),
-    collage: hasCollage
-      ? {
-          // Null is `fixed` (#413) — an offer prepared before the mode existed renders exactly as
-          // it did, which is also why the mode is not one of the columns `hasCollage` tests.
-          collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
-          // Null is `landscape` (#1699), on the same reasoning.
-          collageGridShape: normalizeCollageGridShape(offer.collageGridShape),
-          collageRows: offer.collageRows!,
-          collageColumns: offer.collageColumns!,
-          collageGapPercent: offer.collageGapPercent!,
-          collageBackground: offer.collageBackground!,
-          collageLabelPercent: offer.collageLabelPercent!,
+  // Each offer's inputs but for its tile labels and the copies asked about, which are read below for
+  // every offer of a collection at once.
+  const drafts = await Promise.all(
+    offers.map(async (offer) => {
+      const sourceById = new Map<string, SourcePhoto>();
+      // The offer's own label vocabulary (#379), so the photo card names a set exactly as the sets card
+      // above it does. Labels are display-only here — no stored image goes out of date over one.
+      const labeller = labellers.get(offer.collectionId)!;
+      const labels: PlanLabels = { copies: new Map(), sets: new Map() };
+      // The checklist slots (#1673) are read only for an offer that groups by them: they cost a chain
+      // walk, and an offer that does not group must hash exactly as it did.
+      const checklistSlots = offer.photoGroupByChecklist
+        ? await loadChecklistSlots(
+            offer.collectionId,
+            offer.sets.flatMap((set) =>
+              set.items.map((li) => ({ itemId: li.itemId, stampId: li.item.stampId }))
+            )
+          )
+        : null;
+      const allSets: PlanSet[] = offer.sets.map((set) => ({
+        id: set.id,
+        sortOrder: set.sortOrder,
+        items: set.items.map((li): PlanCopy => {
+          const bySide = new Map(li.item.photos.map((p) => [p.role, p]));
+          labels.copies.set(li.itemId, labeller.copy(li.item.stamp));
+          for (const photo of li.item.photos) {
+            sourceById.set(photo.id, photo);
+          }
+          return {
+            itemId: li.itemId,
+            sortOrder: li.sortOrder,
+            catalogSortKey: li.item.stamp.primaryCatalogSortKey,
+            frontPhotoId: bySide.get("front")?.id ?? null,
+            backPhotoId: bySide.get("back")?.id ?? null,
+            ...(checklistSlots ? { checklists: checklistSlots.get(li.itemId) ?? [] } : {}),
+          };
+        }),
+      }));
+
+      // Labels cover **every** set, excluded ones included: a stored image rendered from a set that has
+      // since sold still has to be able to name it (#315), exactly as it names a set since removed.
+      for (const set of offer.sets) {
+        labels.sets.set(set.id, labeller.set(set));
+      }
+
+      // Sets that have gone leave the plan's inputs here (#315) — the engine, the fingerprint and the
+      // renderer all see the offer as what is still sellable, and nothing downstream needs to know.
+      const excluded = excludedByOffer.get(offer.id)!;
+      const sets = allSets.filter((set) => !excluded.has(set.id));
+      const excludedSets: OfferPhotoExcludedSet[] = offer.sets
+        .filter((set) => excluded.has(set.id))
+        .map((set) => ({
+          setId: set.id,
+          label: labels.sets.get(set.id) ?? REMOVED_LABEL,
+          reason: excluded.get(set.id)!,
+        }));
+
+      const hasCollage =
+        offer.collageRows != null &&
+        offer.collageColumns != null &&
+        offer.collageGapPercent != null &&
+        offer.collageBackground != null &&
+        offer.collageLabelPercent != null;
+      // The group template's numbers (#1673) are written as one group as well.
+      const hasGroupCollage =
+        offer.groupCollageRows != null &&
+        offer.groupCollageColumns != null &&
+        offer.groupCollageGapPercent != null &&
+        offer.groupCollageBackground != null &&
+        offer.groupCollageLabelPercent != null;
+
+      // The copies the offer can still sell: the members of the sets that survived the exclusion above.
+      // A manual attachment naming anything else is showing a stamp the buyer cannot get (#461).
+      const sellableItemIds = new Set(sets.flatMap((set) => set.items.map((copy) => copy.itemId)));
+
+      // Attachments (#313). Their photos join the source map so the renderer can read the bytes, and a
+      // `copy_photo`'s copy joins the label subjects — a copy attached on its own need not be one the
+      // collages already cover.
+      const attachments: PlanAttachment[] = [];
+      const attachmentTitles = new Map<string, string | null>();
+      const attachmentSources = new Map<string, AttachmentSource>();
+      for (const row of offer.photoAttachments) {
+        // One shape for all three modes: a manual collage (#331) is its tiles at its own width, and the
+        // single-image modes are one tile in one column — which is what the renderer has always made of
+        // them (#310, #312).
+        const source: AttachmentSource =
+          row.source === "upload"
+            ? "upload"
+            : row.source === "manual_collage"
+              ? "manual_collage"
+              : "copy_photo";
+        const photos = (
+          source === "manual_collage"
+            ? row.tiles.map((tile) => ({ photo: tile.photo, itemId: tile.itemId }))
+            : row.photo
+              ? [{ photo: row.photo, itemId: row.itemId }]
+              : []
+        ).filter((t) => t.itemId == null || sellableItemIds.has(t.itemId));
+        // A collage whose every tile lost its source scan — or whose every tile named a copy that has
+        // gone (#461) — plans nothing rather than an empty image.
+        if (photos.length === 0) continue;
+        attachments.push({
+          id: row.id,
+          position: row.sortOrder,
+          tiles: photos.map((t) => ({ photoId: t.photo.id, itemId: t.itemId })),
+          columns: source === "manual_collage" ? row.collageColumns ?? 1 : 1,
+        });
+        attachmentTitles.set(row.id, row.title);
+        attachmentSources.set(row.id, source);
+        for (const { photo } of photos) {
+          sourceById.set(photo.id, photo);
         }
-      : null,
-    groupByChecklist: offer.photoGroupByChecklist,
-    groupCollage: hasGroupCollage
-      ? {
-          collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
-          collageGridShape: normalizeCollageGridShape(offer.groupCollageGridShape),
-          collageRows: offer.groupCollageRows!,
-          collageColumns: offer.groupCollageColumns!,
-          collageGapPercent: offer.groupCollageGapPercent!,
-          collageBackground: offer.groupCollageBackground!,
-          collageLabelPercent: offer.groupCollageLabelPercent!,
-        }
-      : null,
-    limits: {
-      maxPhotos: offer.platform.maxPhotos,
-      maxPhotoEdge: offer.platform.maxPhotoEdge,
-      maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
-    },
-    sourceById,
-    photoPlanOrder: offer.photoPlanOrder,
-    photoPlanUnpublished: offer.photoPlanUnpublished,
-    attachments,
-    attachmentTitles,
-    attachmentSources,
-    needsCovers: offerNeedsCovers(offer.coverSymbols, offer.platform.coverSymbols),
-    coverStyle: normalizePhotoCoverStyle(offer.platform.coverStyle),
-    coverColor: normalizePlatformCoverColor(offer.platform.coverColor),
-    coverAskedItemIds: askedItemIds,
-  };
+      }
+      withDefaultScales(sourceById, offer.collection.defaultScanningProfile);
+
+      const labelSubjects = [
+        ...sets.flatMap((set) => set.items.map((copy) => copy.itemId)),
+        ...attachments.flatMap((a) => a.tiles.flatMap((tile) => (tile.itemId ? [tile.itemId] : []))),
+      ];
+      // An attachment naming a copy the offer no longer sells leaves the plan with the copy (#461),
+      // exactly as the set it came from does (#315) — attaching one is guarded
+      // (`attachOfferCopyPhoto`), and a copy leaving the offer afterwards is now guarded here. Only the
+      // *plan* drops it: the row survives, so a set held back by bidding elsewhere brings its
+      // attachments back with it when it frees up.
+
+      const inputs: GenerationInputs = {
+        offerId: offer.id,
+        logLabel: `offer ${offer.id}`,
+        offerName: offer.name,
+        offerNo: offer.offerNo,
+        collectionId: offer.collectionId,
+        ownerId: offer.collection.ownerId,
+        sets,
+        excludedSets,
+        labels,
+        photoSides: normalizePhotoSides(offer.photoSides),
+        preferSingles: offer.photoPreferSingles,
+        photoLabelLeftTemplate: offer.photoLabelLeftTemplate,
+        photoLabelRightTemplate: offer.photoLabelRightTemplate,
+        tileLabels: new Map(),
+        uploadTileLabel: renderCopylessTileLabel({
+          left: offer.photoLabelLeftTemplate,
+          right: offer.photoLabelRightTemplate,
+        }),
+        collage: hasCollage
+          ? {
+              // Null is `fixed` (#413) — an offer prepared before the mode existed renders exactly as
+              // it did, which is also why the mode is not one of the columns `hasCollage` tests.
+              collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
+              // Null is `landscape` (#1699), on the same reasoning.
+              collageGridShape: normalizeCollageGridShape(offer.collageGridShape),
+              collageRows: offer.collageRows!,
+              collageColumns: offer.collageColumns!,
+              collageGapPercent: offer.collageGapPercent!,
+              collageBackground: offer.collageBackground!,
+              collageLabelPercent: offer.collageLabelPercent!,
+            }
+          : null,
+        groupByChecklist: offer.photoGroupByChecklist,
+        groupCollage: hasGroupCollage
+          ? {
+              collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
+              collageGridShape: normalizeCollageGridShape(offer.groupCollageGridShape),
+              collageRows: offer.groupCollageRows!,
+              collageColumns: offer.groupCollageColumns!,
+              collageGapPercent: offer.groupCollageGapPercent!,
+              collageBackground: offer.groupCollageBackground!,
+              collageLabelPercent: offer.groupCollageLabelPercent!,
+            }
+          : null,
+        limits: {
+          maxPhotos: offer.platform.maxPhotos,
+          maxPhotoEdge: offer.platform.maxPhotoEdge,
+          maxPhotoFileSizeMib: offer.platform.maxPhotoFileSizeMib,
+        },
+        sourceById,
+        photoPlanOrder: offer.photoPlanOrder,
+        photoPlanUnpublished: offer.photoPlanUnpublished,
+        attachments,
+        attachmentTitles,
+        attachmentSources,
+        needsCovers: offerNeedsCovers(offer.coverSymbols, offer.platform.coverSymbols),
+        coverStyle: normalizePhotoCoverStyle(offer.platform.coverStyle),
+        coverColor: normalizePlatformCoverColor(offer.platform.coverColor),
+        coverAskedItemIds: new Set(),
+      };
+      return { offer, inputs, labelSubjects: [...new Set(labelSubjects)] };
+    })
+  );
+
+  for (const collectionId of collectionIds) {
+    const mine = drafts.filter((d) => d.offer.collectionId === collectionId);
+    const [tileLabels, asked] = await Promise.all([
+      readTileLabelsMany(
+        mine[0].offer.collection.ownerId,
+        collectionId,
+        mine.map(({ offer, labelSubjects }) => ({
+          itemIds: labelSubjects,
+          templates: { left: offer.photoLabelLeftTemplate, right: offer.photoLabelRightTemplate },
+          language: offer.platform.titleLanguage,
+        }))
+      ),
+      readCoverAskedItemIds(collectionId, [...new Set(mine.flatMap((d) => d.labelSubjects))]),
+    ]);
+    mine.forEach(({ inputs, labelSubjects }, i) => {
+      inputs.tileLabels = tileLabels[i];
+      inputs.coverAskedItemIds = new Set(labelSubjects.filter((id) => asked.has(id)));
+      found.set(inputs.offerId, inputs);
+    });
+  }
+  return found;
 }
 
 /**
@@ -1181,15 +1255,21 @@ export async function getOfferPhotoPlanState(
   offerId: string
 ): Promise<OfferPhotoPlanState> {
   await assertOfferOwner(ownerId, offerId);
-  const inputs = await readInputs(offerId);
-  if (!inputs) throw new OfferPhotoGenerationError("Offer not found.");
+  const state = (await readOfferPhotoPlanStates([offerId])).get(offerId);
+  if (!state) throw new OfferPhotoGenerationError("Offer not found.");
+  return state;
+}
 
-  const [generation, entries] = await Promise.all([
-    prisma.offerPhotoGeneration.findUnique({ where: { offerId } }),
+/** Each offer's run and stored images, in upload order — what a plan state is read from besides the
+ *  inputs. */
+function readPlanRecords(offerIds: readonly string[]) {
+  return Promise.all([
+    prisma.offerPhotoGeneration.findMany({ where: { offerId: { in: [...offerIds] } } }),
     prisma.offerPhotoEntry.findMany({
-      where: { offerId },
+      where: { offerId: { in: [...offerIds] } },
       orderBy: { sortOrder: "asc" },
       select: {
+        offerId: true,
         photoId: true,
         sortOrder: true,
         token: true,
@@ -1202,7 +1282,41 @@ export async function getOfferPhotoPlanState(
       },
     }),
   ]);
+}
 
+type PlanRecords = Awaited<ReturnType<typeof readPlanRecords>>;
+
+/**
+ * {@link getOfferPhotoPlanState} for several offers at once, by offer id (#2222) — a Facebook post's
+ * lots — in a few reads whatever their number. Not owner-checked: the callers have done that. An
+ * offer that does not exist is absent.
+ */
+async function readOfferPhotoPlanStates(offerIds: readonly string[]): Promise<Map<string, OfferPhotoPlanState>> {
+  const states = new Map<string, OfferPhotoPlanState>();
+  if (offerIds.length === 0) return states;
+  const [inputsById, [generations, entries]] = await Promise.all([
+    readInputsMany(offerIds),
+    readPlanRecords(offerIds),
+  ]);
+  const generationOf = new Map(generations.map((g) => [g.offerId, g]));
+  const entriesOf = new Map<string, PlanRecords[1]>();
+  for (const entry of entries) {
+    const list = entriesOf.get(entry.offerId);
+    if (list) list.push(entry);
+    else entriesOf.set(entry.offerId, [entry]);
+  }
+  for (const [offerId, inputs] of inputsById) {
+    states.set(offerId, planStateOf(inputs, generationOf.get(offerId) ?? null, entriesOf.get(offerId) ?? []));
+  }
+  return states;
+}
+
+/** The plan state these inputs, this run and these stored images make. */
+function planStateOf(
+  inputs: GenerationInputs,
+  generation: PlanRecords[0][number] | null,
+  entries: PlanRecords[1]
+): OfferPhotoPlanState {
   const plan = planFor(inputs);
   const coverCandidates = coverCandidatesFor(inputs, plan);
   // The plan's marks, by token, so a stored image can say whether it is part of the upload set. A
@@ -1350,7 +1464,7 @@ export async function getOfferPhotoPlanState(
  * was rendered then. It stops short of the read model's image list and previews, which the gate has
  * no use for.
  */
-export async function readOfferPhotoReadiness(offerId: string): Promise<{
+export interface OfferPhotoReadiness {
   status: OfferPhotoGenerationStatus;
   outOfDate: boolean;
   storedCount: number;
@@ -1360,39 +1474,62 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
   uncheckedCoverCount: number;
   /** The covers as the Photos card counts them — what a screen offering the walk asks (#2114). */
   covers: OfferPhotoCoverState;
-} | null> {
-  const inputs = await readInputs(offerId);
-  if (!inputs) return null;
-  const [generation, storedCount] = await Promise.all([
-    prisma.offerPhotoGeneration.findUnique({
-      where: { offerId },
-      select: { status: true, fingerprint: true },
+}
+
+export async function readOfferPhotoReadiness(offerId: string): Promise<OfferPhotoReadiness | null> {
+  return (await readOfferPhotoReadinessMany([offerId])).get(offerId) ?? null;
+}
+
+/** {@link readOfferPhotoReadiness} for several offers at once, by offer id (#2222) — a page of Prepare
+ *  rows, a Facebook post's lots — in a few reads whatever their number. An offer that does not exist
+ *  is absent. */
+export async function readOfferPhotoReadinessMany(
+  offerIds: readonly string[]
+): Promise<Map<string, OfferPhotoReadiness>> {
+  const readiness = new Map<string, OfferPhotoReadiness>();
+  if (offerIds.length === 0) return readiness;
+  const [inputsById, generations, stored] = await Promise.all([
+    readInputsMany(offerIds),
+    prisma.offerPhotoGeneration.findMany({
+      where: { offerId: { in: [...offerIds] } },
+      select: { offerId: true, status: true, fingerprint: true },
     }),
-    prisma.offerPhotoEntry.count({ where: { offerId } }),
+    prisma.offerPhotoEntry.groupBy({
+      by: ["offerId"],
+      where: { offerId: { in: [...offerIds] } },
+      _count: { _all: true },
+    }),
   ]);
-  const plan = planFor(inputs);
-  const coverCandidates = coverCandidatesFor(inputs, plan);
-  const covers: OfferPhotoCoverState = {
-    needed: inputs.needsCovers,
-    photoCount: coverCandidates.filter((c) => c.asked).length,
-    uncheckedCount: coverCandidates.filter((c) => c.asked && !c.checked).length,
-    otherCount: coverCandidates.filter((c) => !c.asked).length,
-  };
-  return {
-    status: (generation?.status as OfferPhotoGenerationStatus) ?? "none",
-    // Same rule as the panel's: only stored images can be stale, and only against a recorded
-    // fingerprint.
-    outOfDate:
-      storedCount > 0 &&
-      generation?.fingerprint != null &&
-      generation.fingerprint !== fingerprintFor(inputs, plan),
-    storedCount,
-    plannedCount: plan.images.length,
-    // Only the photos asked about (#1891): a copy from an area that carries no forbidden symbols
-    // never holds the offer back.
-    uncheckedCoverCount: covers.uncheckedCount,
-    covers,
-  };
+  const generationOf = new Map(generations.map((g) => [g.offerId, g]));
+  const storedOf = new Map(stored.map((row) => [row.offerId, row._count._all]));
+  for (const [offerId, inputs] of inputsById) {
+    const generation = generationOf.get(offerId);
+    const storedCount = storedOf.get(offerId) ?? 0;
+    const plan = planFor(inputs);
+    const coverCandidates = coverCandidatesFor(inputs, plan);
+    const covers: OfferPhotoCoverState = {
+      needed: inputs.needsCovers,
+      photoCount: coverCandidates.filter((c) => c.asked).length,
+      uncheckedCount: coverCandidates.filter((c) => c.asked && !c.checked).length,
+      otherCount: coverCandidates.filter((c) => !c.asked).length,
+    };
+    readiness.set(offerId, {
+      status: (generation?.status as OfferPhotoGenerationStatus) ?? "none",
+      // Same rule as the panel's: only stored images can be stale, and only against a recorded
+      // fingerprint.
+      outOfDate:
+        storedCount > 0 &&
+        generation?.fingerprint != null &&
+        generation.fingerprint !== fingerprintFor(inputs, plan),
+      storedCount,
+      plannedCount: plan.images.length,
+      // Only the photos asked about (#1891): a copy from an area that carries no forbidden symbols
+      // never holds the offer back.
+      uncheckedCoverCount: covers.uncheckedCount,
+      covers,
+    });
+  }
+  return readiness;
 }
 
 // ── Covering symbols (#1665) ─────────────────────────────────────────────────
@@ -1701,13 +1838,44 @@ export type OfferUploadPlanImage = Omit<OfferUploadImage, "bytes">;
 export async function readOfferUploadPlan(
   ownerId: string,
   offerId: string
-): Promise<{ slug: string; images: OfferUploadPlanImage[] } | { reason: string }> {
+): Promise<OfferUploadPlan> {
   const state = await getOfferPhotoPlanState(ownerId, offerId);
   const offer = await prisma.offer.findUniqueOrThrow({
     where: { id: offerId },
     select: { name: true, offerNo: true },
   });
+  return uploadPlanOf(state, offerFileSlug(offer.name, offer.offerNo));
+}
 
+/** What an offer puts up: its upload set, or why there is nothing to upload. */
+export type OfferUploadPlan = { slug: string; images: OfferUploadPlanImage[] } | { reason: string };
+
+/**
+ * {@link readOfferUploadPlan} for several offers at once, by offer id (#2222) — a Facebook post's lots —
+ * each with where its run stands, in a few reads whatever their number. Owner-checked: an offer of
+ * somebody else's, like one that does not exist, is absent.
+ */
+export async function readOfferUploadPlans(
+  ownerId: string,
+  offerIds: readonly string[]
+): Promise<Map<string, { status: OfferPhotoGenerationStatus; plan: OfferUploadPlan }>> {
+  const plans = new Map<string, { status: OfferPhotoGenerationStatus; plan: OfferUploadPlan }>();
+  if (offerIds.length === 0) return plans;
+  const [states, offers] = await Promise.all([
+    readOfferPhotoPlanStates(offerIds),
+    prisma.offer.findMany({
+      where: { id: { in: [...offerIds] }, collection: { ownerId } },
+      select: { id: true, name: true, offerNo: true },
+    }),
+  ]);
+  for (const offer of offers) {
+    const state = states.get(offer.id);
+    if (state) plans.set(offer.id, { status: state.status, plan: uploadPlanOf(state, offerFileSlug(offer.name, offer.offerNo)) });
+  }
+  return plans;
+}
+
+function uploadPlanOf(state: OfferPhotoPlanState, slug: string): OfferUploadPlan {
   // The read model already resolved every image's marks and its upload name against the current
   // plan, so the archive cannot disagree with the panel about what goes up or what it is called.
   const uploaded = state.images.filter((image) => image.publish && !image.overLimit);
@@ -1721,7 +1889,7 @@ export async function readOfferUploadPlan(
   }
 
   return {
-    slug: offerFileSlug(offer.name, offer.offerNo),
+    slug,
     images: uploaded.map((image) => ({
       photoId: image.photoId,
       fileName: image.fileName,
