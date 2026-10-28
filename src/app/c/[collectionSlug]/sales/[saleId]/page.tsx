@@ -10,7 +10,7 @@ import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getCarriers } from "@/lib/carriers";
-import { listPackingSupplies } from "@/lib/packing-supplies";
+import { listPackingSuppliesOnHand } from "@/lib/packing-supplies";
 import { readSaleBuyerMessage } from "@/lib/sale-buyer-message";
 import { listSaleAttachments } from "@/lib/sale-attachments";
 import { formatEntityNo } from "@/lib/quick-jump";
@@ -51,8 +51,9 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
     getSaleIssueIds(saleId),
     // Short list, and the shipment dialog needs it the moment the header renders (#491).
     getCarriers(session.user.id, collection.id),
-    // What the parcel's supply lines can name (#1898) — a short dictionary.
-    listPackingSupplies(session.user.id, collection.id),
+    // What the parcel's supply lines can name (#1898) — a short dictionary, with what is on hand
+    // (#2229).
+    listPackingSuppliesOnHand(session.user.id, collection.id),
     // Rendered on every load (#1815), so it is the sale as it stands after any edit's refresh.
     readSaleBuyerMessage(session.user.id, saleId),
     // The sale's own files (#2198) — shipment photos, receipts; a handful.

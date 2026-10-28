@@ -15,14 +15,17 @@ import {
 import {
   createSaleSupplyLine,
   deleteSaleSupplyLine,
+  SaleSupplyShortError,
   updateSaleSupplyLine,
 } from "../../src/lib/sale-supplies";
+import { settleSupplies } from "../../src/lib/supply-settlement";
 
 // Packing supplies used on a sale (#1898, ADR-0068 §7), read back out of Prisma: a sale's *my
 // shipping* is its postage plus the supplies its parcel used, taken from stock FIFO and costed at
 // their batches' unit costs; supplies come back to stock when a line is changed or removed or the
-// sale deleted; using more than is on hand leaves the line short and the total incomplete until a
-// purchase covers it. The settling rule itself is unit-tested (`tests/unit/supply-stock.test.ts`);
+// sale deleted. A line added or changed by hand takes no more than is on hand (#2229); one that came
+// in short otherwise — a service's usual supplies, a line recorded before — stays short and the total
+// incomplete until a purchase covers it. The settling rule itself is unit-tested (`tests/unit/supply-stock.test.ts`);
 // this covers the writes that call it and the reads that cost what it leaves.
 
 const TS = Date.now();
@@ -42,6 +45,7 @@ describe("packing supplies on a sale", () => {
   let saleOne: string;
   let saleTwo: string;
   let lineOne: string;
+  let lineTwo: string;
   let nextNo = 8300;
   let nextSaleNo = 8300;
 
@@ -79,6 +83,21 @@ describe("packing supplies on a sale", () => {
         },
       })
     ).id;
+  }
+
+  /** A line written the way a carrier service's usual supplies (#1899) or a sale recorded before
+   * #2229 write one — with no check against stock — and settled. */
+  async function shortLine(saleId: string, supplyId: string, quantity: number): Promise<string> {
+    return prisma.$transaction(async (tx) => {
+      const line = await tx.saleSupplyLine.create({ data: { saleId, supplyId, quantity } });
+      await settleSupplies(tx, [supplyId]);
+      return line.id;
+    });
+  }
+
+  async function envelopeOnHand(): Promise<number> {
+    const stock = await getSuppliesStock(userId, collectionId);
+    return stock.supplies.find((s) => s.id === envelopeId)!.onHand;
   }
 
   async function onHand(): Promise<Record<string, number>> {
@@ -164,8 +183,17 @@ describe("packing supplies on a sale", () => {
     assert.equal(items.find((s) => s.id === saleOne)!.netProceeds, "-6.60");
   });
 
-  it("records more than is on hand, short and uncosted, and marks the total incomplete", async () => {
-    await createSaleSupplyLine(userId, saleTwo, { supplyId: envelopeId, quantity: 3 });
+  it("refuses a line asking for more than is on hand, and records nothing", async () => {
+    await assert.rejects(createSaleSupplyLine(userId, saleTwo, { supplyId: envelopeId, quantity: 3 }), {
+      name: "SaleSupplyShortError",
+      message: "Only 1 “C6 envelope” on hand.",
+    });
+    assert.equal(await prisma.saleSupplyLine.count({ where: { saleId: saleTwo } }), 0);
+    assert.deepEqual(await onHand(), { [batchA]: 0, [batchB]: 1 });
+  });
+
+  it("keeps a line that came in short, uncosted, and marks the total incomplete", async () => {
+    lineTwo = await shortLine(saleTwo, envelopeId, 3);
     const detail = (await getSaleDetail(userId, saleTwo))!;
     assert.deepEqual(
       detail.supplies.lines.map((l) => [l.quantity, l.costBase, l.shortUnits]),
@@ -177,6 +205,19 @@ describe("packing supplies on a sale", () => {
     const stock = await getSuppliesStock(userId, collectionId);
     assert.equal(stock.supplies[0].shortUnits, 2);
     assert.equal(stock.supplies[0].onHand, 0);
+  });
+
+  it("lets a short line keep its quantity, but not raise it", async () => {
+    await updateSaleSupplyLine(userId, lineTwo, { supplyId: envelopeId, quantity: 3 });
+    await assert.rejects(
+      updateSaleSupplyLine(userId, lineTwo, { supplyId: envelopeId, quantity: 4 }),
+      SaleSupplyShortError
+    );
+    const detail = (await getSaleDetail(userId, saleTwo))!;
+    assert.deepEqual(
+      detail.supplies.lines.map((l) => [l.quantity, l.shortUnits]),
+      [[3, 2]]
+    );
   });
 
   it("covers a shortfall from the next purchase of the supply", async () => {
@@ -252,19 +293,48 @@ describe("packing supplies on a sale", () => {
     await deleteSaleSupplyLine(userId, line);
   });
 
-  it("moves a line to another supply, giving the first one's units back", async () => {
+  it("raises a line only by what is on hand, counting the units it already took", async () => {
+    // The line holds two of April's five; three are left.
+    assert.equal(await envelopeOnHand(), 3);
+    await assert.rejects(updateSaleSupplyLine(userId, lineOne, { supplyId: envelopeId, quantity: 6 }), {
+      name: "SaleSupplyShortError",
+      message: "Only 5 “C6 envelope” on hand.",
+    });
+    assert.equal((await prisma.saleSupplyLine.findUniqueOrThrow({ where: { id: lineOne } })).quantity, 2);
+    await updateSaleSupplyLine(userId, lineOne, { supplyId: envelopeId, quantity: 5 });
+    assert.equal(await envelopeOnHand(), 0);
+    await updateSaleSupplyLine(userId, lineOne, { supplyId: envelopeId, quantity: 2 });
+    assert.equal(await envelopeOnHand(), 3);
+  });
+
+  it("moves a line to another supply only up to what that one has on hand", async () => {
     const tape = await createPackingSupply(userId, collectionId, "Tape");
-    await updateSaleSupplyLine(userId, lineOne, { supplyId: tape, quantity: 1 });
+    await assert.rejects(updateSaleSupplyLine(userId, lineOne, { supplyId: tape, quantity: 1 }), {
+      name: "SaleSupplyShortError",
+      message: "No “Tape” on hand — record the purchase that brought them in first.",
+    });
     const detail = (await getSaleDetail(userId, saleOne))!;
     assert.deepEqual(
-      detail.supplies.lines.map((l) => [l.supplyName, l.shortUnits]),
-      [["Tape", 1]]
+      detail.supplies.lines.map((l) => [l.supplyName, l.quantity, l.shortUnits]),
+      [["C6 envelope", 2, 0]]
     );
-    const stock = await getSuppliesStock(userId, collectionId);
-    assert.equal(stock.supplies.find((s) => s.id === envelopeId)!.onHand, 5);
+    assert.equal(await envelopeOnHand(), 3);
     // A supply a sale used cannot be deleted, even one never bought.
+    const short = await shortLine(saleOne, tape, 1);
     await assert.rejects(deletePackingSupply(userId, tape), PackingSupplyInUseError);
+    await deleteSaleSupplyLine(userId, short);
+  });
+
+  it("moves a line to another supply, giving the first one's units back", async () => {
+    const card = (await getSuppliesStock(userId, collectionId)).supplies.find((s) => s.name === "Transport card")!;
+    await assert.rejects(
+      updateSaleSupplyLine(userId, lineOne, { supplyId: card.id, quantity: card.onHand + 1 }),
+      SaleSupplyShortError
+    );
+    await updateSaleSupplyLine(userId, lineOne, { supplyId: card.id, quantity: 1 });
+    assert.equal(await envelopeOnHand(), 5);
     await updateSaleSupplyLine(userId, lineOne, { supplyId: envelopeId, quantity: 2 });
+    assert.equal(await envelopeOnHand(), 3);
   });
 
   it("guards every write", async () => {

@@ -18,9 +18,13 @@ import {
 // stock FIFO when the line is written (`settleSupplies`), and each costs the unit cost of the batch it
 // came from — derived, as the batch's own is, so the sale's figure settles when the purchase does.
 //
-// Using more than is on hand is allowed: the line records what it used, holds what stock had, and
-// the rest is **short** — uncosted, the total marked incomplete, until a purchase covers it. A sale
-// recorded before this has no lines and keeps its typed amount as the whole of its shipping.
+// **A line added or changed by hand takes no more than is on hand** (#2229): the parcel was packed
+// from the shelf, so a supply that is not in stock cannot have gone into it. The write and the
+// settling run in one transaction, and a line the stock could not cover rolls the whole write back —
+// the rule own uses already follow (#1900). A line can still be **short** — uncosted, the total
+// marked incomplete, until a purchase covers it — when it was filled in from a carrier service's
+// usual supplies (#1899), written before #2229, or left so by a batch lowered or deleted later. A
+// sale recorded before #1898 has no lines and keeps its typed amount as the whole of its shipping.
 //
 // All access is collection-owner-scoped; the checks live here, server-side.
 
@@ -119,6 +123,22 @@ export interface SaleSupplyLineInput {
   quantity: number;
 }
 
+/** Thrown when a line added or changed by hand asks for more than the supply has on hand (#2229). */
+export class SaleSupplyShortError extends Error {
+  constructor(
+    readonly supplyName: string,
+    /** What the line could have: the supply's units on hand plus those the line already held. */
+    readonly available: number
+  ) {
+    super(
+      available === 0
+        ? `No “${supplyName}” on hand — record the purchase that brought them in first.`
+        : `Only ${available} “${supplyName}” on hand.`
+    );
+    this.name = "SaleSupplyShortError";
+  }
+}
+
 function quantityOf(input: SaleSupplyLineInput): number {
   if (!Number.isInteger(input.quantity) || input.quantity < 1) {
     throw new Error("A supply line's quantity must be a whole number of at least 1.");
@@ -164,7 +184,34 @@ async function assertSupplyInCollection(collectionId: string, supplyId: string):
   if (!supply) throw new Error("Packing supply not found in this collection.");
 }
 
-/** Add a supply line to a sale, taking its units from stock FIFO. Returns its id. */
+/** Units a line asked for that it does not hold. */
+async function shortOf(
+  tx: DbTransaction,
+  lineId: string
+): Promise<{ short: number; held: number; name: string }> {
+  const line = await tx.saleSupplyLine.findUniqueOrThrow({
+    where: { id: lineId },
+    select: { quantity: true, supply: { select: { name: true } }, uses: { select: { quantity: true } } },
+  });
+  const held = line.uses.reduce((sum, u) => sum + u.quantity, 0);
+  return { short: Math.max(0, line.quantity - held), held, name: line.supply.name };
+}
+
+/** After settling: the write left the line no shorter than it was, or it is refused (#2229). A new
+ * line, or one moved to another supply, was short of nothing. The units a short line does hold are
+ * all the stock had — the rule takes whatever is left before leaving a line short — so they are what
+ * it could have.
+ *
+ * Only a write that asks for *more* than stock has is refused: a line already short — filled in from
+ * a service's usual supplies, written before #2229, or left so by a lowered batch — can still be kept
+ * or lowered, and can always be removed. */
+async function assertCovered(tx: DbTransaction, lineId: string, shortBefore: number): Promise<void> {
+  const after = await shortOf(tx, lineId);
+  if (after.short > shortBefore) throw new SaleSupplyShortError(after.name, after.held);
+}
+
+/** Add a supply line to a sale, taking its units from stock FIFO; refused if stock does not have
+ * them (#2229). Returns its id. */
 export async function createSaleSupplyLine(
   ownerId: string,
   saleId: string,
@@ -179,12 +226,14 @@ export async function createSaleSupplyLine(
       select: { id: true },
     });
     await settleSupplies(tx, [input.supplyId]);
+    await assertCovered(tx, created.id, 0);
     return created.id;
   });
 }
 
 /** Restate a line's supply and quantity. Fewer units give back the ones taken last; more take from
- * stock FIFO; another supply gives back every unit and takes the new one's. */
+ * stock FIFO, and are refused if stock does not have them (#2229); another supply gives back every
+ * unit and takes the new one's. */
 export async function updateSaleSupplyLine(
   ownerId: string,
   lineId: string,
@@ -194,12 +243,14 @@ export async function updateSaleSupplyLine(
   await assertSupplyInCollection(collectionId, input.supplyId);
   const quantity = quantityOf(input);
   await prisma.$transaction(async (tx) => {
+    const shortBefore = before === input.supplyId ? (await shortOf(tx, lineId)).short : 0;
     if (before !== input.supplyId) await tx.saleSupplyUse.deleteMany({ where: { lineId } });
     await tx.saleSupplyLine.update({
       where: { id: lineId },
       data: { supplyId: input.supplyId, quantity },
     });
     await settleSupplies(tx, [before, input.supplyId]);
+    await assertCovered(tx, lineId, shortBefore);
   });
 }
 

@@ -460,8 +460,8 @@ under the supply's **Used** and in the register with its cost. Its **⋮** menu 
 you **Edit use** or **Delete use**; fewer units, or deleting it, returns them to the batches they came
 from.
 
-- **You cannot use more than is on hand.** Unlike a sale — where the parcel has already gone and the
-  next purchase covers it — nothing is waiting here, so the dialog refuses and says how many there
+- **You cannot use more than is on hand** — the same rule as a sale's packing supplies added by hand
+  ([Packing supplies](sales.md#packing-supplies)) — so the dialog refuses and says how many there
   are. *Use…* is greyed out on a supply with nothing on hand.
 - **The cost is charged to no sale and no copy.** It is a cost of its own: narrow the **register** to
   *Used outside sales* and switch on **By month** for what those uses cost each month, with how many
