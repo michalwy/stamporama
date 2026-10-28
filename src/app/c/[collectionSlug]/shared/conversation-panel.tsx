@@ -21,6 +21,7 @@ import {
   CONVERSATION_CHANNEL_LABEL,
   CONVERSATION_DIRECTIONS,
   CONVERSATION_DIRECTION_LABEL,
+  type ConversationDirection,
 } from "@/lib/conversation-log-rules";
 import { CONVERSATION_ATTACHMENT_ACCEPT, formatAttachmentSize } from "@/lib/conversation-attachment-rules";
 import type { ConversationEntryData, ConversationLogView } from "@/lib/conversation-log";
@@ -41,6 +42,11 @@ import type { ConversationActionState } from "@/app/actions/conversation-log";
 // enlarges in the shared lightbox, a PDF as its name; a PDF opens in a new tab, as the file itself.
 // `⋮ → Attach files` adds them through the upload route, one request per file so one bad file is
 // one message; the × on a file removes it.
+//
+// Who said it is read at a glance (#2247): an entry from the buyer and one to the buyer each carry
+// a coloured bar down the left edge and a direction chip in that colour with an arrow — ← blue for
+// what came in, → green for what went out. A Note stays grey, with neither. The colours are two of
+// the tag palette's, not success or error: here they mean only the direction.
 
 const CHIP: CSSProperties = {
   fontSize: "0.75rem",
@@ -52,6 +58,38 @@ const CHIP: CSSProperties = {
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
 };
+
+/** A direction's colour and arrow; a Note has neither. */
+const DIRECTION_LOOK: Record<ConversationDirection, { color: string; soft: string; border: string; arrow: string } | null> = {
+  from_buyer: {
+    color: "var(--color-tag-blue)",
+    soft: "var(--color-tag-blue-soft)",
+    border: "var(--color-tag-blue-border)",
+    arrow: "←",
+  },
+  to_buyer: {
+    color: "var(--color-tag-green)",
+    soft: "var(--color-tag-green-soft)",
+    border: "var(--color-tag-green-border)",
+    arrow: "→",
+  },
+  note: null,
+};
+
+/** The width of the coloured bar down an entry's left edge. A Note keeps the width, uncoloured, so
+ *  every entry's text starts at the same place. */
+const DIRECTION_BAR_WIDTH = "3px";
+
+function directionChipStyle(direction: ConversationDirection): CSSProperties {
+  const look = DIRECTION_LOOK[direction];
+  return look ? { ...CHIP, color: look.color, background: look.soft, borderColor: look.border, fontWeight: 600 } : CHIP;
+}
+
+function directionText(direction: ConversationDirection): string {
+  const look = DIRECTION_LOOK[direction];
+  const label = CONVERSATION_DIRECTION_LABEL[direction];
+  return look ? `${look.arrow} ${label}` : label;
+}
 
 const INPUT_STYLE: CSSProperties = {
   width: "100%",
@@ -525,8 +563,9 @@ function EntryRow({
       style={{
         display: "flex",
         gap: "0.75rem",
-        padding: "0.625rem 1.25rem",
+        padding: `0.625rem 1.25rem 0.625rem calc(1.25rem - ${DIRECTION_BAR_WIDTH})`,
         borderTop: first ? undefined : "1px solid var(--color-border)",
+        borderLeft: `${DIRECTION_BAR_WIDTH} solid ${DIRECTION_LOOK[entry.direction]?.color ?? "transparent"}`,
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -535,7 +574,7 @@ function EntryRow({
             {formatInstant(entry.occurredAt)}
           </span>
           <span style={CHIP}>{CONVERSATION_CHANNEL_LABEL[entry.channel]}</span>
-          <span style={CHIP}>{CONVERSATION_DIRECTION_LABEL[entry.direction]}</span>
+          <span style={directionChipStyle(entry.direction)}>{directionText(entry.direction)}</span>
           {showSale && entry.saleId && entry.saleNo !== null && (
             <Link href={`/c/${collectionSlug}/sales/${entry.saleId}`} style={{ ...CHIP, textDecoration: "none" }}>
               Sale {formatEntityNo(entry.saleNo)}
@@ -731,6 +770,7 @@ function EntryDialog({
   const [occurredAt, setOccurredAt] = useState(() =>
     initial ? toLocalInputValue(initial.occurredAt) : nowLocalInput()
   );
+  const [direction, setDirection] = useState<ConversationDirection>(initial?.direction ?? "from_buyer");
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -792,20 +832,36 @@ function EntryDialog({
               </select>
             </div>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="conversation-direction">Direction</LabelWithError>
-              <select
-                id="conversation-direction"
-                name="direction"
-                defaultValue={initial?.direction ?? "from_buyer"}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {CONVERSATION_DIRECTIONS.map((direction) => (
-                  <option key={direction} value={direction}>
-                    {CONVERSATION_DIRECTION_LABEL[direction]}
-                  </option>
+              <LabelWithError>Direction</LabelWithError>
+              {/* The same arrows and colours as the entries in the log (#2247). */}
+              <div role="radiogroup" aria-label="Direction" style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+                {CONVERSATION_DIRECTIONS.map((option) => (
+                  <label
+                    key={option}
+                    style={{
+                      ...directionChipStyle(option),
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3125rem",
+                      padding: "0.25rem 0.5rem",
+                      cursor: isPending ? "default" : "pointer",
+                      outline: direction === option ? `2px solid ${DIRECTION_LOOK[option]?.color ?? "var(--color-border-strong)"}` : undefined,
+                      outlineOffset: "1px",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="direction"
+                      value={option}
+                      checked={direction === option}
+                      disabled={isPending}
+                      onChange={() => setDirection(option)}
+                      style={{ margin: 0 }}
+                    />
+                    {directionText(option)}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
           <div style={FIELD_GAP}>
