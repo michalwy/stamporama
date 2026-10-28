@@ -302,9 +302,12 @@ what.
 **Estimated profit while a purchase lot is still open.** A copy whose lot is not closed yet has no
 settled cost, but it has an **estimated** cost — the figure its purchase order and its own page show
 — and this screen counts it at that estimate, so you can judge a sale before you close the lot. A
-profit that leans on one is marked as an estimate the way an estimated cost is: `~`, muted and
-italic, on the unit's profit and on the sale's cost and profit, which is then labelled
-**estimated**; a note (and the unit's hover) says how many copies are estimated. Once the lot is
+profit that leans on one is marked as an estimate the way an estimated cost is: `~` and italic, on
+the unit's profit and on the sale's cost and profit, which is then labelled **estimated**; a note
+(and the unit's hover) says how many copies are estimated. The mark is shown once — *~−10.59 PLN*.
+An estimated profit is still **green when it is a profit and red when it is a loss**, as a settled
+one is, so *~−3.90 PLN* reads as a loss at a glance; only zero, and the estimated cost, which has no
+sign, stay neutral. Once the lot is
 closed, the same figures show the actual cost, with no mark and nothing for you to do. A copy whose
 cost cannot be estimated (no catalog value, no exchange rate on the purchase, not delivered) is
 still left out as pending. Only the sale's own screen counts estimates: the profit and loss screen
@@ -323,6 +326,7 @@ figure as **incomplete**, e.g. *profit ≤ +18.40 EUR · 1 copy without cost*.
   own page, where you set its cost.
 - The sale's **Profit / loss** is marked **incomplete** too, with `≤` on its figure and a note
   naming the copies the same way.
+- An incomplete figure keeps its sign's colour: green for a profit, red for a loss.
 - Once every such copy has a cost, the mark goes and the unit shows a plain profit.
 
 A copy from an opening balance with no value is still left out (see above): its cost is not missing,

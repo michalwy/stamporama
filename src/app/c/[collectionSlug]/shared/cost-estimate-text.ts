@@ -12,6 +12,11 @@ export const COST_ESTIMATE_STYLE: CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
+/** The estimate mark, set a little apart from what follows it: in italic `~` and a minus touch and
+ * read as `~~` (#1883, #2227). A margin rather than a space, so the text still copies as
+ * `~−516.23 PLN`. */
+export const ESTIMATE_MARK_STYLE: CSSProperties = { marginRight: "0.15em" };
+
 /** The hint beside an estimated cost. */
 export const COST_ESTIMATE_HINT =
   "Estimated: this copy's share of its open purchase lot's cost by catalog value, the figure its purchase order shows. It becomes the cost basis when the lot is closed.";

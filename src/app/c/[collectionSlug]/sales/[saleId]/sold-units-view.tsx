@@ -10,7 +10,9 @@ import type { IssueHeader } from "@/lib/issues";
 import type { SaleCopyRef, SaleDetailLine } from "@/lib/sales";
 import { saleLineHeading } from "@/lib/sale-line-name";
 import { describeEstimated, describeLeftOut, explainWithoutCost, type UnitProfit } from "@/lib/sale-profit";
-import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
+import { COST_ESTIMATE_STYLE, ESTIMATE_MARK_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
+import { DIRECTION_COLOR } from "@/app/c/[collectionSlug]/shared/figure-direction-color";
+import { figureDirection } from "@/lib/summary-figure";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -935,9 +937,10 @@ function EditableLinePrice({
 
 /** A sold unit's profit (#168) under its net: the figure when every copy on it counts, otherwise a
  * dash that says which copies are missing what. A figure counting a copy at its open lot's estimate
- * (#1814) reads as an estimate — `~`, muted italic, as an estimated cost does (#1696). One counting a
+ * (#1814) reads as an estimate — `~`, italic, as an estimated cost does (#1696). One counting a
  * copy with no cost recorded (#1875) is a ceiling rather than an estimate — `≤`, since the cost it
- * leaves out can only lower it — and names those copies beside it, leading to each. */
+ * leaves out can only lower it — and names those copies beside it, leading to each. Either way it
+ * keeps its sign's colour (#2227): the estimate's muted grey would make a gain and a loss look alike. */
 function UnitProfitLine({
   profit,
   copiesWithoutCost,
@@ -950,13 +953,13 @@ function UnitProfitLine({
   if (profit.profit != null) {
     const n = Number(profit.profit);
     const estimated = profit.estimatedCount > 0;
-    const mark = (copiesWithoutCost.length > 0 ? "≤ " : "") + (estimated ? "~" : "");
+    const ceiling = copiesWithoutCost.length > 0 ? "≤ " : "";
     const figure = (
       <Tooltip
         content={[
           copiesWithoutCost.length > 0
             ? `Net against the ${estimated ? "~" : ""}${profit.cost} ${baseCurrency} recorded for its copies — ${explainWithoutCost(copiesWithoutCost.length).toLowerCase()}`
-            : `Net against the ${mark}${profit.cost} ${baseCurrency} its copies cost`,
+            : `Net against the ${estimated ? "~" : ""}${profit.cost} ${baseCurrency} its copies cost`,
           describeEstimated(profit.estimatedCount),
         ]
           .filter(Boolean)
@@ -967,11 +970,12 @@ function UnitProfitLine({
           style={{
             fontSize: "0.75rem",
             fontVariantNumeric: "tabular-nums",
-            color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-muted)",
             ...(estimated ? COST_ESTIMATE_STYLE : {}),
+            color: DIRECTION_COLOR[figureDirection(profit.profit)] ?? "var(--color-text-muted)",
           }}
         >
-          profit {mark}
+          profit {ceiling}
+          {estimated && <span style={ESTIMATE_MARK_STYLE}>~</span>}
           {n < 0 ? `−${Math.abs(n).toFixed(2)}` : `+${n.toFixed(2)}`} {baseCurrency}
         </span>
       </Tooltip>
