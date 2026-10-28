@@ -200,6 +200,14 @@ type: the supplies are **taken from your stock**, oldest batch first, and each u
 cost in the batch it came from ([Packing supplies](purchases.md#packing-supplies)). Name your
 supplies once under **Settings → Packing supplies** first.
 
+**You pick only from what is on hand.** The parcel was packed from what is on the shelf, so the
+**Supply** list offers only supplies you have in stock, each with how many — *C4 envelope — 12 on
+hand* — and a larger **Quantity** is marked on the field (*Max 12*) and **Add** cannot be pressed.
+With nothing on hand, the window says so: supplies come into stock on a purchase's **Packing
+supplies**. **Edit line** keeps the line's own supply in the list even when none is left, and counts
+what the line already took as available — so you can keep or lower its quantity, and raise it only by
+what is on hand.
+
 **My shipping is then the postage plus the supplies**, added up for you. The amounts show it as two
 rows — **− Postage** and **− Packing supplies**, the latter in your base currency — and the card's
 header states the sum with its parts: *Postage 12.00 + supplies 1.40 = my shipping 13.40 PLN*. The
@@ -208,11 +216,13 @@ net and the profit use that total.
 - **Changing or removing a line returns the supplies to stock**, to the batches they came from, at
   the costs they were taken at. Using fewer gives back the units taken last. Deleting the sale
   returns all of them.
-- **You can use more than you have on hand.** The line is kept, the units your stock did not have
-  are named on it (*2 units not in stock*) and cost nothing yet, and the supplies figure and the
-  profit are marked **incomplete** — the profit with `≤`, since the true figure can only be lower.
-  The next purchase of that supply covers them by itself, earliest sale first, and the mark goes.
-  The **Packing supplies** screen says how many units sales are waiting for.
+- **A line can still come in short of stock** — filled in by a shipping option (see below),
+  recorded before this rule, or left short by a purchase's batch lowered or deleted later. The
+  line is kept, the units your stock did not have are named on it (*2 units not in stock*) and cost
+  nothing yet, and the supplies figure and the profit are marked **incomplete** — the profit with
+  `≤`, since the true figure can only be lower. The next purchase of that supply covers them by
+  itself, earliest sale first, and the mark goes. The **Packing supplies** screen says how many units
+  sales are waiting for.
 - A unit from a batch bought in another currency with **no rate** into your base currency is
   counted the same way — no cost yet, the total incomplete — until the purchase has a rate.
 - **A shipping option can fill them in.** When the [carrier service](collections.md#carriers) a

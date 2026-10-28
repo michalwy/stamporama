@@ -4,7 +4,8 @@
 
 Accepted. Decided with the collector on 2026-10-13 and built by #1897, the foundation of a track:
 #1898 takes supplies onto a sale's shipping cost, #1899 gives a shipping method its default supplies,
-#1900 takes supplies out of stock without a sale (§9). Amends [ADR-0009](0009-purchase-record-model.md) §1
+#1900 takes supplies out of stock without a sale (§9), and #2229 limits a sale's lines added by hand
+to what is on hand (§10). Amends [ADR-0009](0009-purchase-record-model.md) §1
 and §3 with a third kind of purchase line. §7 and §8 amended by
 [ADR-0069](0069-carrier-rate-lists-and-shipping-options.md) (#1909): the postage and the default
 supplies now come from the carrier service a platform's shipping option is linked to.
@@ -116,7 +117,9 @@ taken from stock FIFO** at their batches' unit costs.
   settles when the purchase does, as a lot's estimate does.
 - **Using more than is on hand is allowed** (the issue's decision): the line holds what stock had and
   the rest is **short**, uncosted, the total marked incomplete as #1875 marks a profit with a missing
-  cost. A unit from a batch with no rate into the base currency is uncosted the same way.
+  cost. A unit from a batch with no rate into the base currency is uncosted the same way. *Amended by
+  §10 (#2229):* a line added or changed **by hand** is refused beyond what is on hand; a line can
+  still be short by the other ways in, and is read exactly as here.
 - **One rule keeps uses and stock in step** (`settleSupplyUses`, pure; `settleSupplies` runs it in the
   transaction of every write that changes a supply's stock or demand). It never moves a unit that
   still fits; it gives back what a lowered line or a lowered batch no longer covers — a line's
@@ -192,6 +195,28 @@ migration's comment calls this §8: #1899's section took that number while the t
   can still be corrected, and it can always be deleted.
 - A supply with an own use cannot be deleted (`NO ACTION`, checked first in `deletePackingSupply`);
   the collection cascades to its uses.
+
+### 10. A sale's lines added by hand come from what is on hand (#2229)
+
+Settled with the collector on 2026-10-28, amending §7's *using more than is on hand is allowed* for
+the lines typed on a sale. The parcel has already been packed from the shelf, so a supply that is not
+in stock cannot have gone into it, and offering one only invited a wrong pick.
+
+- **The window offers only supplies with stock above zero**, each labelled with what is on hand, and
+  **a larger quantity is an error on the field** with *Add* unavailable. With nothing on hand it says
+  so and points to buying supplies on a purchase. The rule is the pure `src/lib/sale-supply-pick.ts`;
+  the sale screen reads each supply's units on hand through `listPackingSuppliesOnHand`.
+- **Changing a line keeps its own supply listed**, even with none left, and counts what the line
+  already took as available: its limit is the units on hand plus its own quantity. A line still short
+  is one whose supply has nothing on hand (§7's invariant), so its limit is its own quantity — kept
+  or lowered, never raised.
+- **The server holds the same rule**, as §9's own uses do: `createSaleSupplyLine` and
+  `updateSaleSupplyLine` settle in their transaction and roll back with `SaleSupplyShortError` if the
+  line is left **shorter than it was** — not merely short, so a short line stays correctable and
+  removable. A stale window cannot record a shortfall by hand.
+- **Unchanged:** a carrier service's usual supplies (§8) are filled in without the check — the
+  default is the collector's standing list, not a pick — and a line already recorded short, or left
+  short by a batch lowered or deleted later, keeps §7's uncosted shortfall and incomplete mark.
 
 ## Consequences
 

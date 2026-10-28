@@ -16,8 +16,14 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { CHIP, INPUT_STYLE } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import type { SaleSupplyLineData, SaleSuppliesData } from "@/lib/sales";
-import type { PackingSupplyData } from "@/lib/packing-supplies";
+import type { PackingSupplyOnHand } from "@/lib/packing-supplies";
 import { describeUncostedSupplies } from "@/lib/supply-stock";
+import {
+  saleSupplyLimit,
+  saleSupplyOptionLabel,
+  saleSupplyOptions,
+  saleSupplyQuantityError,
+} from "@/lib/sale-supply-pick";
 
 // A sale's **packing supplies** (#1898, ADR-0068 §7) — the envelope and transport cards the parcel
 // went out in. Each line names a supply and how many units were used; the units are taken from stock
@@ -25,8 +31,10 @@ import { describeUncostedSupplies } from "@/lib/supply-stock";
 // cost. The card states that sum with its parts, so the figure in the amounts card above can be
 // read back to what it is made of.
 //
-// Using more than is on hand is allowed: the line is kept, the units stock did not have are named
-// and cost nothing yet, and the next purchase of the supply covers them.
+// A line added or changed here takes only what is on hand (#2229): the window offers supplies with
+// stock and refuses a larger quantity, and the server holds the same rule. A line can still be short
+// — filled in from a shipping method's usual supplies, or recorded before — and then the units stock
+// did not have are named and cost nothing yet, until the next purchase of the supply covers them.
 
 type ActionResult = { status: string; message?: string; id?: string };
 
@@ -37,8 +45,8 @@ interface SaleSuppliesCardProps {
   postageBase: string | null;
   myShippingBase: string;
   baseCurrency: string;
-  /** The collection's supply dictionary — what a line can name. */
-  dictionary: readonly PackingSupplyData[];
+  /** The collection's supply dictionary — what a line can name — with what is on hand (#2229). */
+  dictionary: readonly PackingSupplyOnHand[];
   isPending: boolean;
   error: string | undefined;
   /** The screen's own runner: clears the error, runs the action, refreshes on success. */
@@ -211,6 +219,7 @@ export function SaleSuppliesCard({
           title="Add packing supplies"
           actionLabel="Add"
           dictionary={dictionary}
+          collectionSlug={params.collectionSlug}
           isPending={isPending}
           error={error}
           onClose={close}
@@ -231,6 +240,7 @@ export function SaleSuppliesCard({
           title="Edit packing supplies"
           actionLabel="Save"
           dictionary={dictionary}
+          collectionSlug={params.collectionSlug}
           initial={dialog.line}
           isPending={isPending}
           error={error}
@@ -276,6 +286,7 @@ function SaleSupplyLineDialog({
   title,
   actionLabel,
   dictionary,
+  collectionSlug,
   initial,
   isPending,
   error,
@@ -284,56 +295,81 @@ function SaleSupplyLineDialog({
 }: {
   title: string;
   actionLabel: string;
-  dictionary: readonly PackingSupplyData[];
+  dictionary: readonly PackingSupplyOnHand[];
+  collectionSlug: string;
   initial?: SaleSupplyLineData;
   isPending: boolean;
   error: string | undefined;
   onClose: () => void;
   onSubmit: (fd: FormData) => void;
 }) {
+  // Only what is on hand, and the line's own supply when it is being changed (#2229).
+  const options = saleSupplyOptions(dictionary, initial);
+  const [supplyId, setSupplyId] = useState(initial?.supplyId ?? options[0]?.id ?? "");
+  const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : "1");
+  const quantityError = saleSupplyQuantityError(quantity, saleSupplyLimit(dictionary, supplyId, initial));
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (quantityError) return;
     onSubmit(new FormData(e.currentTarget));
   }
   return (
     <DialogShell title={title} onClose={onClose} maxWidth="26rem">
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
-          <div style={{ display: "flex", gap: "1rem" }}>
-            <div style={{ flex: 2 }}>
-              <LabelWithError htmlFor="sale-supply-supply">Supply</LabelWithError>
-              <select
-                id="sale-supply-supply"
-                name="supplyId"
-                defaultValue={initial?.supplyId ?? dictionary[0]?.id ?? ""}
-                required
-                autoFocus
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
-              >
-                {dictionary.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+          {options.length === 0 ? (
+            <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+              No packing supplies on hand. They come into stock when you buy them — add them to a{" "}
+              <Link href={`/c/${collectionSlug}/purchases`}>purchase</Link>&apos;s Packing supplies.
+            </p>
+          ) : (
+            <div style={{ display: "flex", gap: "1rem" }}>
+              <div style={{ flex: 2 }}>
+                <LabelWithError htmlFor="sale-supply-supply">Supply</LabelWithError>
+                <select
+                  id="sale-supply-supply"
+                  name="supplyId"
+                  value={supplyId}
+                  onChange={(e) => setSupplyId(e.target.value)}
+                  required
+                  autoFocus
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  {options.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {saleSupplyOptionLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="sale-supply-quantity" error={quantityError ?? undefined}>
+                  Quantity
+                </LabelWithError>
+                <TextInput
+                  id="sale-supply-quantity"
+                  name="quantity"
+                  inputMode="numeric"
+                  placeholder="e.g. 2"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  required
+                  disabled={isPending}
+                  aria-invalid={quantityError ? true : undefined}
+                  style={INPUT_STYLE}
+                />
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="sale-supply-quantity">Quantity</LabelWithError>
-              <TextInput
-                id="sale-supply-quantity"
-                name="quantity"
-                inputMode="numeric"
-                placeholder="e.g. 2"
-                defaultValue={initial ? String(initial.quantity) : "1"}
-                required
-                disabled={isPending}
-                style={INPUT_STYLE}
-              />
-            </div>
-          </div>
+          )}
         </DialogBody>
-        <DialogActions actionLabel={isPending ? "Saving…" : actionLabel} onCancel={onClose} disabled={isPending} error={error} />
+        <DialogActions
+          actionLabel={isPending ? "Saving…" : actionLabel}
+          onCancel={onClose}
+          disabled={isPending || options.length === 0 || quantityError != null}
+          error={error}
+        />
       </form>
     </DialogShell>
   );

@@ -85,6 +85,48 @@ export async function listPackingSupplies(
   }));
 }
 
+/** A supply as a sale's supply-line picker reads it (#2229): what is on hand now. */
+export interface PackingSupplyOnHand {
+  id: string;
+  name: string;
+  /** Units the batches hold after every use recorded against them. */
+  onHand: number;
+}
+
+/** The collection's supplies, by name, each with its units on hand — what a sale's supply line can
+ * take from (#2229). */
+export async function listPackingSuppliesOnHand(
+  ownerId: string,
+  collectionId: string
+): Promise<PackingSupplyOnHand[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.packingSupply.findMany({
+    where: { collectionId },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      lines: {
+        select: {
+          quantity: true,
+          uses: { select: { quantity: true } },
+          ownUseTakes: { select: { quantity: true } },
+        },
+      },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    onHand: r.lines.reduce((sum, batch) => {
+      const taken =
+        batch.uses.reduce((s, u) => s + u.quantity, 0) +
+        batch.ownUseTakes.reduce((s, t) => s + t.quantity, 0);
+      return sum + Math.max(0, batch.quantity - taken);
+    }, 0),
+  }));
+}
+
 function supplyName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A packing supply needs a name.");

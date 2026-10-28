@@ -11,7 +11,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleCopyRef, SaleDetail, SaleSuppliesData } from "@/lib/sales";
-import type { PackingSupplyData } from "@/lib/packing-supplies";
+import type { PackingSupplyOnHand } from "@/lib/packing-supplies";
 import { describeUncostedSupplies } from "@/lib/supply-stock";
 import type { SaleBuyerMessage } from "@/lib/sale-buyer-message";
 import {
@@ -142,7 +142,7 @@ interface SaleDetailPanelProps {
   /** The collection's carriers (#491) — what the shipment dialog picks from. */
   carriers: CarrierData[];
   /** The collection's packing supplies (#1898) — what a supply line of the parcel can name. */
-  packingSupplies: PackingSupplyData[];
+  packingSupplies: PackingSupplyOnHand[];
   /** The message to the buyer rendered for this sale (#1815), or null when its platform has no
    *  template — and then there is no *Message to buyer* at all. */
   buyerMessage: SaleBuyerMessage | null;
