@@ -103,6 +103,7 @@ import {
   type IntakeGroupNode,
 } from "./intake-groups";
 import { parseItemNoOnlySearch, parseItemNoSearch } from "./item-number";
+import type { CopySearchField } from "./copy-search-fields";
 import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 import {
@@ -1128,6 +1129,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * #200 even though the raw string isn't a substring of the stored number. */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it (#2238); absent is every
+   * field. Only the Copies list's box sends it — every other way into this search reads them all.
+   * A `#123` search is the copy number whatever is here. */
+  searchFields?: CopySearchField[];
   /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of **any** of these stamps (#657) — the plural of {@link stampId}, for a
@@ -1384,52 +1389,65 @@ function buildItemWhere(
     and.push({ itemNo: onlyItemNo });
   } else if (filters.search) {
     const s = filters.search;
+    // The fields the collector ticked beside the Copies list's box (#2238); absent is every one.
+    const ticked = filters.searchFields ? new Set(filters.searchFields) : null;
+    const on = (field: CopySearchField) => !ticked || ticked.has(field);
     // Free text spans two levels — the linked stamp's identity and the copy's own filing
     // reference (#303) — so the OR sits on the item, not inside `stampWhere` (whose other
     // entries must stay AND-ed).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const or: any[] = [
-      { stamp: { name: { contains: s, mode: "insensitive" } } },
-      {
-        stamp: {
-          issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } },
-        },
-      },
-      { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } },
-      { locationRef: { contains: s, mode: "insensitive" } },
-    ];
+    const or: any[] = [];
+    // Every stamp the copy **carries** (#748; ADR-0044 §3), not only the one `Item.stampId` points
+    // at: a carrier's stamps are a description of the piece and stay searchable, and a buyer — or
+    // the collector — looking for the third number on a cover must find the cover. The leading
+    // stamp's branches stay as they are: they are the same question about it, and reach a copy an
+    // older build left with no entry at all.
+    const carried: Prisma.StampWhereInput[] = [];
+    if (on("stampName")) {
+      or.push({ stamp: { name: { contains: s, mode: "insensitive" } } });
+      carried.push({ name: { contains: s, mode: "insensitive" } });
+    }
+    if (on("issueName")) {
+      const issue: Prisma.StampWhereInput = {
+        issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } },
+      };
+      or.push({ stamp: issue });
+      carried.push(issue);
+    }
+    if (on("catalogNumber")) {
+      const catalog: Prisma.StampWhereInput = {
+        catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } },
+      };
+      or.push({ stamp: catalog });
+      carried.push(catalog);
+      // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
+      // when one was recognized) so "Mi PL 200" resolves even though the raw text
+      // isn't a substring of the stored "200".
+      if (filters.catalogNumber) {
+        const parsed: Prisma.StampWhereInput = {
+          catalogNumbers: {
+            some: {
+              number: { contains: filters.catalogNumber, mode: "insensitive" },
+              ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
+            },
+          },
+        };
+        or.push({ stamp: parsed });
+        carried.push(parsed);
+      }
+    }
+    if (on("locationRef")) or.push({ locationRef: { contains: s, mode: "insensitive" } });
     // Internal copy number (#268): a bare numeric entry also looks up the copy by its own number,
     // `123` or `00123` from a label written while numbers were padded (#2096).
     // Added to the OR rather than replacing it — `200` is a plausible catalog number too.
-    const itemNo = parseItemNoSearch(s);
-    if (itemNo !== null) or.push({ itemNo });
-    // Every stamp the copy **carries** (#748; ADR-0044 §3), not only the one `Item.stampId` points
-    // at: a carrier's stamps are a description of the piece and stay searchable, and a buyer — or
-    // the collector — looking for the third number on a cover must find the cover. The branches
-    // above stay as they are: they are the same question about the leading stamp, and reach a copy
-    // an older build left with no entry at all.
-    const carried: Prisma.StampWhereInput[] = [
-      { name: { contains: s, mode: "insensitive" } },
-      { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
-      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
-    ];
-    // Prefixed catalog input (#146): match the parsed number (narrowed to a vendor
-    // when one was recognized) so "Mi PL 200" resolves even though the raw text
-    // isn't a substring of the stored "200".
-    if (filters.catalogNumber) {
-      const parsed: Prisma.StampWhereInput = {
-        catalogNumbers: {
-          some: {
-            number: { contains: filters.catalogNumber, mode: "insensitive" },
-            ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
-          },
-        },
-      };
-      or.push({ stamp: parsed });
-      carried.push(parsed);
+    if (on("copyNumber")) {
+      const itemNo = parseItemNoSearch(s);
+      if (itemNo !== null) or.push({ itemNo });
     }
-    or.push({ stamps: { some: { stamp: { OR: carried } } } });
-    and.push({ OR: or });
+    if (carried.length > 0) or.push({ stamps: { some: { stamp: { OR: carried } } } });
+    // Only *Copy number* ticked and text that is not a number: nothing can match, said outright
+    // rather than left to how an empty `OR` happens to read.
+    and.push(or.length > 0 ? { OR: or } : { id: { in: [] } });
   }
   if (filters.notOfferedPlatformId) {
     // "For sale, not yet offered on platform X" (#259): exclude copies already sitting in a

@@ -7,6 +7,8 @@ import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { asHeldFilter, readHeldSplit } from "@/lib/held-filter";
 import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -65,6 +67,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     search: readSearchParam(sp),
     catalogVendorId: sp.get("catalogVendorId") || undefined,
     catalogNumber: sp.get("catalogNumber") || undefined,
+    // The fields the search box was narrowed to beside it (#2238); absent is every field.
+    searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), COPY_SEARCH_FIELD_KEYS),
     stampId: sp.get("stampId") || undefined,
     issueId: sp.get("issueId") || undefined,
     checklistId: sp.get("checklistId") || undefined,

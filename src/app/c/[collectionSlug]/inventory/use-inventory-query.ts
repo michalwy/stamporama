@@ -28,6 +28,8 @@ import { appendFaultFilterParams, type FaultFilterOpts } from "@/lib/fault-filte
 import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
 import type { CompletenessFilter } from "@/lib/completeness-filter";
 import { heldSplitParam, type HeldFilter } from "@/lib/held-filter";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { CopySearchField } from "@/lib/copy-search-fields";
 
 interface InventoryItemsPage {
   items: ItemListItem[];
@@ -79,6 +81,9 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
    * catalog number ("Mi PL 200", #146). */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The fields the search box matches, when the collector narrowed it beside the box (#2238);
+   * absent is every field. */
+  searchFields?: CopySearchField[];
   /** Restrict to copies of a single stamp (stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
@@ -151,6 +156,7 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
+  searchFields?: CopySearchField[];
   stampId?: string;
   issueId?: string;
   locationId?: string;
@@ -235,6 +241,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.search) params.set("search", filters.search);
   if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
   if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+  if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.checklistId) params.set("checklistId", filters.checklistId);
@@ -473,6 +480,7 @@ export function useHoldingsValuation(
       search: filters.search,
       catalogVendorId: filters.catalogVendorId,
       catalogNumber: filters.catalogNumber,
+      searchFields: filters.searchFields,
       issueId: filters.issueId,
       locationId: filters.locationId,
       locationExact: filters.locationExact,
@@ -510,6 +518,7 @@ export function useHoldingsValuation(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
       if (filters.locationExact) params.set("locationExact", "true");
@@ -565,6 +574,7 @@ export function useItemYears(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
