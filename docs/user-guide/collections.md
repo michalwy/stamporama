@@ -62,7 +62,7 @@ Down the left of the Settings screen is a list of its entries, one per thing you
 named and coloured like the sidebar's sections, so you look for a setting under the part of the app
 it serves:
 
-- **General** — Collection (currency, default language, home market, reset to demo data) and
+- **General** — Collection (currency, default language and home market) and
   Photos & storage (the storage figures and how long generated images and finished scans are kept).
 - **Catalog** — Catalogs, Conditions, Certificate statuses, Formats, Subtypes, Attributes, Size
   presets and Duplicate numbers.
@@ -87,10 +87,9 @@ and **Philasearch** — use the whole width of the window. Each setting is a **c
 short line saying what it is, and its control — and the cards sit side by side, two or three to a
 row depending on how wide the window is, so no field is ever stretched across the screen. Where a
 setting has more to say, an **ⓘ** beside its name says it when you hover it, and this guide says the
-rest. A few things stay apart from the cards: **Reset to demo data** sits on its own at the foot of
-Collection, with its warning beside the button; the **duplicate report** runs across the page under
-the Duplicate numbers card; and **Philasearch** is its [platform](platforms.md)'s settings, under a
-row of the platform's figures.
+rest. Two things stay apart from the cards: the **duplicate report** runs across the page under the
+Duplicate numbers card, and **Philasearch** is its [platform](platforms.md)'s settings, under a row
+of the platform's figures.
 
 Every page has an address of its own, and so does each tab — `settings?tab=formats&part=multipliers`
 — so a bookmark opens exactly what you were looking at. Addresses saved before the entries were

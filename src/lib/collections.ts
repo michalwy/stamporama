@@ -11,7 +11,7 @@ import {
   SCANNING_SETUP_SELECT,
   toScanningSetup,
 } from "./scanning-profiles";
-import { seedDemoData, wipeDemoData } from "./demo";
+import { seedDemoData } from "./demo";
 import { modulePlatformRows } from "./platforms";
 import {
   recomputeIssueSortKeys,
@@ -20,7 +20,7 @@ import {
 
 /** Populate the denormalized catalog sort key (#181) for a whole collection after demo data is
  * seeded. Runs post-commit (the recompute reads through the plain client), which is fine for
- * seeding: nothing reads the collection's lists until the create/reset call returns. */
+ * seeding: nothing reads the collection's lists until the create call returns. */
 async function recomputeCollectionSortKeys(collectionId: string): Promise<void> {
   await recomputeIssueSortKeys(collectionId);
   await recomputeStampSortKeys(collectionId);
@@ -89,28 +89,6 @@ export async function createCollection(
   );
   if (options?.seedDemo) await recomputeCollectionSortKeys(created.id);
   return created;
-}
-
-export async function resetCollectionToDemo(
-  ownerId: string,
-  collectionId: string
-): Promise<void> {
-  const owned = await prisma.collection.findUnique({
-    where: { id: collectionId, ownerId },
-    select: { id: true },
-  });
-  if (!owned) throw new Error("Collection not found or access denied.");
-
-  await prisma.$transaction(
-    async (tx) => {
-      await wipeDemoData(collectionId, tx as never);
-      await seedDemoData(collectionId, tx as never);
-    },
-    // Wipe + full reseed (catalog + large inventory); needs more than the
-    // default 5s interactive-transaction timeout.
-    { timeout: 120_000, maxWait: 10_000 }
-  );
-  await recomputeCollectionSortKeys(collectionId);
 }
 
 /**

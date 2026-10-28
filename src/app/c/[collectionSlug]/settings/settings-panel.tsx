@@ -1,17 +1,15 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
+import { DialogSecondaryButton } from "@/app/dialog-shell";
 import {
   clearCollectionStorageCacheAction,
-  resetToDemoDataAction,
   updateCollectionBidPercentsAction,
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
   updateCollectionHomeMarketAction,
   updateCollectionScanSheetTtlAction,
   type ClearStorageCacheState,
-  type ResetToDemoState,
 } from "@/app/actions/collections";
 import {
   closedOfferPhotoTtlMs,
@@ -35,7 +33,6 @@ import {
 
 interface CollectionSettingsPanelProps {
   collectionId: string;
-  collectionName: string;
   baseCurrency: string;
   /** The language this collection's own entity text is written in (#293). */
   defaultLanguage: string;
@@ -354,10 +351,8 @@ function StorageCacheCard({
   );
 }
 
-/** Settings → Collection (#1469): what holds for the whole collection, and the reset. */
-export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, homeMarket }: CollectionSettingsPanelProps) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
+/** Settings → Collection (#1469): what holds for the whole collection. */
+export function CollectionSettingsPanel({ collectionId, baseCurrency, defaultLanguage, homeMarket }: CollectionSettingsPanelProps) {
   const [isPending, startTransition] = useTransition();
 
   const [language, setLanguage] = useState(defaultLanguage);
@@ -392,195 +387,59 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
     });
   }
 
-  function openDialog() {
-    setActionState({ status: "idle" });
-    setDialogOpen(true);
-  }
-
-  function closeDialog() {
-    if (!isPending) setDialogOpen(false);
-  }
-
-  function handleReset() {
-    startTransition(async () => {
-      const result = await resetToDemoDataAction(collectionId);
-      setActionState(result);
-      if (result.status === "success") {
-        setDialogOpen(false);
-      }
-    });
-  }
-
   return (
-    <>
-      <SettingsFieldGrid>
-        <SettingsFieldCard label="Base currency" hint="Set when the collection was created; it cannot be changed.">
-          <CardFigure>{baseCurrency}</CardFigure>
-        </SettingsFieldCard>
+    <SettingsFieldGrid>
+      <SettingsFieldCard label="Base currency" hint="Set when the collection was created; it cannot be changed.">
+        <CardFigure>{baseCurrency}</CardFigure>
+      </SettingsFieldCard>
 
-        {/* Default language (#293): the language the collection's own entity text is written in.
-            Platforms listing in it need no translations at all. */}
-        <SettingsFieldCard
-          label="Default language"
-          hint="The language your names and title names are written in."
-          tooltip="A platform that lists in this language needs no translations at all."
-          error={languageError}
-        >
-          <select
-            aria-label="Default language"
-            value={language}
-            onChange={(e) => handleLanguageChange(e.target.value)}
-            disabled={isPending}
-            style={SETTINGS_FIELD_SELECT_STYLE}
-          >
-            {COMMON_LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label} ({l.code})
-              </option>
-            ))}
-          </select>
-        </SettingsFieldCard>
-
-        {/* Home market (#1634): whose auction results anchor valuations unless an area names its
-            own anchoring markets, and what a result counts as when its seller names no market. */}
-        <SettingsFieldCard
-          label="Home market"
-          hint="Whose auction results count unless an area says otherwise."
-          tooltip="An area can name its own anchoring markets — foreign results for German material, say. A result whose seller, house or platform has no market set counts as this one."
-          error={marketError}
-        >
-          <select
-            aria-label="Home market"
-            value={market}
-            onChange={(e) => handleMarketChange(e.target.value)}
-            disabled={isPending}
-            style={SETTINGS_FIELD_SELECT_STYLE}
-          >
-            {!COMMON_MARKETS.some((m) => m.code === market) && <option value={market}>{market}</option>}
-            {COMMON_MARKETS.map((m) => (
-              <option key={m.code} value={m.code}>
-                {m.label} ({m.code})
-              </option>
-            ))}
-          </select>
-        </SettingsFieldCard>
-      </SettingsFieldGrid>
-
-      {/* The reset stays apart from the grid (#1473), at the page's foot, and keeps its warning on
-          the page beside the button: it is the one action here that destroys the collection's
-          data, and the sentence is what stops it being pressed as if it were a setting. */}
-      <section
-        style={{
-          marginTop: "2.5rem",
-          border: "1px solid var(--color-error-border)",
-          borderRadius: "0.75rem",
-          overflow: "hidden",
-        }}
+      {/* Default language (#293): the language the collection's own entity text is written in.
+          Platforms listing in it need no translations at all. */}
+      <SettingsFieldCard
+        label="Default language"
+        hint="The language your names and title names are written in."
+        tooltip="A platform that lists in this language needs no translations at all."
+        error={languageError}
       >
-        <div
-          style={{
-            padding: "1rem 1.5rem",
-            background: "var(--color-error-soft)",
-            borderBottom: "1px solid var(--color-error-border)",
-          }}
+        <select
+          aria-label="Default language"
+          value={language}
+          onChange={(e) => handleLanguageChange(e.target.value)}
+          disabled={isPending}
+          style={SETTINGS_FIELD_SELECT_STYLE}
         >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--color-error)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            Danger zone
-          </h3>
-        </div>
+          {COMMON_LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.label} ({l.code})
+            </option>
+          ))}
+        </select>
+      </SettingsFieldCard>
 
-        <div
-          style={{
-            padding: "1.25rem 1.5rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "2rem",
-            background: "var(--color-bg-elevated)",
-          }}
+      {/* Home market (#1634): whose auction results anchor valuations unless an area names its
+          own anchoring markets, and what a result counts as when its seller names no market. */}
+      <SettingsFieldCard
+        label="Home market"
+        hint="Whose auction results count unless an area says otherwise."
+        tooltip="An area can name its own anchoring markets — foreign results for German material, say. A result whose seller, house or platform has no market set counts as this one."
+        error={marketError}
+      >
+        <select
+          aria-label="Home market"
+          value={market}
+          onChange={(e) => handleMarketChange(e.target.value)}
+          disabled={isPending}
+          style={SETTINGS_FIELD_SELECT_STYLE}
         >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Reset to demo data
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Replace all collection data with the built-in demo dataset.
-            </p>
-          </div>
-
-          {actionState.status === "success" ? (
-            <span
-              style={{
-                fontSize: "0.875rem",
-                color: "var(--color-success)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Reset complete
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={openDialog}
-              style={{
-                padding: "0.5rem 1rem",
-                background: "transparent",
-                color: "var(--color-error)",
-                border: "1px solid var(--color-error-border)",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-              }}
-            >
-              Reset to demo data
-            </button>
-          )}
-        </div>
-      </section>
-
-      {dialogOpen && (
-        <ConfirmDialog
-          title="Reset to demo data?"
-          message={
-            <>
-              This will permanently delete all current data in{" "}
-              <strong>{collectionName}</strong> and replace it with the demo
-              dataset. This cannot be undone.
-            </>
-          }
-          actionLabel="Reset"
-          pendingLabel="Resetting…"
-          onClose={closeDialog}
-          onConfirm={handleReset}
-          isPending={isPending}
-          error={actionState.status === "error" ? actionState.message : undefined}
-        />
-      )}
-    </>
+          {!COMMON_MARKETS.some((m) => m.code === market) && <option value={market}>{market}</option>}
+          {COMMON_MARKETS.map((m) => (
+            <option key={m.code} value={m.code}>
+              {m.label} ({m.code})
+            </option>
+          ))}
+        </select>
+      </SettingsFieldCard>
+    </SettingsFieldGrid>
   );
 }
 
