@@ -18,6 +18,12 @@ import {
   ListSearchBox,
   useDebouncedSearch,
 } from "@/app/c/[collectionSlug]/shared/list-search-box";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import {
+  AUCTION_LOT_SEARCH_FIELDS,
+  AUCTION_LOT_SEARCH_FIELD_KEYS,
+} from "@/lib/auction-lot-search-fields";
 import {
   AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_OUTCOME_LABEL,
@@ -285,6 +291,15 @@ export function AuctionLotsPanel({
   // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+  // The fields that box matches (#2244, the Copies list's control from #2238), ticked beside it and
+  // remembered per collection — apart from the filters, so *Clear filters* leaves it alone, and
+  // outside the URL. Sent only with a search, so an empty box asks the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "auction-search-fields",
+    collectionId,
+    AUCTION_LOT_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = search ? searchFields.narrowed : undefined;
 
   // The collector's own labels (#1625) — remembered like every other filter here, the URL winning
   // when it carries them, in `tag-filter.ts`' own param names. The ids and the mode are one filter,
@@ -339,6 +354,7 @@ export function AuctionLotsPanel({
       toReview,
       notPurchased,
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       sellerId,
       platformId,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
@@ -355,6 +371,7 @@ export function AuctionLotsPanel({
       toReview,
       notPurchased,
       search,
+      narrowedSearchFields,
       sellerId,
       platformId,
       tagIds,
@@ -664,6 +681,15 @@ export function AuctionLotsPanel({
             onChange={setLocalSearch}
             placeholder="Search lot, notes, sale, seller…"
             label="Search lots"
+            /* The fields that box matches (#2244); `#12` stays the lot's own number whatever is
+               ticked. */
+            searchFields={
+              <SearchFieldsControl
+                fields={AUCTION_LOT_SEARCH_FIELDS}
+                ticked={searchFields.ticked}
+                onChange={searchFields.setTicked}
+              />
+            }
           />
           <span
             style={{

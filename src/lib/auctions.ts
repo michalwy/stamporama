@@ -43,11 +43,12 @@ import { getOrFetchRate, getOrFetchRates } from "./exchange-rates";
 import type { BaseCurrency } from "./currencies";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
 import { createLeadingEntriesTx } from "./item-stamps";
-import { parseEntityNoSearch } from "./quick-jump";
+import { ENTITY_NO_PREFIX, parseEntityNoSearch } from "./quick-jump";
 import {
   AUCTION_SALE_SEARCH_FIELD_KEYS,
   type AuctionSaleSearchField,
 } from "./auction-sale-search-fields";
+import type { AuctionLotSearchField } from "./auction-lot-search-fields";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE, captureModuleRules } from "./platform-modules";
@@ -765,6 +766,10 @@ export interface AuctionLotFilters extends TagFilterOpts {
    * its URL, the lot's own short number, and the sale / seller / platform it belongs to. Composes
    * with every other filter rather than replacing them. */
   search?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it beside the box (#2244);
+   * absent is every field. Only the lot list's box sends it — the agent API reads them all. A
+   * `#12` search is the lot's own number whatever is here. */
+  searchFields?: AuctionLotSearchField[];
   sellerId?: string;
   platformId?: string;
   saleId?: string;
@@ -802,7 +807,7 @@ function lotListWhere(
   // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
   // alongside it.
-  if (filters.search?.trim()) and.push(lotSearchWhere(filters.search));
+  if (filters.search?.trim()) and.push(lotSearchWhere(filters.search, filters.searchFields));
   // The collector's own labels (#1625) — `tag-filter.ts`' one spelling, an `AND` entry of its own
   // for the reason the search above is: *all* is an `AND`, *no tags* an `OR`, and either as a sibling
   // key would collide with the outcome's.
@@ -887,22 +892,40 @@ function outcomeWhere(outcome: AuctionLotOutcome): Prisma.AuctionLotWhereInput {
  *
  * Deliberately **not** the composition: what a lot contains is searched on the copies and stamps
  * lists, and a lot list narrowed by a stamp name would answer a question the row cannot show.
+ *
+ * `fields` is the collector's narrowing of it, ticked beside the box (#2244); absent is every one.
+ * `#12` is read before the fields and is that lot alone, whatever is ticked — the copy number's
+ * rule (#2136) — while a bare `12` is the lot's number only with *Lot number* ticked.
  */
-function lotSearchWhere(search: string): Prisma.AuctionLotWhereInput {
+function lotSearchWhere(
+  search: string,
+  fields?: readonly AuctionLotSearchField[]
+): Prisma.AuctionLotWhereInput {
   const s = search.trim();
+  if (s.startsWith(ENTITY_NO_PREFIX)) {
+    const ownNo = parseEntityNoSearch(s);
+    if (ownNo !== null) return { auctionLotNo: ownNo };
+  }
+  const ticked = fields ? new Set(fields) : null;
+  const on = (field: AuctionLotSearchField) => !ticked || ticked.has(field);
   const text = { contains: s, mode: "insensitive" as const };
-  const or: Prisma.AuctionLotWhereInput[] = [
-    { title: text },
-    { notes: text },
-    { lotNo: text },
-    { url: text },
-    { auctionSale: { name: text } },
-    { auctionSale: { seller: { name: text } } },
-    { auctionSale: { platform: { name: text } } },
-  ];
-  const auctionLotNo = parseEntityNoSearch(s);
-  if (auctionLotNo !== null) or.push({ auctionLotNo });
-  return { OR: or };
+  const or: Prisma.AuctionLotWhereInput[] = [];
+  if (on("titleNotes")) or.push({ title: text }, { notes: text });
+  if (on("houseLotNo")) or.push({ lotNo: text });
+  if (on("listingUrl")) or.push({ url: text });
+  if (on("lotNo")) {
+    const auctionLotNo = parseEntityNoSearch(s);
+    if (auctionLotNo !== null) or.push({ auctionLotNo });
+  }
+  if (on("sale"))
+    or.push(
+      { auctionSale: { name: text } },
+      { auctionSale: { seller: { name: text } } },
+      { auctionSale: { platform: { name: text } } }
+    );
+  // Only *Lot number* ticked and text that is no number: nothing can match, said outright rather
+  // than left to how an empty `OR` happens to read.
+  return or.length > 0 ? { OR: or } : { id: { in: [] } };
 }
 
 /** The stored side of `lotNeedsComposition` (#442), kept beside the `where` it is spliced into so

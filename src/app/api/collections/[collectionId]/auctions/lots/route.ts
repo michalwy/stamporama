@@ -6,6 +6,8 @@ import { isAuctionLotOutcome } from "@/lib/auction-rules";
 import type { AuctionClosingWindow } from "@/lib/auctions";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { AUCTION_LOT_SEARCH_FIELD_KEYS } from "@/lib/auction-lot-search-fields";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 
 /** A derived-state filter (`bid-possible`, `outbid`, …), ignored when it says anything else. */
@@ -47,6 +49,8 @@ export async function GET(
       toReview: sp.get("toReview") === "1" || undefined,
       notPurchased: sp.get("notPurchased") === "1" || undefined,
       search: readSearchParam(sp),
+      // The fields the search box was narrowed to beside it (#2244); absent is every field.
+      searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), AUCTION_LOT_SEARCH_FIELD_KEYS),
       sellerId: sp.get("sellerId") || undefined,
       platformId: sp.get("platformId") || undefined,
       saleId: sp.get("saleId") || undefined,

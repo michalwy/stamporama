@@ -133,6 +133,39 @@ describe("auction list search (#484)", () => {
     assert.deepEqual(await lotTitles("allegro.pl/oferta/12345"), ["Poland 1919 overprints"]);
   });
 
+  it("searches only the fields ticked beside the box (#2244)", async () => {
+    const [lot] = (await listAuctionLots(userId, collectionId, { search: "overprint" })).items;
+    // `allegro` is the platform of both lots and the listing address of one.
+    assert.deepEqual(await lotTitles("allegro", { searchFields: ["listingUrl"] }), [
+      "Poland 1919 overprints",
+    ]);
+    assert.deepEqual(await lotTitles("allegro", { searchFields: ["titleNotes", "houseLotNo"] }), []);
+    assert.deepEqual(await lotTitles("torn", { searchFields: ["titleNotes"] }), [
+      "Poland 1919 overprints",
+    ]);
+    assert.deepEqual(await lotTitles("a-77", { searchFields: ["sale"] }), []);
+    assert.deepEqual(await lotTitles("köhler", { searchFields: ["sale"] }), ["Danzig airmails"]);
+    // A bare number is the lot's own number only with *Lot number* ticked…
+    assert.deepEqual(await lotTitles(String(lot.auctionLotNo), { searchFields: ["sale"] }), []);
+    assert.ok(
+      (await lotTitles(String(lot.auctionLotNo), { searchFields: ["lotNo"] })).includes(
+        "Poland 1919 overprints"
+      )
+    );
+    // …while `#N` is that lot whatever is ticked.
+    assert.deepEqual(await lotTitles(`#${lot.auctionLotNo}`, { searchFields: ["sale"] }), [
+      "Poland 1919 overprints",
+    ]);
+    // Only *Lot number* ticked and text that is no number: nothing, said outright.
+    assert.deepEqual(await lotTitles("allegro", { searchFields: ["lotNo"] }), []);
+    // The toolbar's counts are counted over the same narrowed search.
+    const counted = await auctionLotFilterCounts(userId, collectionId, {
+      search: "allegro",
+      searchFields: ["listingUrl"],
+    });
+    assert.equal(counted.total, 1);
+  });
+
   it("composes with the other filters rather than replacing them", async () => {
     // The seller select and the box narrow together: nothing of Köhler's says "overprints".
     assert.deepEqual(await lotTitles("overprint", { sellerId: otherSellerId }), []);

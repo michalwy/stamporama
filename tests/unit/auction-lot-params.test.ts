@@ -6,6 +6,7 @@ import {
   type AuctionLotFilters,
 } from "../../src/app/c/[collectionSlug]/auctions/lot-params";
 import { tagFilterFromParams } from "../../src/lib/tag-filter";
+import { SEARCH_FIELDS_PARAM } from "../../src/lib/search-fields";
 
 /**
  * What the lot list actually asks the API for (#450). The regression these guard is a filter the
@@ -29,6 +30,7 @@ describe("auction lot params", () => {
     toReview: true,
     notPurchased: true,
     search: "köhler",
+    searchFields: ["titleNotes", "sale"],
     sellerId: "seller-1",
     platformId: "platform-1",
     tagIds: ["tag-a", "tag-b"],
@@ -54,6 +56,8 @@ describe("auction lot params", () => {
     assert.equal(params.get("toReview"), "1");
     assert.equal(params.get("notPurchased"), "1");
     assert.equal(params.get("search"), "köhler");
+    // `SEARCH_FIELDS_PARAM`, which the lot routes read back with `parseSearchFields` (#2244).
+    assert.equal(params.get(SEARCH_FIELDS_PARAM), "titleNotes,sale");
     assert.equal(params.get("sellerId"), "seller-1");
     assert.equal(params.get("platformId"), "platform-1");
     assert.equal(params.get("tagIds"), "tag-a,tag-b");
@@ -109,6 +113,7 @@ describe("auction lot narrowings", () => {
     toReview: true,
     notPurchased: true,
     search: "köhler",
+    searchFields: ["titleNotes", "sale"],
     sellerId: "seller-1",
     platformId: "platform-1",
     tagIds: ["tag-a"],
@@ -118,8 +123,9 @@ describe("auction lot narrowings", () => {
   it("announces every filter that narrows the list", () => {
     const keys = lotNarrowings(every).map((n) => n.key);
     for (const key of Object.keys(every) as (keyof AuctionLotFilters)[]) {
-      // The one that widens, and the tag mode, which only qualifies the tags beside it.
-      if (key === "includeClosed" || key === "tagMode") continue;
+      // The one that widens, the tag mode, which only qualifies the tags beside it, and the search
+      // fields, which only say how the box reads what is typed (#2244).
+      if (key === "includeClosed" || key === "tagMode" || key === "searchFields") continue;
       assert.ok(keys.includes(key), `${key} narrows the list and the band never says so`);
     }
   });
