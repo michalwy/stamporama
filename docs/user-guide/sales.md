@@ -649,7 +649,7 @@ laid out as a walk through your shelves:
 - One **section per storage [location](locations.md)**, in shelf order (or per sold set — see
   [Grouping by sold set](#grouping-by-sold-set)), with the copies filed
   nowhere in a trailing **No location** section. A section is headed by the location's
-  **short code** (`ABX`) alone, never its name — see [Location codes and the legend](#location-codes-and-the-legend).
+  **code** (`A.B.1`) alone, never its name — see [Location codes and the legend](#location-codes-and-the-legend).
 - Inside a section, one line per copy: a **tick box** plus whichever of the columns below you
   turned on. Lines are ordered by the in-location **ref** — what you read off the shelf.
   Refs of the usual `prefix + number` shape (`A100`, `A1200`, `B-3000`) sort **by prefix first,
@@ -686,7 +686,8 @@ sale.
 
 The sheet goes into the parcel, so it never prints your storage names: wherever it says where a copy
 is — a section heading, or the **Location** column of a sheet by set — it prints the location's
-[short code](locations.md) instead. *No location* is printed as it is.
+full [code](locations.md#location-codes) (`A.B.1`) instead — its levels' codes joined with dots,
+so it follows a move or a parent's new code like everywhere else. *No location* is printed as it is.
 
 What the codes stand for is in the **legend**, shown above the sheet on screen: each code on this
 sale's list beside its location's full path, in shelf order, headed by the sale's number and date so

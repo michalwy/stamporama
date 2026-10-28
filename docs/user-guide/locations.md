@@ -41,19 +41,30 @@ move those copies first.
 
 ## Location codes
 
-Every location has a short **code** — up to six letters and digits, such as `ABX` — shown beside
-its name on the Locations screen and in the location picker, where you can also search by it. A
-code stands in for the location's whole path where the path is too long, or too private, to print,
-so it stays the same however the location is renamed or moved: change it yourself in **Edit** when
-you want another one.
+Every location has a **code**, built from its place in the tree. Each location sets the code of
+**its own level** only, and its **full code** is the codes of every level from the top down joined
+with dots — the way its path *Cabinet › Shelf › Stockbook* is joined from their names. A cabinet
+`A`, its shelf `B`, the stockbook on that shelf `C` and the stockbook's first page `1` have the full
+codes `A`, `A.B`, `A.B.C` and `A.B.C.1`. The full code is shown beside the location's name on the
+Locations screen and in the location picker, where you can also search by it. It stands in for the
+location's whole path where the path is too long, or too private, to print.
 
-When you add a location, a code is proposed from its path: the first letter of the **last word** of
-each name from the top down (`Segment A › Shelf B › Stockbook X` → `ABX`), or the whole word when
-it is a number (`Szafa 1 › Klaser A` → `1A`). If that code is already taken, a number is added
-(`ABX2`). Type over it to choose your own. Codes are unique within the collection and letter case
-does not matter — `abx` is saved as `ABX` — so a code another location already has is refused, and
-the dialog names the location that has it. Locations created before codes existed were given one
-by the same rule.
+Because it is built from the tree, the full code **follows the tree**: move a location, or change a
+parent's code, and the full code of that location and of everything under it changes at once.
+Renaming a location does not change its code.
+
+A level's code can be **any text, of any length** — only a dot is not allowed, since the dot joins
+the levels, and spaces around it are dropped. Whether a long code suits your printouts is up to you.
+Every level has a code: a location cannot be saved without one. Two locations **under the same
+parent** cannot share a code, and letter case does not matter there — `a` beside `A` is refused,
+and the dialog names the location that has it. Locations under different parents can: `A.1` and
+`B.1` can both exist.
+
+When you add a location, a code is proposed from its own name: the first letter of its name's
+**last word** (`Klaser A` → `A`), or the whole word when it is a number (`Szafa 1` → `1`). If a
+location under the same parent already has that code, a number is added (`A2`). Type over it to
+choose your own; the dialog shows the full code it makes under the chosen parent. Existing
+locations were given codes by the same rule, each from its own name.
 
 A code is only a label for the location: it is not part of a copy's **Ref** (`A147`), which is
 unchanged.

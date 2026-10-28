@@ -29,7 +29,7 @@ export function filterLocationTree(
     // The code finds a location as well as its name does — it is what the collector learns (#2191).
     const matches =
       location.name.toLocaleLowerCase("en").includes(normalizedSearchQuery) ||
-      location.code.toLocaleLowerCase("en").includes(normalizedSearchQuery);
+      location.fullCode.toLocaleLowerCase("en").includes(normalizedSearchQuery);
 
     if (matches || children.length > 0) {
       filtered.push({ ...location, children });
@@ -329,13 +329,14 @@ function LocationTreeSelectNode({
   );
 }
 
-/** A node's name with its short code beside it (#2191), the code kept whole when the name is cut. */
+/** A node's name with its full code beside it (#2191, #2235), the code kept whole when the name is
+ * cut. */
 function LocationNodeLabel({ location }: { location: LocationTreeItem }) {
   return (
     <span className="flex min-w-0 items-baseline gap-2">
       <span className="truncate">{location.name}</span>
       <span className="shrink-0 font-mono text-xs font-semibold text-[var(--color-text-muted)]">
-        {location.code}
+        {location.fullCode}
       </span>
     </span>
   );

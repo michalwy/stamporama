@@ -1,35 +1,93 @@
-// A storage location's short code (#2191): a label of up to six letters and digits that stands in
-// for the location's whole path wherever the path is too long or too private to print (the packing
-// list, #2192). Unique within the collection and stable — moving or renaming a location keeps it,
-// and only the collector changes it. Never part of a ref: `A503` is written on the card, the code is
-// not. No React / Prisma, so the Add-location dialog proposes the same code the server would write.
+// A storage location's code (#2191), built per level since #2235: each location sets the code of
+// its own level only, and its **full code** is its levels' codes joined with dots from the top down
+// (`A.B.C.1`) — the way its path `Cabinet › Shelf › Stockbook` is joined from their names. So the
+// full code follows the tree: a move, or a parent's new code, changes it at once for the location
+// and everything under it. A level's code is any text without a dot, kept as typed, and unique
+// among its siblings regardless of case, which is what keeps the full codes unique. It stands in
+// for the path where the path is too long or too private to print (the packing list, #2192), and
+// is never part of a ref. No React / Prisma, so the location dialog proposes the same code the
+// server would write.
 //
-// **The generator has a twin in SQL**: `20261026120000_location_codes` gave every existing location
-// its code by this same rule, so a change here is a change to what that backfill *meant*, not to
-// what it wrote.
+// **The generator has a twin in SQL**: `20261028120000_location_level_codes` gave every existing
+// location its level code by this same rule, so a change here is a change to what that backfill
+// *meant*, not to what it wrote.
 
-export const LOCATION_CODE_MAX_LENGTH = 6;
+/** What joins the levels' codes into a location's full code. Not allowed inside one. */
+export const LOCATION_CODE_SEPARATOR = ".";
 
-const CODE_PATTERN = /^[A-Z0-9]+$/;
-
-/** How a typed code is stored: trimmed and upper-cased, which is what makes `abx` and `ABX` the
- * same code to the unique index. */
+/** How a typed code is stored: trimmed, otherwise kept as typed. */
 export function normalizeLocationCode(raw: string): string {
-  return raw.trim().toUpperCase();
+  return raw.trim();
 }
 
-/** Why a (normalized) code cannot be saved, or null when it can. Uniqueness is the server's. */
+/** What two sibling codes are compared by: `a` beside `A` is a clash. */
+export function locationCodeKey(code: string): string {
+  return normalizeLocationCode(code).toLowerCase();
+}
+
+/** Why a (normalized) level code cannot be saved, or null when it can. Uniqueness among the
+ * siblings is {@link locationCodeSibling}'s. */
 export function locationCodeProblem(code: string): string | null {
   if (code === "") return "Code is required.";
-  if (code.length > LOCATION_CODE_MAX_LENGTH) {
-    return `A code is at most ${LOCATION_CODE_MAX_LENGTH} characters.`;
+  if (code.includes(LOCATION_CODE_SEPARATOR)) {
+    return "A code cannot contain a dot — the dot joins the levels' codes.";
   }
-  if (!CODE_PATTERN.test(code)) return "A code is letters and digits only.";
   return null;
 }
 
-// Polish (and German) letters folded onto the ASCII a code is written in. The SQL twin uses
-// `translate` with these same two strings.
+/** The fields a full code is built from. Structural, like `LocationPathNode`, so a server read can
+ * pass the columns it selected. */
+export interface LocationCodeNode {
+  id: string;
+  code: string;
+  parentId: string | null;
+}
+
+/** The full code (`A.B.C.1`) from the root location to `locationId`, or null when unknown (mirrors
+ * `buildLocationPath`). */
+export function buildLocationCode(
+  locations: readonly LocationCodeNode[],
+  locationId: string | null
+): string | null {
+  if (!locationId) return null;
+  const byId = new Map(locations.map((l) => [l.id, l]));
+  const codes: string[] = [];
+  let current = byId.get(locationId);
+  let depth = 0;
+  while (current && depth < 50) {
+    codes.unshift(current.code);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return codes.length > 0 ? codes.join(LOCATION_CODE_SEPARATOR) : null;
+}
+
+/** The full code a location would have with `code` under `parentId` — what the dialog shows while
+ * the code, or the parent, is being changed. */
+export function joinLocationCode(
+  locations: readonly LocationCodeNode[],
+  parentId: string | null,
+  code: string
+): string {
+  const parent = buildLocationCode(locations, parentId);
+  return parent === null ? code : `${parent}${LOCATION_CODE_SEPARATOR}${code}`;
+}
+
+/** The sibling under `parentId` already holding `code` (case aside), or undefined. `locations`
+ * should not hold the location being saved. */
+export function locationCodeSibling<T extends LocationCodeNode>(
+  locations: readonly T[],
+  parentId: string | null,
+  code: string
+): T | undefined {
+  const key = locationCodeKey(code);
+  return locations.find(
+    (l) => (l.parentId ?? null) === (parentId ?? null) && locationCodeKey(l.code) === key
+  );
+}
+
+// Polish (and German) letters folded onto the ASCII a suggested code is written in. The SQL twin
+// uses `translate` with these same two strings.
 const FOLD_FROM = "ąćęłńóśźżäöüĄĆĘŁŃÓŚŹŻÄÖÜ";
 const FOLD_TO = "acelnoszzaouACELNOSZZAOU";
 
@@ -42,56 +100,24 @@ function fold(word: string): string {
   return out.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-/** One level of the path's contribution: the initial of the name's **last** word, which is the word
- * that tells a location from its siblings (`Klaser A`, `Szafa 1`), or that word whole when it is a
- * number. Empty when the last word has no letter or digit in it. */
-function levelToken(name: string): string {
+/** The code a name would be given before any clash: the initial of its **last** word, which is the
+ * word that tells a location from its siblings (`Klaser A` → `A`), or that word whole when it is a
+ * number (`Szafa 1` → `1`); `L` when the last word has no letter or digit in it. */
+export function locationCodeBase(name: string): string {
   const words = name.trim().split(/\s+/);
   const word = fold(words[words.length - 1] ?? "");
-  return /^[0-9]+$/.test(word) ? word : word.slice(0, 1);
+  const token = /^[0-9]+$/.test(word) ? word : word.slice(0, 1);
+  return token === "" ? "L" : token;
 }
 
-function keepEnd(text: string, length: number): string {
-  return text.slice(Math.max(0, text.length - length));
-}
-
-/** The code a path would be given before any clash: its levels' tokens root to leaf
- * (`Segment A › Shelf B › Stockbook X` → `ABX`), the leaf end kept when that runs past six. */
-export function locationCodeBase(pathNames: readonly string[]): string {
-  const base = keepEnd(pathNames.map(levelToken).join(""), LOCATION_CODE_MAX_LENGTH);
-  return base === "" ? "L" : base;
-}
-
-/** The first of `ABX`, `ABX2`, `ABX3`… not already taken in the collection; the base gives up its
- * front characters so the number still fits in six. `taken` holds normalized codes. */
-export function suggestLocationCode(
-  pathNames: readonly string[],
-  taken: ReadonlySet<string>
-): string {
-  const base = locationCodeBase(pathNames);
-  if (!taken.has(base)) return base;
+/** The first of `A`, `A2`, `A3`… that no sibling holds. `siblingCodes` are the codes of the
+ * locations that would share the new one's parent. */
+export function suggestLocationCode(name: string, siblingCodes: Iterable<string>): string {
+  const taken = new Set(Array.from(siblingCodes, locationCodeKey));
+  const base = locationCodeBase(name);
+  if (!taken.has(locationCodeKey(base))) return base;
   for (let n = 2; ; n++) {
-    const suffix = String(n);
-    const candidate = keepEnd(base, LOCATION_CODE_MAX_LENGTH - suffix.length) + suffix;
-    if (!taken.has(candidate)) return candidate;
+    const candidate = `${base}${n}`;
+    if (!taken.has(locationCodeKey(candidate))) return candidate;
   }
-}
-
-/** The names from the root down to a location that would sit under `parentId` with `name` — the
- * path a code is built from, for a location that may not exist yet. */
-export function locationPathNames(
-  locations: readonly { id: string; name: string; parentId: string | null }[],
-  parentId: string | null,
-  name: string
-): string[] {
-  const byId = new Map(locations.map((l) => [l.id, l]));
-  const names = [name];
-  let current = parentId ? byId.get(parentId) : undefined;
-  let depth = 0;
-  while (current && depth < 50) {
-    names.unshift(current.name);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-    depth++;
-  }
-  return names;
 }

@@ -238,18 +238,19 @@ describe("deleteLocation guards", () => {
   });
 });
 
-describe("location codes (#2191)", () => {
+describe("location codes (#2191, per level since #2235)", () => {
   let f: Awaited<ReturnType<typeof seedFixtures>>;
   before(async () => {
     f = await seedFixtures(`codes-${Date.now()}`);
   });
   after(() => cleanup(f.userId));
 
-  async function codeOf(id: string): Promise<string> {
-    return (await getLocations(f.userId, f.collectionId)).find((l) => l.id === id)!.code;
+  async function codesOf(id: string): Promise<{ code: string; fullCode: string }> {
+    const location = (await getLocations(f.userId, f.collectionId)).find((l) => l.id === id)!;
+    return { code: location.code, fullCode: location.fullCode };
   }
 
-  it("generates a code from the path when none is given, numbering a clash", async () => {
+  it("suggests a level's code from its own name when none is given, numbering a sibling clash", async () => {
     const segment = await createLocation(f.userId, f.collectionId, {
       name: "Segment A",
       assignable: false,
@@ -262,63 +263,96 @@ describe("location codes (#2191)", () => {
     const book = await createLocation(f.userId, f.collectionId, {
       name: "Stockbook X",
       parentId: shelf.id,
-      code: "",
     });
     const twin = await createLocation(f.userId, f.collectionId, {
       name: "Stockbook Xenia",
       parentId: shelf.id,
     });
-    assert.equal(await codeOf(segment.id), "A");
-    assert.equal(await codeOf(shelf.id), "AB");
-    assert.equal(await codeOf(book.id), "ABX");
-    assert.equal(await codeOf(twin.id), "ABX2");
+    assert.deepEqual(await codesOf(segment.id), { code: "A", fullCode: "A" });
+    assert.deepEqual(await codesOf(shelf.id), { code: "B", fullCode: "A.B" });
+    assert.deepEqual(await codesOf(book.id), { code: "X", fullCode: "A.B.X" });
+    assert.deepEqual(await codesOf(twin.id), { code: "X2", fullCode: "A.B.X2" });
   });
 
-  it("stores a typed code upper-cased and refuses one in use, naming its location", async () => {
-    const box = await createLocation(f.userId, f.collectionId, { name: "Box", code: " k1 " });
-    assert.equal(await codeOf(box.id), "K1");
+  it("keeps a typed code as typed and lets cousins share it", async () => {
+    const first = await createLocation(f.userId, f.collectionId, { name: "Box 1", code: " k1 " });
+    const second = await createLocation(f.userId, f.collectionId, { name: "Box 2", code: "Box two" });
+    const a = await createLocation(f.userId, f.collectionId, {
+      name: "Page",
+      parentId: first.id,
+      code: "1",
+    });
+    const b = await createLocation(f.userId, f.collectionId, {
+      name: "Page",
+      parentId: second.id,
+      code: "1",
+    });
+    assert.deepEqual(await codesOf(a.id), { code: "1", fullCode: "k1.1" });
+    assert.deepEqual(await codesOf(b.id), { code: "1", fullCode: "Box two.1" });
+  });
+
+  it("refuses a sibling's code whatever its case, naming the sibling, and a dot or a blank", async () => {
     await assert.rejects(
       () => createLocation(f.userId, f.collectionId, { name: "Other", code: "K1" }),
-      /Code K1 is already used by Box\./
+      /Code K1 is already used by Box 1\./
+    );
+    const shelf = (await getLocations(f.userId, f.collectionId)).find((l) => l.name === "Shelf B")!;
+    await assert.rejects(
+      () => createLocation(f.userId, f.collectionId, { name: "Other", parentId: shelf.id, code: "x" }),
+      /Code x is already used by Segment A › Shelf B › Stockbook X\./
     );
     await assert.rejects(
-      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "abx" }),
-      /Code ABX is already used by Segment A › Shelf B › Stockbook X\./
+      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "A.1" }),
+      /dot/
     );
     await assert.rejects(
-      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "TOOLONG" }),
-      /at most 6/
+      () => createLocation(f.userId, f.collectionId, { name: "Other", code: "  " }),
+      /Code is required/
     );
   });
 
-  it("keeps the code through a rename and a move, and changes it only when asked", async () => {
+  it("holds the sibling rule in the database too", async () => {
+    await assert.rejects(
+      () =>
+        prisma.location.create({
+          data: { collectionId: f.collectionId, name: "Raw", code: "K1" },
+        }),
+      (err: unknown) => (err as { code?: string }).code === "P2002"
+    );
+  });
+
+  it("follows a move and a parent's new code at once, and refuses a move onto a sibling's code", async () => {
     const drawer = await createLocation(f.userId, f.collectionId, { name: "Drawer 7" });
-    const tray = await createLocation(f.userId, f.collectionId, { name: "Tray" });
-    assert.equal(await codeOf(drawer.id), "7");
+    const tray = await createLocation(f.userId, f.collectionId, { name: "Tray", code: "T" });
+    const card = await createLocation(f.userId, f.collectionId, {
+      name: "Card",
+      parentId: drawer.id,
+      code: "c",
+    });
+    assert.deepEqual(await codesOf(card.id), { code: "c", fullCode: "7.c" });
 
     await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id });
-    assert.equal(await codeOf(drawer.id), "7");
+    assert.deepEqual(await codesOf(drawer.id), { code: "7", fullCode: "T.7" });
+    assert.deepEqual(await codesOf(card.id), { code: "c", fullCode: "T.7.c" });
 
-    await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id, code: "7" });
-    assert.equal(await codeOf(drawer.id), "7");
+    await updateLocation(f.userId, tray.id, { name: "Tray", code: "Tr" });
+    assert.deepEqual(await codesOf(card.id), { code: "c", fullCode: "Tr.7.c" });
 
-    await updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id, code: "d8" });
-    assert.equal(await codeOf(drawer.id), "D8");
-
+    const other = await createLocation(f.userId, f.collectionId, { name: "Other", code: "c" });
     await assert.rejects(
-      () => updateLocation(f.userId, drawer.id, { name: "Drawer 8", code: "K1" }),
-      /Code K1 is already used by Box\./
+      () => updateLocation(f.userId, other.id, { name: "Other", parentId: drawer.id }),
+      /Code c is already used by Tray › Drawer 8 › Card\./
     );
     await assert.rejects(
-      () => updateLocation(f.userId, drawer.id, { name: "Drawer 8", code: "" }),
+      () => updateLocation(f.userId, drawer.id, { name: "Drawer 8", parentId: tray.id, code: "" }),
       /Code is required/
     );
-    assert.equal(await codeOf(drawer.id), "D8");
+    assert.deepEqual(await codesOf(drawer.id), { code: "7", fullCode: "Tr.7" });
   });
 
   it("lets two collections use the same code", async () => {
     const other = await seedFixtures(`codes-other-${Date.now()}`);
-    await createLocation(other.userId, other.collectionId, { name: "Box", code: "K1" });
+    await createLocation(other.userId, other.collectionId, { name: "Box", code: "k1" });
     await cleanup(other.userId);
   });
 });

@@ -2,6 +2,7 @@ import type { CollectionAreaData } from "./areas";
 import type { LocationData } from "./locations";
 import { catalogLabel, type AreaVendorMaps, type CatalogLabelSubject } from "./area-vendor";
 import { buildAreaPath } from "./area-path";
+import { buildLocationCode } from "./location-code";
 import { buildLocationPath } from "./location-path";
 import { compareLocationRef } from "./location-ref";
 
@@ -26,9 +27,9 @@ import { compareLocationRef } from "./location-ref";
 // order — by location, then ref — so a set is picked down the shelf all the same, and a merge never
 // crosses two sets, because each set is its own bucket.
 //
-// A sale's sheet names a location by its **short code** (#2191, #2192), not its path: the sheet goes
-// into the parcel, and the path is the collector's own storage names. The codes are explained by a
-// legend printed apart from it ({@link packingLocationLegend}). Shelf order is still the order of the
+// A sale's sheet names a location by its **full code** (#2191, #2192; `A.B.1`, its levels' codes
+// joined, since #2235), not its path: the sheet goes into the parcel, and the path is the
+// collector's own storage names. The codes are explained by a legend printed apart from it ({@link packingLocationLegend}). Shelf order is still the order of the
 // paths — a code is a label, and collating the labels would reorder the walk.
 //
 // A sheet the partner reads is the same shaping with the shelf taken out of it: the divisions are the
@@ -274,7 +275,7 @@ export interface PackingListOptions {
   rowOrder?: "shelf" | "catalog";
   /**
    * How a location is printed, in headings and rows alike: `path` (`Szafa 1 › Klaser A`), or `code`
-   * — the location's short code (#2192), for a sheet whose names are explained by a legend kept apart
+   * — the location's full code (#2192, #2235), for a sheet whose names are explained by a legend kept apart
    * from it. The order is the paths' either way.
    */
   locationLabel?: "path" | "code";
@@ -309,7 +310,6 @@ export function buildPackingList(
     options.ungroupedLabel ?? (byGroup || bySet ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
   const rowOrder = options.rowOrder ?? "shelf";
   const byCode = options.locationLabel === "code";
-  const codes = new Map(locations.map((l) => [l.id, l.code]));
 
   const buckets = new Map<string, Bucket>();
   let currency: string | null = null;
@@ -317,7 +317,9 @@ export function buildPackingList(
   for (const copy of copies) {
     const locationPath = buildLocationPath(locations, copy.locationId);
     const locationLabel =
-      byCode && copy.locationId ? (codes.get(copy.locationId) ?? locationPath) : locationPath;
+      byCode && copy.locationId
+        ? (buildLocationCode(locations, copy.locationId) ?? locationPath)
+        : locationPath;
     const group = byGroup ? (copy.line?.group ?? null) : null;
     const set = bySet ? (copy.set ?? null) : null;
     const bucketKey = bySet
@@ -435,13 +437,12 @@ export function packingLocationLegend(
   copies: readonly Pick<PackingCopy, "locationId">[],
   locations: readonly LocationData[]
 ): PackingLegendEntry[] {
-  const byId = new Map(locations.map((l) => [l.id, l]));
   const entries = new Map<string, PackingLegendEntry>();
   for (const { locationId } of copies) {
     if (!locationId || entries.has(locationId)) continue;
-    const location = byId.get(locationId);
+    const code = buildLocationCode(locations, locationId);
     const path = buildLocationPath(locations, locationId);
-    if (location && path) entries.set(locationId, { code: location.code, path });
+    if (code && path) entries.set(locationId, { code, path });
   }
   return Array.from(entries.values()).sort((a, b) => COLLATOR.compare(a.path, b.path));
 }

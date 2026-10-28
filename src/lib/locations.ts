@@ -3,8 +3,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { buildLocationPath } from "./location-path";
 import {
+  buildLocationCode,
   locationCodeProblem,
-  locationPathNames,
+  locationCodeSibling,
   normalizeLocationCode,
   suggestLocationCode,
 } from "./location-code";
@@ -50,8 +51,10 @@ async function resolveLocationCollection(locationId: string): Promise<string> {
 export interface LocationData {
   id: string;
   name: string;
-  /** The short code standing in for the path (#2191), upper-cased. */
+  /** This level's code (#2235), as typed. */
   code: string;
+  /** The full code: the levels' codes from the top down joined with dots (`A.B.1`, #2235). */
+  fullCode: string;
   parentId: string | null;
   description: string | null;
   assignable: boolean;
@@ -82,6 +85,7 @@ export async function getLocations(
     id: l.id,
     name: l.name,
     code: l.code,
+    fullCode: buildLocationCode(locations, l.id) ?? l.code,
     parentId: l.parentId,
     description: l.description,
     assignable: l.assignable,
@@ -133,9 +137,10 @@ export async function getLocationRefUsage(
 }
 
 /**
- * The code a location is saved with (#2191): the one the collector typed, normalized and checked,
- * or — when none was typed — the first free one its path suggests. A code another location holds
- * is refused by name, so the collector knows which one to change instead.
+ * The level code a location is saved with (#2235): the one the collector typed, trimmed and
+ * checked, or — when none was given at all — the first free one its own name suggests among the
+ * siblings it will have. Blank is refused: every level has a code. A code a sibling holds is refused
+ * by the sibling's path, so the collector knows which one to change instead.
  */
 async function resolveLocationCode(
   collectionId: string,
@@ -151,16 +156,16 @@ async function resolveLocationCode(
     })
   ).filter((l) => l.id !== locationId);
 
-  const code = typed === undefined ? "" : normalizeLocationCode(typed);
-  if (code === "") {
+  if (typed === undefined) {
     return suggestLocationCode(
-      locationPathNames(others, parentId, name),
-      new Set(others.map((l) => l.code))
+      name,
+      others.filter((l) => l.parentId === parentId).map((l) => l.code)
     );
   }
+  const code = normalizeLocationCode(typed);
   const problem = locationCodeProblem(code);
   if (problem) throw new Error(problem);
-  const holder = others.find((l) => l.code === code);
+  const holder = locationCodeSibling(others, parentId, code);
   if (holder) throw new Error(codeInUseMessage(code, others, holder.id));
   return code;
 }
@@ -175,13 +180,23 @@ function codeInUseMessage(
 
 /** A unique-index refusal on the code, lost to a write that landed between the check and the save,
  * told the same way the check would have told it. */
-async function rethrowCodeClash(err: unknown, collectionId: string, code: string): Promise<never> {
+async function rethrowCodeClash(
+  err: unknown,
+  collectionId: string,
+  locationId: string | null,
+  parentId: string | null,
+  code: string
+): Promise<never> {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
     const locations = await prisma.location.findMany({
       where: { collectionId },
       select: { id: true, name: true, parentId: true, code: true },
     });
-    const holder = locations.find((l) => l.code === code);
+    const holder = locationCodeSibling(
+      locations.filter((l) => l.id !== locationId),
+      parentId,
+      code
+    );
     if (holder) throw new Error(codeInUseMessage(code, locations, holder.id));
   }
   throw err;
@@ -192,7 +207,7 @@ export async function createLocation(
   collectionId: string,
   data: {
     name: string;
-    /** Blank or absent: generated from the path (#2191). */
+    /** Absent: suggested from the name (#2235). Blank is refused. */
     code?: string;
     parentId?: string | null;
     description?: string | null;
@@ -228,7 +243,9 @@ export async function createLocation(
       },
       select: { id: true },
     })
-    .catch((err: unknown) => rethrowCodeClash(err, collectionId, code));
+    .catch((err: unknown) =>
+      rethrowCodeClash(err, collectionId, null, data.parentId ?? null, code)
+    );
   return { id: created.id };
 }
 
@@ -237,7 +254,8 @@ export async function updateLocation(
   locationId: string,
   data: {
     name: string;
-    /** Absent: the code is left as it is. Never regenerated — a code is stable (#2191). */
+    /** Absent: the level's code is left as it is, and still has to be free among the siblings the
+     * location is moved to (#2235). */
     code?: string;
     parentId?: string | null;
     description?: string | null;
@@ -284,34 +302,31 @@ export async function updateLocation(
     }
   }
 
-  let code: string | undefined;
-  if (data.code !== undefined) {
-    code = normalizeLocationCode(data.code);
-    const problem = locationCodeProblem(code);
-    if (problem) throw new Error(problem);
-    code = await resolveLocationCode(
-      collectionId,
-      locationId,
-      code,
-      data.parentId ?? null,
-      data.name
-    );
-  }
+  const parentId = data.parentId ?? null;
+  const current = await prisma.location.findUniqueOrThrow({
+    where: { id: locationId },
+    select: { code: true },
+  });
+  const code = await resolveLocationCode(
+    collectionId,
+    locationId,
+    data.code ?? current.code,
+    parentId,
+    data.name
+  );
 
   await prisma.location
     .update({
       where: { id: locationId },
       data: {
         name: data.name,
-        ...(code !== undefined ? { code } : {}),
-        parentId: data.parentId ?? null,
+        code,
+        parentId,
         description: data.description ?? null,
         ...(data.assignable !== undefined ? { assignable: data.assignable } : {}),
       },
     })
-    .catch((err: unknown) =>
-      code === undefined ? Promise.reject(err) : rethrowCodeClash(err, collectionId, code)
-    );
+    .catch((err: unknown) => rethrowCodeClash(err, collectionId, locationId, parentId, code));
 }
 
 export async function deleteLocation(

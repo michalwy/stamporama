@@ -37,7 +37,8 @@ const AREAS: CollectionAreaData[] = [
 
 const LOCATIONS: LocationData[] = [
   // Codes collate against their paths on purpose — `Pudło 2` is the first shelf and `ZZ`, `Szafa 1 ›
-  // Klaser A` the second and `AA` — so a sheet printing codes is seen to keep the paths' order.
+  // Klaser A` the second and `S1.AA`, its levels' codes joined (#2235) — so a sheet printing codes is
+  // seen to keep the paths' order.
   { id: "szafa", name: "Szafa 1", parentId: null, code: "S1" } as LocationData,
   { id: "klaser", name: "Klaser A", parentId: "szafa", code: "AA" } as LocationData,
   { id: "pudlo", name: "Pudło 2", parentId: null, code: "ZZ" } as LocationData,
@@ -475,7 +476,7 @@ describe("packingSetOrder", () => {
   });
 });
 
-// ── Location codes and their legend (#2192) ──────────────────────────────────
+// ── Location codes and their legend (#2192, #2235) ─────────────────────────────
 
 describe("buildPackingList printing location codes", () => {
   it("heads each location's section with its code, in the paths' shelf order", () => {
@@ -488,9 +489,9 @@ describe("buildPackingList printing location codes", () => {
     );
     assert.deepEqual(
       list.groups.map((g) => g.location),
-      ["ZZ", "AA", NO_LOCATION_LABEL]
+      ["ZZ", "S1.AA", NO_LOCATION_LABEL]
     );
-    assert.equal(list.groups[1].rows[0].location, "AA");
+    assert.equal(list.groups[1].rows[0].location, "S1.AA");
     assert.equal(list.groups[1].rows[0].locationPath, "Szafa 1 › Klaser A");
   });
 
@@ -509,7 +510,7 @@ describe("buildPackingList printing location codes", () => {
     );
     assert.deepEqual(
       list.groups[0].rows.map((r) => r.location),
-      ["ZZ", "AA", null]
+      ["ZZ", "S1.AA", null]
     );
   });
 
@@ -532,7 +533,7 @@ describe("packingLocationLegend", () => {
     );
     assert.deepEqual(legend, [
       { code: "ZZ", path: "Pudło 2" },
-      { code: "AA", path: "Szafa 1 › Klaser A" },
+      { code: "S1.AA", path: "Szafa 1 › Klaser A" },
     ]);
   });
 

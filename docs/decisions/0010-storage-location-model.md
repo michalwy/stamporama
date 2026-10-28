@@ -68,6 +68,31 @@ a rename or a move keeps it, and only the collector changes it. A code is genera
 where none is typed (`src/lib/location-code.ts`; existing locations were backfilled by the same
 rule in SQL). It is never part of `Item.locationRef`.
 
+*Amended by §7: the code is now per level, and the stable whole-path code is gone.*
+
+### 7. A location's code is its levels' codes joined with dots (#2235)
+
+Settled with the collector on 2026-10-28. A whole code set on each location cannot follow the tree:
+a structured scheme — cabinet `A`, its shelf `A.B`, the stockbook on it `A.B.C`, its first page
+`A.B.C.1` — had to be typed out in full on every location and kept in step by hand, and six
+characters without a dot did not fit it. So `Location.code` now holds **its own level's code
+only**, and the location's **full code** is its ancestors' codes and its own joined with `.` from
+the top down, built where it is shown (`buildLocationCode` in `src/lib/location-code.ts`, and
+`LocationData.fullCode` from `getLocations`) — never stored, so a move or a parent's new code
+changes the full code of the location and everything under it at once. That replaces §6's
+*stable*: the code is meant to follow the tree.
+
+A level's code is any text of any length, trimmed and otherwise kept as typed, with no dot in it
+(the dot is the separator) and never blank. It is **unique among its siblings regardless of case**,
+which is what keeps the full codes unique: the unique index is
+`("collectionId", "parentId", lower("code")) NULLS NOT DISTINCT` — the nulls must be equal so the
+top-level locations are siblings of each other — created by hand in
+`20261028120000_location_level_codes`, since Prisma can express neither the expression nor the
+null rule. A move is checked against the new siblings too, and a clash is refused naming the
+sibling's path. A new location is offered a code from its own name by §6's rule applied to one
+level (the initial of the last word, or that word whole when it is a number), numbered `A2`, `A3`…
+past a sibling's; the migration recalculated every existing code the same way.
+
 ## Consequences
 
 - Locations get their own screen under the **Collection** section (not Settings):
