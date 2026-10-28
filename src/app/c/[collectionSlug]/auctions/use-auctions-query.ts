@@ -21,6 +21,8 @@ import type {
   AuctionClosingWindow,
 } from "@/lib/auctions";
 import type { AuctionSaleStatus } from "@/lib/auction-rules";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { AuctionSaleSearchField } from "@/lib/auction-sale-search-fields";
 import type { LotSignal } from "@/lib/auction-lot";
 import { lotParams, type AuctionLotFilters } from "./lot-params";
 
@@ -131,13 +133,28 @@ export function useAuctionParties(collectionId: string) {
 }
 
 /** Every sale with its parcel totals — the settlement list. Unpaginated (see `listAuctionSales`). */
-export function useAuctionSales(collectionId: string, status?: AuctionSaleStatus, search?: string) {
+export function useAuctionSales(
+  collectionId: string,
+  status?: AuctionSaleStatus,
+  search?: string,
+  /** The fields the search matches, when narrowed beside the box (#2245); absent is every field.
+   * Only in the key while it narrows, so an unnarrowed search shares the entry it always had. */
+  searchFields?: readonly AuctionSaleSearchField[]
+) {
   return useQuery<AuctionSaleView[]>({
-    queryKey: ["auctions", collectionId, "sales", status ?? "all", search ?? ""] as const,
+    queryKey: [
+      "auctions",
+      collectionId,
+      "sales",
+      status ?? "all",
+      search ?? "",
+      ...(searchFields ? [searchFields.join(",")] : []),
+    ] as const,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
       if (search) params.set("search", search);
+      if (searchFields) params.set(SEARCH_FIELDS_PARAM, searchFields.join(","));
       const res = await fetch(
         `/api/collections/${collectionId}/auctions/sales?${params.toString()}`
       );
