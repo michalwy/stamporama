@@ -168,3 +168,41 @@ describe("matchedStampsInIssue", () => {
     assert.equal(matchedStampsInIssue(ISSUE, TREE, { search: "zzz" }, VENDORS), null);
   });
 });
+
+// #2239: a search narrowed beside the Issues list's box explains a row only through what is ticked,
+// as only that reached the server.
+describe("narrowed to the ticked fields", () => {
+  it("lets the header explain a hit only through a ticked field", () => {
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "birds", VENDORS, ["issueName"]), true);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "birds", VENDORS, ["stampName"]), false);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "309", VENDORS, ["issueName"]), false);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "42", VENDORS, ["issueNumber"]), true);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "42", VENDORS, ["catalogNumber"]), false);
+    // The year is no field the server searches, so a narrowed search never reaches it.
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "1938", VENDORS, ["issueName"]), false);
+  });
+
+  it("keeps #N the issue number whatever is ticked", () => {
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "#42", VENDORS, ["stampName"]), true);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "#309", VENDORS), false);
+  });
+
+  it("picks out stamps only by the ticked fields", () => {
+    assert.deepEqual([...matchStampsBySearch(TREE, "perforated", VENDORS, ["stampName"])], ["s-309AP"]);
+    assert.equal(matchStampsBySearch(TREE, "perforated", VENDORS, ["catalogNumber"]).size, 0);
+    assert.deepEqual([...matchStampsBySearch(TREE, "309AP", VENDORS, ["catalogNumber"])], ["s-309AP"]);
+    assert.equal(matchStampsBySearch(TREE, "309AP", VENDORS, ["stampName"]).size, 0);
+  });
+
+  it("narrows the tree of an issue whose name the search no longer reads", () => {
+    const tree = [...TREE, stamp("s-birds", "Birds overprint")];
+    assert.equal(matchedStampsInIssue(ISSUE, tree, { search: "birds" }, VENDORS), null);
+    const matched = matchedStampsInIssue(
+      ISSUE,
+      tree,
+      { search: "birds", searchFields: ["stampName"] },
+      VENDORS
+    );
+    assert.deepEqual([...matched!], ["s-birds"]);
+  });
+});

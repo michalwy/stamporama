@@ -9,6 +9,8 @@ import {
 import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
 import type { AreaFacet } from "@/lib/area-facets";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { IssueSearchField } from "@/lib/issue-search-fields";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -26,6 +28,9 @@ export interface IssueListFilters extends TagFilterOpts {
    *  catalog number ("Mi PL 200") matches even though that spelling is never stored. */
   searchCatalogVendorId?: string;
   searchCatalogNumber?: string;
+  /** The fields the search box matches, when the collector narrowed it beside the box (#2239);
+   *  absent is every field. */
+  searchFields?: IssueSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   /** "none" for the no-year bucket, otherwise a numeric year string. */
@@ -44,6 +49,7 @@ export interface IssueYearFacetFilters extends TagFilterOpts {
   search?: string;
   searchCatalogVendorId?: string;
   searchCatalogNumber?: string;
+  searchFields?: IssueSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
 }
@@ -54,6 +60,7 @@ export interface IssueAreaFacetFilters extends TagFilterOpts {
   search?: string;
   searchCatalogVendorId?: string;
   searchCatalogNumber?: string;
+  searchFields?: IssueSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   /** "none" for the no-year bucket, otherwise a numeric year string. */
@@ -108,6 +115,7 @@ export function useIssuesInfinite(
         params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
       if (filters.searchCatalogNumber)
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);
@@ -149,6 +157,7 @@ export function useIssueYears(
         params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
       if (filters.searchCatalogNumber)
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);
@@ -175,6 +184,7 @@ export function useIssueAreaFacets(
         params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
       if (filters.searchCatalogNumber)
         params.set("searchCatalogNumber", filters.searchCatalogNumber);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);

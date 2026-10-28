@@ -62,7 +62,8 @@ import {
   shownChecklistWhere,
   type ChecklistKind,
 } from "./checklist-kind";
-import { parseEntityNoSearch } from "./quick-jump";
+import { ENTITY_NO_PREFIX, parseEntityNoSearch } from "./quick-jump";
+import type { IssueSearchField } from "./issue-search-fields";
 import { checkSiblingGroup, siblingsOf, sortOrderAssignments } from "./issue-member-order";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
 import type { UmbrellaPricesPolicy, UmbrellaWithOwnPrices } from "./umbrella-prices-question";
@@ -1065,6 +1066,10 @@ export interface IssueListFilterOpts {
   /** Bare catalog number parsed out of the quick search text (#289) — "Mi PL 200" and
    *  "PL200" both yield "200". Widens the quick search, never narrows it. */
   searchCatalogNumber?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it (#2239); absent is every
+   *  field. Only the Issues list's box sends it — the agent API and the picker read them all. A
+   *  `#12` search is the issue number whatever is here. */
+  searchFields?: IssueSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   /** Narrow to the issues with numbers in this catalogue (#2170): a declared range in it, or a stamp
@@ -1108,42 +1113,59 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
     conditions.push({ collectionAreaId: { in: opts.areaIds } });
   }
 
-  if (opts.search) {
+  // `#12` is the issue's own number and nothing else (#2239), whatever fields are ticked — the way
+  // the number reads on its row, and what the quick-jump box puts here to land on one issue. A bare
+  // `12` stays ambiguous below.
+  const onlyIssueNo =
+    opts.search?.trim().startsWith(ENTITY_NO_PREFIX) ? parseEntityNoSearch(opts.search) : null;
+  if (onlyIssueNo !== null) {
+    conditions.push({ issueNo: onlyIssueNo });
+  } else if (opts.search) {
     const s = opts.search;
+    // The fields the collector ticked beside the Issues list's box (#2239); absent is every one.
+    const ticked = opts.searchFields ? new Set(opts.searchFields) : null;
+    const on = (field: IssueSearchField) => !ticked || ticked.has(field);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const or: any[] = [
-      { name: { contains: s, mode: "insensitive" } },
-      { members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } },
-      { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
-      { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
-      { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } },
-    ];
+    const or: any[] = [];
+    if (on("issueName")) or.push({ name: { contains: s, mode: "insensitive" } });
+    if (on("stampName")) {
+      or.push({ members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } });
+    }
+    if (on("catalogNumber")) {
+      or.push(
+        { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
+        { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } }
+      );
+      // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
+      // never appears in a stored number, so the caller also hands us the number parsed out
+      // of it (`parseCatalogSearch`, #146) plus the vendor when its abbreviation led the
+      // input. Matching stays `contains`, like the rest of the quick search — that is what
+      // lets "Fi BL31" reach a stored "BL31" through its digit run.
+      if (opts.searchCatalogNumber) {
+        const n = { contains: opts.searchCatalogNumber, mode: "insensitive" as const };
+        const vendorClause = opts.searchCatalogVendorId
+          ? { catalogVendorId: opts.searchCatalogVendorId }
+          : {};
+        or.push(
+          { catalogNumbers: { some: { ...vendorClause, firstNumber: n } } },
+          { catalogNumbers: { some: { ...vendorClause, lastNumber: n } } },
+          { members: { some: { stamp: { catalogNumbers: { some: { ...vendorClause, number: n } } } } } }
+        );
+      }
+    }
 
     // The issue's own short number (#432), on exactly the copy search's rule (#268): matched *in
     // addition to* the text, never instead of it, because `200` is also a perfectly good catalog
-    // number. `#200` and `200` both reach it — the first is how the number reads on screen, and it
-    // is what the quick-jump box (#431) puts in this field to land on one issue.
-    const issueNo = parseEntityNoSearch(s);
-    if (issueNo !== null) or.push({ issueNo });
-
-    // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
-    // never appears in a stored number, so the caller also hands us the number parsed out
-    // of it (`parseCatalogSearch`, #146) plus the vendor when its abbreviation led the
-    // input. Matching stays `contains`, like the rest of the quick search — that is what
-    // lets "Fi BL31" reach a stored "BL31" through its digit run.
-    if (opts.searchCatalogNumber) {
-      const n = { contains: opts.searchCatalogNumber, mode: "insensitive" as const };
-      const vendorClause = opts.searchCatalogVendorId
-        ? { catalogVendorId: opts.searchCatalogVendorId }
-        : {};
-      or.push(
-        { catalogNumbers: { some: { ...vendorClause, firstNumber: n } } },
-        { catalogNumbers: { some: { ...vendorClause, lastNumber: n } } },
-        { members: { some: { stamp: { catalogNumbers: { some: { ...vendorClause, number: n } } } } } }
-      );
+    // number.
+    if (on("issueNumber")) {
+      const issueNo = parseEntityNoSearch(s);
+      if (issueNo !== null) or.push({ issueNo });
     }
 
-    conditions.push({ OR: or });
+    // Only *Issue number* ticked and text that is no number: nothing can match, said outright
+    // rather than left to how an empty `OR` happens to read.
+    conditions.push(or.length > 0 ? { OR: or } : { id: { in: [] } });
   }
 
   // Catalog filter (#146): a number narrows to a vendor when one is set, else it
