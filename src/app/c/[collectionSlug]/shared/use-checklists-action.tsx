@@ -8,7 +8,7 @@ import {
   DialogPrimaryButton,
   LabelWithError,
   ConfirmDialog,
-  FORM_DIALOG_COLUMNS_WIDTH,
+  DIALOG_MAX_WIDTH,
   PICKER_DIALOG_HEIGHT,
 } from "@/app/dialog-shell";
 import { DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
@@ -67,6 +67,7 @@ import { SpecialisedChecklistsToggle, SpecialisedMark } from "./specialised-chec
 import { NO_AUTOFILL } from "./no-autofill";
 import { TextInput } from "./text-input";
 import { Tooltip } from "./tooltip";
+import { useOverflowing } from "./use-overflowing";
 import { fillTranslationValues, type TranslationValues } from "./translations-dialog";
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
@@ -112,6 +113,15 @@ export function checklistKindAction(
         onSelect: () => onSelect("specialised"),
       };
 }
+
+/** The left column's width (#2237): wide enough for a name of ordinary length — *Six Year
+ *  Reconstruction Plan* — whole on one line beside its grip, stamp count and ⋮, so checklists named
+ *  alike can be told apart without opening each. A longer name is still cut, and shown on hover. */
+const CHECKLIST_LIST_WIDTH = "28rem";
+
+/** The window grows by as much as its left column did (#2237), so the stamps on the right keep
+ *  their room; on a narrow screen it is held to the screen, as other windows are. */
+const CHECKLISTS_DIALOG_WIDTH = `min(72rem, ${DIALOG_MAX_WIDTH})`;
 
 const COUNT_BADGE: React.CSSProperties = {
   fontSize: "0.8125rem",
@@ -166,6 +176,22 @@ export interface ChecklistsScope {
   /** The area's leading catalog, so the chip that names the stamp is the accented one, exactly as
    *  it is on the row this dialog was opened from. */
   primaryVendorId: string | null;
+}
+
+/** A checklist's name on the left, cut at the end when even the wider column cannot hold it, and
+ *  then shown in full on hover — only then, so a name already whole carries no bubble (#2237). */
+function ChecklistName({ name }: { name: string }) {
+  const [ref, cut] = useOverflowing<HTMLSpanElement>(name);
+  return (
+    <Tooltip content={cut ? name : undefined} maxWidth="32rem" style={{ minWidth: 0 }}>
+      <span
+        ref={ref}
+        style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      >
+        {name}
+      </span>
+    </Tooltip>
+  );
 }
 
 /** Row-menu entry opening the checklists editor, following the `{ action, dialog }` convention so
@@ -515,14 +541,14 @@ export function ChecklistsDialog({
       <DialogShell
         title={`Checklists — ${issueLabel}`}
         onClose={() => void close()}
-        maxWidth={FORM_DIALOG_COLUMNS_WIDTH}
+        maxWidth={CHECKLISTS_DIALOG_WIDTH}
         height={PICKER_DIALOG_HEIGHT}
         dismissable={deleting === null && applyingPreset === null && !translationsOpen}
       >
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
           <div
             style={{
-              width: "20rem",
+              width: CHECKLIST_LIST_WIDTH,
               flexShrink: 0,
               overflowY: "auto",
               padding: "1.25rem",
@@ -588,11 +614,7 @@ export function ChecklistsDialog({
                             cursor: "pointer",
                           }}
                         >
-                          <span
-                            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                          >
-                            {checklist.name}
-                          </span>
+                          <ChecklistName name={checklist.name} />
                           <SpecialisedMark kind={checklist.kind} />
                         </button>
                         <span style={COUNT_BADGE}>{checklist.stampIds.length}</span>

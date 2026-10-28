@@ -806,6 +806,8 @@ Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **
 
 The editor is one dialog in two halves. **On the left**, the issue's checklists; **on the right**, the one you picked — its name, its type and its stamps. **Every change is saved as you make it** — a tick, a drag, a type, the checklists' order; a name or a translation when you leave its field — so there is nothing to save at the end, only **Close**.
 
+The list on the left is wide enough for a checklist's name of ordinary length — *Six Year Reconstruction Plan* — to read whole beside its stamp count; a longer name is cut short, and shows in full when you point at it.
+
 On the left you can:
 
 - **Add** a checklist with **+ Add checklist**. It appears at the end of the list as *New checklist*, picked at once, with an empty name field and the type **Standard**. It is saved the moment you give it a name; until then you can already choose its type and tick its stamps, and **⋮ → Discard** drops it. An issue with no checklist yet opens with the list empty and **+ Add checklist** as the one thing to do.
