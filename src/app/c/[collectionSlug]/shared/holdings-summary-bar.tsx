@@ -17,11 +17,11 @@ import {
   negatedAmount,
   signedAmount,
   stateFigure,
-  type FigureDirection,
   type StatedFigure,
 } from "@/lib/summary-figure";
 import { usePersistedFlag } from "./use-persisted-flag";
-import { COST_ESTIMATE_STYLE } from "./cost-estimate-text";
+import { COST_ESTIMATE_STYLE, ESTIMATE_MARK_STYLE } from "./cost-estimate-text";
+import { DIRECTION_COLOR } from "./figure-direction-color";
 import { FaultReducedNote } from "./fault-reduction-mark";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
@@ -269,19 +269,6 @@ function AbsentAmount({ text, style }: { text: string; style: React.CSSPropertie
 /** The hover on a figure that counts copies at their estimated cost (#1881). */
 const ESTIMATED_FIGURE_HINT =
   "An estimate: copies on purchase lots that are still open are counted at their share of the lot's cost by catalog value, the figure each copy's own page shows. It settles when the lots are closed.";
-
-/** A gain in the success colour, a loss in the error one — the tokens a sale's profit and the profit
- * and loss screen use, so a gain looks the same here as there (#559, #1883). Neither takes no colour
- * of its own: it did not go any way. */
-const DIRECTION_COLOR: Record<FigureDirection, string | undefined> = {
-  gain: "var(--color-success)",
-  loss: "var(--color-error)",
-  none: undefined,
-};
-
-/** The estimate mark, set a little apart from what follows it: in italic `~` and a minus touch and
- * read as `~~` (#1883). A margin rather than a space, so the text still copies as `~−516.23 PLN`. */
-const ESTIMATE_MARK_STYLE: React.CSSProperties = { marginRight: "0.15em" };
 
 /** The amount slot, in the one place that decides whether there is an amount to put in it (#1184).
  * A figure with nothing behind it says so in the collector's terms instead of printing a sum of

@@ -21,7 +21,9 @@ import {
   type EstimatedProfitFigures,
 } from "@/lib/sale-profit";
 import { CopiesWithoutCost } from "./copies-without-cost";
-import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
+import { COST_ESTIMATE_STYLE, ESTIMATE_MARK_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
+import { DIRECTION_COLOR } from "@/app/c/[collectionSlug]/shared/figure-direction-color";
+import { figureDirection } from "@/lib/summary-figure";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { CUSTOM_SHIPPING_OPTION, shipmentGoingBy } from "@/lib/sale-rules";
 import type { ShippingOptionData } from "@/lib/shipping-options";
@@ -1300,9 +1302,13 @@ const PROFIT_NOTE: React.CSSProperties = {
 /** The cost and profit rows under the net (#168), in the net's own column. A profit that cannot be
  * computed says why instead of showing a figure; one over only some of the copies says how many it
  * left out, and why. One counting a copy at its open lot's estimate (#1814) reads as an estimate —
- * `~`, muted italic, on both the cost and the profit — and says how many copies are estimated. One
+ * `~`, italic, on both the cost and the profit — and says how many copies are estimated. One
  * counting a copy with no cost recorded (#1875) is incomplete and a ceiling — `≤` on the profit — and
- * names those copies, each leading to its own page. */
+ * names those copies, each leading to its own page.
+ *
+ * The profit is coloured by its sign whatever marks it carries (#2227): an estimated or incomplete
+ * loss is still a loss, and reads as one at a glance. Only the cost, which has no sign, takes the
+ * estimate's muted grey. */
 function ProfitRows({
   profit,
   copiesWithoutCost,
@@ -1353,7 +1359,6 @@ function ProfitRows({
     );
   }
 
-  const n = Number(profit.profit);
   const leftOut = profit.countedCount < profit.copyCount;
   const withoutCost = copiesWithoutCost.length > 0;
   const uncostedSupplies = supplies.incomplete ? describeUncostedSupplies(supplies) : null;
@@ -1363,6 +1368,7 @@ function ProfitRows({
   const ceiling = withoutCost || uncostedSupplies != null ? "≤ " : "";
   const estimateStyle = estimateNote ? COST_ESTIMATE_STYLE : {};
   const qualifiers = [incomplete && "incomplete", estimateNote && "estimated"].filter(Boolean);
+  const direction = DIRECTION_COLOR[figureDirection(profit.profit)];
   return (
     <>
       <div style={ROW_LABEL}>
@@ -1376,12 +1382,21 @@ function ProfitRows({
       <div style={{ ...ROW_LABEL, fontWeight: 600, color: "var(--color-text-primary)" }}>
         {qualifiers.length > 0 ? `Profit / loss (${qualifiers.join(", ")})` : "Profit / loss"}
       </div>
-      {amount(`${ceiling}${mark}${signedAmount(profit.profit)} ${baseCurrency}`, {
-        fontSize: "0.875rem",
-        fontWeight: 600,
-        color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-primary)",
-        ...estimateStyle,
-      })}
+      {amount(
+        <>
+          {ceiling}
+          {mark && <span style={ESTIMATE_MARK_STYLE}>{mark}</span>}
+          {signedAmount(profit.profit)} {baseCurrency}
+        </>,
+        {
+          fontSize: "0.875rem",
+          fontWeight: 600,
+          color: "var(--color-text-primary)",
+          ...estimateStyle,
+          // A zero went neither way and keeps the neutral look: the estimate's grey, or none.
+          ...(direction ? { color: direction } : {}),
+        },
+      )}
       {estimateNote && <p style={PROFIT_NOTE}>{estimateNote}.</p>}
       {withoutCost && (
         <p style={PROFIT_NOTE}>
