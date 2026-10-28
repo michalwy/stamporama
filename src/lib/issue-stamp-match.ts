@@ -12,7 +12,8 @@
 // stays testable without Prisma and the two surfaces cannot drift apart.
 
 import { catalogKeyMatches, catalogMatchKey } from "./catalog-number";
-import { parseEntityNoSearch } from "./quick-jump";
+import { ENTITY_NO_PREFIX, parseEntityNoSearch } from "./quick-jump";
+import type { IssueSearchField } from "./issue-search-fields";
 
 /** What a number needs of its vendor to be keyed — structural, so the UI's `AreaCatalogEntry`
  *  map is passed straight in and this module keeps `server-only` out of `test:unit`. */
@@ -50,10 +51,18 @@ export interface MatchableStamp {
 export interface StampFilterQuery {
   /** The quick-search box's text (#289's prefixed numbers included — they normalize the same). */
   search?: string;
+  /** The fields {@link search} was narrowed to beside the Issues list's box (#2239); absent is
+   *  every field, as the server reads it. */
+  searchFields?: readonly IssueSearchField[];
   /** The catalog filter's number (#146), matched **exactly**, as the server matches it. */
   catalogNumber?: string;
   /** Narrows {@link catalogNumber} to one vendor; without it the number matches across all. */
   catalogVendorId?: string;
+}
+
+/** Whether a search narrowed to `fields` reads `field` — every one when it was not narrowed. */
+function searchesField(fields: readonly IssueSearchField[] | undefined, field: IssueSearchField) {
+  return !fields || fields.includes(field);
 }
 
 /** Normalized catalog keys for one stamp's numbers — vendor abbreviation + area prefix + number. */
@@ -70,17 +79,29 @@ function stampKeys(stamp: MatchableStamp, vendorMap: MatchVendorMap): string[] {
  * Numbers are matched on their normalized key (vendor abbreviation + area prefix + number), so a
  * prefixed query resolves in any spacing — `Mi PL 200`, `MiPL200`, `PL200` and bare `200` all
  * reach the same issue (#146).
+ *
+ * Narrowed to `fields` (#2239), only what is ticked can explain the row, as only that reached the
+ * server; the year, which the server never searches, explains it only while nothing is narrowed.
+ * `#12` is the issue number whatever is ticked, the server's own rule.
  */
 export function issueHeaderMatchesSearch(
   issue: MatchableIssue,
   search: string,
-  vendorMap: MatchVendorMap
+  vendorMap: MatchVendorMap,
+  fields?: readonly IssueSearchField[]
 ): boolean {
   const q = search.trim().toLowerCase();
   if (!q) return true;
-  if ((issue.name ?? "").toLowerCase().includes(q)) return true;
-  if (issue.year != null && String(issue.year).includes(q)) return true;
-  if (parseEntityNoSearch(search) === issue.issueNo) return true;
+  const onlyIssueNo = q.startsWith(ENTITY_NO_PREFIX) ? parseEntityNoSearch(search) : null;
+  if (onlyIssueNo !== null) return onlyIssueNo === issue.issueNo;
+  if (searchesField(fields, "issueName") && (issue.name ?? "").toLowerCase().includes(q)) {
+    return true;
+  }
+  if (!fields && issue.year != null && String(issue.year).includes(q)) return true;
+  if (searchesField(fields, "issueNumber") && parseEntityNoSearch(search) === issue.issueNo) {
+    return true;
+  }
+  if (!searchesField(fields, "catalogNumber")) return false;
   const keys = issue.catalogNumbers.flatMap((cn) => {
     const v = vendorMap.get(cn.catalogVendorId);
     const abbr = v?.vendorAbbreviation ?? "";
@@ -91,18 +112,24 @@ export function issueHeaderMatchesSearch(
   return catalogKeyMatches(search, keys);
 }
 
-/** Which of an issue's stamps a search matched — by name or by catalog number (#186). */
+/** Which of an issue's stamps a search matched — by name or by catalog number (#186), each only
+ *  while its field is ticked (#2239). */
 export function matchStampsBySearch(
   stamps: readonly MatchableStamp[],
   search: string,
-  vendorMap: MatchVendorMap
+  vendorMap: MatchVendorMap,
+  fields?: readonly IssueSearchField[]
 ): Set<string> {
   const q = search.trim().toLowerCase();
   const out = new Set<string>();
   if (!q) return out;
+  const byName = searchesField(fields, "stampName");
+  const byNumber = searchesField(fields, "catalogNumber");
   for (const s of stamps) {
-    const nameHit = (s.name ?? "").toLowerCase().includes(q);
-    if (nameHit || catalogKeyMatches(search, stampKeys(s, vendorMap))) out.add(s.stampId);
+    const nameHit = byName && (s.name ?? "").toLowerCase().includes(q);
+    if (nameHit || (byNumber && catalogKeyMatches(search, stampKeys(s, vendorMap)))) {
+      out.add(s.stampId);
+    }
   }
   return out;
 }
@@ -159,7 +186,10 @@ export function needsInnerStampMatch(
   vendorMap: MatchVendorMap
 ): boolean {
   if (!hasStampFilter(query)) return false;
-  if (query.search?.trim() && !issueHeaderMatchesSearch(issue, query.search, vendorMap)) return true;
+  const { search, searchFields } = query;
+  if (search?.trim() && !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields)) {
+    return true;
+  }
   if (query.catalogNumber && !issueHeaderMatchesCatalogFilter(issue, query)) return true;
   return false;
 }
@@ -182,8 +212,9 @@ export function matchedStampsInIssue(
   vendorMap: MatchVendorMap
 ): Set<string> | null {
   const sets: Set<string>[] = [];
-  if (query.search?.trim() && !issueHeaderMatchesSearch(issue, query.search, vendorMap)) {
-    sets.push(matchStampsBySearch(stamps, query.search, vendorMap));
+  const { search, searchFields } = query;
+  if (search?.trim() && !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields)) {
+    sets.push(matchStampsBySearch(stamps, search, vendorMap, searchFields));
   }
   if (query.catalogNumber && !issueHeaderMatchesCatalogFilter(issue, query)) {
     sets.push(matchStampsByCatalogFilter(stamps, query));

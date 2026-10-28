@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { listIssueAreaFacets } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
  *  keeps `year` and drops the area selection, so each row says what selecting it would list. */
@@ -21,6 +23,8 @@ export async function GET(
   const search = readSearchParam(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
+  // The fields the search box was narrowed to beside it (#2239); absent is every field.
+  const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), ISSUE_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const yearParam = sp.get("year");
@@ -38,6 +42,7 @@ export async function GET(
       search,
       searchCatalogVendorId,
       searchCatalogNumber,
+      searchFields,
       catalogVendorId,
       catalogNumber,
       year,

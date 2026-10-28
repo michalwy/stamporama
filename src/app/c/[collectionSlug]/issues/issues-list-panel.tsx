@@ -96,6 +96,9 @@ import { effectivePrimaryVendorId, resolveAreaFilterIds } from "@/app/c/[collect
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { ISSUE_SEARCH_FIELDS, ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
 import type { StampFilterQuery } from "@/lib/issue-stamp-match";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { formControl } from "@/app/control-style";
@@ -211,6 +214,15 @@ export function IssuesListPanel({
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const search = searchParams.get("search") ?? "";
+  // The fields that box matches (#2239, the Copies list's control #2238), ticked beside it and
+  // remembered per collection — apart from the URL and from every filter, since it is how the box
+  // reads what is typed. Sent only with a search, so an empty box asks the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "issues-search-fields",
+    collectionId,
+    ISSUE_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = search ? searchFields.narrowed : undefined;
   const { sortBy, sortDir, persistSort } = usePersistedSort<IssueSortBy>(
     "issues", "year", "asc",
     searchParams.get("sortBy"),
@@ -279,6 +291,7 @@ export function IssuesListPanel({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
@@ -288,7 +301,7 @@ export function IssuesListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   // The half of the filter set a stamp *inside* an issue can satisfy (#631). Handed to every row so
@@ -297,10 +310,11 @@ export function IssuesListPanel({
   const stampFilter: StampFilterQuery = useMemo(
     () => ({
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       catalogNumber: effectiveCatalogNumber || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
     }),
-    [search, effectiveCatalogNumber, effectiveCatalogVendorId]
+    [search, narrowedSearchFields, effectiveCatalogNumber, effectiveCatalogVendorId]
   );
 
   const yearFacetFilters: IssueYearFacetFilters = useMemo(
@@ -309,11 +323,12 @@ export function IssuesListPanel({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
     }),
-    [filterAreaIds, search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(
@@ -328,12 +343,13 @@ export function IssuesListPanel({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
       year: year || undefined,
     }),
-    [search, parsedSearch, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year]
+    [search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -633,6 +649,14 @@ export function IssuesListPanel({
         <ListToolbar
           search={search}
           onSearchChange={(v) => updateParams({ search: v })}
+          /* The fields that box matches (#2239); `#12` stays the issue number whatever is ticked. */
+          searchFields={
+            <SearchFieldsControl
+              fields={ISSUE_SEARCH_FIELDS}
+              ticked={searchFields.ticked}
+              onChange={searchFields.setTicked}
+            />
+          }
           sortBy={sortBy}
           sortDir={sortDir}
           onSortChange={(sb, sd) => { persistSort(sb as IssueSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}

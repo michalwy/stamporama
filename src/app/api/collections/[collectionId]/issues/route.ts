@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 const VALID_SORT_BY = new Set<IssueSortBy>(["year", "name", "catalogNumber"]);
@@ -27,6 +29,8 @@ export async function GET(
   const search = readSearchParam(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
+  // The fields the search box was narrowed to beside it (#2239); absent is every field.
+  const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), ISSUE_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const displayConditionId = sp.get("displayConditionId") || undefined;
@@ -50,6 +54,7 @@ export async function GET(
       search,
       searchCatalogVendorId,
       searchCatalogNumber,
+      searchFields,
       catalogVendorId,
       catalogNumber,
       // The collector's own labels (#1182) — a filter like any other, so the list and both
