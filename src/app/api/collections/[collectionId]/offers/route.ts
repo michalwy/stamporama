@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { listOffersPaginated } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 // Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or the
@@ -50,6 +52,8 @@ export async function GET(
       needsRefresh,
       platformSale,
       search,
+      // The fields the box was narrowed to beside it (#2242); absent is every field.
+      searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS),
       includeClosed,
       facebookPostNo: parseFacebookPostNo(sp.get("post")),
       pageSize: 50,

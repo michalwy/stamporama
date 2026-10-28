@@ -65,6 +65,13 @@ describe("offer list context", () => {
     });
   });
 
+  it("carries the fields a search was narrowed to, and only with the search (#2242)", () => {
+    assert.deepEqual(roundTrip({ search: "A234", searchFields: ["locationRef"] })?.searchFields, [
+      "locationRef",
+    ]);
+    assert.equal(roundTrip({ searchFields: ["locationRef"] })?.searchFields, undefined);
+  });
+
   it("round-trips the show-closed toggle, which the list keeps out of its own URL", () => {
     assert.deepEqual(roundTrip({ states: ["sold"], includeClosed: true }), {
       platformId: undefined,

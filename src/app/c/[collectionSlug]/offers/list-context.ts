@@ -1,5 +1,7 @@
 import { isOfferState, type OfferState } from "@/lib/offer-rules";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { OFFER_SEARCH_FIELD_KEYS, type OfferSearchField } from "@/lib/offer-search-fields";
 
 /**
  * The filter context an offer was opened from (#429), carried in the detail URL so the screen can
@@ -43,6 +45,9 @@ export interface OfferListContext {
   /** What was in the search box (#465): the list an offer was found through is the list the walk
    * steps along, and a search narrows it exactly as a filter does. */
   search?: string;
+  /** The fields that search was narrowed to beside the box (#2242), so the walk reads the text as
+   * the list did; absent is every field. */
+  searchFields?: OfferSearchField[];
   /** The one multi-lot Facebook post the list was narrowed to (#1842), by its number. */
   post?: number;
 }
@@ -63,6 +68,9 @@ export function offerListContextQuery(context: OfferListContext): string {
   else if (context.states?.length) params.set("state", context.states.join(","));
   if (context.includeClosed) params.set("closed", "1");
   if (context.search) params.set("search", context.search);
+  if (context.search && context.searchFields) {
+    params.set(SEARCH_FIELDS_PARAM, context.searchFields.join(","));
+  }
   if (context.post) params.set("post", String(context.post));
   return `?${params.toString()}`;
 }
@@ -79,6 +87,7 @@ export function parseOfferListContext(
   if (get(MARKER) !== MARKER_VALUE) return null;
   const needsAction = get("needsAction") === "1";
   const post = parseFacebookPostNo(get("post"));
+  const searchFields = parseSearchFields(get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS);
   return {
     platformId: get("platform") || undefined,
     states: needsAction ? [] : (get("state") || "").split(",").filter(isOfferState),
@@ -90,6 +99,7 @@ export function parseOfferListContext(
     platformSale: get("platformSale") === "1",
     includeClosed: get("closed") === "1",
     search: get("search") || undefined,
+    ...(searchFields ? { searchFields } : {}),
     ...(post ? { post } : {}),
   };
 }

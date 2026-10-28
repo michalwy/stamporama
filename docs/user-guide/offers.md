@@ -2978,7 +2978,8 @@ The search box finds one offer among hundreds by what you happen to know about i
 
 - the **listing title**, or — for an offer you never titled — the stamp names and set titles its
   shown label is built from;
-- the offer's **own number**, bare (`200`) or as it reads on screen (`#200`);
+- the offer's **own number**, bare (`200`), or as it reads on screen (`#200`) — which finds that one
+  offer and nothing else;
 - a **catalog number** of any copy in the offer, or the **filing ref** (`A234`) of where that copy
   sits — the same ref the [inventory](inventory.md) list searches on;
 - the **listing URL** — paste the marketplace link out of a sale notification and it lands on the
@@ -2986,9 +2987,21 @@ The search box finds one offer among hundreds by what you happen to know about i
   number from the marketplace works too.
 
 Matching is case-insensitive and by substring, with no fuzzy guessing: a search that quietly lands
-on the wrong listing would be worse than none. The offer number and the URL are matched *in addition
-to* the text, never instead of it — `200` is also a perfectly good catalog number, so both are
-shown.
+on the wrong listing would be worse than none. A bare offer number and the URL are matched *in
+addition to* the text, never instead of it — `200` is also a perfectly good catalog number, so both
+are shown.
+
+**Beside the box, a control picks which fields it searches**: *Title*, *Offer number*, *Catalogue
+number*, *Location ref* and *Listing URL*. All are ticked to begin with, and the control reads **All
+fields**; untick the ones you do not mean and the box matches only what is left — with only
+*Catalogue number* ticked, `865` finds the offers holding a copy numbered `865` and not offer #865 or
+a listing whose address ends in the same digits. **All fields** at the top of its list ticks them all
+again. One field always stays ticked. While the search is narrowed the control is drawn in the accent
+colour and names the one field ticked, or how many are (*2 fields*), so a search that finds nothing
+because of it shows why at a glance. `#200` is still offer #200 whatever is ticked. The choice is
+remembered for this list in each collection, apart from the phrase in the box: clearing the box
+leaves it as it is, since it is how the box reads what you type, not a filter on the offers. An offer
+opened from the searched list steps through it read the same way.
 
 The search **combines** with the platform, state and show-closed filters rather than replacing them,
 and the counts and the summary bar describe the searched set like they do any other filter. It is

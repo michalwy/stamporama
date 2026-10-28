@@ -78,7 +78,8 @@ import {
   markListingContentChanged,
 } from "./offer-listing-sync";
 import { claimCovers, type AllegroPaymentStatus } from "./allegro-sync-rules";
-import { parseOfferAddressSearch } from "./offer-search";
+import { parseOfferAddressSearch, parseOfferNoOnlySearch } from "./offer-search";
+import type { OfferSearchField } from "./offer-search-fields";
 import { urlNamesPlatformOffer } from "./platform-offer-url";
 import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
@@ -2906,6 +2907,10 @@ export interface OfferListFilters {
    * offer's own number, its listing URL, or the catalog number / filing ref of a copy it holds.
    * Composes with every other filter rather than replacing them. */
   search?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it beside the box (#2242);
+   * absent is every field. Only the Offers list's box sends it. A `#12` search is the offer number
+   * whatever is here. */
+  searchFields?: OfferSearchField[];
   /** Only the lots of one multi-lot Facebook post, by its short number (#1842) — what the *Post #N ·
    *  lot M* chip on a lot's row narrows the list to. A plain column narrowing like `bidding`, composing
    *  with every other filter. */
@@ -2927,63 +2932,83 @@ export interface PaginatedOffersResult {
  *   derived from (#209/#379): the set titles and the stamp names behind them. An offer that *has* a
  *   title is matched on the title, because that is what the list is showing and what the collector
  *   deliberately wrote;
- * - the **offer's own number** (#416), a bare integer or behind a `#`, following `parseEntityNoSearch`
- *   (#431) — matched *in addition to* the text, never instead of it, since `200` is also a perfectly
- *   good catalog number;
+ * - the **offer's own number** (#416), a bare integer following `parseEntityNoSearch` (#431) —
+ *   matched *in addition to* the text, never instead of it, since `200` is also a perfectly good
+ *   catalog number; written `#12` it is that offer alone, whatever is ticked (#2242);
  * - the **catalog numbers** of the copies in its sets, exactly as the sales list searches them;
  * - the **filing ref** of those copies (`A234`), for the same reason the inventory list searches it
  *   (#303): where a piece sits in the album is one of the few things a collector reliably knows
  *   about it, and an offer is findable by what is in it;
  * - the **listing URL**, at the address's own boundaries rather than as a bare substring — see
  *   `offer-search.ts` for why either half of that is never a plain `contains`.
+ *
+ * `fields` narrows it to the ones the collector ticked beside the Offers list's box (#2242) —
+ * `title`, `offerNumber`, `catalogNumber`, `locationRef`, `listingUrl`; absent is every one.
  */
-function offerSearchWhere(search: string): Prisma.OfferWhereInput {
+function offerSearchWhere(
+  search: string,
+  fields?: readonly OfferSearchField[]
+): Prisma.OfferWhereInput {
   const s = search.trim();
+  // `#12` is the offer's own number and nothing else, whatever is ticked (#2242; #2136's rule).
+  const onlyOfferNo = parseOfferNoOnlySearch(s);
+  if (onlyOfferNo !== null) return { offerNo: onlyOfferNo };
+
+  const ticked = fields ? new Set(fields) : null;
+  const on = (field: OfferSearchField) => !ticked || ticked.has(field);
   const text = { contains: s, mode: "insensitive" as const };
-  const stampMatch: Prisma.OfferWhereInput = {
-    sets: { some: { items: { some: { item: { stamp: { name: text } } } } } },
-  };
   /** One of the offer's copies matching, whatever is asked of the copy. */
   const heldCopy = (item: Prisma.ItemWhereInput): Prisma.OfferWhereInput => ({
     sets: { some: { items: { some: { item } } } },
   });
 
-  const or: Prisma.OfferWhereInput[] = [
-    { name: text },
-    { name: null, sets: { some: { title: text } } },
-    { name: null, ...stampMatch },
-    heldCopy({ stamp: { catalogNumbers: { some: { number: text } } } }),
-    heldCopy({ locationRef: text }),
-  ];
-
-  const offerNo = parseEntityNoSearch(s);
-  if (offerNo !== null) or.push({ offerNo });
-
-  // A pasted link is compared as an address: the stored URL has to *end* at the same place, or
-  // carry it followed by a query, a fragment or a further segment — so `…/sale/12` never matches
-  // `…/sale/1234`.
-  const { address, listingId } = parseOfferAddressSearch(s);
-  if (address) {
+  const or: Prisma.OfferWhereInput[] = [];
+  if (on("title")) {
     or.push(
-      { url: { endsWith: address, mode: "insensitive" } },
-      { url: { contains: `${address}/`, mode: "insensitive" } },
-      { url: { contains: `${address}?`, mode: "insensitive" } },
-      { url: { contains: `${address}#`, mode: "insensitive" } }
+      { name: text },
+      { name: null, sets: { some: { title: text } } },
+      { name: null, ...heldCopy({ stamp: { name: text } }) }
     );
   }
-  // …and a listing number is found inside an address that shares nothing else with it, at the
-  // boundaries `findCapturedLot` uses for the same job on an auction lot.
-  if (listingId) {
-    or.push(
-      { url: { endsWith: `/${listingId}` } },
-      { url: { endsWith: `-${listingId}` } },
-      { url: { contains: `/${listingId}?` } },
-      { url: { contains: `-${listingId}?` } },
-      { url: { contains: `offerId=${listingId}` } }
-    );
+  if (on("catalogNumber")) {
+    or.push(heldCopy({ stamp: { catalogNumbers: { some: { number: text } } } }));
+  }
+  if (on("locationRef")) or.push(heldCopy({ locationRef: text }));
+
+  if (on("offerNumber")) {
+    const offerNo = parseEntityNoSearch(s);
+    if (offerNo !== null) or.push({ offerNo });
   }
 
-  return { OR: or };
+  if (on("listingUrl")) {
+    // A pasted link is compared as an address: the stored URL has to *end* at the same place, or
+    // carry it followed by a query, a fragment or a further segment — so `…/sale/12` never matches
+    // `…/sale/1234`.
+    const { address, listingId } = parseOfferAddressSearch(s);
+    if (address) {
+      or.push(
+        { url: { endsWith: address, mode: "insensitive" } },
+        { url: { contains: `${address}/`, mode: "insensitive" } },
+        { url: { contains: `${address}?`, mode: "insensitive" } },
+        { url: { contains: `${address}#`, mode: "insensitive" } }
+      );
+    }
+    // …and a listing number is found inside an address that shares nothing else with it, at the
+    // boundaries `findCapturedLot` uses for the same job on an auction lot.
+    if (listingId) {
+      or.push(
+        { url: { endsWith: `/${listingId}` } },
+        { url: { endsWith: `-${listingId}` } },
+        { url: { contains: `/${listingId}?` } },
+        { url: { contains: `-${listingId}?` } },
+        { url: { contains: `offerId=${listingId}` } }
+      );
+    }
+  }
+
+  // Only fields ticked that this text cannot be (a number, a link): nothing can match, said outright
+  // rather than left to how an empty `OR` happens to read.
+  return or.length > 0 ? { OR: or } : { id: { in: [] } };
 }
 
 /**
@@ -3038,6 +3063,7 @@ function offerListWhere(
     | "states"
     | "includeClosed"
     | "search"
+    | "searchFields"
     | "bidding"
     | "endedAuction"
     | "listingOutOfDate"
@@ -3059,7 +3085,7 @@ function offerListWhere(
   // while flagged from being counted as work waiting to be done.
   if (filters.listingOutOfDate) and.push(LISTING_DRIFT_WHERE);
   if (refreshWhere) and.push(refreshWhere);
-  if (filters.search?.trim()) and.push(offerSearchWhere(filters.search));
+  if (filters.search?.trim()) and.push(offerSearchWhere(filters.search, filters.searchFields));
   if (needsActionIds) and.push({ id: { in: needsActionIds } });
   // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the user
   // opted in (#245).
@@ -3291,6 +3317,7 @@ export async function offerListNeighbours(
     | "needsAction"
     | "includeClosed"
     | "search"
+    | "searchFields"
     | "bidding"
     | "endedAuction"
     | "platformSale"
@@ -3620,6 +3647,7 @@ export async function offerFilterCounts(
     | "needsAction"
     | "includeClosed"
     | "search"
+    | "searchFields"
     | "bidding"
     | "endedAuction"
     | "platformSale"
@@ -3627,7 +3655,9 @@ export async function offerFilterCounts(
 ): Promise<OfferFilterCounts> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const searchWhere = filters.search?.trim() ? offerSearchWhere(filters.search) : null;
+  const searchWhere = filters.search?.trim()
+    ? offerSearchWhere(filters.search, filters.searchFields)
+    : null;
   // A search is the one narrowing the derived facet cannot express, `needsActionRows` reading its
   // own SQL rather than a `where` (ADR-0013 §4). So it is resolved to ids first and handed in as
   // the scope that read already takes — no search matches means an empty scope, not an open one.
@@ -3808,6 +3838,7 @@ export async function offersSummary(
     | "needsAction"
     | "includeClosed"
     | "search"
+    | "searchFields"
     | "bidding"
     | "endedAuction"
     | "platformSale"

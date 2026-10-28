@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { offerListNeighbours } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 
 // Where one offer sits in the filtered offer list, for the detail screen's next/previous links
@@ -32,6 +34,7 @@ export async function GET(
       platformId: sp.get("platformId") || undefined,
       states,
       search: readSearchParam(sp),
+      searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS),
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",

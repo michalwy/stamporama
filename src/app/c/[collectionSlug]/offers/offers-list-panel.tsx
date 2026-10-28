@@ -32,6 +32,9 @@ import {
 } from "@/lib/offer-rules";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { OFFER_SEARCH_FIELDS, OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import {
   useOffersInfinite,
   useOfferPlatforms,
@@ -232,6 +235,15 @@ export function OffersListPanel({
   // Search box (#465), remembered alongside the other filters and, like them, overridden by the URL
   // whenever it carries one — so a link to a searched list still means what it says.
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+  // The fields that box matches (#2242, the Copies list's control from #2238), ticked beside it and
+  // remembered per collection apart from the search and the filters, and outside the URL. Sent only
+  // with a search and only when it narrows, so an unnarrowed search asks the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "offers-search-fields",
+    collectionId,
+    OFFER_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = search ? searchFields.narrowed : undefined;
 
   // Narrowed to the offers under the hammer (#215) when a link says so — the notification centre's
   // "bidding started" group (#481) is the one that does. URL-only and never remembered: it is where
@@ -274,6 +286,7 @@ export function OffersListPanel({
       needsRefresh,
       includeClosed,
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       post,
     }),
     [
@@ -287,6 +300,7 @@ export function OffersListPanel({
       needsRefresh,
       includeClosed,
       search,
+      narrowedSearchFields,
       post,
     ]
   );
@@ -777,6 +791,14 @@ export function OffersListPanel({
             onChange={setLocalSearch}
             placeholder="Search title, #no, link, catalog no, ref…"
             label="Search offers"
+            /* The fields that box matches (#2242); `#12` stays the offer number whatever is ticked. */
+            searchFields={
+              <SearchFieldsControl
+                fields={OFFER_SEARCH_FIELDS}
+                ticked={searchFields.ticked}
+                onChange={searchFields.setTicked}
+              />
+            }
           />
           <select
             aria-label="Filter by platform"
