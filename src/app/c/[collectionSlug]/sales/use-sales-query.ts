@@ -9,6 +9,8 @@ import type {
 } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
 import type { SaleStatus } from "@/lib/sale-status";
+import type { SaleSearchField } from "@/lib/sale-search-fields";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -30,6 +32,8 @@ export interface SaleFilters {
   statuses?: SaleStatus[];
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
+  /** The fields `search` matches (#2243), sent only when it narrows — absent is every field. */
+  searchFields?: SaleSearchField[];
   /** Only sales holding a line whose set nobody has chosen yet (#697). */
   setChoicePending?: boolean;
   /** Only sales carrying the *to review* marker (#1948). */
@@ -52,6 +56,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       if (filters.buyerId) params.set("buyerId", filters.buyerId);
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.setChoicePending) params.set("setChoice", "1");
       if (filters.toReview) params.set("toReview", "1");
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);

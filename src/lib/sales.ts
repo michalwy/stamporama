@@ -136,6 +136,7 @@ export class SaleActionBlockedError extends Error {
 // client UI can share them; re-exported here for existing server-side importers.
 export { SALE_STATUS_ORDER, isSaleStatus, type SaleStatus } from "./sale-status";
 import { isSaleSent, isSaleStatus, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
+import { SALE_SEARCH_FIELD_KEYS, type SaleSearchField } from "./sale-search-fields";
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
@@ -2022,6 +2023,9 @@ export interface SaleListFilters {
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
   search?: string;
+  /** The fields `search` matches (#2243) — absent is every field. Only the Sales list's own box sends
+   * it; the agent API's `list_sales` keeps searching them all. */
+  searchFields?: readonly SaleSearchField[];
   /** Narrow to sales holding at least one line whose set nobody has chosen yet (#697). A **boolean
    * rather than a chip among the statuses**: it is not a place in the fulfilment lifecycle but a
    * decision outstanding *inside* a sale, and a sale can be waiting on it in any status. Absent is
@@ -2047,21 +2051,27 @@ export interface PaginatedSalesResult {
 }
 
 /** The `where` fragment for the sales-list free-text search (#193): buyer name, platform name, the
- * external reference, or any sold copy's stamp name / catalog number. Case-insensitive substring. */
-function saleSearchWhere(search: string): Prisma.SaleWhereInput {
+ * external reference, or any sold copy's stamp name / catalog number. Case-insensitive substring.
+ * `fields` narrows it to the branches ticked beside the box (#2243); absent is every one. */
+function saleSearchWhere(
+  search: string,
+  fields: readonly SaleSearchField[] = SALE_SEARCH_FIELD_KEYS
+): Prisma.SaleWhereInput {
   const s = search.trim();
-  const stampMatch = {
-    OR: [
-      { name: { contains: s, mode: "insensitive" as const } },
-      { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" as const } } } },
-    ],
-  };
+  const ticked = new Set(fields);
+  const contains = { contains: s, mode: "insensitive" as const };
+  const stampMatch: Prisma.StampWhereInput[] = [
+    ...(ticked.has("stampName") ? [{ name: contains }] : []),
+    ...(ticked.has("catalogNumber") ? [{ catalogNumbers: { some: { number: contains } } }] : []),
+  ];
   return {
     OR: [
-      { externalRef: { contains: s, mode: "insensitive" } },
-      { platform: { name: { contains: s, mode: "insensitive" } } },
-      { buyer: { name: { contains: s, mode: "insensitive" } } },
-      { lines: { some: { items: { some: { item: { stamp: stampMatch } } } } } },
+      ...(ticked.has("orderNumber") ? [{ externalRef: contains }] : []),
+      ...(ticked.has("platform") ? [{ platform: { name: contains } }] : []),
+      ...(ticked.has("buyer") ? [{ buyer: { name: contains } }] : []),
+      ...(stampMatch.length
+        ? [{ lines: { some: { items: { some: { item: { stamp: { OR: stampMatch } } } } } } }]
+        : []),
     ],
   };
 }
@@ -2074,7 +2084,7 @@ function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.S
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
     ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
-    ...(filters.search ? saleSearchWhere(filters.search) : {}),
+    ...(filters.search ? saleSearchWhere(filters.search, filters.searchFields) : {}),
     // One line is enough to put the sale on the list (#697): the collector is looking for parcels
     // that cannot be packed yet, and one undecided line stops the parcel.
     ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
