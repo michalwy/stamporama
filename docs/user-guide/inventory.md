@@ -109,7 +109,8 @@ that is filtering the list.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, subtype, certificate,
-location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the
+location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box, though not the fields beside the box that it
+searches. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It is only there to click while something is actually
 filtering, but its place on the row is held either way, so the first filter you switch on does not
 shunt the rest of the bar sideways.
@@ -159,6 +160,20 @@ right, from *which copies* to *how they are shown*.
   empty list says so, with **Show it** to clear every filter — the area and the year included — and,
   for a copy that was sold, traded away or written off, to switch on the *Include* that shows it.
   When the collection has no such copy, the list says that instead.
+
+  **Beside the box, a control picks which fields it searches**: *Stamp name*, *Issue name*,
+  *Catalogue number*, *Location ref* and *Copy number*. All are ticked to begin with, and the
+  control reads **All fields**; untick the ones you do not mean and the box matches only what is
+  left — with only *Location ref* ticked, `A038` finds the copies filed under `A038` and not a
+  stamp or catalogue number that happens to contain the same characters. **All fields** at the top
+  of its list ticks them all again. One field always stays ticked. While the search is narrowed the
+  control is drawn in the accent colour and names the one field ticked, or how many are
+  (*2 fields*), so a search that finds nothing because of it shows why at a glance. `#123` is still
+  the copy's number whatever is ticked, and a catalogue number typed with a vendor prefix is still
+  narrowed to that vendor within *Catalogue number*. The choice is remembered for this list in each
+  collection, and **Reset filters** leaves it as it is: it is how the box reads what you type, not a
+  filter on the copies. Other ways into the same search — the copy pickers and quick-jump — keep
+  searching every field.
 - **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
   that have **no offer** on it yet — your worklist of what still needs listing there. A copy
   already listed on a *different* platform still shows up, since the same copy can be offered on

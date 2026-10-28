@@ -5,6 +5,7 @@ import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
+import { SEARCH_FIELDS_WIDTH } from "./search-fields-control";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,9 @@ export interface ListToolbarProps {
   /** The search box's placeholder — the one line of help a list's search gets (the Copies list names
    *  `#123`, #2136). `Search...` when absent. */
   searchPlaceholder?: string;
+  /** The fields the search box matches, ticked beside it (#2238) — a `SearchFieldsControl`. Held
+   *  to the box so the row never wraps between the two; the box keeps `searchMaxWidth` of its own. */
+  searchFields?: React.ReactNode;
   /** The **grouped** bar (#2086), the Issues list's: given `filters` or `view`, the row is drawn as
    * four groups in a fixed order — the search; the filters (the catalogue search first, then these);
    * the view (the sort control first, then these); and `actions` at the right end. The bar wraps
@@ -209,6 +213,7 @@ export function ListToolbar({
   sortLast = false,
   searchMaxWidth = "20rem",
   searchPlaceholder = "Search...",
+  searchFields,
   actions,
   filters,
   view,
@@ -308,7 +313,7 @@ export function ListToolbar({
       />
     );
 
-  const searchBox = (
+  const searchInput = (
     <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
       <TextInput
         placeholder={searchPlaceholder}
@@ -338,6 +343,25 @@ export function ListToolbar({
         </Tooltip>
       )}
     </div>
+  );
+  // The box and the fields it matches are one unit on the row (#2238): it grows as the box alone
+  // did, up to the box's own cap plus the control's fixed width.
+  const searchBox = searchFields ? (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        flex: "1 1 auto",
+        minWidth: 0,
+        maxWidth: `calc(${searchMaxWidth} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
+      }}
+    >
+      {searchInput}
+      {searchFields}
+    </div>
+  ) : (
+    searchInput
   );
 
   const actionsGroup = actions && (
