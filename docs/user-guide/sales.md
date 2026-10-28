@@ -758,6 +758,12 @@ Each **entry** says **when** it was said, the **channel** (*Messenger*, *E-mail*
 **summary**, and optionally a **quote** of what matters word for word (an agreement, an address, an
 amount) and a **link** to where the conversation can be found. Entries are listed newest first.
 
+The direction is shown in colour so you can see who said what without reading each entry: an entry
+**from the buyer** has a **blue** bar down its left edge and a blue *← From the buyer* chip, one **to
+the buyer** a **green** bar and a green *→ To the buyer* chip. A **Note** stays grey, with no bar
+and no arrow. The **Add entry** and edit dialog offers the three directions with the same arrows and
+colours.
+
 - **An entry belongs to the buyer, and only optionally to a sale.** A conversation often covers
   several sales, or happens before there is one. The panel shows **This sale**'s entries; **All with
   this buyer** shows the whole history with them, each entry naming its sale. The same log is on the

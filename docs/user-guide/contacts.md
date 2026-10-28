@@ -170,8 +170,10 @@ first, each naming the sale it is about where it has one — the same panel a
 [sale's screen](sales.md#the-conversation-with-the-buyer) opens, there narrowed to that sale. It
 closes with its **✕** or **Esc**, and if you leave it open it is open on the next contact too. **Add
 entry** records one by hand, and an entry's **⋮** menu edits or deletes it, or attaches files to it
-— see [the conversation with the buyer](sales.md#the-conversation-with-the-buyer). Entries an AI
-assistant wrote are marked *Assistant*.
+— see [the conversation with the buyer](sales.md#the-conversation-with-the-buyer). An entry from
+the contact has a blue left bar and a blue *← From the buyer* chip, one to them a green bar and a
+green *→ To the buyer* chip; a *Note* stays grey. Entries an AI assistant wrote are marked
+*Assistant*.
 
 ## Finding a contact
 
