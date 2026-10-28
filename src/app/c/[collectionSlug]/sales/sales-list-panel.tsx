@@ -17,6 +17,9 @@ import {
 } from "./use-sales-query";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { SALE_SEARCH_FIELDS, SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
 import { SALE_STATUS_ORDER, SALE_STATUS_META } from "./sale-status";
 import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
@@ -111,9 +114,28 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   // combines with the status chips, and it is URL-only, where the bell's group links to it.
   const toReview = searchParams.get("toReview") === "1";
 
+  // The fields that box matches (#2243, on #2238's control), ticked beside it and remembered per
+  // collection — apart from the search itself and outside the URL: it is how the box reads what is
+  // typed, not a narrowing of the sales. Sent only with a search, so an empty box asks the request
+  // it always did.
+  const searchFields = usePersistedSearchFields(
+    "sales-search-fields",
+    collectionId,
+    SALE_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = search ? searchFields.narrowed : undefined;
+
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, buyerId, statuses, search: search || undefined, setChoicePending, toReview }),
-    [platformId, buyerId, statuses, search, setChoicePending, toReview]
+    () => ({
+      platformId,
+      buyerId,
+      statuses,
+      search: search || undefined,
+      searchFields: narrowedSearchFields,
+      setChoicePending,
+      toReview,
+    }),
+    [platformId, buyerId, statuses, search, narrowedSearchFields, setChoicePending, toReview]
   );
 
   // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
@@ -180,14 +202,22 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        {/* Find one sale by who bought it, where, or what was in it (#193). The box keeps its own
-            20rem basis, which is what it had before it became the shared control. */}
+        {/* Find one sale by who bought it, where, or what was in it (#193), in the fields ticked
+            beside the box (#2243). The box keeps its own 20rem basis, which is what it had before it
+            became the shared control. */}
         <ListSearchBox
           value={localSearch}
           onChange={setLocalSearch}
           placeholder="Search buyer, platform, item…"
           label="Search sales"
           width="20rem"
+          searchFields={
+            <SearchFieldsControl
+              fields={SALE_SEARCH_FIELDS}
+              ticked={searchFields.ticked}
+              onChange={searchFields.setTicked}
+            />
+          }
         />
         <select
           aria-label="Filter by platform"

@@ -5,6 +5,7 @@ import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
+import { SEARCH_FIELDS_WIDTH } from "./search-fields-control";
 
 // The free-text search box a server-side list toolbar carries (#193, #465, #484), and the debounce
 // that decides when what was typed becomes a request. Extracted here when the auction screens got
@@ -82,6 +83,9 @@ interface ListSearchBoxProps {
   label: string;
   /** Flex basis, for a toolbar that wraps. */
   width?: string;
+  /** The fields the box matches, ticked beside it (#2238) — a `SearchFieldsControl`. Held to the box
+   *  as `ListToolbar`'s slot holds it, so a wrapping toolbar never parts the two. */
+  searchFields?: React.ReactNode;
 }
 
 /** The box itself: a text input with a clear affordance that appears once there is something to
@@ -93,9 +97,16 @@ export function ListSearchBox({
   placeholder,
   label,
   width = "18rem",
+  searchFields,
 }: ListSearchBoxProps) {
-  return (
-    <div style={{ position: "relative", flex: `0 1 ${width}`, minWidth: "11rem" }}>
+  const box = (
+    <div
+      style={{
+        position: "relative",
+        flex: searchFields ? "1 1 auto" : `0 1 ${width}`,
+        minWidth: "11rem",
+      }}
+    >
       <TextInput
         placeholder={placeholder}
         aria-label={label}
@@ -132,6 +143,22 @@ export function ListSearchBox({
           </button>
         </Tooltip>
       )}
+    </div>
+  );
+  if (!searchFields) return box;
+  // The box keeps its own basis, and the control its fixed width beside it.
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        flex: `0 1 calc(${width} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
+        minWidth: 0,
+      }}
+    >
+      {box}
+      {searchFields}
     </div>
   );
 }

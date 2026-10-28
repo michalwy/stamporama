@@ -931,6 +931,18 @@ so the phrase you left in the box is there again when you next open the screen, 
 its **✕** beside it, ready to be cleared in one click. As with the chips, a search named in the URL
 wins over the remembered one, and clearing the box clears the memory of it.
 
+**Beside the box, a control picks which fields it searches**: *Buyer*, *Platform*, *Order number*,
+*Stamp name* and *Catalogue number* — the last two being the copies sold on the sale. All are
+ticked to begin with, and the control reads **All fields**; untick the ones you do not mean and the
+box matches only what is left — with only *Order number* ticked, a number finds the sale with that
+marketplace order and not a buyer or a stamp that happens to contain the same characters. **All
+fields** at the top of its list ticks them all again. One field always stays ticked. While the
+search is narrowed the control is drawn in the accent colour and names the one field ticked, or how
+many are (*2 fields*), so a search that finds nothing because of it shows why at a glance. The
+choice is remembered for this list in each collection, apart from the phrase itself: clearing the
+box leaves it as it is, and a link to the list does not carry it. It works the same way as on the
+[Copies list](inventory.md).
+
 ## Related
 
 - [Offers](offers.md) — the listings (and their sets) a sale is recorded against.
