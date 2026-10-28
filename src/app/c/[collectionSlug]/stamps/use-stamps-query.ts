@@ -3,6 +3,8 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { StampSearchField } from "@/lib/stamp-search-fields";
 import type { EditablePhotoSummary } from "@/lib/photos";
 import type { AreaFacet } from "@/lib/area-facets";
 import {
@@ -21,6 +23,9 @@ interface StampsPage {
 export interface StampListFilters extends StampAttributeFilters, TagFilterOpts {
   areaIds?: string[];
   search?: string;
+  /** The fields the search box matches, when the collector narrowed it beside the box (#2240);
+   * absent is every field. */
+  searchFields?: StampSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
@@ -40,6 +45,7 @@ export interface StampListFilters extends StampAttributeFilters, TagFilterOpts {
 export interface StampYearFacetFilters extends StampAttributeFilters, TagFilterOpts {
   areaIds?: string[];
   search?: string;
+  searchFields?: StampSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
@@ -49,6 +55,7 @@ export interface StampYearFacetFilters extends StampAttributeFilters, TagFilterO
  *  which is why `year` is in here and out of {@link StampYearFacetFilters}. */
 export interface StampAreaFacetFilters extends StampAttributeFilters, TagFilterOpts {
   search?: string;
+  searchFields?: StampSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
@@ -106,6 +113,7 @@ export function useStampsInfinite(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
@@ -138,6 +146,7 @@ export function useStampYears(
       if (filters.areaIds && filters.areaIds.length > 0)
         params.set("areaIds", filters.areaIds.join(","));
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);
@@ -162,6 +171,7 @@ export function useStampAreaFacets(
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       if (filters.issueId) params.set("issueId", filters.issueId);

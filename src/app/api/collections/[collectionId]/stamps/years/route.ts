@@ -5,6 +5,8 @@ import { listStampYearFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
 
 export async function GET(
   request: NextRequest,
@@ -20,6 +22,8 @@ export async function GET(
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
   const search = readSearchParam(sp);
+  // The fields the search box was narrowed to beside it (#2240); absent is every field.
+  const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), STAMP_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
@@ -28,6 +32,7 @@ export async function GET(
     const years = await listStampYearFacets(session.user.id, collectionId, {
       areaIds,
       search,
+      searchFields,
       catalogVendorId,
       catalogNumber,
       issueId,
