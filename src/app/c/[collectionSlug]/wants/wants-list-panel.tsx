@@ -33,6 +33,9 @@ import {
 import { useInvalidateWantSignals } from "./use-invalidate-want-signals";
 import { WantIssueGroupRow } from "./want-issue-group-row";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { WANT_SEARCH_FIELDS, WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
 import { WantFormDialog } from "./want-form-dialog";
 import { useToast } from "@/app/toast-provider";
 import { WantRow, type WantDictionaries } from "./want-row";
@@ -168,6 +171,15 @@ export function WantsListPanel({
   );
   const searchCatalogNumber = (searchText && parsedSearch.number) || undefined;
   const searchCatalogVendorId = (searchCatalogNumber && parsedSearch.vendorId) || undefined;
+  // The fields that box matches (#2241, #2238's control), ticked beside it and remembered per
+  // collection, though nothing else on this toolbar is. Sent only with a search, so an empty box asks
+  // the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "wants-search-fields",
+    collectionId,
+    WANT_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = searchText ? searchFields.narrowed : undefined;
 
   /**
    * Everything the year facets are counted against — that is, every filter *except* the year, so a
@@ -184,9 +196,10 @@ export function WantsListPanel({
       search: searchText || undefined,
       searchCatalogNumber,
       searchCatalogVendorId,
+      searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, stampId]
+    [status, priorities, conditionIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
   );
   const listFilters: WantListFilters = useMemo(
     () => ({ ...facetFilters, year: year || undefined }),
@@ -210,9 +223,10 @@ export function WantsListPanel({
       search: searchText || undefined,
       searchCatalogNumber,
       searchCatalogVendorId,
+      searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, stampId]
+    [status, priorities, conditionIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
   );
   const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
 
@@ -383,13 +397,21 @@ export function WantsListPanel({
           </span>
         )}
 
-        <TextInput
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by catalog no., name, issue or note…"
-          style={{ ...FILTER_CONTROL_STYLE, width: "18rem" }}
-        />
+        {/* The box and the fields it matches (#2241) are one unit, so the row never wraps between them. */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          <TextInput
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by catalog no., name, issue or note…"
+            style={{ ...FILTER_CONTROL_STYLE, width: "18rem" }}
+          />
+          <SearchFieldsControl
+            fields={WANT_SEARCH_FIELDS}
+            ticked={searchFields.ticked}
+            onChange={searchFields.setTicked}
+          />
+        </div>
 
         <div style={{ display: "flex", gap: "0.375rem" }}>
           {STATUS_OPTIONS.map(({ key, label }) => {

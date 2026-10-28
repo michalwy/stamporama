@@ -26,6 +26,7 @@ import {
 import { childIsVariant, isUnknownVariantStamp } from "./variant-classification";
 import { loadChecklistVariantRollup, loadVariantChains } from "./checklist-variant-rollup";
 import { wantDepthTargets, type WantDepth, type WantDepthTree } from "./want-depth-rules";
+import type { WantSearchField } from "./want-search-fields";
 import {
   wantMatchesCopy,
   acceptanceSetsEqual,
@@ -352,6 +353,9 @@ export interface WantListFilters {
    *  `search`, which they widen and never replace. */
   searchCatalogNumber?: string;
   searchCatalogVendorId?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it beside the Want list's
+   *  box (#2241); absent is every field. Only that box sends it. */
+  searchFields?: WantSearchField[];
   offset?: number;
   pageSize?: number;
 }
@@ -410,29 +414,35 @@ function buildWantListWhere(
   const text = filters.search?.trim();
   if (text) {
     const contains = { contains: text, mode: "insensitive" as const };
-    const or: Prisma.WantWhereInput[] = [
-      { notes: contains },
-      { stamp: { name: contains } },
-      { stamp: { catalogNumbers: { some: { number: contains } } } },
-      { stamp: { issueMemberships: { some: { issue: { name: contains } } } } },
-    ];
-    // Prefixed catalog numbers (#1261), on the Issues list's quick-search rule (#289): the raw text
-    // of `Mi SU 3637` is never a substring of a stored `3637`, so the number parsed out of it — and
-    // the vendor, when its abbreviation led — is matched as well. `contains`, like the rest of the
-    // search, so `Fi BL31` still reaches a stored `BL31`.
-    if (filters.searchCatalogNumber) {
-      or.push({
-        stamp: {
-          catalogNumbers: {
-            some: {
-              number: { contains: filters.searchCatalogNumber, mode: "insensitive" },
-              ...(filters.searchCatalogVendorId
-                ? { catalogVendorId: filters.searchCatalogVendorId }
-                : {}),
+    // The fields the collector ticked beside the box (#2241); absent is every one.
+    const ticked = filters.searchFields ? new Set(filters.searchFields) : null;
+    const on = (field: WantSearchField) => !ticked || ticked.has(field);
+    const or: Prisma.WantWhereInput[] = [];
+    if (on("note")) or.push({ notes: contains });
+    if (on("stampName")) or.push({ stamp: { name: contains } });
+    if (on("catalogNumber")) {
+      or.push({ stamp: { catalogNumbers: { some: { number: contains } } } });
+      // Prefixed catalog numbers (#1261), on the Issues list's quick-search rule (#289): the raw text
+      // of `Mi SU 3637` is never a substring of a stored `3637`, so the number parsed out of it — and
+      // the vendor, when its abbreviation led — is matched as well. `contains`, like the rest of the
+      // search, so `Fi BL31` still reaches a stored `BL31`.
+      if (filters.searchCatalogNumber) {
+        or.push({
+          stamp: {
+            catalogNumbers: {
+              some: {
+                number: { contains: filters.searchCatalogNumber, mode: "insensitive" },
+                ...(filters.searchCatalogVendorId
+                  ? { catalogVendorId: filters.searchCatalogVendorId }
+                  : {}),
+              },
             },
           },
-        },
-      });
+        });
+      }
+    }
+    if (on("issueName")) {
+      or.push({ stamp: { issueMemberships: { some: { issue: { name: contains } } } } });
     }
     // ANDed with the condition `OR` above rather than merged into it — two independent questions,
     // and one `OR` array holding both would make either alone enough to match.
