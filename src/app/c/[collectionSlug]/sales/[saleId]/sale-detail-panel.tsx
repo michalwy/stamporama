@@ -51,6 +51,7 @@ import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
 import { MoveSaleSetsDialog } from "./move-sale-sets-dialog";
 import { saleMoveSourceRefusal } from "@/lib/sale-move-rules";
+import { soldUnitsSummary } from "@/lib/sold-units-summary";
 import { saleLineHeading } from "@/lib/sale-line-name";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
@@ -187,6 +188,8 @@ export function SaleDetailPanel({
   // suggestion only — the collector advances the status manually; it never changes on its own.
   const packedIdx = SALE_STATUS_ORDER.indexOf("packed");
   const showPackedHint = sale.allItemsPacked && statusIdx >= 0 && statusIdx < packedIdx;
+  // The Sold units heading's figures (#2231), refreshed with the sale on every pack, add, remove and move.
+  const soldSummary = soldUnitsSummary(sale.lines, sale.unpackedItemCount);
 
   /**
    * The other direction of the same fact (#973): the sale is being moved to `packed` **or past
@@ -825,11 +828,17 @@ export function SaleDetailPanel({
         clearError={() => setError(undefined)}
       />
 
-      {/* Sold units */}
+      {/* Sold units, with the whole sale's sets, copies and packed copies (#2231) — read off the
+          sale rather than the list below, so the toolbar's filters do not narrow them. */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Sold units
-        </h3>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+          <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Sold units
+          </h3>
+          {soldSummary && (
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>· {soldSummary}</span>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {/* Copies that were never listed (#2021): one set with its own price, no offer made. */}
           <Tooltip content="Sell copies that are on no offer — picked from stock, they become one set on this sale with the price you type">
