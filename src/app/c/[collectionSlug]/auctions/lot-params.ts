@@ -2,6 +2,7 @@ import type { AuctionClosingWindow } from "@/lib/auctions";
 import type { LotSignal } from "@/lib/auction-lot";
 import type { AuctionLotOutcome } from "@/lib/auction-rules";
 import { DEFAULT_TAG_FILTER_MODE, type TagFilterMode } from "@/lib/tag-filter";
+import type { AuctionLotSearchField } from "@/lib/auction-lot-search-fields";
 
 /**
  * What the lot list is narrowed to, as the client holds it (#351/#352). A mirror of the server-side
@@ -29,6 +30,9 @@ export interface AuctionLotFilters {
   notPurchased?: boolean;
   /** Free-text search over the lot, its notes and the sale it belongs to (#484). */
   search?: string;
+  /** The fields {@link search} matches, when the collector narrowed it beside the box (#2244);
+   * absent is every field. Only sent with a search. */
+  searchFields?: AuctionLotSearchField[];
   sellerId?: string;
   platformId?: string;
   /** The collector's own labels (#1625) — `tag-filter.ts`' two fields, under its own param names. */
@@ -59,6 +63,8 @@ const LOT_PARAM: {
   toReview: () => "1",
   notPurchased: () => "1",
   search: (value) => value,
+  // `SEARCH_FIELDS_PARAM`, the name every list's routes read the choice under (#2238).
+  searchFields: (value) => value.join(","),
   sellerId: (value) => value,
   platformId: (value) => value,
   // `tag-filter.ts`' own spelling — `appendTagFilterParams` writes the same two keys the same way —
@@ -138,6 +144,9 @@ const LOT_NARROWS: {
   notPurchased: () => "1",
   // A blank-but-present search narrows nothing, and the box routinely holds one mid-edit.
   search: (value) => (value.trim() ? value : null),
+  // How the box reads what is typed (#2244), not a narrowing of the rows: remembered apart from the
+  // filters, so neither the band nor *Clear filters* names it.
+  searchFields: null,
   sellerId: (value) => value,
   platformId: (value) => value,
   // The ids narrow; the mode only qualifies them, so the band names it inside the tags' own label

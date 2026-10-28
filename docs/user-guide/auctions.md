@@ -577,8 +577,21 @@ Finally:
 
 - The **search box** at the head of the toolbar, for when you already know which lot you want: it
   matches the lot's title and notes, the house's lot number, the listing address, the lot's own
-  number (`12` or `#12`), and the sale, seller or platform it belongs to. It composes with every
-  chip beside it, so a search inside *Can still bid* stays inside it.
+  number (`12`), and the sale, seller or platform it belongs to. `#12` is the lot numbered 12 and
+  nothing else. It composes with every chip beside it, so a search inside *Can still bid* stays
+  inside it.
+
+  **Beside the box, a control picks which fields it searches**: *Title and notes*, *House lot
+  number*, *Listing address*, *Lot number* and *Sale, seller, platform*. All are ticked to begin
+  with, and the control reads **All fields**; untick the ones you do not mean and the box matches
+  only what is left — with only *Listing address* ticked, `allegro` finds the lots whose address is
+  on Allegro and not every lot of a sale on the Allegro platform. **All fields** at the top of its
+  list ticks them all again. One field always stays ticked. While the search is narrowed the
+  control is drawn in the accent colour and names the one field ticked, or how many are
+  (*2 fields*), so a search that finds nothing because of it shows why at a glance. `#12` is still
+  the lot numbered 12 whatever is ticked. The choice is remembered for this list in each
+  collection, and **Clear filters** leaves it as it is: it is how the box reads what you type, not
+  a filter on the lots.
 - **Seller** and **platform** selects, so "everything I have running on Allegro right now" is one
   filter rather than a walk through parcels. Every option carries a count, and — like the chips —
   each says how many lots *choosing it* would show rather than how many are on screen now. So
@@ -614,7 +627,7 @@ Whenever anything is narrowing the list, a line appears under the toolbar:
 It says how much is being hidden, names each filter in the words of the control that set it — so you
 can find the control and switch that one off — and **Clear filters** puts the whole watchlist back in
 one press. It clears the search box and **Show closed** along with everything else; **Group by sale**
-is left as it is, because that is how the rows are arranged rather than which lots are in them.
+and the fields the search box matches are left as they are, because that is how the rows are arranged rather than which lots are in them.
 
 **Show closed** is never named in that line. It shows you *more* lots rather than fewer, so there is
 nothing being hidden for it to warn you about.
