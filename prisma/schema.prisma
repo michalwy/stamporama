@@ -7358,9 +7358,12 @@ model Location {
   id           String   @id @default(cuid())
   collectionId String
   name         String
-  // A short label standing in for the whole path where the path is too long or too private to
-  // print (#2191): up to six letters and digits, stored upper-cased, unique within the collection.
-  // Generated from the path when none is given (`src/lib/location-code.ts`), then the collector's.
+  // This level's code (#2191, per level since #2235): any text without a dot, kept as typed. The
+  // location's full code is its levels' codes joined with dots (`A.B.C.1`), built where it is shown
+  // (`src/lib/location-code.ts`), and stands in for the path where the path is too long or too
+  // private to print. Unique among its siblings regardless of case, by a raw
+  // `UNIQUE ("collectionId", "parentId", lower("code")) NULLS NOT DISTINCT` index (see migration)
+  // that Prisma cannot express.
   code         String
   parentId     String?
   description  String?
@@ -7377,7 +7380,6 @@ model Location {
   children   Location[] @relation("LocationChildren")
   items      Item[]
 
-  @@unique([collectionId, code])
   @@index([collectionId])
   @@map("location")
 }

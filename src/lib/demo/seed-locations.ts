@@ -61,30 +61,26 @@ export async function seedLocations(
   const rng = mulberry32(0x4c4f_4341);
 
   const assignableIds: string[] = [];
-  // Codes the way the Locations screen would have proposed them (#2191).
-  const codes = new Set<string>();
+  // Level codes the way the Locations screen would have proposed them, free among siblings (#2235).
+  const siblingCodes = new Map<string | null, string[]>();
 
-  async function insertNode(
-    node: LocationNode,
-    parentId: string | null,
-    parentPath: string[]
-  ): Promise<void> {
+  async function insertNode(node: LocationNode, parentId: string | null): Promise<void> {
     const assignable = node.assignable ?? true;
-    const path = [...parentPath, node.name];
-    const code = suggestLocationCode(path, codes);
-    codes.add(code);
+    const siblings = siblingCodes.get(parentId) ?? [];
+    const code = suggestLocationCode(node.name, siblings);
+    siblingCodes.set(parentId, [...siblings, code]);
     const location = await tx.location.create({
       data: { collectionId, name: node.name, code, parentId, assignable },
       select: { id: true },
     });
     if (assignable) assignableIds.push(location.id);
     for (const child of node.children ?? []) {
-      await insertNode(child, location.id, path);
+      await insertNode(child, location.id);
     }
   }
 
   for (const root of TREE) {
-    await insertNode(root, null, []);
+    await insertNode(root, null);
   }
 
   if (assignableIds.length === 0) return;

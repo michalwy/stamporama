@@ -26,8 +26,9 @@ import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/ce
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { buildLocationPath } from "@/lib/location-path";
 import {
-  LOCATION_CODE_MAX_LENGTH,
-  locationPathNames,
+  joinLocationCode,
+  locationCodeProblem,
+  locationCodeSibling,
   normalizeLocationCode,
   suggestLocationCode,
 } from "@/lib/location-code";
@@ -80,7 +81,8 @@ const badgeStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-// The code beside a location's name (#2191), drawn the way it will be printed so it can be learnt.
+// The full code beside a location's name (#2191, #2235), drawn the way it will be printed so it can
+// be learnt.
 const codeStyle: React.CSSProperties = {
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
   fontSize: "0.8125rem",
@@ -93,7 +95,8 @@ const codeStyle: React.CSSProperties = {
 
 interface LocationFormProps {
   defaultName?: string;
-  /** The saved code when editing; absent when adding, where the field proposes one (#2191). */
+  /** The level's saved code when editing; absent when adding, where the field proposes one from the
+   * name (#2235). */
   defaultCode?: string;
   defaultParentId?: string | null;
   defaultDescription?: string | null;
@@ -137,8 +140,10 @@ function LocationForm({
   const [parentId, setParentId] = useState(defaultParentId ?? "");
   const [name, setName] = useState(defaultName ?? "");
 
-  // A new location is offered the code its path would be given, following the name and the parent
-  // until the collector types one of their own; an existing one keeps its code (#2191).
+  // The field holds this level's code only (#2235). A new location is offered one from its own name,
+  // free among the siblings under the chosen parent, following the name and the parent until the
+  // collector types one of their own; an existing one keeps its code. The full code it makes is
+  // shown under it, and follows the parent too.
   const others = useMemo(
     () => locations.filter((l) => l.id !== currentLocationId),
     [locations, currentLocationId]
@@ -146,17 +151,24 @@ function LocationForm({
   const suggestedCode = useMemo(
     () =>
       suggestLocationCode(
-        locationPathNames(others, parentId || null, name),
-        new Set(others.map((l) => l.code))
+        name,
+        others.filter((l) => l.parentId === (parentId || null)).map((l) => l.code)
       ),
     [others, parentId, name]
   );
   const [typedCode, setTypedCode] = useState<string | null>(defaultCode ?? null);
   const code = typedCode ?? suggestedCode;
-  const holder = others.find((l) => l.code === normalizeLocationCode(code));
+  const normalizedCode = normalizeLocationCode(code);
+  const holder =
+    normalizedCode === ""
+      ? undefined
+      : locationCodeSibling(others, parentId || null, normalizedCode);
   const codeError = holder
     ? `Used by ${buildLocationPath(locations, holder.id) ?? holder.name}`
-    : undefined;
+    : normalizedCode === ""
+      ? undefined
+      : (locationCodeProblem(normalizedCode) ?? undefined);
+  const fullCode = joinLocationCode(others, parentId || null, normalizedCode);
 
   return (
     <>
@@ -182,16 +194,24 @@ function LocationForm({
             id="f-location-code"
             name="code"
             value={code}
-            onChange={(e) => setTypedCode(e.target.value.toUpperCase())}
+            onChange={(e) => setTypedCode(e.target.value)}
             disabled={isPending}
-            maxLength={LOCATION_CODE_MAX_LENGTH}
-            pattern="[A-Za-z0-9]+"
             autoComplete="off"
             style={{ ...INPUT_STYLE, ...codeStyle, fontSize: "0.875rem" }}
             required
           />
         </div>
       </div>
+      <p
+        style={{
+          margin: "-0.5rem 0 1rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-muted)",
+          textAlign: "right",
+        }}
+      >
+        Full code <span style={codeStyle}>{fullCode}</span>
+      </p>
 
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-location-parent-button">Parent location</LabelWithError>
@@ -432,7 +452,7 @@ export function LocationsPanel({
                 {location.name}
               </span>
 
-              <span style={codeStyle}>{location.code}</span>
+              <span style={codeStyle}>{location.fullCode}</span>
 
               {!location.assignable && <span style={badgeStyle}>Grouping</span>}
 

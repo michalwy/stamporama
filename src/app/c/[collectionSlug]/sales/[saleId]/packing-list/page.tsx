@@ -56,8 +56,8 @@ function formatDate(d: Date): string {
  * sale detail screen. Both divisions are built here and the sheet's switch only picks one, so
  * switching is not a round trip. App chrome (`.no-print`) drops out on paper.
  *
- * Locations print as their short codes (#2192): the sheet goes into the parcel, and the paths are
- * the collector's own storage names. They are explained by a legend shown above the sheet and
+ * Locations print as their full codes (#2192, #2235): the sheet goes into the parcel, and the paths
+ * are the collector's own storage names. They are explained by a legend shown above the sheet and
  * printed on its own (`PrintButton`'s `part`), never with the sheet.
  */
 export default async function PackingListPage({ params }: PackingListPageProps) {
