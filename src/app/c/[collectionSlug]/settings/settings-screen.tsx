@@ -787,7 +787,6 @@ function SettingsEntryBody({
       return (
         <CollectionSettingsPanel
           collectionId={collectionId}
-          collectionName={collectionName}
           baseCurrency={baseCurrency}
           defaultLanguage={defaultLanguage}
           homeMarket={homeMarket}

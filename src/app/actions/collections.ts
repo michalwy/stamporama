@@ -6,7 +6,6 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   createCollection,
-  resetCollectionToDemo,
   setCollectionBidPercents,
   setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
@@ -58,25 +57,6 @@ export async function createCollectionAction(
   }
 
   redirect(`/c/${slug}`);
-}
-
-export type ResetToDemoState =
-  | { status: "idle" }
-  | { status: "success" }
-  | { status: "error"; message: string };
-
-export async function resetToDemoDataAction(
-  collectionId: string
-): Promise<ResetToDemoState> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect(await signInPath());
-
-  try {
-    await resetCollectionToDemo(session.user.id, collectionId);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Reset failed. Please try again." };
-  }
 }
 
 export type DefaultLanguageState =
