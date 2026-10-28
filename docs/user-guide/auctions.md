@@ -672,7 +672,19 @@ sale's own screen shows every lot in the parcel, closed ones included.
 **Auctions → Sales** in the sidebar lists the settlements. Its toolbar carries a **search box** —
 over the sale's name, its catalogue URL and the seller or platform it is with — and the status
 chips; both are remembered per collection and travel in the address bar, exactly as the lot list's
-filters do, so coming back to the screen finds it as you left it. Each row shows the parcel's **all-in total**:
+filters do, so coming back to the screen finds it as you left it.
+
+**Beside the box, a control picks which fields it searches**: *Sale name*, *Catalogue URL*, *Seller*
+and *Platform*. All are ticked to begin with, and the control reads **All fields**; untick the ones
+you do not mean and the box matches only what is left — with only *Seller* ticked, `Gärtner` finds
+the house's sales and not a platform or a sale name that happens to say the same. **All fields** at
+the top of its list ticks them all again, and one field always stays ticked. While the search is
+narrowed the control is drawn in the accent colour and names the one field ticked, or how many are
+(*2 fields*). The choice is remembered for this list in each collection, apart from the search and
+the status chips, and is not carried in the address bar: it is how the box reads what you type, not
+a filter on the sales. It works as the [Copies list's](inventory.md) does.
+
+Each row shows the parcel's **all-in total**:
 every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus
 shipping once. Lots you lost, watched or cancelled cost nothing and are left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping

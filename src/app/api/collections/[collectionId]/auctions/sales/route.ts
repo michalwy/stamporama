@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { listAuctionSales } from "@/lib/auctions";
 import { isAuctionSaleStatus } from "@/lib/auction-rules";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { AUCTION_SALE_SEARCH_FIELD_KEYS } from "@/lib/auction-sale-search-fields";
 
 // Every auction sale with its parcel totals — the settlement list. Unpaginated by design: a sale is
 // one parcel from one seller, and the screen answers "what do I owe whom".
@@ -24,6 +26,8 @@ export async function GET(
     const items = await listAuctionSales(session.user.id, collectionId, {
       status: statusParam && isAuctionSaleStatus(statusParam) ? statusParam : undefined,
       search: readSearchParam(sp),
+      // The fields the search box was narrowed to beside it (#2245); absent is every field.
+      searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), AUCTION_SALE_SEARCH_FIELD_KEYS),
     });
     return NextResponse.json({ items });
   } catch {

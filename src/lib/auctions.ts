@@ -44,6 +44,10 @@ import type { BaseCurrency } from "./currencies";
 import { allocateEntityNumber, allocateItemNumbers } from "./items";
 import { createLeadingEntriesTx } from "./item-stamps";
 import { parseEntityNoSearch } from "./quick-jump";
+import {
+  AUCTION_SALE_SEARCH_FIELD_KEYS,
+  type AuctionSaleSearchField,
+} from "./auction-sale-search-fields";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE, captureModuleRules } from "./platform-modules";
@@ -1754,16 +1758,28 @@ export interface AuctionSaleListFilters {
    * seller / platform it is with — which, for a marketplace basket whose name is derived from the
    * pair, is the same two words either way. */
   search?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it beside the box (#2245);
+   * absent is every field. Only the Sales list's box sends it. */
+  searchFields?: AuctionSaleSearchField[];
 }
 
 /** The `where` fragment for the sale list's search box (#484). Case-insensitive substring over the
- * sale's own name and URL and the two parties on it. A sale's identifier is part of its name
- * (there is no separate sale-number column), so `Köhler 385` is found by either half. */
-function saleSearchWhere(search: string): Prisma.AuctionSaleWhereInput {
+ * sale's own name and URL and the two parties on it — or over those of them ticked beside the box
+ * (#2245). A sale's identifier is part of its name (there is no separate sale-number column), so
+ * `Köhler 385` is found by either half. */
+function saleSearchWhere(
+  search: string,
+  fields?: readonly AuctionSaleSearchField[]
+): Prisma.AuctionSaleWhereInput {
   const text = { contains: search.trim(), mode: "insensitive" as const };
-  return {
-    OR: [{ name: text }, { url: text }, { seller: { name: text } }, { platform: { name: text } }],
+  const branches: Record<AuctionSaleSearchField, Prisma.AuctionSaleWhereInput> = {
+    name: { name: text },
+    url: { url: text },
+    seller: { seller: { name: text } },
+    platform: { platform: { name: text } },
   };
+  const ticked = fields && fields.length > 0 ? fields : AUCTION_SALE_SEARCH_FIELD_KEYS;
+  return { OR: ticked.map((field) => branches[field]) };
 }
 
 /** Every sale, newest first, each with its parcel totals — the settlement list. Unpaginated: a sale
@@ -1779,7 +1795,7 @@ export async function listAuctionSales(
     where: {
       collectionId,
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.search?.trim() ? saleSearchWhere(filters.search) : {}),
+      ...(filters.search?.trim() ? saleSearchWhere(filters.search, filters.searchFields) : {}),
     },
     orderBy: { createdAt: "desc" },
     select: SALE_SELECT,

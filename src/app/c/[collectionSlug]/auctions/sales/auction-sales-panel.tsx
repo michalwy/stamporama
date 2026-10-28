@@ -9,6 +9,12 @@ import {
   ListSearchBox,
   useDebouncedSearch,
 } from "@/app/c/[collectionSlug]/shared/list-search-box";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import {
+  AUCTION_SALE_SEARCH_FIELDS,
+  AUCTION_SALE_SEARCH_FIELD_KEYS,
+} from "@/lib/auction-sale-search-fields";
 import {
   AUCTION_SALE_STATUSES,
   AUCTION_SALE_STATUS_LABEL,
@@ -65,6 +71,14 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
     : (storedStatus ?? "");
   const status = isAuctionSaleStatus(statusRaw) ? statusRaw : undefined;
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
+  // The fields that box matches (#2245), ticked beside it and remembered per collection — apart from
+  // the search and the status, and outside the URL: it is how the box reads what is typed, not a
+  // filter. Sent only with a search, so an empty box asks the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "auction-sale-search-fields",
+    collectionId,
+    AUCTION_SALE_SEARCH_FIELD_KEYS
+  );
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -87,7 +101,8 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
   const { data: sales = [], isLoading } = useAuctionSales(
     collectionId,
     status,
-    search || undefined
+    search || undefined,
+    search ? searchFields.narrowed : undefined
   );
 
   function closeDialog() {
@@ -130,6 +145,13 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
             placeholder="Search sale, seller, platform…"
             label="Search sales"
             width="16rem"
+          />
+          {/* The fields that box matches (#2245) — beside it, in this half's `nowrap` row, so the
+              two never part. */}
+          <SearchFieldsControl
+            fields={AUCTION_SALE_SEARCH_FIELDS}
+            ticked={searchFields.ticked}
+            onChange={searchFields.setTicked}
           />
           <span
             style={{
