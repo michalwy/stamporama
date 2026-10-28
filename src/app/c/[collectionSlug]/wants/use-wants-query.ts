@@ -4,6 +4,8 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import type { WantIssueGroupRow, WantListItem, WantYearFacet } from "@/lib/wants";
 import type { WantPriority } from "@/lib/want-rules";
 import type { AreaFacet } from "@/lib/area-facets";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { WantSearchField } from "@/lib/want-search-fields";
 
 interface WantsPage {
   items: WantListItem[];
@@ -29,6 +31,9 @@ export interface WantListFilters {
    *  its abbreviation led. Sent beside the text, which the server still matches as typed. */
   searchCatalogNumber?: string;
   searchCatalogVendorId?: string;
+  /** The fields the search box matches, when the collector narrowed it beside the box (#2241);
+   *  absent is every field. */
+  searchFields?: WantSearchField[];
 }
 
 /** The filters the year facets are counted against — everything except the year itself. */
@@ -66,6 +71,7 @@ function toParams(filters: WantListFilters): URLSearchParams {
   if (filters.searchCatalogVendorId) {
     params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
   }
+  if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
   return params;
 }
 

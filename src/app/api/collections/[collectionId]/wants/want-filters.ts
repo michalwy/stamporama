@@ -1,5 +1,7 @@
 import { isWantPriority, type WantListFilters, type WantPriority } from "@/lib/wants";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
 
 // One parser for the list route and the year-facet route beside it (#532). Shared so a facet can
 // never be counted against a different question than the page it sits next to — the two routes
@@ -31,6 +33,8 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     search: readSearchParam(params),
     searchCatalogNumber: params.get("searchCatalogNumber") ?? undefined,
     searchCatalogVendorId: params.get("searchCatalogVendorId") ?? undefined,
+    // The fields the search box was narrowed to beside it (#2241); absent is every field.
+    searchFields: parseSearchFields(params.get(SEARCH_FIELDS_PARAM), WANT_SEARCH_FIELD_KEYS),
     // A junk offset is page one, not an error: the parameter is ours, and a 400 here would break
     // scrolling over something nobody typed.
     offset: Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0,
