@@ -466,7 +466,16 @@ corrected in one place and every sale it ever carried follows.
 The detail screen doubles as a **packing list**. Each sold set is a collapsible card whose header
 shows the set, its copy count, price, net and [profit](#profit-and-loss). Expanding it shows the
 exact physical copies that left — as full inventory rows with catalog number, condition, and
-**location**, so you can pull each piece to pack it. It works like a purchase order:
+**location**, so you can pull each piece to pack it.
+
+**The Sold units heading counts the whole sale**: how many sets and copies it holds, and how many of
+those copies are packed — *Sold units · 12 sets · 87 copies · 40 packed*, or *all packed* once every
+copy is. A copy is one physical piece, as on a set's card, so a cover with several stamps on it is
+one copy; sets on no offer and sets still to be chosen count like any other. The figures follow you
+as you pack copies and add, remove or move sets, and the **Packed** and **Set** filters below narrow
+the list, never the totals. An empty sale shows no figures.
+
+The list works like a purchase order:
 
 - The primary grouping is **Set** (each sold set its own card, the default), **Location** (a
   section per storage spot — a packing walk-order, so you clear one spot at a time), or neither
