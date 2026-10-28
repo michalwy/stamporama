@@ -5,6 +5,8 @@ import { listStampAreaFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
  *  keeps `year` and drops the area selection, so each row says what selecting it would list. */
@@ -20,6 +22,8 @@ export async function GET(
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
   const search = readSearchParam(sp);
+  // The fields the search box was narrowed to beside it (#2240); absent is every field.
+  const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), STAMP_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
@@ -36,6 +40,7 @@ export async function GET(
   try {
     const areas = await listStampAreaFacets(session.user.id, collectionId, {
       search,
+      searchFields,
       catalogVendorId,
       catalogNumber,
       issueId,

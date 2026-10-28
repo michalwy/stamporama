@@ -83,6 +83,7 @@ import {
 import type { StampSizeFields } from "./stamp-size";
 import { roundAmount } from "./decimal-input";
 import { parseStampNoSearch } from "./quick-jump";
+import type { StampSearchField } from "./stamp-search-fields";
 import type { Prisma } from "@/generated/prisma/client";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
@@ -746,6 +747,9 @@ export interface StampListFilterOpts {
   offset?: number;
   pageSize?: number;
   search?: string;
+  /** The fields {@link search} matches, when the collector has narrowed it (#2240); absent is every
+   * field. Only the Stamps list's box sends it. */
+  searchFields?: StampSearchField[];
   catalogVendorId?: string;
   catalogNumber?: string;
   issueId?: string;
@@ -795,17 +799,22 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
 
   if (opts.search) {
     const s = opts.search;
-    conditions.push({
-      OR: [
-        { name: { contains: s, mode: "insensitive" } },
-        { issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } },
-        { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } },
-        // The two free-text attributes (#71 §6, #737): they get no filter control of their own, so
-        // the search box is how `11½` or `10 gr` is asked for.
-        { denomination: { contains: s, mode: "insensitive" } },
-        { perforation: { contains: s, mode: "insensitive" } },
-      ],
-    });
+    // The fields the collector ticked beside the Stamps list's box (#2240); absent is every one.
+    // Never empty: the control keeps one field ticked and the parser reads none as every field.
+    const ticked = opts.searchFields ? new Set(opts.searchFields) : null;
+    const on = (field: StampSearchField) => !ticked || ticked.has(field);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const or: any[] = [];
+    if (on("stampName")) or.push({ name: { contains: s, mode: "insensitive" } });
+    if (on("issueName"))
+      or.push({ issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } });
+    if (on("catalogNumber"))
+      or.push({ catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } });
+    // The two free-text attributes (#71 §6, #737): they get no filter control of their own, so
+    // the search box is how `11½` or `10 gr` is asked for.
+    if (on("denomination")) or.push({ denomination: { contains: s, mode: "insensitive" } });
+    if (on("perforation")) or.push({ perforation: { contains: s, mode: "insensitive" } });
+    conditions.push({ OR: or });
   }
 
   // The four dictionary attributes (#737). Each set narrows independently and they combine with

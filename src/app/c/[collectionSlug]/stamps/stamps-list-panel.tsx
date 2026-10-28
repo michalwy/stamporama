@@ -19,6 +19,9 @@ import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { STAMP_SEARCH_FIELDS, STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
 import {
   useStampsInfinite,
   useStampYears,
@@ -91,6 +94,15 @@ export function StampsListPanel({
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
   const search = searchParams.get("search") ?? "";
+  // The fields that box matches (#2240, the Copies list's #2238), ticked beside it and remembered
+  // per collection — outside the URL, so a link into the list carries none of it. Sent only with a
+  // search, so an empty box asks the request it always did.
+  const searchFields = usePersistedSearchFields(
+    "stamps-search-fields",
+    collectionId,
+    STAMP_SEARCH_FIELD_KEYS
+  );
+  const narrowedSearchFields = search ? searchFields.narrowed : undefined;
   const { sortBy, sortDir, persistSort } = usePersistedSort<StampSortBy>(
     "stamps", "issueDate", "asc",
     searchParams.get("sortBy"),
@@ -156,6 +168,7 @@ export function StampsListPanel({
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
@@ -167,20 +180,21 @@ export function StampsListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
     () => ({
       areaIds: filterAreaIds,
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
       ...attributeFilters,
       ...tagFilter,
     }),
-    [filterAreaIds, search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter]
+    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
@@ -193,6 +207,7 @@ export function StampsListPanel({
   const areaFacetFilters: StampAreaFacetFilters = useMemo(
     () => ({
       search: search || undefined,
+      searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       issueId: issueId || undefined,
@@ -200,7 +215,7 @@ export function StampsListPanel({
       ...attributeFilters,
       ...tagFilter,
     }),
-    [search, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters, tagFilter]
+    [search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters, tagFilter]
   );
 
   const { data: areaFacets } = useStampAreaFacets(collectionId, areaFacetFilters);
@@ -307,6 +322,14 @@ export function StampsListPanel({
         <ListToolbar
           search={search}
           onSearchChange={(v) => updateParams({ search: v })}
+          /* The fields that box matches (#2240). */
+          searchFields={
+            <SearchFieldsControl
+              fields={STAMP_SEARCH_FIELDS}
+              ticked={searchFields.ticked}
+              onChange={searchFields.setTicked}
+            />
+          }
           sortBy={sortBy}
           sortDir={sortDir}
           onSortChange={(sb, sd) => { persistSort(sb as StampSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}
