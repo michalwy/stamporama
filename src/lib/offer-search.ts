@@ -8,6 +8,8 @@
 // digits — which is also a perfectly good catalog number. Matching either as a bare substring
 // would quietly land on the wrong listing, and a search that does that is worse than none (#431).
 
+import { ENTITY_NO_PREFIX, parseEntityNoSearch } from "./quick-jump";
+
 /** The parts of a search entry that can name a listing's own address.
  *
  * Two of them, because the two ways a collector arrives at one differ. A pasted link is an address
@@ -67,4 +69,15 @@ export function parseOfferAddressSearch(search: string): OfferAddressSearch {
   const lastSegment = path.slice(path.lastIndexOf("/") + 1);
   const trailingDigits = lastSegment.match(/(\d{4,})$/);
   return { address: `${host}${path}`, listingId: trailingDigits ? trailingDigits[1] : null };
+}
+
+/** Read a search entry as **only** an offer's own number — written the way the row prints it,
+ * `#12` — or null when it is not one (#2242).
+ *
+ * The `#` is the collector saying *this is an offer's number*, so the search finds that one offer
+ * and nothing else, whichever fields are ticked beside the box: the Copies list's rule for a copy's
+ * number (#2136). A bare `12` stays ambiguous and keeps matching the number beside the text. */
+export function parseOfferNoOnlySearch(search: string): number | null {
+  if (!search.trim().startsWith(ENTITY_NO_PREFIX)) return null;
+  return parseEntityNoSearch(search);
 }

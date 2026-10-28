@@ -45,6 +45,8 @@ import { lotBuilderSearchParams, type LotBuilderRequest } from "@/lib/lot-builde
 import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
 import type { SeriesRecombinationResult } from "@/lib/series-recombination";
 import type { OfferGeneratorPreview } from "@/lib/offer-generator";
+import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import type { OfferSearchField } from "@/lib/offer-search-fields";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -76,6 +78,9 @@ export interface OfferFilters {
    * and filing refs (#465). Matched server-side — the list is cursor-paginated, so it cannot be a
    * client facet. */
   search?: string;
+  /** The fields the search box matches, when the collector narrowed it beside the box (#2242);
+   * absent is every field. */
+  searchFields?: OfferSearchField[];
   /** Only the lots of one multi-lot Facebook post, by its number (#1842) — what a lot's *Post #N*
    * chip narrows the list to. */
   post?: number;
@@ -142,6 +147,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(`/api/collections/${collectionId}/offers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch offers");
@@ -417,6 +423,7 @@ export function useOfferNeighbours(
       else if (context?.states?.length) params.set("state", context.states.join(","));
       else if (context?.includeClosed) params.set("includeClosed", "1");
       if (context?.search) params.set("search", context.search);
+      if (context?.searchFields) params.set(SEARCH_FIELDS_PARAM, context.searchFields.join(","));
       if (context?.post) params.set("post", String(context.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/neighbours?${params.toString()}`
@@ -447,6 +454,7 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/counts?${params.toString()}`
@@ -475,6 +483,7 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       else if (filters.states?.length) params.set("state", filters.states.join(","));
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
+      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/summary?${params.toString()}`

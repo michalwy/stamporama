@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseOfferAddressSearch } from "../../src/lib/offer-search";
+import { parseOfferAddressSearch, parseOfferNoOnlySearch } from "../../src/lib/offer-search";
 
 /** How the offers list's search box (#465) reads an entry that might name a listing's own address:
  * a pasted marketplace link, or the offer number a sale notification quotes. */
@@ -49,5 +49,20 @@ describe("offer address search", () => {
     ]) {
       assert.deepEqual(parseOfferAddressSearch(entry), { address: null, listingId: null }, entry);
     }
+  });
+});
+
+/** `#12` is the offer's own number and nothing else, whatever is ticked beside the box (#2242). */
+describe("offer number only search", () => {
+  it("reads a number behind a # as the offer's own number", () => {
+    assert.equal(parseOfferNoOnlySearch("#12"), 12);
+    assert.equal(parseOfferNoOnlySearch("  # 12 "), 12);
+  });
+
+  it("leaves a bare number, and anything else, to the fields", () => {
+    assert.equal(parseOfferNoOnlySearch("12"), null);
+    assert.equal(parseOfferNoOnlySearch("#12a"), null);
+    assert.equal(parseOfferNoOnlySearch("#0"), null);
+    assert.equal(parseOfferNoOnlySearch("Warsaw #12"), null);
   });
 });
