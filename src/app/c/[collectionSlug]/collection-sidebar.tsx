@@ -537,6 +537,14 @@ export function CollectionSidebar({
             label="Checklists"
             active={isActive(`${base}/checklists`)}
           />
+          {/* How complete any chosen area and years are (#2266), counting only the copies of chosen
+              conditions and dispositions. Beside Checklists, because what it measures is them. */}
+          <NavItem
+            href={`${base}/completeness`}
+            icon={<Icon name="completeness" />}
+            label="Completeness"
+            active={isActive(`${base}/completeness`)}
+          />
           {/* Areas are how the catalogue is organised (#1234) — the tree issues and stamps hang on,
               and the facet every catalogue screen filters by — so the collector looks for them
               here. #775 moved them out of Settings on frequency, and that stands; it filed them

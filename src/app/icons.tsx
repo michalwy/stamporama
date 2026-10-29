@@ -47,6 +47,7 @@ import {
   Boxes,
   Calendar,
   Camera,
+  ChartPie,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -175,6 +176,9 @@ const GLYPHS = {
    *  own. A clipboard with a list, deliberately not `selectionActions`' ticked list: that one acts
    *  on the rows ticked on screen, and this is a subject in the sidebar. */
   checklists: ClipboardList,
+  /** How complete a chosen part of the catalogue is (#2266) — a pie, the share held of a whole.
+   *  Not `checklists`' clipboard: that screen edits sets, this one measures them. */
+  completeness: ChartPie,
   inventory: Layers,
   /** The collection's own division of the philatelic world (#775) — countries and the territories
    *  under them, the tree an issue is filed into. A folded map, deliberately not the `locations`

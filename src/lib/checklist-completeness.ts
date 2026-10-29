@@ -23,6 +23,24 @@ import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./chec
 // stamp is a copy of it, so `checklist-variant-rollup.ts` widens the read to those children and
 // says which member each row answers for.
 
+/**
+ * The copies a checklist's completeness counts: not sold, not given to a partner (#644), not
+ * disposed of, not lost on the way — `copy-counts.ts`' exclusions — and neither a carrier of several
+ * catalogue positions, which is a copy of none of them (#745, ADR-0044 §3: a cover franked with
+ * three of an issue's stamps completes no square of its grid, because the collector cannot supply
+ * any one of them off it), nor a copy whose candidates span several variant trees (#1651), which
+ * counts towards no completeness until it is settled. Exported for the Completeness screen
+ * (#2266), whose figures must agree with this grid's.
+ */
+export const COUNTED_COPY_WHERE = {
+  saleLineItems: { none: {} },
+  ...NOT_TRADED_AWAY,
+  ...NOT_MULTI_STAMP,
+  ...NOT_ACROSS_TREES,
+  disposedAt: null,
+  deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
+};
+
 /** One checklist's grid, named so the card can label it. */
 export interface ChecklistCompleteness extends ChecklistCompletenessGrid {
   checklistId: string;
@@ -115,18 +133,7 @@ async function completenessOf(
           where: {
             collectionId,
             stampId: { in: rollup.countingStampIds },
-            saleLineItems: { none: {} },
-            // …nor one given to a partner (#644).
-            ...NOT_TRADED_AWAY,
-            // …nor a carrier of several catalogue positions, which is a copy of none of them
-            // (#745, ADR-0044 §3): a cover franked with three of an issue's stamps completes no
-            // square of its grid, because the collector cannot supply any one of them off it.
-            ...NOT_MULTI_STAMP,
-            // …nor a copy whose candidates span several variant trees (#1651): it counts towards no
-            // completeness until it is settled.
-            ...NOT_ACROSS_TREES,
-            disposedAt: null,
-            deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
+            ...COUNTED_COPY_WHERE,
           },
           _count: { _all: true },
         });

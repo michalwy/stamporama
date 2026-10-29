@@ -188,7 +188,7 @@ Reads split by subject, and each consumer states which it means. **Per checklist
 
 A checklist is **standard or specialised** (`Checklist.kind`, #1617; ADR-0031 §11). Every read that lists, offers or counts checklists takes an `includeSpecialised` boolean and leaves the specialised ones out without it; pages, routes and actions take it from the collector's per-collection switch (a cookie, read by `readIncludeSpecialised`), the agent API from `include_specialised`. A read naming a checklist by id answers whatever its kind, a membership write leaves the kinds its form did not show alone, the default set a stamp joins is the issue's first standard checklist, and the declared catalogue range reads standard checklists only.
 
-Storage and reads live in `src/lib/checklists.ts`, and the Checklists screen's figures in `src/lib/spanning-checklists.ts`; the `default` sentinel the stamp form submits when an issue has no checklist yet is in the pure `src/lib/checklist-vocabulary.ts`, since the form is a client component.
+Storage and reads live in `src/lib/checklists.ts`, the Checklists screen's figures in `src/lib/spanning-checklists.ts`, and the Completeness screen's (#2266, any area and years narrowed by condition and disposition) in `src/lib/completeness-screen.ts`; the `default` sentinel the stamp form submits when an issue has no checklist yet is in the pure `src/lib/checklist-vocabulary.ts`, since the form is a client component.
 
 ### Want list (`Want` / `WantCondition` / `WantCertificateStatus` / `WantFormat`, #532; [ADR-0032](../decisions/0032-want-list.md))
 
