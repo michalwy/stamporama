@@ -1,18 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
-import { isTerminalState } from "@/lib/offer-rules";
+import { isTerminalState, OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import {
+  countOffersByState,
+  hiddenOffersText,
+  parseShownOfferStates,
+  toggleShownOfferState,
+  writeShownOfferStates,
+} from "@/lib/offer-card-states";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
+import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
   OfferStateChip,
   NeedsActionChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
+  offerStateTint,
+  offerStateTitle,
 } from "./offer-badges";
 import { useOffersForTarget } from "./use-offers-query";
 import { Icon } from "@/app/icons";
@@ -23,6 +34,10 @@ import { Icon } from "@/app/icons";
 // present one listing two ways.
 
 const MUTED = "var(--color-text-muted)";
+
+/** Where the state chips' choice is remembered — one key for the card on all three pages and the
+ * View offers window (#2263). */
+const OFFER_CARD_STATES_KEY = "offer-card-states";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -172,8 +187,75 @@ export function OfferTargetRow({
   );
 }
 
-/** The Offers card of a detail screen: every offer holding a copy of the target, live listings
- * first, each opening the offer's own screen. Read-only, like the popup it shares rows with. */
+/**
+ * The state chips over a list of offers (#2263): one per state the offers are actually in, with its
+ * count, any number on together, drawn in the colours the rows' state chips are. Sold and withdrawn
+ * start off. Remembered per collection, and one choice for every page's card and the View offers
+ * window, so switching *Sold* on once keeps it on everywhere.
+ *
+ * When the chips leave nothing in view the list says what is hidden rather than reading as empty.
+ */
+export function OfferTargetList({
+  collectionId,
+  collectionSlug,
+  offers,
+}: {
+  collectionId: string;
+  collectionSlug: string;
+  offers: OfferListItem[];
+}) {
+  const [stored, setStored] = usePersistedCollectionValue(OFFER_CARD_STATES_KEY, collectionId);
+  const shown = useMemo(() => parseShownOfferStates(stored), [stored]);
+  const counts = useMemo(() => countOffersByState(offers), [offers]);
+  const visible = useMemo(() => {
+    const on = new Set(shown);
+    return offers.filter((o) => on.has(o.state));
+  }, [offers, shown]);
+
+  return (
+    <>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "0.75rem" }}>
+        {counts.map(({ state, count }) => (
+          <Tooltip key={state} content={offerStateTitle(state)}>
+            <FilterChip
+              label={OFFER_STATE_LABEL[state]}
+              count={count}
+              active={shown.includes(state)}
+              toggle
+              tint={offerStateTint(state)}
+              onClick={() => setStored(writeShownOfferStates(toggleShownOfferState(shown, state)))}
+            />
+          </Tooltip>
+        ))}
+      </div>
+      {visible.length === 0 ? (
+        <div style={{ color: MUTED, fontSize: "0.875rem" }}>{hiddenOffersText(counts, shown)}</div>
+      ) : (
+        <div
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.5rem",
+            overflow: "clip",
+            background: "var(--color-bg-elevated)",
+          }}
+        >
+          {visible.map((offer, i) => (
+            <OfferTargetRow
+              key={offer.id}
+              offer={offer}
+              collectionSlug={collectionSlug}
+              isLast={i === visible.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The Offers card of a detail screen: the offers holding a copy of the target in the states its
+ * chips show, live listings first, each opening the offer's own screen. Read-only, like the popup it
+ * shares rows with. The heading counts every offer, whatever the chips show. */
 export function RelatedOffersCard({
   collectionId,
   target,
@@ -190,23 +272,7 @@ export function RelatedOffersCard({
       count={offers.length || null}
       empty={isLoading || offers.length === 0}
     >
-      <div
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.5rem",
-          overflow: "clip",
-          background: "var(--color-bg-elevated)",
-        }}
-      >
-        {offers.map((offer, i) => (
-          <OfferTargetRow
-            key={offer.id}
-            offer={offer}
-            collectionSlug={collectionSlug}
-            isLast={i === offers.length - 1}
-          />
-        ))}
-      </div>
+      <OfferTargetList collectionId={collectionId} collectionSlug={collectionSlug} offers={offers} />
     </DetailCard>
   );
 }

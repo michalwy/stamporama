@@ -123,7 +123,8 @@ this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appea
   the line price, the copy's share of the net proceeds, its cost basis and the profit or loss on it
   (see [what a sold copy earned](inventory.md#what-a-sold-copy-earned)), the offer it went out
   through, and whether it has been packed.
-- **Offers** — every offer that holds this copy, across all platforms and all states.
+- **Offers** — every offer that holds this copy, across all platforms, filtered by
+  [state chips](#the-offers-card).
 
 ## The stamp page
 
@@ -188,7 +189,8 @@ this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appea
   found it. Each want's **⋮** menu can **Close** or **Delete** it; the form that changes its terms
   lives on the want list. See
   [On the stamp's and the copy's own pages](wants.md#on-the-stamps-and-the-copys-own-pages).
-- **Offers** — every offer holding a copy of this stamp.
+- **Offers** — every offer holding a copy of this stamp, filtered by
+  [state chips](#the-offers-card).
 
 ## Measuring and marking a photo
 
@@ -296,7 +298,8 @@ Offers. Details, Checklists and Stamps are always there.
   After each change the whole page catches up at once: the tree, the stamp counts, the Checklists
   and Completeness cards, the catalog value and the copies.
 - **Copies** — every copy you hold from any stamp in the issue.
-- **Offers** — every offer holding a copy from this issue.
+- **Offers** — every offer holding a copy from this issue, filtered by
+  [state chips](#the-offers-card).
 
 ### Completeness
 
@@ -353,3 +356,23 @@ entries accept **anything**. See
 changing the checklist later does not touch the want list, and running it again adds nothing that
 is already there. *Do not hold* means what the grid above it
 means, variant children and all — a stamp the card counts as held is not wanted again.
+
+## The Offers card
+
+The **Offers** card on the copy, stamp and issue pages lists the offers holding the copy, a copy of
+the stamp, or a copy from the issue. Its heading counts **every** offer, whatever state it is in.
+
+Over the offers is a row of **state chips** — one per state the offers are actually in, with its
+count, drawn in the same colour as the state chip on each offer — and the card lists the offers in
+the states switched on. Click a chip to switch it on or off; any number can be on at once.
+
+- **Sold** and **Withdrawn** start off, so the card opens on what is still open — *Preparing*,
+  *Ready*, *Pending*, *Active*, *Paused* — rather than on a stamp's trading history. Switch them on
+  to see the history.
+- Only states the card has offers in get a chip: a stamp with nothing withdrawn shows no
+  *Withdrawn* chip.
+- When the chips leave nothing in view, the card says what is hidden — *2 sold, 1 withdrawn
+  hidden* — rather than looking empty. A copy, stamp or issue with no offers at all has no card.
+- The choice is **remembered** for the collection, and it is one choice for all three pages and
+  for the [View offers](inventory.md#seeing-which-offers-something-is-in) popup on the lists:
+  switch *Sold* on once and it stays on everywhere, also after a reload.
