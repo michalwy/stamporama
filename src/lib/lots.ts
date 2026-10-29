@@ -25,7 +25,7 @@ import {
 } from "./item-stamps";
 import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
-import { isDeliveryState } from "./delivery-state";
+import { inCollectionForDelivery, isDeliveryState } from "./delivery-state";
 import { hasPurchaseArrived } from "./purchase-status";
 import type { ArrivingCopy } from "./want-rules";
 import {
@@ -1825,15 +1825,6 @@ export async function markPurchaseArrived(
   });
 }
 
-/** How setting a delivery state affects collection membership (#121): the pre-arrival states
- * (`ordered`/`to_sort`/`in_transit`) are never a holding → not in collection. `delivered`
- * deliberately leaves membership **untouched** — the collector picks the disposition (in
- * collection / for sale / for trade) themselves. `damaged`/`not_delivered` also leave it as-is. */
-function inCollectionForDelivery(state: string): boolean | undefined {
-  if (state === "ordered" || state === "to_sort" || state === "in_transit") return false;
-  return undefined;
-}
-
 export interface LotBulkChanges {
   locationId?: string | null;
   /** The in-location ref written on the filed copies (#565) — the ref card the transport card
@@ -2142,6 +2133,40 @@ export async function bulkUpdateLotItems(
 
   const delivered = await applyLotBulkChanges(collectionId, { id: { in: ids } }, changes);
   return { count: ids.length, delivered, lotIds: distinctLotIds(rows) };
+}
+
+/** The fields of a copy's intake row that its own row edits write (#2262): the disposition flags,
+ *  the delivery state, and where it is filed. */
+export interface LotCopyRowFields {
+  inCollection: boolean;
+  forSale: boolean;
+  forTrade: boolean;
+  deliveryState: string;
+  locationId: string | null;
+  locationRef: string | null;
+}
+
+/** One copy's row edit on the intake screen (#2262) — {@link bulkUpdateLotItems} over that copy,
+ *  handing back the fields its row draws as they now stand, so the screen sets that one row
+ *  rather than reading its lot again. */
+export async function updateLotCopy(
+  ownerId: string,
+  itemId: string,
+  changes: LotBulkChanges
+): Promise<BulkUpdateResult & { copy: LotCopyRowFields }> {
+  const result = await bulkUpdateLotItems(ownerId, [itemId], changes);
+  const copy = await prisma.item.findUniqueOrThrow({
+    where: { id: itemId },
+    select: {
+      inCollection: true,
+      forSale: true,
+      forTrade: true,
+      deliveryState: true,
+      locationId: true,
+      locationRef: true,
+    },
+  });
+  return { ...result, copy };
 }
 
 /** The lots a set of copies sits in, each once — what a bulk change reports it touched (#1409). */

@@ -1,5 +1,7 @@
-import type { IntakeGroupAxis } from "@/lib/intake-groups";
-import type { IntakeWriteTouched } from "@/lib/lots";
+import { inCollectionForDelivery } from "@/lib/delivery-state";
+import type { IntakeGroupAxis, IntakeGroupNode } from "@/lib/intake-groups";
+import type { ItemListItem } from "@/lib/items";
+import type { IntakeWriteTouched, LotCopyRowFields } from "@/lib/lots";
 import type {
   IntakeFilterParams,
   LotCopiesParams,
@@ -51,6 +53,9 @@ export interface IntakeWriteScope extends IntakeWriteTouched {
   /** The order's own figures moved — a lot's status, price or copy count, the issues its copies
    *  fall under, its tiles — so the server render is re-read as well. */
   orderChanged?: boolean;
+  /** The written copy's row was set in place (#2262), so no list of copies is read again — see
+   *  `staleAfterCopyEdit`. */
+  rowPatched?: boolean;
 }
 
 /** The segments a lot's own reads are never keyed under — everything else in that place is a lot. */
@@ -85,4 +90,136 @@ export function staleAfterWrite(
   if (touchedLotIds.has(about)) return true;
   const what = queryKey[3];
   return what === "list" || what === "completeness";
+}
+
+/** What a copy's own row edits change (#2262): its disposition flags, its delivery state, and
+ *  where it is filed — the edits made from the row without opening the copy. */
+export type CopyRowChanges = Partial<
+  Pick<LotCopyRowFields, "inCollection" | "forSale" | "forTrade" | "deliveryState" | "locationId">
+>;
+
+/**
+ * How a copy's row reads once a row edit has landed (#2262), so the row can say so the moment it is
+ * clicked rather than after the save. The write's own rules, restated: a pre-arrival delivery state
+ * takes the copy out of the collection, an explicit flag wins over that, and clearing the location
+ * clears the ref with it.
+ */
+export function copyRowPatch(changes: CopyRowChanges): Partial<LotCopyRowFields> {
+  const patch: Partial<LotCopyRowFields> = {};
+  if (changes.deliveryState !== undefined) {
+    patch.deliveryState = changes.deliveryState;
+    const inCollection = inCollectionForDelivery(changes.deliveryState);
+    if (inCollection !== undefined) patch.inCollection = inCollection;
+  }
+  if (changes.inCollection !== undefined) patch.inCollection = changes.inCollection;
+  if (changes.forSale !== undefined) patch.forSale = changes.forSale;
+  if (changes.forTrade !== undefined) patch.forTrade = changes.forTrade;
+  if (changes.locationId !== undefined) {
+    patch.locationId = changes.locationId;
+    if (changes.locationId === null) patch.locationRef = null;
+  }
+  return patch;
+}
+
+/** What a patch's fields read on the copy before it — what a failed save puts back. */
+export function copyRowUndo(
+  item: LotCopyRowFields,
+  patch: Partial<LotCopyRowFields>
+): Partial<LotCopyRowFields> {
+  const undo: Partial<LotCopyRowFields> = {};
+  for (const key of Object.keys(patch) as (keyof LotCopyRowFields)[]) {
+    (undo as Record<string, unknown>)[key] = item[key];
+  }
+  return undo;
+}
+
+/** A paged copy list with one copy's row fields set, or the same object when the copy is not in it
+ *  — so a list that does not hold the copy is not handed to its observers as changed. */
+export function patchCopyInPages<T extends { pages: { items: ItemListItem[] }[] }>(
+  data: T | undefined,
+  itemId: string,
+  patch: Partial<LotCopyRowFields>
+): T | undefined {
+  if (!data) return data;
+  let found = false;
+  const pages = data.pages.map((page) => {
+    if (!page.items.some((it) => it.id === itemId)) return page;
+    found = true;
+    return {
+      ...page,
+      items: page.items.map((it) => (it.id === itemId ? { ...it, ...patch } : it)),
+    };
+  });
+  return found ? { ...data, pages } : data;
+}
+
+/**
+ * What a copy's own row edit leaves stale (#2262) — narrower than {@link staleAfterWrite}, because
+ * the row has already been set in place:
+ *
+ * - **`keep`** — every list of copies, the copy's own lot's included. Re-reading a lot of 4,000
+ *   copies, every page the collector has scrolled through, was what made one click cost seconds;
+ *   and a copy the change takes out of the list's filters stays in view until the list is next read,
+ *   rather than vanishing under the cursor. Another lot's header too, as after any write on one lot.
+ * - **`summary`** — the copy's lot's summaries and the order's: its counts follow the change, and
+ *   its headings are re-read without dropping the one the copy sits under (`keepVanishedGroups`).
+ * - **`stale`** — the rest of the copy's lot and of the order (return, completeness), the selection's
+ *   count and refs, and every open card's completeness, which counts for-sale copies collection-wide.
+ */
+export function staleAfterCopyEdit(
+  queryKey: readonly unknown[],
+  collectionId: string,
+  lotIds: ReadonlySet<string>
+): "keep" | "summary" | "stale" {
+  if (queryKey[0] !== "lot-copies" || queryKey[1] !== collectionId) return "keep";
+  const about = queryKey[2];
+  if (about === "purchase") {
+    const what = queryKey[4];
+    return what === "list" ? "keep" : what === "summary" ? "summary" : "stale";
+  }
+  if (typeof about !== "string" || NOT_A_LOT.has(about)) return "stale";
+  const what = queryKey[3];
+  if (what === "list") return "keep";
+  if (lotIds.has(about)) return what === "summary" ? "summary" : "stale";
+  return what === "completeness" ? "stale" : "keep";
+}
+
+/**
+ * A summary's headings re-read after a row edit (#2262), with every heading the new read dropped
+ * put back where it stood, holding no copies. A heading is dropped when the filters leave nothing
+ * under it — the last *For sale* copy of an issue, under the *For sale* chip, cleared — and its rows
+ * would go with it, under the cursor. Kept, the copy stays in view until the list is next read, as
+ * it does in a flat list. The same array when nothing was dropped, so an unchanged read is not a
+ * change.
+ */
+export function keepVanishedGroups(
+  prev: readonly IntakeGroupNode[],
+  next: IntakeGroupNode[]
+): IntakeGroupNode[] {
+  const prevByPath = new Map(prev.map((n) => [n.path, n]));
+  const nextPaths = new Set(next.map((n) => n.path));
+  // Each dropped heading rides after the heading that stood before it and is still there.
+  const after = new Map<string, IntakeGroupNode[]>();
+  let anchor = "";
+  for (const node of prev) {
+    if (nextPaths.has(node.path)) {
+      anchor = node.path;
+      continue;
+    }
+    after.set(anchor, [...(after.get(anchor) ?? []), emptied(node)]);
+  }
+  let changed = after.size > 0;
+  const out: IntakeGroupNode[] = [...(after.get("") ?? [])];
+  for (const node of next) {
+    const before = prevByPath.get(node.path);
+    const children = before ? keepVanishedGroups(before.children, node.children) : node.children;
+    if (children !== node.children) changed = true;
+    out.push(children === node.children ? node : { ...node, children });
+    out.push(...(after.get(node.path) ?? []));
+  }
+  return changed ? out : next;
+}
+
+function emptied(node: IntakeGroupNode): IntakeGroupNode {
+  return { ...node, count: 0, openCount: 0, children: node.children.map(emptied) };
 }

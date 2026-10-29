@@ -40,10 +40,12 @@ import {
   markPurchaseArrived,
   bulkUpdateLotItems,
   bulkUpdateLotItemsScoped,
+  updateLotCopy,
   readLotBulkScope,
   resolveTouchedLots,
   type IntakeWriteTouched,
   type LotBulkChanges,
+  type LotCopyRowFields,
 } from "@/lib/lots";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import { addPurchasePhotos, parsePhotoChangeSet, removePurchasePhoto } from "@/lib/photos";
@@ -822,6 +824,36 @@ export async function bulkUpdateLotItemsAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to update copies. Please try again.",
+    };
+  }
+}
+
+/** One copy's edit from its own row on the intake screen (#2262): the same change fields as
+ * {@link bulkUpdateLotItemsAction}, answered with the row's fields as they now stand. */
+export async function updateLotCopyAction(
+  itemId: string,
+  formData: FormData
+): Promise<
+  | { status: "success"; copy: LotCopyRowFields; copies?: ArrivingCopy[]; lotIds: string[] }
+  | { status: "error"; message: string }
+> {
+  const session = await getSession();
+  try {
+    const { delivered, lotIds, copy } = await updateLotCopy(
+      session.user.id,
+      itemId,
+      parseBulkChanges(formData)
+    );
+    return {
+      status: "success",
+      copy,
+      copies: delivered.length > 0 ? delivered : undefined,
+      lotIds,
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to update the copy. Please try again.",
     };
   }
 }
