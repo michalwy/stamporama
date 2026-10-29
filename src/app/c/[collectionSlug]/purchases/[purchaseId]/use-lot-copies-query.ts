@@ -1,6 +1,11 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import type {
   CopyDispositionFilter,
   ItemListItem,
@@ -15,8 +20,19 @@ import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { CopyContainer } from "@/lib/lot-selection";
 import type { LocationRefInUse } from "@/lib/location-ref";
 import { formatTilePhotoRoles, type TilePhotoRole } from "@/lib/tile-photo-roles";
-import { formatIntakeGroupAxes, type IntakeGroupAxis } from "@/lib/intake-groups";
-import { lotCopiesKeys, staleAfterWrite } from "./lot-copies-keys";
+import {
+  formatIntakeGroupAxes,
+  type IntakeGroupAxis,
+  type IntakeGroupNode,
+} from "@/lib/intake-groups";
+import type { LotCopyRowFields } from "@/lib/lots";
+import {
+  keepVanishedGroups,
+  lotCopiesKeys,
+  patchCopyInPages,
+  staleAfterCopyEdit,
+  staleAfterWrite,
+} from "./lot-copies-keys";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -365,5 +381,45 @@ export function useInvalidateLotCopies() {
       queryClient.invalidateQueries({
         predicate: (query) => staleAfterWrite(query.queryKey, collectionId, touchedLotIds),
       }),
+    /** Set one copy's row fields in every list of copies that holds it (#2262) — the lot's lists and
+     *  the order's alike, whatever their filters, since the same copy can be on screen in either. */
+    patchCopyRow: (collectionId: string, itemId: string, patch: Partial<LotCopyRowFields>) => {
+      for (const query of queryClient.getQueryCache().findAll({
+        queryKey: lotCopiesKeys.all(collectionId),
+        predicate: (q) => q.queryKey[3] === "list" || q.queryKey[4] === "list",
+      })) {
+        queryClient.setQueryData<InfiniteData<LotCopiesPage>>(query.queryKey, (data) =>
+          patchCopyInPages(data, itemId, patch)
+        );
+      }
+    },
+    /** Re-read what a copy's own row edit can have moved, its row having been set in place (#2262;
+     *  `staleAfterCopyEdit`). A summary on screen is re-read and then given back any heading the
+     *  read dropped, so the row under it stays in view. */
+    refreshAfterCopyEdit: async (collectionId: string, lotIds: ReadonlySet<string>) => {
+      const summaries = queryClient
+        .getQueryCache()
+        .findAll({
+          queryKey: lotCopiesKeys.all(collectionId),
+          predicate: (q) => staleAfterCopyEdit(q.queryKey, collectionId, lotIds) === "summary",
+        });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          predicate: (q) => staleAfterCopyEdit(q.queryKey, collectionId, lotIds) === "stale",
+        }),
+        ...summaries.map(async (query) => {
+          const before = query.state.data as { groupTree: IntakeGroupNode[] } | undefined;
+          await queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+          const after = queryClient.getQueryData<{ groupTree: IntakeGroupNode[] }>(query.queryKey);
+          // Only a read that came back: an inactive summary is left invalidated, and setting its
+          // data would mark it fresh again.
+          if (!before || !after || after === before) return;
+          const groupTree = keepVanishedGroups(before.groupTree, after.groupTree);
+          if (groupTree !== after.groupTree) {
+            queryClient.setQueryData(query.queryKey, { ...after, groupTree });
+          }
+        }),
+      ]);
+    },
   };
 }

@@ -55,6 +55,17 @@ export function deliveryStateToken(state: string): string {
  * their way in. */
 export const UNAVAILABLE_DELIVERY_STATES = ["not_delivered", "damaged"] as const;
 
+/** How setting a delivery state affects collection membership (#121): the pre-arrival states
+ * (`ordered`/`to_sort`/`in_transit`) are never a holding → not in collection. `delivered`
+ * deliberately leaves membership **untouched** — the collector picks the disposition (in
+ * collection / for sale / for trade) themselves. `damaged`/`not_delivered` also leave it as-is.
+ * Here rather than beside the write, because the intake row draws the write's outcome before the
+ * server answers (#2262) and must draw the same one. */
+export function inCollectionForDelivery(state: string): boolean | undefined {
+  if (state === "ordered" || state === "to_sort" || state === "in_transit") return false;
+  return undefined;
+}
+
 /** A copy is *in hand* only when it is delivered — the precondition for listing it for sale
  * (#188) and the reason the offer actions are unavailable otherwise (#273). */
 export function isDelivered(state: string): boolean {

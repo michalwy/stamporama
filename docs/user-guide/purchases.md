@@ -2831,9 +2831,18 @@ tree-select. For condition or certificate changes use its **⋮** menu → **Edi
 if the seller shipped a different condition than expected (MH instead of MNH), correct it
 there.
 
+These row edits **show the moment you click** and save behind you, so you can work down a lot
+copy after copy without waiting — however many thousand copies it holds, only the copy you
+changed and the counts it moves (*N to sort*, the *Kept for* chips, the lot's and the order's
+headers) are brought up to date, not the whole list. If a save fails, the row goes back to how it
+was and a message says why. A copy your change takes out of the filter you are looking at — you
+clear *For sale* while *Kept for: For sale* is on — **stays where it is** until the list is next
+read (another filter, a reload), so it does not vanish under the pointer.
+
 To focus on what's left, click the toolbar's **N to sort** chip (under *Still needs*) to narrow
-every view down to the copies waiting to be sorted; click it again to show all. As you sort each
-copy it drops out of the filtered list. The chip counts copies in the **to sort** state only —
+every view down to the copies waiting to be sorted; click it again to show all. A copy you sort
+from its own row stays in view until the list is next read, while the count drops at once; a
+batch stored from the bar drops out straight away. The chip counts copies in the **to sort** state only —
 copies still *ordered* or *in transit* haven't arrived yet, so there is nothing to sort about them
 (the close confirmation still counts those; see [Closing a lot](#closing-a-lot)). Each lot header
 repeats its own **N to sort** count so you can see where the work is.

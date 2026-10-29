@@ -92,7 +92,12 @@ import {
   type LotCopiesParams,
   type OrderFilterParams,
 } from "./use-lot-copies-query";
-import type { IntakeWriteScope } from "./lot-copies-keys";
+import {
+  copyRowPatch,
+  copyRowUndo,
+  type CopyRowChanges,
+  type IntakeWriteScope,
+} from "./lot-copies-keys";
 import type { PurchaseActionState } from "@/app/actions/purchases";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -395,7 +400,8 @@ export function PurchaseDetailPanel({
   // pass never can. The server-rendered list stands in until the first read answers, so the first
   // paint is unchanged.
   const locations = useCollectionLocations(collectionId).data ?? serverLocations;
-  const { invalidateLotCopies, invalidateLotCopiesAfter } = useInvalidateLotCopies();
+  const { invalidateLotCopies, invalidateLotCopiesAfter, refreshAfterCopyEdit } =
+    useInvalidateLotCopies();
   // The purchase list is a client-side infinite query with a 30s stale time, so it survives a
   // back-navigation from here and would keep showing the pre-edit delivery status (#440).
   const { invalidateList: invalidatePurchaseList } = useInvalidatePurchases();
@@ -714,6 +720,8 @@ export function PurchaseDetailPanel({
    *  written copy or stamp is turned into lots by the server, which alone knows where the copies
    *  sit and which of them a stamp's price reaches. Should it fail to say, everything is re-read. */
   async function refreshTouchedLots(scope: IntakeWriteScope) {
+    // A copy's own row edit (#2262): its row is already set, and its lot is the one it names.
+    if (scope.rowPatched) return refreshAfterCopyEdit(collectionId, new Set(scope.lotIds ?? []));
     let lotIds: Set<string> | null = new Set(scope.lotIds ?? []);
     if (scope.itemIds?.length || scope.stampIds?.length) {
       const { resolveTouchedLotsAction } = await import("@/app/actions/purchases");
@@ -2221,7 +2229,9 @@ function withTouchedLots(r: PurchaseActionState) {
  * server-resolved scope with its copy count (a whole lot/issue, which may exceed one page and
  * so can no longer be enumerated client-side, #172). */
 type BulkTarget =
-  | { kind: "ids"; ids: string[] }
+  /** `copy` is set when the target is one copy opened from its own row: the change is then that
+   *  row's edit (#2262), set at once, rather than a bulk write. */
+  | { kind: "ids"; ids: string[]; copy?: ItemListItem }
   | { kind: "scope"; scope: BulkScopeClient; count: number };
 
 function bulkTargetCount(t: BulkTarget): number {
@@ -2271,6 +2281,41 @@ function useCopyEditing(ctx: {
   const [moveRefusals, setMoveRefusals] = useState<MoveLotRefusal[] | null>(null);
   /** Whether *Move to lot…* has anywhere to go: a second lot on the purchase. */
   const canMoveToLot = moveLots.length > 1;
+  const { toast } = useToast();
+  const { patchCopyRow } = useInvalidateLotCopies();
+  /** Each copy's latest row edit (#2262), so a save that a later click on the same copy has
+   *  overtaken neither sets the row back to its own answer nor undoes the later click. */
+  const rowEdits = useRef(new Map<string, number>());
+
+  /**
+   * One copy's edit from its own row (#2262) — a disposition chip, the delivery status, the
+   * location. The row shows the change at once and the save follows; nothing waits on it, so the
+   * next chip, on this copy or another, can be clicked straight away. The lists of copies are not
+   * read again: the row is set from what the server says it now holds, and the counts are re-read
+   * around it. A failed save puts the row back and says why.
+   */
+  function editCopyRow(item: ItemListItem, changes: CopyRowChanges) {
+    const patch = copyRowPatch(changes);
+    const undo = copyRowUndo(item, patch);
+    const edit = (rowEdits.current.get(item.id) ?? 0) + 1;
+    rowEdits.current.set(item.id, edit);
+    const latest = () => rowEdits.current.get(item.id) === edit;
+    patchCopyRow(collectionId, item.id, patch);
+    run(async () => {
+      const fd = new FormData();
+      appendBulkChanges(fd, changes);
+      const { updateLotCopyAction } = await import("@/app/actions/purchases");
+      const r = await updateLotCopyAction(item.id, fd);
+      if (r.status === "error") {
+        if (latest()) patchCopyRow(collectionId, item.id, undo);
+        toast({ message: r.message, tone: "error" });
+        // Said here, beside the row it was about; the screen's own error line stays clear.
+        return { status: "reverted" };
+      }
+      if (latest()) patchCopyRow(collectionId, item.id, r.copy);
+      return { ...r, refresh: { lotIds: r.lotIds, rowPatched: true } };
+    });
+  }
 
   /** Apply a bulk change to an explicit id list (a single copy from its row menu). */
   function runBulk(itemIds: string[], changes: BulkCopyChanges) {
@@ -2556,7 +2601,13 @@ function useCopyEditing(ctx: {
               setCopyError(undefined);
             }
           }}
-          onConfirm={(locationId) => applyBulk(bulkMove, { locationId: locationId || null })}
+          onConfirm={(locationId) => {
+            if (bulkMove.kind === "ids" && bulkMove.copy) {
+              editCopyRow(bulkMove.copy, { locationId: locationId || null });
+              setBulkMove(null);
+              setCopyError(undefined);
+            } else applyBulk(bulkMove, { locationId: locationId || null });
+          }}
         />
       )}
 
@@ -2611,6 +2662,7 @@ function useCopyEditing(ctx: {
     setCopyError,
     runBulk,
     removeCopy,
+    editCopyRow,
     setBulkMove,
     setBulkStore,
     canMoveToLot,
@@ -2675,7 +2727,9 @@ function CopyRow({
       opensPage
       highlight={highlight}
       onSetCatalogPrice={open ? () => copy.setQuickPriceItem(item) : undefined}
-      onSetLocation={open ? () => copy.setBulkMove({ kind: "ids", ids: [item.id] }) : undefined}
+      onSetLocation={
+        open ? () => copy.setBulkMove({ kind: "ids", ids: [item.id], copy: item }) : undefined
+      }
       hideDispositions
       // The intake screen's own delivery control lives in `trailingChips` below (#272).
       hideDeliveryState
@@ -2686,10 +2740,10 @@ function CopyRow({
           estimate={estimate}
           lotRatio={lotRatio}
           onSetDeliveryState={
-            open ? (state) => copy.runBulk([item.id], { deliveryState: state }) : undefined
+            open ? (state) => copy.editCopyRow(item, { deliveryState: state }) : undefined
           }
           onSetDisposition={
-            open ? (flag, value) => copy.runBulk([item.id], { [flag]: value }) : undefined
+            open ? (flag, value) => copy.editCopyRow(item, { [flag]: value }) : undefined
           }
         />
       }
