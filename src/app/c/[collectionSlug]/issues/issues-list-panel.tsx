@@ -37,6 +37,7 @@ import { MergeIssueDialog } from "./merge-issue-dialog";
 import { useToast } from "@/app/toast-provider";
 import { RangeExtendedDialog } from "./range-extended-dialog";
 import { ReparentStampDialog } from "./reparent-stamp-dialog";
+import { singleYear } from "@/lib/list-area-year-filter";
 import type { IssueListItem, IssueSortBy, StampNodeData, IssueRangeSuggestion } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
@@ -955,7 +956,7 @@ export function IssuesListPanel({
           collectionId={collectionId}
           areas={areas}
           defaultAreaId={filterAreaId ?? undefined}
-          defaultYear={year && year !== "none" ? Number(year) : undefined}
+          defaultYear={singleYear(year) ?? undefined}
           isPending={isPending}
           error={error}
           onClose={closeDialog}

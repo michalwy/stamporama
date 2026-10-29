@@ -56,12 +56,17 @@ describe("planAttachPicker (#2179)", () => {
   });
 
   it("narrows by year, the no-year facet included", () => {
-    assert.deepEqual(plan(rows, { year: 1950 }).ids, ["a", "d"]);
+    assert.deepEqual(plan(rows, { year: "1950" }).ids, ["a", "d"]);
     assert.deepEqual(plan(rows, { year: "none" }).ids, ["c"]);
   });
 
+  it("narrows by a span of years, which leaves the copies of no year out (#2258)", () => {
+    assert.deepEqual(plan(rows, { year: "1950-1951" }).ids, ["b", "a", "d"]);
+    assert.deepEqual(plan(rows, { year: "1951-" }).ids, ["b"]);
+  });
+
   it("counts the year facet over the search but not over the year itself", () => {
-    const searched = plan(rows, { search: "eagle", year: 1950 });
+    const searched = plan(rows, { search: "eagle", year: "1950" });
     assert.deepEqual(searched.ids, ["a"]);
     assert.deepEqual(searched.yearFacets, [
       { year: 1950, count: 1 },

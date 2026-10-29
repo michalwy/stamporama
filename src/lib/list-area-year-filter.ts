@@ -62,18 +62,110 @@ export function decadeOf(year: number): number {
 }
 
 /**
- * A list filter's `year` value as the domain reads it: one year, the no-year bucket, a decade as an
- * inclusive span (#1401), or nothing. **The one parser** every Copies route reads its year with, so
- * the rows, their count, the rail and the holdings bar cannot come to read a decade differently.
+ * A range of years on the rail (#2258), spelled `1945-1960`, both ends included. Either end may be
+ * left open — `1945-` is 1945 onwards, `-1918` up to 1918. The spelling rides in the same `year`
+ * value as a year, `none` and a decade, so the address, the per-collection memory and every route
+ * that already passes the year through carry a range without a parameter of their own.
+ */
+const RANGE_PATTERN = /^(\d*)-(\d*)$/;
+
+/**
+ * What a `year` value selects: every year, the no-year bucket, one year, or an inclusive span with
+ * either end possibly open (`null`). A decade is read as the span it names.
+ */
+export type YearSelection =
+  | { kind: "all" }
+  | { kind: "none" }
+  | { kind: "year"; year: number }
+  | { kind: "range"; from: number | null; to: number | null };
+
+/** A `year` value read as a selection. Anything it cannot read selects every year. */
+export function readYearSelection(value: string | null | undefined): YearSelection {
+  if (!value || value === ALL_SENTINEL) return { kind: "all" };
+  if (value === "none") return { kind: "none" };
+  if (/^\d+$/.test(value)) return { kind: "year", year: parseInt(value, 10) };
+  const decade = parseDecade(value);
+  if (decade !== null) return { kind: "range", from: decade, to: decade + 9 };
+  const match = RANGE_PATTERN.exec(value);
+  if (!match || (!match[1] && !match[2])) return { kind: "all" };
+  const from = match[1] ? parseInt(match[1], 10) : null;
+  const to = match[2] ? parseInt(match[2], 10) : null;
+  // Written by hand into the address the wrong way round, it is still the span meant.
+  if (from !== null && to !== null && from > to) return { kind: "range", from: to, to: from };
+  return { kind: "range", from, to };
+}
+
+/**
+ * The `year` value for a span from `from` to `to`, both included — null when neither end is given.
+ * **A span typed backwards is put the right way round**, not refused, and a span of one year is
+ * that year, so the rail marks it as the plain click would have.
+ */
+export function yearRangeValue(from: number | null, to: number | null): string | null {
+  if (from === null && to === null) return null;
+  if (from !== null && to !== null) {
+    const [lo, hi] = from <= to ? [from, to] : [to, from];
+    return lo === hi ? String(lo) : `${lo}-${hi}`;
+  }
+  return `${from ?? ""}-${to ?? ""}`;
+}
+
+/** Whether a thing of year `year` (null: it has none) is inside what `value` selects. **No year
+ *  is outside every span**: it is selected on its own or not at all. */
+export function yearSelects(value: string | null | undefined, year: number | null): boolean {
+  const selection = readYearSelection(value);
+  switch (selection.kind) {
+    case "all":
+      return true;
+    case "none":
+      return year === null;
+    case "year":
+      return year === selection.year;
+    case "range":
+      return (
+        year !== null &&
+        (selection.from === null || year >= selection.from) &&
+        (selection.to === null || year <= selection.to)
+      );
+  }
+}
+
+/** The one year `value` selects, or null when it selects every year, no year or a span — what a
+ *  new issue's year is pre-filled from. */
+export function singleYear(value: string | null | undefined): number | null {
+  const selection = readYearSelection(value);
+  return selection.kind === "year" ? selection.year : null;
+}
+
+/** A span as it is written for the collector: *1945–1960*, *1945 onwards*, *up to 1918*. */
+export function yearRangeLabel(from: number | null, to: number | null): string {
+  if (from !== null && to !== null) return `${from}–${to}`;
+  if (from !== null) return `${from} onwards`;
+  return `Up to ${to}`;
+}
+
+/**
+ * A list filter's `year` value as the domain reads it: one year, the no-year bucket, or an
+ * inclusive span — a decade (#1401) or a range (#2258), either end of it possibly open — or
+ * nothing. **The one parser** every route reads its year with, so the rows, their count, the rail
+ * and the holdings bar cannot come to read a span differently.
  */
 export function readYearFilter(
   value: string | null | undefined
 ): { year?: number | "none"; yearFrom?: number; yearTo?: number } {
-  if (!value) return {};
-  if (value === "none") return { year: "none" };
-  const decade = parseDecade(value);
-  if (decade !== null) return { yearFrom: decade, yearTo: decade + 9 };
-  return /^\d+$/.test(value) ? { year: parseInt(value, 10) } : {};
+  const selection = readYearSelection(value);
+  switch (selection.kind) {
+    case "all":
+      return {};
+    case "none":
+      return { year: "none" };
+    case "year":
+      return { year: selection.year };
+    case "range":
+      return {
+        ...(selection.from !== null ? { yearFrom: selection.from } : {}),
+        ...(selection.to !== null ? { yearTo: selection.to } : {}),
+      };
+  }
 }
 
 /** A selection as the screen holds it: `null` on either half is "not narrowed by this". */

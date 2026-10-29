@@ -9,6 +9,7 @@ import {
   DialogPrimaryButton,
   DialogSecondaryButton,
 } from "@/app/dialog-shell";
+import { yearSelects } from "@/lib/list-area-year-filter";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey } from "@/lib/catalog-number";
@@ -133,10 +134,9 @@ export function ComposeSetDialog({
 
   const visibleCopies = useMemo(() => {
     const raw = search.trim();
-    const y = year === "none" ? "none" : year ? Number(year) : null;
     return copies.filter((c) => {
-      if (y === "none" && c.issuedYear !== null) return false;
-      if (typeof y === "number" && c.issuedYear !== y) return false;
+      // One year, No year or a span of them (#2258), read as the rail and the routes read it.
+      if (!yearSelects(year, c.issuedYear)) return false;
       // The one copy search a picker runs (#2136): `#123` is that copy alone, anything else its
       // stamp, issue, location ref, catalogue number or — bare — its own number.
       return copyMatchesSearch(c, raw, () => {

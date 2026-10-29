@@ -14,6 +14,7 @@
 
 import { copyMatchesSearch, type CopySearchable } from "./copy-search";
 import type { AttachYear } from "./attach-picker-filters";
+import { yearSelects } from "./list-area-year-filter";
 import {
   sortAttachableCopies,
   type AttachSortCopy,
@@ -56,10 +57,7 @@ export function planAttachPicker<T extends AttachCandidate>(
     .map(([year, count]) => ({ year, count }))
     .sort((a, b) => (a.year === null ? 1 : b.year === null ? -1 : a.year - b.year));
   const { year } = query;
-  const inYear =
-    year === null
-      ? searched
-      : searched.filter((c) => (year === "none" ? c.issuedYear === null : c.issuedYear === year));
+  const inYear = year === null ? searched : searched.filter((c) => yearSelects(year, c.issuedYear));
   const ordered = sortAttachableCopies(inYear, query.sortBy, query.sortDir, areaOrder);
   return { ids: ordered.map((c) => c.id), yearFacets };
 }

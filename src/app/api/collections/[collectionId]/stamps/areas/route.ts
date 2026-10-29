@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listStampAreaFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
@@ -27,15 +28,6 @@ export async function GET(
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
-  const yearParam = sp.get("year");
-  const year =
-    yearParam === null || yearParam === ""
-      ? undefined
-      : yearParam === "none"
-        ? ("none" as const)
-        : Number.isFinite(Number(yearParam))
-          ? Number(yearParam)
-          : undefined;
 
   try {
     const areas = await listStampAreaFacets(session.user.id, collectionId, {
@@ -44,7 +36,8 @@ export async function GET(
       catalogVendorId,
       catalogNumber,
       issueId,
-      year,
+      // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
+      ...readYearFilter(sp.get("year")),
       // The attribute filters narrow these counts too (#737), for the same reason they narrow the
       // year ones: they are filters, not display axes.
       ...stampAttributeFiltersFromParams(sp),

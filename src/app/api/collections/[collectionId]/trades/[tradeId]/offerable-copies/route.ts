@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listOfferableCopies } from "@/lib/trade-lines";
 import { readSearchParam } from "@/lib/text-input";
 
@@ -23,19 +24,13 @@ export async function GET(
   const { tradeId } = await params;
   const sp = request.nextUrl.searchParams;
   const areaIds = sp.getAll("areaId");
-  const yearParam = sp.get("year");
-  const year =
-    yearParam === "none"
-      ? ("none" as const)
-      : yearParam && /^\d+$/.test(yearParam)
-        ? parseInt(yearParam, 10)
-        : undefined;
 
   try {
     const items = await listOfferableCopies(session.user.id, tradeId, {
       areaIds: areaIds.length > 0 ? areaIds : null,
       search: readSearchParam(sp),
-      year,
+      // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
+      ...readYearFilter(sp.get("year")),
       forTradeOnly: sp.get("forTrade") !== "false",
     });
     return NextResponse.json({ items });

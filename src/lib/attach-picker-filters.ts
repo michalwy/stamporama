@@ -29,6 +29,7 @@
  */
 
 import { isAttachSortKey, type AttachSortDir, type AttachSortKey } from "./attach-picker-sort";
+import { readYearSelection } from "./list-area-year-filter";
 import { NO_LOCATION } from "./location-groups";
 
 /** Where a copy stands: still held, gone on a sale or a closed trade, or written off (#394).
@@ -160,8 +161,9 @@ export function toggleValue<T extends string>(list: readonly T[], value: T): T[]
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-/** The year facet's value: one year, `"none"` for the copies of no year, or null for every year. */
-export type AttachYear = number | "none" | null;
+/** The year facet's value as the rail spells it: one year, `"none"` for the copies of no year, a
+ *  span of years (#2258), or null for every year — read with `yearSelects`. */
+export type AttachYear = string | null;
 
 /** Everything the picker narrows and orders its list by, beside the area rail and the state. */
 export interface AttachReadQuery {
@@ -180,10 +182,10 @@ export interface AttachReadQuery {
   search: string;
 }
 
-/** The year as the facet stores it (`"1950"`, `"none"`, or null) read as a filter value. */
+/** The year as the facet stores it (`"1950"`, `"none"`, `"1945-1960"`, or null) read as a filter
+ *  value — null for anything the rail cannot read, which selects every year. */
 export function parseAttachYear(raw: string | null | undefined): AttachYear {
-  if (raw === "none") return "none";
-  return raw && /^\d+$/.test(raw) ? parseInt(raw, 10) : null;
+  return readYearSelection(raw).kind === "all" ? null : (raw ?? null);
 }
 
 /** Put the picker's filters, year, search and sort on a query string (#2179). The state and the
@@ -209,7 +211,7 @@ export function writeAttachQuery(
   params.set("sort", filters.sortBy);
   params.set("dir", filters.sortDir);
   const y = parseAttachYear(year);
-  if (y !== null) params.set("year", String(y));
+  if (y !== null) params.set("year", y);
   if (search.trim()) params.set("search", search);
 }
 

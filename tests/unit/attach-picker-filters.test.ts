@@ -53,7 +53,7 @@ describe("the picker's query string (#2179)", () => {
       locationExact: true,
       sortBy: "value",
       sortDir: "desc",
-      year: 1950,
+      year: "1950",
       search: "#809",
     });
   });
@@ -73,7 +73,8 @@ describe("the picker's query string (#2179)", () => {
 
   it("reads the no-year facet as its own value", () => {
     assert.equal(parseAttachYear("none"), "none");
-    assert.equal(parseAttachYear("1950"), 1950);
+    assert.equal(parseAttachYear("1950"), "1950");
+    assert.equal(parseAttachYear("1945-1960"), "1945-1960");
     assert.equal(parseAttachYear("abc"), null);
     assert.equal(parseAttachYear(null), null);
   });

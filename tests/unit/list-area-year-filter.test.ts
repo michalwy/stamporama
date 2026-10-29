@@ -4,8 +4,14 @@ import {
   ALL_SENTINEL,
   areaYearMemoryKey,
   areaYearUrlUpdates,
+  readYearFilter,
+  readYearSelection,
   resolveAreaYearFilter,
   shouldRememberAreaYear,
+  singleYear,
+  yearRangeLabel,
+  yearRangeValue,
+  yearSelects,
   type AreaYearFilter,
 } from "../../src/lib/list-area-year-filter";
 
@@ -212,5 +218,72 @@ describe("the picker's area/year memory is its own (#1659)", () => {
       areaYearMemoryKey("c1", "stamp-picker"),
       areaYearMemoryKey("c2", "stamp-picker")
     );
+  });
+});
+
+describe("a range of years on the rail (#2258)", () => {
+  it("spells a span with both ends included, either end open, and one year as that year", () => {
+    assert.equal(yearRangeValue(1945, 1960), "1945-1960");
+    assert.equal(yearRangeValue(1945, null), "1945-");
+    assert.equal(yearRangeValue(null, 1918), "-1918");
+    assert.equal(yearRangeValue(1950, 1950), "1950");
+    assert.equal(yearRangeValue(null, null), null);
+  });
+
+  it("puts a span typed backwards the right way round rather than refusing it", () => {
+    assert.equal(yearRangeValue(1960, 1945), "1945-1960");
+    assert.deepEqual(readYearSelection("1960-1945"), { kind: "range", from: 1945, to: 1960 });
+  });
+
+  it("reads every spelling the year value takes, and selects every year on one it cannot read", () => {
+    assert.deepEqual(readYearSelection("1945-1960"), { kind: "range", from: 1945, to: 1960 });
+    assert.deepEqual(readYearSelection("-1918"), { kind: "range", from: null, to: 1918 });
+    assert.deepEqual(readYearSelection("1950s"), { kind: "range", from: 1950, to: 1959 });
+    assert.deepEqual(readYearSelection("1950"), { kind: "year", year: 1950 });
+    assert.deepEqual(readYearSelection("none"), { kind: "none" });
+    assert.deepEqual(readYearSelection(ALL_SENTINEL), { kind: "all" });
+    assert.deepEqual(readYearSelection("-"), { kind: "all" });
+    assert.deepEqual(readYearSelection("19x5"), { kind: "all" });
+  });
+
+  it("hands every route the same span, an open end left out", () => {
+    assert.deepEqual(readYearFilter("1945-1960"), { yearFrom: 1945, yearTo: 1960 });
+    assert.deepEqual(readYearFilter("1945-"), { yearFrom: 1945 });
+    assert.deepEqual(readYearFilter("-1918"), { yearTo: 1918 });
+    assert.deepEqual(readYearFilter("-"), {});
+  });
+
+  it("includes both ends and leaves No year outside every span", () => {
+    assert.equal(yearSelects("1945-1960", 1945), true);
+    assert.equal(yearSelects("1945-1960", 1960), true);
+    assert.equal(yearSelects("1945-1960", 1961), false);
+    assert.equal(yearSelects("1945-", 2020), true);
+    assert.equal(yearSelects("-1918", 1919), false);
+    assert.equal(yearSelects("1945-1960", null), false);
+    assert.equal(yearSelects("none", null), true);
+    assert.equal(yearSelects("1950", 1950), true);
+    assert.equal(yearSelects(null, null), true);
+  });
+
+  it("names one year only when one is selected, so a span pre-fills no new issue", () => {
+    assert.equal(singleYear("1950"), 1950);
+    assert.equal(singleYear("1945-1960"), null);
+    assert.equal(singleYear("none"), null);
+    assert.equal(singleYear(null), null);
+  });
+
+  it("writes a span for the collector as the head of the column shows it", () => {
+    assert.equal(yearRangeLabel(1945, 1960), "1945–1960");
+    assert.equal(yearRangeLabel(1945, null), "1945 onwards");
+    assert.equal(yearRangeLabel(null, 1918), "Up to 1918");
+  });
+
+  it("is remembered and mirrored into the address like a year", () => {
+    const selection: AreaYearFilter = { areaId: "pl", year: "1945-1960" };
+    assert.deepEqual(areaYearUrlUpdates(selection, null, null), {
+      areaId: "pl",
+      year: "1945-1960",
+    });
+    assert.deepEqual(resolveAreaYearFilter(sources({ storedYear: "1945-1960" })).year, "1945-1960");
   });
 });

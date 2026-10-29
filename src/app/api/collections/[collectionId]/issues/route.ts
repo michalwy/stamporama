@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
@@ -35,13 +36,6 @@ export async function GET(
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const displayConditionId = sp.get("displayConditionId") || undefined;
   const displayFormatId = sp.get("displayFormatId") || undefined;
-  const yearParam = sp.get("year");
-  const year =
-    yearParam === "none"
-      ? ("none" as const)
-      : yearParam && /^\d+$/.test(yearParam)
-        ? parseInt(yearParam, 10)
-        : undefined;
   const sortByParam = sp.get("sortBy") as IssueSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -60,7 +54,8 @@ export async function GET(
       // The collector's own labels (#1182) — a filter like any other, so the list and both
       // facet rails narrow by it and their counts answer for it.
       ...tagFilterFromParams(sp),
-      year,
+      // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
+      ...readYearFilter(sp.get("year")),
       displayConditionId,
       displayFormatId,
       sortBy,
