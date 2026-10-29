@@ -7,6 +7,7 @@ import {
   isAuctionListing,
 } from "@/lib/offer-rules";
 import { facebookPostLabel } from "@/lib/facebook-post-rules";
+import { NEUTRAL_TAG_TOKENS, type TagColorTokens } from "@/lib/tag-colors";
 import Link from "next/link";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
@@ -52,6 +53,23 @@ const STATE: Record<OfferState, { token: string | null; title: string }> = {
   sold: { token: "success", title: "Sold through this offer" },
   withdrawn: { token: null, title: "Taken down; not for sale here" },
 };
+
+/** A state's colours in the shape `FilterChip`'s `tint` takes, so the Offers card's state chips
+ *  (#2263) are drawn in the colours the rows' state chips are. */
+export function offerStateTint(state: OfferState): TagColorTokens {
+  const token = STATE[state].token;
+  if (!token) return NEUTRAL_TAG_TOKENS;
+  return {
+    color: `var(--color-${token})`,
+    border: `var(--color-${token}-border, var(--color-border))`,
+    background: `var(--color-${token}-soft, var(--color-bg-page))`,
+  };
+}
+
+/** What a state means, as its row chip's tooltip says it. */
+export function offerStateTitle(state: OfferState): string {
+  return STATE[state].title;
+}
 
 export function OfferStateChip({ state }: { state: OfferState }) {
   const meta = STATE[state];

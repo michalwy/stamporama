@@ -1934,9 +1934,16 @@ when you want to record a catalog value rather than read one.
 ## Seeing which offers something is in
 
 Every copy row's **⋮** menu has a **View offers** action. It opens a read-only popup listing
-**every offer that references this copy**, across all platforms and all states — live listings
-first (**Active**, **Paused**), then the ones you're still preparing, then the closed ones
-(**Sold**, **Withdrawn**). A copy you have never listed says so.
+**every offer that references this copy**, across all platforms — live listings first
+(**Active**, **Paused**), then the ones you're still preparing, then the closed ones (**Sold**,
+**Withdrawn**). A copy you have never listed says so.
+
+A row of **state chips** sits over the offers — one per state they are in, with its count — and
+the popup lists the offers in the states switched on. **Sold** and **Withdrawn** start off, so
+what you see first is what is still open; click a chip to switch it on or off, any number at once.
+When the chips hide every offer the popup says what is hidden (*2 sold, 1 withdrawn hidden*). The
+choice is remembered for the collection and is the same one the
+[Offers card](detail-pages.md) on a copy's, a stamp's and an issue's page uses.
 
 The same action is on the **Stamps** and **Issues** lists, next to
 [View copies](#viewing-copies-from-the-catalog) and scoped the same way:
