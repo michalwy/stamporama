@@ -787,3 +787,110 @@ export function changedRunPrices(
   }
   return out;
 }
+
+// ── Reading the run's values (#2260) ─────────────────────────────────────────────────────────────
+
+/** A price subject as the read is asked it — `RunPriceSubject` without its key. */
+export interface RunReadSubject {
+  stampId: string;
+  conditionId: string;
+  certificateStatusId: string | null;
+}
+
+/**
+ * The subjects one read of the run answers: each subject asked, then — for one on an umbrella whose
+ * tree is in `trees` — every stamp of that tree below it, in the same condition and certificate, the
+ * expansion `runPriceSubjects` makes on the client. Asked once each. The server makes it from the
+ * trees it has just read, so a run's umbrellas, their variants and every price field arrive in the
+ * same answer rather than one tree after another, each starting a read of the whole run again.
+ */
+export function withUmbrellaVariants(
+  subjects: readonly RunReadSubject[],
+  trees: Readonly<Record<string, readonly { stampId: string }[]>>
+): RunReadSubject[] {
+  const seen = new Set<string>();
+  const out: RunReadSubject[] = [];
+  const add = (stampId: string, s: RunReadSubject) => {
+    const key = catalogValueSubjectKey(stampId, s.conditionId, s.certificateStatusId ?? "");
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ stampId, conditionId: s.conditionId, certificateStatusId: s.certificateStatusId });
+  };
+  for (const s of subjects) {
+    add(s.stampId, s);
+    for (const row of trees[s.stampId] ?? []) if (row.stampId !== s.stampId) add(row.stampId, s);
+  }
+  return out;
+}
+
+/**
+ * What the run window has read of its values (#2260), kept **across reads**: a change to the run asks
+ * only for the subjects nobody has read yet, and every other row keeps its field — and what was
+ * typed in it — while that read is out.
+ *
+ * `fresh` holds the subjects read since `generation` began; `refreshRunValues` starts a new one after
+ * a save, so the whole run is read again in one go while the figures already on screen stay there,
+ * marked as loading.
+ */
+export interface RunValuesCache<Tree, Row, Catalog> {
+  generation: number;
+  /** Each umbrella's tree, by the umbrella's stamp. */
+  trees: ReadonlyMap<string, Tree>;
+  /** What is on file, by subject key. */
+  rows: ReadonlyMap<string, Row>;
+  /** The catalogues those rows name, by id. */
+  catalogs: ReadonlyMap<string, Catalog>;
+  fresh: ReadonlySet<string>;
+}
+
+export function emptyRunValues<Tree, Row, Catalog>(): RunValuesCache<Tree, Row, Catalog> {
+  return { generation: 0, trees: new Map(), rows: new Map(), catalogs: new Map(), fresh: new Set() };
+}
+
+/** The run's own subjects (no variants — the read adds those) not read in this generation. */
+export function runSubjectsToRead<S extends { key: string }>(
+  subjects: readonly S[],
+  cache: RunValuesCache<unknown, unknown, unknown>
+): S[] {
+  return subjects.filter((s) => !cache.fresh.has(s.key));
+}
+
+/** A new generation after a write: everything is read again, nothing on screen is dropped. */
+export function refreshRunValues<Tree, Row, Catalog>(
+  cache: RunValuesCache<Tree, Row, Catalog>
+): RunValuesCache<Tree, Row, Catalog> {
+  return { ...cache, generation: cache.generation + 1, fresh: new Set() };
+}
+
+/**
+ * One read folded in. Every subject it answered for is fresh — the ones asked, and their umbrellas'
+ * variants — whether or not a row came back for it (a stamp with no catalogue has none), so nothing
+ * is asked for twice. A read started before a refresh still lands its figures but marks nothing
+ * fresh: what it says may predate the write the refresh followed.
+ */
+export function mergeRunValues<Tree extends readonly { stampId: string }[], Row extends RunReadSubject, Catalog>(
+  cache: RunValuesCache<Tree, Row, Catalog>,
+  generation: number,
+  asked: readonly RunReadSubject[],
+  read: {
+    trees: Readonly<Record<string, Tree>>;
+    rows: readonly Row[];
+    catalogs: readonly Catalog[];
+  },
+  catalogIdOf: (catalog: Catalog) => string
+): RunValuesCache<Tree, Row, Catalog> {
+  const trees = new Map(cache.trees);
+  for (const [id, tree] of Object.entries(read.trees)) trees.set(id, tree);
+  const rows = new Map(cache.rows);
+  for (const row of read.rows) {
+    rows.set(catalogValueSubjectKey(row.stampId, row.conditionId, row.certificateStatusId ?? ""), row);
+  }
+  const catalogs = new Map(cache.catalogs);
+  for (const catalog of read.catalogs) catalogs.set(catalogIdOf(catalog), catalog);
+  if (generation !== cache.generation) return { ...cache, trees, rows, catalogs };
+  const fresh = new Set(cache.fresh);
+  for (const s of withUmbrellaVariants(asked, read.trees)) {
+    fresh.add(catalogValueSubjectKey(s.stampId, s.conditionId, s.certificateStatusId ?? ""));
+  }
+  return { ...cache, trees, rows, catalogs, fresh };
+}

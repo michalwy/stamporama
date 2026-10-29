@@ -5,6 +5,11 @@ import {
   branchFolded,
   changedRunPrices,
   clearedAssignments,
+  emptyRunValues,
+  mergeRunValues,
+  refreshRunValues,
+  runSubjectsToRead,
+  withUmbrellaVariants,
   hasOwnTags,
   nextWithoutStamp,
   overriddenFields,
@@ -713,5 +718,83 @@ describe("a run tile's tags (#1599)", () => {
   it("match a new tag by its name, whatever its case", () => {
     const own = ownTagsFrom([{ id: null, name: "check", color: null }], [fresh]);
     assert.deepEqual(own, { add: [], drop: [] });
+  });
+});
+
+describe("reading a run's values (#2260)", () => {
+  const subject = (stampId: string, conditionId = "mnh", certificateStatusId: string | null = null) => ({
+    stampId,
+    conditionId,
+    certificateStatusId,
+  });
+  const keyOf = (s: ReturnType<typeof subject>) => `${s.stampId}|${s.conditionId}|${s.certificateStatusId ?? ""}`;
+  const keyed = (s: ReturnType<typeof subject>) => ({ ...s, key: keyOf(s) });
+  type Row = ReturnType<typeof subject> & { amount: string };
+  type Tree = { stampId: string }[];
+  const trees = { U: [{ stampId: "U" }, { stampId: "Ua" }, { stampId: "Ub" }] };
+
+  it("adds an umbrella's variants in its condition, after it, each once", () => {
+    const out = withUmbrellaVariants(
+      [subject("A"), subject("U"), subject("Ua"), subject("U", "used", "cert")],
+      trees
+    );
+    assert.deepEqual(out.map(keyOf), [
+      "A|mnh|",
+      "U|mnh|",
+      "Ua|mnh|",
+      "Ub|mnh|",
+      "U|used|cert",
+      "Ua|used|cert",
+      "Ub|used|cert",
+    ]);
+  });
+
+  it("asks for every subject while nothing is read, then for none", () => {
+    const asked = [subject("A"), subject("U")];
+    let cache = emptyRunValues<Tree, Row, { id: string }>();
+    assert.equal(runSubjectsToRead(asked.map(keyed), cache).length, 2);
+    cache = mergeRunValues(
+      cache,
+      cache.generation,
+      asked,
+      { trees, rows: [{ ...subject("A"), amount: "1" }], catalogs: [{ id: "mi" }] },
+      (c) => c.id
+    );
+    assert.deepEqual(runSubjectsToRead(asked.map(keyed), cache), []);
+    // The umbrella's variants came with it — fresh though no row came back for them.
+    assert.ok(cache.fresh.has("Ua|mnh|") && cache.fresh.has("Ub|mnh|"));
+    assert.deepEqual(cache.trees.get("U"), trees.U);
+    assert.equal(cache.rows.get("A|mnh|")?.amount, "1");
+    assert.ok(cache.catalogs.has("mi"));
+  });
+
+  it("asks only for what a change brings, keeping what was read", () => {
+    let cache = emptyRunValues<Tree, Row, { id: string }>();
+    cache = mergeRunValues(
+      cache,
+      0,
+      [subject("A"), subject("B")],
+      { trees: {}, rows: [{ ...subject("A"), amount: "1" }, { ...subject("B"), amount: "2" }], catalogs: [] },
+      (c) => c.id
+    );
+    const changed = [subject("A"), subject("C")].map(keyed);
+    assert.deepEqual(runSubjectsToRead(changed, cache).map((s) => s.key), ["C|mnh|"]);
+    assert.equal(cache.rows.get("A|mnh|")?.amount, "1");
+  });
+
+  it("reads everything again after a write, keeping the figures meanwhile", () => {
+    let cache = emptyRunValues<Tree, Row, { id: string }>();
+    cache = mergeRunValues(cache, 0, [subject("A")], { trees: {}, rows: [{ ...subject("A"), amount: "1" }], catalogs: [] }, (c) => c.id);
+    cache = refreshRunValues(cache);
+    assert.equal(cache.generation, 1);
+    assert.deepEqual(runSubjectsToRead([keyed(subject("A"))], cache).map((s) => s.key), ["A|mnh|"]);
+    assert.equal(cache.rows.get("A|mnh|")?.amount, "1");
+  });
+
+  it("lands a read started before a refresh without calling it fresh", () => {
+    let cache = refreshRunValues(emptyRunValues<Tree, Row, { id: string }>());
+    cache = mergeRunValues(cache, 0, [subject("A")], { trees: {}, rows: [{ ...subject("A"), amount: "1" }], catalogs: [] }, (c) => c.id);
+    assert.equal(cache.rows.get("A|mnh|")?.amount, "1");
+    assert.equal(cache.fresh.size, 0);
   });
 });

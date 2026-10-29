@@ -3,7 +3,7 @@
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   DialogActions,
   DialogSecondaryButton,
@@ -34,6 +34,10 @@ import {
   runBlockers,
   runChoices,
   runPriceSubjects,
+  runSubjectsToRead,
+  emptyRunValues,
+  mergeRunValues,
+  refreshRunValues,
   runStart,
   runTileTags,
   runValueKeys,
@@ -61,6 +65,7 @@ import {
   type UmbrellaCellSummary,
 } from "@/lib/variant-price-cells";
 import type { VariantPriceRow } from "@/lib/variant-prices";
+import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
 import {
   useCollectionFormats,
   useInvalidateInventory,
@@ -549,36 +554,53 @@ export function IssueRunDialog({
   /** The umbrellas the run lands on, each read as the variant grid's own subtree (#2161) — the tree
    * the single tile's section prices (#1337), so the two agree on which stamps are an umbrella's
    * variants, in which order, and which of them a catalogue prices directly. */
-  const umbrellaIds = [
-    ...new Set(
-      assignments.flatMap((a) =>
-        a.stampId && memberById.get(a.stampId)?.isUmbrella ? [a.stampId] : []
-      )
-    ),
-  ];
-  const umbrellaTrees = useQueries({
-    queries: umbrellaIds.map((stampId) => ({
-      queryKey: ["issueRunVariantTree", stampId] as const,
-      queryFn: async (): Promise<VariantPriceRow[]> => {
-        const { getVariantPriceGridAction } = await import("@/app/actions/variant-prices");
-        const r = await getVariantPriceGridAction({ kind: "stamp", stampId, subtree: true });
-        if (r.status === "error") throw new Error(r.message);
-        return r.grid.rows;
-      },
-    })),
+  const isUmbrella = (stampId: string) => memberById.get(stampId)?.isUmbrella === true;
+  /**
+   * What the run has read of its values, kept across reads (#2260): the trees, what is on file per
+   * subject and the catalogues they name. **One read answers the whole run** — every umbrella's tree,
+   * its variants' prices and every row's — and a change to the run asks only for the subjects it
+   * brings, so every other row keeps its field and what was typed in it meanwhile.
+   */
+  const [runValues, setRunValues] = useState(() =>
+    emptyRunValues<VariantPriceRow[], BulkQuickPriceRow, BulkQuickPriceCatalog>()
+  );
+  /** The rows' own subjects — what the run asks the read for; it adds the umbrellas' variants. */
+  const toRead = runSubjectsToRead(runPriceSubjects(assignments, resolved), runValues);
+  const valuesRead = useQuery({
+    queryKey: [
+      "issueRunCatalogValues",
+      runValues.generation,
+      toRead.map((s) => s.key).join(","),
+    ] as const,
+    queryFn: async () => {
+      const generation = runValues.generation;
+      const asked = toRead.map(({ stampId, conditionId, certificateStatusId }) => ({
+        stampId,
+        conditionId,
+        certificateStatusId,
+      }));
+      const { getRunCatalogValuesAction } = await import("@/app/actions/checklists");
+      const r = await getRunCatalogValuesAction({
+        subjects: asked,
+        umbrellaIds: [...new Set(asked.flatMap((s) => (isUmbrella(s.stampId) ? [s.stampId] : [])))],
+      });
+      if (r.status === "error") throw new Error(r.message);
+      setRunValues((prev) => mergeRunValues(prev, generation, asked, r, (c) => c.catalogNameId));
+      return true;
+    },
+    // Not before the members are in: they say which stamps are umbrellas, and a subject read as
+    // no umbrella would not be read again for its tree.
+    enabled: toRead.length > 0 && !membersLoading,
+    staleTime: Infinity,
+    gcTime: 0,
   });
-  const treeOf = new Map<string, VariantPriceRow[]>();
-  const treeErrorOf = new Map<string, string>();
-  umbrellaIds.forEach((id, i) => {
-    const rows = umbrellaTrees[i]?.data;
-    if (rows) treeOf.set(id, rows);
-    const error = umbrellaTrees[i]?.error;
-    if (error) treeErrorOf.set(id, error.message);
-  });
+  /** A save makes what was read stale: the whole run is read again, its figures staying meanwhile. */
+  const rereadValues = () => setRunValues(refreshRunValues);
+  const treeOf = runValues.trees;
   /** Every stamp under an umbrella, in tree order — empty while its tree is being read, so the row
    * asks for nothing meanwhile rather than for a price of the umbrella. */
   const variantsOf: RunVariantsOf = (stampId) => {
-    if (!memberById.get(stampId)?.isUmbrella) return null;
+    if (!isUmbrella(stampId)) return null;
     return (treeOf.get(stampId) ?? [])
       .filter((r) => r.stampId !== stampId)
       .map((r) => ({ stampId: r.stampId, identified: r.identified }));
@@ -586,30 +608,9 @@ export function IssueRunDialog({
   /** The prices this run can record — one per stamp × condition × certificate, never per tile, and
    * on an umbrella's row its variants' (#2161). */
   const priceSubjects = runPriceSubjects(assignments, resolved, variantsOf);
-  const priceSubjectsKey = priceSubjects.map((s) => s.key).join(",");
-  /** One read for the whole run — the offer grid's bulk context (#720), which answers the primary
-   * catalogue, its latest edition and what is on file at the single for every subject at once. */
-  const prices = useQuery({
-    queryKey: ["issueRunCatalogValues", priceSubjectsKey] as const,
-    queryFn: async () => {
-      const { getBulkQuickCatalogPriceContextAction } = await import("@/app/actions/stamps");
-      const r = await getBulkQuickCatalogPriceContextAction(
-        priceSubjects.map(({ stampId, conditionId, certificateStatusId }) => ({
-          stampId,
-          conditionId,
-          certificateStatusId,
-        }))
-      );
-      if (r.status === "error") throw new Error(r.message);
-      return r;
-    },
-    enabled: priceSubjects.length > 0,
-    staleTime: 0,
-    gcTime: 0,
-    // A changed condition re-reads the run; the rows whose subjects did not change keep their fields
-    // meanwhile rather than all blinking out at once.
-    placeholderData: (previous) => previous,
-  });
+  /** Whether a subject is still to be read — the rows the read is out for show it. */
+  const valueReading = (key: string | null) =>
+    key != null && !runValues.fresh.has(key) && !valuesRead.isError;
   /** What was typed, by subject — so a figure typed on one tile is the figure of every tile sharing
    * its stamp and condition, and a change of condition leaves it under the subject it was typed for
    * rather than moving it onto another. */
@@ -619,12 +620,10 @@ export function IssueRunDialog({
   /** The field for one subject, or null where there is none — no primary catalogue, or the read for
    * it not in yet. */
   const priceField = (key: string | null) => {
-    if (!key || !prices.data) return null;
-    const row = prices.data.rows.find(
-      (r) => catalogValueSubjectKey(r.stampId, r.conditionId, r.certificateStatusId ?? "") === key
-    );
+    if (!key) return null;
+    const row = runValues.rows.get(key);
     if (!row?.primaryCatalogNameId) return null;
-    const catalog = prices.data.catalogs.find((c) => c.catalogNameId === row.primaryCatalogNameId);
+    const catalog = runValues.catalogs.get(row.primaryCatalogNameId);
     const recorded = row.amounts[row.primaryCatalogNameId] ?? null;
     return {
       catalog,
@@ -632,7 +631,7 @@ export function IssueRunDialog({
         catalogNameId: row.primaryCatalogNameId,
         amount: typedPrices.get(key) ?? recorded ?? "",
         recorded,
-        loading: prices.isFetching,
+        loading: !runValues.fresh.has(key),
       },
     };
   };
@@ -674,7 +673,7 @@ export function IssueRunDialog({
     });
   };
   // Written from the full grid (#2161): the run's read is stale once it closes having saved.
-  const fullGrid = useVariantPriceGrid({ onSaved: () => void prices.refetch() });
+  const fullGrid = useVariantPriceGrid({ onSaved: rereadValues });
   const priceInputs = useRef(new Map<string, HTMLInputElement | null>());
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   /** Tab walks the values and nothing else, and off the last one lands on Identify (#726). */
@@ -836,7 +835,7 @@ export function IssueRunDialog({
       const { quickSetCatalogPricesBulkAction } = await import("@/app/actions/stamps");
       const r = await quickSetCatalogPricesBulkAction(changed);
       setSavingPrices(false);
-      if (r.savedRows > 0) void prices.refetch();
+      if (r.savedRows > 0) rereadValues();
       if (r.status === "error") {
         setPriceError(r.message);
         return;
@@ -1023,17 +1022,14 @@ export function IssueRunDialog({
 
   /** Whether the values are still being read — the run's, or an umbrella's tree (#2161), whose row
    * asks for nothing until it is in. */
-  const valuesReading =
-    prices.isLoading ||
-    (prices.isFetching && valueKeys.length === 0) ||
-    umbrellaTrees.some((q) => q.isLoading);
+  const valuesReading = toRead.length > 0 && !valuesRead.isError && valueKeys.length === 0;
   /** Whether any subject of the run can be recorded at all — a primary catalogue with an edition. */
   const anyValueField = subjectFields.some((f) => f != null);
   /** Whether the run's values note is drawn, which the run's counts then sit beside. */
   const valuesNoteShown =
     priceSubjects.length > 0 &&
     !valuesReading &&
-    !prices.isError &&
+    !valuesRead.isError &&
     anyValueField;
   /** The tiles still without a stamp (#1523) and the tiles on an umbrella (#1247), counted at the top
    * so a long run need not be scrolled to find them. */
@@ -1283,9 +1279,9 @@ export function IssueRunDialog({
               {priceSubjects.length > 0 ? (
                 valuesReading ? (
                   <p style={MUTED}>Reading the catalog values on file…</p>
-                ) : prices.isError ? (
+                ) : valuesRead.isError ? (
                   <p style={{ ...MUTED, color: "var(--color-error)" }}>
-                    The catalog values on file could not be read: {prices.error.message}
+                    The catalog values on file could not be read: {valuesRead.error.message}
                   </p>
                 ) : !anyValueField ? (
                   <p style={MUTED}>
@@ -1543,6 +1539,7 @@ export function IssueRunDialog({
                           entry={slot.key != null && slot.entryIndex === i}
                           entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
                           amount={field?.value.amount ?? null}
+                          reading={valueReading(slot.key)}
                           currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
                           label={`#${i + 1} ${label} ${subjectLabel} catalog value`}
                           {...fieldProps(slot.key)}
@@ -1568,15 +1565,20 @@ export function IssueRunDialog({
                         them (#1337): a field per variant down the tree, under the row and lined up
                         with its value, so Tab goes through them and on to the next row. */}
                     {/* Only where the umbrella has a catalogue to be priced in, as a row's field. */}
-                    {slot.variants && a.stampId && field && (
+                    {slot.variants && a.stampId && (field || valueReading(slot.key)) && (
                       <RunVariantPrices
                         rows={treeOf.get(a.stampId) ?? null}
-                        error={treeErrorOf.get(a.stampId) ?? null}
+                        error={
+                          valuesRead.isError && !treeOf.has(a.stampId)
+                            ? valuesRead.error.message
+                            : null
+                        }
                         rootId={a.stampId}
                         variants={slot.variants}
                         index={i}
                         summary={umbrellaValue(a.stampId, a.stampId, d)}
                         valueOf={(vkey) => priceField(vkey)?.value.amount ?? null}
+                        readingOf={valueReading}
                         currencyOf={(vkey) =>
                           runCatalog ? null : (priceField(vkey)?.catalog?.currency ?? null)
                         }
@@ -2164,6 +2166,7 @@ function RowValue({
   entry,
   entryTurn,
   amount,
+  reading,
   currency,
   label,
   disabled,
@@ -2176,6 +2179,9 @@ function RowValue({
   entryTurn: number | null;
   /** Null where there is no field — nothing to record, or the read not in yet. */
   amount: string | null;
+  /** The read for this subject is out (#2260): with no field yet, the row says so rather than
+   * standing empty. */
+  reading: boolean;
   /** Named per row only where the run's catalogs differ; otherwise it is in the heading. */
   currency: string | null;
   label: string;
@@ -2192,7 +2198,22 @@ function RowValue({
         fontSize: "0.75rem",
       }}
     >
-      {amount == null ? null : entry ? (
+      {amount == null ? (
+        reading && (entry || entryTurn != null) ? (
+          <span
+            style={{
+              width: "6.5rem",
+              flexShrink: 0,
+              boxSizing: "border-box",
+              padding: "0 0.5rem",
+              textAlign: "right",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Reading…
+          </span>
+        ) : null
+      ) : entry ? (
         <>
           <NumericInput
             kind="amount"
@@ -2336,6 +2357,7 @@ function RunVariantPrices({
   index,
   summary,
   valueOf,
+  readingOf,
   currencyOf,
   umbrellaValueOf,
   labelOf,
@@ -2353,6 +2375,8 @@ function RunVariantPrices({
   index: number;
   summary: UmbrellaCellSummary | null;
   valueOf: (key: string) => string | null;
+  /** Whether a variant's subject is still to be read (#2260). */
+  readingOf: (key: string) => boolean;
   currencyOf: (key: string) => string | null;
   umbrellaValueOf: (stampId: string) => UmbrellaCellSummary | null;
   labelOf: (row: VariantPriceRow) => string;
@@ -2434,6 +2458,7 @@ function RunVariantPrices({
                   entry={v.entryIndex === index}
                   entryTurn={v.entryIndex !== index ? v.entryIndex + 1 : null}
                   amount={valueOf(v.key)}
+                  reading={readingOf(v.key)}
                   currency={currencyOf(v.key)}
                   label={labelOf(row)}
                   {...fieldProps(v.key)}
