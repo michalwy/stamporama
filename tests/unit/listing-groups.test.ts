@@ -78,18 +78,22 @@ describe("offerMatchesFilters", () => {
   });
 
   it("matches a year only when every copy is on it", () => {
-    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["de", 1960]), { year: 1960 }), true);
-    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["pl", 1961]), { year: 1960 }), false);
+    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["de", 1960]), { year: "1960" }), true);
+    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["pl", 1961]), { year: "1960" }), false);
   });
 
   it("selects the no-year bucket with \"none\"", () => {
     assert.equal(offerMatchesFilters(offer(["pl", null]), { year: "none" }), true);
+    // A span (#2258): every copy inside it, and a copy of no year outside every span.
+    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["pl", 1961]), { year: "1960-1961" }), true);
+    assert.equal(offerMatchesFilters(offer(["pl", 1960], ["pl", 1962]), { year: "1960-1961" }), false);
+    assert.equal(offerMatchesFilters(offer(["pl", null]), { year: "-1961" }), false);
     assert.equal(offerMatchesFilters(offer(["pl", 1960]), { year: "none" }), false);
   });
 
   it("never matches an empty offer against a coordinate", () => {
     assert.equal(offerMatchesFilters(offer(), { areaIds: ["pl"] }), false);
-    assert.equal(offerMatchesFilters(offer(), { year: 1960 }), false);
+    assert.equal(offerMatchesFilters(offer(), { year: "1960" }), false);
   });
 
   it("passes everything through when nothing is selected", () => {
@@ -192,7 +196,7 @@ describe("offerAreaFacets (#843)", () => {
 
   it("respects the year selection but not its own dimension", () => {
     const rows = [offer(["pl", 1960]), offer(["pl", 1961]), offer(["de", 1960])];
-    assert.deepEqual(byArea(offerAreaFacets(rows, { year: 1960 })), [
+    assert.deepEqual(byArea(offerAreaFacets(rows, { year: "1960" })), [
       { areaId: "de", count: 1 },
       { areaId: "pl", count: 1 },
     ]);
@@ -219,7 +223,7 @@ describe("offerAreaFacets (#843)", () => {
       offer(["pl", null]),
       offer(["pl", 1960], ["de", 1960]),
     ];
-    for (const year of [1960, 1961, "none", null] as const) {
+    for (const year of ["1960", "1961", "1960-1961", "none", null] as const) {
       const facets = offerAreaFacets(rows, { year });
       for (const areaId of ["pl", "de"]) {
         const listed = rows.filter((o) =>

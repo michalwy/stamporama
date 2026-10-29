@@ -41,6 +41,7 @@ import {
   type WantPriority,
 } from "./want-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { readYearFilter } from "./list-area-year-filter";
 import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 
 // The priority vocabulary lives in the pure module, since the form and the list toolbar render it
@@ -335,8 +336,9 @@ export interface WantListFilters {
   conditionIds?: string[];
   /** The wanted stamp's own primary area, already expanded to descendants by the caller (#385). */
   areaIds?: string[];
-  /** `"none"` is the no-year bucket; otherwise a numeric year string. Matched against the stamp's
-   *  `issuedYear`, exactly as the stamps list matches it. */
+  /** `"none"` is the no-year bucket; otherwise a numeric year string or a span of years (#2258),
+   *  as `readYearFilter` reads it. Matched against the stamp's `issuedYear`, exactly as the stamps
+   *  list matches it. */
   year?: string;
   /** One stamp's wants — what the stamp detail screen's card reads (#518). */
   stampId?: string;
@@ -403,7 +405,13 @@ function buildWantListWhere(
     stamp.stampAreaLinks = { some: { collectionAreaId: { in: filters.areaIds } } };
   }
   if (!omitYear && filters.year) {
-    stamp.issuedYear = filters.year === "none" ? null : Number(filters.year);
+    const { year, yearFrom, yearTo } = readYearFilter(filters.year);
+    if (year !== undefined) stamp.issuedYear = year === "none" ? null : year;
+    else if (yearFrom !== undefined || yearTo !== undefined)
+      stamp.issuedYear = {
+        ...(yearFrom !== undefined ? { gte: yearFrom } : {}),
+        ...(yearTo !== undefined ? { lte: yearTo } : {}),
+      };
   }
   if (filters.issueId) {
     stamp.issueMemberships =

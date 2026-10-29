@@ -143,6 +143,9 @@ describe("structure segments (#1401)", () => {
     assert.deepEqual(labels("year", copies), ["1950s", "1960s", "No year"]);
     assert.deepEqual(labels("year", copies, { decade: "1950s" }), ["1952", "1958"]);
     assert.deepEqual(labels("year", copies, { year: "1958" }), ["1958"]);
+    // A span from the rail (#2258) opens into the years inside it, as a decade does.
+    assert.deepEqual(labels("year", copies, { year: "1955-1963" }), ["1958", "1963"]);
+    assert.deepEqual(labels("year", copies, { year: "-1958" }), ["1952", "1958"]);
     const [fifties] = structureSegments("year", copies, vocab, narrowing());
     assert.deepEqual(fifties.params, { year: "all", decade: "1950s" });
   });
@@ -405,6 +408,12 @@ describe("the Copies list's address, as a route reads it (#1401)", () => {
     assert.equal(read({ year: "all", decade: "1950s" }).year, "1950s");
     assert.equal(read({ year: "1955", decade: "1950s" }).year, "1955");
     assert.equal(read({ decade: "195" }).year, undefined);
+  });
+
+  it("carries a span of years from the rail, but not a decade spelt in the rail's place (#2258)", () => {
+    assert.equal(read({ year: "1945-1960" }).year, "1945-1960");
+    assert.equal(read({ year: "1945-" }).year, "1945-");
+    assert.equal(read({ year: "1950s" }).year, undefined);
   });
 
   it("scopes a location as the list's switch does, and parses a catalogue search", () => {

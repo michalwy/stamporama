@@ -22,6 +22,7 @@ import {
   YEAR_FILTER_PARAM,
   decadeValue,
   parseDecade,
+  readYearSelection,
 } from "./list-area-year-filter";
 
 /** The Copies list's own parameter for a decade (#1401); see `inventory-list-panel.tsx`. */
@@ -70,11 +71,13 @@ export function copiesListAreaId(
   return areas.some((a) => a.id === raw) ? raw : null;
 }
 
-/** The year a Copies address narrows to, as the rail reads it: a year, `none`, or null — anything
- *  else is no year, as `readYearFilter` reads it. */
+/** The year a Copies address narrows to, as the rail reads it: a year, `none`, a span of years
+ *  (#2258), or null — anything else is no year, as `readYearFilter` reads it. A decade has its own
+ *  parameter ({@link copiesListDecade}) and is not a rail value. */
 export function copiesListRailYear(url: URLSearchParams): string | null {
   const raw = url.get(YEAR_FILTER_PARAM);
-  return raw === "none" || (raw && /^\d+$/.test(raw)) ? raw : null;
+  if (!raw || parseDecade(raw) !== null) return null;
+  return readYearSelection(raw).kind === "all" ? null : raw;
 }
 
 /** The decade a Copies address narrows to — only while the rail names no single year, as the list

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { DialogShell, PICKER_DIALOG_HEIGHT, type DialogAsideProps } from "@/app/dialog-shell";
+import { singleYear } from "@/lib/list-area-year-filter";
 import type { CollectionAreaData } from "@/lib/areas";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import {
@@ -387,7 +388,8 @@ export function StampPickerBrowser({
     useIssuesInfinite(collectionId, filters, { areaId, includeSubAreas });
   const issues = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
 
-  const selectedYearNumber = year && year !== "none" ? Number(year) : undefined;
+  // Only one year pre-fills a new issue — a span of them (#2258) names no single year to give it.
+  const selectedYearNumber = singleYear(year) ?? undefined;
 
   function closeCreate() {
     if (!isPending) {

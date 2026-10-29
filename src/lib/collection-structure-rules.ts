@@ -26,7 +26,13 @@
  */
 
 import { DELIVERY_STATE_META, type DeliveryState } from "./delivery-state";
-import { NO_AREA, decadeOf, decadeValue } from "./list-area-year-filter";
+import {
+  NO_AREA,
+  decadeOf,
+  decadeValue,
+  readYearSelection,
+  yearSelects,
+} from "./list-area-year-filter";
 import { DEFAULT_TAG_FILTER_MODE, NO_TAGS, tagFilterFromParams, type TagFilterMode } from "./tag-filter";
 import { copiesListAreaId, copiesListDecade, copiesListRailYear } from "./copies-list-url";
 import type { HoldingsSummary } from "./valuation";
@@ -127,7 +133,7 @@ export interface StructureNarrowing {
   tagMode: TagFilterMode;
   /** An area id or {@link NO_AREA}. */
   areaId: string | null;
-  /** The rail's single year: a year or `none`. */
+  /** The rail's year: a year, `none`, or a span of years (#2258). */
   year: string | null;
   /** The first year of a decade. */
   decade: number | null;
@@ -315,7 +321,18 @@ function yearSegments(copies: StructureCopy[], narrowing: StructureNarrowing): S
     match: (copy) => copy.issuedYear === null,
   };
   if (narrowing.year === "none") return [noYear];
-  if (narrowing.year) {
+  const years = [
+    ...new Set(copies.map((c) => c.issuedYear).filter((y): y is number => y !== null)),
+  ].sort((a, b) => a - b);
+  // A span of years from the rail (#2258) opens into its years, as a decade does.
+  const { decade } = narrowing;
+  const inSpan =
+    readYearSelection(narrowing.year).kind === "range"
+      ? (y: number) => yearSelects(narrowing.year, y)
+      : decade !== null
+        ? (y: number) => y >= decade && y <= decade + 9
+        : null;
+  if (!inSpan && narrowing.year) {
     const year = Number(narrowing.year);
     return [
       {
@@ -327,13 +344,9 @@ function yearSegments(copies: StructureCopy[], narrowing: StructureNarrowing): S
       },
     ];
   }
-  const years = [
-    ...new Set(copies.map((c) => c.issuedYear).filter((y): y is number => y !== null)),
-  ].sort((a, b) => a - b);
-  if (narrowing.decade !== null) {
-    const from = narrowing.decade;
+  if (inSpan) {
     return years
-      .filter((y) => y >= from && y <= from + 9)
+      .filter(inSpan)
       .map((year) => ({
         key: String(year),
         label: String(year),

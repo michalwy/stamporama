@@ -756,6 +756,10 @@ export interface StampListFilterOpts {
   /** Restrict to a single year. A number matches `stamp.issuedYear`; `"none"`
    *  matches stamps with no issued year. Omitted means no year filter. */
   year?: number | "none";
+  /** Restrict to a span of years, both ends included (#2258) — either end may be left open. A
+   *  stamp with no issued year is outside every span. */
+  yearFrom?: number;
+  yearTo?: number;
   sortBy?: StampSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the list price column. When omitted, defaults
@@ -844,6 +848,15 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
 
   if (opts.year !== undefined) {
     conditions.push({ issuedYear: opts.year === "none" ? null : opts.year });
+  }
+
+  if (opts.yearFrom !== undefined || opts.yearTo !== undefined) {
+    conditions.push({
+      issuedYear: {
+        ...(opts.yearFrom !== undefined ? { gte: opts.yearFrom } : {}),
+        ...(opts.yearTo !== undefined ? { lte: opts.yearTo } : {}),
+      },
+    });
   }
 
   // The collector's own labels (#1182) — `buildIssueListWhere`'s clause exactly, one level down, and

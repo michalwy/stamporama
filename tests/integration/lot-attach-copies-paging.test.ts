@@ -262,7 +262,7 @@ describe("listAttachableCopies — filtered, ordered and paged where it reads (#
     const facetTotal = page.yearFacets.reduce((sum, f) => sum + f.count, 0);
     assert.equal(facetTotal, matching.length, "the facet counts what the search holds");
 
-    const in1951 = await listAttachableCopies(userId, lotId, { search: text, year: 1951 });
+    const in1951 = await listAttachableCopies(userId, lotId, { search: text, year: "1951" });
     assert.equal(in1951.total, matching.filter((c) => c.issuedYear === 1951).length);
     assert.deepEqual(in1951.yearFacets, page.yearFacets, "choosing a year leaves the others counted");
     const noYear = await listAttachableCopies(userId, lotId, { year: "none" });

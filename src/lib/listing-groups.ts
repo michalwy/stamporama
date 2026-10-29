@@ -15,6 +15,7 @@
 // Narrowing by year is the stricter question, and such an offer answers no to every year.
 
 import type { AreaFacet } from "./area-facets";
+import { yearSelects } from "./list-area-year-filter";
 
 /** The area/year coordinates of one offer, as the read model reports them: one entry per distinct
  * pair across its copies. A copy's area is its stamp's primary area link and its year is the stamp's
@@ -71,7 +72,8 @@ export function offerGroupKey(offer: GroupableOffer): GroupKey {
  * parent area matches an offer whose copies sit in its children. Every copy must be inside it: an
  * offer half of which is elsewhere is not an offer for this area's posting session.
  *
- * `year` is exact and, like the area, must hold for every copy. `"none"` selects the no-year bucket.
+ * `year` is the rail's value — one year, `"none"` for the no-year bucket, or a span of years (#2258)
+ * — and, like the area, must hold for every copy.
  *
  * A Mixed selection is a group choice rather than a coordinate, so it is answered by the group key
  * and ignores both other dimensions — asking "which areas is this Mixed offer in" is the question
@@ -79,7 +81,7 @@ export function offerGroupKey(offer: GroupableOffer): GroupKey {
  */
 export function offerMatchesFilters(
   offer: GroupableOffer,
-  filters: { areaIds?: string[] | null; year?: number | "none" | null; mixedOnly?: boolean }
+  filters: { areaIds?: string[] | null; year?: string | null; mixedOnly?: boolean }
 ): boolean {
   if (filters.mixedOnly) return offerGroupKey(offer).mixed;
   if (filters.areaIds && filters.areaIds.length > 0) {
@@ -87,10 +89,10 @@ export function offerMatchesFilters(
     if (offer.areaYears.length === 0) return false;
     if (!offer.areaYears.every((p) => p.areaId !== null && allowed.has(p.areaId))) return false;
   }
-  if (filters.year !== undefined && filters.year !== null) {
-    const wanted = filters.year === "none" ? null : filters.year;
+  if (filters.year) {
+    const { year } = filters;
     if (offer.areaYears.length === 0) return false;
-    if (!offer.areaYears.every((p) => p.year === wanted)) return false;
+    if (!offer.areaYears.every((p) => yearSelects(year, p.year))) return false;
   }
   return true;
 }
@@ -187,7 +189,7 @@ export function offerYearFacets(
  */
 export function offerAreaFacets(
   offers: GroupableOffer[],
-  filters: { year?: number | "none" | null; mixedOnly?: boolean } = {}
+  filters: { year?: string | null; mixedOnly?: boolean } = {}
 ): AreaFacet[] {
   const counts = new Map<string, number>();
   for (const offer of offers) {

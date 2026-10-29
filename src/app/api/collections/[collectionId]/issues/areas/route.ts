@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listIssueAreaFacets } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
@@ -27,15 +28,6 @@ export async function GET(
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), ISSUE_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
-  const yearParam = sp.get("year");
-  const year =
-    yearParam === null || yearParam === ""
-      ? undefined
-      : yearParam === "none"
-        ? ("none" as const)
-        : Number.isFinite(Number(yearParam))
-          ? Number(yearParam)
-          : undefined;
 
   try {
     const areas = await listIssueAreaFacets(session.user.id, collectionId, {
@@ -45,7 +37,8 @@ export async function GET(
       searchFields,
       catalogVendorId,
       catalogNumber,
-      year,
+      // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
+      ...readYearFilter(sp.get("year")),
       // The collector's own labels (#1182) — a filter like any other, so the list and both
       // facet rails narrow by it and their counts answer for it.
       ...tagFilterFromParams(sp),

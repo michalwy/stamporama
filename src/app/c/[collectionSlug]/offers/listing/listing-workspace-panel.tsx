@@ -143,7 +143,8 @@ export function ListingWorkspacePanel({
     [filterAreaId, areas, includeSubAreas]
   );
 
-  const parsedYear = year === "" ? undefined : year === "none" ? ("none" as const) : Number(year);
+  // One year, No year or a span of them (#2258), as the rail spells it; "" is every year.
+  const parsedYear = year || undefined;
 
   // The rail's facets are counted against the *area* selection but not their own dimension, so each
   // count says what clicking it would show. A Mixed selection replaces both, so its facets go quiet.

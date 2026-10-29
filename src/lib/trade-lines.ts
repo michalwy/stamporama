@@ -753,6 +753,9 @@ export interface OfferableCopyFilters {
   areaIds?: string[] | null;
   search?: string;
   year?: number | "none";
+  /** A span of years, both ends included (#2258) — either end may be open. */
+  yearFrom?: number;
+  yearTo?: number;
   /**
    * Narrow to copies marked **for trade** (`Item.forTrade`, ADR-0007 §4) — the picker's default.
    *
@@ -796,6 +799,8 @@ export async function listOfferableCopies(
     areaIds: filters.areaIds ?? undefined,
     search: filters.search,
     year: filters.year,
+    yearFrom: filters.yearFrom,
+    yearTo: filters.yearTo,
     ...(filters.forTradeOnly ? { forTrade: true } : {}),
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
