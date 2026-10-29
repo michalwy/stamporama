@@ -1790,6 +1790,10 @@ so you can copy a column of numbers off the catalogue page without selecting any
   in amber**; the note above the run counts them.
 - `1,50` and `1.50` are both accepted. The figure is always the single's, whatever format you file
   the piece as.
+- **The whole run's values arrive together** — every row's field and every umbrella's variants at
+  once, however many umbrellas the run holds; until then each row says *Reading…*. Reassigning a
+  tile or changing a condition reads only the rows that changed: the others keep their fields and
+  whatever you typed in them.
 - **An umbrella in the run asks for its variants' prices**, as identifying a single tile does,
   because the catalogue prices each variant rather than the stamp. Under a row on a stamp with
   variants of its own comes one line per variant down its tree, indented as the tree is and labelled

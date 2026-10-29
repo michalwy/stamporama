@@ -27,7 +27,8 @@ import {
 } from "@/lib/spanning-checklists";
 import { getIssueCompleteness } from "@/lib/checklist-completeness";
 import { headlineCompleteness } from "@/lib/checklist-completeness-rules";
-import type { RunChecklist } from "@/lib/issue-run";
+import type { RunChecklist, RunReadSubject } from "@/lib/issue-run";
+import { getRunCatalogValues, type RunCatalogValues } from "@/lib/issue-run-values";
 import type { TranslationValueMap } from "@/lib/translations";
 import { isChecklistKind, type ChecklistKind } from "@/lib/checklist-kind";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
@@ -102,6 +103,22 @@ export async function getRunChecklistAction(
 ): Promise<RunChecklist | null> {
   const session = await getSession();
   return getRunChecklist(session.user.id, collectionId, checklistId);
+}
+
+/** A run's catalogue values, its umbrellas' trees with them, in one read (#2260). */
+export async function getRunCatalogValuesAction(request: {
+  subjects: RunReadSubject[];
+  umbrellaIds: string[];
+}): Promise<({ status: "success" } & RunCatalogValues) | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await getRunCatalogValues(session.user.id, request)) };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Could not read the catalog values.",
+    };
+  }
 }
 
 /** The collection's checklists that span issues — what the run picker offers beside an issue's own

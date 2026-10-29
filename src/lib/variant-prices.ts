@@ -447,6 +447,65 @@ export async function getVariantPriceGrid(
   };
 }
 
+/**
+ * Several stamps' own subtrees in one read (#2260): per stamp, exactly the rows `getVariantPriceGrid`
+ * draws for `{ kind: "stamp", stampId, subtree: true }` — the same tree, order, labels and
+ * `identified` flags — without the grid's dictionaries, editions, prices and multipliers, which a
+ * checklist run asking about seven umbrellas at once does not draw. One authorization check, one
+ * descendant walk and one stamp read for all of them, where the grid makes each per opening.
+ */
+export async function getVariantSubtrees(
+  ownerId: string,
+  stampIds: readonly string[]
+): Promise<Record<string, VariantPriceRow[]>> {
+  const rootIds = [...new Set(stampIds)];
+  if (rootIds.length === 0) return {};
+  const roots = await prisma.stamp.findMany({
+    where: { id: { in: rootIds } },
+    select: { id: true, collectionId: true },
+  });
+  if (roots.length !== rootIds.length) throw new Error("Stamp not found.");
+  const collectionId = roots[0].collectionId;
+  if (roots.some((s) => s.collectionId !== collectionId)) {
+    throw new Error("These stamps are not all in one collection.");
+  }
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const descendants = await buildDescendantMap(collectionId, new Set(rootIds));
+  const subtreeOf = new Map(
+    rootIds.map((id) => [id, new Set([id, ...(descendants.get(id) ?? [])])])
+  );
+  const allIds = [...new Set([...subtreeOf.values()].flatMap((s) => [...s]))];
+
+  const [stamps, members, labeller] = await Promise.all([
+    prisma.stamp.findMany({
+      where: { id: { in: allIds }, collectionId },
+      select: GRID_STAMP_SELECT,
+    }) as Promise<GridStamp[]>,
+    prisma.issueMember.findMany({
+      where: { stampId: { in: allIds } },
+      select: { stampId: true, sortOrder: true },
+      orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+    }),
+    makeOfferLabeller(collectionId),
+  ]);
+  // A stamp's first issue position, as the subtree scope reads it in `resolveScope`.
+  const sortOrderByStamp = new Map<string, number>();
+  for (const m of members) if (!sortOrderByStamp.has(m.stampId)) sortOrderByStamp.set(m.stampId, m.sortOrder);
+  const labelOf = (stamp: GridStamp) =>
+    labeller.catalogNumbers(stamp)[0] ?? labeller.copy(stamp);
+
+  const out: Record<string, VariantPriceRow[]> = {};
+  for (const [rootId, ids] of subtreeOf) {
+    out[rootId] = flattenTree(
+      stamps.filter((s) => ids.has(s.id)),
+      sortOrderByStamp,
+      labelOf
+    );
+  }
+  return out;
+}
+
 /** Which stamps a scope covers, and what the grid is named after. */
 async function resolveScope(
   ownerId: string,
