@@ -27,7 +27,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - **Overview**, pinned above the sections — the one screen about the collection as a whole — with
   [Collection structure](overview.md#collection-structure), its breakdown, indented beneath it
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
-  variant-price worklist under it, Checklists, Completeness, then Areas), **Collection** (Inventory, then
+  variant-price worklist under it, Checklists, then Areas), **Collection** (Inventory, Completeness, then
   Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Intake** (Want list,
   Intake documents, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
   and selling alike). A subject read through more than one screen carries the extra ones indented
@@ -924,7 +924,7 @@ A checklist spanning issues is also offered when a ticked run of scan tiles is i
 
 ## Completeness
 
-**Completeness**, in the **Catalog** section of the sidebar, says how complete any part of the catalogue is — *Poland 1945–1960*, *Germany in the fifties*, everything — counting only the copies you choose: *how complete is Poland 1945–1960 in MNH, counting only the copies kept in the collection?* It is the question behind deciding what to buy and what to keep back from sale, which the [Overview](overview.md)'s *Coverage by area* tile, fixed to its areas and every copy held, cannot ask.
+**Completeness**, in the **Collection** section of the sidebar, says how complete any part of the catalogue is — *Poland 1945–1960*, *Germany in the fifties*, everything — counting only the copies you choose: *how complete is Poland 1945–1960 in MNH, counting only the copies kept in the collection?* It is the question behind deciding what to buy and what to keep back from sale, which the [Overview](overview.md)'s *Coverage by area* tile, fixed to its areas and every copy held, cannot ask.
 
 - **The part of the catalogue** is chosen in the **Area** and **Year** columns on the left — the same columns, and the same selection, as on the Issues, Stamps and Copies lists, so arriving from one of them shows the area you were on, and a [range of years](#filtering-the-issues-stamps-and-copies-lists) works here as there. What is measured is the checklists of the issues filed there in those years; a checklist [spanning several issues](#checklists-that-span-several-issues) belongs to no area or year and is not counted here. The columns count issues, as on the Issues list.
 - **Condition** — pick one or several. Only copies in one of them count. *Every condition* is the default.

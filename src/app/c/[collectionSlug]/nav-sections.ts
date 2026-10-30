@@ -25,8 +25,10 @@ export type SectionKey = "catalog" | "collection" | "selling" | "buying" | "part
 export const SECTION_ROUTES: Record<SectionKey, string[]> = {
   // Areas are the Catalog's (#1234): the tree issues and stamps hang on and the facet every catalogue
   // screen filters by. #775 gave them a page in Collection; only the section moved, not the address.
-  catalog: ["/issues", "/stamps", "/checklists", "/completeness", "/areas"],
-  collection: ["/inventory", "/locations", "/albums"],
+  // Completeness is the Collection's (#2268): how much of the catalogue is held, and in what — the
+  // checklists are only its measure. Like Areas, the section moved and the address did not.
+  catalog: ["/issues", "/stamps", "/checklists", "/areas"],
+  collection: ["/inventory", "/completeness", "/locations", "/albums"],
   selling: ["/offers", "/sales", "/supplies"],
   buying: ["/wants", "/purchases", "/auctions"],
   partners: ["/trades", "/contacts", "/colnect"],
