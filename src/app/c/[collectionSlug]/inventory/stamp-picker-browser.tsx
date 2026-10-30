@@ -24,6 +24,13 @@ import type {
 } from "@/lib/issues";
 import type { SpanningChecklistSummary } from "@/lib/checklists";
 import { checklistColorMap } from "@/lib/checklist-colors";
+import {
+  EXPAND_ALL_OFF,
+  EXPAND_ALL_ON,
+  openedByExpandAll,
+  toggleUnderExpandAll,
+  type PickerExpandAll,
+} from "@/lib/picker-tree-state";
 import { checklistBranches, countOffChecklist } from "@/lib/checklist-branches";
 import { getIssueChecklistHeadlinesAction } from "@/app/actions/checklists";
 import {
@@ -737,6 +744,28 @@ function IssueBrowser({
     [pickerTree.state.expanded]
   );
 
+  // Expand all / Collapse all (#2273), the Copies list's control (#538) over the picker's issues. The
+  // mode lives here, above the rows and outside every filter, so a changed area, year or search keeps
+  // it, and it ends with the picker: the next open starts from the remembered tree alone.
+  const [expandAll, setExpandAll] = useState<PickerExpandAll>(EXPAND_ALL_OFF);
+  const isOpen = (issueId: string) =>
+    expandedIds.has(issueId) || openedByExpandAll(expandAll, issueId);
+  const allExpanded = issues.length > 0 && issues.every((issue) => isOpen(issue.id));
+  function setIssueOpen(issueId: string, open: boolean) {
+    pickerTree.setIssueExpanded(issueId, open);
+    setExpandAll((mode) => toggleUnderExpandAll(mode, issueId, open));
+  }
+  function toggleAll() {
+    if (allExpanded) {
+      // Collapse all folds what the list shows, the remembered issues among them — otherwise they
+      // would be open again the next time the picker is.
+      setExpandAll(EXPAND_ALL_OFF);
+      pickerTree.foldIssues(issues.map((issue) => issue.id));
+    } else {
+      setExpandAll(EXPAND_ALL_ON);
+    }
+  }
+
   // **The picker opens on the issue last picked from** (#1616), so the branch left open is on screen
   // rather than somewhere down the list. Once per open, on the first rows drawn: an issue not among
   // them (filtered out, or on a page not loaded yet) is not chased — jumping there later, as the
@@ -842,6 +871,20 @@ function IssueBrowser({
         <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
         {/* Specialised checklists (#1617): out of the rows, the branches and the set buttons until on. */}
         <SpecialisedChecklistsToggle />
+        {issues.length > 0 && (
+          <Tooltip
+            content={
+              allExpanded
+                ? "Close every issue, back to one line each."
+                : "Open every issue the list shows, and those it shows later, to its stamps."
+            }
+            style={{ flexShrink: 0 }}
+          >
+            <button type="button" onClick={toggleAll} style={EXPAND_ALL_BUTTON_STYLE}>
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+          </Tooltip>
+        )}
         <button
           type="button"
           onClick={() => onNewIssue(selectedAreaId)}
@@ -870,7 +913,8 @@ function IssueBrowser({
               primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
               isLast={i === issues.length - 1 && !hasMore}
               userExpanded={expandedIds.has(issue.id)}
-              onSetExpanded={(open) => pickerTree.setIssueExpanded(issue.id, open)}
+              openedByAll={openedByExpandAll(expandAll, issue.id)}
+              onSetExpanded={(open) => setIssueOpen(issue.id, open)}
               branchToggles={pickerTree.state.branches[issue.id] ?? NO_BRANCH_TOGGLES}
               onSetBranch={(key, open) => pickerTree.setBranchOpen(issue.id, key, open)}
               justAdded={issue.id === justCreatedIssueId}
@@ -935,6 +979,18 @@ const RUN_BUTTON_STYLE: React.CSSProperties = {
   fontSize: "0.75rem",
   fontWeight: 500,
   cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Expand all / Collapse all (#2273): the Copies list's text button (#538), not a filter chip. */
+const EXPAND_ALL_BUTTON_STYLE: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  fontSize: "0.8125rem",
+  fontWeight: 600,
+  color: "var(--color-text-secondary)",
   whiteSpace: "nowrap",
 };
 
@@ -1029,6 +1085,7 @@ function PickIssueRow({
   primaryVendorId,
   isLast,
   userExpanded,
+  openedByAll,
   onSetExpanded,
   branchToggles,
   onSetBranch,
@@ -1053,6 +1110,9 @@ function PickIssueRow({
   isLast: boolean;
   /** Whether the collector has this issue open (#1616) — remembered across opens of the picker. */
   userExpanded: boolean;
+  /** Open because Expand all is on (#2273) — for this open of the picker only, so its branches are
+   *  held on the row, as a search-opened row's are. */
+  openedByAll: boolean;
   onSetExpanded: (open: boolean) => void;
   /** The branches opened or closed by hand, by checklist id (`none` for the off-checklist one). */
   branchToggles: Record<string, boolean>;
@@ -1092,7 +1152,7 @@ function PickIssueRow({
   const { data: members = [], isLoading: membersLoading } = useIssueMembers(
     collectionId,
     issue.id,
-    userExpanded || probeForInnerMatch
+    userExpanded || openedByAll || probeForInnerMatch
   );
   // Null while the probe is still out or the header explained the hit: only a row that really
   // surfaced through its stamps narrows the rest of its tree.
@@ -1102,7 +1162,7 @@ function PickIssueRow({
   );
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
-  const isExpanded = userExpanded || matchedStampIds !== null;
+  const isExpanded = userExpanded || openedByAll || matchedStampIds !== null;
   // Several checklists are drawn as branches in tree mode, as on the Issues list (#1520, #1585), and
   // the chip filter has nothing to do beside them, the branches already separating the checklists.
   const multiChecklist = issue.checklists.length > 1;
@@ -1144,8 +1204,8 @@ function PickIssueRow({
   // reason — a match behind a collapsed arrow is a match nobody sees). The collector's own toggle
   // wins either way, and lasts while the issue stays open — across opens of the picker since #1616;
   // folding the issue forgets them.
-  // A row only the search opened is not the collector's to remember, so its branches are held here,
-  // for as long as the row is on screen, as every branch was before.
+  // A row only the search or Expand all (#2273) opened is not the collector's to remember, so its
+  // branches are held here, for as long as the row is on screen, as every branch was before.
   const [searchBranchToggles, setSearchBranchToggles] = useState<Record<string, boolean>>({});
   const toggles = userExpanded ? branchToggles : searchBranchToggles;
   const branchOpen = (key: string) => toggles[key] ?? !!matchedStampIds;
