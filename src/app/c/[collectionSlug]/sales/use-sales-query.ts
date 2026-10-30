@@ -197,5 +197,11 @@ export function useInvalidateSales() {
       // A changed buyer or a merge moves conversation entries off a sale (#2149).
       queryClient.invalidateQueries({ queryKey: ["conversation", collectionId] });
     },
+    /** A sale's status change on its own (#2270): what reads sales by status — the Sales list's rows
+     * and the Dashboard's Sales section — and nothing that reads its lines, copies or offers. */
+    invalidateSaleStatus: (collectionId: string) => {
+      queryClient.invalidateQueries({ queryKey: [...saleKeys.all(collectionId), "list"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", collectionId] });
+    },
   };
 }
