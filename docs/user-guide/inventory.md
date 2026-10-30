@@ -764,7 +764,7 @@ laid out the same way.
      there. Catalog search ignores spacing, so `Mi PL 200`, `Mi PL200`, `MiPL200`, and just
      `200` all find the same stamp. Each suggestion shows its catalog number, name, issue,
      year, and area so you can tell similar stamps apart.
-   - **Browse…** opens a larger picker: pick an **area** on the left, filter its **issues**
+   - **Browse…** opens a larger picker — it fills the screen, so a big monitor shows more issues at once: pick an **area** on the left, filter its **issues**
      on the right, then expand an issue to choose a stamp or one of its variants. The picker
      remembers its area, year, and search text, so it reopens on the same filter you left it
      on — and the remembered text is **selected** when it opens, so you can just start typing
