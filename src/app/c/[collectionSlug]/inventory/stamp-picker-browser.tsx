@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { DialogShell, PICKER_DIALOG_HEIGHT, type DialogAsideProps } from "@/app/dialog-shell";
+import {
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
+  DialogShell,
+  type DialogAsideProps,
+} from "@/app/dialog-shell";
 import { singleYear } from "@/lib/list-area-year-filter";
 import type { CollectionAreaData } from "@/lib/areas";
 import { parseCatalogSearch } from "@/lib/catalog-number";
@@ -484,8 +489,12 @@ export function StampPickerBrowser({
         // A create dialog stacks above this one; while it is up this dialog must stop dismissing
         // itself, or one Esc would close both.
         dismissable={!create && !checklistsFor}
-        maxWidth="min(96vw, 110rem)"
-        height={PICKER_DIALOG_HEIGHT}
+        // A window for browsing a catalogue takes the whole screen but for the shell's margin (#2272):
+        // the more of the catalogue it shows, the less scrolling a pick takes. The area tree, the year
+        // column and the tile beside them keep their widths, and every rem past them goes to the issue
+        // list. `96vw` was its width on a small screen, which the 2rem margin would otherwise trim.
+        maxWidth={`max(96vw, ${DIALOG_MAX_WIDTH})`}
+        height={DIALOG_MAX_HEIGHT}
         // Which stamp a piece *is* is read off the piece, so when this picker is one step of
         // identifying a scan tile the tile comes with it (#592) — leftmost, outside the area tree,
         // because it is the subject of the browsing rather than one more way of narrowing it.
