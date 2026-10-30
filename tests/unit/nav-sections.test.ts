@@ -14,6 +14,11 @@ describe("sectionForPath", () => {
     assert.equal(sectionForPath(`${base}/areas`, base), "catalog");
   });
 
+  it("files Completeness under Collection, at its unchanged address (#2268)", () => {
+    assert.equal(sectionForPath(`${base}/completeness`, base), "collection");
+    assert.equal(sectionTintForHref(`${base}/completeness`, base), SECTION_TINTS.collection);
+  });
+
   it("keeps the rest of Collection where it was", () => {
     for (const route of ["/inventory", "/locations", "/albums"]) {
       assert.equal(sectionForPath(`${base}${route}`, base), "collection");
