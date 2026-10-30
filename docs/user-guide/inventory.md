@@ -785,6 +785,14 @@ laid out the same way.
      reload. A search leaves it alone: an issue the search opened for you is not remembered, and
      clearing the search shows the tree as it was. Folding an issue forgets its branches.
 
+     **Expand all**, in the toolbar beside **Show specialised checklists**, opens every issue the
+     list shows to its stamps — the way each opens on its own chevron, under the **Checklists**
+     view you chose — and reads **Collapse all** once they are all open. It stays on while you
+     scroll further or change the area, years or filter: the issues that come into the list open
+     too. Each issue's own chevron still folds or opens it. **Collapse all** closes every issue the
+     list shows, the remembered ones among them. Expand all itself is not remembered: the picker
+     reopens on the issues you had opened by hand.
+
      The issue list loads **as you scroll**, like the Issues screen, and the area, year and
      search filters all narrow it before it is fetched — so the picker opens just as quickly on
      a collection of thousands of issues as on a small one. An issue's stamps are read when you

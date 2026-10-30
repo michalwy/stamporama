@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import {
+  foldIssues,
   parsePickerTreeState,
   serializePickerTreeState,
   setBranchOpen,
@@ -41,6 +42,10 @@ export function usePickerTreeState(collectionId: string) {
     state,
     setIssueExpanded: useCallback(
       (issueId: string, open: boolean) => update((s) => setIssueExpanded(s, issueId, open)),
+      [update]
+    ),
+    foldIssues: useCallback(
+      (issueIds: Iterable<string>) => update((s) => foldIssues(s, issueIds)),
       [update]
     ),
     setBranchOpen: useCallback(

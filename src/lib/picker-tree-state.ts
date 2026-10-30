@@ -141,3 +141,49 @@ export function serializePickerTreeState(state: PickerTreeState): string {
   }
   return JSON.stringify(state);
 }
+
+/** Fold several issues at once — Collapse all over the issues the list shows (#2273). Each one forgets
+ *  its branches, as a fold by hand does. */
+export function foldIssues(state: PickerTreeState, issueIds: Iterable<string>): PickerTreeState {
+  const folding = new Set(issueIds);
+  if (!state.expanded.some((id) => folding.has(id))) return state;
+  const branches: Record<string, Record<string, boolean>> = {};
+  for (const [id, toggles] of Object.entries(state.branches)) {
+    if (!folding.has(id)) branches[id] = toggles;
+  }
+  return { ...state, expanded: state.expanded.filter((id) => !folding.has(id)), branches };
+}
+
+/**
+ * **Expand all** (#2273): a mode over the remembered tree, held for one open of the picker and never
+ * stored — the picker opens on the collector's own toggles, as it did before. While it is on, every
+ * issue the list shows is open, those that arrive later by scrolling or a changed area, year or
+ * filter included, so *Expand all* stays true until it is turned off; `closed` holds the issues
+ * folded by hand since, the exceptions to it.
+ */
+export interface PickerExpandAll {
+  on: boolean;
+  closed: ReadonlySet<string>;
+}
+
+export const EXPAND_ALL_OFF: PickerExpandAll = { on: false, closed: new Set() };
+export const EXPAND_ALL_ON: PickerExpandAll = { on: true, closed: new Set() };
+
+/** Whether Expand all is what holds this issue open. */
+export function openedByExpandAll(mode: PickerExpandAll, issueId: string): boolean {
+  return mode.on && !mode.closed.has(issueId);
+}
+
+/** An issue opened or folded by hand while Expand all is on becomes, or stops being, an exception to
+ *  it. Off, there is nothing to note: the remembered tree records the toggle on its own. */
+export function toggleUnderExpandAll(
+  mode: PickerExpandAll,
+  issueId: string,
+  open: boolean
+): PickerExpandAll {
+  if (!mode.on || mode.closed.has(issueId) !== open) return mode;
+  const closed = new Set(mode.closed);
+  if (open) closed.delete(issueId);
+  else closed.add(issueId);
+  return { on: true, closed };
+}

@@ -2,12 +2,17 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   EMPTY_PICKER_TREE_STATE,
+  EXPAND_ALL_OFF,
+  EXPAND_ALL_ON,
+  foldIssues,
   MAX_EXPANDED,
+  openedByExpandAll,
   parsePickerTreeState,
   serializePickerTreeState,
   setBranchOpen,
   setIssueExpanded,
   setLastPickedIssue,
+  toggleUnderExpandAll,
 } from "../../src/lib/picker-tree-state";
 
 const roundTrip = (raw: string | null) => parsePickerTreeState(raw);
@@ -111,5 +116,47 @@ describe("setLastPickedIssue", () => {
     assert.equal(state.lastPickedIssueId, "i7");
     assert.deepEqual(state.expanded, []);
     assert.equal(setLastPickedIssue(state, "i7"), state);
+  });
+});
+
+describe("foldIssues (#2273)", () => {
+  it("folds every issue named and forgets their branches, keeping the rest", () => {
+    let state = setIssueExpanded(EMPTY_PICKER_TREE_STATE, "i1", true);
+    state = setIssueExpanded(state, "i2", true);
+    state = setIssueExpanded(state, "i3", true);
+    state = setBranchOpen(state, "i1", "c1", true);
+    state = setBranchOpen(state, "i3", "c1", false);
+    state = setLastPickedIssue(state, "i1");
+    state = foldIssues(state, ["i1", "i2", "absent"]);
+    assert.deepEqual(state.expanded, ["i3"]);
+    assert.deepEqual(state.branches, { i3: { c1: false } });
+    assert.equal(state.lastPickedIssueId, "i1");
+  });
+
+  it("returns the same state when none of them is expanded", () => {
+    const state = setIssueExpanded(EMPTY_PICKER_TREE_STATE, "i1", true);
+    assert.equal(foldIssues(state, ["i2"]), state);
+  });
+});
+
+describe("Expand all (#2273)", () => {
+  it("holds every issue open while on, and none while off", () => {
+    assert.equal(openedByExpandAll(EXPAND_ALL_ON, "any"), true);
+    assert.equal(openedByExpandAll(EXPAND_ALL_OFF, "any"), false);
+  });
+
+  it("notes an issue folded by hand as an exception, and drops it when reopened", () => {
+    const folded = toggleUnderExpandAll(EXPAND_ALL_ON, "i1", false);
+    assert.equal(openedByExpandAll(folded, "i1"), false);
+    assert.equal(openedByExpandAll(folded, "i2"), true);
+    assert.equal(toggleUnderExpandAll(folded, "i1", false), folded);
+    const reopened = toggleUnderExpandAll(folded, "i1", true);
+    assert.equal(openedByExpandAll(reopened, "i1"), true);
+    assert.equal(reopened.closed.size, 0);
+  });
+
+  it("notes nothing while off", () => {
+    assert.equal(toggleUnderExpandAll(EXPAND_ALL_OFF, "i1", false), EXPAND_ALL_OFF);
+    assert.equal(toggleUnderExpandAll(EXPAND_ALL_OFF, "i1", true), EXPAND_ALL_OFF);
   });
 });
