@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -57,6 +57,12 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
+import {
+  restoredSaleStatusChoice,
+  saleStatusChoiceReducer,
+  shownSaleStatus,
+  type SavedSaleStatus,
+} from "@/lib/sale-status-choice";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -103,6 +109,13 @@ const SECONDARY_BTN: React.CSSProperties = {
   padding: "0.375rem 0.875rem",
   fontSize: "0.8125rem",
 };
+
+/**
+ * The statuses saved from this tab without the sale page being read again (#2270), by sale. A page
+ * the router brings back from its cache — *Back* to the sale — is the reading from before the save,
+ * so the panel it mounts draws the saved status over it until a fresh reading catches up.
+ */
+const savedStatusBySale = new Map<string, SavedSaleStatus>();
 
 function todayIso(): string {
   const now = new Date();
@@ -156,7 +169,7 @@ interface SaleDetailPanelProps {
 
 export function SaleDetailPanel({
   collectionId,
-  sale,
+  sale: pageSale,
   carriers,
   packingSupplies,
   buyerMessage,
@@ -167,13 +180,35 @@ export function SaleDetailPanel({
 }: SaleDetailPanelProps) {
   const router = useRouter();
   const params = useParams<{ collectionSlug: string }>();
-  const { invalidateAll } = useInvalidateSales();
+  const { invalidateAll, invalidateSaleStatus } = useInvalidateSales();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
   // The Attachments card's file input, which the header's `⋮ → Add attachments` opens (#2198).
   const attachmentInput = useRef<HTMLInputElement>(null);
+
+  // The status as chosen (#2270): drawn the moment it is chosen and saved behind the screen, over
+  // the page's own until a reading of the page catches up. `sale` below is the page's sale with that
+  // status, so the select, the advance button, the hints and every guard read the chosen one.
+  const [statusChoice, dispatchStatus] = useReducer(saleStatusChoiceReducer, pageSale, (page) =>
+    restoredSaleStatusChoice(savedStatusBySale.get(page.id), page.status)
+  );
+  const statusSeq = useRef(statusChoice.latest);
+  const lastPageRead = useRef(pageSale);
+  useEffect(() => {
+    // A reading that no longer carries the status the save was chosen over has caught up with it.
+    const saved = savedStatusBySale.get(pageSale.id);
+    if (saved && saved.over !== pageSale.status) savedStatusBySale.delete(pageSale.id);
+    if (lastPageRead.current === pageSale) return;
+    lastPageRead.current = pageSale;
+    dispatchStatus({ type: "pageRead" });
+  }, [pageSale]);
+  const shownStatus = shownSaleStatus(statusChoice, pageSale.status);
+  const sale = useMemo(
+    () => (shownStatus === pageSale.status ? pageSale : { ...pageSale, status: shownStatus }),
+    [pageSale, shownStatus]
+  );
 
   const soldDate = formatDate(sale.soldAt);
 
@@ -253,10 +288,59 @@ export function SaleDetailPanel({
     setStatus(next);
   }
 
-  function setStatus(next: string, onDone?: () => void) {
+  /** Draw `next` at once (#2270) and hand back the number its save settles under. */
+  function chooseStatus(next: string): number {
+    dispatchStatus({ type: "chose", status: next });
+    statusSeq.current += 1;
+    return statusSeq.current;
+  }
+
+  /**
+   * A status change on its own (#2270): it shows at once and saves behind the screen, without the
+   * page being read again — nothing on it but the status changed, and the status is drawn from the
+   * choice. The Sales list's rows and the Dashboard, which sort sales by status, are told; lines,
+   * copies, shipping, supplies and attachments are not read again. Choosing again does not wait for
+   * this save, and a failure puts back what was there and says why.
+   */
+  function setStatus(next: string) {
+    const seq = chooseStatus(next);
+    const over = pageSale.status;
+    const saleId = pageSale.id;
+    void (async () => {
+      let result: { status: string; message?: string };
+      try {
+        const { setSaleStatusAction } = await import("@/app/actions/sales");
+        result = await setSaleStatusAction(saleId, next);
+      } catch {
+        result = { status: "error", message: "Failed to update the sale status." };
+      }
+      const ok = result.status === "success";
+      dispatchStatus({ type: "settled", seq, status: next, ok });
+      if (ok) {
+        savedStatusBySale.set(saleId, { over, status: next });
+        invalidateSaleStatus(collectionId);
+      } else {
+        toast({ message: result.message ?? "Failed to update the sale status.", tone: "error" });
+      }
+    })();
+  }
+
+  /**
+   * A status change that asked something first (#2270): it shows the moment the question is
+   * answered, and saves with what the answer wrote in one run — the amounts or the parcel, which the
+   * page draws from its own reading, so that reading is what refreshes. A refused save puts the
+   * status back and the dialog says why.
+   */
+  function runWithStatus(
+    next: string,
+    fn: () => Promise<{ status: string; message?: string }>,
+    onDone?: () => void
+  ) {
+    const seq = chooseStatus(next);
     run(async () => {
-      const { setSaleStatusAction } = await import("@/app/actions/sales");
-      return setSaleStatusAction(sale.id, next);
+      const result = await fn();
+      dispatchStatus({ type: "settled", seq, status: next, ok: result.status === "success" });
+      return result;
     }, onDone);
   }
 
@@ -1059,9 +1143,13 @@ export function SaleDetailPanel({
               setError(undefined);
             }
           }}
-          onSkip={() => setStatus("paid", () => setDialog({ kind: "none" }))}
+          onSkip={() => {
+            setDialog({ kind: "none" });
+            setStatus("paid");
+          }}
           onSubmit={(totalPaid) =>
-            run(
+            runWithStatus(
+              "paid",
               async () => {
                 const { updateSaleAmountAction, setSaleStatusAction } = await import(
                   "@/app/actions/sales"
@@ -1098,20 +1186,32 @@ export function SaleDetailPanel({
               setError(undefined);
             }
           }}
-          onSkip={() => setStatus("sent", () => setDialog({ kind: "none" }))}
-          onSubmit={(carrierId, trackingCode) =>
-            run(
+          onSkip={() => {
+            setDialog({ kind: "none" });
+            setStatus("sent");
+          }}
+          onSubmit={(carrierId, trackingCode) => {
+            const saveShipment = async () => {
+              const { updateSaleShipmentAction } = await import("@/app/actions/sales");
+              return updateSaleShipmentAction(sale.id, carrierId, trackingCode);
+            };
+            const close = () => setDialog({ kind: "none" });
+            // Correcting the parcel moves no status, so it has none to show ahead of the save.
+            if (dialog.mode === "edit") {
+              run(saveShipment, close);
+              return;
+            }
+            runWithStatus(
+              "sent",
               async () => {
-                const { updateSaleShipmentAction, setSaleStatusAction } = await import(
-                  "@/app/actions/sales"
-                );
-                const saved = await updateSaleShipmentAction(sale.id, carrierId, trackingCode);
-                if (saved.status !== "success" || dialog.mode === "edit") return saved;
+                const saved = await saveShipment();
+                if (saved.status !== "success") return saved;
+                const { setSaleStatusAction } = await import("@/app/actions/sales");
                 return setSaleStatusAction(sale.id, "sent");
               },
-              () => setDialog({ kind: "none" })
-            )
-          }
+              close
+            );
+          }}
         />
       )}
 

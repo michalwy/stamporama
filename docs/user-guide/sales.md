@@ -394,6 +394,12 @@ either pick any step from the dropdown or click the **→ next** button to advan
 change is saved immediately and stamped with the moment it happened, so the sale keeps a timeline
 of its transitions. The current status also shows as a chip on each sale's list row.
 
+The new status shows the moment you choose it and saves behind the screen — the rest of the sale
+page is not read again, so a sale of many lines changes status as quickly as a small one. You can
+pick another status straight away; the last one you chose is the one that stays. If a save fails,
+the previous status comes back and a message says why. When a step asks something first — the total
+on **Paid**, the tracking number on **Sent** — the status shows as soon as you answer.
+
 Status is independent of everything else on the sale — advancing it never changes copies or offers,
 and it can move backward (pick an earlier step) if you need to correct a mistake.
 
