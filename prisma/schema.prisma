@@ -4032,6 +4032,10 @@ model ItemVariantHistory {
 // or deleted by the app — a wrong move is put right by another move, and both stay.
 //
 // The history starts with the migration: every copy then got a `start` entry naming where it was.
+//
+// `sale_packing`, `trade_packing` and `write_off` (#2278) are the moments a copy is taken off its
+// location because it is leaving: packed for a sale (`sourceId` the sale), packed for a trade it is
+// given away in (`sourceId` the trade), written off.
 enum ItemLocationMoveSource {
   start
   created
@@ -4041,6 +4045,9 @@ enum ItemLocationMoveSource {
   scan
   replacement
   other
+  sale_packing
+  trade_packing
+  write_off
 }
 
 model ItemLocationMove {

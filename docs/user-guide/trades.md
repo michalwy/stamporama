@@ -656,6 +656,12 @@ is what you decide on: take it up with your partner, or let it go.
 go on a marketplace listing again, and any warning about it having been promised goes with it. A line
 that went in the parcel or vanished in the post is not released, because the copy is not back.
 
+**A copy that went comes off its location.** Recording one of your lines as **Sent** or **Never
+arrived** is the trade's packing: the copy's location and ref are cleared, and its
+[history](locations.md#where-copies-have-been) records where it was, naming the trade. The packing
+list goes on printing it under the place it was taken from. Taking the verdict back, or changing it to
+withdrawn, does not put it back — file it anew; see [Copies that leave](locations.md#copies-that-leave).
+
 **Recording a fact is not renegotiating.** A verdict leaves the trade *Agreed*. If you decide the
 difference is worth settling again, use **Reopen the negotiation** on the trade's ⋮ menu — that
 unlocks the list and shows your partner that it has changed. On their page, a line you withdrew or one

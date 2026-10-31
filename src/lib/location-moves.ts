@@ -4,6 +4,7 @@ import { prisma, type DbTransaction } from "./db";
 import { buildLocationPath } from "./location-path";
 import { buildLocationCode } from "./location-code";
 import { intakeDocumentName } from "./purchase-kind";
+import { formatEntityNo } from "./quick-jump";
 import {
   locationMoveDirection,
   locationSubtreeIds,
@@ -14,12 +15,13 @@ import {
 
 // A copy's moves between locations (#2277, ADR-0074). The entries are written by the database — the
 // `item_record_location_move` trigger, on every insert of a copy and every change of its location or
-// ref — so this module never writes one. It does two things: it tells the trigger *what* is moving
-// the copies of the current transaction (`setMoveSourceTx`), and it reads the history back, for a
-// copy and for a location.
+// ref — so this module never writes one. It does three things: it tells the trigger *what* is moving
+// the copies of the current transaction (`setMoveSourceTx`), it takes copies that are leaving off
+// their locations (`takeOffLocationTx`, #2278), and it reads the history back, for a copy and for a
+// location.
 
 /** What is moving copies: the source an entry records, and what it names where it names one — the
- *  purchase, for `purchase`. */
+ *  purchase for `purchase`, the sale for `sale_packing`, the trade for `trade_packing`. */
 export interface MoveSource {
   source: LocationMoveSource;
   sourceId?: string | null;
@@ -35,6 +37,56 @@ export interface MoveSource {
 export async function setMoveSourceTx(tx: DbTransaction, move: MoveSource): Promise<void> {
   await tx.$executeRaw`SELECT set_config('stamporama.move_source', ${move.source}, true),
                               set_config('stamporama.move_source_id', ${move.sourceId ?? ""}, true)`;
+}
+
+/**
+ * Take copies off their locations because they are leaving (#2278): packed for a sale, packed for a
+ * trade they are given away in, written off. Location and ref are both cleared, so a location counts
+ * only the copies physically in it, and the trigger records where each one was taken from — which is
+ * what the packing list reads back ({@link packedFromPlaces}). A copy already off its location is
+ * left alone, so it gains no entry. Nothing ever puts a copy back: unpacked or come back, it is filed
+ * anew.
+ */
+export async function takeOffLocationTx(
+  tx: DbTransaction,
+  where: Prisma.ItemWhereInput,
+  move: MoveSource
+): Promise<void> {
+  await setMoveSourceTx(tx, move);
+  await tx.item.updateMany({
+    where: { AND: [where, { OR: [{ locationId: { not: null } }, { locationRef: { not: null } }] }] },
+    data: { locationId: null, locationRef: null },
+  });
+}
+
+/**
+ * Where packed copies were taken from (#2278): for each copy given that is off its location, the
+ * place its latest entry took it off — a location still there, and the ref it had. A packing list
+ * keeps saying where to pull each copy from with it, so a stamp found missing from the parcel can
+ * still be looked for where it was. A copy taken off a location since deleted has no place to name.
+ */
+export async function packedFromPlaces(
+  collectionId: string,
+  itemIds: readonly string[]
+): Promise<Map<string, { locationId: string; locationRef: string | null }>> {
+  if (itemIds.length === 0) return new Map();
+  const rows = await prisma.itemLocationMove.findMany({
+    where: {
+      collectionId,
+      itemId: { in: [...itemIds] },
+      toLocationId: null,
+      fromLocationId: { not: null },
+    },
+    orderBy: NEWEST_FIRST,
+    select: { itemId: true, fromLocationId: true, fromRef: true },
+  });
+  const places = new Map<string, { locationId: string; locationRef: string | null }>();
+  for (const r of rows) {
+    if (!places.has(r.itemId)) {
+      places.set(r.itemId, { locationId: r.fromLocationId!, locationRef: r.fromRef });
+    }
+  }
+  return places;
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -61,6 +113,13 @@ export interface LocationMovePlace {
   ref: string | null;
 }
 
+/** A purchase, a sale or a trade an entry names, as its link reads. */
+export interface LocationMoveNamed {
+  kind: "purchase" | "sale" | "trade";
+  id: string;
+  label: string;
+}
+
 export interface LocationMoveEntry {
   id: string;
   /** ISO timestamp. */
@@ -68,8 +127,9 @@ export interface LocationMoveEntry {
   from: LocationMovePlace;
   to: LocationMovePlace;
   source: LocationMoveSource;
-  /** The purchase a `purchase` entry names, when it still exists. */
-  purchase: { id: string; label: string } | null;
+  /** What the entry names, when it still exists: the purchase of a `purchase` entry, the sale of a
+   *  `sale_packing` one, the trade of a `trade_packing` one. */
+  named: LocationMoveNamed | null;
   copy: { id: string; itemNo: number; stampName: string | null };
 }
 
@@ -122,45 +182,77 @@ function place(
   return { locationId: null, label: name, code: null, deleted: name != null, ref };
 }
 
-/** The purchases the entries name, labelled as the copy's own Purchase card labels its order. */
-async function purchaseLabels(
-  collectionId: string,
-  rows: EntryRow[]
-): Promise<Map<string, string>> {
-  const ids = [
-    ...new Set(rows.filter((r) => r.source === "purchase" && r.sourceId).map((r) => r.sourceId!)),
+const NAMED_KIND: Partial<Record<LocationMoveSource, LocationMoveNamed["kind"]>> = {
+  purchase: "purchase",
+  sale_packing: "sale",
+  trade_packing: "trade",
+};
+
+function idsNaming(rows: EntryRow[], kind: LocationMoveNamed["kind"]): string[] {
+  return [
+    ...new Set(rows.filter((r) => NAMED_KIND[r.source] === kind && r.sourceId).map((r) => r.sourceId!)),
   ];
-  if (ids.length === 0) return new Map();
-  const purchases = await prisma.purchase.findMany({
-    where: { id: { in: ids }, collectionId },
-    select: { id: true, kind: true, title: true, purchasedAt: true, contact: { select: { name: true } } },
-  });
-  return new Map(
-    purchases.map((p) => {
-      const date = p.purchasedAt.toISOString().slice(0, 10);
-      const name = intakeDocumentName({
-        kind: p.kind,
-        title: p.title,
-        contactName: p.contact?.name ?? null,
-      });
-      return [p.id, name ? `${name} · ${date}` : date];
-    })
-  );
+}
+
+/** What the entries name, keyed by kind and id: a purchase labelled as the copy's own Purchase card
+ *  labels its order, a sale by its number and platform, a trade by its number and partner. */
+async function namedLabels(collectionId: string, rows: EntryRow[]): Promise<Map<string, string>> {
+  const purchaseIds = idsNaming(rows, "purchase");
+  const saleIds = idsNaming(rows, "sale");
+  const tradeIds = idsNaming(rows, "trade");
+  const [purchases, sales, trades] = await Promise.all([
+    purchaseIds.length === 0
+      ? []
+      : prisma.purchase.findMany({
+          where: { id: { in: purchaseIds }, collectionId },
+          select: { id: true, kind: true, title: true, purchasedAt: true, contact: { select: { name: true } } },
+        }),
+    saleIds.length === 0
+      ? []
+      : prisma.sale.findMany({
+          where: { id: { in: saleIds }, collectionId },
+          select: { id: true, saleNo: true, platform: { select: { name: true } } },
+        }),
+    tradeIds.length === 0
+      ? []
+      : prisma.trade.findMany({
+          where: { id: { in: tradeIds }, collectionId },
+          select: { id: true, tradeNo: true, partner: { select: { name: true } } },
+        }),
+  ]);
+  const labels = new Map<string, string>();
+  for (const p of purchases) {
+    const date = p.purchasedAt.toISOString().slice(0, 10);
+    const name = intakeDocumentName({
+      kind: p.kind,
+      title: p.title,
+      contactName: p.contact?.name ?? null,
+    });
+    labels.set(`purchase:${p.id}`, name ? `${name} · ${date}` : date);
+  }
+  for (const sale of sales) {
+    labels.set(`sale:${sale.id}`, `${formatEntityNo(sale.saleNo)} · ${sale.platform.name}`);
+  }
+  for (const t of trades) {
+    labels.set(`trade:${t.id}`, `${formatEntityNo(t.tradeNo)} · ${t.partner.name}`);
+  }
+  return labels;
 }
 
 function toEntry(
   row: EntryRow,
   locations: LocationNode[],
-  purchases: Map<string, string>
+  labels: Map<string, string>
 ): LocationMoveEntry {
-  const purchaseLabel = row.source === "purchase" && row.sourceId ? purchases.get(row.sourceId) : undefined;
+  const kind = NAMED_KIND[row.source];
+  const label = kind && row.sourceId ? labels.get(`${kind}:${row.sourceId}`) : undefined;
   return {
     id: row.id,
     movedAt: row.movedAt.toISOString(),
     from: place(locations, row.fromLocationId, row.fromLocationName, row.fromRef),
     to: place(locations, row.toLocationId, row.toLocationName, row.toRef),
     source: row.source,
-    purchase: purchaseLabel ? { id: row.sourceId!, label: purchaseLabel } : null,
+    named: kind && label ? { kind, id: row.sourceId!, label } : null,
     copy: { id: row.item.id, itemNo: row.item.itemNo, stampName: row.item.stamp.name },
   };
 }
@@ -184,8 +276,8 @@ export async function getCopyLocationMoves(
     }),
     collectionLocations(collectionId),
   ]);
-  const purchases = await purchaseLabels(collectionId, rows);
-  return rows.map((r) => toEntry(r, locations, purchases));
+  const labels = await namedLabels(collectionId, rows);
+  return rows.map((r) => toEntry(r, locations, labels));
 }
 
 export interface LocationHistoryQuery {
@@ -245,10 +337,10 @@ export async function listLocationHistory(
     ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
   });
   const page = rows.slice(0, pageSize);
-  const purchases = await purchaseLabels(collectionId, page);
+  const labels = await namedLabels(collectionId, page);
   return {
     items: page.map((r) => ({
-      ...toEntry(r, locations, purchases),
+      ...toEntry(r, locations, labels),
       // Never null: every row read touches the subtree at one end or the other.
       direction: locationMoveDirection(r, subtreeSet) ?? "within",
     })),

@@ -84,6 +84,29 @@ copies it held; it answers for the location **and everything under it**, matches
 the entry that is in the location (case aside), narrows by whole UTC days, and says per entry
 whether it came **in**, went **out** or moved **within**.
 
+### 6. A copy that leaves is taken off its location (#2278)
+
+Amended by #2278, which the collector settled on 2026-10-31: a copy comes off its location — location
+and ref both cleared — the moment it is **packed for a sale** (its own tick, *mark every copy packed*,
+the phone), **packed for a trade** it is given away in (a give line recorded *sent* or *never
+arrived*), or **written off**. The sources are `sale_packing` (naming the sale), `trade_packing`
+(naming the trade) and `write_off`, written through `takeOffLocationTx` (`location-moves.ts`), which
+names the source and clears the place in one transaction. Nothing puts a copy back — unpacked,
+restored or returned, it is filed anew — so a location counts exactly the copies physically in it.
+
+What reads the history because of it:
+
+- **The packing lists** show a packed copy under the place it was taken from — its latest entry
+  that took it off a location (`packedFromPlaces`) — so a stamp missing from the parcel can be looked
+  for where it was.
+- **The next ref** (`getLocationRefUsage`) follows every ref ever written in the location, the
+  history's `toRef`s included, so a card emptied by packing is not numbered twice.
+
+The copies already packed, sent, delivered, traded away or written off were taken off theirs by
+`20261031140100_take_gone_copies_off_locations`, through the trigger, per sale and per trade so each
+entry names its own. The new enum values are added by the migration before it: a value cannot be used
+in the transaction that adds it.
+
 ## Consequences
 
 - The schema has a second trigger and function beside `stamp_allocate_stamp_no` (ADR-0062); like it,
@@ -92,5 +115,5 @@ whether it came **in**, went **out** or moved **within**.
   call, and forgetting it shows as *Other change*, not as a gap.
 - A raw `UPDATE "item"` from `psql` is recorded too, as `other` — which is what the record is for.
 - The agent API neither moves copies nor reads the history; it is out of scope (#2277).
-- #2278 adds its sources (packing for a sale or a trade, a write-off) to the enum in its own
-  migration.
+- #2278 added its sources (packing for a sale or a trade, a write-off) to the enum in its own
+  migration, §6.

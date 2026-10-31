@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { listItemsPaginated } from "./items";
+import { packedFromPlaces } from "./location-moves";
 import type { PackingCopy, PackingLine } from "./packing-list";
 import { readTradeBalance } from "./trade-valuation";
 import {
@@ -9,6 +10,7 @@ import {
   tradeFulfillmentLabel,
   tradeRealisationClosedMessage,
   tradeShareFulfillmentLabel,
+  wentInTradeParcel,
 } from "./trade-realisation-rules";
 import { isTradeStatus, type TradeStatus } from "./trade-rules";
 
@@ -114,6 +116,15 @@ export async function readTradePackingList(
     options.withValues ? readTradeBalance(ownerId, tradeId) : Promise.resolve(null),
   ]);
   const byId = new Map(items.map((item) => [item.id, item]));
+  // A copy that went in the parcel is off its location (#2278); the sheet keeps saying where it was
+  // pulled from, read from its history, so one found missing can still be looked for there.
+  const takenFrom = await packedFromPlaces(
+    trade.collectionId,
+    trade.lines
+      .filter((l) => l.itemId && byId.get(l.itemId)?.locationId == null)
+      .filter((l) => wentInTradeParcel(readTradeFulfillment(l.fulfillment)))
+      .map((l) => l.itemId!)
+  );
 
   const kind: "agreed" | "own" = balance?.agreedCatalogVendorId ? "agreed" : "own";
   const currency = balance ? (kind === "agreed" ? balance.tradeCurrency : balance.baseCurrency) : "";
@@ -167,6 +178,7 @@ export async function readTradePackingList(
     };
     copies.push({
       ...item,
+      ...takenFrom.get(item.id),
       // **The tick is the verdict** (#642). No second packed flag like the sale's (#192): the box on
       // this sheet says *this one went in the envelope*, which is exactly what `fulfilled` means, and
       // a parallel flag would be a second record of one fact for the two to disagree about.

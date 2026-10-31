@@ -202,8 +202,9 @@ describe("item location moves (#2277)", () => {
     assert.equal(history.length, 2);
     const [latest, first] = history;
     assert.equal(latest.source, "purchase");
-    assert.equal(latest.purchase?.id, purchase.id);
-    assert.match(latest.purchase!.label, /2026-04-01/);
+    assert.equal(latest.named?.kind, "purchase");
+    assert.equal(latest.named?.id, purchase.id);
+    assert.match(latest.named!.label, /2026-04-01/);
     assert.deepEqual(latest.from, { locationId: bookAId, label: "Szafa › Klaser A", code: "S.A", deleted: false, ref: null });
     assert.deepEqual(latest.to, { locationId: bookBId, label: "Szafa › Klaser B", code: "S.B", deleted: false, ref: "5" });
     assert.equal(first.source, "copy_form");
