@@ -553,6 +553,9 @@ number is never handed to another copy. What changes is that the copy:
   Issues lists;
 - stops being offered for listing anywhere, and cannot be added to an offer;
 - has what it cost reported on the holdings bar's **Written off** line — see below.
+- comes **off its location** — location and ref both cleared, with an entry in its
+  [history](locations.md#where-copies-have-been) saying where it was. Restoring it does not put it
+  back; file it anew ([Copies that leave](locations.md#copies-that-leave)).
 
 The **Edit copy** dialog shows the disposal beside the delivery state rather than instead of it:
 the two are independent, and both stay readable.

@@ -119,16 +119,25 @@ export async function getLocationRefUsage(
     throw new Error("Location not found or access denied.");
   }
 
-  const grouped = await prisma.item.groupBy({
-    by: ["locationRef"],
-    where: { collectionId, locationId, NOT: { locationRef: null } },
-    _count: { id: true },
-  });
+  const [grouped, everWritten] = await Promise.all([
+    prisma.item.groupBy({
+      by: ["locationRef"],
+      where: { collectionId, locationId, NOT: { locationRef: null } },
+      _count: { id: true },
+    }),
+    // Every ref a copy was ever filed under here (#2278), from the location's history (#2277): a
+    // card emptied by packing still had its number, and it is not handed out twice.
+    prisma.itemLocationMove.findMany({
+      where: { collectionId, toLocationId: locationId, NOT: { toRef: null } },
+      distinct: ["toRef"],
+      select: { toRef: true },
+    }),
+  ]);
 
   const refs = foldLocationRefCounts(
     grouped.map((g) => ({ ref: g.locationRef, count: g._count.id }))
   );
-  const written = refs.map((r) => r.ref);
+  const written = [...refs.map((r) => r.ref), ...everWritten.map((m) => m.toRef)];
   return {
     refs,
     highest: highestLocationRef(written),

@@ -19,6 +19,7 @@ import {
   tradeFulfillmentSentence,
   tradeShareFulfillmentLabel,
   UNANSWERED_FULFILLMENTS,
+  wentInTradeParcel,
 } from "../../src/lib/trade-realisation-rules";
 import { TRADE_STATUSES } from "../../src/lib/trade-rules";
 
@@ -90,6 +91,16 @@ describe("what still commits a copy (#639)", () => {
 
   it("derives the query's list from that judgement rather than restating it", () => {
     assert.deepEqual([...COMMITTING_FULFILLMENTS].sort(), ["fulfilled", "missing", "pending"]);
+  });
+});
+
+describe("what went in the parcel (#2278)", () => {
+  it("is a sent line and one that never arrived — the copies that came off the shelf", () => {
+    assert.equal(wentInTradeParcel("fulfilled"), true);
+    assert.equal(wentInTradeParcel("missing"), true);
+    // Withdrawn, it never left; pending, nobody has packed it yet.
+    assert.equal(wentInTradeParcel("withdrawn"), false);
+    assert.equal(wentInTradeParcel("pending"), false);
   });
 });
 

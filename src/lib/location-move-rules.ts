@@ -13,6 +13,9 @@ export const LOCATION_MOVE_SOURCES = [
   "scan",
   "replacement",
   "other",
+  "sale_packing",
+  "trade_packing",
+  "write_off",
 ] as const;
 export type LocationMoveSource = (typeof LOCATION_MOVE_SOURCES)[number];
 
@@ -25,9 +28,13 @@ const SOURCE_LABELS: Record<LocationMoveSource, string> = {
   scan: "Scan sheet",
   replacement: "Replacement",
   other: "Other change",
+  sale_packing: "Packed for a sale",
+  trade_packing: "Packed for a trade",
+  write_off: "Written off",
 };
 
-/** How an entry's source reads on screen. A purchase is named beside it, as a link, where it can be. */
+/** How an entry's source reads on screen. A purchase, a sale or a trade is named beside it, as a link,
+ *  where it can be. */
 export function locationMoveSourceLabel(source: LocationMoveSource): string {
   return SOURCE_LABELS[source];
 }

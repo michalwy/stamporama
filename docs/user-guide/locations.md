@@ -104,6 +104,40 @@ you: it is the **card that location is currently up to**, so you carry on packin
 on your desk, and **Next ref** starts a new one when it is full. Either way the counter belongs to
 the location, so the strip of cards a box is on carries on across purchases.
 
+The counter follows **every ref ever written** in the location, not only the cards that still hold
+something: a card emptied because its stamps were [packed or written off](#copies-that-leave) keeps
+its number, and that number is never handed out again.
+
+## Copies that leave
+
+A copy comes **off its location** — location and ref both cleared — the moment it starts to leave
+the collection:
+
+- when it is **marked packed** for a sale — by its own tick in the
+  [packing view](sales.md#packing-view), by **Mark all packed and move**, or on the phone — not when
+  the parcel is sent;
+- when its line on a trade is recorded as **Sent** or **Never arrived** — the trade's packing (see
+  [What actually happened](trades.md#what-actually-happened)); a copy you **withdrew** stays where it is;
+- when it is marked [no longer held](inventory.md#copies-you-no-longer-hold).
+
+So a location counts **only the copies that have a location** — the copies physically there. That
+includes a copy that has sold but is still waiting to be packed: it is on the shelf until you take it
+off. The counts on the Locations screen and the strip of refs under the ref field when you **Store** a
+purchase or **Bulk edit** copies all read this way.
+
+Each of these is a move in the copy's [history](#where-copies-have-been), so where it was is never
+lost — and the [packing list](sales.md#printing-a-packing-list) keeps saying where to pull each copy
+from, a packed one included.
+
+**Nothing puts a copy back.** Unmark it packed, take a trade verdict back, or restore a copy you
+wrote off, and it stays **unfiled**: file it anew. The same for a copy that comes back to you — a sale
+returned, a parcel never sent. It shows among the copies with no location, the *unfiled* bucket of the
+location filter, like any other copy filed nowhere, so it is easy to find and put away — its history
+says where it used to be.
+
+Copies already packed, sent, delivered, traded away or written off on the day this arrived were taken
+off their locations then, each with an entry in its history saying where it was.
+
 ## Printing blank ref cards
 
 If you file stock onto transport cards, each card carries one or more small index cards with a
@@ -163,7 +197,8 @@ Every time a copy's location or ref changes, Stamporama writes it down: when, wh
 what moved it. The ref is part of the place, so moving a copy from card `A12` to card `A13` of the
 same box is a move too. However the copy is moved, the move is recorded: from its **Edit copy**
 dialog, from **Bulk edit** on the Copies list, by **Store** or **Move** on a purchase, by marking a
-purchase arrived into a location, from a scan sheet, or by filing old copies on **Replacements**.
+purchase arrived into a location, from a scan sheet, by filing old copies on **Replacements** — or by
+taking it off its location when it is [packed or written off](#copies-that-leave).
 
 The record is never edited or deleted. If a copy was moved by mistake, move it back: both moves
 stay in the record.
@@ -175,7 +210,8 @@ day, marked **Starting point**; a copy added since starts with the entry that ad
 
 A copy's own page has a **Locations** card listing its moves, newest first: where it came from,
 where it went, when, and what did it — **Copy form**, **Bulk edit**, **Purchase** (naming the
-purchase, as a link), **Scan sheet**, **Replacement**, or **Other change**. Each location is a link
+purchase, as a link), **Scan sheet**, **Replacement**, **Packed for a sale** or **Packed for a
+trade** (naming the sale or the trade, as a link), **Written off**, or **Other change**. Each location is a link
 to that location's history.
 
 ### On a location

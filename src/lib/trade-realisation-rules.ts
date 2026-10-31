@@ -179,6 +179,15 @@ export const COMMITTING_FULFILLMENTS: readonly TradeFulfillment[] = TRADE_FULFIL
 );
 
 /**
+ * Whether this verdict says the give line's copy **went in the parcel** (#2278): sent, or sent and
+ * never arrived. That is the trade's packing, and it takes the copy off its location, as packing a
+ * sold copy does. A withdrawn copy never left the shelf; one still pending has not been packed yet.
+ */
+export function wentInTradeParcel(fulfillment: TradeFulfillment): boolean {
+  return hasTradeVerdict(fulfillment) && isCommittingFulfillment(fulfillment);
+}
+
+/**
  * Whether this give line has taken its copy **out of the collection** (#644).
  *
  * The third exit path, beside a `SaleLineItem` and a `disposedAt` — and, like the other two, a fact

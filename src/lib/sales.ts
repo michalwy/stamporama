@@ -4,6 +4,7 @@ import { loadCostEstimates } from "./cost-estimates";
 import type { CostEstimate } from "./purchase-allocation";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { packedFromPlaces, takeOffLocationTx } from "./location-moves";
 import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
@@ -777,7 +778,10 @@ export async function setSaleStatus(
 /** Toggle whether a single physical copy has been packed (#192). Keyed by `itemId` alone — the
  * `sale_line_item.itemId` unique constraint means a copy belongs to at most one sale line, so the
  * item identifies the row unambiguously. Independent of the sale's overall status; the UI surfaces
- * an advance-to-`packed` hint when the last copy is packed, but this never changes `Sale.status`. */
+ * an advance-to-`packed` hint when the last copy is packed, but this never changes `Sale.status`.
+ *
+ * Packing takes the copy off its location (#2278), and unpacking does not put it back: it is filed
+ * anew, and its history says where it was. */
 export async function setSaleLineItemPacked(
   ownerId: string,
   itemId: string,
@@ -785,12 +789,21 @@ export async function setSaleLineItemPacked(
 ): Promise<void> {
   const row = await prisma.saleLineItem.findUnique({
     where: { itemId },
-    select: { saleLine: { select: { sale: { select: { collection: { select: { ownerId: true } } } } } } },
+    select: {
+      saleLine: {
+        select: { saleId: true, sale: { select: { collection: { select: { ownerId: true } } } } },
+      },
+    },
   });
   if (!row || row.saleLine.sale.collection.ownerId !== ownerId) {
     throw new Error("Sold copy not found or access denied.");
   }
-  await prisma.saleLineItem.update({ where: { itemId }, data: { packed } });
+  await prisma.$transaction(async (tx) => {
+    await tx.saleLineItem.update({ where: { itemId }, data: { packed } });
+    if (packed) {
+      await takeOffLocationTx(tx, { id: itemId }, { source: "sale_packing", sourceId: row.saleLine.saleId });
+    }
+  });
 }
 
 /**
@@ -806,7 +819,8 @@ export async function setSaleLineItemPacked(
  * collector made in a dialog, and the caller moves the status separately.
  *
  * An `updateMany` rather than a write per copy, scoped by the sale: a parcel of eighty copies is
- * one statement, and the client never learns the item ids to loop over.
+ * one statement, and the client never learns the item ids to loop over. The copies come off their
+ * locations with it (#2278), as a copy packed on its own does.
  */
 export async function markSaleCopiesPacked(ownerId: string, saleId: string): Promise<number> {
   const sale = await prisma.sale.findUnique({
@@ -816,11 +830,18 @@ export async function markSaleCopiesPacked(ownerId: string, saleId: string): Pro
   if (!sale || sale.collection.ownerId !== ownerId) {
     throw new Error("Sale not found or access denied.");
   }
-  const result = await prisma.saleLineItem.updateMany({
-    where: { saleLine: { saleId }, packed: false },
-    data: { packed: true },
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.saleLineItem.updateMany({
+      where: { saleLine: { saleId }, packed: false },
+      data: { packed: true },
+    });
+    await takeOffLocationTx(
+      tx,
+      { saleLineItems: { some: { saleLine: { saleId } } } },
+      { source: "sale_packing", sourceId: saleId }
+    );
+    return result.count;
   });
-  return result.count;
 }
 
 /** Edit a sale header (platform / buyer / date / handling / commission). The currency is a fixed
@@ -3300,7 +3321,7 @@ export interface SaleCopyItem extends ItemListItem {
 
 /** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) and the offer
  * number behind each copy's line into a set of enriched copies, preserving the enriched order. */
-async function withPacked(items: ItemListItem[]): Promise<SaleCopyItem[]> {
+async function withPacked(collectionId: string, items: ItemListItem[]): Promise<SaleCopyItem[]> {
   if (items.length === 0) return [];
   const rows = await prisma.saleLineItem.findMany({
     where: { itemId: { in: items.map((i) => i.id) } },
@@ -3311,10 +3332,18 @@ async function withPacked(items: ItemListItem[]): Promise<SaleCopyItem[]> {
     },
   });
   const byId = new Map(rows.map((r) => [r.itemId, r]));
+  // A packed copy is off its location (#2278), but the packing view and the printed list keep
+  // saying where it was pulled from — read from its history — so a stamp found missing from the
+  // parcel can still be looked for there.
+  const takenFrom = await packedFromPlaces(
+    collectionId,
+    items.filter((i) => i.locationId == null && byId.get(i.id)?.packed).map((i) => i.id)
+  );
   return items.map((i) => {
     const row = byId.get(i.id);
     return {
       ...i,
+      ...takenFrom.get(i.id),
       packed: row?.packed ?? false,
       offerNo: row?.saleLine.offer?.offerNo ?? null,
       saleLineId: row?.saleLine.id ?? "",
@@ -3345,7 +3374,7 @@ export async function listSaleLineCopies(
     ids,
     pageSize: ids.length,
   });
-  return withPacked(items);
+  return withPacked(line.sale.collectionId, items);
 }
 
 /** Every physical copy across a whole sale, enriched (with packed flag) for the packing view's
@@ -3371,7 +3400,7 @@ export async function listSaleCopies(
     ids,
     pageSize: ids.length,
   });
-  return withPacked(items);
+  return withPacked(sale.collectionId, items);
 }
 
 // ── Realized proceeds, per copy ───────────────────────────────────────────────

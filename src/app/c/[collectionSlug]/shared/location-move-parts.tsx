@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { LocationMoveEntry, LocationMovePlace } from "@/lib/location-moves";
+import type { LocationMoveEntry, LocationMoveNamed, LocationMovePlace } from "@/lib/location-moves";
 import { locationMoveSourceLabel } from "@/lib/location-move-rules";
 
 // The pieces a location history entry is drawn from (#2277), shared by the copy's card and the
@@ -39,21 +39,27 @@ export function LocationMovePlaceText({
   );
 }
 
-/** What moved the copy, with the purchase named as a link where the entry names one. */
+const NAMED_PATH: Record<LocationMoveNamed["kind"], string> = {
+  purchase: "purchases",
+  sale: "sales",
+  trade: "trades",
+};
+
+/** What moved the copy, with the purchase, sale or trade named as a link where the entry names one. */
 export function LocationMoveSourceText({
   collectionSlug,
   entry,
 }: {
   collectionSlug: string;
-  entry: Pick<LocationMoveEntry, "source" | "purchase">;
+  entry: Pick<LocationMoveEntry, "source" | "named">;
 }) {
   const label = locationMoveSourceLabel(entry.source);
-  if (!entry.purchase) return <span>{label}</span>;
+  if (!entry.named) return <span>{label}</span>;
   return (
     <span>
       {label}{" "}
-      <Link href={`/c/${collectionSlug}/purchases/${entry.purchase.id}`} style={LINK}>
-        {entry.purchase.label}
+      <Link href={`/c/${collectionSlug}/${NAMED_PATH[entry.named.kind]}/${entry.named.id}`} style={LINK}>
+        {entry.named.label}
       </Link>
     </span>
   );

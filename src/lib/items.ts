@@ -141,7 +141,7 @@ import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-ro
 import { issueMatchesCompleteness, type CompletenessFilter } from "./completeness-filter";
 import { heldStackKeys, inHeldStack, type HeldFilter } from "./held-filter";
 import { buildLocationPath } from "./location-path";
-import { setMoveSourceTx, type MoveSource } from "./location-moves";
+import { setMoveSourceTx, takeOffLocationTx, type MoveSource } from "./location-moves";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
 import {
@@ -1058,10 +1058,15 @@ export async function disposeItem(
     );
   }
 
-  const item = await prisma.item.update({
-    where: { id: itemId },
-    data: { disposedAt: new Date(), disposalReason: input.reason, disposalNote: note },
-    select: ITEM_SELECT,
+  // Written off, the copy comes off its location (#2278) — its history says where it was — and a
+  // restore does not put it back: a copy that turned up again is filed anew.
+  const item = await prisma.$transaction(async (tx) => {
+    await takeOffLocationTx(tx, { id: itemId }, { source: "write_off" });
+    return tx.item.update({
+      where: { id: itemId },
+      data: { disposedAt: new Date(), disposalReason: input.reason, disposalNote: note },
+      select: ITEM_SELECT,
+    });
   });
   return toItemData(item);
 }

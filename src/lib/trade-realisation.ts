@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { takeOffLocationTx } from "./location-moves";
 import { assertLineOwner } from "./trade-access";
 import { LABEL_STAMP_SELECT, loadTradeLineLabeller } from "./trade-line-label";
 import { isTradeSide, isTradeStatus, type TradeSide, type TradeStatus } from "./trade-rules";
@@ -13,6 +14,7 @@ import {
   tradeClosingBlockerMessage,
   tradeRealisationClosedMessage,
   UNANSWERED_FULFILLMENTS,
+  wentInTradeParcel,
   type TradeFulfillment,
   type TradeRealisationCounts,
 } from "./trade-realisation-rules";
@@ -22,7 +24,7 @@ import {
 // `trade-realisation-rules.ts`, beside this module exactly as `trade-feedback-rules.ts` sits beside
 // `trade-feedback.ts`.
 //
-// **It writes two columns and touches nothing else.** Not the quantity, not the key, not
+// **It writes two columns, and the given copy's location.** Not the quantity, not the key, not
 // `manualValue`, and above all not the frozen `TradeLineValuation` rows: the agreement is what both
 // sides shook hands on and the partner is holding a printout of it. Realisation is a second layer on
 // the same line, and the realised balance is derived from the two together — the agreement minus what
@@ -141,13 +143,16 @@ export async function readTradeRealisation(tradeId: string): Promise<TradeRealis
  * on a line — `assertContentEditable` refuses at `agreed`, and this refuses everywhere else. That is
  * the whole shape of the issue: the list locks because the partner holds a copy of it, and recording
  * that reality diverged from that copy is a different act with its own window.
+ *
+ * A give line's copy that went in the parcel comes off its location (#2278) — the trade's packing.
+ * A verdict changed back does not put it back: the copy is filed anew.
  */
 export async function setTradeLineFulfillment(
   ownerId: string,
   lineId: string,
   input: { fulfillment: unknown; note?: unknown }
 ): Promise<void> {
-  const { status } = await assertLineOwner(ownerId, lineId);
+  const { status, side, tradeId } = await assertLineOwner(ownerId, lineId);
   if (!canRecordTradeRealisation(status)) {
     throw new Error(tradeRealisationClosedMessage(status));
   }
@@ -155,12 +160,18 @@ export async function setTradeLineFulfillment(
   const parsed = parseTradeFulfillment(input.fulfillment, input.note);
   if (!parsed.ok) throw new Error(parsed.message);
 
-  await prisma.tradeLine.update({
-    where: { id: lineId },
-    data: {
-      fulfillment: parsed.value.fulfillment,
-      fulfillmentNote: parsed.value.note,
-    },
+  await prisma.$transaction(async (tx) => {
+    const line = await tx.tradeLine.update({
+      where: { id: lineId },
+      data: {
+        fulfillment: parsed.value.fulfillment,
+        fulfillmentNote: parsed.value.note,
+      },
+      select: { itemId: true },
+    });
+    if (side === "give" && line.itemId && wentInTradeParcel(parsed.value.fulfillment)) {
+      await takeOffLocationTx(tx, { id: line.itemId }, { source: "trade_packing", sourceId: tradeId });
+    }
   });
 }
 

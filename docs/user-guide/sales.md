@@ -508,6 +508,14 @@ packing happens copy by copy, so this is tracked **per copy**, independent of th
 **"All copies packed — advance to Packed?"** hint next to the status control; it's only a reminder —
 you still advance the status yourself, it never changes on its own.
 
+**Packing a copy takes it off its location.** The tick clears the copy's location and ref, so the box
+it came from no longer counts it, and its [history](locations.md#where-copies-have-been) records
+where it was. **Mark all packed and move** does the same for every copy, and so does packing on the
+phone. The packing view and the printed list go on showing a packed copy under the place it was
+taken from, so a stamp found missing from the parcel can still be looked for there. Unticking does
+**not** put it back: the copy stays unfiled until you file it again — see
+[Copies that leave](locations.md#copies-that-leave).
+
 Remove a sold set from its card's **⋮** menu (its copies become available again).
 
 ### How a sold set is named
@@ -664,6 +672,8 @@ laid out as a walk through your shelves:
 - Copies that are indistinguishable while packing — same stamp, same condition, same certificate
   status, same ref, same packed state — collapse into a **single line with a quantity**, so five of
   the same stamp are one line to tick rather than five.
+- A copy already **packed** is off its location, and is printed under the location and ref it was
+  [taken from](locations.md#copies-that-leave), so the sheet still says where every piece came from.
 
 ### Grouping by sold set
 
