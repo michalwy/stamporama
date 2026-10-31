@@ -27,6 +27,7 @@ import {
   facebookPostStage,
   facebookPostTitleRefusal,
   facebookTitleWithWords,
+  isFacebookLotClosed,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
   type FacebookPostDeletion,
@@ -1173,7 +1174,8 @@ export async function readFacebookApprovalClosing(
  * each Ready lot goes `ready → pending` and the link is the pending post's. Approved, `to` is `active`:
  * each pending lot goes `pending → active`, and the final link replaces the post's pending link
  * ({@link facebookPostLink}) wherever a lot carries it, since that address is the one that moved; a
- * lot's own photo link is still left as it is.
+ * lot's own photo link is still left as it is. A lot sold or withdrawn while the post waited does not
+ * hold the approval back (#2290) — a buyer may answer a pending post — and is left as it is.
  */
 export async function publishFacebookPost(
   ownerId: string,
@@ -1188,9 +1190,13 @@ export async function publishFacebookPost(
     select: { id: true, offerNo: true, facebookLotNo: true, state: true, url: true },
   });
   // Where each lot may start from, and where it is already done: approving finishes a post that was
-  // pending, and submitting one leaves a lot already pending where it is.
+  // pending, and submitting one leaves a lot already pending where it is. Approving also leaves a lot
+  // that closed while the post waited (#2290).
+  const approving = lots.some((l) => l.state === "pending") && to === "active";
   const movable = to === "active" ? ["ready", "pending"] : ["ready"];
-  const waiting = lots.filter((l) => !movable.includes(l.state) && l.state !== to);
+  const waiting = lots.filter(
+    (l) => !movable.includes(l.state) && l.state !== to && !(approving && isFacebookLotClosed(l.state))
+  );
   if (waiting.length > 0) {
     const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
     throw new OfferActionBlockedError("bad-transition", `Every lot must be Ready before the post goes up: ${named}.`);
@@ -1212,7 +1218,6 @@ export async function publishFacebookPost(
       throw new OfferActionBlockedError("photos-generating", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${hold}`);
     }
   }
-  const approving = lots.some((l) => l.state === "pending") && to === "active";
   const pending = approving ? facebookPostLink(lots.filter((l) => l.state === "pending")) : null;
   let activated = 0;
   for (const lot of lots) {

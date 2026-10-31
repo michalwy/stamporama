@@ -83,6 +83,7 @@ export function ActivateOfferDialog({
   platformName,
   initialUrl,
   facebookLots,
+  facebookClosedLots = 0,
   initialTarget = "active",
   canWait = true,
   approving = false,
@@ -98,6 +99,9 @@ export function ActivateOfferDialog({
   initialUrl: string | null;
   /** On a Facebook auction, how many lots its post holds — 1 when it is posted alone. Null elsewhere. */
   facebookLots?: number | null;
+  /** Approving a post, how many of its lots were sold or withdrawn while it waited (#2290): they stay
+   *  as they are, and the approval takes up the others. */
+  facebookClosedLots?: number;
   /** Whether *Waiting for approval* starts ticked — the ⋮ *Submit for approval…* entry opens it so
    *  (off Facebook; on Facebook the one *Publish…* starts it unticked, #1847). */
   initialTarget?: PublishTarget;
@@ -141,7 +145,16 @@ export function ActivateOfferDialog({
     lots > 1 ? <>all {lots} lots of this post</> : <strong>{offerLabel}</strong>;
 
   let lead: React.ReactNode;
-  if (approving) {
+  const waiting = lots - facebookClosedLots;
+  if (approving && lots > 1 && facebookClosedLots > 0) {
+    lead = (
+      <>
+        Mark {waiting === 1 ? "the lot" : <>the {waiting} lots</>} of this post still waiting approved and live on{" "}
+        {platformName} — the {facebookClosedLots} sold or withdrawn while it waited stay as they are. Today
+        becomes {waiting === 1 ? "its" : "their"} listing date.
+      </>
+    );
+  } else if (approving) {
     lead = (
       <>
         Mark {subject} approved and live on {platformName}. Today becomes{" "}

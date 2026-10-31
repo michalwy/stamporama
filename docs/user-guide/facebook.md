@@ -636,7 +636,10 @@ none of its own. A lot can carry its own photo's link instead: enter it as that
 offer's listing URL before activating, and it is kept. A post waiting for the group's approval waits
 as one too: submitting, approving, rejecting or withdrawing it — or any lot of it — does it for the
 whole post, and approving writes the final link in place of the pending one and the closing time you
-settle on into every auction of the post. Once the post is up, each lot is its own result again —
+settle on into every auction of the post. A buyer may answer a post before the group approves it: a lot
+sold — or withdrawn — while the post waited stays as it is, and **Approved…**, **Rejected — back to
+Ready** and **Withdraw…** are still offered and act on the lots still waiting. Once every lot has sold
+there is nothing left to approve. Once the post is up, each lot is its own result again —
 withdrawing one lot leaves the others.
 
 **Adding lots to a post.** Until a post is up — while it is being prepared or Ready — more offers can
