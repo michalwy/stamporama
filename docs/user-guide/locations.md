@@ -74,11 +74,14 @@ with a legend of what they stand for printed separately.
 
 ## Editing and deleting
 
-Every location row has a **⋮** menu with **Add sub-location**, **Edit**, and **Delete**.
+Every location row has a **⋮** menu with **Add sub-location**, **Edit**, **History** and **Delete**.
 
 A location can only be deleted once it is empty: if it still has **child locations** or
 **stored copies**, the delete dialog explains what to clear first. This prevents
 accidentally losing track of where copies were.
+
+A deleted location stays named in the [history](#where-copies-have-been) of the copies that were
+in it, marked *(deleted)*.
 
 ## Filing copies into a location
 
@@ -152,3 +155,42 @@ so you can see at a glance where everything lives. To narrow the list, use the
 [Filters and sorting](inventory.md#filters-and-sorting). Selecting a location shows every
 copy stored in it **and in any location nested inside it**, so filtering by a cabinet
 shows the copies in all of its stockbooks at once.
+
+## Where copies have been
+
+Every time a copy's location or ref changes, Stamporama writes it down: when, where the copy was
+(location and ref), where it went — or that it was taken off its location with nowhere new — and
+what moved it. The ref is part of the place, so moving a copy from card `A12` to card `A13` of the
+same box is a move too. However the copy is moved, the move is recorded: from its **Edit copy**
+dialog, from **Bulk edit** on the Copies list, by **Store** or **Move** on a purchase, by marking a
+purchase arrived into a location, from a scan sheet, or by filing old copies on **Replacements**.
+
+The record is never edited or deleted. If a copy was moved by mistake, move it back: both moves
+stay in the record.
+
+The history starts on the day this feature arrived. Each copy's first entry is where it was on that
+day, marked **Starting point**; a copy added since starts with the entry that added it.
+
+### On a copy
+
+A copy's own page has a **Locations** card listing its moves, newest first: where it came from,
+where it went, when, and what did it — **Copy form**, **Bulk edit**, **Purchase** (naming the
+purchase, as a link), **Scan sheet**, **Replacement**, or **Other change**. Each location is a link
+to that location's history.
+
+### On a location
+
+Click a location's name on the Locations screen — or choose **History** from its **⋮** menu — to see
+every copy that came into it and every copy that left it, newest first. Each row says when, which
+copy (a link to it), whether it came **In**, went **Out**, or moved **Within** the location (from one
+ref to another), where it came from, where it went, and what moved it.
+
+A location that groups others — a cabinet — shows the moves of everything under it; a copy moved
+between two of its stockbooks reads as **Within**.
+
+Narrow the list with:
+
+- **Ref** — only moves onto or off that ref in this location (letter case does not matter), so you
+  can see everything that was ever on card `A147`.
+- **From** and **To** — only moves on those days, both days included. Either can be left empty.
+

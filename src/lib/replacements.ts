@@ -4,6 +4,7 @@ import { prisma, type DbTransaction } from "./db";
 import { stampLabel } from "./items";
 import { formatItemNo } from "./item-number";
 import { buildLocationPath } from "./location-path";
+import { setMoveSourceTx } from "./location-moves";
 import type { PhotoSummary, PhotoRole } from "./photos";
 import { TRADED_AWAY_LINE } from "./trade-exit";
 import { anyHeldCopiesWhere, heldCopiesWhere } from "./copy-counts";
@@ -533,6 +534,8 @@ export async function settleReplacements(
   const locationRef = card.locationRef?.trim() || null;
 
   return prisma.$transaction(async (tx) => {
+    // Filing the old copies onto the card is a move, recorded as the replacement's (#2277).
+    await setMoveSourceTx(tx, { source: "replacement" });
     await closeMootReplacements(tx, collectionId);
     const pairs = await tx.itemReplacement.findMany({
       where: { id: { in: ids }, collectionId, status: "open" },

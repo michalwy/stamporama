@@ -82,6 +82,7 @@ import {
   TAG_SUMMARY_SELECT,
   type TagSummary,
 } from "./tags";
+import { setMoveSourceTx } from "./location-moves";
 import type { TagEntry } from "./tag-entry";
 import { tagFilterWhere, type TagFilterOpts } from "./tag-filter";
 
@@ -4682,6 +4683,8 @@ export async function settleAuctionSale(
       if (copies.length > 0) {
         // `createManyAndReturn` rather than `createMany`: each copy needs the `ItemStamp` entry
         // naming its stamp written beside it (ADR-0044 §2), and that takes the ids back.
+        // The copies' history starts with the purchase the settled sale became (#2277).
+        await setMoveSourceTx(tx, { source: "purchase", sourceId: purchase.id });
         const made = await tx.item.createManyAndReturn({
           data: copies,
           select: { id: true, stampId: true },

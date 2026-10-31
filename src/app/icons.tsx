@@ -78,6 +78,7 @@ import {
   HandCoins,
   Handshake,
   Hash,
+  History,
   House,
   LayoutDashboard,
   LayoutGrid,
@@ -270,6 +271,8 @@ const GLYPHS = {
   /** Saves one file to the collector's disk — a single photo beside the ZIP that takes them all (#1865). */
   download: Download,
   move: ArrowLeftRight,
+  /** What has happened to a thing over time — a location's moves in and out (#2277). */
+  history: History,
   /** A new copy taking an old one's place in the collection — the replacement pairs (#1936). */
   replace: Replace,
   merge: Merge,

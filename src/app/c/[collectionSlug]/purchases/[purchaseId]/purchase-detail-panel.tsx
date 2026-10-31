@@ -805,6 +805,7 @@ export function PurchaseDetailPanel({
   // actions on a row; these two belong to the selection, which lives here.
   const selectionEditing = useCopyEditing({
     collectionId,
+    purchaseId: purchase.id,
     areas,
     locations,
     conditions,
@@ -2245,6 +2246,8 @@ function bulkTargetCount(t: BulkTarget): number {
  * the two groupings drive identical editing behaviour. */
 function useCopyEditing(ctx: {
   collectionId: string;
+  /** The order the copies are on, named by a move this screen makes (#2277). */
+  purchaseId: string;
   areas: CollectionAreaData[];
   locations: LocationData[];
   conditions: StampConditionData[];
@@ -2258,7 +2261,7 @@ function useCopyEditing(ctx: {
   moveLots: MoveLotOption[];
 }) {
   const { collectionId, areas, locations, conditions, certificateStatuses, isPending, run } = ctx;
-  const { onBulkDone, moveLots } = ctx;
+  const { onBulkDone, moveLots, purchaseId } = ctx;
   const { invalidateScans } = useInvalidateScans();
   // Catalog-number rendering context for the quick-price dialog (#147): reuse the same
   // per-area vendor maps the copy rows use so numbers format identically.
@@ -2324,6 +2327,7 @@ function useCopyEditing(ctx: {
       async () => {
         const fd = new FormData();
         fd.set("itemIds", itemIds.join(","));
+        fd.set("purchaseId", purchaseId);
         appendBulkChanges(fd, changes);
         const { bulkUpdateLotItemsAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsAction(fd);
@@ -3430,6 +3434,7 @@ function LotCard({
 
   const copy = useCopyEditing({
     collectionId,
+    purchaseId,
     areas,
     locations,
     conditions,
@@ -4297,6 +4302,7 @@ function OrderCopiesView({
 }) {
   const copy = useCopyEditing({
     collectionId,
+    purchaseId,
     areas,
     locations,
     conditions,

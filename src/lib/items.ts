@@ -141,6 +141,7 @@ import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-ro
 import { issueMatchesCompleteness, type CompletenessFilter } from "./completeness-filter";
 import { heldStackKeys, inHeldStack, type HeldFilter } from "./held-filter";
 import { buildLocationPath } from "./location-path";
+import { setMoveSourceTx, type MoveSource } from "./location-moves";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
 import {
@@ -636,7 +637,9 @@ function assertFaultReduction(percent: number | null | undefined): void {
 export async function createItem(
   ownerId: string,
   collectionId: string,
-  data: ItemCreateInput
+  data: ItemCreateInput,
+  // What the copy's first entry in its location history says added it (#2277).
+  move: MoveSource = { source: "copy_form" }
 ): Promise<ItemData> {
   await assertCollectionOwner(ownerId, collectionId);
   await assertStampInCollection(collectionId, data.stampId);
@@ -659,6 +662,7 @@ export async function createItem(
   // (ADR-0044 §2): a copy with no entry is a copy whose stamps are unknown, and the number the
   // create reserved would be spent on it.
   const item = await prisma.$transaction(async (tx) => {
+    await setMoveSourceTx(tx, move);
     const itemNo = await allocateItemNumber(tx, collectionId);
     const created = await tx.item.create({
       data: {
@@ -772,7 +776,9 @@ export interface UpdateItemResult {
 export async function updateItem(
   ownerId: string,
   itemId: string,
-  data: ItemUpdateInput
+  data: ItemUpdateInput,
+  // What a change of the copy's location or ref is recorded as moved by (#2277).
+  move: MoveSource = { source: "copy_form" }
 ): Promise<UpdateItemResult> {
   const current = await prisma.item.findUnique({
     where: { id: itemId },
@@ -842,6 +848,7 @@ export async function updateItem(
   };
 
   const item = await prisma.$transaction(async (tx) => {
+    await setMoveSourceTx(tx, move);
     const updated = await tx.item.update({
       where: { id: itemId },
       data: updateData,

@@ -902,6 +902,9 @@ reordering that list, or striking a stamp off it, records no refinement, because
 copy was identified as something else. The dialog also carries the **Never list on**
 control — see [copies you never list on a platform](#copies-you-never-list-on-a-platform).
 
+Changing the copy's **Location** or **Ref** is recorded in its location history, shown on the
+copy's own page — see [where copies have been](locations.md#where-copies-have-been).
+
 To edit the **stamp** a copy points to — its name, catalog numbers, or catalog prices — choose
 **Edit stamp** from the same **⋮** menu. It opens the shared stamp editor (the one on the Stamps
 and Issues lists), so you can fix stamp-level details without navigating away from Inventory. Edits

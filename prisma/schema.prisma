@@ -226,6 +226,8 @@ model Collection {
   // Mail sent to the collector on this collection's behalf (#1372).
   mailMessages    MailMessage[]
   overviewAreas   CollectionOverviewArea[]
+  // Every copy's moves between locations (#2277).
+  itemLocationMoves ItemLocationMove[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -3655,6 +3657,9 @@ model Item {
   lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)
   location          Location?            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   variantHistory    ItemVariantHistory[]
+  /** Where this copy has been (#2277), one entry per change of its location or ref. See
+   *  {@link ItemLocationMove}. */
+  locationMoves     ItemLocationMove[]
   /** Every stamp this copy carries, the leading one included (ADR-0044 §2). See {@link ItemStamp}. */
   stamps            ItemStamp[]
   /** The stamps this copy **might be** — one of them, not known which (#1651, ADR-0065). Empty for an
@@ -4014,6 +4019,59 @@ model ItemVariantHistory {
 
   @@index([itemId])
   @@map("item_variant_history")
+}
+
+// Where a copy has been (#2277, ADR-0074): one entry per change of a copy's location or ref — the
+// ref is part of the place, so card 12 to card 13 of one box is a move too — including being taken
+// off a location with no new one. **Written only by the database**: the `item_record_location_move`
+// trigger (see migration) adds an entry on every insert of a copy and on every update that changes
+// `locationId` or `locationRef`, whichever code made it, so no way of moving a copy can forget to
+// record it. What the app adds is *what did it*: `source` and `sourceId` are read from the
+// transaction-local settings `setMoveSourceTx` (`src/lib/location-moves.ts`) writes; a write that
+// sets none is recorded as `created` (an insert) or `other` (an update). Entries are never edited
+// or deleted by the app — a wrong move is put right by another move, and both stay.
+//
+// The history starts with the migration: every copy then got a `start` entry naming where it was.
+enum ItemLocationMoveSource {
+  start
+  created
+  copy_form
+  bulk_edit
+  purchase
+  scan
+  replacement
+  other
+}
+
+model ItemLocationMove {
+  id               String                 @id @default(dbgenerated("(gen_random_uuid())::text"))
+  collectionId     String
+  itemId           String
+  movedAt          DateTime               @default(now())
+  fromLocationId   String?
+  // The location's name when the entry was written, read only once the location is deleted and its
+  // id has gone with it — so a move out of a box since thrown away still says which box.
+  fromLocationName String?
+  fromRef          String?
+  toLocationId     String?
+  toLocationName   String?
+  toRef            String?
+  source           ItemLocationMoveSource
+  // What `source` names, where it names one: the purchase for `purchase`. Not a foreign key, since
+  // what it points at depends on `source`; a reader that cannot find it shows the source unnamed.
+  sourceId         String?
+
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  item         Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  // A deleted location leaves the entries that named it, which keep its name (above).
+  fromLocation Location?  @relation("ItemLocationMoveFrom", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocation   Location?  @relation("ItemLocationMoveTo", fields: [toLocationId], references: [id], onDelete: SetNull)
+
+  @@index([itemId, movedAt])
+  @@index([fromLocationId, movedAt])
+  @@index([toLocationId, movedAt])
+  @@index([collectionId])
+  @@map("item_location_move")
 }
 
 // Purchase transaction header (ADR-0009 §1). A single acquisition event: optional
@@ -7379,6 +7437,9 @@ model Location {
   parent     Location?  @relation("LocationChildren", fields: [parentId], references: [id])
   children   Location[] @relation("LocationChildren")
   items      Item[]
+  // What left this location and what came into it (#2277).
+  movesOut   ItemLocationMove[] @relation("ItemLocationMoveFrom")
+  movesIn    ItemLocationMove[] @relation("ItemLocationMoveTo")
 
   @@index([collectionId])
   @@map("location")
