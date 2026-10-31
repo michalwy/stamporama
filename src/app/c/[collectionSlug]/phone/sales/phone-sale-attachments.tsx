@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/app/icons";
 import { phoneButton } from "@/app/phone-screen";
 import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
+import { PhoneCameraButton } from "@/app/c/[collectionSlug]/phone/purchases/phone-camera-button";
 import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import {
   saleAttachmentUrl,
@@ -14,13 +15,15 @@ import {
 /**
  * A sale's own files on the phone's *Sales to do* (#2198): the photos of the packed parcel, the
  * posting receipt, taken at the packing table or the post office. Thumbnails of what the sale keeps,
- * a tap opening one at full size, and *Add photo*.
+ * a tap opening one at full size, and two ways to add one (#2285).
  *
- * *Add photo* is a file input with no `capture`, so the phone offers its own choice of the camera or
- * the gallery, and `multiple`, so several pictures from the gallery go at once. Each is uploaded to
- * the sale the moment it is picked, through the desk's upload route. `accept` is any image, as on the
- * purchase's camera (#2011): a narrower list makes some phones offer the file picker instead, and
- * the route refuses anything it cannot keep. Removing a file is the desk's.
+ * *Take photo* is the purchase's camera (#2011, `PhoneCameraButton`): the back camera opened straight
+ * away, one picture a tap. *From gallery* is a file input with `multiple` and no `capture`, so several
+ * pictures go at once — a phone's picker for several offers no camera, which is why the two are
+ * separate buttons. Both upload each picture to the sale the moment it is taken or picked, through
+ * the desk's upload route. `accept` is any image, as on the camera: a narrower list makes some phones
+ * offer the file picker instead, and the route refuses anything it cannot keep. Removing a file is the
+ * desk's.
  */
 export function PhoneSaleAttachments({
   collectionId,
@@ -80,23 +83,26 @@ export function PhoneSaleAttachments({
           {error}
         </p>
       )}
-      <button type="button" disabled={busy} onClick={() => input.current?.click()} style={BUTTON}>
-        <Icon name="camera" size="lg" />
-        Add photo
-      </button>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          // Cleared so the same picture can be picked again after a failed upload.
-          e.target.value = "";
-          if (files.length > 0) void addPhotos(files);
-        }}
-      />
+      <div style={BUTTONS}>
+        <PhoneCameraButton label="Take photo" disabled={busy} onPicture={(file) => void addPhotos([file])} />
+        <button type="button" disabled={busy} onClick={() => input.current?.click()} style={BUTTON}>
+          <Icon name="gallery" size="lg" />
+          From gallery
+        </button>
+        <input
+          ref={input}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            // Cleared so the same picture can be picked again after a failed upload.
+            e.target.value = "";
+            if (files.length > 0) void addPhotos(files);
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -115,6 +121,13 @@ const TILE: CSSProperties = {
   borderRadius: "0.375rem",
   background: "var(--color-bg-muted)",
   color: "var(--color-text-secondary)",
+};
+
+// Side by side, each half the row: the hidden inputs take no cell.
+const BUTTONS: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "0.5rem",
 };
 
 const BUTTON: CSSProperties = {

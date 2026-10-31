@@ -108,10 +108,12 @@ desktop-only.
 - **Mark paid asks nothing** — the desk's total-paid prompt (#443) is skippable, and the phone skips
   it, since the issue settled that *sent* is the one step that takes input and the amounts stay at the
   desk (decided in writing #2007).
-- **Add photo** on each row (#2198, `phone-sale-attachments.tsx`) keeps pictures with the sale — its
-  attachments on the desk. A file input with `multiple` and **no `capture`**, so the phone offers its
-  own choice of camera or gallery (the issue's *camera or gallery*), where #2011's `PhoneCameraButton`
-  forces the camera; `accept="image/*"` for #2011's reason. Each picture is posted straight to the
+- **Two buttons on each row** (#2198, `phone-sale-attachments.tsx`) keep pictures with the sale — its
+  attachments on the desk. **Take photo** is #2011's `PhoneCameraButton` (back camera, one picture a
+  tap); **From gallery** is a file input with `multiple` and no `capture`. #2198 shipped one input
+  without `capture` to leave camera-or-gallery to the phone, but **a phone's picker for several
+  pictures offers no camera**, so the camera got its own button (#2285). `accept="image/*"` on both
+  for #2011's reason. Each picture is posted straight to the
   sale's upload route (`uploadSaleAttachments`, one at a time so one refusal does not hold back the
   rest) — no staging, since the sale already exists. Thumbnails come from `listAttachmentsOfSales`,
   one read for the page, kept out of `listSalesAwaitingFulfilment` so the Dashboard does not pay for

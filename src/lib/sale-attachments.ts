@@ -15,8 +15,8 @@ import {
 
 // A sale's own files (#2198): photos of the packed parcel and its contents, the posting receipt, a
 // tracking slip — what settles a dispute about a lost or damaged parcel. One module for every
-// writer: the sale screen's upload route and removal action, the phone's *Add photo*, and the agent
-// API.
+// writer: the sale screen's upload route and removal action, the phone's *Take photo* and *From
+// gallery*, and the agent API.
 //
 // **Built as the conversation log's files are** (#2150, ADR-0073 §7), and through the same checks:
 // a file is read by `prepareConversationAttachment` — what it is from its bytes, the upload limit,
