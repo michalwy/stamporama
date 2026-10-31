@@ -38,6 +38,8 @@ import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { CopyPhotosCard } from "./copy-photos-card";
 import { OtherCopiesCard } from "./other-copies-card";
+import { CopyLocationHistoryCard } from "./copy-location-history-card";
+import type { LocationMoveEntry } from "@/lib/location-moves";
 import { isOneStampsCopy } from "@/lib/other-copies-rules";
 import {
   useCollectionCertificateStatuses,
@@ -117,6 +119,7 @@ export function CopyDetailPanel({
   locations,
   sale,
   variantCopies,
+  locationMoves,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -127,6 +130,8 @@ export function CopyDetailPanel({
   sale: ItemSaleRecord | null;
   /** Held copies of the stamp's variants (#528), for the Other copies card's line (#2090). */
   variantCopies: number;
+  /** Where the copy has been, newest first (#2277). */
+  locationMoves: LocationMoveEntry[];
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -387,6 +392,9 @@ export function CopyDetailPanel({
                 )}
               </FieldGrid>
             </DetailCard>
+
+            {/* Beside the location it answers for: where the copy was before (#2277). */}
+            <CopyLocationHistoryCard collectionSlug={collectionSlug} moves={locationMoves} />
 
             {/* Every stamp on the piece, in the collector's own order — which is the order they
                 sit on it, and the order `{catalog}` enumerates them in (ADR-0044 §8). Drawn only for

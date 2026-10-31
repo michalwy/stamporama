@@ -67,6 +67,7 @@ import { loadIssuePrefixMap } from "./issue-prefix";
 import { catalogMatchKey } from "./catalog-number";
 import { flattenMemberTree } from "./issue-member-order";
 import { closedLotsMessage, summarizeCopiesMove } from "./copies-move";
+import { setMoveSourceTx, type MoveSource } from "./location-moves";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -1560,8 +1561,11 @@ export async function intakeStamps(
   // transaction: a copy with no entry is a copy whose stamps are unknown, not a copy of one stamp.
   // The photos stay outside it — they are stored bytes, and a storage write has no business holding
   // a database transaction open.
+  // Every copy's history starts with the purchase it was added on (#2277).
+  const move: MoveSource = { source: "purchase", sourceId: lot.purchaseId };
   if (singleStamp && stampIds.length === 1 && input.photoChangeSet) {
     const item = await prisma.$transaction(async (tx) => {
+      await setMoveSourceTx(tx, move);
       const row = await tx.item.create({
         data: copyData(stampIds[0], itemNos[0]),
         select: { id: true, itemNo: true, stampId: true },
@@ -1574,6 +1578,7 @@ export async function intakeStamps(
     created.push(item);
   } else {
     const rows = await prisma.$transaction(async (tx) => {
+      await setMoveSourceTx(tx, move);
       const made = await tx.item.createManyAndReturn({
         data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
         select: { id: true, itemNo: true, stampId: true },
@@ -1801,6 +1806,7 @@ export async function markPurchaseArrived(
   if (locationId) await assertLocationAssignable(collectionId, locationId);
 
   return prisma.$transaction(async (tx) => {
+    await setMoveSourceTx(tx, { source: "purchase", sourceId: purchaseId });
     // Conditional, so marking an order that is already arrived again leaves the moment it arrived
     // alone — `statusChangedAt` is when the status changed, not when it was last written (#1810).
     await tx.purchase.updateMany({
@@ -1951,7 +1957,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
 async function applyLotBulkChanges(
   collectionId: string,
   baseWhere: Prisma.ItemWhereInput,
-  changes: LotBulkChanges
+  changes: LotBulkChanges,
+  move: MoveSource
 ): Promise<ArrivingCopy[]> {
   const hasDisposition =
     changes.inCollection !== undefined ||
@@ -1973,6 +1980,7 @@ async function applyLotBulkChanges(
       : [];
 
     if (changes.locationId !== undefined) {
+      await setMoveSourceTx(tx, move);
       await tx.item.updateMany({
         where: baseWhere,
         data: changes.locationId
@@ -2105,7 +2113,10 @@ function movesToDelivered(changes: LotBulkChanges): boolean {
 export async function bulkUpdateLotItems(
   ownerId: string,
   itemIds: string[],
-  changes: LotBulkChanges
+  changes: LotBulkChanges,
+  // What a move is recorded as (#2277): Bulk edit from the Copies list, the purchase when the
+  // purchase's own screen stores its copies.
+  move: MoveSource = { source: "bulk_edit" }
 ): Promise<BulkUpdateResult> {
   const ids = [...new Set(itemIds.filter((id) => id))];
   if (ids.length === 0) return { count: 0, delivered: [], lotIds: [] };
@@ -2131,7 +2142,12 @@ export async function bulkUpdateLotItems(
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
   await assertVariantDictionaries(collectionId, changes);
 
-  const delivered = await applyLotBulkChanges(collectionId, { id: { in: ids } }, changes);
+  const delivered = await applyLotBulkChanges(
+    collectionId,
+    { id: { in: ids } },
+    changes,
+    await ownMoveSource(collectionId, move)
+  );
   return { count: ids.length, delivered, lotIds: distinctLotIds(rows) };
 }
 
@@ -2154,7 +2170,17 @@ export async function updateLotCopy(
   itemId: string,
   changes: LotBulkChanges
 ): Promise<BulkUpdateResult & { copy: LotCopyRowFields }> {
-  const result = await bulkUpdateLotItems(ownerId, [itemId], changes);
+  // A row of the intake screen is its purchase's: a move from it names the purchase (#2277).
+  const lot = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { lot: { select: { purchaseId: true } } },
+  });
+  const result = await bulkUpdateLotItems(
+    ownerId,
+    [itemId],
+    changes,
+    lot?.lot ? { source: "purchase", sourceId: lot.lot.purchaseId } : { source: "bulk_edit" }
+  );
   const copy = await prisma.item.findUniqueOrThrow({
     where: { id: itemId },
     select: {
@@ -2167,6 +2193,17 @@ export async function updateLotCopy(
     },
   });
   return { ...result, copy };
+}
+
+/** A move source naming a purchase names one of this collection's, or none — the id comes from the
+ *  client, and an entry must not name another collection's order. */
+async function ownMoveSource(collectionId: string, move: MoveSource): Promise<MoveSource> {
+  if (move.source !== "purchase" || !move.sourceId) return move;
+  const purchase = await prisma.purchase.findFirst({
+    where: { id: move.sourceId, collectionId },
+    select: { id: true },
+  });
+  return purchase ? move : { source: "purchase" };
 }
 
 /** The lots a set of copies sits in, each once — what a bulk change reports it touched (#1409). */
@@ -2394,7 +2431,21 @@ export async function bulkUpdateLotItemsScoped(
   const perLot = await prisma.item.groupBy({ by: ["lotId"], where, _count: { _all: true } });
   const count = perLot.reduce((sum, g) => sum + g._count._all, 0);
   if (count === 0) return { count: 0, delivered: [], lotIds: [] };
-  const delivered = await applyLotBulkChanges(collectionId, where, changes);
+  // Scoped changes are the purchase screen's, so a move names the purchase (#2277).
+  const purchaseId =
+    scope.purchaseId ??
+    (scope.lotId
+      ? (await prisma.purchaseLot.findFirst({
+          where: { id: scope.lotId, purchase: { collectionId } },
+          select: { purchaseId: true },
+        }))?.purchaseId
+      : undefined);
+  const delivered = await applyLotBulkChanges(
+    collectionId,
+    where,
+    changes,
+    await ownMoveSource(collectionId, { source: "purchase", sourceId: purchaseId ?? null })
+  );
   return { count, delivered, lotIds: distinctLotIds(perLot) };
 }
 

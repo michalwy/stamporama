@@ -804,7 +804,7 @@ export async function reidentifyTileCopy(
     ...(stamps ? { stamps } : {}),
     // The set the piece might be (#1651) — or none, which drops one the copy carried.
     candidateStampIds: input.candidateStampIds ?? [],
-  });
+  }, { source: "scan" });
   if (input.stampPhotoTileId === undefined) await seedStampImage(ownerId, item.id);
   if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);
   return { itemId: item.id, itemNo: item.itemNo };

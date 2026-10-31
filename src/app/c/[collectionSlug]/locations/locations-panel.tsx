@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -437,12 +438,15 @@ export function LocationsPanel({
                 <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
               )}
 
-              <span
+              {/* The name opens the location's history (#2277): what came in and what left. */}
+              <Link
+                href={`/c/${collectionSlug}/locations/${location.id}`}
                 style={{
                   flex: 1,
                   fontSize: "0.9375rem",
                   fontWeight: depth === 0 ? 600 : 500,
                   color: "var(--color-text-primary)",
+                  textDecoration: "none",
                   minWidth: 0,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -450,7 +454,7 @@ export function LocationsPanel({
                 }}
               >
                 {location.name}
-              </span>
+              </Link>
 
               <span style={codeStyle}>{location.fullCode}</span>
 
@@ -483,6 +487,12 @@ export function LocationsPanel({
                     label: "Edit",
                     icon: "edit",
                     onSelect: () => openDialog({ kind: "edit", location }),
+                  },
+                  {
+                    key: "history",
+                    label: "History",
+                    icon: "history",
+                    onSelect: () => router.push(`/c/${collectionSlug}/locations/${location.id}`),
                   },
                   // Blank index cards for this box (#565), printed *before* anything is packed
                   // onto them — which is why this lives here, on the location, rather than only

@@ -814,10 +814,14 @@ export async function bulkUpdateLotItemsAction(
     return { status: "error", message: "No copies selected." };
   }
   try {
+    // Sent by the purchase's own screen, so a move it makes names the purchase (#2277); the Copies
+    // list's Bulk edit sends none.
+    const purchaseId = str(formData, "purchaseId");
     const { delivered, lotIds } = await bulkUpdateLotItems(
       session.user.id,
       itemIds,
-      parseBulkChanges(formData)
+      parseBulkChanges(formData),
+      purchaseId ? { source: "purchase", sourceId: purchaseId } : { source: "bulk_edit" }
     );
     return { status: "success", copies: delivered.length > 0 ? delivered : undefined, lotIds };
   } catch (e) {
