@@ -27,7 +27,7 @@ import {
   type FacebookTemplateRole,
 } from "./facebook-group-rules";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
-import { isAuctionListing, offerFileSlug, type OfferListingType } from "./offer-rules";
+import { CLOSED_OFFER_STATES, isAuctionListing, offerFileSlug, type OfferListingType } from "./offer-rules";
 import {
   DEFAULT_CURRENCY_STYLE,
   isCurrencyStyle,
@@ -859,7 +859,9 @@ export function isFacebookLotPosted(state: string): boolean {
  *    screen draws one *Publish…* for `activate` (#1847); `submit` says whether its dialog may offer
  *    *Waiting for approval*;
  *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
- *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
+ *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779). A
+ *    lot sold or withdrawn while the post waited blocks none of them (#2290): a buyer may answer a
+ *    pending post, and each move acts on the lots still waiting and leaves a closed lot as it is;
  *  - `backToReady` — while the post is up and a lot of it is still for sale (#1998): a Publish that
  *    was a mistake, or a post gone from the group, taken back to Ready (`facebookBackToReadyPlan`);
  *  - `backToPreparing` — while the post is not up and a lot of it is Ready (#2115): every Ready lot
@@ -889,7 +891,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
   return {
     activate: !pending && ready && onlyIn(["ready", "active"]),
     submit: !pending && ready && onlyIn(["ready"]),
-    approve: pending && onlyIn(["ready", "pending", "active"]),
+    approve: pending && lots.every((l) => ["ready", "pending", "active"].includes(l.state) || isFacebookLotClosed(l.state)),
     reject: pending,
     withdraw: pending,
     backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
@@ -898,6 +900,12 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
   };
+}
+
+/** Whether a lot is closed — sold or withdrawn — and so left as it is by the post's approval,
+ *  rejection and withdrawal (#2290). */
+export function isFacebookLotClosed(state: string): boolean {
+  return (CLOSED_OFFER_STATES as readonly string[]).includes(state);
 }
 
 /** Whether a lot is up in the group and still for sale — running or paused. */

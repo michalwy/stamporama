@@ -410,7 +410,16 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `facebookPostMoves`** (pure, `facebook-post-rules.ts`), written to match the gates of
   `publishFacebookPost`, `rejectOfferOrPost` and `withdrawOfferOrPost`; the moves themselves are the
   existing actions asked of a lot — any lot to publish, a pending one to approve, reject or withdraw —
-  so nothing new runs server-side. `facebookPostStage` is where the post stands, said on the screen and
+  so nothing new runs server-side. **A lot closed while its post waited does not block the post's
+  approval** (#2290, settled with the collector on 2026-11-01): a buyer may answer a pending post, and
+  its sale is recorded as any other. `isFacebookLotClosed` (sold or withdrawn) is let through by both
+  `facebookPostMoves().approve` and `publishFacebookPost`'s *every lot must be Ready* gate — on an
+  approval only — and the approval moves the pending lots and leaves the closed ones; the final link
+  still replaces the pending one in every lot carrying it, a sold one included, since it is the same
+  post's address. Rejecting and withdrawing already acted on the pending lots alone. A post whose
+  every lot closed has nothing pending, so nothing is offered. The approval dialog names the lots
+  still waiting (`facebookClosedLots`). The integration test is in
+  `tests/integration/facebook-auctions.test.ts`. `facebookPostStage` is where the post stands, said on the screen and
   on each lot's card. The kit section moved out of `offer-facebook-card.tsx` into `facebook-post-kit.tsx`
   (`FacebookPostKit`, `selfOfferId` null on the post's screen so every lot's gap links to its offer):
   the card draws it only for an offer posted alone, and a lot's card is the post's number, the lot's,

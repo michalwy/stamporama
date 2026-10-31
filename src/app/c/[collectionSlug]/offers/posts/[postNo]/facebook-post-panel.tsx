@@ -11,6 +11,7 @@ import {
   facebookPostLink,
   facebookPostMoves,
   facebookPostStage,
+  isFacebookLotClosed,
   isFacebookLotPosted,
   sortFacebookLots,
   type FacebookLotSort,
@@ -409,8 +410,11 @@ export function FacebookPostPanel({
         const { publishOfferAction } = await import("@/app/actions/offers");
         return publishOfferAction(via, url, target, endsAt);
       },
+      // A lot sold or withdrawn while the post waited stays as it is (#2290).
       approving
-        ? `Post #${postNo} approved — all its lots are up`
+        ? lots.some((l) => isFacebookLotClosed(l.state))
+          ? `Post #${postNo} approved — the lots that were waiting are up`
+          : `Post #${postNo} approved — all its lots are up`
         : target === "pending"
           ? `Post #${postNo} submitted — waiting for the group's approval`
           : lots.length > 1
@@ -1197,6 +1201,7 @@ export function FacebookPostPanel({
           platformName={screen.platform.name}
           initialUrl={dialog.approving ? postLink : null}
           facebookLots={lots.length}
+          facebookClosedLots={dialog.approving ? lots.filter((l) => isFacebookLotClosed(l.state)).length : 0}
           initialTarget={dialog.target}
           approving={dialog.approving}
           canWait={moves.submit}

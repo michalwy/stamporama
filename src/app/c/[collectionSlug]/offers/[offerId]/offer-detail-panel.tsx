@@ -85,7 +85,7 @@ import {
   soldElsewhereRemovalLabel,
   soldElsewhereRemovalVia,
 } from "@/lib/offer-needs-action-remedy";
-import { facebookPostLink } from "@/lib/facebook-post-rules";
+import { facebookPostLink, isFacebookLotClosed } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import {
   evaluatePublishPhotoHold,
@@ -1746,6 +1746,11 @@ export function OfferDetailPanel({
                 : null
           }
           facebookLots={offer.facebook ? (facebookPostLots ?? 1) : null}
+          facebookClosedLots={
+            activating.approving && facebookPostLots !== null
+              ? (offer.facebook?.lots ?? []).filter((l) => isFacebookLotClosed(l.state)).length
+              : 0
+          }
           initialTarget={activating.target}
           approving={activating.approving}
           offerId={offerId}

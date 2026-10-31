@@ -872,6 +872,19 @@ describe("a multi-lot post's screen (#1842)", () => {
     );
   });
 
+  it("offers approve, reject and withdraw on a pending post whose lots partly sold or were withdrawn (#2290)", () => {
+    for (const closed of ["sold", "withdrawn"]) {
+      const partly = facebookPostMoves(lots("pending", closed, "pending"));
+      assert.deepEqual([partly.approve, partly.reject, partly.withdraw], [true, true, true], closed);
+      assert.equal(facebookPostStage(lots("pending", closed)), "pending");
+    }
+    // Every lot sold while it waited: nothing is left to approve.
+    const sold = facebookPostMoves(lots("sold", "sold"));
+    assert.deepEqual([sold.approve, sold.reject, sold.withdraw], [false, false, false]);
+    // A lot neither waiting, up nor closed still holds the approval back, as before.
+    assert.equal(facebookPostMoves(lots("pending", "paused")).approve, false);
+  });
+
   it("offers no move of the post's own once it is up but Back to Ready, and no take-out", () => {
     const up = facebookPostMoves(lots("active", "sold", "withdrawn"));
     assert.deepEqual(

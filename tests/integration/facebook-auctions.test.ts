@@ -606,6 +606,48 @@ describe("Facebook auction offers (#1544)", () => {
     assert.equal((await read(d)).state, "active", "a post that is up keeps its other lots");
   });
 
+  it("approves, rejects and withdraws a pending post whose lot sold while it waited, leaving that lot sold (#2290)", async () => {
+    const pendingLink = "https://www.facebook.com/groups/1/pending_posts/16";
+    const final = "https://www.facebook.com/groups/1/posts/16";
+    // A buyer answers the pending post: the lot's sale is recorded as any other.
+    async function pendingPostWithSale() {
+      const [a, b, c] = [
+        await auction([await newItem()], "ready"),
+        await auction([await newItem()], "ready"),
+        await auction([await newItem()], "ready"),
+      ];
+      await createFacebookPost(userId, collectionId, [a, b, c], "Test post");
+      await publishOfferOrPost(userId, a, pendingLink, "pending");
+      await prisma.offer.update({ where: { id: b }, data: { state: "sold" } });
+      return [a, b, c];
+    }
+
+    const [a, b, c] = await pendingPostWithSale();
+    await publishOfferOrPost(userId, c, final);
+    assert.equal((await read(a)).state, "active");
+    assert.equal((await read(c)).state, "active");
+    assert.equal((await read(b)).state, "sold", "the sold lot stays sold");
+    assert.equal((await read(a)).url, final, "the final link replaces the pending one");
+
+    const [d, e, f] = await pendingPostWithSale();
+    await rejectOfferOrPost(userId, d);
+    assert.deepEqual([(await read(d)).state, (await read(f)).state], ["ready", "ready"]);
+    assert.equal((await read(e)).state, "sold", "a rejection leaves the sold lot sold");
+
+    const [g, h, i] = await pendingPostWithSale();
+    await withdrawOfferOrPost(userId, i);
+    assert.deepEqual([(await read(g)).state, (await read(i)).state], ["withdrawn", "withdrawn"]);
+    assert.equal((await read(h)).state, "sold", "a withdrawal leaves the sold lot sold");
+
+    // A lot neither waiting nor closed still holds the approval back, as before.
+    const [j, k] = [await auction([await newItem()], "ready"), await auction([await newItem()], "ready")];
+    await createFacebookPost(userId, collectionId, [j, k], "Test post");
+    await publishOfferOrPost(userId, j, pendingLink, "pending");
+    await prisma.offer.update({ where: { id: k }, data: { state: "paused" } });
+    await assert.rejects(() => publishOfferOrPost(userId, j, final), /Every lot must be Ready.*lot 2/);
+    assert.equal((await read(j)).state, "pending", "nothing moved");
+  });
+
   it("activates an auction posted alone the ordinary way, its link the listing link", async () => {
     const link = "https://www.facebook.com/groups/1/posts/9";
     const a = await auction([await newItem()], "ready");
