@@ -9,6 +9,7 @@ import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
+import { isHoldingState, type HoldingState } from "@/lib/copy-card-states";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -96,9 +97,12 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // Copies that have **left** are hidden from the inventory list by default — sold (#207), and
     // given to a partner in a closed trade (#644) — and one `includeGone=true` shows both again:
     // two toggles for one question would be a second thing to remember to press.
-    excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
+    excludeGone: boolParam(sp.get("includeGone")) || readHoldingStates(sp) ? undefined : true,
     // Copies no longer held are hidden the same way (#395) — the list answers "what do I have".
     includeDisposed: boolParam(sp.get("includeDisposed")),
+    // Or the states asked for by name (#2281), replacing both defaults: the Copies card's chips ask
+    // *which* copies they want, held ones included or not.
+    holdingStates: readHoldingStates(sp),
     // For or against the multi-stamp copies (#748). An unrecognised value is no filter, so a stale
     // link shows the list rather than an empty screen.
     multiStamp: asMultiStampFilter(sp.get("multiStamp")),
@@ -110,6 +114,13 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // so a stamp held in two places is still held twice when one place's copies are read.
     ...readHeldFilter(sp),
   };
+}
+
+/** The holding states asked for (#2281), comma-separated. Unrecognised values are dropped, and none
+ *  left is no filter — the defaults — rather than an unmatchable empty set. */
+export function readHoldingStates(sp: URLSearchParams): HoldingState[] | undefined {
+  const values = readCsvParam(sp, "holdingStates")?.filter(isHoldingState);
+  return values && values.length > 0 ? values : undefined;
 }
 
 /** {@link readItemFilters}' *Held* half (#1932) — nothing at all while the filter is off. */

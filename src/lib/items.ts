@@ -143,6 +143,7 @@ import { heldStackKeys, inHeldStack, type HeldFilter } from "./held-filter";
 import { buildLocationPath } from "./location-path";
 import { setMoveSourceTx, takeOffLocationTx, type MoveSource } from "./location-moves";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { HOLDING_STATES, type HoldingState } from "./copy-card-states";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
 import {
   lotCatalogBasis,
@@ -1215,7 +1216,7 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * **OR**. Set, it replaces both defaults that hide the copies that have left: the attach picker
    * asks *which* of them it wants rather than turning each on beside the held ones. Absent is the
    * defaults, {@link excludeGone} and {@link includeDisposed} as given. */
-  holdingStates?: readonly ("held" | "gone" | "disposed")[];
+  holdingStates?: readonly HoldingState[];
   /** Restrict to copies whose linked stamp has this issued year. A number matches
    * `stamp.issuedYear`; `"none"` matches stamps with no issued year. Mirrors the
    * stamps list year filter (#142). */
@@ -1812,6 +1813,15 @@ export interface ItemTradeMark {
   partnerName: string;
 }
 
+/** The sale a copy left on (#2281), so a row that has gone can say where: the sale's number and the
+ *  day it was sold, linking to it. At most one — `SaleLineItem.itemId` is unique. */
+export interface ItemSaleMark {
+  saleId: string;
+  saleNo: number;
+  /** The sale's date, `YYYY-MM-DD`. */
+  soldAt: string;
+}
+
 /** A copy enriched with the display data the list screen needs: the linked stamp's
  * identity (catalog numbers, name, issued date, owning issue), condition and
  * certificate labels, disposition flags, and acquisition/purchase fields. */
@@ -1878,6 +1888,8 @@ export interface ItemListItem {
    * appear when *Include sold* is on (#207), which is exactly when the row needs to say so (#393).
    * Soldness stays outside `isHeld` (#394) — it has its own mechanism at every reader. */
   sold: boolean;
+  /** The sale it left on (#2281), or null — what `sold` says, with where. */
+  soldIn: ItemSaleMark | null;
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
@@ -2067,6 +2079,11 @@ const ITEM_LIST_SELECT = {
   // `variantHistory` drives the "refined" marker; `saleLineItems` is the copy's soldness (#393) —
   // the very relation `excludeGone` filters on (#207), so the chip and the filter cannot disagree.
   _count: { select: { variantHistory: true, saleLineItems: true } },
+  // …and which sale (#2281), so a sold row names it. One at most: the copy is unique on the relation.
+  saleLineItems: {
+    take: 1,
+    select: { saleLine: { select: { sale: { select: { id: true, saleNo: true, soldAt: true } } } } },
+  },
   // The platforms this copy is kept off (#506) — the same relation the *not offered on X* filter
   // narrows by, so the row's chip and the worklist can never disagree.
   platformExclusions: { select: { platformId: true } },
@@ -2232,6 +2249,12 @@ function tradeMark(row: ItemListRow, tense: "promised" | "left"): ItemTradeMark 
   };
 }
 
+function saleMark(row: ItemListRow): ItemSaleMark | null {
+  const sale = row.saleLineItems[0]?.saleLine.sale;
+  if (!sale) return null;
+  return { saleId: sale.id, saleNo: sale.saleNo, soldAt: sale.soldAt.toISOString().slice(0, 10) };
+}
+
 /** Map an enriched copy row plus its resolved catalog valuation into the list-item shape. */
 function toItemListItem(
   row: ItemListRow,
@@ -2252,6 +2275,7 @@ function toItemListItem(
     subtype: subtypeLabel(row.stamp),
     hasHistory: row._count.variantHistory > 0,
     sold: row._count.saleLineItems > 0,
+    soldIn: saleMark(row),
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,
     issuedYear: row.stamp.issuedYear,
@@ -2631,6 +2655,29 @@ export async function countItems(
     buildItemWhere(collectionId, filters, locationIds)
   );
   return prisma.item.count({ where });
+}
+
+/** How many copies the current filter holds **in each holding state** (#2281) — held, gone (sold or
+ * traded away) and written off — for the state chips of a stamp's and an issue's Copies card. Each
+ * figure is {@link countItems} with the one state asked for, so a chip's count and the rows it
+ * brings into view are the same `where`. Whatever states the filters ask for are replaced: the
+ * question is every state, one at a time. */
+export async function countItemsByHoldingState(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {}
+): Promise<Record<HoldingState, number>> {
+  const base: ItemListFiltersPaginated = {
+    ...filters,
+    excludeGone: undefined,
+    includeDisposed: undefined,
+  };
+  const [held, gone, disposed] = await Promise.all(
+    HOLDING_STATES.map((state) =>
+      countItems(ownerId, collectionId, { ...base, holdingStates: [state] })
+    )
+  );
+  return { held, gone, disposed };
 }
 
 /** How many copies the current filter holds, **broken down by condition** (#710) — the same

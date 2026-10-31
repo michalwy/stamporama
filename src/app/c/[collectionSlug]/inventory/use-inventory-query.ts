@@ -20,6 +20,7 @@ import type { ContactData } from "@/lib/contacts";
 import type { StampNodeData } from "@/lib/issues";
 import type { StampSearchItem } from "@/lib/stamps";
 import type { StampHoldings } from "@/lib/stamp-holdings";
+import type { HoldingCounts, HoldingState } from "@/lib/copy-card-states";
 import type { HeldCopyPicture } from "@/lib/held-copies";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
@@ -124,6 +125,10 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   /** Show copies no longer held (#394/#395) — lost, damaged in storage, discarded. Hidden by
    * default, since the list answers "what do I have". */
   includeDisposed?: boolean;
+  /** The holding states wanted, by name (#2281) — held, gone, written off, any of them. Set, it
+   *  replaces {@link includeGone} and {@link includeDisposed}: the Copies card's chips may want the
+   *  copies that have left without the held ones. */
+  holdingStates?: HoldingState[];
   /** For or against the multi-stamp copies (#748): `only` the carriers, `exclude` them, absent both.
    *  A grouped list's multi-stamp bucket addresses its own members with `only`, and every other
    *  group of a grouping that sets carriers apart with `exclude`. */
@@ -265,6 +270,8 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
     params.set("deliveryStates", filters.deliveryStates.join(","));
   if (filters.includeGone) params.set("includeGone", "true");
   if (filters.includeDisposed) params.set("includeDisposed", "true");
+  if (filters.holdingStates && filters.holdingStates.length > 0)
+    params.set("holdingStates", filters.holdingStates.join(","));
   if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
   if (filters.complete) params.set("complete", filters.complete);
   appendHeldFilterParams(params, filters);
@@ -298,6 +305,23 @@ export function withHeldScope(
   list: InventoryItemFilters
 ): InventoryItemFilters {
   return list.held ? { ...members, heldWithin: list } : members;
+}
+
+/** How many copies the filter holds in each holding state (#2281), for the Copies card's state
+ * chips. Under the `inventory` key, so a copy write — a sale, a write-off — re-reads it with the
+ * list. */
+export function useCopyHoldingCounts(collectionId: string, filters: InventoryItemFilters) {
+  return useQuery<HoldingCounts>({
+    queryKey: ["inventory", collectionId, "holdingCounts", filters] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/holding-counts?${itemFilterParams(filters).toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to count copies by state");
+      const data: { counts: HoldingCounts } = await res.json();
+      return data.counts;
+    },
+  });
 }
 
 /** How many copies the current filter holds (#845) — the whole set, which the infinite list itself
