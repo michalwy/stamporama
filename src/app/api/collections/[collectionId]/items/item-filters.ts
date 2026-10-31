@@ -71,6 +71,10 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // The fields the search box was narrowed to beside it (#2238); absent is every field.
     searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), COPY_SEARCH_FIELD_KEYS),
     stampId: sp.get("stampId") || undefined,
+    // A stamp's whole family at once (#2282) — `stampId`'s plural, the copy page's Other copies.
+    stampIds: readCsvParam(sp, "stampIds"),
+    // …less the copy whose page it is (#2282), so a chip's count never includes it.
+    excludeIds: readCsvParam(sp, "excludeIds"),
     issueId: sp.get("issueId") || undefined,
     checklistId: sp.get("checklistId") || undefined,
     locationId: sp.get("locationId") || undefined,

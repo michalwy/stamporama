@@ -37,10 +37,9 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { CopyPhotosCard } from "./copy-photos-card";
-import { OtherCopiesCard } from "./other-copies-card";
+import { OtherCopiesCard, type OtherCopiesGroup } from "./other-copies-card";
 import { CopyLocationHistoryCard } from "./copy-location-history-card";
 import type { LocationMoveEntry } from "@/lib/location-moves";
-import { isOneStampsCopy } from "@/lib/other-copies-rules";
 import {
   useCollectionCertificateStatuses,
   useInvalidateInventory,
@@ -118,7 +117,7 @@ export function CopyDetailPanel({
   areas,
   locations,
   sale,
-  variantCopies,
+  otherCopies,
   locationMoves,
 }: {
   collectionId: string;
@@ -128,8 +127,9 @@ export function CopyDetailPanel({
   areas: CollectionAreaData[];
   locations: LocationData[];
   sale: ItemSaleRecord | null;
-  /** Held copies of the stamp's variants (#528), for the Other copies card's line (#2090). */
-  variantCopies: number;
+  /** The Other copies card's groups (#2090, #2282): one per stamp the copy is of, each with its
+   *  family. None for a copy that is no one stamp's. */
+  otherCopies: OtherCopiesGroup[];
   /** Where the copy has been, newest first (#2277). */
   locationMoves: LocationMoveEntry[];
 }) {
@@ -469,17 +469,17 @@ export function CopyDetailPanel({
               <RelatedWantsCard collectionId={collectionId} stampId={item.stampId} />
             )}
 
-            {/* The other copies of its stamp (#2090), next to the stamp's wants for the same reason:
-                reading a copy is when it is weighed against the rest — the better keeper, or the
-                duplicate to sell. Not on a piece that is no one stamp's copy. */}
-            {isOneStampsCopy(item) && (
+            {/* The other copies of its stamp's family (#2090, #2282), next to the stamp's wants for
+                the same reason: reading a copy is when it is weighed against the rest — the better
+                keeper, or the duplicate to sell. A cover or fragment gets a group per stamp on it;
+                a copy possibly in several variant trees, none. */}
+            {otherCopies.length > 0 && (
               <OtherCopiesCard
                 collectionId={collectionId}
                 areas={areas}
                 baseCurrency={baseCurrency}
                 itemId={item.id}
-                stampId={item.stampId}
-                variantCopies={variantCopies}
+                groups={otherCopies}
               />
             )}
 
