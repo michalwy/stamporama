@@ -32,7 +32,7 @@ export default async function PhoneSalesPage({ params }: PhoneSalesPageProps) {
     // Short list — what *Mark sent* picks the carrier from (#491).
     getCarriers(session.user.id, collection.id),
   ]);
-  // Each sale's own files (#2198), shown on its row with *Add photo*.
+  // Each sale's own files (#2198), shown on its row with *Take photo* and *From gallery*.
   const attachmentsBySale = await listAttachmentsOfSales(
     session.user.id,
     collection.id,
