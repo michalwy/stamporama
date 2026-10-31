@@ -182,7 +182,8 @@ this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appea
     belongs to no issue keeps a read-only card, and when some of the variants belong to a different
     issue the card says so instead of offering a reorder the server would refuse.
 - **Copies** — the copies you hold of exactly this stamp (a variant's copies are its own, never
-  rolled up into its parent).
+  rolled up into its parent), filtered by [state chips](#the-copies-card) that can also bring back
+  the copies you sold, traded away or wrote off.
 - **Wants** — everything recorded on your [want list](wants.md) for this stamp: the acceptance
   chips and the priority, exactly as the want list draws them. Open wants lead; closed ones follow,
   faded — on a single stamp a closed want is the useful record that you were looking for it and
@@ -297,7 +298,9 @@ Offers. Details, Checklists and Stamps are always there.
   Moving a stamp to another issue, or under a different parent, is still done from the Issues list.
   After each change the whole page catches up at once: the tree, the stamp counts, the Checklists
   and Completeness cards, the catalog value and the copies.
-- **Copies** — every copy you hold from any stamp in the issue.
+- **Copies** — every copy you hold from any stamp in the issue, filtered by
+  [state chips](#the-copies-card) that can also bring back the copies you sold, traded away or
+  wrote off.
 - **Offers** — every offer holding a copy from this issue, filtered by
   [state chips](#the-offers-card).
 
@@ -356,6 +359,29 @@ entries accept **anything**. See
 changing the checklist later does not touch the want list, and running it again adds nothing that
 is already there. *Do not hold* means what the grid above it
 means, variant children and all — a stamp the card counts as held is not wanted again.
+
+## The Copies card
+
+The **Copies** card on the stamp and issue pages lists the copies of the stamp, or from the issue.
+Over them is a row of **state chips**, each with its count:
+
+- **Held** — the copies you still have, including those ordered or still on their way.
+- **Sold & traded** — the copies that left on a sale or in a closed trade.
+- **No longer held** — the copies you wrote off: lost, damaged or discarded.
+
+Only **Held** is on to begin with, so the card first shows what you have. Switch the others on to
+answer *have I had this stamp before, what did I pay, and where did it go?* — any number of chips
+can be on at once. Only states the card has copies in get a chip.
+
+- A copy that has gone **says where it went**: a sold copy names its sale and the day it was sold,
+  and links to the sale; a traded copy names its trade and the partner, and links to the trade; a
+  written-off copy says why and when. These rows are read-only, as every row of the card is.
+- The heading counts the copies **in view**. When the chips leave nothing in view, the card says
+  what is hidden — *2 sold & traded, 1 written off hidden* — rather than looking empty. A stamp or
+  issue you never had a copy of has no card.
+- The chips apply to the **Possibly this stamp** / **Possibly of this issue** copies too.
+- The choice is **remembered** for the collection, and it is one choice for the stamp page and the
+  issue page, also after a reload.
 
 ## The Offers card
 

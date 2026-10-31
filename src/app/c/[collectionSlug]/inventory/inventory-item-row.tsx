@@ -2,6 +2,8 @@
 
 import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   formatIssuedDate,
   moneyPrimaryText,
@@ -689,6 +691,8 @@ export function InventoryItemRow({
     !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);
 
   const copyHref = useRecordHref("copy", item.id);
+  // Where a copy that has gone went — its sale or its trade (#2281).
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const pageHref = opensPage ? copyHref : null;
   const rowOpen = useRowOpen(pageHref);
   // The Valuation window for the stamp behind this copy (#114) — the same entry the stamps and
@@ -1135,9 +1139,13 @@ export function InventoryItemRow({
             <Tooltip
               content={`Traded to ${item.tradedAway.partnerName} in trade #${item.tradedAway.tradeNo}, which is closed. It left the collection with no sale and no proceeds — what it cost was carried over into what came back.`}
             >
-              <span style={soldChipStyle()}>
-                <Icon name="trades" size="sm" /> Traded away · #{item.tradedAway.tradeNo}
-              </span>
+              <Link
+                href={`/c/${collectionSlug}/trades/${item.tradedAway.tradeId}`}
+                style={{ ...soldChipStyle(), textDecoration: "none" }}
+              >
+                <Icon name="trades" size="sm" /> Traded away · #{item.tradedAway.tradeNo} ·{" "}
+                {item.tradedAway.partnerName}
+              </Link>
             </Tooltip>
           )}
           {/* Sold (#393). A sold copy is hidden until *Include sold* is on (#207), so the chip only
@@ -1145,9 +1153,20 @@ export function InventoryItemRow({
               collection is otherwise indistinguishable from one still in it. Chipped whenever it
               applies, for the same reason the disposal chip below is: it is never the default, and
               it changes how every other chip on the row should be read. */}
+          {/* …naming the sale and its day, linking to it (#2281): what a collector asks of a copy
+              that has gone is where it went. */}
           {item.sold && (
             <Tooltip content="This copy has been sold and left the collection. It is only listed here because sold copies are being shown.">
-              <span style={soldChipStyle()}><Icon name="sell" size="sm" /> Sold</span>
+              {item.soldIn ? (
+                <Link
+                  href={`/c/${collectionSlug}/sales/${item.soldIn.saleId}`}
+                  style={{ ...soldChipStyle(), textDecoration: "none" }}
+                >
+                  <Icon name="sell" size="sm" /> Sold · #{item.soldIn.saleNo} · {item.soldIn.soldAt}
+                </Link>
+              ) : (
+                <span style={soldChipStyle()}><Icon name="sell" size="sm" /> Sold</span>
+              )}
             </Tooltip>
           )}
           {/* Disposal (#394/#395). Chipped whenever it applies — unlike delivery, where the
@@ -1157,6 +1176,7 @@ export function InventoryItemRow({
             <Tooltip content={describeDisposal(item) ?? ""}>
               <span style={disposalChipStyle(item.disposalReason)}>
                 <Icon name="disposed" size="sm" /> {item.disposalReason ? disposalReasonLabel(item.disposalReason) : "No longer held"}
+                {item.disposedAt ? ` · ${new Date(item.disposedAt).toISOString().slice(0, 10)}` : ""}
               </span>
             </Tooltip>
           )}

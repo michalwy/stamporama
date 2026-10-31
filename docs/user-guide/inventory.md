@@ -286,8 +286,9 @@ right, from *which copies* to *how they are shown*.
     copy must satisfy both.
   - *Also include* — **Include sold & traded** brings back copies that have [sold](sales.md) and
     copies you gave to a partner in a closed [trade](trades.md), both hidden by default so the list
-    shows only what you still hold; each then carries a **Sold** or **Traded away · #7** chip, so a
-    copy that has left is never mistaken for one still in it. **Include no longer held** brings back
+    shows only what you still hold; each then carries a **Sold · #12 · 2026-10-03** or **Traded
+    away · #7 · Anna** chip, linking to the sale or the trade, so a copy that has left is never
+    mistaken for one still in it, and where it went is one click away. **Include no longer held** brings back
     copies marked as [no longer held](#copies-you-no-longer-hold), hidden for the same reason.
   - So ticking one from each heading reads as one sentence: *No photos* + *Include sold & traded* is
     "copies with no photo, counting the ones that have sold". The holdings totals and year panel
