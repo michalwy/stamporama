@@ -9,7 +9,8 @@ import { getLocations } from "@/lib/locations";
 import { getItemListItem, listItemsPaginated } from "@/lib/items";
 import { getItemSaleRecord } from "@/lib/sales";
 import { getCopyLocationMoves } from "@/lib/location-moves";
-import { countVariantDescendantCopies } from "@/lib/copy-counts";
+import { loadStampFamilies } from "@/lib/stamp-family";
+import { otherCopiesStampIds } from "@/lib/other-copies-rules";
 import { formatItemNo } from "@/lib/item-number";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { CopyDetailPanel } from "./copy-detail-panel";
@@ -54,12 +55,14 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
   const item = items[0];
   if (!item) notFound();
 
-  const [areas, locations, sale, variantCounts, locationMoves] = await Promise.all([
+  const otherCopiesStamps = otherCopiesStampIds(item);
+  const [areas, locations, sale, families, locationMoves] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getItemSaleRecord(session.user.id, itemId),
-    // The stamp's variants' copies (#2090), counted as the stamp page counts them (#528).
-    countVariantDescendantCopies(collection.id, [item.stampId]),
+    // The families whose other copies the copy's page lists (#2090, #2282): the umbrella and its
+    // variants, for each stamp the copy is of.
+    loadStampFamilies(collection.id, otherCopiesStamps),
     // Where it has been (#2277) — read with the page, so a save's refresh re-reads it too.
     getCopyLocationMoves(session.user.id, collection.id, itemId),
   ]);
@@ -82,7 +85,12 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
         areas={areas}
         locations={locations}
         sale={sale}
-        variantCopies={variantCounts.get(item.stampId)?.total ?? 0}
+        otherCopies={otherCopiesStamps.map((stampId) => ({
+          stamp: item.multiStamp
+            ? (item.carriedStamps.find((s) => s.stampId === stampId) ?? null)
+            : null,
+          familyStampIds: families.get(stampId) ?? [stampId],
+        }))}
         locationMoves={locationMoves}
       />
     </Screen>

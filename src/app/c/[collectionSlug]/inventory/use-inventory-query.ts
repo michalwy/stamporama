@@ -87,6 +87,10 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   searchFields?: CopySearchField[];
   /** Restrict to copies of a single stamp (stamp-level inventory popup, #110). */
   stampId?: string;
+  /** Restrict to copies of any of these stamps — a stamp's family on the copy page (#2282). */
+  stampIds?: string[];
+  /** Leave these copies out — the copy whose page lists its other copies (#2282). */
+  excludeIds?: string[];
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
   issueId?: string;
   /** Restrict to copies of a checklist's stamps (a checklist branch's copies popup, #1520). */
@@ -248,6 +252,10 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
   if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
   if (filters.stampId) params.set("stampId", filters.stampId);
+  if (filters.stampIds && filters.stampIds.length > 0)
+    params.set("stampIds", filters.stampIds.join(","));
+  if (filters.excludeIds && filters.excludeIds.length > 0)
+    params.set("excludeIds", filters.excludeIds.join(","));
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.checklistId) params.set("checklistId", filters.checklistId);
   if (filters.possibleStampId) params.set("possibleStampId", filters.possibleStampId);
@@ -311,9 +319,23 @@ export function withHeldScope(
  * chips. Under the `inventory` key, so a copy write — a sale, a write-off — re-reads it with the
  * list. */
 export function useCopyHoldingCounts(collectionId: string, filters: InventoryItemFilters) {
-  return useQuery<HoldingCounts>({
+  return useQuery(copyHoldingCountsQuery(collectionId, filters));
+}
+
+/** {@link useCopyHoldingCounts} for several filters at once — one per group of the copy page's
+ * Other copies card (#2282), whose number follows the stamps a cover carries. The same key per
+ * filter, so the two hooks share what they have read. */
+export function useCopyHoldingCountsMany(
+  collectionId: string,
+  filtersList: readonly InventoryItemFilters[]
+) {
+  return useQueries({ queries: filtersList.map((f) => copyHoldingCountsQuery(collectionId, f)) });
+}
+
+function copyHoldingCountsQuery(collectionId: string, filters: InventoryItemFilters) {
+  return {
     queryKey: ["inventory", collectionId, "holdingCounts", filters] as const,
-    queryFn: async () => {
+    queryFn: async (): Promise<HoldingCounts> => {
       const res = await fetch(
         `/api/collections/${collectionId}/items/holding-counts?${itemFilterParams(filters).toString()}`
       );
@@ -321,7 +343,7 @@ export function useCopyHoldingCounts(collectionId: string, filters: InventoryIte
       const data: { counts: HoldingCounts } = await res.json();
       return data.counts;
     },
-  });
+  };
 }
 
 /** How many copies the current filter holds (#845) — the whole set, which the infinite list itself

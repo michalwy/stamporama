@@ -15,6 +15,7 @@ import {
   toggleShownHoldingState,
   writeShownHoldingStates,
   type HoldingState,
+  type HoldingStateCount,
 } from "@/lib/copy-card-states";
 import {
   useInventoryItemsInfinite,
@@ -35,7 +36,7 @@ export type RelatedCopiesTarget =
   | { kind: "issue"; issueId: string };
 
 /** Where the state chips' choice is remembered — one key for the card on the stamp's and the
- * issue's page (#2281). */
+ * issue's page (#2281), and the copy page's Other copies card (#2282). */
 const COPY_CARD_STATES_KEY = "copy-card-states";
 
 /** The chips' tints: held is the card's ordinary state, gone the row's *Sold* colour, written off
@@ -66,8 +67,7 @@ export function RelatedCopiesCard({
   target: RelatedCopiesTarget;
 }) {
   // The state chips (#2281): held, sold & traded, written off — only Held on until switched.
-  const [stored, setStored] = usePersistedCollectionValue(COPY_CARD_STATES_KEY, collectionId);
-  const shown = useMemo(() => parseShownHoldingStates(stored), [stored]);
+  const [shown, toggle] = useShownHoldingStates(collectionId);
 
   const baseFilters: InventoryItemFilters = useMemo(
     () => (target.kind === "stamp" ? { stampId: target.stampId } : { issueId: target.issueId }),
@@ -114,25 +114,9 @@ export function RelatedCopiesCard({
       count={inView}
       empty={counts.isLoading || possibleCounts.isLoading || chips.length === 0}
     >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "0.75rem" }}>
-        {chips.map(({ state, count }) => (
-          <FilterChip
-            key={state}
-            label={HOLDING_STATE_LABEL[state]}
-            count={count}
-            active={shown.includes(state)}
-            toggle
-            tint={STATE_TINT[state]}
-            onClick={() =>
-              setStored(writeShownHoldingStates(toggleShownHoldingState(shown, state)))
-            }
-          />
-        ))}
-      </div>
+      <HoldingStateChips chips={chips} shown={shown} onToggle={toggle} />
       {inView === 0 && possibleInView === 0 ? (
-        <div style={{ color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
-          {hiddenCopiesText(chips, shown)}
-        </div>
+        <HiddenCopies chips={chips} shown={shown} />
       ) : (
         <div
           style={{
@@ -179,5 +163,60 @@ export function RelatedCopiesCard({
         </div>
       )}
     </DetailCard>
+  );
+}
+
+/** The chips' choice (#2281), remembered per collection under one key for every card that has them
+ * — the stamp's, the issue's and the copy's (#2282) — with the toggle that writes it. */
+export function useShownHoldingStates(
+  collectionId: string
+): [HoldingState[], (state: HoldingState) => void] {
+  const [stored, setStored] = usePersistedCollectionValue(COPY_CARD_STATES_KEY, collectionId);
+  const shown = useMemo(() => parseShownHoldingStates(stored), [stored]);
+  const toggle = (state: HoldingState) =>
+    setStored(writeShownHoldingStates(toggleShownHoldingState(shown, state)));
+  return [shown, toggle];
+}
+
+/** The state chips over a copies card (#2281): one per state the card has copies in, with its
+ * count. */
+export function HoldingStateChips({
+  chips,
+  shown,
+  onToggle,
+}: {
+  chips: readonly HoldingStateCount[];
+  shown: readonly HoldingState[];
+  onToggle: (state: HoldingState) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "0.75rem" }}>
+      {chips.map(({ state, count }) => (
+        <FilterChip
+          key={state}
+          label={HOLDING_STATE_LABEL[state]}
+          count={count}
+          active={shown.includes(state)}
+          toggle
+          tint={STATE_TINT[state]}
+          onClick={() => onToggle(state)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** What a card says when its chips leave nothing in view (#2281): *2 sold & traded hidden*. */
+export function HiddenCopies({
+  chips,
+  shown,
+}: {
+  chips: readonly HoldingStateCount[];
+  shown: readonly HoldingState[];
+}) {
+  return (
+    <div style={{ color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
+      {hiddenCopiesText(chips, shown)}
+    </div>
   );
 }

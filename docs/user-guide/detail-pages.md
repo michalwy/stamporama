@@ -79,8 +79,8 @@ records you were last on are listed under it; see
 
 ## The copy page
 
-*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Wants, Other copies of
-this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appear when the copy has them.
+*Left column:* Details, Notes, Photos, Catalog prices. *Right column:* Wants, Other copies,
+Purchase, Sale, Offers. Only Details is always there; the rest appear when the copy has them.
 
 - **Identity** — the internal copy number, the stamp it is a copy of (click through to the stamp
   page), and its catalog numbers. At the end of the line, **Edit** opens the copy form — the same one
@@ -109,15 +109,26 @@ this stamp, Purchase, Sale, Offers. Only Details is always there; the rest appea
   on the want list as closed) or **Delete** it (permanently, after a confirmation). Its terms are
   still edited on the want list. Not shown on a piece carrying several stamps. See
   [On the stamp's and the copy's own pages](wants.md#on-the-stamps-and-the-copys-own-pages).
-- **Other copies of this stamp** — the other copies you hold of the same stamp, in the same rows
-  as the stamp page's **Copies** card (photo, copy number, condition, certificate, format, faults,
-  disposition, location), so the better keeper or the duplicate to sell is found without leaving the
-  page. Click a row to open that copy's page. These are the copies the stamp's own count includes:
-  ones still on their way or waiting to be sorted are listed, each row saying so; sold, disposed,
-  lost and damaged copies are not. Copies of the stamp's **variants** are not listed — a line under
-  the card says how many there are and links to the stamp page, where they are. The card is not
-  shown when there is no other copy, nor on a piece carrying several stamps (or one whose possible
-  stamps lie in different variant trees), which is no one stamp's copy.
+- **Other copies** — the other copies of the same stamp, in the same rows as the stamp page's
+  **Copies** card (photo, copy number, the stamp's catalog number, condition, certificate, format,
+  faults, disposition, location, cost), so the better keeper, the duplicate to sell or what an
+  earlier copy fetched is found without leaving the page. Click a row to open that copy's page.
+  - **The whole family**: on a copy of a stamp with variants, the copies of every variant are listed
+    too; on a copy of a variant, the copies of the stamp above it and of its other variants. Each
+    row's catalog number says which variant it is. A distinct entry under the stamp — an error, a
+    plate flaw — is a stamp of its own and keeps its own copies.
+  - **The same [state chips](#the-copies-card) as the Copies card** — **Held**, **Sold & traded**,
+    **No longer held** — each with its count, only Held on at first. The choice is the Copies
+    card's own: switch Sold & traded on here and it is on there too. A copy that has gone says where
+    it went, the sale or trade linked.
+  - Held copies are the ones the stamp's own count includes: those still on their way or waiting to
+    be sorted are listed, each row saying so; copies lost or damaged in delivery are not listed under
+    any chip, nor copies that only **might** be the stamp.
+  - **A cover or fragment** carrying several stamps gets one group per stamp on it, each headed by
+    that stamp's catalog number and name.
+  - The card is not shown when there is no other copy, nor on a copy whose possible stamps lie in
+    different variant trees, which is no one stamp's copy. When there are other copies but the
+    chips hide them all, the card says how many are hidden.
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
   the line price, the copy's share of the net proceeds, its cost basis and the profit or loss on it
