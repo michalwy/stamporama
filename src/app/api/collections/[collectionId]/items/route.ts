@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { withCompletenessSwitch } from "@/lib/specialised-checklists-preference";
-import { listItemsPaginated, type ItemSortBy } from "@/lib/items";
+import { listItemsPaginated } from "@/lib/items";
+import { isCopyListSortKey } from "@/lib/copy-list-sort";
 import { readItemFilters } from "./item-filters";
 
-const VALID_SORT_BY = new Set<ItemSortBy>(["created"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
 
 export async function GET(
@@ -22,8 +22,8 @@ export async function GET(
 
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
-  const sortByParam = sp.get("sortBy") as ItemSortBy | null;
-  const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
+  const sortByParam = sp.get("sortBy");
+  const sortBy = isCopyListSortKey(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
   const sortDir =
     sortDirParam && VALID_SORT_DIR.has(sortDirParam)

@@ -93,6 +93,9 @@ export const LIST_BANNER_STYLE: React.CSSProperties = {
 export interface SortOption {
   value: string;
   label: string;
+  /** The direction the list turns to when this key is picked (#2300) — for a key whose useful
+   *  reading runs one way, newest or dearest first. Absent keeps the direction already set. */
+  firstDir?: "asc" | "desc";
 }
 
 export interface CatalogVendorOption {
@@ -109,7 +112,7 @@ export interface ListToolbarProps {
   onSortChange: (sortBy: string, sortDir: "asc" | "desc") => void;
   /** Empty for a screen with nothing to order — the collection structure screen (#1401), whose rows
    *  follow their dimension's own order — and the bar then draws no sort control at all. */
-  sortOptions: SortOption[];
+  sortOptions: readonly SortOption[];
   catalogVendors?: CatalogVendorOption[];
   catalogVendorId?: string;
   catalogNumber?: string;
@@ -482,7 +485,12 @@ export function SortControl({
       <span style={LABEL_STYLE}>Sort</span>
       <select
         value={sortBy}
-        onChange={(e) => onSortChange(e.target.value, sortDir)}
+        onChange={(e) =>
+          onSortChange(
+            e.target.value,
+            sortOptions.find((o) => o.value === e.target.value)?.firstDir ?? sortDir
+          )
+        }
         disabled={sortDisabled}
         style={{ ...SELECT_STYLE, cursor: sortDisabled ? "default" : "pointer" }}
       >

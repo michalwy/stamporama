@@ -42,11 +42,8 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { usePersistedFilterParams } from "@/app/c/[collectionSlug]/shared/use-persisted-filter-params";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
-import {
-  LIST_BANNER_STYLE,
-  ListToolbar,
-  type SortOption,
-} from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { LIST_BANNER_STYLE, ListToolbar } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { COPY_LIST_SORT_KEYS, COPY_LIST_SORT_OPTIONS } from "@/lib/copy-list-sort";
 import { asMultiStampFilter, MULTI_STAMP_GROUP_KEY } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { asHeldFilter } from "@/lib/held-filter";
@@ -194,10 +191,6 @@ function isListableCopy(item: ItemListItem): boolean {
  * one `<select>` value space, so the review options are prefixed rather than given a second control
  * nobody would connect to the first. */
 const EXCLUDED_OPTION_PREFIX = "excluded:";
-
-const SORT_OPTIONS: SortOption[] = [
-  { value: "created", label: "Date added" },
-];
 
 /**
  * The listing buttons while the selection **collides** with a live offer (#660).
@@ -519,7 +512,7 @@ export function InventoryListPanel({
     "inventory", "created", "asc",
     searchParams.get("sortBy"),
     searchParams.get("sortDir"),
-    ["created"]
+    COPY_LIST_SORT_KEYS
   );
   /** Which of the four spare filters (#846) are on — the selection the one control they share
    * reads from. Their individual booleans stay above, because that is what the query takes. */
@@ -1335,10 +1328,11 @@ export function InventoryListPanel({
               persistSort(sb as ItemSortBy, sd);
               updateParams({ sortBy: sb, sortDir: sd });
             }}
-            sortOptions={SORT_OPTIONS}
-            /* Not removed under a grouping, greyed with the reason on it (#868) — every grouping
-               brings its own total order, and a control that disappears on a pick takes its width
-               off the bar and its explanation with it. */
+            sortOptions={COPY_LIST_SORT_OPTIONS}
+            /* Not removed under the duplicate grouping, greyed with the reason on it (#868) — its
+               groups bring their own total order, and a control that disappears on a pick takes its
+               width off the bar and its explanation with it. Under the filing and issue groupings it
+               orders the copies inside each group (#2300). */
             sortDisabledReason={copyGroupingSortReason(effectiveGroupMode)}
             /* The bar's order is the user's (#846) and it ends *grouping, sorting* — so the sort
                control follows the filters rather than sitting between the search box and the first
