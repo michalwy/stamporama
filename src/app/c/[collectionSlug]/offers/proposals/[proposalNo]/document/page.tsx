@@ -5,7 +5,7 @@ import Link from "next/link";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
-import { findProposalId, markProposalHandedOut } from "@/lib/proposals";
+import { findProposalId } from "@/lib/proposals";
 import { parseProposalNo } from "@/lib/proposal-rules";
 import { readProposalDocument } from "@/lib/proposal-handout";
 import { proposalDocumentLabels, proposalDocumentPhotoSrcs } from "@/lib/proposal-document-rules";
@@ -47,7 +47,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * (`@media print` in `globals.css`), as a post's preview is (#2212). Everything on it is for the buyer —
  * nothing about the collection, the copies or the offers behind the lots.
  *
- * Opening it is making the document, so a proposal being prepared becomes Sent (#2288).
+ * Opening it changes nothing: only *Mark sent* marks a proposal Sent (#2329).
  */
 export default async function ProposalDocumentPage({ params }: PageProps) {
   const page = await resolve(params);
@@ -56,7 +56,6 @@ export default async function ProposalDocumentPage({ params }: PageProps) {
   const { userId, proposalId, collectionSlug, collectionId } = page;
   const document = await readProposalDocument(userId, proposalId, collectionId);
   if (!document) notFound();
-  if (document.standing === "shown") await markProposalHandedOut(userId, proposalId);
   const labels = proposalDocumentLabels(document.language);
 
   return (

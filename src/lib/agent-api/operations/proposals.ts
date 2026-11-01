@@ -60,8 +60,8 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 //
 // **No send, no decline, no link.** Marking a proposal sent, declining it, and the buyer's link and
 // document stay in the app — the collector decided on 2026-11-01 that what reaches the buyer is
-// theirs. Reading the message here does **not** mark the proposal sent, as copying it in the app
-// does: the agent reads it, and handing it over is still the collector's act.
+// theirs. Reading the message here does **not** mark the proposal sent — nor does copying it in the
+// app (#2329): handing it over and marking it sent are the collector's acts.
 // `tests/unit/agent-api-operation-boundary.test.ts` holds all of it as a fact about imports.
 //
 // ## Naming

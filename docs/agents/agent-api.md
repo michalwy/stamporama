@@ -1094,7 +1094,7 @@ the two sharing `proposalListWhere`.
 **The boundary is the import map in `tests/unit/agent-api-operation-boundary.test.ts`**: the five
 proposal writes are reached from `operations/proposals.ts` alone, the API conversion must mark the
 sale, and every other writer of `proposals.ts` and `proposal-handout.ts` — read off their exports by
-verb — is out of every operation module: `moveProposal`, `markProposalHandedOut`, the unmarked
+verb — is out of every operation module: `moveProposal`, the unmarked
 `convertProposalToSale` and the link's writers. `tests/integration/agent-api-proposals.test.ts`
 drives the scenario through the real route. The trades' *no send-shaped name* guard and the sales'
 *no sale-named write* guard exempt these operations by name, each saying why: a Proposal is not a

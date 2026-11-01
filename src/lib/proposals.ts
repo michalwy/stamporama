@@ -1062,22 +1062,3 @@ async function sellProposalLots(
   const { saleNo } = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { saleNo: true } });
   return { saleId, saleNo, created };
 }
-
-/**
- * Something was made for the buyer — the photos, the document or its link, or the message (#2288) —
- * so a proposal being prepared is now **Sent**, as *Mark sent* would make it. A proposal already sent
- * or closed, or one with no lots yet, is left as it is: this is a consequence of handing something
- * out, never a refusal of it. Returns whether it moved.
- */
-export async function markProposalHandedOut(ownerId: string, proposalId: string): Promise<boolean> {
-  const { status } = await assertProposalOwner(ownerId, proposalId);
-  if (status !== "preparing") return false;
-  const lots = await prisma.offer.count({ where: { proposalId } });
-  if (proposalMoveRefusal(status, "send", lots)) return false;
-  // Conditional on the status read, so two hand-outs at once move it once.
-  const { count } = await prisma.proposal.updateMany({
-    where: { id: proposalId, status: "preparing" },
-    data: { status: proposalStatusAfter("send"), sentAt: new Date() },
-  });
-  return count > 0;
-}

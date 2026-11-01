@@ -95,7 +95,7 @@ function toolLot(lot: ProposalLot): ToolLot {
  *
  * Each lot carries its lot number (#2288), and while the proposal is open the card above the lots holds
  * what the buyer is sent — the message, the photos, the document — numbering the lots alike, with
- * each lot's photos on its row. Handing any of them out marks a proposal being prepared sent.
+ * each lot's photos on its row. Handing any of them out changes nothing: only *Mark sent* sends it (#2329).
  *
  * The lots work as a Facebook post's do (#2313), through the same row and the same tools: each row is
  * the lot's photo — its copies' while it has none of its own — its number, its offer as a link, its
@@ -176,19 +176,6 @@ export function ProposalPanel({
       toast({ message: done });
       refresh();
     });
-  }
-
-  /** Something went to the buyer (#2288): a proposal being prepared is now sent. */
-  function handedOut() {
-    if (screen!.status !== "preparing") return;
-    void import("@/app/actions/proposals")
-      .then(({ markProposalHandedOutAction }) => markProposalHandedOutAction(proposalId))
-      .then((result) => {
-        if (result.status === "success" && result.moved) {
-          toast({ message: `Proposal #${screen!.proposalNo} marked sent` });
-          refresh();
-        }
-      });
   }
 
   function send() {
@@ -361,7 +348,6 @@ export function ProposalPanel({
           collectionSlug={collectionSlug}
           photos={photos}
           photoless={tools.photolessCount}
-          onHandedOut={handedOut}
           onOpenDocument={() => setDialog("document")}
         />
       )}
@@ -433,7 +419,6 @@ export function ProposalPanel({
                         collectionId={collectionId}
                         lot={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
                         copyPhotoId={lot.copyPhotoId}
-                        onHandedOut={handedOut}
                       />
                     }
                     photoStyle={{ flex: "0 1 auto", minWidth: "6rem", maxWidth: "24rem" }}

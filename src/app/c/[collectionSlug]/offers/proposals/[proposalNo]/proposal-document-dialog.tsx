@@ -21,7 +21,7 @@ import { proposalKeys } from "../use-proposals-query";
 // **Document…** (#2288) — the collector's end of a proposal's document: the page to print or save as a
 // PDF, and the link a buyer opens without an account, managed as a post's preview link is (#2212) —
 // create, copy, open as the buyer sees it, replace, withdraw — with when it was made and last opened.
-// Making the link hands the document out, so a proposal being prepared becomes Sent. It says when the
+// Neither making the link nor opening the page changes the proposal's state (#2329). It says when the
 // proposal is closed, which is all a buyer opening the link then sees, and when its language is one
 // the page has no words in.
 
@@ -73,7 +73,7 @@ export function ProposalDocumentDialog({
   proposalId: string;
   proposalNo: number;
   onClose: () => void;
-  /** A link was made or withdrawn — making one may have marked the proposal sent. */
+  /** A link was made or withdrawn. */
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -136,8 +136,7 @@ export function ProposalDocumentDialog({
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <p style={META}>
             Every lot with its number, title, price and photos, and the total — in the proposal&apos;s
-            language, and nothing else from your collection. Making it marks a proposal being prepared
-            sent.
+            language, and nothing else from your collection.
           </p>
 
           <div>
