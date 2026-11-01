@@ -496,6 +496,12 @@ describe("facebookLotAddRefusal (#1870)", () => {
     assert.equal(facebookLotAddRefusal(offer({ listingType: "fixed" }), { ...post, mixedListingTypes: true }), null);
   });
 
+  it("lets either type into a post with no lot yet (#2291)", () => {
+    const empty = { ...post, lotTypes: [] };
+    assert.equal(facebookLotAddRefusal(offer(), empty), null);
+    assert.equal(facebookLotAddRefusal(offer({ listingType: "fixed" }), empty), null);
+  });
+
   it("names every offer turned away in one sentence, and nothing when none was", () => {
     assert.equal(describeRefusedLots([]), null);
     assert.equal(
@@ -927,6 +933,17 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(facebookPostStage(lots("active", "sold")), "up");
     assert.equal(facebookPostStage(lots("paused", "withdrawn")), "up");
     assert.equal(facebookPostStage(lots("sold", "withdrawn")), "over");
+  });
+
+  it("reads a post made by hand with no lot yet as being prepared, offering only its lots (#2291)", () => {
+    assert.equal(facebookPostStage([]), "preparing");
+    const empty = facebookPostMoves([]);
+    assert.equal(empty.activate, false, "nothing to publish");
+    assert.equal(empty.submit, false);
+    assert.equal(empty.backToPreparing, false);
+    assert.equal(empty.takeOut, false);
+    assert.equal(empty.addLots, true);
+    assert.deepEqual(empty.waiting, []);
   });
 
   it("reads a post number from a filter only as a positive whole number", () => {

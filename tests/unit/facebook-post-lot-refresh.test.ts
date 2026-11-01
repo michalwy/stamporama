@@ -51,6 +51,7 @@ function screen(): FacebookPostScreen {
     collectionId: "c",
     kit: { lots: [kitLot("a"), kitLot("b", { lotNo: 2 })] } as FacebookPostScreen["kit"],
     platform: { id: "fb", name: "Facebook" },
+    mixedListingTypes: false,
     sales: {},
     translations: {
       language: "en",

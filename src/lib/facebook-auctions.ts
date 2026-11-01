@@ -1,5 +1,5 @@
 import "server-only";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type FacebookGroup } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import {
@@ -80,6 +80,9 @@ export interface FacebookGroupChoice {
   bidIncrement: string | null;
   auctionDays: number | null;
   closingTime: string | null;
+  /** How the group lays out a post of several lots (#1841) — what *New post…* names as the group's
+   *  (#2291). */
+  multiLotLayout: FacebookMultiLotLayout;
 }
 
 /** What the offer form needs to know about a platform: whether it is Facebook, and its groups. */
@@ -131,6 +134,7 @@ export async function listFacebookGroupChoices(
         bidIncrement: settings.bidIncrement?.toFixed(2) ?? null,
         auctionDays: settings.auctionDays,
         closingTime: settings.closingTime,
+        multiLotLayout: settings.multiLotLayout,
       };
     }),
   };
@@ -535,45 +539,67 @@ export async function getFacebookOfferKit(
   // empty and nothing is named as missing for it.
   const alone = lotCount < 2;
   if (alone) for (const lot of lots) lot.lotNo = null;
-  const base = `/api/collections/${offer.collectionId}`;
+  return buildFacebookKit(offer.collectionId, offer.facebookGroup, offer.facebookPost, lots, lotCount, offerId);
+}
+
+/**
+ * A post's kit read off the post itself (#2291), not off a lot — what its screen draws, since a post
+ * made by hand starts with no lot to read it from. Null for a post that is gone.
+ */
+export async function getFacebookPostKit(postId: string): Promise<FacebookOfferKit | null> {
+  const post = await prisma.facebookPost.findUnique({
+    where: { id: postId },
+    select: { id: true, postNo: true, title: true, layout: true, collectionId: true, group: true },
+  });
+  if (!post) return null;
+  const lots = await readKitLots(post.collectionId, { facebookPostId: post.id });
+  if (lots.length < 2) for (const lot of lots) lot.lotNo = null;
+  return buildFacebookKit(post.collectionId, post.group, post, lots, lots.length, null);
+}
+
+/** The kit around its lots: the group's settings as they read now, the post, its layout and where its
+ *  photos download from. `offerId` is the offer's own archive's, for an offer in no post. */
+async function buildFacebookKit(
+  collectionId: string,
+  facebookGroup: FacebookGroup,
+  facebookPost: { id: string; postNo: number; title: string | null; layout: string | null } | null,
+  lots: FacebookKitLot[],
+  lotCount: number,
+  offerId: string | null
+): Promise<FacebookOfferKit> {
+  const base = `/api/collections/${collectionId}`;
   // The post reads as the group posts now — its own template, or the platform's it follows (#1661).
   // A lot already published is drawn from its snapshot instead (#1800); these are for the rest, and
   // for a repost, which puts the current template up again.
-  const settings = groupSettings(
-    offer.facebookGroup,
-    await readFacebookDefaults(offer.facebookGroup.platformId)
-  );
+  const settings = groupSettings(facebookGroup, await readFacebookDefaults(facebookGroup.platformId));
   return {
-    collectionId: offer.collectionId,
+    collectionId,
     group: {
-      id: offer.facebookGroup.id,
-      name: offer.facebookGroup.name,
-      url: offer.facebookGroup.url,
-      archived: offer.facebookGroup.archivedAt !== null,
+      id: facebookGroup.id,
+      name: facebookGroup.name,
+      url: facebookGroup.url,
+      archived: facebookGroup.archivedAt !== null,
       postTemplate: settings.postTemplate,
       quickBuyTemplate: settings.quickBuyTemplate,
       standingNote: settings.standingNote,
-      custom: toCustomSettings(offer.facebookGroup.customSettings),
+      custom: toCustomSettings(facebookGroup.customSettings),
       multiLotLayout: settings.multiLotLayout,
       auctionCaptionTemplate: settings.auctionCaptionTemplate,
       quickBuyCaptionTemplate: settings.quickBuyCaptionTemplate,
       captionPostTemplate: settings.captionPostTemplate,
     },
-    post: offer.facebookPost
+    post: facebookPost
       ? {
-          id: offer.facebookPost.id,
-          postNo: offer.facebookPost.postNo,
-          title: offer.facebookPost.title,
-          layout: offer.facebookPost.layout === null ? null : toFacebookMultiLotLayout(offer.facebookPost.layout),
+          id: facebookPost.id,
+          postNo: facebookPost.postNo,
+          title: facebookPost.title,
+          layout: facebookPost.layout === null ? null : toFacebookMultiLotLayout(facebookPost.layout),
         }
       : null,
-    layout: facebookPostLayout(
-      offer.facebookPost && { layout: offer.facebookPost.layout, lotCount },
-      settings
-    ),
+    layout: facebookPostLayout(facebookPost && { layout: facebookPost.layout, lotCount }, settings),
     lots,
-    photoZipPath: offer.facebookPost
-      ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
+    photoZipPath: facebookPost
+      ? `${base}/facebook-posts/${facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
   };
 }

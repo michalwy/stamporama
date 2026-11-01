@@ -249,7 +249,7 @@ export function FacebookPostKit({
             </Tooltip>
           )}
           <CopyButton value={plain} html={html} label="post text" />
-          {zipWaits ? (
+          {kit.lots.length === 0 ? null : zipWaits ? (
             <Tooltip content={zipWaits}>
               <span style={MUTED}>↓ Photos, one per lot</span>
             </Tooltip>

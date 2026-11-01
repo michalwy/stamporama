@@ -658,7 +658,8 @@ export function useOfferCopies(collectionId: string, offerId: string, enabled: b
  * search are filtered client-side for instant facets (mirrors the Copies / lot pickers). */
 export function useComposableCopies(
   collectionId: string,
-  offerId: string,
+  /** Null for an offer not made yet (#2291): every copy that could be listed. */
+  offerId: string | null,
   areaIds: string[] | null,
   /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
   areaSelection: AreaSelection,
@@ -676,7 +677,9 @@ export function useComposableCopies(
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
       const res = await fetch(
-        `/api/collections/${collectionId}/offers/${offerId}/composable-copies?${params.toString()}`
+        offerId
+          ? `/api/collections/${collectionId}/offers/${offerId}/composable-copies?${params.toString()}`
+          : `/api/collections/${collectionId}/composable-copies?${params.toString()}`
       );
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;

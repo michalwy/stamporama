@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { listFacebookPostGroups } from "@/lib/facebook-posts";
+import { getFacebookPlatform } from "@/lib/facebook";
 import { FacebookPostsListPanel } from "./facebook-posts-list-panel";
 import { Screen } from "@/app/screen";
 
@@ -31,6 +32,8 @@ export default async function FacebookPostsPage({ params }: FacebookPostsPagePro
   // The groups posts were made in, for the group filter — a handful, read once like the trades
   // list's catalog vendors.
   const groups = await listFacebookPostGroups(session.user.id, collection.id);
+  // *New post…* (#2291) makes a post in one of its groups — offered while Facebook is switched on.
+  const facebook = await getFacebookPlatform(session.user.id, collection.id);
 
   return (
     <Screen height="column">
@@ -44,7 +47,12 @@ export default async function FacebookPostsPage({ params }: FacebookPostsPagePro
       >
         Facebook posts
       </h2>
-      <FacebookPostsListPanel collectionId={collection.id} collectionSlug={collectionSlug} groups={groups} />
+      <FacebookPostsListPanel
+        collectionId={collection.id}
+        collectionSlug={collectionSlug}
+        groups={groups}
+        facebookPlatformId={facebook?.id ?? null}
+      />
     </Screen>
   );
 }

@@ -528,6 +528,39 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the refused under the *Lots* heading. The integration test is
   `tests/integration/facebook-post-add-lots.test.ts`.
 
+- **A post can be made by hand, empty, and its lots made on its screen** (#2291, raised on 2026-11-01;
+  the issue's *to be confirmed* points implemented as written; ADR-0061 §2 as amended). **New post…**
+  (`offers/posts/new-post-dialog.tsx`, `NewFacebookPostDialog`) stands on the list of posts' toolbar and
+  in Settings → Facebook's header (`NewPostAction`, both tabs, while a group is in use); it asks the
+  group (`useFacebookGroupChoice`, so it starts on the last used), the title and the layout — the
+  group's by default, named through `FacebookGroupChoice.multiLotLayout` — and opens the new post's
+  screen. `createEmptyFacebookPost` (`facebook-posts.ts`) refuses a blank title and an archived group;
+  the post's `titleFollowsOffer` stays false. **An empty post reads as being prepared**:
+  `facebookPostStage([])` is `preparing` (it was `ready`, `every` over nothing), `facebookPostStageWhere`
+  matches a post with no lots under *preparing*, `facebookPostMoves([])` offers only `addLots`, and a
+  post with no lot holds no type — `facebookLotAddRefusal` and `listFacebookLotCandidates` let either
+  in. **The screen reads its kit off the post** (`getFacebookPostKit` in `facebook-auctions.ts`, beside
+  `getFacebookOfferKit`, both through `buildFacebookKit`), and its platform off the group, so a post
+  with no lot has a screen; it says *No lots yet*, hides *Photo settings…* and the kit's ↓ Photos, and
+  the list's row says *No lots yet* in place of *Posted alone*. **New lot…** and **New lot from a new
+  item…** stand beside *Add lots…* (`moves.addLots`); `NewLotFlow` (`posts/[postNo]/new-lot-flow.tsx`)
+  chains existing pieces — `ComposeSetDialog` with `offerId: null` and `onPick` (the copies through
+  `GET …/composable-copies`, the collection-level twin of the offer's route; no title preview, the
+  form shows it), or the add-copy dialog with `createItemForOfferAction` as *Sell a new item* does —
+  then `AddToOfferDialog` `startInCreate` with `facebookLot`, which draws `OfferFormDialog` with
+  `facebookLot` (`FacebookLotFormTarget`: platform shown, not asked; group locked; the post's type
+  locked where it has one and the group does not mix; the post's auction closing time locked where it
+  has one, else the group's default; only Preparing and Ready) and calls `createFacebookLotAction`
+  (`actions/offers.ts`, beside `createOfferAction` for `readOfferInput`), then a confirmation offering
+  the next lot. **`createFacebookLot`** forces the post's platform and group onto the input, refuses a
+  live state and runs `createOffer` with an `inTransaction` hook (`joinPostAsNextLot`) that asks
+  `facebookLotAddRefusal`, numbers the lot `max + 1`, shares the auctions' closing time and stops a
+  post of one following — in the creation's transaction, so a refused lot is no offer, and
+  `placeCreatedOffer` finds it in a post and burns no post number. The integration test is
+  `tests/integration/facebook-post-by-hand.test.ts`. Known edge, left as #2116 made it: a post made by
+  hand whose one lot is deleted goes with it (`detachFacebookLot`), and its one lot is a candidate for
+  another post's *Add lots…*, which takes it out of this one.
+
 - **Generate offers can make its new offers the lots of a new post** (#2030, decided with the
   collector on 2026-10-18; the first of #2030–#2033, *the post is the one workspace*). The dialog's
   **In a new post** + title rides the commit only, as `GeneratorRequest.postTitle` (absent = no post,

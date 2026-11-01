@@ -18,7 +18,8 @@ several lots has a number and a screen of its own. §2 is amended by #1989: ever
 goes up is in a post — an offer posted alone is a post of one lot, made when it is published. §2 is
 amended by #1998: a post that is up can be taken back to Ready, split when lots sold or withdrawn stay.
 §2 is amended by #2116: a Facebook offer is in a post from the moment it is made, and a post of one
-differs from a post of several only in its templates.
+differs from a post of several only in its templates. §2 is amended by #2291: a post can be made by
+hand, empty, and its lots made in it one by one.
 
 Facebook is the Facebook module platform since [ADR-0071](0071-platform-entity.md) (#1955), not a contact named as Facebook; its groups and settings are unchanged.
 
@@ -227,6 +228,19 @@ the screen, the number and title, the moves and the placeholders are the same. T
 - **Existing Facebook offers in no post** were each given a post of one, following its offer's title,
   and an existing post of one follows where its title was its offer's or none. *Not in a post yet*
   had nothing left to list and went.
+
+**Amended by #2291 (raised on 2026-11-01): a post can be made by hand, empty, and its lots made in it
+one by one.** Until then a post came only out of offers that existed, so putting an album together lot
+by lot as the stamps came out of the stock book meant making each offer alone and then collecting them.
+The post is where everything else about it is done (#2030–#2033); it is where it starts too.
+
+- **A post made by hand has no lot to begin with**: its group, its title and its layout (or the
+  group's), *Being prepared*, nothing to publish. It may be deleted while it is empty, as any post.
+- **A new lot is a new offer made in the post** — from copies in the app or from a new item — on
+  Facebook in the post's group, of the post's type unless the group mixes them, closing with its
+  auctions, never live on its own, and only while the post is not up. It is numbered as the post's
+  next lot as it is made, so no post of one is made for it and thrown away.
+- **A post with no lot holds no type**, so either joins it first.
 
 ### 3. Posting starts as a kit to paste
 

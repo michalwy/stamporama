@@ -6,6 +6,7 @@ import {
   facebookGroupMixesTypes,
   facebookPostLayout,
   getFacebookOfferKit,
+  getFacebookPostKit,
   readKitLots,
   type FacebookKitLot,
   type FacebookOfferKit,
@@ -39,6 +40,7 @@ import { allocateEntityNumber } from "./items";
 import { deleteVariants } from "./offer-photo-generation";
 import {
   OfferActionBlockedError,
+  createOffer,
   offersPrintedTextGaps,
   offersTextStatus,
   patchOffer,
@@ -54,6 +56,7 @@ import {
   setOfferState,
   syncGeneratedTexts,
   takeFacebookOfferBackToReady,
+  type OfferInput,
   type OfferTextStatus,
   type PrepareOffer,
 } from "./offers";
@@ -62,6 +65,7 @@ import {
   CLOSED_OFFER_STATES,
   OFFER_STATES,
   isAuctionListing,
+  isLiveState,
   isOfferState,
   normalizeListingType,
   type OfferState,
@@ -297,6 +301,133 @@ export async function addFacebookLots(
 }
 
 /**
+ * Make a post by hand (#2291), empty, before it has any lot: its group, its title — every post has one
+ * (#1862) — and its layout, or null to follow the group's. It starts *Preparing* with no lots; they are
+ * made in it one by one from its screen (`createFacebookLot`) or added from the offers that exist
+ * (`addFacebookLots`). Its title is its own from the start, never following a lot's (#2116).
+ */
+export async function createEmptyFacebookPost(
+  ownerId: string,
+  collectionId: string,
+  values: { groupId: string; title: string; layout: FacebookMultiLotLayout | null }
+): Promise<{ postId: string; postNo: number }> {
+  const titleRefusal = facebookPostTitleRefusal(values.title);
+  if (titleRefusal) throw new OfferActionBlockedError("facebook-group", titleRefusal);
+  if (values.layout !== null && !FACEBOOK_MULTI_LOT_LAYOUTS.includes(values.layout)) throw new Error("Unknown layout.");
+  await assertCollectionOwner(ownerId, collectionId);
+  const group = await prisma.facebookGroup.findFirst({
+    where: { id: values.groupId, platform: { collectionId } },
+    select: { archivedAt: true, name: true },
+  });
+  if (!group) throw new Error("Group not found.");
+  if (group.archivedAt) {
+    throw new OfferActionBlockedError("facebook-group", `${group.name} is archived — a new post goes into a group in use.`);
+  }
+  return prisma.$transaction(async (tx) => {
+    const postNo = await allocateEntityNumber(tx, collectionId, "facebookPost");
+    const post = await tx.facebookPost.create({
+      data: { collectionId, postNo, groupId: values.groupId, title: values.title.trim(), layout: values.layout },
+      select: { id: true },
+    });
+    return { postId: post.id, postNo };
+  });
+}
+
+/** What a lot made on its post's screen became (#2291). */
+export interface FacebookLotCreated {
+  offerId: string;
+  offerNo: number;
+  postNo: number;
+  lotNo: number;
+}
+
+/**
+ * Make a new offer as a post's next lot (#2291) — *New lot…* on the post's screen: the ordinary
+ * creation (`createOffer`), on the Facebook platform and in the post's group whatever the input names,
+ * seeded with the copies picked, and put into the post **in the creation's transaction**, so a lot the
+ * post refuses is no offer at all and no post of one is made for it and thrown away. The post must not
+ * be up, and the lot is made Preparing or Ready: it goes up with the post, not on its own. It is asked
+ * what *Add lots…* asks (`facebookLotAddRefusal`): the post's type unless the group mixes them; an
+ * auction takes the post's closing time, or gives it one.
+ */
+export async function createFacebookLot(
+  ownerId: string,
+  postId: string,
+  input: OfferInput,
+  opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
+): Promise<FacebookLotCreated> {
+  const post = await prisma.facebookPost.findUnique({
+    where: { id: postId },
+    select: { collectionId: true, postNo: true, groupId: true, group: { select: { platformId: true } } },
+  });
+  if (!post) throw new Error("Post not found.");
+  await assertCollectionOwner(ownerId, post.collectionId);
+  if (isLiveState(input.state)) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      "A lot goes up with its post — make it Preparing or Ready, and publish the post."
+    );
+  }
+  let lotNo = 0;
+  const offerId = await createOffer(
+    ownerId,
+    post.collectionId,
+    { ...input, platformId: post.group.platformId, facebookGroupId: post.groupId },
+    { ...opts, inTransaction: async (tx, id) => void (lotNo = await joinPostAsNextLot(tx, postId, id)) }
+  );
+  // A captioned post's new lot has its photo queued now, as an added lot's is (#1861).
+  await syncFacebookPostLotPhotos(postId);
+  const { offerNo } = await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { offerNo: true } });
+  return { offerId, offerNo, postNo: post.postNo, lotNo };
+}
+
+/** Number a new offer as a post's next lot inside the creation's transaction (#2291), asking it what
+ *  *Add lots…* asks — a refusal rolls the creation back — and giving the post's auctions one closing
+ *  time, the first auction's that has one in lot order, as `addFacebookLots` does. */
+async function joinPostAsNextLot(tx: DbTransaction, postId: string, offerId: string): Promise<number> {
+  const post = await tx.facebookPost.findUniqueOrThrow({
+    where: { id: postId },
+    select: {
+      postNo: true,
+      groupId: true,
+      lots: {
+        orderBy: { facebookLotNo: "asc" },
+        select: { id: true, facebookLotNo: true, listingType: true, state: true, endsAt: true },
+      },
+    },
+  });
+  if (post.lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      `Post #${post.postNo} is up, so it takes no new lots — they go up with a post, not after it.`
+    );
+  }
+  const offer = postCandidate(await tx.offer.findUniqueOrThrow({ where: { id: offerId }, select: POST_CANDIDATE_SELECT }));
+  const reason = facebookLotAddRefusal(offer, {
+    postId,
+    groupId: post.groupId,
+    mixedListingTypes: await facebookGroupMixesTypes(post.groupId),
+    lotTypes: [...new Set(post.lots.map((l) => normalizeListingType(l.listingType)))],
+  });
+  if (reason) throw new OfferActionBlockedError("facebook-group", `The new lot ${reason}.`);
+
+  const lotNo = Math.max(0, ...post.lots.map((l) => l.facebookLotNo ?? 0)) + 1;
+  const auctions = [
+    ...post.lots.map((l) => ({ id: l.id, listingType: normalizeListingType(l.listingType), endsAt: l.endsAt })),
+    offer,
+  ].filter((l) => isAuctionListing(l.listingType));
+  const endsAt = auctions.find((l) => l.endsAt !== null)?.endsAt ?? null;
+  await tx.offer.update({ where: { id: offerId }, data: { facebookPostId: postId, facebookLotNo: lotNo } });
+  // A post of one that gains a second lot keeps the title it has, as its own from now on (#2116).
+  await tx.facebookPost.update({ where: { id: postId }, data: { titleFollowsOffer: false } });
+  const retimed = auctions.filter((l) => (l.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null));
+  if (retimed.length > 0) {
+    await tx.offer.updateMany({ where: { id: { in: retimed.map((l) => l.id) } }, data: { endsAt } });
+  }
+  return lotNo;
+}
+
+/**
  * The offers that could join a post as further lots (#1870) — what its screen's *Add lots…* picks
  * from: Facebook offers in the post's group, alone in a post of one (#2116) or in none, not yet up,
  * and of a type the post holds unless the group's posts may mix them — the same conditions
@@ -331,7 +462,8 @@ export async function listFacebookLotCandidates(
     OR: [{ facebookPostId: null }, { facebookPostId: { in: alone } }],
     state: { in: OFFER_STATES.filter((s) => !isFacebookLotPosted(s)) },
   });
-  return mixes ? offers : offers.filter((o) => types.includes(o.listingType));
+  // A post with no lot yet (#2291) holds no type, so it takes either.
+  return mixes || types.length === 0 ? offers : offers.filter((o) => types.includes(o.listingType));
 }
 
 /**
@@ -379,8 +511,12 @@ export interface FacebookPostScreen {
   title: string | null;
   collectionId: string;
   kit: FacebookOfferKit;
-  /** The Facebook platform the lots are offered on — what *Sell* on a lot's row records the sale on. */
+  /** The Facebook platform the lots are offered on — what *Sell* on a lot's row records the sale on,
+   *  and what *New lot…* makes its offer on (#2291). */
   platform: { id: string; name: string };
+  /** Whether the group's posts may mix auctions and quick buys (#1671) — else *New lot…* makes a lot
+   *  of the type the post's lots already are (#2291). */
+  mixedListingTypes: boolean;
   /** Keyed by the lot's offer id; a lot sold on no sale is absent. Several only when its sets were
    *  sold apart. */
   sales: Record<string, { id: string; saleNo: number }[]>;
@@ -435,9 +571,10 @@ export async function findFacebookPostId(
 }
 
 /**
- * A post as its own screen shows it (#1842): the kit every lot's card used to repeat, read once off its
- * first lot, and each lot's sale. Null for a post that is gone — removed with its last lot, deleted, or
- * a post of one whose offer joined another post (#2116).
+ * A post as its own screen shows it (#1842): the kit every lot's card used to repeat, read once off the
+ * post — so a post made by hand shows before it has a lot (#2291) — and each lot's sale. Null for a
+ * post that is gone — removed with its last lot, deleted, or a post of one whose offer joined another
+ * post (#2116).
  */
 export async function getFacebookPostScreen(ownerId: string, postId: string): Promise<FacebookPostScreen | null> {
   const post = await prisma.facebookPost.findUnique({
@@ -447,20 +584,14 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
       postNo: true,
       title: true,
       collectionId: true,
-      lots: {
-        select: { id: true, platform: { select: { id: true, name: true } } },
-        orderBy: { facebookLotNo: "asc" },
-        take: 1,
-      },
+      group: { select: { platform: { select: { id: true, name: true } } } },
     },
   });
-  if (!post || post.lots.length === 0) return null;
+  if (!post) return null;
   await assertCollectionOwner(ownerId, post.collectionId);
-  const [kit, photos] = await Promise.all([
-    getFacebookOfferKit(post.lots[0].id),
-    readFacebookPostPhotos(ownerId, post.id),
-  ]);
+  const [kit, photos] = await Promise.all([getFacebookPostKit(post.id), readFacebookPostPhotos(ownerId, post.id)]);
   if (!kit) return null;
+  const platform = post.group.platform;
   const lines = await prisma.saleLine.findMany({
     where: { offerId: { in: kit.lots.map((l) => l.offerId) } },
     select: { offerId: true, sale: { select: { id: true, saleNo: true } } },
@@ -480,7 +611,8 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     title: post.title,
     collectionId: post.collectionId,
     kit,
-    platform: post.lots[0].platform,
+    platform,
+    mixedListingTypes: await facebookGroupMixesTypes(kit.group.id),
     sales,
     translations: posted ? null : await facebookPostTranslations(ownerId, post.collectionId, kit),
     lotTexts: posted
@@ -492,7 +624,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
             kit.lots.map((l) => l.offerId)
           )
         ),
-    lotTitles: posted ? null : await facebookPostLotTitles(post.collectionId, post.lots[0].platform.id, kit),
+    lotTitles: posted ? null : await facebookPostLotTitles(post.collectionId, platform.id, kit),
     hasPreviewLink: previewLinks > 0,
     photos,
   };
@@ -806,7 +938,13 @@ function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWh
     case "ready":
       return { AND: [{ lots: { every: { state: "ready" } } }, { lots: { some: {} } }] };
     case "preparing":
-      return { AND: [{ lots: { none: { state: { in: [...POSTED_STATES] } } } }, { lots: { some: { state: { not: "ready" } } } }] };
+      // A post with no lot yet (#2291) is being prepared too.
+      return {
+        AND: [
+          { lots: { none: { state: { in: [...POSTED_STATES] } } } },
+          { OR: [{ lots: { some: { state: { not: "ready" } } } }, { lots: { none: {} } }] },
+        ],
+      };
   }
 }
 
