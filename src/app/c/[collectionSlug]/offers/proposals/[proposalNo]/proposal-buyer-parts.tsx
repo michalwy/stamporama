@@ -16,8 +16,8 @@ import { useProposalMessage } from "../use-proposals-query";
 
 // **What a proposal's buyer is sent** (#2288), on the proposal's screen: the message to copy, the lots'
 // photos to download in one archive — each lot's are also on its row, to copy or download one by one —
-// and the document to print or share as a link. Each carries the lot numbers the screen shows, and
-// handing any of them out marks a proposal being prepared sent (`onHandedOut`).
+// and the document to print or share as a link. Each carries the lot numbers the screen shows. None of
+// them changes the proposal's state: only *Mark sent* marks it Sent (#2329).
 
 const META: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-text-muted)" };
 
@@ -92,7 +92,6 @@ export function ProposalBuyerCard({
   collectionSlug,
   photos,
   photoless,
-  onHandedOut,
   onOpenDocument,
 }: {
   screen: ProposalScreen;
@@ -100,8 +99,6 @@ export function ProposalBuyerCard({
   photos: ProposalLotPhotos[] | undefined;
   /** How many lots have no photos yet (#2323) — what *Make photos* makes; 0 once it is sent. */
   photoless: number;
-  /** Something went to the buyer: a proposal being prepared becomes sent. */
-  onHandedOut: () => void;
   onOpenDocument: () => void;
 }) {
   const { data: message, isLoading } = useProposalMessage(screen.collectionId, screen.proposalId);
@@ -115,7 +112,7 @@ export function ProposalBuyerCard({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <h3 style={HEADING}>Message</h3>
           <span style={{ flex: 1 }} />
-          {message?.text && <CopyButton value={message.text} label="message" onCopied={onHandedOut} />}
+          {message?.text && <CopyButton value={message.text} label="message" />}
         </div>
         {isLoading ? (
           <p style={{ ...META, margin: 0 }}>Loading the message…</p>
@@ -149,7 +146,6 @@ export function ProposalBuyerCard({
               <a
                 href={`/api/collections/${screen.collectionId}/proposals/${screen.proposalId}/photos/zip`}
                 download
-                onClick={onHandedOut}
                 style={{ ...SECONDARY_BUTTON, alignSelf: "flex-start" }}
               >
                 <Icon name="download" size="sm" />
@@ -193,14 +189,12 @@ export function LotPhotos({
   collectionId,
   lot,
   copyPhotoId,
-  onHandedOut,
 }: {
   collectionId: string;
   /** Its photos as the buyer is sent them; absent once the proposal is closed or the lot withdrawn. */
   lot: ProposalLotPhotos | undefined;
   /** Its first copy's front photo, or null when no copy has one. */
   copyPhotoId: string | null;
-  onHandedOut: () => void;
 }) {
   const { toast } = useToast();
   const [viewing, setViewing] = useState<number | null>(null);
@@ -254,10 +248,7 @@ export function LotPhotos({
       return;
     }
     copyImageAt(src(photoId, "full")).then(
-      () => {
-        toast({ message: `Lot ${lot!.lotNo}'s photo ${index + 1} copied` });
-        onHandedOut();
-      },
+      () => toast({ message: `Lot ${lot!.lotNo}'s photo ${index + 1} copied` }),
       () => toast({ message: "Could not copy — the browser blocked the clipboard", tone: "error" })
     );
   }
@@ -305,7 +296,6 @@ export function LotPhotos({
                   href={src(image.photoId, "full")}
                   download={image.fileName}
                   aria-label={`Download ${viewable[i].label}`}
-                  onClick={onHandedOut}
                   style={PHOTO_BUTTON}
                 >
                   <Icon name="download" size="sm" />

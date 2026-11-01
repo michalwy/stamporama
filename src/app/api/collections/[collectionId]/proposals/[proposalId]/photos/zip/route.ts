@@ -5,7 +5,7 @@ import { OfferPhotoGenerationError } from "@/lib/offer-photo-generation";
 import { buildProposalPhotoArchive } from "@/lib/proposal-handout";
 
 // A proposal's lots' photos as one ZIP, in lot order (#2288), each file named for its lot — for sending
-// over Messenger in one go. The screen marks the proposal sent when the collector downloads it.
+// over Messenger in one go. Downloading it leaves the proposal as it is — only *Mark sent* sends it (#2329).
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ collectionId: string; proposalId: string }> }

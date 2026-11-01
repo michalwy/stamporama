@@ -13,7 +13,6 @@ import {
   getProposalScreen,
   listPreparingProposals,
   makeProposalLots,
-  markProposalHandedOut,
   moveProposal,
   removeProposalLot,
 } from "../../src/lib/proposals";
@@ -134,8 +133,8 @@ describe("A sent proposal is fixed (#2307); New offer makes a lot (#2304)", () =
     await addProposalLots(userId, proposalId, [await offer(directId, "3.00")]);
 
     await prisma.proposal.update({ where: { id: proposalId }, data: { sentAt: new Date("2026-01-02T00:00:00Z") } });
-    // Sending again — here by handing something out — marks it Sent with the new time.
-    assert.equal(await markProposalHandedOut(userId, proposalId), true);
+    // Sending again — Mark sent — marks it Sent with the new time.
+    await moveProposal(userId, proposalId, "send");
     const again = (await getProposalScreen(userId, proposalId))!;
     assert.equal(again.status, "sent");
     assert.notEqual(again.sentOn, "2026-01-02");

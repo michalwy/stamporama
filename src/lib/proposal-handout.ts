@@ -29,8 +29,8 @@ import {
 // **What a proposal's buyer is sent** (#2288) — the database half: the lots' photos (read for the
 // screen, and as one archive), the message from the Direct platform's template, and the document with
 // the link a buyer opens it by. The pure rules are `proposal-document-rules.ts` and
-// `proposal-message-rules.ts`; what marks a proposal sent when any of these is made is
-// `markProposalHandedOut` (`proposals.ts`).
+// `proposal-message-rules.ts`. Making any of these changes nothing about the proposal's state — only
+// *Mark sent* (`moveProposal`) marks it Sent (#2329).
 //
 // **Every one of them numbers the lots alike** — `Offer.proposalLotNo`, the number the proposal's
 // screen shows — so the buyer's *I'll take 2, 5 and 7* means the same lots in all three.

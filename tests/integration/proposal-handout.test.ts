@@ -9,7 +9,6 @@ import {
   createProposal,
   getDirectPlatform,
   getProposalScreen,
-  markProposalHandedOut,
   moveProposal,
   removeProposalLot,
 } from "../../src/lib/proposals";
@@ -27,8 +26,8 @@ import {
 } from "../../src/lib/proposal-handout";
 
 // What a proposal's buyer is sent (#2288): its lots numbered alike everywhere, the message from the
-// Direct platform's template, the photos, and the document with its live link — and handing any of
-// them out marks a proposal being prepared sent. Each case makes copies and proposals of its own.
+// Direct platform's template, the photos, and the document with its live link — none of which changes
+// the proposal's state: only Mark sent does (#2329). Each case makes copies and proposals of its own.
 
 const ts = Date.now();
 
@@ -184,23 +183,17 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     assert.equal((await prisma.platform.findUniqueOrThrow({ where: { id: other.id } })).proposalMessageTemplate, null);
   });
 
-  it("marks a proposal being prepared sent when something is handed out — once, and only with lots", async () => {
-    const empty = await createProposal(userId, collectionId, buyerId);
-    assert.equal(await markProposalHandedOut(userId, empty.proposalId), false);
-    assert.equal(await status(empty.proposalId), "preparing");
+  it("leaves a proposal being prepared as it is when anything for the buyer is made — only Mark sent sends it (#2329)", async () => {
+    const { proposalId } = await proposalWith(["A", "10.00"]);
+    await readProposalMessage(userId, proposalId);
+    await readProposalPhotos(userId, proposalId);
+    await readProposalDocument(userId, proposalId, collectionId);
+    await createProposalShareToken(userId, proposalId);
+    assert.equal(await status(proposalId), "preparing");
+    assert.equal((await prisma.proposal.findUniqueOrThrow({ where: { id: proposalId } })).sentAt, null);
 
-    const { proposalId } = await proposalWith(["A"]);
-    assert.equal(await markProposalHandedOut(userId, proposalId), true);
+    await moveProposal(userId, proposalId, "send");
     assert.equal(await status(proposalId), "sent");
-    assert.ok((await prisma.proposal.findUniqueOrThrow({ where: { id: proposalId } })).sentAt);
-    assert.equal(await markProposalHandedOut(userId, proposalId), false);
-
-    const declined = await proposalWith(["B"]);
-    await moveProposal(userId, declined.proposalId, "decline");
-    assert.equal(await markProposalHandedOut(userId, declined.proposalId), false);
-    assert.equal(await status(declined.proposalId), "declined");
-
-    await assert.rejects(markProposalHandedOut(otherUserId, proposalId));
   });
 
   it("draws the document with each lot's number, title, price and photos, and the total, in the proposal's language", async () => {

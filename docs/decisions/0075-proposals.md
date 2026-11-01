@@ -106,7 +106,13 @@ The message comes from the **Direct platform's** proposal message template
 (`Platform.proposalMessageTemplate`, read on Direct only), as a post's text comes from its group's —
 no template, no message (#1692). The document reads like a post's preview (#2212) and is printed or
 shared by a live link (`ProposalShareToken`) that follows the prices until the proposal closes and then
-says only that it is closed. Handing any of the three out moves a Preparing proposal to Sent.
+says only that it is closed. ~~Handing any of the three out moves a Preparing proposal to Sent.~~
+**Amended by #2329 (2026-11-01):** handing any of them out changes nothing — copying the message or
+a photo, downloading photos, opening the document or making its link all leave a Preparing proposal
+Preparing. Opening the document to check it is not sending it, and a proposal turned Sent by mistake
+could only be reopened with a false *the buyer saw an earlier version*. **Only *Mark sent* marks a
+proposal Sent**, a reopened one included; the buyer opening the link still shows as *last opened* and
+changes no state.
 
 ### 9. A sent proposal is fixed (#2307), and New offer makes a lot (#2304)
 

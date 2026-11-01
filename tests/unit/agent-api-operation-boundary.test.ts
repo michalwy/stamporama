@@ -1293,7 +1293,7 @@ describe("the agent API's operation modules (#2303)", () => {
   });
 
   it("reach no other writer of a proposal — no send, no decline, no link, no unmarked sale", () => {
-    for (const closed of ["moveProposal", "markProposalHandedOut", "convertProposalToSale", "createProposalShareToken", "revokeProposalShareToken"]) {
+    for (const closed of ["moveProposal", "convertProposalToSale", "createProposalShareToken", "revokeProposalShareToken"]) {
       assert.ok(proposalWriters.includes(closed), `the walk did not find \`${closed}\` among the proposal writers`);
     }
     const closed = new Set(proposalWriters.filter((name) => !PROPOSAL_API_WRITES.includes(name)));

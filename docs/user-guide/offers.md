@@ -3261,13 +3261,15 @@ While the proposal is open, the card above its lots holds everything for the buy
   available*, and once the proposal is sold or declined it says only that the offer is closed. A new
   link replaces the old one; **Withdraw** ends it.
 
-**Making any of them marks a Preparing proposal Sent** — copying the message or a photo, downloading
-photos, opening the document or making its link — just as **Mark sent** would.
+**None of them marks the proposal Sent.** Copying the message or a photo, downloading photos, opening
+the document and making its link all leave it as it is, so you can check anything before it goes —
+press **Mark sent** once it has gone to the buyer.
 
 ### Sent, reopened, declined
 
 A proposal starts **Preparing**: lots come and go and their titles and prices change. **Mark sent**
-once it has gone to the buyer — it needs at least one lot — or let sending it do so (above).
+once it has gone to the buyer — it needs at least one lot. Nothing else marks it sent (above). When the
+buyer opens the link, the document's window shows it as *last opened*; that changes nothing either.
 
 **A sent proposal stays as the buyer saw it.** It takes no new lots, none is taken out, and no lot's
 title or price changes — not on the proposal's screen, and not on the lot's own offer screen either,
@@ -3276,8 +3278,8 @@ The buyer's message is written from the Direct platform's template, so nothing o
 changes it.
 
 To change it, **Reopen** it: it is **Preparing** again and changes as before, and its screen notes
-that the buyer was sent an earlier version, and when. Send it again — **Mark sent**, or by sending
-something as above — and it is **Sent** with the new time.
+that the buyer was sent an earlier version, and when. Once you have sent it again, **Mark sent** and it
+is **Sent** with the new time.
 
 **Decline…** closes it as **Declined** and **withdraws every lot still open**; the copies stay in
 your inventory. A declined proposal changes no more. A proposal becomes **Sold** once the lots the
