@@ -3213,7 +3213,13 @@ takes the lot out of the proposal.
   quick.
 - **Photo settings…** — every lot's photo settings in one dialog, and their photos made again, instead
   of opening each lot's offer. It works exactly as on a post: a setting the lots share shows its value,
-  one where they differ says **Differs by lot**, and only what you change is written.
+  one where they differ says **Differs by lot**, and only what you change is written. **Regenerate
+  every lot** makes every lot's photos again with no setting changed.
+- **Make photos** — beside it: the photos of every lot that has none, each from its own settings,
+  whatever its state — a lot added with **Add offers…** or made Active at creation included — without
+  opening their offers or changing a setting. A lot whose photos cannot be made (a copy's scan missing,
+  say) is named under the buttons with its reason. See
+  [A post with several lots](facebook.md#a-post-with-several-lots), where it works the same.
 - **Regenerate lot texts…**, **Title template for all lots…**, **Add to titles…** and **Remove from
   titles…** — every lot's title and description written again, given one title template, or the same
   words put on or taken off every title, as on a post. A lot whose text is out of date is marked so in
@@ -3244,8 +3250,10 @@ While the proposal is open, the card above its lots holds everything for the buy
 - **Photos** — **Download all** gives every lot's photos in one ZIP, each file named for its lot
   (`lot-02-…`). Each lot's row also shows its photos, to enlarge, **copy** (to paste straight into a
   chat) or download one by one. They are the lot's offer photos, by its offer photo settings —
-  **Mark ready** makes the missing ones, and **Photo settings…** changes and remakes them for every lot
-  at once. A withdrawn lot's photos are left out.
+  **Make photos** makes the missing ones, and **Photo settings…** changes and remakes them for every lot
+  at once. While the proposal is Preparing and a lot has none, the card says how many lots are without
+  (*No photos yet on 3 lots — Make photos, beside the lots, makes them*). A withdrawn lot's photos are
+  left out.
 - **Document** — **Print or share…** opens the document: the proposal's number, every lot with its
   number, title, price and photos, and the total, in the proposal's language — nothing else from your
   collection. Open it to print or save as a PDF, or make a **link** the buyer opens without an

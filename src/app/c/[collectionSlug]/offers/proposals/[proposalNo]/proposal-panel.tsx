@@ -99,8 +99,9 @@ function toolLot(lot: ProposalLot): ToolLot {
  *
  * The lots work as a Facebook post's do (#2313), through the same row and the same tools: each row is
  * the lot's photo — its copies' while it has none of its own — its number, its offer as a link, its
- * state, price and sale. While the proposal is being prepared, *Photo settings…*, *Regenerate lot
- * texts…* and the titles all at once, the lots' order, and pricing and readying from the rows with
+ * state, price and sale. While the proposal is being prepared, *Photo settings…*, *Make photos* (#2323,
+ * the lots with none), *Regenerate lot texts…* and the titles all at once, the lots' order, and pricing
+ * and readying from the rows with
  * *Use estimated price*, *Check covers* and *Mark ready* over every lot; one lot's change refreshes that
  * lot alone. What stays the post's — its group, layout, text and captions, publishing — has no place
  * here; the proposal keeps its own card and its own states.
@@ -359,6 +360,7 @@ export function ProposalPanel({
           screen={screen}
           collectionSlug={collectionSlug}
           photos={photos}
+          photoless={tools.photolessCount}
           onHandedOut={handedOut}
           onOpenDocument={() => setDialog("document")}
         />

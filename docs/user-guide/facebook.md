@@ -598,9 +598,18 @@ show, and from the
   photographing both). Saving writes only what you changed, to every lot. **Regenerate photos after
   saving** is ticked, as on an offer, and renders the photos again of every lot whose settings changed;
   a lot that cannot be rendered — no collage numbers, say — is reported in the message and the rest go
-  ahead. The post keeps no settings of its own: each lot keeps its own afterwards, and a lot added later
-  keeps whatever it had. Once the post is up its photos are the ones posted, so the action is not
-  offered.
+  ahead. Tick **Regenerate every lot** to make the photos of every lot again, whether a setting changed
+  or not — you can save with nothing changed just for that; a lot whose photos cannot be made is named
+  under the buttons with its reason. The post keeps no settings of its own: each lot keeps its own
+  afterwards, and a lot added later keeps whatever it had. Once the post is up its photos are the ones
+  posted, so the action is not offered.
+- **Make photos** — beside **Photo settings…** until the post is up: makes the photos of every lot that
+  has none, each from its own photo settings, whatever its state — a lot added with **Add offers…** or
+  already Active, which **Mark ready** no longer reaches, included — without opening the lots' offers
+  or changing a setting. The button counts the lots without photos (**Make photos (2)**) and is greyed
+  out once every lot has them. A lot whose photos cannot be made — no scan for the chosen sides, no
+  collage numbers — is named under the buttons by its lot number, with its reason, and the others go
+  ahead.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
   click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,

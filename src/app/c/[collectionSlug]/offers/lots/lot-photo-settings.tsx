@@ -14,7 +14,8 @@ import { PhotoSettingsDialog } from "../[offerId]/photo-settings-dialog";
 // proposal is being prepared. What the lots share is shown; a setting
 // they do not share reads *Differs by lot* and is left alone unless changed. Saving writes only what
 // was changed, to every lot, and — unless unticked, as on an offer (#328) — regenerates the photos of
-// each lot whose settings changed.
+// each lot whose settings changed. *Regenerate every lot* (#2323) makes every lot's photos again, a
+// setting changed or not; a lot whose photos cannot be made is named with its reason beside the lots.
 
 /** What the lots share, as the offer dialog's `config`; a differing setting's place holds a blank. */
 function sharedConfig(settings: LotGroupPhotoSettings["settings"]): OfferPhotoConfigInput {
@@ -39,12 +40,15 @@ export function LotPhotoSettingsButton({
   group,
   disabled,
   onSaved,
+  onSkipped,
 }: {
   collectionId: string;
   group: LotGroup;
   disabled: boolean;
   /** The lots' settings were written — their screen is read again. */
   onSaved: () => void;
+  /** The lots *Regenerate every lot* could not make photos of, each with its reason (#2323). */
+  onSkipped: (skipped: { offerId: string; message: string }[]) => void;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState<LotGroupPhotoSettings | null>(null);
@@ -65,15 +69,32 @@ export function LotPhotoSettingsButton({
   function save(formData: FormData) {
     setError(undefined);
     const regenerate = formData.get("regeneratePhotos") != null;
+    const regenerateAll = formData.get("regenerateAllPhotos") != null;
     startTransition(async () => {
-      const { updateLotGroupPhotoSettingsAction } = await import("@/app/actions/offer-lot-groups");
+      const { updateLotGroupPhotoSettingsAction, makeLotGroupPhotosAction } = await import("@/app/actions/offer-lot-groups");
       const result = await updateLotGroupPhotoSettingsAction(group, formData);
       if (result.status === "error") {
         setError(result.message);
         return;
       }
-      setOpen(null);
       const count = result.changed.length;
+      if (regenerateAll) {
+        // Every lot from its own settings (#2323), whether this save changed them or not.
+        const made = await makeLotGroupPhotosAction(group, "all");
+        if (made.status === "error") {
+          setError(made.message);
+          return;
+        }
+        setOpen(null);
+        onSaved();
+        onSkipped(made.skipped);
+        const saved = count === 0 ? "No setting changed" : count === 1 ? "Photo settings saved on 1 lot" : `Photo settings saved on ${count} lots`;
+        const queued = made.queued.length;
+        if (queued === 0) toast({ message: `${saved}; no lot's photos could be regenerated`, tone: "error" });
+        else toast({ message: `${saved} — ${queued === 1 ? "1 lot's photos are" : `${queued} lots' photos are`} being regenerated` });
+        return;
+      }
+      setOpen(null);
       if (count === 0) {
         toast({ message: "No lot's photo settings changed", tone: "info" });
         return;
