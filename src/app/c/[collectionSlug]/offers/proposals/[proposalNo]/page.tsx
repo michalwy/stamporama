@@ -3,6 +3,8 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
+import { getCollectionAreas } from "@/lib/areas";
+import { getLocations } from "@/lib/locations";
 import { findProposalId } from "@/lib/proposals";
 import { parseProposalNo } from "@/lib/proposal-rules";
 import { Screen } from "@/app/screen";
@@ -32,12 +34,24 @@ export default async function ProposalPage({ params }: ProposalPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const proposalId = await findProposalId(session.user.id, collection.id, proposalNo);
+  const [proposalId, areas, locations] = await Promise.all([
+    findProposalId(session.user.id, collection.id, proposalNo),
+    // *New lots…*'s copy picker (#2299).
+    getCollectionAreas(session.user.id, collection.id),
+    getLocations(session.user.id, collection.id),
+  ]);
   if (!proposalId) notFound();
 
   return (
     <Screen height="column">
-      <ProposalPanel collectionId={collection.id} collectionSlug={collectionSlug} proposalId={proposalId} />
+      <ProposalPanel
+        collectionId={collection.id}
+        collectionSlug={collectionSlug}
+        proposalId={proposalId}
+        areas={areas}
+        locations={locations}
+        baseCurrency={collection.baseCurrency}
+      />
     </Screen>
   );
 }

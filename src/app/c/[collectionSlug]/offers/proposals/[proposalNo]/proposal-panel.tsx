@@ -8,13 +8,23 @@ import { useToast } from "@/app/toast-provider";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { isProposalOpen, proposalMoveRefusal } from "@/lib/proposal-rules";
+import {
+  DEFAULT_PROPOSAL_LOT_PACKING,
+  isProposalOpen,
+  parseProposalLotPacking,
+  proposalMoveRefusal,
+  type ProposalLotPacking,
+} from "@/lib/proposal-rules";
+import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
 import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
 import type { PrepareOffer } from "@/lib/offers";
 import type { ProposalLot } from "@/lib/proposals";
 import type { ProposalLotPhotos } from "@/lib/proposal-handout";
 import { OfferStateChip } from "../../offer-badges";
 import { useInvalidateOffers } from "../../use-offers-query";
+import { ComposeSetDialog } from "../../[offerId]/compose-set-dialog";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { useInvalidateSales } from "../../../sales/use-sales-query";
 import { PreparePriceField, PrepareTitleField } from "../../prepare/prepare-offer-parts";
 import { useProposalLotsPrepare, useProposalPhotos, useProposalScreen } from "../use-proposals-query";
@@ -23,6 +33,9 @@ import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
 import { LotPhotos, ProposalBuyerCard } from "./proposal-buyer-parts";
 import { ProposalDocumentDialog } from "./proposal-document-dialog";
+
+/** Where *New lots…*'s last answer — an offer each, or one for all — is remembered (#2299). */
+const PACKING_KEY = "proposal-new-lots-packing";
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
@@ -61,8 +74,9 @@ const LOT_ROW: React.CSSProperties = {
 /**
  * A proposal's screen (#2287): who it is for and where it stands, its lots — each an ordinary offer on
  * the Direct platform, titled and priced here in place while the proposal is open, as a post's lots
- * are (#2031) — and the total. *Add offers…* takes Direct offers already made; the Copies list's
- * *Generate offers* on Direct puts new ones straight in. *Mark sent* once it has gone to the buyer —
+ * are (#2031) — and the total. *New lots…* (#2299) makes new Direct offers of copies picked here, an
+ * offer each or one for all, the last answer remembered per collection; *Add offers…* takes Direct
+ * offers already made; the Copies list's *Generate offers* on Direct puts new ones straight in. *Mark sent* once it has gone to the buyer —
  * prices stay editable — and *Decline…* withdraws the lots still open. *Convert to sale…* (#2289)
  * sells the lots the buyer took, withdraws the rest and closes it as Sold, linking the sale.
  *
@@ -74,10 +88,17 @@ export function ProposalPanel({
   collectionId,
   collectionSlug,
   proposalId,
+  areas,
+  locations,
+  baseCurrency,
 }: {
   collectionId: string;
   collectionSlug: string;
   proposalId: string;
+  /** For *New lots…*'s copy picker. */
+  areas: CollectionAreaData[];
+  locations: LocationData[];
+  baseCurrency: string;
 }) {
   const { data: screen, isLoading, isError } = useProposalScreen(collectionId, proposalId);
   const { data: prepare = {} } = useProposalLotsPrepare(collectionId, proposalId);
@@ -85,7 +106,9 @@ export function ProposalPanel({
   const { invalidateAll } = useInvalidateOffers();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { toast } = useToast();
-  const [dialog, setDialog] = useState<"add" | "decline" | "convert" | "document" | null>(null);
+  const [dialog, setDialog] = useState<"add" | "new" | "decline" | "convert" | "document" | null>(null);
+  const [storedPacking, rememberPacking] = usePersistedCollectionValue(PACKING_KEY, collectionId);
+  const packing = parseProposalLotPacking(storedPacking) ?? DEFAULT_PROPOSAL_LOT_PACKING;
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const priceRefs = useRef(new Map<string, HTMLInputElement | null>());
@@ -140,6 +163,25 @@ export function ProposalPanel({
     );
   }
 
+  /** *New lots…* (#2299): the copies picked become new lots. The answer to *an offer each or one for
+   *  all* is remembered only when it was asked — with one copy picked there is no question. */
+  function makeLots(itemIds: string[], perCopy: boolean) {
+    const chosen: ProposalLotPacking = perCopy ? "each" : "together";
+    if (itemIds.length > 1) rememberPacking(chosen);
+    setError(undefined);
+    startTransition(async () => {
+      const result = await (await import("@/app/actions/proposals")).makeProposalLotsAction(proposalId, itemIds, chosen);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      setDialog(null);
+      const made = `${result.lots} new ${result.lots === 1 ? "lot" : "lots"}`;
+      toast({ message: result.unpriced > 0 ? `${made} · ${result.unpriced} with no estimate to price at` : made });
+      refresh();
+    });
+  }
+
   /** Enter in a lot's price: on to the next open lot's. */
   function focusAfter(offerId: string) {
     const ids = screen!.lots.filter((lot) => prepare[lot.offerId]).map((lot) => lot.offerId);
@@ -178,6 +220,11 @@ export function ProposalPanel({
         <span style={{ flex: 1 }} />
         {open && (
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
+              <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("new")}>
+                New lots…
+              </button>
+            </Tooltip>
             <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("add")}>
               Add offers…
             </button>
@@ -247,12 +294,12 @@ export function ProposalPanel({
       >
         {screen.lots.length === 0 ? (
           <p style={{ margin: 0, padding: "2rem", ...META, fontSize: "0.9375rem" }}>
-            No lots yet. Tick copies on the{" "}
+            No lots yet. Make them from your copies with New lots…, add {screen.platform.name} offers already
+            made with Add offers…, or tick copies on the{" "}
             <Link href={`/c/${collectionSlug}/inventory`} style={LINK}>
               Copies
             </Link>{" "}
-            list and generate offers on {screen.platform.name} into this proposal, or add {screen.platform.name}{" "}
-            offers already made with Add offers….
+            list and generate offers on {screen.platform.name} into this proposal.
           </p>
         ) : (
           <ul style={{ margin: 0, padding: 0 }}>
@@ -312,6 +359,30 @@ export function ProposalPanel({
               `${offerIds.length} ${offerIds.length === 1 ? "offer" : "offers"} added to the proposal`
             )
           }
+          onNewLots={() => {
+            setError(undefined);
+            setDialog("new");
+          }}
+        />
+      )}
+      {dialog === "new" && (
+        <ComposeSetDialog
+          collectionId={collectionId}
+          offerId={null}
+          platformId={screen.platform.id}
+          platformTitleLanguage={null}
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          title={`New lots of proposal #${screen.proposalNo} — their copies`}
+          newOffers={{ platformName: screen.platform.name, perCopy: packing === "each", isPending, error }}
+          onPick={(copies, perCopy) => makeLots(copies.map((c) => c.id), perCopy)}
+          onClose={() => {
+            if (isPending) return;
+            setDialog(null);
+            setError(undefined);
+          }}
+          onDone={() => setDialog(null)}
         />
       )}
       {dialog === "convert" && (

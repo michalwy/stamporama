@@ -663,19 +663,23 @@ export function useComposableCopies(
   areaIds: string[] | null,
   /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
   areaSelection: AreaSelection,
-  enabled: boolean
+  enabled: boolean,
+  /** With no offer, only the copies not yet offered on this platform (#2299). */
+  notOfferedPlatformId: string | null = null
 ) {
   return useQuery<ItemListItem[]>({
-    queryKey: ["offers", collectionId, "composable", offerId, areaIds] as const,
+    queryKey: ["offers", collectionId, "composable", offerId, notOfferedPlatformId, areaIds] as const,
     ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
       "offers",
       collectionId,
       "composable",
       offerId,
+      notOfferedPlatformId,
     ]),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
+      if (!offerId && notOfferedPlatformId) params.set("notOfferedOn", notOfferedPlatformId);
       const res = await fetch(
         offerId
           ? `/api/collections/${collectionId}/offers/${offerId}/composable-copies?${params.toString()}`

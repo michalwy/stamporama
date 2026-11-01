@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   isProposalOpen,
+  parseProposalLotPacking,
   parseProposalNo,
+  proposalNewLotSets,
   proposalLotPrice,
   proposalLotRefusal,
   proposalLotsRefusal,
@@ -142,5 +144,29 @@ describe("a proposal becoming a sale (#2289)", () => {
     assert.equal(mixed.ok, false);
     assert.match(!mixed.ok ? mixed.message : "", /PLN and EUR/);
     assert.equal(proposalLotCurrency([]).ok, false);
+  });
+});
+
+describe("new lots from copies (#2299)", () => {
+  it("makes an offer of each copy, or one offer of one set holding them all", () => {
+    assert.deepEqual(proposalNewLotSets(["a", "b", "c"], "each"), [[["a"]], [["b"]], [["c"]]]);
+    assert.deepEqual(proposalNewLotSets(["a", "b", "c"], "together"), [[["a", "b", "c"]]]);
+  });
+
+  it("makes the same one offer of a single copy either way", () => {
+    assert.deepEqual(proposalNewLotSets(["a"], "each"), [[["a"]]]);
+    assert.deepEqual(proposalNewLotSets(["a"], "together"), [[["a"]]]);
+  });
+
+  it("counts a copy picked twice once, and makes nothing of nothing", () => {
+    assert.deepEqual(proposalNewLotSets(["a", "b", "a"], "each"), [[["a"]], [["b"]]]);
+    assert.deepEqual(proposalNewLotSets([], "together"), []);
+  });
+
+  it("reads only the two packings", () => {
+    assert.equal(parseProposalLotPacking("each"), "each");
+    assert.equal(parseProposalLotPacking("together"), "together");
+    assert.equal(parseProposalLotPacking("perCopy"), null);
+    assert.equal(parseProposalLotPacking(null), null);
   });
 });
