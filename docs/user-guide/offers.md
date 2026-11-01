@@ -3197,15 +3197,15 @@ are listed the same way and, while the proposal is **Preparing**, worked on with
 
 **Each lot's row** shows the lot's photos — the ones the buyer is sent — and, while it has none yet,
 its first copy's own photo with a dashed edge and *The copy's photo — none to send yet*, so you always
-see which stamps it is. Then its **lot number**, its **offer** — the offer's number with an arrow,
-which opens the offer — and its title, its **price**, **state**, number of **sets**, and its **sale**
-once it is sold. A lot's **⋮** menu opens its offer, takes a **Ready** lot **Back to preparing**, and
+see which stamps it is. Then its **lot number**, its **offer's number** and its **title** — click
+either to open the lot's offer — its **price**, **state**, number of **sets**, and its **sale** once
+it is sold. A lot's **⋮** menu opens its offer, takes a **Ready** lot **Back to preparing**, and
 takes the lot out of the proposal.
 
 **While the proposal is Preparing**, as on a post that is not up yet:
 
-- **Pricing and readying from the rows.** Each lot's title is edited in place and its price typed into
-  its price table: **Enter** saves it and moves to the next lot's. The row says what still stops the
+- **Pricing and readying from the rows.** Each lot's title is still the link to its offer; the pencil
+  beside it edits the title in place. Its price is typed into its price table: **Enter** saves it and moves to the next lot's. The row says what still stops the
   lot from being marked ready. Above the lots, **Use estimated price**, **Check covers** and **Mark
   ready** act on every lot — see
   [Pricing the lots and marking them ready](facebook.md#pricing-the-lots-and-marking-them-ready).

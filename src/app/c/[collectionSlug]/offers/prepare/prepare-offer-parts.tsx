@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useState, useTransition } from "react";
+import Link from "next/link";
 import type { PrepareOffer } from "@/lib/offers";
 import { isAuctionListing, pricingReadyFor } from "@/lib/offer-rules";
 import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
@@ -38,6 +39,9 @@ const COVERS_LINK: React.CSSProperties = {
   textDecoration: "underline",
 };
 
+/** The title on one line, cut short with an ellipsis. */
+const TITLE_LINE: React.CSSProperties = { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+
 /** The row's price field: small, as an editor inside a list row is (`control-style.ts`). */
 const PRICE_INPUT: React.CSSProperties = {
   width: "5.5rem",
@@ -55,15 +59,19 @@ const PRICE_INPUT: React.CSSProperties = {
  * The offer's title, edited in place as on the offer's own screen: editing starts from what is shown,
  * the derived label included (#363), an untouched field saves nothing, and blank clears it back to the
  * derived label (#209). `onChanged` follows a save — the title is part of the ready gate (#636).
+ * Given `href`, the title is a link there and a pencil beside it edits it (#2324).
  */
 export function PrepareTitleField({
   offer,
   onChanged,
   inputWidth = "28rem",
+  href,
 }: {
   offer: PrepareOffer;
   onChanged: () => void;
   inputWidth?: string;
+  /** Where the title leads — a lot's row links it to its offer. */
+  href?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -93,11 +101,17 @@ export function PrepareTitleField({
           value={offer.name ?? offer.label}
           placeholder="Listing title"
           display={
-            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {offer.name ?? offer.label}
-            </span>
+            href ? (
+              <Link href={href} style={{ ...TITLE_LINE, minWidth: 0, color: "var(--color-accent)" }}>
+                {offer.name ?? offer.label}
+              </Link>
+            ) : (
+              <span style={TITLE_LINE}>{offer.name ?? offer.label}</span>
+            )
           }
           editable
+          editControl={!!href}
+          editAriaLabel="Edit the title"
           isPending={isPending}
           inputType="text"
           inputStyle={{ width: inputWidth, maxWidth: "100%" }}
