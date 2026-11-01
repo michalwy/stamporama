@@ -10,8 +10,8 @@ import {
   type FacebookTitleWordsMode,
 } from "@/lib/facebook-post-rules";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
-import { pricingReadyFor, type OfferListingType, type OfferState } from "@/lib/offer-rules";
-import { isCoverReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { CLOSED_OFFER_STATES, pricingReadyFor, type OfferListingType, type OfferState } from "@/lib/offer-rules";
+import { isCoverReadinessBlocker, isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { GroupLotLabel, LotGroup } from "@/lib/offer-lot-group-rules";
 import type { LotGroupTitles } from "@/lib/offer-lot-groups";
 import { catalogueFillEntries, type CatalogueFillGroup, type CatalogueFillLine } from "@/lib/lot-catalogue-fill";
@@ -33,7 +33,10 @@ import type { LotRowPricing } from "./lot-row";
 // post is not up, a proposal's while it is being prepared — one implementation for both, which the
 // screens place around their lots:
 //
-// - **Photo settings…** (#2032): every lot's photo settings in one dialog, their photos regenerated.
+// - **Photo settings…** (#2032): every lot's photo settings in one dialog, their photos regenerated —
+//   every lot's with *Regenerate every lot* (#2323), a setting changed or not.
+// - **Make photos** (#2323): the photos of every lot that has none, from its own settings, whatever
+//   its state — a lot past Ready that *Mark ready* no longer reaches; a lot that cannot be made is named.
 // - **Regenerate lot texts…** (#1983) and the titles all at once (#2033): *Title template for all
 //   lots…*, *Add to titles…*, *Remove from titles…*; a lot whose text is out of date is counted above
 //   the lots, with a link to regenerate just those.
@@ -94,6 +97,12 @@ const STEP_LINK: React.CSSProperties = {
 /** The lot has no stated price yet — the figure *Use estimated price* fills. */
 function unpriced(offer: PrepareOffer): boolean {
   return !pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice);
+}
+
+/** The lot has no photos of its own and none being made (#2323) — what *Make photos* makes. */
+function photoless(offer: PrepareOffer, state: OfferState | undefined): boolean {
+  if (state === undefined || (CLOSED_OFFER_STATES as readonly OfferState[]).includes(state)) return false;
+  return !offer.picturesGenerated && !offer.readyBlockers.some(isPhotoRunBlocker);
 }
 
 /** How many of the lot's photos its ready gate still wants checked for symbols (#1665). */
@@ -270,6 +279,7 @@ export function useLotGroupTools<L extends ToolLot>({
   const toCover = prepared.filter((o) => uncheckedCovers(o) > 0);
   const coverCount = toCover.reduce((sum, o) => sum + uncheckedCovers(o), 0);
   const toReady = prepared.filter((o) => lots.find((l) => l.offerId === o.id)?.state === "preparing");
+  const toPhotograph = prepared.filter((o) => photoless(o, lots.find((l) => l.offerId === o.id)?.state));
   // With nothing left unchecked, *Check covers* walks every photo of the lots that apply covers again —
   // a cover found wrong at the last look, on a Ready lot (#2114).
   const toReview = prepared.filter((o) => o.covers.needed && o.covers.photoCount > 0);
@@ -324,6 +334,25 @@ export function useLotGroupTools<L extends ToolLot>({
     });
   }
 
+  // Every lot with no photos (#2323), whatever its state: queued from each lot's own settings, a lot
+  // that cannot be made named with its reason.
+  function makePhotos() {
+    if (toPhotograph.length === 0) return;
+    setLotSkips([]);
+    startTransition(async () => {
+      const { makeLotGroupPhotosAction } = await import("@/app/actions/offer-lot-groups");
+      const result = await makeLotGroupPhotosAction(group, "missing");
+      refresh();
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      setLotSkips(result.skipped);
+      const n = result.queued.length;
+      if (n > 0) toast({ message: `${n === 1 ? "1 lot's photos are" : `${n} lots' photos are`} being made` });
+    });
+  }
+
   /** What the lot's row is given to be priced in (#2031), or null while the lots are not priced here. */
   function rowPricing(
     lot: ToolLot,
@@ -374,7 +403,26 @@ export function useLotGroupTools<L extends ToolLot>({
   const headingButtons = (
     <>
       {editable && lots.length > 0 && (
-        <LotPhotoSettingsButton collectionId={collectionId} group={group} disabled={isPending} onSaved={refresh} />
+        <LotPhotoSettingsButton
+          collectionId={collectionId}
+          group={group}
+          disabled={isPending}
+          onSaved={refresh}
+          onSkipped={setLotSkips}
+        />
+      )}
+      {editable && prepareRows && lots.length > 0 && (
+        <Tooltip
+          content={
+            toPhotograph.length > 0
+              ? "Make the photos of every lot that has none, from its own photo settings, whatever its state — no setting changed. A lot whose photos cannot be made is named below."
+              : "Every lot has its photos."
+          }
+        >
+          <DialogSecondaryButton type="button" disabled={isPending || toPhotograph.length === 0} onClick={makePhotos}>
+            Make photos{toPhotograph.length > 0 ? ` (${toPhotograph.length})` : ""}
+          </DialogSecondaryButton>
+        </Tooltip>
       )}
       {lotTitles && lots.length > 0 && (
         <>
@@ -579,6 +627,8 @@ export function useLotGroupTools<L extends ToolLot>({
     drag,
     isPending,
     prepared,
+    /** How many lots have no photos and none being made (#2323); 0 while the lots are not priced here. */
+    photolessCount: toPhotograph.length,
     textWarning,
     headingButtons,
     lotBar,

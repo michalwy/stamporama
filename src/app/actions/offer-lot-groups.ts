@@ -10,16 +10,19 @@ import { parseLotGroup } from "@/lib/offer-lot-group-rules";
 import {
   changeLotGroupTitleWords,
   getLotGroupPhotoSettings,
+  makeLotGroupPhotos,
   regenerateLotGroupTexts,
   reorderLotGroup,
   setLotGroupTitleTemplate,
   updateLotGroupPhotoSettings,
+  type LotGroupPhotosMade,
   type LotGroupPhotoSettings,
 } from "@/lib/offer-lot-groups";
 import { readPhotoConfigFields } from "@/lib/offer-photo-config";
+import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 
 // The tools a group of lots is worked on with from its screen (#2313) — a Facebook post's, or a
-// proposal's: photo settings (#2032), texts (#1983), titles (#2033) and order (#1986). Each names the
+// proposal's: photo settings (#2032) and the photos made (#2323), texts (#1983), titles (#2033) and order (#1986). Each names the
 // group it works on; the server checks it is the caller's and may still change. A refusal is reported
 // as a message rather than thrown: the post is up, the proposal sent, a number out of range.
 
@@ -75,6 +78,25 @@ export async function updateLotGroupPhotoSettingsAction(
     return { status: "success", changed: await updateLotGroupPhotoSettings(session.user.id, group, parsed.value) };
   } catch (err) {
     return failure(err, "Failed to save the lots' photo settings.");
+  }
+}
+
+/** *Make photos* (#2323): the photos of the lots that have none, or — *Photo settings…* with
+ *  *Regenerate every lot* — of every lot, each from its own settings. */
+export async function makeLotGroupPhotosAction(
+  rawGroup: unknown,
+  scope: "missing" | "all"
+): Promise<({ status: "success" } & LotGroupPhotosMade) | Failure> {
+  const session = await getSession();
+  const group = parseLotGroup(rawGroup);
+  if (!group) return NO_GROUP;
+  if (scope !== "missing" && scope !== "all") return { status: "error", message: "Choose which lots' photos to make." };
+  try {
+    const made = await makeLotGroupPhotos(session.user.id, group, scope);
+    if (made.queued.length > 0) kickOfferPhotoWorker();
+    return { status: "success", ...made };
+  } catch (err) {
+    return failure(err, "Failed to make the lots' photos.");
   }
 }
 

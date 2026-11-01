@@ -84,17 +84,22 @@ const PHOTO_BUTTON: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const lotsText = (n: number) => (n === 1 ? "1 lot" : `${n} lots`);
+
 /** The card above the lots: the message, the photos' archive and the document. */
 export function ProposalBuyerCard({
   screen,
   collectionSlug,
   photos,
+  photoless,
   onHandedOut,
   onOpenDocument,
 }: {
   screen: ProposalScreen;
   collectionSlug: string;
   photos: ProposalLotPhotos[] | undefined;
+  /** How many lots have no photos yet (#2323) — what *Make photos* makes; 0 once it is sent. */
+  photoless: number;
   /** Something went to the buyer: a proposal being prepared becomes sent. */
   onHandedOut: () => void;
   onOpenDocument: () => void;
@@ -139,7 +144,7 @@ export function ProposalBuyerCard({
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <h3 style={HEADING}>Photos</h3>
-          {photoCount > 0 ? (
+          {photoCount > 0 && (
             <Tooltip content="Every lot's photos in one ZIP, each file named for its lot">
               <a
                 href={`/api/collections/${screen.collectionId}/proposals/${screen.proposalId}/photos/zip`}
@@ -151,12 +156,17 @@ export function ProposalBuyerCard({
                 Download all ({photoCount})
               </a>
             </Tooltip>
-          ) : (
-            <p style={{ ...META, margin: 0 }}>
-              {photos === undefined
-                ? "Loading the photos…"
-                : "No photos yet — Mark ready makes the lots' photos, or Photo settings… with Regenerate."}
+          )}
+          {photos === undefined ? (
+            <p style={{ ...META, margin: 0 }}>Loading the photos…</p>
+          ) : photoless > 0 ? (
+            // Pointing at *Make photos* (#2323): the lots added after Ready — or made Active — that have none.
+            <p style={{ ...META, margin: 0, color: photoCount > 0 ? "var(--color-warning)" : undefined }}>
+              {photoCount > 0 ? `${lotsText(photoless)} without photos` : `No photos yet on ${lotsText(photoless)}`} — Make
+              photos, beside the lots, makes them.
             </p>
+          ) : (
+            photoCount === 0 && <p style={{ ...META, margin: 0 }}>No photos yet.</p>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

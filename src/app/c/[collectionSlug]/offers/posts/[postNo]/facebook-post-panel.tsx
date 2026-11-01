@@ -114,7 +114,8 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 //   the order, so the text, the captions and the photos' download follow; the rows show the new order
 //   at once and the server's answer replaces it.
 // - **Photo settings…** (#2032), beside them while the post is not up: every lot's photo settings in
-//   one dialog — the sides to photograph, say — and their photos regenerated, instead of each offer's.
+//   one dialog — the sides to photograph, say — and their photos regenerated, instead of each offer's;
+//   *Make photos* (#2323) beside it makes the photos of every lot that has none, whatever its state.
 // - **Pricing and readying the lots** (#2031), while the post is not up — the Prepare screen's work, for
 //   this post's lots: each row carries the compact price table with the lot's own price typed in it
 //   (Enter saves it and moves down to the next lot's), its title edited in place, and what still stops

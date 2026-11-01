@@ -259,6 +259,16 @@ export interface PhotoSettingsDialogProps {
   collage?: { lead: ReactNode; actionLabel: string; packaging: "one-set" | "per-copy" };
 }
 
+/** A tick beside the footer's buttons: whether, and which, photos are made again on saving. */
+const FOOTER_TICK = (isPending: boolean): React.CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  gap: "0.4375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-secondary)",
+  cursor: isPending ? "default" : "pointer",
+});
+
 /**
  * This listing's own photo configuration (#308): which scan sides to include, the label written
  * under each stamp (#312), and the collage numbers — copied from a collage template (#307) and then
@@ -320,6 +330,9 @@ export function PhotoSettingsDialog({
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
   // Regenerate on save (#328), on by default — see the note by the footer checkbox.
   const [regenerate, setRegenerate] = useState(true);
+  // A group's dialog (#2323): every lot's photos made again, whether its settings changed or not — off
+  // by default, since it replaces images the settings did not put out of date.
+  const [regenerateAll, setRegenerateAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -874,39 +887,55 @@ export function PhotoSettingsDialog({
           />
         ) : (
           <DialogActions
-            actionLabel={isPending ? "Saving…" : regenerate ? "Save & regenerate" : "Save settings"}
+            actionLabel={
+              isPending
+                ? "Saving…"
+                : regenerateAll
+                  ? "Save & regenerate all"
+                  : regenerate
+                    ? "Save & regenerate"
+                    : "Save settings"
+            }
             onCancel={onClose}
             disabled={isPending}
             error={error}
             leading={
-              <Tooltip
-                content={
-                  bulk
-                    ? "Render the images of every lot whose settings changed again once saved, replacing the stored ones"
-                    : "Render this offer's images again once the settings are saved, replacing the stored ones"
-                }
-              >
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4375rem",
-                    fontSize: "0.8125rem",
-                    color: "var(--color-text-secondary)",
-                    cursor: isPending ? "default" : "pointer",
-                  }}
+              <>
+                <Tooltip
+                  content={
+                    bulk
+                      ? "Render the images of every lot whose settings changed again once saved, replacing the stored ones"
+                      : "Render this offer's images again once the settings are saved, replacing the stored ones"
+                  }
                 >
-                  <input
-                    type="checkbox"
-                    name="regeneratePhotos"
-                    checked={regenerate}
-                    onChange={(e) => setRegenerate(e.target.checked)}
-                    disabled={isPending}
-                    style={{ cursor: isPending ? "default" : "pointer" }}
-                  />
-                  Regenerate photos after saving
-                </label>
-              </Tooltip>
+                  <label style={FOOTER_TICK(isPending)}>
+                    <input
+                      type="checkbox"
+                      name="regeneratePhotos"
+                      checked={regenerate || regenerateAll}
+                      onChange={(e) => setRegenerate(e.target.checked)}
+                      disabled={isPending || regenerateAll}
+                      style={{ cursor: isPending ? "default" : "pointer" }}
+                    />
+                    Regenerate photos after saving
+                  </label>
+                </Tooltip>
+                {bulk && (
+                  <Tooltip content="Render the images of every lot again once saved, from its own settings — whether a setting changed or not">
+                    <label style={FOOTER_TICK(isPending)}>
+                      <input
+                        type="checkbox"
+                        name="regenerateAllPhotos"
+                        checked={regenerateAll}
+                        onChange={(e) => setRegenerateAll(e.target.checked)}
+                        disabled={isPending}
+                        style={{ cursor: isPending ? "default" : "pointer" }}
+                      />
+                      Regenerate every lot
+                    </label>
+                  </Tooltip>
+                )}
+              </>
             }
           />
         )}

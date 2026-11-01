@@ -18,7 +18,8 @@ import {
 } from "./facebook-post-rules";
 import type { LotGroup } from "./offer-lot-group-rules";
 import { OFFER_PHOTO_CONFIG_SELECT, offerPhotoConfigFromRow, type PlatformPhotoLimits } from "./offer-photo-config";
-import type { OfferState } from "./offer-rules";
+import { enqueueOfferPhotoGeneration, OfferPhotoGenerationError } from "./offer-photo-generation";
+import { CLOSED_OFFER_STATES, type OfferState } from "./offer-rules";
 import {
   OfferActionBlockedError,
   patchOffer,
@@ -32,7 +33,8 @@ import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { proposalLotsRefusal, proposalStatusOf } from "./proposal-rules";
 
 // The tools a group of lots is worked on with from its screen (#2313) — a Facebook post's lots, or a
-// proposal's: every lot's photo settings in one dialog (#2032), their texts regenerated (#1983), their
+// proposal's: every lot's photo settings in one dialog (#2032), their photos made (#2323), their texts
+// regenerated (#1983), their
 // titles from one template or with the same words on or off (#2033), and their order (#1986). One
 // implementation, told which group: the post's screen grew them first, and a proposal is the same
 // thing for one buyer. Each lot is an ordinary offer keeping its own settings and texts, written
@@ -181,6 +183,58 @@ export async function updateLotGroupPhotoSettings(
     changed.push(lot.id);
   }
   return changed;
+}
+
+// ── Making the photos (#2323) ───────────────────────────────────────────────────────────────────
+
+/** Which lots' photos the group's run makes: the lots that have none (*Make photos*), or every lot
+ *  (*Photo settings…* with *Regenerate every lot*). */
+export type LotGroupPhotoScope = "missing" | "all";
+
+/** What a run over the group's photos did: the lots queued, and each one refused with its reason. */
+export interface LotGroupPhotosMade {
+  queued: string[];
+  skipped: { offerId: string; message: string }[];
+}
+
+/**
+ * Queue the photos of the group's lots from each lot's own settings, whatever its state — the lots
+ * past Ready that *Mark ready* no longer reaches (#2323), without a setting changed for the sake of it.
+ * `missing` takes the lots with no photos stored and none being made; `all` every lot. A sold or
+ * withdrawn lot is left: it is no longer offered. A lot whose photos cannot be made — no collage
+ * numbers, no scan for the chosen sides — is answered with its reason, as *Mark ready* answers one it
+ * cannot ready (#323's rule), and the rest go ahead. The caller nudges the worker.
+ */
+export async function makeLotGroupPhotos(
+  ownerId: string,
+  group: LotGroup,
+  scope: LotGroupPhotoScope
+): Promise<LotGroupPhotosMade> {
+  const { lots } = await readLotGroup(ownerId, group, PHOTOS_POSTED);
+  const open = lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state)).map((l) => l.id);
+  let targets = open;
+  if (scope === "missing" && open.length > 0) {
+    const [stored, running] = await Promise.all([
+      prisma.offerPhotoEntry.groupBy({ by: ["offerId"], where: { offerId: { in: open } } }),
+      prisma.offerPhotoGeneration.findMany({
+        where: { offerId: { in: open }, status: { in: ["queued", "running"] } },
+        select: { offerId: true },
+      }),
+    ]);
+    const has = new Set([...stored, ...running].map((r) => r.offerId));
+    targets = open.filter((id) => !has.has(id));
+  }
+  const made: LotGroupPhotosMade = { queued: [], skipped: [] };
+  for (const offerId of targets) {
+    try {
+      await enqueueOfferPhotoGeneration(ownerId, offerId);
+      made.queued.push(offerId);
+    } catch (e) {
+      if (!(e instanceof OfferPhotoGenerationError)) throw e;
+      made.skipped.push({ offerId, message: e.message });
+    }
+  }
+  return made;
 }
 
 // ── Texts and titles (#1983, #2033) ─────────────────────────────────────────────────────────────
