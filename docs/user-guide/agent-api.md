@@ -194,6 +194,26 @@ until you confirm it. **It cannot delete a sale or move one along** — no *Paid
 no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
 does not record a running auction's current bid either: the price it sells at is the one it read.
 
+On **[proposals](offers.md#proposals)** — an offer you put together for one buyer — it can answer a
+buyer who asked for more. It can:
+
+- **find a proposal** by contact or state, and read one: its lots by their numbers, each with its
+  offer, copies and price, the total, the sale it became, and the message for the buyer as your
+  Direct platform's template writes it. A **read only** token can do this much. Reading the message
+  does not mark the proposal sent — sending it is still yours;
+- **start a proposal** for a contact, **add** offers already on Direct as its lots, **make new lots**
+  from copies — an offer each, or one offer of them all, as [**New lots…**](offers.md#giving-it-lots)
+  does — **price** a lot, and **take one out**. Each is refused wherever the proposal's screen would
+  refuse it, with the same reason;
+- **turn it into a sale** with the lots the buyer took, named by their lot numbers — at each lot's
+  price or at a price agreed — into a new Direct sale or one of the buyer's open sales, as
+  [**Convert to sale…**](offers.md#selling-it) does. The other lots are withdrawn and the proposal is
+  *Sold*; the sale is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+  until you confirm it.
+
+**It does not mark a proposal sent, decline it, or make its link or document for the buyer** — what
+reaches the buyer stays on the proposal's screen.
+
 On the **conversations with your buyers**, it can keep the
 [log](sales.md#the-conversation-with-the-buyer) that a sale's screen and a contact's page show —
 reading a Messenger thread, an e-mail or the marketplace's messages and writing down what was agreed.

@@ -262,8 +262,9 @@ const SALE_ID_PARAMETER: ParameterSpec = {
   description: "The sale's id, from `list_sales`, `sell_offer` or `sell_offer_set`.",
 };
 
-/** The sale in `get_sale`'s shape, read fresh — every write answers with what it left. */
-async function loadSale(context: OperationContext, saleId: string): Promise<AgentSale> {
+/** The sale in `get_sale`'s shape, read fresh — every write answers with what it left, and so does
+ *  `convert_proposal_to_sale` (#2303). */
+export async function readSaleById(context: OperationContext, saleId: string): Promise<AgentSale> {
   const [detail, header] = await Promise.all([
     getSaleDetail(context.ownerId, saleId),
     loadCollectionHeader(context),
@@ -288,7 +289,7 @@ async function loadSale(context: OperationContext, saleId: string): Promise<Agen
 export async function readSale(context: OperationContext, params: ParsedParams): Promise<AgentSale> {
   const saleId = requiredString(params, "saleId");
   await assertSale(context, saleId);
-  return loadSale(context, saleId);
+  return readSaleById(context, saleId);
 }
 
 export const getSaleOperation: Operation = {
@@ -547,7 +548,7 @@ async function sell(
       )
     )
   );
-  return loadSale(context, recorded.saleId);
+  return readSaleById(context, recorded.saleId);
 }
 
 const SELL_RESULT = {
@@ -648,7 +649,7 @@ export async function moveSaleSets(context: OperationContext, params: ParsedPara
       target: targetSaleId ? { saleId: targetSaleId } : { newSale: true },
     })
   );
-  const [from, to] = await Promise.all([loadSale(context, moved.sourceSaleId), loadSale(context, moved.targetSaleId)]);
+  const [from, to] = await Promise.all([readSaleById(context, moved.sourceSaleId), readSaleById(context, moved.targetSaleId)]);
   return { from, to };
 }
 

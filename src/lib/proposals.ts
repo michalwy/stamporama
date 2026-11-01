@@ -21,7 +21,8 @@ import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { ensureModulePlatforms } from "./platforms";
 import { parsePrice } from "./sale-rules";
 import { isSaleSent, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
-import { recordProposalSaleLines, soldItemIds, type SaleLineDraft } from "./sales";
+import { markSaleWrittenByApi, recordProposalSaleLines, soldItemIds, type SaleLineDraft } from "./sales";
+import { saleLineAddedAction } from "./sale-review";
 import {
   isProposalOpen,
   proposalConversionRefusal,
@@ -211,6 +212,15 @@ async function directCurrency(collectionId: string, baseCurrency: string): Promi
 }
 
 /** Every proposal of the collection, newest first, paged by offset like the other lists. */
+/** What the list narrows by, built once so the page and its count cannot narrow differently. */
+function proposalListWhere(collectionId: string, filters: ProposalListFilters): Prisma.ProposalWhereInput {
+  return {
+    collectionId,
+    ...(filters.statuses?.length ? { status: { in: [...filters.statuses] } } : {}),
+    ...(filters.contactId ? { contactId: filters.contactId } : {}),
+  };
+}
+
 export async function listProposalsPaginated(
   ownerId: string,
   collectionId: string,
@@ -220,11 +230,7 @@ export async function listProposalsPaginated(
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
   const rows = await prisma.proposal.findMany({
-    where: {
-      collectionId,
-      ...(filters.statuses?.length ? { status: { in: [...filters.statuses] } } : {}),
-      ...(filters.contactId ? { contactId: filters.contactId } : {}),
-    },
+    where: proposalListWhere(collectionId, filters),
     orderBy: { proposalNo: "desc" },
     take: pageSize + 1,
     skip: offset,
@@ -237,6 +243,16 @@ export async function listProposalsPaginated(
     items: page.map((row) => toListItem(row, currency)),
     nextCursor: hasMore ? String(offset + pageSize) : null,
   };
+}
+
+/** How many proposals the list's filters match — the agent API's `total` (#2303). */
+export async function countProposals(
+  ownerId: string,
+  collectionId: string,
+  filters: ProposalListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.proposal.count({ where: proposalListWhere(collectionId, filters) });
 }
 
 /** A contact's proposals, newest first — every one, as the contact's page lists them. The caller has
@@ -764,6 +780,34 @@ export async function convertProposalToSale(
   proposalId: string,
   input: ProposalSaleInput
 ): Promise<ProposalSaleResult> {
+  return sellProposalLots(ownerId, proposalId, input, null);
+}
+
+/**
+ * *Convert to sale…* through the agent API (#2303): the same conversion under the same rules, and the
+ * sale marked *to review* (#1948) — created or added to — in the conversion's own transaction, so a
+ * sale the agent recorded cannot come out unmarked. Nothing here clears the marker.
+ */
+export async function convertProposalToSaleThroughApi(
+  ownerId: string,
+  proposalId: string,
+  input: ProposalSaleInput
+): Promise<ProposalSaleResult> {
+  return sellProposalLots(ownerId, proposalId, input, (tx, saleId, created, actions) =>
+    markSaleWrittenByApi(tx, saleId, { kind: created ? "created" : "changed", actions })
+  );
+}
+
+/** What the agent API does in the conversion's transaction: the sale, whether it is new, and what
+ *  was added to it, a line per lot. */
+type ProposalSaleMark = (tx: DbTransaction, saleId: string, created: boolean, actions: string[]) => Promise<void>;
+
+async function sellProposalLots(
+  ownerId: string,
+  proposalId: string,
+  input: ProposalSaleInput,
+  mark: ProposalSaleMark | null
+): Promise<ProposalSaleResult> {
   const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
   const ticked = new Map(input.lots.map((lot) => [lot.offerId, lot.price]));
   const refusal = proposalConversionRefusal(status, ticked.size);
@@ -777,6 +821,7 @@ export async function convertProposalToSale(
   const sets = await setsToSell([...ticked.keys()]);
   const drafts: SaleLineDraft[] = [];
   const currencies: string[] = [];
+  const actions: string[] = [];
   for (const [offerId, rawPrice] of ticked) {
     const lot = lotById.get(offerId);
     const lotRefusal = proposalSaleLotRefusal({
@@ -789,6 +834,7 @@ export async function convertProposalToSale(
     const price = parsePrice(rawPrice);
     if (!price.ok) throw new OfferActionBlockedError("unpriced", `Offer #${lot.offerNo}: ${price.message}`);
     currencies.push(lot.currency);
+    actions.push(saleLineAddedAction({ offerNo: lot.offerNo, price: price.value, currency: lot.currency }));
     for (const set of sets.get(offerId)!) {
       drafts.push({ offerId, offerSetId: set.offerSetId, price: price.value, itemIds: set.itemIds });
     }
@@ -845,6 +891,7 @@ export async function convertProposalToSale(
         throw new OfferActionBlockedError("bad-transition", "This proposal was closed meanwhile — nothing was sold.");
       }
       await withdrawOpenOffersTx(tx, notTaken);
+      if (mark) await mark(tx, saleId, !("saleId" in input.target), actions);
     }
   );
   const { saleNo } = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { saleNo: true } });

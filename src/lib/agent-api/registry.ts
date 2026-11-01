@@ -32,7 +32,9 @@
 // open, then the two reads over what is
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
 // drafting a listing and drafting one before pricing and wording it, and recording it sold last
-// (#1949): the sales already recorded, the buyer, and the sale — then the conversation with the
+// (#1949): the sales already recorded, the buyer, and the sale — then proposals (#2303), in the
+// order one is put together for a buyer who asked for more: the proposals kept, one read, a new one,
+// its lots added or made, priced and taken out, and last what the buyer took — then the conversation with the
 // buyer (#2149): what is already in the log, a conversation recorded, a correction, a move, a
 // deletion, and an entry's files attached and removed (#2150) — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
@@ -108,6 +110,17 @@ import {
   sellOfferSetOperation,
 } from "./operations/sales";
 import { addSaleAttachmentsOperation, listSaleAttachmentsOperation } from "./operations/sale-attachments";
+import {
+  addProposalLotsOperation,
+  convertProposalToSaleOperation,
+  createProposalOperation,
+  getProposalOperation,
+  getProposalSaleOptionsOperation,
+  listProposalsOperation,
+  makeProposalLotsOperation,
+  removeProposalLotOperation,
+  setProposalLotPriceOperation,
+} from "./operations/proposals";
 import {
   addConversationEntriesOperation,
   attachConversationFilesOperation,
@@ -262,6 +275,15 @@ export const OPERATIONS: readonly Operation[] = [
   moveSaleSetsOperation,
   listSaleAttachmentsOperation,
   addSaleAttachmentsOperation,
+  listProposalsOperation,
+  getProposalOperation,
+  createProposalOperation,
+  addProposalLotsOperation,
+  makeProposalLotsOperation,
+  setProposalLotPriceOperation,
+  removeProposalLotOperation,
+  getProposalSaleOptionsOperation,
+  convertProposalToSaleOperation,
   listConversationEntriesOperation,
   addConversationEntriesOperation,
   updateConversationEntryOperation,

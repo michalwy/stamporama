@@ -3229,6 +3229,10 @@ The proposal's screen then links to its sale (*sold in sale #12 on Facebook*), a
 says *from proposal #4*. Only a proposal's lots can join a sale on another platform this way — any
 other offer still sells only into a sale on its own platform.
 
+Your assistant can put a proposal together, price it and convert it for you through the
+[Assistant API](agent-api.md#what-it-can-do-and-what-it-will-not); a sale it records waits for your
+review. Sending and declining stay here.
+
 ## Related
 
 - [Inventory](inventory.md) — the copies you compose offers from.

@@ -180,7 +180,9 @@ describe("the sale operations (#1949)", () => {
     // which changes no line, amount or status. Named exactly, so anything else written under
     // `/sales` is still caught. A second moves sold sets to another open sale of the same buyer
     // (#2204) — every line stays sold, on one sale or the other, and no status or amount changes.
-    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets"];
+    // A third records a proposal's accepted lots as a sale (#2303), as `sell_offer` records an offer's,
+    // into a new sale or the buyer's open one, marked to review — it deletes and moves nothing.
+    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale"];
     const offenders = OPERATIONS.filter((operation) => {
       if (LEAVES_SALES_STANDING.includes(operation.name)) return false;
       const words = operation.name.split("_");
