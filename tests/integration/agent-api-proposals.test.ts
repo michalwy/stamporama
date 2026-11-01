@@ -5,7 +5,7 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { createOffer } from "../../src/lib/offers";
-import { getDirectPlatform, getProposalScreen } from "../../src/lib/proposals";
+import { getDirectPlatform, getProposalScreen, moveProposal } from "../../src/lib/proposals";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { DELETE, GET, PATCH, POST } from "../../src/app/api/v1/[...path]/route";
 import type { AgentProposal, AgentProposalRow, AgentProposalSaleOptions } from "../../src/lib/agent-api/proposal-reads";
@@ -234,6 +234,34 @@ describe("the proposal operations (#2303)", () => {
     const closed = await refused(token, "PATCH", `${p}/lots/1/price`, { price: "1.00" });
     assert.match(closed.message, /sold — its lots do not change any more/);
     assert.equal((await refused(token, "POST", `${p}/sale`, { lots: ["3"], sale: "new" })).status, 400);
+  });
+
+  it("refuses every change to a sent proposal's lots with the app's reason, until it is reopened (#2307)", async () => {
+    const proposal = await ok<AgentProposal>(token, "POST", "/proposals", { contact: "Jan Kowalski" });
+    const p = `/proposals/${proposal.proposalNo}`;
+    const first = await offer(directId, "5.00");
+    await ok<AgentProposal>(token, "POST", `${p}/lots`, { offers: [first.id] });
+    await moveProposal(userId, proposal.id, "send");
+
+    const extra = await offer(directId, "6.00");
+    for (const [method, path, body] of [
+      ["POST", `${p}/lots`, { offers: [extra.id] }],
+      ["POST", `${p}/lots/new`, { copy_ids: [await copy()], packing: "each" }],
+      ["PATCH", `${p}/lots/1/price`, { price: "9.00" }],
+      ["DELETE", `${p}/lots/1`, undefined],
+      ["PATCH", `/offers/${first.id}/price`, { price: "9.00" }],
+    ] as const) {
+      const answer = await refused(token, method, path, body);
+      assert.equal(answer.status, 400, `${method} ${path}`);
+      assert.match(answer.message, /has been sent/, `${method} ${path}`);
+    }
+    const unchanged = await ok<AgentProposal>(token, "GET", p);
+    assert.equal(unchanged.lots.length, 1);
+    assert.equal(unchanged.lots[0]!.price, "5.00");
+
+    await moveProposal(userId, proposal.id, "reopen");
+    const priced = await ok<AgentProposal>(token, "PATCH", `${p}/lots/1/price`, { price: "9.00" });
+    assert.equal(priced.lots[0]!.price, "9.00");
   });
 
   it("reads the message from Direct's template without marking the proposal sent", async () => {

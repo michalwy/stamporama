@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
+import { useParams } from "next/navigation";
 import {
   PICKER_DIALOG_HEIGHT,
   DialogShell,
@@ -31,7 +32,16 @@ import { InventoryItemRow } from "./inventory-item-row";
 import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
-import { OfferFormDialog, type FacebookLotFormTarget } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
+import {
+  OfferFormDialog,
+  type FacebookLotFormTarget,
+  type OfferFormProposalField,
+} from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
+import { NewProposalDialog } from "@/app/c/[collectionSlug]/offers/proposals/proposal-parts";
+import { useProposalChoice } from "@/app/c/[collectionSlug]/offers/proposals/use-proposal-choice";
+import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
+import { DIRECT_PLATFORM_MODULE } from "@/lib/platform-modules";
+import { useToast } from "@/app/toast-provider";
 import type { FacebookLotCreated } from "@/lib/facebook-posts";
 import {
   useComposeTargets,
@@ -316,6 +326,36 @@ export function AddToOfferDialog({
   // currency from the cached contact search, so it must be invalidated too (#212).
   const { invalidateContacts } = useInvalidatePurchases();
   const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
+  const { toast } = useToast();
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
+
+  // The Proposal field (#2304): the new offer made the next lot of a proposal being prepared. Offered
+  // while Direct is switched on — switched off, a proposal's lots come from its own screen alone
+  // (ADR-0075 §3) — and never for a post's lot. It opens on the proposal last chosen, while that one
+  // still takes lots (#2307).
+  const { data: platforms = [] } = usePlatforms(collectionId);
+  const direct = platforms.find((p) => p.platformModule === DIRECT_PLATFORM_MODULE && p.enabled) ?? null;
+  const proposalChoice = useProposalChoice(collectionId, !facebookLot && direct !== null);
+  // Null until the collector chooses here; until then the remembered one stands.
+  const [chosenProposal, setChosenProposal] = useState<string | null>(null);
+  const proposalId = direct ? (chosenProposal ?? proposalChoice.remembered) : "";
+  const [makingProposal, setMakingProposal] = useState(false);
+  const proposalField: OfferFormProposalField | undefined =
+    direct && !facebookLot
+      ? {
+          direct: {
+            id: direct.id,
+            name: direct.name,
+            platformCurrency: direct.platformCurrency,
+            defaultStartingPrice: direct.defaultStartingPrice,
+            defaultListingType: direct.defaultListingType,
+          },
+          proposals: proposalChoice.proposals,
+          value: proposalId,
+          onChange: setChosenProposal,
+          onNewProposal: () => setMakingProposal(true),
+        }
+      : undefined;
 
   // In the direct "create new offer" flow (#277) the picker never shows, so don't fetch its targets.
   const { data, isLoading } = useComposeTargets(collectionId, itemIds, !startInCreate);
@@ -429,23 +469,38 @@ export function AddToOfferDialog({
   function createOffer(formData: FormData) {
     setCreateError(undefined);
     const usedPlatformId = (formData.get("platformId") as string | null) ?? "";
+    // A proposal's lot is on Direct (#2304); the form sets the field back to None on any other platform.
+    const onDirect = direct !== null && usedPlatformId === direct.id;
+    const intoProposal = onDirect ? proposalId : "";
     startTransition(async () => {
       const actions = await import("@/app/actions/offers");
       const perCopy = offerItemIds.length > 1 && packaging === "per-copy";
       const created = facebookLot
         ? await actions.createFacebookLotAction(collectionId, facebookLot.postId, formData, offerItemIds, perCopy)
-        : await actions.createOfferAction(collectionId, formData, offerItemIds, perCopy);
+        : intoProposal
+          ? await actions.createProposalLotAction(collectionId, intoProposal, formData, offerItemIds, perCopy)
+          : await actions.createOfferAction(collectionId, formData, offerItemIds, perCopy);
       if (created.status !== "success") {
         // Nothing was created (the create + seed commit together), so the picker stays open to retry.
         setCreateError(created.message);
         return;
       }
       if (usedPlatformId) onPlatformUsed?.(usedPlatformId);
+      // The proposal chosen is the one the next offer opens on — None too, when an offer was made on
+      // Direct without one; an offer on another platform says nothing about it.
+      if (onDirect) proposalChoice.remember(intoProposal);
+      if ("proposalNo" in created) {
+        toast({
+          message: `Added to proposal #${created.proposalNo} as lot ${created.lotNo}`,
+          href: `/c/${collectionSlug}/offers/proposals/${created.proposalNo}`,
+          linkLabel: "Open proposal",
+        });
+      }
       rememberOfferDefaults(offerDefaultsFromForm(formData));
       invalidateAll(collectionId);
       invalidateList(collectionId);
       invalidateContacts(collectionId);
-      if (facebookLot && "lotNo" in created) facebookLot.onCreated(created);
+      if (facebookLot && "postNo" in created) facebookLot.onCreated(created);
       onDone();
     });
   }
@@ -658,6 +713,7 @@ export function AddToOfferDialog({
         baseCurrency={baseCurrency}
         initialPlatform={initialPlatform}
         facebookLot={facebookLot}
+        proposal={proposalField}
         {...(facebookLot ? { title: "New lot", submitLabel: "Make lot" } : {})}
         isPending={isPending}
         error={createError}
@@ -680,7 +736,7 @@ export function AddToOfferDialog({
             onMenuOpenChange={setCopiesMenuOpen}
           />
         }
-        dismissable={!copiesMenuOpen}
+        dismissable={!copiesMenuOpen && !makingProposal}
         // The stamp × condition conflict, asked *before* the offer exists (#513): the platform
         // already lists exactly this composition in these conditions (#732). Stated as a fact and
         // never as a platform rule (#524) — the dialog lists on whatever platform was picked, and
@@ -719,6 +775,20 @@ export function AddToOfferDialog({
           }
         }}
         onSubmit={createOffer}
+      />
+    )}
+
+    {/* *New proposal…* from the Proposal field (#2304): the contact asked, the proposal made and chosen. */}
+    {creating && makingProposal && (
+      <NewProposalDialog
+        collectionId={collectionId}
+        collectionSlug={collectionSlug}
+        zIndexBase={130}
+        onMade={({ proposalId: made }) => {
+          setMakingProposal(false);
+          void invalidateAll(collectionId).then(() => setChosenProposal(made));
+        }}
+        onClose={() => setMakingProposal(false)}
       />
     )}
     </>,

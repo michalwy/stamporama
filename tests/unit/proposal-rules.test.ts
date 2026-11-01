@@ -9,7 +9,10 @@ import {
   proposalLotRefusal,
   proposalLotsRefusal,
   proposalMoveRefusal,
+  proposalRenumbersLots,
   proposalStatusAfter,
+  proposalTakesLots,
+  sentProposalLotRefusal,
   proposalStatusOf,
   proposalTotal,
   proposalConversionRefusal,
@@ -50,7 +53,38 @@ describe("proposal status (#2287)", () => {
       assert.match(proposalMoveRefusal(status, "send", 1)!, /does not change/);
       assert.match(proposalLotsRefusal(status)!, /do not change/);
     }
-    assert.equal(proposalLotsRefusal("sent"), null);
+  });
+});
+
+describe("a sent proposal is fixed (#2307)", () => {
+  it("takes lots and changes to them only while it is being prepared", () => {
+    assert.equal(proposalTakesLots("preparing"), true);
+    for (const status of ["sent", "sold", "declined"] as const) assert.equal(proposalTakesLots(status), false);
+    assert.equal(proposalLotsRefusal("preparing"), null);
+    assert.match(proposalLotsRefusal("sent")!, /has been sent .* Reopen it/);
+  });
+
+  it("is reopened only from Sent, back to Preparing", () => {
+    assert.equal(proposalMoveRefusal("sent", "reopen", 1), null);
+    assert.match(proposalMoveRefusal("preparing", "reopen", 1)!, /already being prepared/);
+    for (const status of ["sold", "declined"] as const) {
+      assert.match(proposalMoveRefusal(status, "reopen", 1)!, /does not change/);
+    }
+    assert.equal(proposalStatusAfter("reopen"), "preparing");
+  });
+
+  it("names the offer, its lot and the proposal when an edit of a sent lot is refused", () => {
+    assert.equal(
+      sentProposalLotRefusal({ offerNo: 2680, proposalNo: 4, lotNo: 3 }),
+      "Offer #2680 is lot 3 of proposal #4, which has been sent — reopen the proposal to change it."
+    );
+    assert.match(sentProposalLotRefusal({ offerNo: 1, proposalNo: 4, lotNo: null }), /is a lot of proposal #4/);
+  });
+
+  it("renumbers the lots after one is taken out only before the buyer has been sent them", () => {
+    assert.equal(proposalRenumbersLots("preparing", false), true);
+    assert.equal(proposalRenumbersLots("preparing", true), false);
+    assert.equal(proposalRenumbersLots("sent", true), false);
   });
 });
 

@@ -33,8 +33,7 @@ import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
-import { useOpenProposals } from "@/app/c/[collectionSlug]/offers/proposals/use-proposals-query";
-import { PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
+import { useProposalChoice } from "@/app/c/[collectionSlug]/offers/proposals/use-proposal-choice";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
@@ -268,9 +267,12 @@ export function OfferGeneratorDialog({
   // Null until the collector ticks, unticks or types: until then the plan decides (#2105).
   const [inPostChoice, setInPostChoice] = useState<boolean | null>(null);
   const [typedTitle, setTypedTitle] = useState<string | null>(null);
-  // Into a proposal (#2287): on Direct only; empty is none.
-  const { data: openProposals = [] } = useOpenProposals(collectionId, direct);
-  const [proposalId, setProposalId] = useState("");
+  // Into a proposal (#2287): on Direct only, among the proposals being prepared (#2307); empty is none.
+  // It starts on the proposal last chosen here or in *New offer* (#2304), and remembers the choice.
+  const proposalChoice = useProposalChoice(collectionId, direct);
+  const openProposals = proposalChoice.proposals;
+  const [chosenProposal, setChosenProposal] = useState<string | null>(null);
+  const proposalId = chosenProposal ?? proposalChoice.remembered;
   const intoProposal = direct && openProposals.some((p) => p.proposalId === proposalId) ? proposalId : "";
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
@@ -367,6 +369,7 @@ export function OfferGeneratorDialog({
       const { generateOffersAction } = await import("@/app/actions/offers");
       const result = await generateOffersAction(collectionId, commitQuery, shown);
       if (result.status === "success") {
+        if (direct) proposalChoice.remember(intoProposal);
         onDone({
           createdOffers: result.createdOffers,
           changedOffers: result.changedOffers,
@@ -506,14 +509,14 @@ export function OfferGeneratorDialog({
               <select
                 aria-label="The proposal the new offers become lots of"
                 value={intoProposal}
-                onChange={(e) => setProposalId(e.target.value)}
+                onChange={(e) => setChosenProposal(e.target.value)}
                 disabled={isPending}
                 style={{ ...formControl, ...SELECT, fontSize: "0.8125rem" }}
               >
                 <option value="">None</option>
                 {openProposals.map((p) => (
                   <option key={p.proposalId} value={p.proposalId}>
-                    {`Proposal #${p.proposalNo} · ${p.contactName} · ${PROPOSAL_STATUS_LABEL[p.status]}`}
+                    {`Proposal #${p.proposalNo} · ${p.contactName}`}
                   </option>
                 ))}
               </select>

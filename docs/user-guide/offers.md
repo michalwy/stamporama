@@ -3136,7 +3136,8 @@ it sells in one place, the other offers are handled like any copy sold elsewhere
 
 ### Giving it lots
 
-Three ways, all while the proposal is open:
+Four ways, all while the proposal is **Preparing** — a sent one takes no lots until it is reopened
+(see [Sent, reopened, declined](#sent-reopened-declined)):
 
 - **New lots…** on the proposal's screen. Pick the copies in the copy picker — with its area tree,
   years and search — which shows the copies for sale and in hand that are on no open Direct offer.
@@ -3144,10 +3145,18 @@ Three ways, all while the proposal is open:
   its own, or all of them one lot, sold together. Your last choice is already chosen next time. The
   new lots are Direct offers being prepared, titled as Generate offers titles them, priced at their
   **estimated value** where they have one — correct the price on the proposal as any lot's.
-- **From the copies list.** Tick the copies on the [Copies](inventory.md) list, choose **Direct** in the
-  quick-offer bar and **Generate offers**. **Into proposal** in the dialog picks one of your open
-  proposals, and the offers the pass creates become its lots. An existing offer that only receives
-  sets stays where it is.
+- **New offer, from the copies list.** Tick the copies on the [Copies](inventory.md) list and make a
+  **New offer** of them as usual. Under **Platform** the window has a **Proposal** field, *None* by
+  default: choose one of the proposals being prepared, and the offer is made on **Direct** and becomes
+  that proposal's next lot — or **New proposal…** beside it starts one for a contact and chooses it.
+  Choosing a proposal sets the platform to Direct; choosing another platform sets the field back to
+  *None*. Everything else is the window's own — the copies, title, price and listing type — and the
+  price is suggested as for any new offer. After **Create offer** a message says *Added to proposal
+  #4 as lot 3*, with a link to it. One copy at a time or several at once both work.
+- **Generate offers, from the copies list.** Tick the copies, choose **Direct** in the quick-offer bar
+  and **Generate offers**. **Into proposal** in the dialog picks one of the proposals being prepared,
+  and the offers the pass creates become its lots. An existing offer that only receives sets stays
+  where it is.
 - **Offers already made.** **Add offers…** on the proposal's screen lists the Direct offers that are
   still open and in no other proposal; tick the ones to add. Each row shows the offer's first photo
   and its stamps — catalogue number, condition and issue with its year, a line per set, up to three
@@ -3155,6 +3164,10 @@ Three ways, all while the proposal is open:
   batch are told apart without opening them. The search finds an offer by any catalogue number it
   holds, an issue's or a stamp's name, its title or its number. When there are none, it offers
   **New lots…** instead.
+
+**The proposal you chose is remembered.** While you put a proposal together you work on that one, so
+the next **New offer** and the next **Generate offers** open on it, without your choosing it again —
+for as long as it is being prepared. Once it is sent, sold or declined they open on *None* again.
 
 A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.
 
@@ -3164,14 +3177,15 @@ Every lot has a **lot number** — **Lot 1**, **Lot 2**… on the proposal's scr
 is on everything the buyer is sent: the photos, the document and the message. So when the buyer
 answers *I'll take 2, 5 and 7*, those are the lots on your screen.
 
-A lot added later takes the next number. While the proposal is **Preparing**, taking a lot out moves
-the ones after it up a number, so what the buyer first gets has no gaps. Once it is **Sent** the
-numbers stay as they are — the buyer has them — and a gap is left where a lot was taken out.
+A lot added later takes the next number. Until the proposal is first sent, taking a lot out moves the
+ones after it up a number, so what the buyer first gets has no gaps. Once it has been **Sent** the
+numbers stay as they are — the buyer has them — so a proposal reopened to change it leaves a gap where
+a lot was taken out.
 
 ### Pricing
 
-The proposal's screen lists its lots by lot number. While the proposal is open, each lot's title
-and price are edited in place, exactly as a post's lots are on the
+The proposal's screen lists its lots by lot number. While the proposal is **Preparing**, each lot's
+title and price are edited in place, exactly as a post's lots are on the
 [Facebook post's screen](facebook.md): **Enter** in a price saves it and moves to the next lot's. The
 **total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
 zero but named beside the total (*2 unpriced*).
@@ -3199,14 +3213,25 @@ While the proposal is open, the card above its lots holds everything for the buy
 **Making any of them marks a Preparing proposal Sent** — copying the message or a photo, downloading
 photos, opening the document or making its link — just as **Mark sent** would.
 
-### Sent, declined
+### Sent, reopened, declined
 
-A proposal starts **Preparing**. **Mark sent** once it has gone to the buyer — it needs at least one
-lot — or let sending it do so (above). A sent proposal still takes lots and price changes.
+A proposal starts **Preparing**: lots come and go and their titles and prices change. **Mark sent**
+once it has gone to the buyer — it needs at least one lot — or let sending it do so (above).
+
+**A sent proposal stays as the buyer saw it.** It takes no new lots, none is taken out, and no lot's
+title or price changes — not on the proposal's screen, and not on the lot's own offer screen either,
+which says why when you try. The **New offer** and **Generate offers** windows no longer offer it.
+The buyer's message is written from the Direct platform's template, so nothing on the proposal
+changes it.
+
+To change it, **Reopen** it: it is **Preparing** again and changes as before, and its screen notes
+that the buyer was sent an earlier version, and when. Send it again — **Mark sent**, or by sending
+something as above — and it is **Sent** with the new time.
 
 **Decline…** closes it as **Declined** and **withdraws every lot still open**; the copies stay in
 your inventory. A declined proposal changes no more. A proposal becomes **Sold** once the lots the
-buyer took are sold — see below.
+buyer took are sold — see below. A sent proposal is sold or declined as it stands, without reopening
+it.
 
 ### Selling it
 

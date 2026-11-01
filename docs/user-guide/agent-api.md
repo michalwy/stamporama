@@ -204,7 +204,8 @@ buyer who asked for more. It can:
 - **start a proposal** for a contact, **add** offers already on Direct as its lots, **make new lots**
   from copies — an offer each, or one offer of them all, as [**New lots…**](offers.md#giving-it-lots)
   does — **price** a lot, and **take one out**. Each is refused wherever the proposal's screen would
-  refuse it, with the same reason;
+  refuse it, with the same reason — a [sent proposal](offers.md#sent-reopened-declined) among them,
+  which only you can reopen;
 - **turn it into a sale** with the lots the buyer took, named by their lot numbers — at each lot's
   price or at a price agreed — into a new Direct sale or one of the buyer's open sales, as
   [**Convert to sale…**](offers.md#selling-it) does. The other lots are withdrawn and the proposal is

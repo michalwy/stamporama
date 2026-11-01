@@ -56,6 +56,7 @@ import {
   normalizeListingType,
   pricingReadyFor,
 } from "./offer-rules";
+import { sentProposalLotRefusal } from "./proposal-rules";
 import {
   makeOfferLabeller,
   STAMP_LABEL_SELECT,
@@ -7156,6 +7157,29 @@ export async function duplicateOffer(
 /** Edit an offer's platform / URL / price. Terminal offers (sold / withdrawn) are frozen. Currency
  * is not edited here (#196): it is a per-offer snapshot inherited from the platform at creation, so
  * editing an offer never rewrites it. */
+/**
+ * The offer as a lot of a **sent** proposal (#2307): the refusal an edit of its title, price, format
+ * or platform is answered with, and its opening figure for the header form's comparison — or null when
+ * it is in no proposal, or in one that is not sent. A sent proposal stays as the buyer saw it, and the
+ * offer's own screen is the other way its lots could change.
+ */
+async function sentProposalLot(offerId: string): Promise<{ refusal: string; startingPrice: string | null } | null> {
+  const row = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      offerNo: true,
+      proposalLotNo: true,
+      startingPrice: true,
+      proposal: { select: { status: true, proposalNo: true } },
+    },
+  });
+  if (row?.proposal?.status !== "sent") return null;
+  return {
+    refusal: sentProposalLotRefusal({ offerNo: row.offerNo, proposalNo: row.proposal.proposalNo, lotNo: row.proposalLotNo }),
+    startingPrice: row.startingPrice?.toFixed(2) ?? null,
+  };
+}
+
 export async function updateOffer(
   ownerId: string,
   offerId: string,
@@ -7222,6 +7246,17 @@ export async function updateOffer(
   );
   if (missing) {
     throw new OfferActionBlockedError("unpriced", `A ${ref.state} offer must keep an ${missing}.`);
+  }
+  // A lot of a sent proposal keeps what the buyer was sent (#2307): the rest of the form still saves.
+  const sentLot = await sentProposalLot(offerId);
+  if (
+    sentLot &&
+    (input.platformId !== ref.platformId ||
+      pricing.price !== ref.price ||
+      pricing.listingType !== ref.listingType ||
+      pricing.startingPrice !== sentLot.startingPrice)
+  ) {
+    throw new OfferActionBlockedError("not-eligible", sentLot.refusal);
   }
   // One difference from creation: a header save that leaves the price where it was is not an
   // observation, so it keeps the date the figure was actually last checked instead of pretending it
@@ -7347,6 +7382,11 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
     patch.platformId !== undefined || patch.price !== undefined || patch.startingPrice !== undefined;
   if (isTerminalState(ref.state) && touchesFrozenField) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
+  }
+  // A lot of a sent proposal keeps the title and price the buyer was sent (#2307).
+  if (touchesFrozenField || patch.name !== undefined) {
+    const sentLot = await sentProposalLot(offerId);
+    if (sentLot) throw new OfferActionBlockedError("not-eligible", sentLot.refusal);
   }
   // A ready or active offer always keeps the figure its format states (#336, #449) — the asking
   // price of a quick buy, the starting price of an auction — so clearing that one in place is

@@ -9,12 +9,14 @@ import { readOfferPickerContents } from "./offer-picker-contents";
 import type { OfferPickerContents } from "./offer-picker-contents-rules";
 import {
   applyEstimatedPrices,
+  createOffer,
   GenerationChangedError,
   OfferActionBlockedError,
   readPrepareOffers,
   setOfferState,
   withdrawOpenOffersTx,
   writeGeneratedOffers,
+  type OfferInput,
   type PrepareOffer,
 } from "./offers";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
@@ -24,8 +26,9 @@ import { isSaleSent, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status
 import { markSaleWrittenByApi, recordProposalSaleLines, soldItemIds, type SaleLineDraft } from "./sales";
 import { saleLineAddedAction } from "./sale-review";
 import {
-  isProposalOpen,
   proposalConversionRefusal,
+  proposalRenumbersLots,
+  proposalTakesLots,
   proposalLotCurrency,
   proposalLotRefusal,
   proposalSaleLotRefusal,
@@ -59,14 +62,20 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
 async function assertProposalOwner(
   ownerId: string,
   proposalId: string
-): Promise<{ collectionId: string; status: ProposalStatus }> {
+): Promise<{ collectionId: string; status: ProposalStatus; everSent: boolean }> {
   const proposal = await prisma.proposal.findUnique({
     where: { id: proposalId },
-    select: { collectionId: true, status: true },
+    select: { collectionId: true, status: true, sentAt: true },
   });
   if (!proposal) throw new Error("Proposal not found.");
   await assertCollectionOwner(ownerId, proposal.collectionId);
-  return { collectionId: proposal.collectionId, status: proposalStatusOf(proposal.status) };
+  return {
+    collectionId: proposal.collectionId,
+    status: proposalStatusOf(proposal.status),
+    // Reopening keeps the time it was last sent (#2307), so a proposal being prepared again knows the
+    // buyer has seen it.
+    everSent: proposal.sentAt !== null,
+  };
 }
 
 /**
@@ -271,14 +280,21 @@ export async function listContactProposals(collectionId: string, contactId: stri
   return rows.map((row) => toListItem(row, currency));
 }
 
-/** The proposals still open — what the offer generator offers to put its new offers into. */
-export async function listOpenProposals(
-  ownerId: string,
-  collectionId: string
-): Promise<{ proposalId: string; proposalNo: number; contactName: string; status: ProposalStatus }[]> {
+/** A proposal a new offer can be made a lot of — what *New offer*'s Proposal field (#2304) and the
+ *  offer generator's *Into proposal* list. */
+export interface ProposalTakingLots {
+  proposalId: string;
+  proposalNo: number;
+  contactName: string;
+  status: ProposalStatus;
+}
+
+/** The proposals being prepared — the only ones that take lots (#2307), so the only ones *New offer*
+ *  and the offer generator offer to put new offers into. */
+export async function listPreparingProposals(ownerId: string, collectionId: string): Promise<ProposalTakingLots[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.proposal.findMany({
-    where: { collectionId, status: { in: ["preparing", "sent"] } },
+    where: { collectionId, status: "preparing" },
     orderBy: { proposalNo: "desc" },
     select: { id: true, proposalNo: true, status: true, contact: { select: { name: true } } },
   });
@@ -393,7 +409,7 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
 }
 
 /** The proposal's open lots as Prepare rows — what its screen prices them with, as a post's screen
- *  does (#2031). Empty once the proposal is closed. */
+ *  does (#2031). Empty unless the proposal is being prepared: a sent one is fixed (#2307). */
 export async function getProposalLotsPrepare(
   ownerId: string,
   collectionId: string,
@@ -405,7 +421,7 @@ export async function getProposalLotsPrepare(
   });
   if (!proposal) throw new Error("Proposal not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  if (!isProposalOpen(proposalStatusOf(proposal.status))) return {};
+  if (!proposalTakesLots(proposalStatusOf(proposal.status))) return {};
   const rows = await readPrepareOffers(
     ownerId,
     collectionId,
@@ -533,10 +549,11 @@ export async function addProposalLots(ownerId: string, proposalId: string, offer
   await prisma.$transaction((tx) => writeProposalLots(tx, collectionId, proposalId, offerIds));
 }
 
-/** Take a lot out of an open proposal: the offer stays, an ordinary Direct offer. While the proposal
- *  is being prepared the lots after it move up a number; once it is sent they keep theirs (#2288). */
+/** Take a lot out of a proposal being prepared: the offer stays, an ordinary Direct offer. The lots
+ *  after it move up a number until the buyer has been sent them (#2288); a proposal reopened after it
+ *  was sent (#2307) keeps the numbers. */
 export async function removeProposalLot(ownerId: string, proposalId: string, offerId: string): Promise<void> {
-  const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
+  const { collectionId, status, everSent } = await assertProposalOwner(ownerId, proposalId);
   const closed = proposalLotsRefusal(status);
   if (closed) throw new OfferActionBlockedError("not-eligible", closed);
   await prisma.$transaction(async (tx) => {
@@ -545,7 +562,7 @@ export async function removeProposalLot(ownerId: string, proposalId: string, off
       data: { proposalId: null, proposalLotNo: null },
     });
     if (count === 0) throw new OfferActionBlockedError("not-eligible", "That offer is not a lot of this proposal.");
-    if (status === "preparing") await renumberProposalLots(tx, proposalId);
+    if (proposalRenumbersLots(status, everSent)) await renumberProposalLots(tx, proposalId);
   });
 }
 
@@ -600,12 +617,52 @@ export async function makeProposalLots(
   return { lots: createdOfferIds.length, unpriced: skipped.length };
 }
 
+/** What *New offer* made into a proposal (#2304): the offer, and the lot it became. */
+export interface ProposalLotCreated {
+  offerId: string;
+  proposalNo: number;
+  lotNo: number;
+}
+
+/**
+ * *New offer* with a proposal chosen (#2304): the offer is made exactly as the form makes any other —
+ * its copies, title, price and listing type the form's own — and becomes the proposal's next lot in the
+ * same transaction, so an offer the proposal would refuse (not on Direct, or the proposal sent or closed
+ * meanwhile, #2307) is never made.
+ */
+export async function createProposalLot(
+  ownerId: string,
+  collectionId: string,
+  proposalId: string,
+  input: OfferInput,
+  opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
+): Promise<ProposalLotCreated> {
+  await assertCollectionOwner(ownerId, collectionId);
+  // Filled in by the transaction, which is the only place the lot's number is known.
+  const joined = { proposalNo: 0, lotNo: 0 };
+  const offerId = await createOffer(ownerId, collectionId, input, {
+    ...opts,
+    inTransaction: async (tx, id) => {
+      await writeProposalLots(tx, collectionId, proposalId, [id]);
+      const row = await tx.offer.findUniqueOrThrow({
+        where: { id },
+        select: { proposalLotNo: true, proposal: { select: { proposalNo: true } } },
+      });
+      joined.proposalNo = row.proposal!.proposalNo;
+      joined.lotNo = row.proposalLotNo!;
+    },
+  });
+  return { offerId, ...joined };
+}
+
 // ── Moves ────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Mark the proposal sent, or decline it. Declining withdraws every lot still open — each through the
- * offer's own transition, so a withdrawal is exactly what it is anywhere else — and then closes the
- * proposal; a lot that cannot be withdrawn refuses the decline with the proposal still open.
+ * Mark the proposal sent, reopen a sent one, or decline it. Reopening (#2307) puts it back to Preparing
+ * and keeps the time it was sent, so its screen can say the buyer has seen an earlier version; sending
+ * it again stamps the new time. Declining withdraws every lot still open — each through the offer's own
+ * transition, so a withdrawal is exactly what it is anywhere else — and then closes the proposal; a lot
+ * that cannot be withdrawn refuses the decline with the proposal still open.
  */
 export async function moveProposal(ownerId: string, proposalId: string, move: ProposalMove): Promise<void> {
   const { status } = await assertProposalOwner(ownerId, proposalId);
@@ -628,7 +685,7 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
     where: { id: proposalId },
     data: {
       status: proposalStatusAfter(move),
-      ...(move === "send" ? { sentAt: now } : { closedAt: now }),
+      ...(move === "send" ? { sentAt: now } : move === "decline" ? { closedAt: now } : {}),
     },
   });
 }

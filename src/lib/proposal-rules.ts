@@ -7,8 +7,9 @@
 import { CLOSED_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
 
 /**
- * `preparing` while lots and prices change; `sent` once it has gone to the buyer, prices still
- * editable; `sold` once converted into a sale (#2289) and `declined` by hand — both final.
+ * `preparing` while lots and prices change; `sent` once it has gone to the buyer, and fixed as it went
+ * until it is reopened (#2307); `sold` once converted into a sale (#2289) and `declined` by hand —
+ * both final.
  */
 export type ProposalStatus = "preparing" | "sent" | "sold" | "declined";
 
@@ -31,13 +32,22 @@ export function proposalStatusOf(value: string): ProposalStatus {
   return isProposalStatus(value) ? value : "preparing";
 }
 
-/** Whether a proposal is still open — its lots can be added, removed and priced. */
+/** Whether a proposal is still open — not yet sold or declined, so it can still be sold or declined. */
 export function isProposalOpen(status: ProposalStatus): boolean {
   return status === "preparing" || status === "sent";
 }
 
+/**
+ * Whether a proposal takes lots and changes to them (#2307): only while it is being prepared. A sent
+ * one stays as it went to the buyer — no lot added or taken out, no lot's title or price changed —
+ * until it is reopened.
+ */
+export function proposalTakesLots(status: ProposalStatus): boolean {
+  return status === "preparing";
+}
+
 /** The moves a collector makes by hand. *Sold* is not one: it is reached by selling the lots (#2289). */
-export type ProposalMove = "send" | "decline";
+export type ProposalMove = "send" | "reopen" | "decline";
 
 /** Why `move` cannot be made on a proposal in `status` with `lotCount` lots, or null when it can. */
 export function proposalMoveRefusal(status: ProposalStatus, move: ProposalMove, lotCount: number): string | null {
@@ -49,6 +59,8 @@ export function proposalMoveRefusal(status: ProposalStatus, move: ProposalMove, 
       if (status === "sent") return "This proposal has already been sent.";
       if (lotCount === 0) return "Add at least one lot before marking the proposal sent.";
       return null;
+    case "reopen":
+      return status === "sent" ? null : "This proposal is already being prepared.";
     case "decline":
       return null;
   }
@@ -59,16 +71,41 @@ export function proposalStatusAfter(move: ProposalMove): ProposalStatus {
   switch (move) {
     case "send":
       return "sent";
+    case "reopen":
+      return "preparing";
     case "decline":
       return "declined";
   }
 }
 
-/** Why a proposal in `status` takes no lots or changes to them, or null while it does. */
+/** The sentence a sent proposal answers any change to its lots with (#2307). */
+export const SENT_PROPOSAL_FIXED =
+  "This proposal has been sent — it stays as the buyer saw it. Reopen it to change its lots or their prices.";
+
+/** Why a proposal in `status` takes no lots or changes to them, or null while it does (#2307). */
 export function proposalLotsRefusal(status: ProposalStatus): string | null {
-  return isProposalOpen(status)
-    ? null
-    : `This proposal is ${PROPOSAL_STATUS_LABEL[status].toLowerCase()} — its lots do not change any more.`;
+  if (proposalTakesLots(status)) return null;
+  if (status === "sent") return SENT_PROPOSAL_FIXED;
+  return `This proposal is ${PROPOSAL_STATUS_LABEL[status].toLowerCase()} — its lots do not change any more.`;
+}
+
+/**
+ * Why an offer that is a lot of a sent proposal cannot have its title, price, format or platform
+ * changed (#2307) — asked wherever an offer is edited, so the lot cannot drift from what the buyer
+ * was sent by way of the offer's own screen.
+ */
+export function sentProposalLotRefusal(facts: { offerNo: number; proposalNo: number; lotNo: number | null }): string {
+  const lot = facts.lotNo === null ? "a lot" : `lot ${facts.lotNo}`;
+  return `Offer #${facts.offerNo} is ${lot} of proposal #${facts.proposalNo}, which has been sent — reopen the proposal to change it.`;
+}
+
+/**
+ * Whether taking a lot out renumbers the rest (#2288): only while the buyer holds no numbers yet. A
+ * proposal reopened after it was sent (#2307) keeps them, since the buyer still has the earlier
+ * version and its numbers.
+ */
+export function proposalRenumbersLots(status: ProposalStatus, everSent: boolean): boolean {
+  return status === "preparing" && !everSent;
 }
 
 /** What an offer must be to become a lot of a proposal: on the Direct platform, still open, and in no

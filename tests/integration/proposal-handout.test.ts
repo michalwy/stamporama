@@ -130,7 +130,7 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     await prisma.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } });
   });
 
-  it("numbers the lots as they join, closes the gap while preparing, and keeps the numbers once sent", async () => {
+  it("numbers the lots as they join, closes the gap while preparing, and keeps the numbers once sent and reopened", async () => {
     const { proposalId, offerIds } = await proposalWith(["A"], ["B"], ["C"]);
     const [a, b, c] = offerIds;
     assert.deepEqual(await lotNos(proposalId), [
@@ -147,6 +147,9 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: a } })).proposalLotNo, null);
 
     await moveProposal(userId, proposalId, "send");
+    // A sent proposal is fixed (#2307); reopened, the buyer still holds the numbers they were sent.
+    await assert.rejects(removeProposalLot(userId, proposalId, b), /has been sent/);
+    await moveProposal(userId, proposalId, "reopen");
     await removeProposalLot(userId, proposalId, b);
     const d = await lot("D");
     await addProposalLots(userId, proposalId, [d]);
