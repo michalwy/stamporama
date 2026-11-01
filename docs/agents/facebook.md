@@ -497,8 +497,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   *Lots* table and #1848's per-lot photos and captions were the same lots twice. The kit keeps the
   post-wide part (layout, text, ZIP, gaps) and takes a `renderLots` prop; its `PostLots` hands the post
   panel a `lotKit(lot)` → `FacebookLotKit` (`photos`, and `caption` when captioned, under the kit's own
-  Source switch), and the panel's `LotRow` draws one flex-wrapping row per lot — photos, lot and offer
-  with its `⋮`, type, price, state, link, sale, caption — that wraps rather than shrinking the photo.
+  Source switch), and the panel's lot row (`GroupLotRow`, #2313) draws one flex-wrapping row per lot —
+  photos, lot and offer with its `⋮`, type, price, state, link, sale, caption — that wraps rather than
+  shrinking the photo.
   The kit still owns what a lot puts up; the panel owns where it stands and what it can do.
 
 - **Every multi-lot post has a title** (#1862, decided with the collector on 2026-10-12; ADR-0061 §2).
@@ -698,9 +699,10 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`facebook-post-photo-settings.ts`) writes a lot only when the patch changes it and answers those
   lots, which the dialog's *Regenerate photos after saving* (ticked, #328) hands to
   `generateOffersPhotosAction` — refusals collected, the rest queued. Both read and write are refused
-  once any lot is posted. The actions are in `actions/facebook-post-photos.ts`; the button is
-  `PostPhotoSettingsButton` beside *Regenerate lot texts…*, reading the lots' settings when opened rather
-  than with the screen. Tests: `tests/unit/facebook-post-photo-settings-rules.test.ts`,
+  once any lot is posted. Since #2313 the implementation is `offer-lot-groups.ts`, shared with a
+  proposal's lots (`offers.md`); the actions are `actions/offer-lot-groups.ts` and the button is
+  `LotPhotoSettingsButton` (`offers/lots/`) beside *Regenerate lot texts…*, reading the lots' settings
+  when opened rather than with the screen. Tests: `tests/unit/facebook-post-photo-settings-rules.test.ts`,
   `tests/integration/facebook-post-photo-settings.test.ts`.
 
 - **A post's screen narrows its lots to the ones still for sale** (#2081, raised on 2026-10-19). One
@@ -733,7 +735,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `PreparePriceField` (the compact `OfferPriceStrip` with the standing field), `PrepareReadiness` (the
   blockers, the photo half said as *Photos generated on Mark ready*, the covers as *Check covers (N)*) —
   which `PrepareOfferRow` draws too, so the two screens cannot price or ready an offer differently. The
-  post's `LotRow` draws them under its heading while the read has a row for the lot (the readiness only
+  post's lot row (`GroupLotRow` in `offers/lots/lot-row.tsx` since #2313, shared with a proposal's)
+  draws them under its heading while the read has a row for the lot (the readiness only
   on a Preparing lot), dropping its static title link and *Price* fact; the offer's number becomes the
   link. Enter moves down the lots' price fields in the order drawn. **Above the lots**, *Use estimated
   price* (`applyEstimatedPricesAction`, the unpriced lots with an estimate), *Check covers*

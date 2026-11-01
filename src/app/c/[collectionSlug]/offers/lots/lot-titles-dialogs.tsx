@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
-import type { FacebookKitLot } from "@/lib/facebook-auctions";
+import type { GroupLotLabel } from "@/lib/offer-lot-group-rules";
 import {
   facebookTitleWithWords,
   type FacebookTitleEdge,
@@ -20,8 +20,9 @@ import {
   useTemplateSamples,
 } from "@/app/c/[collectionSlug]/shared/template-builder";
 
-// A post's lot titles changed all at once (#2033), while the post is not up: a title template given to
-// every lot, or the same words added to or removed from the start or end of every title.
+// A group's lot titles changed all at once (#2033) — a post's while it is not up, a proposal's while it
+// is being prepared (#2313): a title template given to every lot, or the same words added to or removed
+// from the start or end of every title.
 
 const ROW: React.CSSProperties = {
   display: "flex",
@@ -53,7 +54,7 @@ const HEADING: React.CSSProperties = {
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)", fontSize: "0.8125rem" };
 
-function LotLabel({ lot }: { lot: FacebookKitLot }) {
+function LotLabel({ lot }: { lot: GroupLotLabel }) {
   return (
     <>
       <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>Lot {lot.lotNo}</span>
@@ -70,7 +71,7 @@ function LotLabel({ lot }: { lot: FacebookKitLot }) {
 export function LotTitleTemplateDialog({
   collectionId,
   language,
-  postNo,
+  groupName,
   lots,
   initialTemplate,
   handWritten,
@@ -80,10 +81,11 @@ export function LotTitleTemplateDialog({
   onSubmit,
 }: {
   collectionId: string;
-  /** The post's listing language, so the preview reads as the titles will. */
+  /** The lots' listing language, so the preview reads as the titles will. */
   language: string | null;
-  postNo: number;
-  lots: readonly FacebookKitLot[];
+  /** How the title names the group: `post #4`, `proposal #2`. */
+  groupName: string;
+  lots: readonly GroupLotLabel[];
   initialTemplate: string;
   /** The offer ids of the lots whose title was written by hand. */
   handWritten: readonly string[];
@@ -104,7 +106,7 @@ export function LotTitleTemplateDialog({
 
   return (
     <DialogShell
-      title={`Title template for all lots of post #${postNo}`}
+      title={`Title template for all lots of ${groupName}`}
       maxWidth="48rem"
       onClose={() => {
         if (!isPending) onCancel();
@@ -120,8 +122,8 @@ export function LotTitleTemplateDialog({
       >
         <DialogBody>
           <p style={TEXT}>
-            Every lot is given this template as its own and its title is written again from it. Lots added to the
-            post later keep their own. <TemplateSyntaxHint />
+            Every lot is given this template as its own and its title is written again from it. Lots added later
+            keep their own. <TemplateSyntaxHint />
           </p>
           <TemplateBuilder
             label="Title template"
@@ -178,7 +180,7 @@ const EDGE_LABEL: Record<FacebookTitleEdge, string> = { start: "At the start", e
  * before anything is saved; one changed this way is written by hand from then on.
  */
 export function LotTitleWordsDialog({
-  postNo,
+  groupName,
   lots,
   mode,
   isPending,
@@ -186,8 +188,9 @@ export function LotTitleWordsDialog({
   onCancel,
   onSubmit,
 }: {
-  postNo: number;
-  lots: readonly FacebookKitLot[];
+  /** How the title names the group: `post #4`, `proposal #2`. */
+  groupName: string;
+  lots: readonly GroupLotLabel[];
   mode: FacebookTitleWordsMode;
   isPending: boolean;
   error?: string;
@@ -204,7 +207,7 @@ export function LotTitleWordsDialog({
 
   return (
     <DialogShell
-      title={`${adding ? "Add to" : "Remove from"} the titles of post #${postNo}`}
+      title={`${adding ? "Add to" : "Remove from"} the titles of ${groupName}`}
       maxWidth="44rem"
       onClose={() => {
         if (!isPending) onCancel();

@@ -246,7 +246,12 @@ export interface PhotoSettingsDialogProps {
    *  `differing` names the settings they do not, each shown as *Differs by lot* and left alone unless
    *  changed. The form then also posts `changed` once per setting changed — only those are written —
    *  and, while the sides still differ, `collagePairSides` for a template picked (#694). */
-  bulk?: { lotCount: number; differing: ReadonlySet<PostPhotoSetting> };
+  bulk?: {
+    lotCount: number;
+    differing: ReadonlySet<PostPhotoSetting>;
+    /** What the lots are lots of, as the dialog's sentences name it: `post`, `proposal` (#2313). */
+    subject: string;
+  };
   /** A one-off collage of ticked copies (#2052): the same settings, made into pictures rather than
    *  saved. `lead` heads the form (the platform they are seeded from, how the copies are composed),
    *  the footer is `actionLabel` alone, and `packaging` hides the one composition switch that does
@@ -275,7 +280,7 @@ export function PhotoSettingsDialog({
   collage: collageMode,
 }: PhotoSettingsDialogProps) {
   /** What these settings are of, in the dialog's sentences. */
-  const subject = bulk ? "post" : collageMode ? "collage" : "offer";
+  const subject = bulk ? bulk.subject : collageMode ? "collage" : "offer";
   // A post's dialog (#2032): a setting the lots do not share starts as *differs* — blank, or null for
   // a switch — and stays out of the save until the collector changes it.
   const differs = (setting: PostPhotoSetting) => bulk?.differing.has(setting) ?? false;

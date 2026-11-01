@@ -20,14 +20,12 @@ import {
   facebookBackToReadyPlan,
   facebookLayoutLotTemplate,
   facebookLotAddRefusal,
-  facebookLotOrderRefusal,
   facebookLotPrintedTexts,
   facebookPostDeleteRefusal,
   facebookPostLink,
   facebookPostRefusal,
   facebookPostStage,
   facebookPostTitleRefusal,
-  facebookTitleWithWords,
   isFacebookLotClosed,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
@@ -38,6 +36,15 @@ import {
   type FacebookTitleWordsMode,
 } from "./facebook-post-rules";
 import { allocateEntityNumber } from "./items";
+import {
+  changeLotGroupTitleWords,
+  readLotGroupTitles,
+  readLotSales,
+  regenerateLotGroupTexts,
+  reorderLotGroup,
+  setLotGroupTitleTemplate,
+  type LotGroupTitles,
+} from "./offer-lot-groups";
 import { deleteVariants } from "./offer-photo-generation";
 import { readOfferPickerContents } from "./offer-picker-contents";
 import type { OfferPickerContents } from "./offer-picker-contents-rules";
@@ -46,13 +53,10 @@ import {
   createOffer,
   offersPrintedTextGaps,
   offersTextStatus,
-  patchOffer,
   publishOffer,
   readOwnOfferState,
-  regenerateOfferText,
   readPrepareOffers,
   readPublishPhotoHold,
-  regenerateOfferTitleAndDescription,
   readOfferPostTitles,
   readSoldElsewhereRefusal,
   writePostOfOne,
@@ -547,13 +551,7 @@ export interface FacebookPostScreen {
 }
 
 /** The lots' titles as *Title template for all lots…* sees them (#2033). */
-export interface FacebookPostLotTitles {
-  /** The template the dialog opens on: the lots' own title template when they all share one — the one
-   *  given to the post before — else the Facebook platform's. Empty when neither has one. */
-  template: string;
-  /** The lots whose title was written by hand (`nameEdited`), by offer id, in lot order. */
-  handWritten: string[];
-}
+export type FacebookPostLotTitles = LotGroupTitles;
 
 /** The untranslated names a post not yet up prints (#1889), each once, and which lot prints each. */
 export interface FacebookPostTranslations {
@@ -603,17 +601,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   const [kit, photos] = await Promise.all([getFacebookPostKit(post.id), readFacebookPostPhotos(ownerId, post.id)]);
   if (!kit) return null;
   const platform = post.group.platform;
-  const lines = await prisma.saleLine.findMany({
-    where: { offerId: { in: kit.lots.map((l) => l.offerId) } },
-    select: { offerId: true, sale: { select: { id: true, saleNo: true } } },
-    orderBy: { sale: { saleNo: "asc" } },
-  });
-  const sales: FacebookPostScreen["sales"] = {};
-  for (const line of lines) {
-    if (!line.offerId) continue;
-    const list = (sales[line.offerId] ??= []);
-    if (!list.some((s) => s.id === line.sale.id)) list.push(line.sale);
-  }
+  const sales = await readLotSales(kit.lots.map((l) => l.offerId));
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   const previewLinks = await prisma.facebookPostPreviewToken.count({ where: { postId: post.id } });
   return {
@@ -635,7 +623,13 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
             kit.lots.map((l) => l.offerId)
           )
         ),
-    lotTitles: posted ? null : await facebookPostLotTitles(post.collectionId, platform.id, kit),
+    lotTitles: posted
+      ? null
+      : await readLotGroupTitles(
+          post.collectionId,
+          platform.id,
+          kit.lots.map((l) => l.offerId)
+        ),
     hasPreviewLink: previewLinks > 0,
     photos,
   };
@@ -703,28 +697,6 @@ export async function getFacebookPostLot(
   };
 }
 
-async function facebookPostLotTitles(
-  collectionId: string,
-  platformId: string,
-  kit: FacebookOfferKit
-): Promise<FacebookPostLotTitles> {
-  const ids = kit.lots.map((l) => l.offerId);
-  const [offers, platform] = await Promise.all([
-    prisma.offer.findMany({
-      where: { id: { in: ids }, collectionId },
-      select: { id: true, nameTemplate: true, nameEdited: true },
-    }),
-    prisma.platform.findUnique({ where: { id: platformId }, select: { titleTemplate: true } }),
-  ]);
-  const own = new Set(offers.map((o) => o.nameTemplate));
-  const shared = own.size === 1 ? [...own][0] : null;
-  const edited = new Set(offers.filter((o) => o.nameEdited).map((o) => o.id));
-  return {
-    template: shared?.trim() ? shared : (platform?.titleTemplate ?? ""),
-    handWritten: ids.filter((id) => edited.has(id)),
-  };
-}
-
 /**
  * What a post not yet up prints untranslated (#1889): for each lot, the names behind the texts its
  * template prints (`{title}`, `{description}` — `facebookLotPrintedTexts`), read off the template it
@@ -785,118 +757,37 @@ export async function refreshFacebookPostTexts(ownerId: string, postId: string):
 
 /**
  * *Regenerate lot texts* on a post's screen (#1983): the given lots' titles and descriptions rendered
- * again from their templates, in lot order — the twenty round trips of each offer's own ↻ in one.
- * A lot in `overwrite` is regenerated as ↻ does, its hand-written text replaced (the collector ticked
- * it); any other is brought back in step by `syncGeneratedTexts`, which keeps hand-written words. Only
- * while no lot is up — a published post's text is frozen (#1800) — and only the post's own lots.
- * Answers how many lots were gone through.
+ * again from their templates — `regenerateLotGroupTexts`, the tool a proposal's lots share (#2313).
+ * Only while no lot is up — a published post's text is frozen (#1800) — and only the post's own lots.
  */
-export async function regenerateFacebookLotTexts(
+export function regenerateFacebookLotTexts(
   ownerId: string,
   postId: string,
   offerIds: readonly string[],
   overwrite: readonly string[]
 ): Promise<number> {
-  await assertPostOwner(ownerId, postId);
-  const lots = await prisma.offer.findMany({
-    where: { facebookPostId: postId },
-    select: { id: true, state: true },
-    orderBy: { facebookLotNo: "asc" },
-  });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
-    throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
-  }
-  const own = new Set(lots.map((l) => l.id));
-  if (offerIds.some((id) => !own.has(id)) || overwrite.some((id) => !own.has(id))) {
-    throw new OfferActionBlockedError("facebook-group", "Only this post's own lots can be regenerated here.");
-  }
-  const asked = new Set(offerIds);
-  const replace = new Set(overwrite);
-  const chosen = lots.filter((l) => asked.has(l.id) || replace.has(l.id));
-  for (const lot of chosen) {
-    if (replace.has(lot.id)) await regenerateOfferTitleAndDescription(ownerId, lot.id);
-    else await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
-  }
-  return chosen.length;
+  return regenerateLotGroupTexts(ownerId, { kind: "post", id: postId }, offerIds, overwrite);
 }
 
-/** The post's lots in lot order, refused once any is up — its text is frozen then (#1800). */
-async function lotsNotYetUp(postId: string) {
-  const lots = await prisma.offer.findMany({
-    where: { facebookPostId: postId },
-    select: { id: true, state: true, nameEdited: true },
-    orderBy: { facebookLotNo: "asc" },
-  });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
-    throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
-  }
-  return lots;
-}
-
-/**
- * *Title template for all lots…* on a post's screen (#2033): `template` becomes every lot's own title
- * template — preferred over the platform's wherever a title is rendered (#774) — and the titles are
- * regenerated from it, as each offer's ↻ does. A lot whose title was written by hand is given the
- * template too but keeps its words unless it is in `overwrite` (the collector ticked it). Nothing is
- * kept on the post itself, so a lot added later keeps its own title. Refused blank — a blank own
- * template would render no title — once the post is up, and for an offer that is not the post's lot.
- * Answers how many titles were regenerated.
- */
-export async function setFacebookPostTitleTemplate(
+/** *Title template for all lots…* on a post's screen (#2033) — `setLotGroupTitleTemplate`. */
+export function setFacebookPostTitleTemplate(
   ownerId: string,
   postId: string,
   template: string,
   overwrite: readonly string[]
 ): Promise<number> {
-  await assertPostOwner(ownerId, postId);
-  const text = template.trim();
-  if (!text) throw new OfferActionBlockedError("facebook-group", "Write a title template for the lots.");
-  const lots = await lotsNotYetUp(postId);
-  const own = new Set(lots.map((l) => l.id));
-  if (overwrite.some((id) => !own.has(id))) {
-    throw new OfferActionBlockedError("facebook-group", "Only this post's own lots can be retitled here.");
-  }
-  const replace = new Set(overwrite);
-  await prisma.offer.updateMany({ where: { id: { in: [...own] } }, data: { nameTemplate: text } });
-  let count = 0;
-  for (const lot of lots) {
-    if (lot.nameEdited && !replace.has(lot.id)) continue;
-    await regenerateOfferText(ownerId, lot.id, "name");
-    count += 1;
-  }
-  return count;
+  return setLotGroupTitleTemplate(ownerId, { kind: "post", id: postId }, template, overwrite);
 }
 
-/**
- * *Add to titles…* / *Remove from titles…* on a post's screen (#2033): `words` added at, or removed
- * from, the `edge` of every lot's title, hand-written ones included (`facebookTitleWithWords`). A title
- * changed is written as by hand, as an edit on the offer's screen is — it no longer follows its
- * template. Refused for blank words and once the post is up. Answers how many titles changed.
- */
-export async function changeFacebookLotTitleWords(
+/** *Add to titles…* / *Remove from titles…* on a post's screen (#2033) — `changeLotGroupTitleWords`. */
+export function changeFacebookLotTitleWords(
   ownerId: string,
   postId: string,
   words: string,
   edge: FacebookTitleEdge,
   mode: FacebookTitleWordsMode
 ): Promise<number> {
-  const { collectionId } = await assertPostOwner(ownerId, postId);
-  if (!words.trim()) {
-    throw new OfferActionBlockedError(
-      "facebook-group",
-      mode === "add" ? "Write the words to add." : "Write the words to remove."
-    );
-  }
-  await lotsNotYetUp(postId);
-  const lots = await readKitLots(collectionId, { facebookPostId: postId });
-  let count = 0;
-  for (const lot of lots) {
-    const next = facebookTitleWithWords(lot.title, words, edge, mode);
-    if (next === null || next === lot.title) continue;
-    await patchOffer(ownerId, lot.offerId, { name: next });
-    count += 1;
-  }
-  return count;
+  return changeLotGroupTitleWords(ownerId, { kind: "post", id: postId }, words, edge, mode);
 }
 
 /** One post as the list of posts draws it (#1850) — of several lots, or of one offer posted alone
@@ -1162,31 +1053,7 @@ export async function reorderFacebookLots(
   offerIds: readonly string[]
 ): Promise<void> {
   await assertPostOwner(ownerId, postId);
-  const lots = await prisma.offer.findMany({
-    where: { facebookPostId: postId },
-    select: { id: true, state: true },
-  });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
-    throw new OfferActionBlockedError(
-      "facebook-group",
-      "The post is up, so its lots stay in the order they were posted."
-    );
-  }
-  const refusal = facebookLotOrderRefusal(
-    lots.map((l) => l.id),
-    offerIds
-  );
-  if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
-  // Renumbered in two passes, as `detachFacebookLot` does: the unique (post, lot) index would refuse
-  // a lot moved onto a number another has not left yet.
-  await prisma.$transaction(async (tx) => {
-    for (const [index, id] of offerIds.entries()) {
-      await tx.offer.update({ where: { id }, data: { facebookLotNo: -1 - index } });
-    }
-    for (const [index, id] of offerIds.entries()) {
-      await tx.offer.update({ where: { id }, data: { facebookLotNo: index + 1 } });
-    }
-  });
+  await reorderLotGroup(ownerId, { kind: "post", id: postId }, offerIds);
 }
 
 /**

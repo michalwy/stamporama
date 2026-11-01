@@ -143,20 +143,23 @@ export interface ProposalLotPhotos {
   images: { photoId: string; fileName: string }[];
 }
 
-/** Every lot's photos, in lot order, in a few reads whatever the number of lots (#2222's read). */
+/** Every lot's photos, in lot order, in a few reads whatever the number of lots (#2222's read) — or,
+ *  with `only`, those lots' alone: what the screen refreshes one lot by (#2313). */
 export async function readProposalPhotos(
   ownerId: string,
   proposalId: string,
-  collectionId?: string
+  collectionId?: string,
+  only?: readonly string[]
 ): Promise<ProposalLotPhotos[]> {
   await assertProposalOwner(ownerId, proposalId, collectionId);
   const head = await readProposalHead(proposalId);
   if (!head) return [];
+  const lots = only ? head.lots.filter((lot) => only.includes(lot.offerId)) : head.lots;
   const plans = await readOfferUploadPlans(
     ownerId,
-    head.lots.map((lot) => lot.offerId)
+    lots.map((lot) => lot.offerId)
   );
-  return head.lots.map((lot) => {
+  return lots.map((lot) => {
     const read = plans.get(lot.offerId);
     const images = !read || "reason" in read.plan ? [] : read.plan.images;
     return {

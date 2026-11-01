@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
 import { baseBtn } from "@/app/button-style";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
-import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { DialogSecondaryButton } from "@/app/dialog-shell";
+import { type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { showLineAt } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DEFAULT_PROPOSAL_LOT_PACKING,
@@ -19,16 +20,20 @@ import {
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
-import type { PrepareOffer } from "@/lib/offers";
+import { lotGroupName } from "@/lib/offer-lot-group-rules";
 import type { ProposalLot } from "@/lib/proposals";
-import type { ProposalLotPhotos } from "@/lib/proposal-handout";
-import { OfferStateChip } from "../../offer-badges";
 import { useInvalidateOffers } from "../../use-offers-query";
 import { ComposeSetDialog } from "../../[offerId]/compose-set-dialog";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { useInvalidateSales } from "../../../sales/use-sales-query";
-import { PreparePriceField, PrepareTitleField } from "../../prepare/prepare-offer-parts";
-import { useProposalLotsPrepare, useProposalPhotos, useProposalScreen } from "../use-proposals-query";
+import { DropLine, GroupLotRow, LOT_LIST, priceFact, saleFact, stateFact, textFacts, type LotFact } from "../../lots/lot-row";
+import { useLotGroupTools, type ToolLot } from "../../lots/use-lot-group-tools";
+import {
+  useProposalLotsPrepare,
+  useProposalPhotos,
+  useProposalScreen,
+  useSettleProposalLot,
+} from "../use-proposals-query";
 import { ProposalStatusChip, proposalTotalText } from "../proposal-parts";
 import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
@@ -43,14 +48,6 @@ const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
 const META: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-text-muted)" };
 
-const LOT_NO: React.CSSProperties = {
-  flexShrink: 0,
-  fontSize: "0.875rem",
-  fontWeight: 700,
-  color: "var(--color-text-primary)",
-  whiteSpace: "nowrap",
-};
-
 const SECONDARY_BUTTON: React.CSSProperties = {
   ...baseBtn,
   border: "1px solid var(--color-border-strong)",
@@ -64,14 +61,28 @@ const PRIMARY_BUTTON: React.CSSProperties = {
   color: "#fff",
 };
 
-const LOT_ROW: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  gap: "1rem",
-  padding: "0.75rem 1.25rem",
-  borderBottom: "1px solid var(--color-border)",
-  listStyle: "none",
+const CARD_TITLE: React.CSSProperties = {
+  margin: 0,
+  fontSize: "1rem",
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
 };
+
+/** A lot as the shared tools read it (#2313): sorted by its stated price, whatever its listing type. */
+function toolLot(lot: ProposalLot): ToolLot {
+  const auction = lot.listingType === "auction";
+  return {
+    offerId: lot.offerId,
+    offerNo: lot.offerNo,
+    lotNo: lot.lotNo,
+    title: lot.title,
+    state: lot.state,
+    catalogSortKey: lot.catalogSortKey,
+    listingType: lot.listingType,
+    price: auction ? "0.00" : (lot.price ?? "0.00"),
+    startingPrice: auction ? lot.price : null,
+  };
+}
 
 /**
  * A proposal's screen (#2287): who it is for and where it stands, its lots — each an ordinary offer on
@@ -85,6 +96,14 @@ const LOT_ROW: React.CSSProperties = {
  * Each lot carries its lot number (#2288), and while the proposal is open the card above the lots holds
  * what the buyer is sent — the message, the photos, the document — numbering the lots alike, with
  * each lot's photos on its row. Handing any of them out marks a proposal being prepared sent.
+ *
+ * The lots work as a Facebook post's do (#2313), through the same row and the same tools: each row is
+ * the lot's photo — its copies' while it has none of its own — its number, its offer as a link, its
+ * state, price and sale. While the proposal is being prepared, *Photo settings…*, *Regenerate lot
+ * texts…* and the titles all at once, the lots' order, and pricing and readying from the rows with
+ * *Use estimated price*, *Check covers* and *Mark ready* over every lot; one lot's change refreshes that
+ * lot alone. What stays the post's — its group, layout, text and captions, publishing — has no place
+ * here; the proposal keeps its own card and its own states.
  */
 export function ProposalPanel({
   collectionId,
@@ -103,7 +122,7 @@ export function ProposalPanel({
   baseCurrency: string;
 }) {
   const { data: screen, isLoading, isError } = useProposalScreen(collectionId, proposalId);
-  const { data: prepare = {} } = useProposalLotsPrepare(collectionId, proposalId);
+  const { data: prepare } = useProposalLotsPrepare(collectionId, proposalId);
   const { data: photos } = useProposalPhotos(collectionId, proposalId);
   const { invalidateAll } = useInvalidateOffers();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
@@ -113,15 +132,32 @@ export function ProposalPanel({
   const packing = parseProposalLotPacking(storedPacking) ?? DEFAULT_PROPOSAL_LOT_PACKING;
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
-  const priceRefs = useRef(new Map<string, HTMLInputElement | null>());
+  const { settleLot, settleLotPrice } = useSettleProposalLot(collectionId, proposalId);
+  // Lots, their titles and prices change only while it is being prepared: sent, it stays as the buyer
+  // saw it until it is reopened (#2307).
+  const editable = !!screen && proposalTakesLots(screen.status);
+  // The tools a proposal's lots share with a post's (#2313), while it is being prepared.
+  const tools = useLotGroupTools({
+    collectionId,
+    group: { kind: "proposal", id: proposalId },
+    groupName: lotGroupName("proposal", screen?.proposalNo ?? 0),
+    lots: (screen?.lots ?? []).map(toolLot),
+    editable,
+    reorderable: editable && (screen?.lots.length ?? 0) > 1,
+    prepareRows: editable ? (prepare ?? null) : null,
+    fillLines: null,
+    lotTexts: screen?.lotTexts ?? null,
+    lotTitles: screen?.lotTitles ?? null,
+    language: null,
+    areas,
+    generatingNote: "Photos being generated.",
+    refresh: () => invalidateAll(collectionId),
+  });
 
   if (isLoading) return <p style={META}>Loading the proposal…</p>;
   if (isError || !screen) return <p style={{ ...META, color: "var(--color-error)" }}>The proposal could not be read.</p>;
 
   const open = isProposalOpen(screen.status);
-  // Lots, their titles and prices change only while it is being prepared: sent, it stays as the buyer
-  // saw it until it is reopened (#2307).
-  const editable = proposalTakesLots(screen.status);
   const reopened = screen.status === "preparing" && screen.sentOn !== null;
   const sendRefusal = proposalMoveRefusal(screen.status, "send", screen.lots.length);
   const hasOpenLot = screen.lots.some((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state));
@@ -192,13 +228,45 @@ export function ProposalPanel({
     });
   }
 
-  /** Enter in a lot's price: on to the next open lot's. */
-  function focusAfter(offerId: string) {
-    const ids = screen!.lots.filter((lot) => prepare[lot.offerId]).map((lot) => lot.offerId);
-    const next = ids[ids.indexOf(offerId) + 1];
-    const input = next ? priceRefs.current.get(next) : null;
-    if (input) input.focus();
-    else priceRefs.current.get(offerId)?.blur();
+  /** One Ready lot back to Preparing, from its row — that lot's change alone, and settles only it. */
+  function backToPreparing(lot: ProposalLot) {
+    setError(undefined);
+    startTransition(async () => {
+      const { setOfferStateAction } = await import("@/app/actions/offers");
+      const result = await setOfferStateAction(lot.offerId, "preparing");
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      await settleLot(lot.offerId);
+      toast({ message: `Lot ${lot.lotNo} is back to Preparing` });
+    });
+  }
+
+  // The lot's own actions (#2313): its offer, and while the proposal is being prepared a Ready lot back
+  // to Preparing and the lot taken out. Selling is the proposal's — *Convert to sale…* (#2289).
+  function lotActions(lot: ProposalLot): RowAction[] {
+    return [
+      { key: "open", label: "Open offer", icon: "externalLink", href: `/c/${collectionSlug}/offers/${lot.offerId}` },
+      ...(editable && lot.state === "ready"
+        ? [{ key: "back-to-preparing", label: "Back to preparing", icon: "revert", onSelect: () => backToPreparing(lot) } as RowAction]
+        : []),
+      ...(editable
+        ? [{ key: "remove", label: "Take this lot out of the proposal", icon: "remove", onSelect: () => removeLot(lot) } as RowAction]
+        : []),
+    ];
+  }
+
+  // What a lot's row says of it: its price once it is no longer typed there, its state, its sets, its
+  // sale, and while it is being prepared where its texts stand.
+  function lotFacts(lot: ProposalLot, priced: boolean): LotFact[] {
+    return [
+      ...(priced ? [] : [priceFact("Price", lot.price, lot.currency)]),
+      stateFact(lot.state),
+      { key: "sets", label: "Sets", value: `${lot.setCount} ${lot.setCount === 1 ? "set" : "sets"}` },
+      saleFact(collectionSlug, screen!.sales[lot.offerId] ?? []),
+      ...textFacts(screen!.lotTexts?.[lot.offerId] ?? null),
+    ];
   }
 
   return (
@@ -230,18 +298,6 @@ export function ProposalPanel({
         <span style={{ flex: 1 }} />
         {open && (
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            {editable && (
-              <>
-                <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
-                  <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("new")}>
-                    New lots…
-                  </button>
-                </Tooltip>
-                <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("add")}>
-                  Add offers…
-                </button>
-              </>
-            )}
             {screen.status === "sent" && (
               <Tooltip content="Back to Preparing, to change its lots or their prices — then send it again">
                 <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={reopen}>
@@ -314,7 +370,8 @@ export function ProposalPanel({
         </p>
       )}
 
-      <div
+      <section
+        aria-label="Lots"
         style={{
           border: "1px solid var(--color-border)",
           borderRadius: "0.75rem",
@@ -322,6 +379,27 @@ export function ProposalPanel({
           background: "var(--color-bg-elevated)",
         }}
       >
+        {/* The lots' heading and the tools over every lot — the post's (#2313), while it is prepared. */}
+        <div style={{ padding: "1rem 1.25rem 0.75rem", borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+            <h3 style={CARD_TITLE}>Lots</h3>
+            {editable && (
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
+                {tools.headingButtons}
+                <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("add")}>
+                  Add offers…
+                </DialogSecondaryButton>
+                <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
+                  <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("new")}>
+                    New lots…
+                  </DialogSecondaryButton>
+                </Tooltip>
+              </div>
+            )}
+          </div>
+          {tools.textWarning}
+          {tools.lotBar}
+        </div>
         {screen.lots.length === 0 ? (
           <p style={{ margin: 0, padding: "2rem", ...META, fontSize: "0.9375rem" }}>
             No lots yet. Make them from your copies with New lots…, add {screen.platform.name} offers already
@@ -332,26 +410,40 @@ export function ProposalPanel({
             list and choose this proposal in New offer or Generate offers.
           </p>
         ) : (
-          <ul style={{ margin: 0, padding: 0 }}>
-            {screen.lots.map((lot) => (
-              <LotRow
-                key={lot.offerId}
-                lot={lot}
-                prepare={editable ? prepare[lot.offerId] : undefined}
-                photos={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
-                collectionId={collectionId}
-                onHandedOut={handedOut}
-                editable={editable}
-                collectionSlug={collectionSlug}
-                priceRef={(el) => {
-                  priceRefs.current.set(lot.offerId, el);
-                }}
-                onEnter={() => focusAfter(lot.offerId)}
-                onChanged={refresh}
-                onRemove={() => removeLot(lot)}
-              />
-            ))}
-          </ul>
+          <ol style={{ ...LOT_LIST, padding: "0 1.25rem" }} {...(tools.drag?.containerProps ?? {})}>
+            {tools.lots.map((toolLot, index) => {
+              const lot = screen.lots.find((l) => l.offerId === toolLot.offerId)!;
+              const pricing = tools.rowPricing(toolLot, {
+                onPriceSaved: (field, value) => void settleLotPrice(lot.offerId, field, value),
+                onTitleChanged: () => void settleLot(lot.offerId),
+              });
+              return (
+                <Fragment key={lot.offerId}>
+                  {showLineAt(tools.drag, index) && <DropLine />}
+                  <GroupLotRow
+                    lotNo={tools.lotNoAt(toolLot, index)}
+                    drag={tools.drag}
+                    index={index}
+                    collectionSlug={collectionSlug}
+                    lot={lot}
+                    photos={
+                      <LotPhotos
+                        collectionId={collectionId}
+                        lot={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
+                        copyPhotoId={lot.copyPhotoId}
+                        onHandedOut={handedOut}
+                      />
+                    }
+                    photoStyle={{ flex: "0 1 auto", minWidth: "6rem", maxWidth: "24rem" }}
+                    facts={lotFacts(lot, !!pricing)}
+                    actions={lotActions(lot)}
+                    pricing={pricing}
+                  />
+                </Fragment>
+              );
+            })}
+            {showLineAt(tools.drag, tools.lots.length) && <DropLine />}
+          </ol>
         )}
         <div
           style={{
@@ -370,7 +462,7 @@ export function ProposalPanel({
             </span>
           </Tooltip>
         </div>
-      </div>
+      </section>
 
       {dialog === "add" && (
         <AddProposalLotsDialog
@@ -456,6 +548,7 @@ export function ProposalPanel({
           onChanged={refresh}
         />
       )}
+      {tools.dialogs}
       {dialog === "decline" && (
         <ConfirmDialog
           title="Decline the proposal?"
@@ -473,78 +566,5 @@ export function ProposalPanel({
         />
       )}
     </div>
-  );
-}
-
-function LotRow({
-  lot,
-  prepare,
-  photos,
-  collectionId,
-  onHandedOut,
-  editable,
-  collectionSlug,
-  priceRef,
-  onEnter,
-  onChanged,
-  onRemove,
-}: {
-  lot: ProposalLot;
-  /** Its Prepare row while the proposal is being prepared and the lot is open — what its title and
-   *  price are edited through. */
-  prepare: PrepareOffer | undefined;
-  /** Its photos as the buyer is sent them, while the proposal is open and the lot still offered. */
-  photos: ProposalLotPhotos | undefined;
-  collectionId: string;
-  onHandedOut: () => void;
-  /** The proposal is being prepared, so the lot can be taken out (#2307). */
-  editable: boolean;
-  collectionSlug: string;
-  priceRef: (el: HTMLInputElement | null) => void;
-  onEnter: () => void;
-  onChanged: () => void;
-  onRemove: () => void;
-}) {
-  const href = `/c/${collectionSlug}/offers/${lot.offerId}`;
-  return (
-    <li style={LOT_ROW}>
-      <div style={{ flex: "1 1 16rem", minWidth: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", minWidth: 0 }}>
-          <Tooltip content="The lot's number — the one the buyer's photos, document and message carry">
-            <span style={LOT_NO}>Lot {lot.lotNo}</span>
-          </Tooltip>
-          <Link href={href} style={{ ...LINK, flexShrink: 0 }}>
-            <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-          </Link>
-          {prepare ? (
-            <PrepareTitleField offer={prepare} onChanged={onChanged} inputWidth="24rem" />
-          ) : (
-            <Link href={href} style={{ ...LINK, fontSize: "0.875rem" }}>
-              {lot.title}
-            </Link>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <OfferStateChip state={lot.state} />
-          <span style={META}>
-            {lot.setCount} {lot.setCount === 1 ? "set" : "sets"}
-          </span>
-        </div>
-        <LotPhotos collectionId={collectionId} lot={photos} onHandedOut={onHandedOut} />
-      </div>
-      {prepare ? (
-        <PreparePriceField ref={priceRef} offer={prepare} onEnter={onEnter} onSaved={onChanged} />
-      ) : (
-        <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
-          {lot.price ? `${lot.price} ${lot.currency}` : "—"}
-        </span>
-      )}
-      {editable && (
-        <RowActionsMenu
-          ariaLabel={`Offer #${lot.offerNo} actions`}
-          actions={[{ key: "remove", label: "Take out of the proposal", icon: "remove", onSelect: onRemove }]}
-        />
-      )}
-    </li>
   );
 }

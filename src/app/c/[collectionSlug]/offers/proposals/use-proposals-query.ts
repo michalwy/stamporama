@@ -1,16 +1,19 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { PrepareOffer } from "@/lib/offers";
 import type {
   ProposalListItem,
   ProposalLotCandidate,
+  ProposalLotUpdate,
   ProposalSaleOptions,
   ProposalScreen,
   ProposalTakingLots,
 } from "@/lib/proposals";
 import type { ProposalLotPhotos, ProposalMessage } from "@/lib/proposal-handout";
 import type { ProposalStatus } from "@/lib/proposal-rules";
+import { withPrepareRow } from "@/lib/facebook-post-lot-refresh";
+import { withProposalLot, withProposalLotPhotos } from "@/lib/proposal-lot-refresh";
 
 // Proposals (#2287). Every key is under the offers key, `["offers", collectionId, …]`, so a write to
 // any offer — a lot priced, withdrawn, sold — refreshes the proposal it is in, and `invalidateAll`
@@ -138,4 +141,67 @@ export function useProposalMessage(collectionId: string, proposalId: string) {
       return res.json();
     },
   });
+}
+
+/** What the proposal's screen reads of the proposal as a whole — written in place by
+ *  {@link settleProposalLot} rather than read again. */
+const PROPOSAL_SCREEN_READS = new Set<unknown>(["screen", "prepare", "photos"]);
+
+/** The last refresh asked of each lot, so an answer overtaken by a later one is dropped. */
+const lotRefreshes = new Map<string, number>();
+
+/**
+ * One lot of a proposal changed from its row — a price, a title, its own state (#2313, #2221's rule for
+ * a post): that lot read again and written into the screen, its Prepare row and its photos. Every
+ * other offer read is marked stale, as `invalidateAll` would, except the proposal's own reads, which the
+ * one lot is written into: refetching them read every lot again for each price of a run typed down the
+ * list.
+ */
+async function settleProposalLot(queryClient: QueryClient, collectionId: string, proposalId: string, offerId: string) {
+  const ask = (lotRefreshes.get(offerId) ?? 0) + 1;
+  lotRefreshes.set(offerId, ask);
+  void queryClient.invalidateQueries({
+    queryKey: ["offers", collectionId],
+    predicate: ({ queryKey: [, , area, kind, id] }) =>
+      !(area === "proposals" && PROPOSAL_SCREEN_READS.has(kind) && id === proposalId),
+  });
+  const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/lots/${offerId}`);
+  if (lotRefreshes.get(offerId) !== ask) return;
+  if (!res.ok) {
+    // Taken out of the proposal meanwhile, or the proposal gone: the screen is read whole.
+    await queryClient.invalidateQueries({ queryKey: ["offers", collectionId] });
+    return;
+  }
+  const update: ProposalLotUpdate & { photos: ProposalLotPhotos | null } = await res.json();
+  queryClient.setQueryData<ProposalScreen>(
+    proposalKeys.screen(collectionId, proposalId),
+    (screen) => screen && withProposalLot(screen, update)
+  );
+  queryClient.setQueryData<Record<string, PrepareOffer> | null>(
+    proposalKeys.prepare(collectionId, proposalId),
+    (rows) => withPrepareRow(rows ?? null, offerId, update.prepare)
+  );
+  queryClient.setQueryData<ProposalLotPhotos[]>(proposalKeys.photos(collectionId, proposalId), (photos) =>
+    withProposalLotPhotos(photos, update.photos)
+  );
+}
+
+/** A lot of the proposal settled from its row (#2313): a price is written into its row at once, as on
+ *  the Prepare screen, and then the lot read again — it alone. */
+export function useSettleProposalLot(collectionId: string, proposalId: string) {
+  const queryClient = useQueryClient();
+  return {
+    settleLot: (offerId: string) => settleProposalLot(queryClient, collectionId, proposalId, offerId),
+    settleLotPrice: (offerId: string, field: "price" | "startingPrice", value: string | null) => {
+      queryClient.setQueryData<Record<string, PrepareOffer> | null>(proposalKeys.prepare(collectionId, proposalId), (data) => {
+        const offer = data?.[offerId];
+        if (!data || !offer) return data;
+        return {
+          ...data,
+          [offerId]: field === "price" ? { ...offer, price: value ?? "0.00" } : { ...offer, startingPrice: value },
+        };
+      });
+      return settleProposalLot(queryClient, collectionId, proposalId, offerId);
+    },
+  };
 }
