@@ -59,12 +59,17 @@ import { useCollectionFormats } from "./use-display-format";
 // one that never claimed to be. `WantChip` beside it took the same shape in #1244: hover for the
 // wants, click for the want list.
 //
-// What the chip does carry is a **dot per marker present** — green in collection, blue for sale,
-// violet for trade, the copy rows' own vocabulary. Presence, never quantity: an unnumbered dot is
-// the one part of the breakdown that survives beside a total, because there is nothing there for
-// the eye to try to add up. A dot lights for a marker carried anywhere the chip counts, this
-// stamp's copies or its variants' alike; which side it came from is a row in the panel. Copies
-// carrying no disposition get no dot — the absence of dots is already what that looks like.
+// What the chip does carry is **three dots in fixed places** (#2297) — in collection, for sale, for
+// trade, the order the dispositions are listed in everywhere else — each in its disposition's own
+// colour (green, blue, violet, the copy rows' vocabulary), **filled** for a marker held and a faint
+// **empty circle** for one not. Until #2297 only the markers present were drawn, side by side and
+// too small for their colours to read, so *●●* could be any two of the three; a fixed place is what
+// lets the position say which is which, and the empty circle is what keeps the place. Presence,
+// never quantity: an unnumbered dot is the one part of the breakdown that survives beside a total,
+// because there is nothing there for the eye to try to add up. A dot lights for a marker carried
+// anywhere the chip counts, this stamp's copies or its variants' alike; which side it came from is
+// a row in the panel. Copies carrying no disposition light no dot, so a chip whose copies carry
+// none shows three empty circles.
 //
 // The count is *this stamp's* copies exactly, never rolled up from variant children: the tree
 // shows each child's own badge right below, so a rollup would show one copy on two rows. What the
@@ -100,13 +105,28 @@ const VARIANT_PART: React.CSSProperties = {
 };
 
 /** A disposition dot on the chip: presence, never quantity. Sized in `em` so it follows whichever
- * chip size is in use. */
+ * chip size is in use, and large enough at list size for its colour and its filled-or-empty to read
+ * (#2297). The ring is drawn by the border on both, so a filled dot and an empty one are the same
+ * size. */
 const DOT: React.CSSProperties = {
-  width: "0.45em",
-  height: "0.45em",
+  width: "0.6em",
+  height: "0.6em",
+  boxSizing: "border-box",
   borderRadius: "50%",
-  background: "currentColor",
+  border: "1px solid currentColor",
   display: "inline-block",
+  flexShrink: 0,
+};
+
+/** A disposition not held: the ring alone, faint, so the three places still read as one group while
+ * this one stays clearly empty. */
+const EMPTY_DOT: React.CSSProperties = {
+  background: "transparent",
+  opacity: 0.45,
+};
+
+const FILLED_DOT: React.CSSProperties = {
+  background: "currentColor",
 };
 
 const PANEL_HEADING: React.CSSProperties = {
@@ -153,7 +173,9 @@ const MARKERS: Record<CopyBreakdownGroupKey, { token: string | null; label: stri
   unmarked: { token: null, label: "No disposition" },
 };
 
-const MARKER_KEYS = ["inCollection", "forSale", "forTrade", "unmarked"] as const;
+/** The chip's three dot places, in their fixed order (#2297). The unmarked copies have no place: they
+ * have no disposition to be coloured by. */
+const DOT_KEYS = ["inCollection", "forSale", "forTrade"] as const;
 
 /** The markers spelled out in full — "2 in collection", "1 for sale" — for the stamp page's
  * *Copies held* field, which says in one line what the hover panel lays out in rows. A marker no copy
@@ -245,13 +267,11 @@ function HeldCopiesChip({
   const { data: formats } = useCollectionFormats(collectionId);
 
   const total = counts.total;
-  // Presence, not quantity: a dot says *there is at least one copy marked this way*, which is the
-  // one thing about the breakdown that can be said beside a total without inviting the eye to add
-  // it up. The figures are a hover away in the panel. The unmarked copies get no dot — they have
-  // no disposition to be coloured by, and "no disposition" is what the *absence* of dots already says.
-  const dots = MARKER_KEYS.filter(
-    (key) => MARKERS[key].token !== null && (counts[key] > 0 || variants[key] > 0)
-  );
+  // Presence, not quantity: a filled dot says *there is at least one copy marked this way*, which
+  // is the one thing about the breakdown that can be said beside a total without inviting the eye to
+  // add it up. The figures are a hover away in the panel. All three places are always drawn, so the
+  // position says which disposition a dot is (#2297); the unmarked copies fill none of them.
+  const held = DOT_KEYS.filter((key) => counts[key] > 0 || variants[key] > 0);
 
   const groups = useMemo(
     () =>
@@ -266,7 +286,7 @@ function HeldCopiesChip({
   const label = [
     summarize(total, variants.total, possible),
     // What the dots convey, in words: which markers are present, not how many carry them.
-    dots.length ? dots.map((key) => MARKERS[key].label.toLowerCase()).join(", ") : null,
+    held.length ? held.map((key) => MARKERS[key].label.toLowerCase()).join(", ") : "no disposition",
     onOpenCopies ? "view the copies" : null,
   ]
     .filter(Boolean)
@@ -282,17 +302,18 @@ function HeldCopiesChip({
       {possible > 0 && <span style={VARIANT_PART}>&nbsp;(?{possible})</span>}&nbsp;
       {total === 1 && variants.total === 0 ? "copy" : "copies"}
       {/* Decorative for a screen reader: the label above says the same in words. */}
-      {dots.map((key) => (
-        <span
-          key={key}
-          aria-hidden
-          style={{
-            ...DOT,
-            color: `var(--color-disposition-${MARKERS[key].token})`,
-            marginLeft: "0.3em",
-          }}
-        />
-      ))}
+      <span aria-hidden style={{ display: "inline-flex", alignItems: "center", gap: "0.2em", marginLeft: "0.35em" }}>
+        {DOT_KEYS.map((key) => (
+          <span
+            key={key}
+            style={{
+              ...DOT,
+              ...(held.includes(key) ? FILLED_DOT : EMPTY_DOT),
+              color: `var(--color-disposition-${MARKERS[key].token})`,
+            }}
+          />
+        ))}
+      </span>
     </>
   );
 
