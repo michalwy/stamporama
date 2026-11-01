@@ -160,3 +160,39 @@ describe("describeLotCoverage", () => {
     assert.equal(describeLotCoverage(8, 8), null);
   });
 });
+
+// The cost column says what is under it, and why it is missing, over the lots (#2333).
+describe("postPriceTotals — the cost's marks and gaps (#2333)", () => {
+  const marks = (costEstimated: boolean, costOpening: boolean, gaps: [number, number, number]) => ({
+    costEstimated,
+    costOpening,
+    costGaps: { unrecorded: gaps[0], unestimated: gaps[1], noOpeningValue: gaps[2] },
+  });
+
+  it("marks the cost when any lot's includes opening values or leans on an estimate, and sums the gaps", () => {
+    const totals = postPriceTotals(
+      [
+        lot({ id: "a", costPrice: "6.00", setsTotals: marks(false, true, [0, 0, 1]) }),
+        lot({ id: "b", costPrice: null, setsTotals: marks(true, false, [2, 1, 0]) }),
+        lot({ id: "c", costPrice: "3.00" }),
+      ],
+      none,
+      "PLN"
+    );
+    assert.deepEqual(totals.cost, {
+      estimated: true,
+      opening: true,
+      gaps: { unrecorded: 2, unestimated: 1, noOpeningValue: 1 },
+    });
+    assert.equal(column(totals, "cost").amount, "9.00");
+  });
+
+  it("leaves a lot in another currency out of the marks, as out of the totals", () => {
+    const totals = postPriceTotals(
+      [lot({ id: "a", currency: "EUR", setsTotals: marks(true, true, [1, 0, 0]) })],
+      none,
+      "PLN"
+    );
+    assert.deepEqual(totals.cost, { estimated: false, opening: false, gaps: { unrecorded: 0, unestimated: 0, noOpeningValue: 0 } });
+  });
+});

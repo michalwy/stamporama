@@ -14,6 +14,11 @@
 // over the lots that carry **both** a price and that figure, so a lot priced but never valued — or
 // valued but not yet priced — cannot tilt it.
 
+//
+// **The cost says what is under it, and why it is missing** (#2333): marked *incl. opening value* or as
+// an estimate when any lot's is, and the copies still without a cost counted by why, over the lots.
+
+import { NO_COST_GAPS, sumCostGaps, type CostGaps } from "./offer-cost";
 import { isAuctionListing, type OfferListingType } from "./offer-rules";
 import { priceMargin, type PriceMargin } from "./offer-price-table";
 
@@ -30,6 +35,8 @@ export interface PostTotalsLot {
   suggestedPrice: string | null;
   marketPrice: { amount: string } | null;
   costPrice: string | null;
+  /** What the lot's cost leans on and the copies it is missing (#2333); absent reads as neither. */
+  setsTotals?: { costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
 }
 
 /** The figure the seller states on a lot (#449) — the asking price of a quick buy, the starting price
@@ -91,6 +98,9 @@ export interface PostPriceTotals {
   priced: number;
   priceKind: PostPriceKind;
   columns: PostTotalColumn[];
+  /** The cost column's marks over the lots (#2333): an estimate under it, opening values under it, and
+   *  the copies still without a cost, by why. */
+  cost: { estimated: boolean; opening: boolean; gaps: CostGaps };
 }
 
 function figureOf(lot: PostTotalsLot, key: PostTotalKey): number | null {
@@ -171,6 +181,11 @@ export function postPriceTotals(
     priced,
     priceKind: auctions === 0 ? "price" : auctions === inCurrency.length ? "starting" : "mixed",
     columns,
+    cost: {
+      estimated: inCurrency.some((l) => l.setsTotals?.costEstimated === true),
+      opening: inCurrency.some((l) => l.setsTotals?.costOpening === true),
+      gaps: sumCostGaps(inCurrency.map((l) => l.setsTotals?.costGaps ?? NO_COST_GAPS)),
+    },
   };
 }
 

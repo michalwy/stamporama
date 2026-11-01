@@ -112,6 +112,7 @@ export async function getLotGroupSummary(
         suggestedPrice: row.suggestedPrice,
         marketPrice: row.marketPrice,
         costPrice: row.costPrice,
+        setsTotals: row.setsTotals,
         setCount: row.setCount,
         itemCount: row.itemCount,
         sold: proceeds.get(row.id) ?? null,

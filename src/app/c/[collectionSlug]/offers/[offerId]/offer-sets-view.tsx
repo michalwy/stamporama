@@ -11,7 +11,7 @@ import type { ItemIssueRef, ItemListItem } from "@/lib/items";
 import { formatCatalogNumber } from "@/lib/catalog-number";
 import type { IssueHeader } from "@/lib/issues";
 import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
-import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { describeCostGaps, describeOpeningCount, offerCostEstimateNotes, offerCostNotes } from "@/lib/offer-cost";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -507,11 +507,7 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
     holdings.baseCurrency
   );
   if (reducedHint) valueNotes.push(reducedHint);
-  const costNotes = [
-    `${cost.knownCount} costed`,
-    ...offerCostEstimateNotes(cost.estimatedCount, cost.unestimated),
-    ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
-  ];
+  const costNotes = [`${cost.knownCount} costed`, ...offerCostNotes(cost)];
   return (
     <div
       style={{
@@ -544,7 +540,7 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
         uncertain={holdings.uncertainCount > 0}
       />
       <Tooltip content={`What this set's copies cost — ${costNotes.join(" · ")}`}>
-        <span style={FIGURE_LABEL}>cost</span>
+        <span style={FIGURE_LABEL}>{cost.opening ? COST_OPENING_LABEL : "cost"}</span>
       </Tooltip>
       <MoneyPair
         baseAmount={cost.amount}
@@ -556,6 +552,10 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
     </div>
   );
 }
+
+/** The cost's label where opening values are under it (#2333) — marked, so it is never read as money
+ *  spent. */
+const COST_OPENING_LABEL = "cost incl. opening value";
 
 const FIGURE_LABEL: React.CSSProperties = {
   fontSize: "0.6875rem",
@@ -614,13 +614,15 @@ function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; base
     },
     {
       key: "cost",
-      label: "cost",
       total: totals.costTotal,
       average: totals.costAverage,
       counted: totals.costKnownSets,
+      label: totals.costOpening ? COST_OPENING_LABEL : "cost",
       hint: [
         "What every set in this listing cost you",
         ...offerCostEstimateNotes(totals.costEstimatedCount, totals.costUnestimated),
+        ...(totals.costOpeningCount > 0 ? [describeOpeningCount(totals.costOpeningCount)] : []),
+        ...describeCostGaps({ ...totals.costGaps, unestimated: 0 }),
       ].join(" — "),
       convertedTotal: converted?.costTotal ?? null,
       convertedAverage: converted?.costAverage ?? null,

@@ -1,6 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { describeCostGaps, describeCostMarks } from "@/lib/offer-cost";
 import { formatPriceMargin, marginSign } from "@/lib/offer-price-table";
 import {
   describeLotCoverage,
@@ -13,6 +14,8 @@ import {
 // the lots, so the post's sum stays in view however far down the lots the collector has typed. The
 // figures are `postPriceTotals`'; this only lays them across as a lot's price strip lays its own —
 // each column its name, its total and what the prices make against it, in a row's colours and signs.
+// The cost names what is under it — *incl. opening value*, an estimate — and says why it is missing
+// where it is (#2333).
 
 const NAME: Record<PostTotalKey, string> = {
   catalogue: "Catalogue",
@@ -25,7 +28,7 @@ const ABOUT: Record<PostTotalKey, string> = {
   catalogue: "The lots' catalogue values, summed",
   estimated: "The lots' estimated values — catalogue × the learned realisation ratio — summed",
   market: "What recorded results paid for the lots' copies, summed",
-  cost: "What the lots' copies cost, summed",
+  cost: "What the lots' copies cost, summed — a copy from an opening balance at its opening value, never money spent",
 };
 
 const PRICE_NAME: Record<PostPriceKind, string> = {
@@ -80,7 +83,10 @@ export function PostPriceTotalsBar({ totals, title = "Post total" }: { totals: P
         }}
       >
         {totals.columns.map((column) => {
-          const over = describeLotCoverage(column.lots, totals.lotCount);
+          const isCost = column.key === "cost";
+          const costMarks = isCost && column.amount !== null ? describeCostMarks(totals.cost) : null;
+          const costGaps = isCost ? describeCostGaps(totals.cost.gaps) : [];
+          const over = [describeLotCoverage(column.lots, totals.lotCount), ...costGaps].filter(Boolean).join(" · ");
           const sign = column.margin ? marginSign(column.margin) : 0;
           const marginHint =
             column.margin === null
@@ -94,7 +100,10 @@ export function PostPriceTotalsBar({ totals, title = "Post total" }: { totals: P
             <div key={column.key} style={{ display: "contents" }}>
               <span style={{ ...MUTED, justifySelf: "end", whiteSpace: "nowrap" }}>
                 <Tooltip content={`${ABOUT[column.key]}, in ${totals.currency}`} align="end">
-                  <span>{NAME[column.key]}</span>
+                  <span>
+                    {NAME[column.key]}
+                    {costMarks && ` (${costMarks})`}
+                  </span>
                 </Tooltip>
               </span>
               <span style={{ justifySelf: "end", whiteSpace: "nowrap", color: "var(--color-text-secondary)", fontSize: "0.8125rem" }}>
@@ -116,7 +125,16 @@ export function PostPriceTotalsBar({ totals, title = "Post total" }: { totals: P
                   " "
                 )}
               </span>
-              <span style={{ ...MUTED, justifySelf: "end", whiteSpace: "nowrap" }}>{over ?? " "}</span>
+              <span
+                style={{
+                  ...MUTED,
+                  justifySelf: "end",
+                  whiteSpace: "nowrap",
+                  ...(costGaps.length > 0 ? { color: "var(--color-warning)" } : {}),
+                }}
+              >
+                {over || " "}
+              </span>
             </div>
           );
         })}

@@ -19,7 +19,15 @@ import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-bas
 import { loadCostEstimates } from "./cost-estimates";
 import { isHeld } from "./disposal";
 import { normalizeRole, sortPhotos } from "./photos";
-import { offerCostTotals, offerSetCost, type OfferSetCost } from "./offer-cost";
+import {
+  costGapsOf,
+  holdingsCostParts,
+  offerCostTotals,
+  offerSetCost,
+  sumCostGaps,
+  type CostGaps,
+  type OfferSetCost,
+} from "./offer-cost";
 import {
   collidingItemIdsByOffer,
   type CollisionCopy,
@@ -4138,6 +4146,15 @@ export interface PreparePicture {
  * figures (#1829/#1839/#1843) read by the same computation the offer's own screen reads, its stated
  * price, and what still stands between it and Ready.
  */
+/** What a Prepare row's price table says of its sets' cost beside the figure (#1736, #2333): whether it
+ *  leans on an estimate or includes opening values, and the copies it is still missing, by why. */
+export interface PrepareSetsTotals {
+  setCount: number;
+  costEstimated: boolean;
+  costOpening: boolean;
+  costGaps: CostGaps;
+}
+
 export interface PrepareOffer {
   id: string;
   offerNo: number;
@@ -4168,7 +4185,7 @@ export interface PrepareOffer {
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
   costPrice: string | null;
-  setsTotals: { setCount: number; costEstimated: boolean };
+  setsTotals: PrepareSetsTotals;
   pictures: PreparePicture[];
   /** {@link pictures} are the offer's generated listing images rather than the copies' photos. */
   picturesGenerated: boolean;
@@ -4446,11 +4463,13 @@ async function buildPrepareOffers(
     const sets = row.sets.map((s) => {
       const items = orderedItems(s.items);
       const holdings = holdingsBySet.get(s.id)!;
+      const parts = holdingsCostParts(holdings);
       const cost = offerSetCost(
-        { total: holdings.cost.totalCostBasis, count: holdings.cost.knownCount, noneCount: holdings.cost.noneCount },
+        parts.known,
         items
           .filter((li) => pendingIds.has(li.itemId))
-          .map((li) => ({ label: labeller.copyOf(li.item), estimate: costEstimates.get(li.itemId)?.amount ?? null }))
+          .map((li) => ({ label: labeller.copyOf(li.item), estimate: costEstimates.get(li.itemId)?.amount ?? null })),
+        parts.opening
       );
       const sold = s.saleLines.length > 0;
       const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: items.map((li) => li.itemId) }, soldVia);
@@ -4505,7 +4524,12 @@ async function buildPrepareOffers(
       marketPrice: figures.marketPrice,
       marketUnconvertible: figures.marketUnconvertible,
       costPrice: figures.costPrice,
-      setsTotals: { setCount: sets.length, costEstimated: sets.some((s) => s.cost.estimated) },
+      setsTotals: {
+        setCount: sets.length,
+        costEstimated: sets.some((s) => s.cost.estimated),
+        costOpening: sets.some((s) => s.cost.opening),
+        costGaps: sumCostGaps(sets.map((s) => costGapsOf(s.cost))),
+      },
       pictures: generated.length > 0 ? generated : copyPictures,
       picturesGenerated: generated.length > 0,
       readyBlockers: [
@@ -5113,6 +5137,11 @@ export interface OfferSetsTotals {
   costUnestimated: string[];
   /** The cost figures lean on an open lot, and are marked as an estimate. */
   costEstimated: boolean;
+  /** The cost figures include opening values (#2333), and are marked so; how many copies. */
+  costOpening: boolean;
+  costOpeningCount: number;
+  /** The copies still without a cost, by why (#2333). */
+  costGaps: CostGaps;
   inOfferCurrency: {
     currency: string;
     catalogTotal: string | null;
@@ -5695,18 +5724,16 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
     const items = orderedItems(s.items);
     const holdings = holdingsBySet.get(s.id)!;
+    const parts = holdingsCostParts(holdings);
     const cost = offerSetCost(
-      {
-        total: holdings.cost.totalCostBasis,
-        count: holdings.cost.knownCount,
-        noneCount: holdings.cost.noneCount,
-      },
+      parts.known,
       items
         .filter((li) => pendingIds.has(li.itemId))
         .map((li) => ({
           label: labeller.copyOf(li.item),
           estimate: costEstimates.get(li.itemId)?.amount ?? null,
-        }))
+        })),
+      parts.opening
     );
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
@@ -5788,6 +5815,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     costEstimatedCount: costTotals.estimatedCount,
     costUnestimated: costTotals.unestimated,
     costEstimated: costTotals.estimated,
+    costOpening: costTotals.opening,
+    costOpeningCount: costTotals.openingCount,
+    costGaps: costTotals.gaps,
     inOfferCurrency:
       baseToOffer === null
         ? null

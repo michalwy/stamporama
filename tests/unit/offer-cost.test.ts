@@ -1,9 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import type { CostBasisTotal } from "../../src/lib/cost-basis";
 import {
   copiesCost,
   copyCostFigure,
+  describeCostGaps,
+  describeCostMarks,
+  holdingsCostParts,
   offerCostEstimateNotes,
+  offerCostNotes,
   offerCostTotals,
   offerSetCost,
   type CopyCostInput,
@@ -142,14 +147,26 @@ describe("a proposed lot's cost (#1743)", () => {
     assert.equal(cost.estimated, true);
   });
 
-  it("leaves an opening balance's copy out, as an offer's COST does", () => {
+  it("counts an opening balance's copy at its opening value, marked, as an offer's COST does (#2333)", () => {
     const cost = copiesCost([
       frozen("1.00"),
       copy({ costBasis: "9.00", lotId: "L3", lotStatus: "closed", lotValued: true, openingBalance: true }),
     ]);
-    assert.equal(cost.amount, "1.00");
+    assert.equal(cost.amount, "10.00");
     assert.equal(cost.knownCount, 1);
+    assert.equal(cost.openingCount, 1);
+    assert.equal(cost.opening, true);
+    assert.equal(cost.estimated, false);
     assert.equal(cost.noneCount, 0);
+  });
+
+  it("leaves an opening balance's copy with no value out, counted apart from no cost recorded (#2333)", () => {
+    const noValue = copy({ lotId: "L4", lotStatus: "closed", lotValued: false, openingBalance: true });
+    const cost = copiesCost([noValue, copy({})]);
+    assert.equal(cost.amount, null);
+    assert.equal(cost.noOpeningValueCount, 1);
+    assert.equal(cost.noneCount, 1);
+    assert.equal(cost.opening, false);
   });
 
   it("has no figure when no copy carries one", () => {
@@ -167,7 +184,7 @@ describe("a proposed lot's cost (#1743)", () => {
     assert.deepEqual(copyCostFigure(open("#3", null)), { kind: "missing", why: "pending" });
     assert.deepEqual(copyCostFigure(copy({})), { kind: "missing", why: "unrecorded" });
     assert.deepEqual(copyCostFigure(noValue), { kind: "missing", why: "no_opening_value" });
-    assert.deepEqual(copyCostFigure(opening), { kind: "missing", why: "opening_balance" });
+    assert.deepEqual(copyCostFigure(opening), { kind: "opening", amount: "9.00" });
 
     const copies = [frozen("1.10"), open("#2", "0.75"), open("#3", null), copy({}), noValue, opening];
     const rows = copies
@@ -175,8 +192,97 @@ describe("a proposed lot's cost (#1743)", () => {
       .reduce((sum, f) => (f.kind === "missing" ? sum : sum + Math.round(Number(f.amount) * 100)), 0);
     const cost = copiesCost(copies);
     assert.equal(cost.amount, (rows / 100).toFixed(2));
-    assert.equal(cost.amount, "1.85");
-    assert.equal(cost.noneCount, 2);
+    assert.equal(cost.amount, "10.85");
+    assert.equal(cost.noneCount, 1);
+    assert.equal(cost.noOpeningValueCount, 1);
     assert.deepEqual(cost.unestimated, ["#3"]);
+  });
+});
+
+// An offer set's opening side, read off its holdings summary (#2333).
+describe("an offer set's opening values (#2333)", () => {
+  const total = (over: Partial<CostBasisTotal>): CostBasisTotal => ({
+    baseCurrency: "EUR",
+    totalCostBasis: "0.00",
+    knownCount: 0,
+    pendingCount: 0,
+    noneCount: 0,
+    noOpeningValueCount: 0,
+    ...over,
+  });
+
+  it("splits the holdings' two halves into what was spent and the opening values", () => {
+    const parts = holdingsCostParts({
+      cost: total({ totalCostBasis: "4.00", knownCount: 1, noneCount: 1 }),
+      openingValue: total({ totalCostBasis: "6.00", knownCount: 2, noneCount: 1, noOpeningValueCount: 1 }),
+    });
+    assert.deepEqual(parts.known, { total: "4.00", count: 1, noneCount: 1 });
+    assert.deepEqual(parts.opening, { total: "6.00", count: 2, noValueCount: 1 });
+
+    const cost = offerSetCost(parts.known, [], parts.opening);
+    assert.equal(cost.amount, "10.00");
+    assert.equal(cost.opening, true);
+    assert.equal(cost.openingCount, 2);
+    assert.equal(cost.noOpeningValueCount, 1);
+    assert.equal(cost.noneCount, 1);
+  });
+
+  it("has a figure from opening values alone, and none when there is no copy with one", () => {
+    assert.equal(offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [], { total: "3.00", count: 1, noValueCount: 0 }).amount, "3.00");
+    const none = offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [], { total: "0.00", count: 0, noValueCount: 2 });
+    assert.equal(none.amount, null);
+    assert.equal(none.opening, false);
+  });
+
+  it("totals the sets' marks and gaps", () => {
+    const totals = offerCostTotals([
+      offerSetCost({ total: "4.00", count: 1, noneCount: 1 }, [], { total: "3.00", count: 1, noValueCount: 0 }),
+      offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [{ label: "A", estimate: null }], {
+        total: "0.00",
+        count: 0,
+        noValueCount: 2,
+      }),
+    ]);
+    assert.equal(totals.total, 7);
+    assert.equal(totals.opening, true);
+    assert.equal(totals.openingCount, 1);
+    assert.deepEqual(totals.gaps, { unrecorded: 1, unestimated: 1, noOpeningValue: 2 });
+  });
+});
+
+describe("what a cost says beside it (#2333)", () => {
+  it("names why a cost is missing, a phrase per reason", () => {
+    assert.deepEqual(describeCostGaps({ unrecorded: 0, unestimated: 0, noOpeningValue: 0 }), []);
+    assert.deepEqual(describeCostGaps({ unrecorded: 3, unestimated: 2, noOpeningValue: 1 }), [
+      "3 copies with no cost recorded",
+      "2 on open purchases with no estimate",
+      "1 on the opening balance with no value",
+    ]);
+    assert.deepEqual(describeCostGaps({ unrecorded: 1, unestimated: 1, noOpeningValue: 0 }), [
+      "1 copy with no cost recorded",
+      "1 on an open purchase with no estimate",
+    ]);
+  });
+
+  it("marks a cost as an estimate, as including opening values, or both", () => {
+    assert.equal(describeCostMarks({ estimated: false, opening: false }), null);
+    assert.equal(describeCostMarks({ estimated: true, opening: false }), "estimate");
+    assert.equal(describeCostMarks({ estimated: false, opening: true }), "incl. opening value");
+    assert.equal(describeCostMarks({ estimated: true, opening: true }), "estimate, incl. opening value");
+  });
+
+  it("notes the opening values and the copies with no cost in the hover", () => {
+    const notes = offerCostNotes({
+      estimatedCount: 0,
+      unestimated: [],
+      openingCount: 2,
+      noneCount: 1,
+      noOpeningValueCount: 1,
+    });
+    assert.deepEqual(notes, [
+      "2 copies at their opening value — not money spent",
+      "1 copy with no cost recorded",
+      "1 on the opening balance with no value",
+    ]);
   });
 });

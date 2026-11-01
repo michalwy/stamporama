@@ -7,11 +7,20 @@
 // order and its own page show — and the result is marked as an estimate wherever any copy under it
 // is pending. A pending copy with no possible estimate leaves the figure incomplete and is named.
 //
-// Pure: `offers.ts` feeds it the frozen side (from the set's holdings summary) and each pending
-// copy's estimate (from `cost-estimates.ts`), so the unit suite can hold the rule. The Lot builder's
-// proposed lot is costed by the same rule from its copies' own fields (`copiesCost`, #1743).
+// **A copy from an opening balance counts at its opening value** (#2333). #1324 made the opening value
+// a copy's cost basis for profit and loss when it sells, but never *money spent*; this is the figure an
+// asking price is set against, so it follows the sale's profit, not the spend: the opening value is
+// counted, and the figure is marked *incl. opening value* wherever one is under it, as an estimate is
+// marked, so it is never read as money spent. A copy on an opening balance with **no** opening value
+// stays out, counted as having no cost. **Where a cost is still missing the figure says why** — no cost
+// recorded, on an open purchase with no estimate, on the opening balance with no value
+// ({@link offerCostNotes}, {@link describeCostGaps}).
+//
+// Pure: `offers.ts` feeds it the frozen side (from the set's holdings summary, {@link holdingsCostParts})
+// and each pending copy's estimate (from `cost-estimates.ts`), so the unit suite can hold the rule. The
+// Lot builder's proposed lot is costed by the same rule from its copies' own fields (`copiesCost`, #1743).
 
-import { resolveCostBasis, type CostBasisInput } from "./cost-basis";
+import { resolveCostBasis, type CostBasisInput, type CostBasisTotal } from "./cost-basis";
 
 /** A pending copy of a set, as the offer's COST needs it. */
 export interface OfferPendingCopy {
@@ -31,23 +40,64 @@ export interface OfferSetCost {
   estimatedCount: number;
   /** Pending copies with no estimate — left out of {@link amount}, and named. */
   unestimated: string[];
-  /** Copies with no cost recorded at all (not pending): left out, as everywhere. */
+  /** Copies with no cost recorded at all (not pending, not on an opening balance): left out, as
+   *  everywhere. */
   noneCount: number;
+  /** Copies from an opening balance counted at their opening value (#2333). */
+  openingCount: number;
+  /** Copies on an opening balance with no opening value — left out, counted as having no cost. */
+  noOpeningValueCount: number;
   /** {@link amount} leans on an open lot — an estimate, or a gap where one could not be made. */
   estimated: boolean;
+  /** {@link amount} includes opening values (#2333) — never money spent, so it is marked. */
+  opening: boolean;
 }
+
+/** A set's opening-balance side (#2333): the opening values its copies carry, and how many copies
+ *  are on an opening balance with no value. */
+export interface OfferOpeningCost {
+  total: string;
+  count: number;
+  noValueCount: number;
+}
+
+const NO_OPENING: OfferOpeningCost = { total: "0.00", count: 0, noValueCount: 0 };
 
 const cents = (amount: number) => Math.round(amount * 100);
 
 /**
- * A set's COST: its frozen cost bases (`known.total` over `known.count` copies) plus the estimate of
- * each pending copy that has one.
+ * The two halves {@link offerSetCost} takes, read off a set's holdings summary, which keeps what was
+ * spent (`cost`) apart from opening values (`openingValue`, #1324). Every copy with no cost is counted
+ * once, as *no opening value* when that is why, else as *no cost recorded*. Pending copies are not
+ * counted here: the caller names them with their estimates.
+ */
+export function holdingsCostParts(holdings: { cost: CostBasisTotal; openingValue: CostBasisTotal }): {
+  known: { total: string; count: number; noneCount: number };
+  opening: OfferOpeningCost;
+} {
+  const { cost, openingValue } = holdings;
+  const noValueCount = cost.noOpeningValueCount + openingValue.noOpeningValueCount;
+  return {
+    known: {
+      total: cost.totalCostBasis,
+      count: cost.knownCount,
+      noneCount: cost.noneCount + openingValue.noneCount - noValueCount,
+    },
+    opening: { total: openingValue.totalCostBasis, count: openingValue.knownCount, noValueCount },
+  };
+}
+
+/**
+ * A set's COST: its frozen cost bases (`known.total` over `known.count` copies), its opening values
+ * (#2333), plus the estimate of each pending copy that has one.
  */
 export function offerSetCost(
   known: { total: string; count: number; noneCount: number },
-  pending: readonly OfferPendingCopy[]
+  pending: readonly OfferPendingCopy[],
+  opening: OfferOpeningCost = NO_OPENING
 ): OfferSetCost {
   let total = known.count > 0 ? cents(Number(known.total)) : 0;
+  if (opening.count > 0) total += cents(Number(opening.total));
   let estimatedCount = 0;
   const unestimated: string[] = [];
   for (const copy of pending) {
@@ -58,14 +108,17 @@ export function offerSetCost(
       estimatedCount++;
     }
   }
-  const counted = known.count + estimatedCount;
+  const counted = known.count + opening.count + estimatedCount;
   return {
     amount: counted === 0 ? null : (total / 100).toFixed(2),
     knownCount: known.count,
     estimatedCount,
     unestimated,
     noneCount: known.noneCount,
+    openingCount: opening.count,
+    noOpeningValueCount: opening.noValueCount,
     estimated: pending.length > 0,
+    opening: opening.count > 0,
   };
 }
 
@@ -83,20 +136,22 @@ export interface CopyCostInput extends CostBasisInput {
  * its catalogue value. The summary is the sum of these, so a row and the total cannot disagree:
  *
  *  - `known` — its frozen cost basis;
+ *  - `opening` — its opening value, from an opening balance (#2333): a cost basis, never money spent;
  *  - `estimate` — pending on an open lot, at the estimate its purchase order shows;
  *  - `missing` — no figure, and why: `pending` (an open lot with no estimate — named by the summary),
- *    `unrecorded` / `no_opening_value` (no cost at all — counted as *no cost recorded*), or
- *    `opening_balance` (an opening value, not money spent — left out, #1324).
+ *    `unrecorded` (no cost recorded) or `no_opening_value` (on an opening balance with no value).
  */
 export type CopyCostFigure =
   | { kind: "known"; amount: string }
+  | { kind: "opening"; amount: string }
   | { kind: "estimate"; amount: string }
-  | { kind: "missing"; why: "pending" | "unrecorded" | "no_opening_value" | "opening_balance" };
+  | { kind: "missing"; why: "pending" | "unrecorded" | "no_opening_value" };
 
 export function copyCostFigure(copy: Omit<CopyCostInput, "label">): CopyCostFigure {
-  if (copy.openingBalance) return { kind: "missing", why: "opening_balance" };
   const basis = resolveCostBasis(copy);
-  if (basis.state === "known") return { kind: "known", amount: basis.amount };
+  if (basis.state === "known") {
+    return copy.openingBalance ? { kind: "opening", amount: basis.amount } : { kind: "known", amount: basis.amount };
+  }
   if (basis.state === "pending") {
     return copy.costEstimate == null
       ? { kind: "missing", why: "pending" }
@@ -108,30 +163,41 @@ export function copyCostFigure(copy: Omit<CopyCostInput, "label">): CopyCostFigu
 /**
  * The COST of copies not yet on an offer — the Lot builder's proposed lot (#1743) — under the very
  * rule a set's COST follows: a frozen cost basis where known, the estimate where the lot is still
- * open. Built from each copy's own fields rather than a holdings summary, which is what an offer set
- * reads, but to the same split: a copy on an opening balance carries an opening value, not money
- * spent, and is left out as `holdings.cost` leaves it out (#1324). The caller hands it held copies
- * only. Summed from {@link copyCostFigure}, the figure each row shows (#1746).
+ * open, an opening balance's copy at its opening value (#2333). Built from each copy's own fields rather
+ * than a holdings summary, which is what an offer set reads, but to the same split. The caller hands it
+ * held copies only. Summed from {@link copyCostFigure}, the figure each row shows (#1746).
  */
 export function copiesCost(copies: readonly CopyCostInput[]): OfferSetCost {
   let total = 0;
   let count = 0;
   let noneCount = 0;
+  let openingTotal = 0;
+  let openingCount = 0;
+  let noValueCount = 0;
   const pending: OfferPendingCopy[] = [];
   for (const copy of copies) {
     const figure = copyCostFigure(copy);
     if (figure.kind === "known") {
       total += cents(Number(figure.amount));
       count++;
+    } else if (figure.kind === "opening") {
+      openingTotal += cents(Number(figure.amount));
+      openingCount++;
     } else if (figure.kind === "estimate") {
       pending.push({ label: copy.label, estimate: Number(figure.amount) });
     } else if (figure.why === "pending") {
       pending.push({ label: copy.label, estimate: null });
-    } else if (figure.why !== "opening_balance") {
+    } else if (figure.why === "no_opening_value") {
+      noValueCount++;
+    } else {
       noneCount++;
     }
   }
-  return offerSetCost({ total: (total / 100).toFixed(2), count, noneCount }, pending);
+  return offerSetCost({ total: (total / 100).toFixed(2), count, noneCount }, pending, {
+    total: (openingTotal / 100).toFixed(2),
+    count: openingCount,
+    noValueCount,
+  });
 }
 
 /** The offer's *Total* and *Per set* COST, summed from its sets' (#378's rule: an offer never lists a
@@ -145,6 +211,12 @@ export interface OfferCostTotals {
   unestimated: string[];
   /** Any set's figure leans on an open lot. */
   estimated: boolean;
+  /** Any set's figure includes opening values (#2333). */
+  opening: boolean;
+  /** Copies counted at their opening value. */
+  openingCount: number;
+  /** The copies still without a cost, by why (#2333). */
+  gaps: CostGaps;
 }
 
 export function offerCostTotals(sets: readonly OfferSetCost[]): OfferCostTotals {
@@ -162,7 +234,91 @@ export function offerCostTotals(sets: readonly OfferSetCost[]): OfferCostTotals 
     estimatedCount: sets.reduce((n, s) => n + s.estimatedCount, 0),
     unestimated: sets.flatMap((s) => s.unestimated),
     estimated: sets.some((s) => s.estimated),
+    opening: sets.some((s) => s.opening),
+    openingCount: sets.reduce((n, s) => n + s.openingCount, 0),
+    gaps: sumCostGaps(sets.map(costGapsOf)),
   };
+}
+
+/** The copies a cost is still missing for, by why (#2333) — each a copy count. */
+export interface CostGaps {
+  /** No cost recorded: no purchase lot, or dropped from a closed one. */
+  unrecorded: number;
+  /** On an open purchase with no estimate. */
+  unestimated: number;
+  /** On an opening balance with no opening value. */
+  noOpeningValue: number;
+}
+
+export const NO_COST_GAPS: CostGaps = { unrecorded: 0, unestimated: 0, noOpeningValue: 0 };
+
+export function costGapsOf(cost: OfferSetCost): CostGaps {
+  return { unrecorded: cost.noneCount, unestimated: cost.unestimated.length, noOpeningValue: cost.noOpeningValueCount };
+}
+
+export function sumCostGaps(gaps: readonly CostGaps[]): CostGaps {
+  return gaps.reduce(
+    (sum, g) => ({
+      unrecorded: sum.unrecorded + g.unrecorded,
+      unestimated: sum.unestimated + g.unestimated,
+      noOpeningValue: sum.noOpeningValue + g.noOpeningValue,
+    }),
+    NO_COST_GAPS
+  );
+}
+
+export function hasCostGaps(gaps: CostGaps): boolean {
+  return gaps.unrecorded + gaps.unestimated + gaps.noOpeningValue > 0;
+}
+
+const copiesWord = (n: number) => `${n} cop${n === 1 ? "y" : "ies"}`;
+
+/**
+ * Why a cost is missing, a phrase per reason (#2333): *3 copies with no cost recorded*, *2 on open
+ * purchases with no estimate*, *1 on the opening balance with no value*. Empty when nothing is missing.
+ */
+export function describeCostGaps(gaps: CostGaps): string[] {
+  const out: string[] = [];
+  if (gaps.unrecorded > 0) out.push(`${copiesWord(gaps.unrecorded)} with no cost recorded`);
+  if (gaps.unestimated > 0) {
+    out.push(`${gaps.unestimated} on ${gaps.unestimated === 1 ? "an open purchase" : "open purchases"} with no estimate`);
+  }
+  if (gaps.noOpeningValue > 0) out.push(`${gaps.noOpeningValue} on the opening balance with no value`);
+  return out;
+}
+
+/** The note on a cost counting opening values (#2333): *4 copies at their opening value — not money
+ *  spent*. */
+export function describeOpeningCount(count: number): string {
+  return `${copiesWord(count)} at ${count === 1 ? "its" : "their"} opening value — not money spent`;
+}
+
+/** What a cost figure is marked with, as a short note: *estimate*, *incl. opening value*, both, or
+ *  null when it is neither (#1736, #2333). */
+export function describeCostMarks(marks: { estimated: boolean; opening: boolean }): string | null {
+  const parts = [marks.estimated ? "estimate" : null, marks.opening ? "incl. opening value" : null].filter(
+    (p): p is string => p !== null
+  );
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/**
+ * The hint's notes on a COST, in one place for every surface that draws one (#2333): the estimate's
+ * notes ({@link offerCostEstimateNotes}), the copies counted at their opening value, then the copies
+ * still without a cost — no cost recorded, or on the opening balance with no value (the open lot's
+ * copies with no estimate are named by the estimate's notes).
+ */
+export function offerCostNotes(cost: {
+  estimatedCount: number;
+  unestimated: readonly string[];
+  openingCount: number;
+  noneCount: number;
+  noOpeningValueCount: number;
+}): string[] {
+  const notes = offerCostEstimateNotes(cost.estimatedCount, cost.unestimated);
+  if (cost.openingCount > 0) notes.push(describeOpeningCount(cost.openingCount));
+  notes.push(...describeCostGaps({ unrecorded: cost.noneCount, unestimated: 0, noOpeningValue: cost.noOpeningValueCount }));
+  return notes;
 }
 
 /** How many copies a hint names before it says *and N more* — a lot of a hundred is one listing. */

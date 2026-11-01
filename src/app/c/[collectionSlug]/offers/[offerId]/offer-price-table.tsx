@@ -1,6 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { describeCostGaps, describeCostMarks, type CostGaps } from "@/lib/offer-cost";
 import {
   describeCatalogueSource,
   describeEstimateBasis,
@@ -33,7 +34,7 @@ export interface OfferPriceTableOffer {
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
   costPrice: string | null;
-  setsTotals: { setCount: number; costEstimated: boolean };
+  setsTotals: { setCount: number; costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
 }
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)" };
@@ -94,10 +95,17 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
       const without = market.noEvidenceCopies > 0 ? `; ${copies(market.noEvidenceCopies)} without any` : "";
       return `What recorded results paid per set — ${copies(market.copies)} with results${without}`;
     }
-    case "cost":
-      return offer.setsTotals.costEstimated
-        ? "What the copies cost per set — partly an estimate, while their lot is open"
-        : "What the copies cost per set";
+    case "cost": {
+      const parts = ["What the copies cost per set"];
+      if (offer.setsTotals.costEstimated) parts.push("partly an estimate, while their lot is open");
+      if (offer.setsTotals.costOpening) {
+        parts.push("including the opening values of copies from an opening balance, which were never money spent");
+      }
+      // A missing cost's why is its note; a figure's tooltip names the copies it leaves out.
+      const gaps = row.amount === null ? [] : describeCostGaps(offer.setsTotals.costGaps);
+      if (gaps.length > 0) parts.push(`left out: ${gaps.join(", ")}`);
+      return parts.join(" — ");
+    }
     case "own":
       return editable ? `${ownLabel} — click it to change it` : ownLabel;
   }
@@ -105,7 +113,7 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
 
 /** The short note in brackets after a row's name (#1839): what the figure is, and nothing more. Since
  *  #1843 only Estimated, Cost and the offer's own price carry one; the catalogue's book and Market's
- *  reason for being empty are the tooltip's. */
+ *  reason for being empty are the tooltip's. A Cost with no figure says why instead (#2333). */
 function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; warn: boolean } | null {
   switch (row.key) {
     case "estimated":
@@ -116,8 +124,18 @@ function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; 
             warn: isStatedSource(offer.suggestedEstimate.source),
           }
         : null;
-    case "cost":
-      return offer.setsTotals.costEstimated ? { text: "estimate", warn: false } : null;
+    case "cost": {
+      // A missing cost says why (#2333); a figure says what is under it — an estimate, opening values.
+      if (row.amount === null) {
+        const gaps = describeCostGaps(offer.setsTotals.costGaps);
+        return gaps.length > 0 ? { text: gaps.join(", "), warn: true } : null;
+      }
+      const marks = describeCostMarks({
+        estimated: offer.setsTotals.costEstimated,
+        opening: offer.setsTotals.costOpening,
+      });
+      return marks ? { text: marks, warn: false } : null;
+    }
     case "own":
       return offer.priceBase ? { text: `≈ ${offer.priceBase} ${offer.baseCurrency}`, warn: false } : null;
     default:
@@ -387,6 +405,10 @@ export function OfferPriceStrip({
                   <button type="button" tabIndex={-1} onClick={onFillCatalogue} style={FILL_LINK}>
                     —
                   </button>
+                </Tooltip>
+              ) : row.amount === null && row.key === "cost" && rowNote ? (
+                <Tooltip content={`No cost: ${rowNote.text}`} align="end">
+                  <span style={{ color: "var(--color-warning)" }}>—</span>
                 </Tooltip>
               ) : row.amount === null ? (
                 <span style={MUTED}>—</span>

@@ -249,7 +249,9 @@ export interface AgentOfferPricing {
    *  beside `catalogueTotal` and never instead of it. */
   readonly marketTotal?: string;
   readonly marketNoEvidenceCopies: number;
-  /** What the copies cost, base currency, where that is known. */
+  /** What the copies cost, base currency, where that is known — the cost a price is set against, so
+   *  a copy from an opening balance counts at its opening value (#2333) and an open lot's copy at its
+   *  estimate (#1736). */
   readonly costTotal?: string;
   /** This platform's own opening figure for an auction (#553), in the platform's currency. Absent
    *  on a quick-buy house. It outranks the figures above **on an auction** — a lot is opened below
