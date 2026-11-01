@@ -33,7 +33,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
 import { Icon } from "@/app/icons";
-import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { CopiesWithoutCost } from "./copies-without-cost";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import { useSaleLineExpansion } from "./sale-line-expansion";
@@ -1083,19 +1083,23 @@ function SoldUnitCard({
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
-        {/* The tick (#2204); its click is stopped so ticking does not also open the card. */}
-        <input
-          type="checkbox"
-          aria-label="Select this sold set"
-          checked={ticked}
-          onChange={onTick}
-          onClick={(e) => e.stopPropagation()}
-          style={{ flexShrink: 0, cursor: "pointer" }}
-        />
+        {/* The tick (#2204) leads the row in a cell of its own (#1589), which stops its click so
+            ticking never also opens the card. The caret's cell reaches only half the gap back
+            towards it (#2314): with the row's whole padding as its bleed, it lay over the box and
+            a click on the tick expanded or collapsed the card instead. */}
+        <CheckCell bleed={{ top: "0.75rem", bottom: "0.75rem", left: "1rem", right: "0.3125rem" }}>
+          <input
+            type="checkbox"
+            aria-label="Select this sold set"
+            checked={ticked}
+            onChange={onTick}
+            style={{ margin: 0, cursor: "pointer" }}
+          />
+        </CheckCell>
         <CaretCell
           expanded={expanded}
           onToggle={onToggle}
-          bleed={{ top: "0.75rem", bottom: "0.75rem", left: "1rem", right: "0.3125rem" }}
+          bleed={{ top: "0.75rem", bottom: "0.75rem", left: "0.3125rem", right: "0.3125rem" }}
         />
         <div style={{ minWidth: 0, flex: 1 }}>
           {/* Named by the offer it sold through, and leading back to it (#2189); a set on no offer,
