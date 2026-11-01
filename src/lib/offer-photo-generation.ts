@@ -1974,6 +1974,50 @@ export async function enqueueOfferPhotoGeneration(
   });
 }
 
+/**
+ * Make a cleaned-up offer's images again once it is back on sale (#2317) — a set taken out of a sale,
+ * or a sale deleted. The sweep (#512) only ever purges a closed offer, and the plan it leaves behind is
+ * everything Regenerate needs, so an offer that is open again has no reason to wait for the collector
+ * to press it, offer by offer.
+ *
+ * Only an offer whose run reads `purged` and whose state is no longer closed is touched: one whose
+ * images are still there is left alone, and attachments uploaded by hand were never deleted. The run
+ * is queued exactly as Regenerate queues it, so the card shows it and every gate that waits for the
+ * photos waits for it. A run that cannot be queued is recorded as `failed` in its own words, so the
+ * card says why rather than still reading "Cleaned up" — what pressing Regenerate would have shown.
+ *
+ * Called after the reopening write has committed. Returns how many runs it queued, so the caller can
+ * nudge the worker.
+ */
+export async function regenerateCleanedUpOfferPhotos(
+  ownerId: string,
+  offerIds: readonly string[]
+): Promise<number> {
+  if (offerIds.length === 0) return 0;
+  const offers = await prisma.offer.findMany({
+    where: {
+      id: { in: [...offerIds] },
+      state: { notIn: [...CLOSED_OFFER_STATES] },
+      photoGeneration: { status: "purged" },
+    },
+    select: { id: true },
+  });
+  let queued = 0;
+  for (const { id } of offers) {
+    try {
+      await enqueueOfferPhotoGeneration(ownerId, id);
+      queued += 1;
+    } catch (e) {
+      if (!(e instanceof OfferPhotoGenerationError)) throw e;
+      await prisma.offerPhotoGeneration.update({
+        where: { offerId: id },
+        data: { status: "failed", error: e.message.slice(0, 500), finishedAt: new Date() },
+      });
+    }
+  }
+  return queued;
+}
+
 // ── Queue mechanics ──────────────────────────────────────────────────────────
 
 /**

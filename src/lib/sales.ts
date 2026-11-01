@@ -38,6 +38,7 @@ import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
+import { regenerateCleanedUpOfferPhotos } from "./offer-photo-generation";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
 import { deleteConversationAttachmentBytes } from "./conversation-attachments";
 import { saleAttachmentRefs } from "./sale-attachments";
@@ -1723,8 +1724,9 @@ export async function swapSaleLineSet(
 
 /** Remove a sold set from a sale (ADR-0013). Its copies become available again (their sold state
  * is derived), and if the line's offer had been flipped to `sold` but is no longer fully sold, the
- * offer reverts to `active`. */
-export async function removeSaleLine(ownerId: string, lineId: string): Promise<void> {
+ * offer reverts to `active` — with its generated images queued again if the sweep had cleaned them
+ * up (#2317). Returns how many such runs were queued, so the caller can nudge the worker. */
+export async function removeSaleLine(ownerId: string, lineId: string): Promise<number> {
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
     select: {
@@ -1746,7 +1748,9 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
       if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, line.offerId))) {
         await tx.offer.update({
           where: { id: line.offerId },
-          data: { state: "active", stateChangedAt: new Date() },
+          // Open again, so no longer closed: as in `deleteSale`, clearing `closedAt` (#512) takes it
+          // back out of the generated-photo purge's reach.
+          data: { state: "active", stateChangedAt: new Date(), closedAt: null },
         });
       }
       // The set is back in what this offer sells, which is the same composition change in reverse
@@ -1754,6 +1758,7 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
       await markListingContentChanged(line.offerId, tx);
     }
   });
+  return line.offerId ? regenerateCleanedUpOfferPhotos(ownerId, [line.offerId]) : 0;
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
@@ -2903,9 +2908,11 @@ export async function salesToReview(
 
 /** Delete a sale (ADR-0013). Cascades its lines + line items, so the copies become available
  * again (their sold state is derived), and its packing-supply lines, which return to stock (#1898).
- * Offers the sale marked `sold` revert to `active`. Its own files (#2198) go with it: the cascade
- * drops their rows, and their bytes are deleted once the delete went through. */
-export async function deleteSale(ownerId: string, saleId: string): Promise<void> {
+ * Offers the sale marked `sold` revert to `active`, and those whose generated images the sweep had
+ * cleaned up have them queued again (#2317). Its own files (#2198) go with it: the cascade drops
+ * their rows, and their bytes are deleted once the delete went through. Returns how many image runs
+ * were queued, so the caller can nudge the worker. */
+export async function deleteSale(ownerId: string, saleId: string): Promise<number> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
     select: {
@@ -2942,6 +2949,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
     }
   });
   await deleteConversationAttachmentBytes(attachments);
+  return regenerateCleanedUpOfferPhotos(ownerId, offerIds);
 }
 
 // ── Merge (#2041) ───────────────────────────────────────────────────────────

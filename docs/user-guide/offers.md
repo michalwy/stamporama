@@ -1106,6 +1106,13 @@ A working collection and an archive of something finished want different answers
 period belongs to the collection rather than to the whole instance. Deleting the sale that sold an
 offer puts the listing back to **Active**, and it stops being a candidate for cleanup at once.
 
+An offer that comes back on sale after its images were cleaned up — its sale deleted, or its set
+taken out of the sale — gets them made again on its own, without **Regenerate** pressed. The run is
+queued the moment the offer is open again, the photo card shows it rendering, and anything that waits
+for the images waits for it as it would for a regeneration you started. If the images cannot be made
+— a copy's scan has gone since — the card says **Failed** and why. An offer whose images were never
+cleaned up is left as it is.
+
 Storage freed this way shows up in the collection's [photo storage total](collections.md).
 
 ## Specification for buyers
