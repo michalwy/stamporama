@@ -71,11 +71,14 @@ export function describeCopyGrouping(mode: CopyGroupMode, axes: CopyGroupAxes): 
 /**
  * Why the sort control cannot be honoured under a grouping, or `null` while it can.
  *
- * Every grouping brings **its own** total order — duplicate groups by how many copies each holds
- * (#372), the filing groups by location path and ref (`location-groups.ts`), issue groups by the
- * Issues list's own reading order (#181, `issue-groups.ts`) — and each is applied server-side
- * because paging over it must neither repeat nor skip a group. So there is nothing for a sort
- * choice to do.
+ * Every grouping brings **its own** total order for its groups — duplicate groups by how many
+ * copies each holds (#372), the filing groups by location path and ref (`location-groups.ts`), issue
+ * groups by the Issues list's own reading order (#181, `issue-groups.ts`) — and each is applied
+ * server-side because paging over it must neither repeat nor skip a group. The sort never reorders
+ * the groups. Under the **filing and issue** groupings it orders the copies **inside** each group
+ * (#2300), whose members are read through the list's own query and so carry its sort; a duplicate
+ * group's members are copies of one stamp, which is where the sort has nothing to say, so the
+ * control stays greyed there.
  *
  * It reads as a **reason on a control that is still there** rather than as the control vanishing
  * (#868): a sort group that disappears the moment a grouping is picked takes about ten characters'
@@ -85,13 +88,11 @@ export function describeCopyGrouping(mode: CopyGroupMode, axes: CopyGroupAxes): 
 export function copyGroupingSortReason(mode: CopyGroupMode): string | null {
   switch (mode) {
     case "none":
+    case "location":
+    case "ref":
+    case "issue":
       return null;
     case "duplicates":
       return "Grouped lists carry their own order. Duplicate groups are ordered by how many copies each holds.";
-    case "location":
-    case "ref":
-      return "Grouped lists carry their own order. Filing groups are ordered by where the copies are kept.";
-    case "issue":
-      return "Grouped lists carry their own order. Issue groups follow the Issues list's own reading order.";
   }
 }

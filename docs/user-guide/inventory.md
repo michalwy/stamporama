@@ -296,9 +296,22 @@ right, from *which copies* to *how they are shown*.
     off** line.
 - **Grouping** — a dropdown that also holds duplicate grouping's three **Split by …** switches. See
   [Grouping the list](#grouping-the-list).
-- **Sort** — by date added, ascending or descending. Greyed under any grouping, which brings its
-  own order: duplicate groups run by how many copies each holds, filing groups by where the copies
-  are kept, issue groups in the Issues list's own order. Hover it and it says which.
+- **Sort** — by **date added**, **catalog number**, **issue date**, **stamp name**, **issue name**,
+  **copy number**, **catalog value** or **cost**, each ascending or descending with the arrow beside
+  it. Picking a sort starts it the useful way round — the catalogue keys and copy number ascending,
+  date added and the two values newest or dearest first.
+  - The catalogue keys read as on the Stamps list: catalog numbers the way the catalogue arranges them
+    (*2* before *10*, a variant such as *200a* right after *200*), and the issue date by year, month
+    and day. A copy of several stamps (a cover, a fragment) sorts by its first stamp.
+  - **Catalog value** and **cost** are the figures the row shows: the copy's own catalog value, and
+    its cost — the frozen cost, or while its purchase lot is still open the **~** estimate. Copies
+    with no value, no cost, no catalog number, no issue date or no issue come **last** either way.
+  - Copies equal on the chosen sort follow by catalog number, then by copy number.
+  - The whole list is sorted, not just the rows loaded so far, under every filter.
+  - Under **Group by location**, **location ref** or **issue** the groups keep their own order and
+    the sort orders the copies inside each group. Under **duplicate** grouping it is greyed: its
+    groups are ordered by how many copies each holds, and a group's copies are of one stamp. Hover
+    it and it says so.
 
 The holdings summary totals follow whatever the filters are showing, so a filtered view
 tells you the catalog value and purchase cost of just those copies.
@@ -1870,7 +1883,8 @@ A few things worth knowing:
 - The **checkbox** in front of a group row ticks the copies filed there that you still hold, exactly
   as it does on a duplicate group.
 
-Both groupings are computed on the server, so a group is never split in half by scrolling.
+Both groupings are computed on the server, so a group is never split in half by scrolling. The
+[sort](#filters-and-sorting) orders the copies inside each group; the groups stay in shelf order.
 
 ## Grouping by issue
 
@@ -1878,7 +1892,8 @@ Both groupings are computed on the server, so a group is never split in half by 
 hold of it — the reading you work a series through, and the one that shows at a glance where a set is
 thin. Rows are in the **Issues list's own order**: by year, then by the issue's primary catalog
 number, then by name. An issue with no year comes after the dated ones, and the copies whose stamp
-belongs to **no issue** are the last row of all.
+belongs to **no issue** are the last row of all. The [sort](#filters-and-sorting) orders the copies
+inside each issue; the issues stay in this order.
 
 Like every other grouping, this covers **whatever the list is showing** — every filter still
 applies, *Include sold & traded* and *Include no longer held* among them, because "what have I got of

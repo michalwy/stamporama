@@ -76,14 +76,17 @@ describe("asCopyGroupMode", () => {
 });
 
 describe("copyGroupingSortReason", () => {
-  it("is null only where the sort control can actually be honoured", () => {
-    assert.equal(copyGroupingSortReason("none"), null);
-    for (const mode of ["duplicates", "location", "ref", "issue"] as CopyGroupMode[]) {
-      const reason = copyGroupingSortReason(mode);
-      assert.ok(reason, `${mode} must say why sorting is unavailable`);
-      // The control stays on the bar wearing this text, so it has to be a sentence rather than a
-      // flag: a disabled control with nothing to say is the thing #868 traded the vanishing one for.
-      assert.ok(reason.endsWith("."), `${mode}'s reason must read as a sentence`);
+  it("is null where the sort orders the list or the copies inside each group (#2300)", () => {
+    for (const mode of ["none", "location", "ref", "issue"] as CopyGroupMode[]) {
+      assert.equal(copyGroupingSortReason(mode), null, mode);
     }
+  });
+
+  it("greys the sort under the duplicate grouping, with a sentence saying why", () => {
+    const reason = copyGroupingSortReason("duplicates");
+    assert.ok(reason);
+    // The control stays on the bar wearing this text, so it has to be a sentence rather than a
+    // flag: a disabled control with nothing to say is the thing #868 traded the vanishing one for.
+    assert.ok(reason.endsWith("."));
   });
 });

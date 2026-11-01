@@ -24,8 +24,16 @@ import {
   COPY_VALUATION_SELECT,
   copyValuationOf,
   valuateItemRows,
+  valuateItemsByIds,
   type ValuationRow,
 } from "./item-valuation";
+import {
+  isInMemoryCopySort,
+  sortCopySortRows,
+  type CopyListSortKey,
+  type CopySortRow,
+  type InMemoryCopySortKey,
+} from "./copy-list-sort";
 import { copyMarketMedian, marketStampIdsOf } from "./market-value";
 import { readMarketMedians } from "./market-values";
 import {
@@ -1102,7 +1110,8 @@ export async function restoreItem(ownerId: string, itemId: string): Promise<Item
  * which is the only signal a membership row carries. */
 const FIRST_ISSUE_MEMBERSHIP = { orderBy: { issueId: "asc" }, take: 1 } as const;
 
-export type ItemSortBy = "created";
+/** The Copies list's sort keys (#2300) — see `copy-list-sort.ts`. */
+export type ItemSortBy = CopyListSortKey;
 
 export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditionId"> {
   /** Restrict to copies in any of these conditions (#425) — an **OR**, empty/absent meaning every
@@ -2471,7 +2480,7 @@ async function withCostEstimates(
 }
 
 /** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
- * condition, and certificate status; sorts by added or acquired date; offset-paginated
+ * condition, and certificate status; sorts by any key of `copy-list-sort.ts` (#2300); offset-paginated
  * to feed the shared infinite-scroll primitive (mirrors `listStampsPaginated`). */
 /**
  * Which copies match these filters — **ids only, nothing enriched** (#637).
@@ -2599,14 +2608,8 @@ export async function listItemsPaginated(
   await assertCollectionOwner(ownerId, collectionId);
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
+  const sortBy = filters.sortBy ?? "created";
   const dir = filters.sortDir ?? "asc";
-  // `id` is the tiebreak, and it is what makes an offset page stable over ties (#710) —
-  // `listWantsPaginated`'s own last clause, for its own reason. `createdAt` alone is not a total
-  // order: `createMany` gives a bulk intake's copies the same millisecond, so two rows tying on it
-  // could come back in different orders on two reads, and an offset page boundary falling inside the
-  // tie would then repeat one row and skip another. It changes nothing anybody sees — the order
-  // within a tie was arbitrary before and is merely fixed now.
-  const orderBy = [{ createdAt: dir }, { id: dir }];
 
   const locationIds = await resolveLocationScope(collectionId, filters);
 
@@ -2615,9 +2618,26 @@ export async function listItemsPaginated(
     filters,
     buildItemWhere(collectionId, filters, locationIds)
   );
+
+  // A key no column carries (#2300) orders the whole matching set by id first, and only the page
+  // it cuts is read whole and enriched.
+  if (isInMemoryCopySort(sortBy)) {
+    const ordered = sortCopySortRows(await readCopySortRows(collectionId, where, sortBy), dir);
+    const pageIds = ordered.slice(offset, offset + pageSize).map((r) => r.id);
+    const rows = await prisma.item.findMany({
+      where: { id: { in: pageIds } },
+      select: ITEM_LIST_SELECT,
+    });
+    const position = new Map(pageIds.map((id, i) => [id, i]));
+    rows.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
+    const items = await withCostEstimates(collectionId, await enrichItemRows(collectionId, rows));
+    const hasMore = offset + pageSize < ordered.length;
+    return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
+  }
+
   const rows = await prisma.item.findMany({
     where,
-    orderBy,
+    orderBy: copyListOrderBy(sortBy, dir),
     take: pageSize + 1,
     skip: offset,
     select: ITEM_LIST_SELECT,
@@ -2629,6 +2649,103 @@ export async function listItemsPaginated(
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+/**
+ * The SQL order of the Copies list for a key a column carries (#2300). Every key ends on catalogue
+ * number, copy number and `id`, all ascending: the first two are the issue's tiebreak, and `id` is
+ * what makes an offset page stable over ties (#710) — `createdAt` alone is not a total order, since
+ * `createMany` gives a bulk intake's copies the same millisecond, and a page boundary falling inside
+ * such a tie would repeat one row and skip another. A blank sorts last in either direction.
+ */
+function copyListOrderBy(
+  sortBy: Exclude<ItemSortBy, InMemoryCopySortKey>,
+  dir: "asc" | "desc"
+): Prisma.ItemOrderByWithRelationInput[] {
+  const last = { sort: dir, nulls: "last" } as const;
+  const tieBreak: Prisma.ItemOrderByWithRelationInput[] = [
+    { stamp: { primaryCatalogSortKey: { sort: "asc", nulls: "last" } } },
+    { itemNo: "asc" },
+    { id: "asc" },
+  ];
+  switch (sortBy) {
+    case "created":
+      return [{ createdAt: dir }, ...tieBreak];
+    case "catalogNumber":
+      return [{ stamp: { primaryCatalogSortKey: last } }, ...tieBreak.slice(1)];
+    case "issueDate":
+      return [
+        { stamp: { issuedYear: last } },
+        { stamp: { issuedMonth: last } },
+        { stamp: { issuedDay: last } },
+        ...tieBreak,
+      ];
+    case "name":
+      return [{ stamp: { name: last } }, ...tieBreak];
+    case "copyNo":
+      return [{ itemNo: dir }, { id: "asc" }];
+  }
+}
+
+/**
+ * Every copy under `where` with the one figure an in-memory sort orders it by (#2300), resolved as
+ * its row resolves it: the issue is the stamp's first membership; the catalogue value is the copy's
+ * valuation in the base currency, faults and all; the cost is the frozen cost basis, else — while
+ * its lot is open — the estimate its row shows with a `~`, else nothing. Ownership is the caller's.
+ */
+async function readCopySortRows(
+  collectionId: string,
+  where: Prisma.ItemWhereInput,
+  sortBy: InMemoryCopySortKey
+): Promise<CopySortRow[]> {
+  const rows = await prisma.item.findMany({
+    where,
+    select: {
+      id: true,
+      itemNo: true,
+      costBasis: true,
+      lotId: true,
+      lot: { select: { status: true, price: true } },
+      stamp: {
+        select: {
+          primaryCatalogSortKey: true,
+          issueMemberships: {
+            ...FIRST_ISSUE_MEMBERSHIP,
+            select: { issue: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  const base = rows.map((row) => ({
+    id: row.id,
+    itemNo: row.itemNo,
+    catalogSortKey: row.stamp.primaryCatalogSortKey,
+  }));
+  if (sortBy === "issueName") {
+    return rows.map((row, i) => ({
+      ...base[i],
+      value: row.stamp.issueMemberships[0]?.issue.name ?? null,
+    }));
+  }
+  if (sortBy === "catalogueValue") {
+    const values = await valuateItemsByIds(collectionId, rows.map((r) => r.id));
+    return base.map((r) => ({ ...r, value: values.get(r.id)?.baseAmount ?? null }));
+  }
+  const costInputs = rows.map((row) => ({
+    id: row.id,
+    costBasis: row.costBasis == null ? null : row.costBasis.toString(),
+    lotId: row.lotId,
+    ...lotCostInputs(row.lot),
+  }));
+  const estimates = await loadCostEstimates(collectionId, costInputs);
+  return costInputs.map((input, i) => ({
+    ...base[i],
+    value:
+      input.costBasis != null
+        ? Number(input.costBasis)
+        : (estimates.get(input.id)?.amount ?? null),
+  }));
 }
 
 /**
