@@ -102,7 +102,7 @@ describe("Make photos over a group's lots (#2323)", () => {
     const offerId = await createOffer(
       userId,
       collectionId,
-      { platformId: directId, url: null, price: "5.00", startingPrice: null, currency: "EUR", listingDate: null, state: "preparing" },
+      { platformId: directId, url: null, price: "5.00", startingPrice: null, currency: "EUR", listingDate: null },
       { seedItemIds: [item.id] }
     );
     await updateOfferPhotoConfig(userId, offerId, {
