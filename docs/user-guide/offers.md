@@ -239,6 +239,13 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
   26 results*), *your estimate, not evidence* for a manual factor, *policy, not evidence* for the
   collection's fallback percentage, or how many buckets when your copies were estimated from several.
   The note turns to the warning colour when the share is one you stated rather than one learned.
+
+  The **New offer** form made from copies on the Copies list starts its price from the same figure,
+  for one set: copies going in as **one set** are suggested at the **sum** of their Estimated values
+  — a three-value series at the three added together — and copies going in **one set each** at
+  **one piece's**, when they all share it. A copy with no Estimated value leaves the price blank, and
+  the line under the price says how many copies have none; so does one set each of copies whose
+  estimates differ. See [What is going into the new offer](inventory.md#what-is-going-into-the-new-offer).
 - **Market** — what recorded results paid for copies like these; its hover says how many copies they
   cover. The row is **always there**: with nothing recorded it reads *—*, and its hover says there
   are no recorded results (or that none can be converted into the offer's currency).

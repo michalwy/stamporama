@@ -21,6 +21,12 @@ import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persiste
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { formatEntityNo } from "@/lib/quick-jump";
+import {
+  newOfferFigure,
+  newOfferFigureAmount,
+  type NewOfferFigure,
+  type NewOfferPackaging,
+} from "@/lib/new-offer-price";
 import { InventoryItemRow } from "./inventory-item-row";
 import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -143,7 +149,7 @@ export interface AddToOfferDialogProps {
    * multi-select is most often a stock of duplicates, and it is what the duplicate-group flow
    * (#372) needs, which reaches this dialog through `startInCreate` and so never sees the footer
    * control that would otherwise let the choice be changed. */
-  initialPackaging?: "per-copy" | "one-set";
+  initialPackaging?: NewOfferPackaging;
   /** Make the offer as a post's next lot (#2291) — *New lot…* on its screen, with `startInCreate` and
    *  `initialPlatform` the post's: the form fixes what the post fixes, and the offer is made in it. */
   facebookLot?: FacebookLotFormTarget & { postId: string; onCreated: (created: FacebookLotCreated) => void };
@@ -193,7 +199,7 @@ export function AddToOfferDialog({
   const itemIds = useMemo(() => items.map((i) => i.id), [items]);
   const multi = items.length > 1;
   // How several copies are packaged (#373), mirroring `ComposeSetDialog`'s two buttons.
-  const [packaging, setPackaging] = useState<"per-copy" | "one-set">(initialPackaging);
+  const [packaging, setPackaging] = useState<NewOfferPackaging>(initialPackaging);
   // The "create new offer" sub-flow: opens OfferFormDialog on top of the picker. Starts open when
   // launched from the "Add to new offer" action (#277), which skips the picker entirely.
   const [creating, setCreating] = useState(startInCreate);
@@ -217,23 +223,28 @@ export function AddToOfferDialog({
     creating
   );
 
+  // The figures a new offer's form suggests from its copies (#2302): one set's, so the packaging
+  // decides — the sum of the copies' figures for one set holding all, one piece's for one set each
+  // (and only when the copies agree). A copy with no figure leaves none, and the form says how many.
+  // Read over the copies actually going in, so taking one out moves the sum with it.
+  const createPackaging: NewOfferPackaging = multi ? packaging : "one-set";
   // The copies' catalogue value in the collection base currency (#230). No longer the suggestion
   // (#1829), but still what a Facebook group opening at a share of catalogue takes its share of
-  // (#1663). Blank when a copy is unpriced, when its value can't be expressed in the base currency
-  // (no rate), or when the copies **disagree** — an offer carries one price, so a figure only
-  // exists where the copies share one (which a duplicate group does by construction, unless its
-  // members carry different fault reductions, #1560).
-  const catalogBase = useMemo(() => {
-    const first = items[0]?.value;
-    if (!first || first.unpriced || first.baseAmountDisplay == null) return "";
-    return items.every((i) => i.value.baseAmountDisplay === first.baseAmountDisplay)
-      ? first.baseAmountDisplay
-      : "";
-  }, [items]);
+  // (#1663). A value that can't be expressed in the base currency (no rate) counts as none.
+  const catalogBase = useMemo(
+    () =>
+      newOfferFigureAmount(
+        newOfferFigure(
+          offerItems.map((i) => (i.value.unpriced ? null : i.value.baseAmountDisplay)),
+          createPackaging
+        )
+      ),
+    [offerItems, createPackaging]
+  );
   // Suggested asking price for the quick-start create path (#1829): the copies' **Estimated value**
-  // — catalogue × the learned realisation ratio — in the base currency, on the same rule: blank
-  // unless every copy has one and they agree. Read while the picker is still open, so it is usually
-  // there by the time the form is.
+  // — catalogue × the learned realisation ratio — in the base currency. Read while the picker is
+  // still open, so it is usually there by the time the form is; until then there is no suggestion
+  // and nothing to say about one.
   const { data: copyEstimates } = useQuery({
     queryKey: ["copy-estimates", collectionId, itemIds],
     queryFn: async () => {
@@ -243,11 +254,17 @@ export function AddToOfferDialog({
     enabled: itemIds.length > 0,
     staleTime: 30_000,
   });
-  const estimatedBase = useMemo(() => {
-    const first = copyEstimates && itemIds[0] ? copyEstimates[itemIds[0]] : undefined;
-    if (!first) return "";
-    return itemIds.every((id) => copyEstimates![id] === first) ? first : "";
-  }, [itemIds, copyEstimates]);
+  const estimate = useMemo(
+    () =>
+      copyEstimates
+        ? newOfferFigure(
+            offerItemIds.map((id) => copyEstimates[id] ?? null),
+            createPackaging
+          )
+        : null,
+    [offerItemIds, copyEstimates, createPackaging]
+  );
+  const estimatedBase = estimate ? newOfferFigureAmount(estimate) : "";
   // Both figures are re-expressed in the new offer's currency as it changes (mirrors the #200
   // duplicate flow). The base is always the base-currency figure, so switching currencies never
   // compounds; a missing rate leaves no suggestion rather than one in the wrong currency.
@@ -675,9 +692,10 @@ export function AddToOfferDialog({
           ) : undefined
         }
         // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
-        // price is set up front rather than deferred to the detail screen. When the copy has an
-        // Estimated value it pre-fills (#1829, the catalogue value until then, #230), converted to the
-        // offer's currency and still fully editable; otherwise the field starts blank.
+        // price is set up front rather than deferred to the detail screen. One set's Estimated value
+        // pre-fills it (#1829, the catalogue value until then, #230; summed for one set of several
+        // copies, #2302), converted to the offer's currency and still fully editable; otherwise the
+        // field starts blank and the note says why.
         showPrice
         // The price is the one thing this flow still asks for — the platform comes in pre-filled and
         // the rest pre-fills from the last offer — so the cursor starts there, with any suggested
@@ -687,13 +705,7 @@ export function AddToOfferDialog({
         onPriceValueChange={setTypedPrice}
         catalogValue={catalogPrice}
         onCurrencyChange={handlePriceCurrencyChange}
-        sourceNote={
-          estimatedBase
-            ? multi
-              ? "The asking price is pre-filled from the copies' shared Estimated value — adjust it as needed, then add the listing URL once you have it."
-              : "The asking price is pre-filled from this copy's Estimated value — adjust it as needed, then add the listing URL once you have it."
-            : "Set the asking price, and add the listing URL once you have it."
-        }
+        sourceNote={newOfferPriceNote(estimate, offerItems.length)}
         onClose={() => {
           if (isPending) return;
           setCreateError(undefined);
@@ -724,6 +736,28 @@ export function AddToOfferDialog({
  * them — the collector's next move is to look at the listing that already exists, and an offer
  * number is what finds it. Advisory throughout: nothing here disables a submit.
  */
+/** The create form's line under the price (#2302): where the suggested price came from, or why there
+ * is none — so a sum is never mistaken for a complete one. `estimate` is null while it is read. */
+function newOfferPriceNote(estimate: NewOfferFigure | null, count: number): string {
+  const rest = "add the listing URL once you have it.";
+  switch (estimate?.kind) {
+    case "figure":
+      return estimate.summed
+        ? `The asking price is pre-filled with the sum of the copies' Estimated values — adjust it as needed, then ${rest}`
+        : count > 1
+          ? `The asking price is pre-filled from the copies' shared Estimated value — adjust it as needed, then ${rest}`
+          : `The asking price is pre-filled from this copy's Estimated value — adjust it as needed, then ${rest}`;
+    case "missing":
+      return count === 1
+        ? `No asking price is suggested: this copy has no Estimated value. Set it, and ${rest}`
+        : `No asking price is suggested: ${estimate.missing} of the ${count} copies have no Estimated value. Set it, and ${rest}`;
+    case "differ":
+      return `No asking price is suggested: each copy is its own set, and their Estimated values differ. Set it, and ${rest}`;
+    default:
+      return `Set the asking price, and ${rest}`;
+  }
+}
+
 function CollisionNotice({ collisions }: { collisions: StampConditionCollision[] }) {
   return (
     <div
