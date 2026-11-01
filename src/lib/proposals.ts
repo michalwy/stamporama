@@ -5,6 +5,8 @@ import { allocateEntityNumber } from "./items";
 import { OPEN_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
 import { offerNumberLabel } from "./offer-set-rules";
 import { formatItemNo } from "./item-number";
+import { readOfferPickerContents } from "./offer-picker-contents";
+import type { OfferPickerContents } from "./offer-picker-contents-rules";
 import {
   applyEstimatedPrices,
   GenerationChangedError,
@@ -407,6 +409,8 @@ export interface ProposalLotCandidate {
   state: OfferState;
   price: string | null;
   currency: string;
+  /** What the row shows of it (#2309): its own title, photo and stamps, and what its search reaches. */
+  contents: OfferPickerContents;
 }
 
 export async function listProposalLotCandidates(ownerId: string, proposalId: string): Promise<ProposalLotCandidate[]> {
@@ -417,6 +421,10 @@ export async function listProposalLotCandidates(ownerId: string, proposalId: str
     orderBy: { offerNo: "desc" },
     select: { id: true, offerNo: true, name: true, ...LOT_FIGURES_SELECT },
   });
+  const contents = await readOfferPickerContents(
+    collectionId,
+    rows.map((row) => row.id)
+  );
   return rows.map((row) => {
     const [f] = totalLots([row]);
     const stated = f!.listingType === "auction" ? f!.startingPrice : f!.price;
@@ -427,6 +435,7 @@ export async function listProposalLotCandidates(ownerId: string, proposalId: str
       state: f!.state,
       price: stated !== null && Number(stated) > 0 ? stated : null,
       currency: row.currency,
+      contents: contents.get(row.id)!,
     };
   });
 }

@@ -30,9 +30,13 @@ import type {
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { OfferListContext } from "./list-context";
-import type { FacebookPostListItem, FacebookPostLotUpdate, FacebookPostScreen } from "@/lib/facebook-posts";
+import type {
+  FacebookLotCandidate,
+  FacebookPostListItem,
+  FacebookPostLotUpdate,
+  FacebookPostScreen,
+} from "@/lib/facebook-posts";
 import { lotPhotosDrawing, withFacebookPostLot, withLotPhotos, withPrepareRow } from "@/lib/facebook-post-lot-refresh";
-import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import type { FacebookPostPhotos } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
 import type { ItemListItem } from "@/lib/items";
@@ -343,7 +347,7 @@ export function useFacebookPostCatalogueFill(collectionId: string, postId: strin
 
 /** The offers that could join a post as further lots (#1870), what *Add lots…* picks from. */
 export function useFacebookLotCandidates(collectionId: string, postId: string) {
-  return useQuery<FacebookKitLot[]>({
+  return useQuery<FacebookLotCandidate[]>({
     queryKey: offerKeys.facebookLotCandidates(collectionId, postId),
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/candidates`);
