@@ -516,7 +516,14 @@ taken from, so a stamp found missing from the parcel can still be looked for the
 **not** put it back: the copy stays unfiled until you file it again — see
 [Copies that leave](locations.md#copies-that-leave).
 
-Remove a sold set from its card's **⋮** menu (its copies become available again).
+Remove a sold set from its card's **⋮** menu (its copies become available again). To remove several
+at once — a buyer who dropped part of an order, or a sale recorded with the wrong sets — tick their
+cards (grouped by **Lot**) and press **Remove** in the bar above them. One confirmation names how
+many sets and copies go and lists them; each set then goes exactly as its own **⋮ → Remove** takes
+it — copies available again, an offer whose last unit it was back to active — and the sale's amounts
+follow from the sets it has left. **It is all or nothing**: if any ticked set is no longer on the
+sale (moved or removed from another tab), nothing is removed and the dialog names which. Afterwards
+the selection is clear.
 
 ### How a sold set is named
 

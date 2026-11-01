@@ -50,6 +50,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
 import { MoveSaleSetsDialog } from "./move-sale-sets-dialog";
+import { RemoveSaleSetsDialog } from "./remove-sale-sets-dialog";
 import { saleMoveSourceRefusal } from "@/lib/sale-move-rules";
 import { soldUnitsSummary } from "@/lib/sold-units-summary";
 import { saleLineHeading } from "@/lib/sale-line-name";
@@ -148,6 +149,8 @@ type Dialog =
   | { kind: "shipment"; mode: "sent" | "edit" }
   | { kind: "merge" }
   | { kind: "moveSets"; lineIds: string[] }
+  /** The ticked sets to remove (#2315), and those a refusal named as no longer on the sale. */
+  | { kind: "removeSets"; lineIds: string[]; goneLineIds?: string[] }
   | { kind: "unpacked"; next: SaleStatus };
 
 interface SaleDetailPanelProps {
@@ -985,6 +988,10 @@ export function SaleDetailPanel({
           setError(refusal ?? undefined);
           if (!refusal) setDialog({ kind: "moveSets", lineIds });
         }}
+        onRemoveTicked={(lineIds) => {
+          setError(undefined);
+          setDialog({ kind: "removeSets", lineIds });
+        }}
         onEditPrice={(lineId, price) =>
           run(async () => {
             const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
@@ -1341,6 +1348,42 @@ export function SaleDetailPanel({
         />
       )}
 
+      {/* The ticked sets at once (#2315) — each as the single removal below takes it, all or none. */}
+      {dialog.kind === "removeSets" && (
+        <RemoveSaleSetsDialog
+          sets={sale.lines
+            .filter((line) => dialog.lineIds.includes(line.id))
+            .map((line) => ({ name: saleLineHeading(line.name), copyCount: line.copyCount }))}
+          goneNames={sale.lines
+            .filter((line) => dialog.goneLineIds?.includes(line.id))
+            .map((line) => saleLineHeading(line.name))}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onConfirm={() => {
+            const lineIds = dialog.lineIds;
+            setError(undefined);
+            startTransition(async () => {
+              const { removeSaleLinesAction } = await import("@/app/actions/sales");
+              const result = await removeSaleLinesAction(sale.id, lineIds);
+              if (result.status !== "success") {
+                setError(result.message);
+                if (result.goneLineIds) setDialog({ kind: "removeSets", lineIds, goneLineIds: result.goneLineIds });
+                return;
+              }
+              invalidateAll(collectionId);
+              setDialog({ kind: "none" });
+              toast({ message: `${result.removed} sold ${result.removed === 1 ? "set" : "sets"} removed` });
+              router.refresh();
+            });
+          }}
+        />
+      )}
       {dialog.kind === "removeLine" && (
         <ConfirmDialog
           title="Remove sold unit"
