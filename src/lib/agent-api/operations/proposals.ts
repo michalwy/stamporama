@@ -54,8 +54,9 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // states, as `set_offer_price` writes it — and `convert_proposal_to_sale` is *Convert to sale…*
 // (#2289) through `convertProposalToSaleThroughApi`, which runs the dialog's conversion and marks the
 // sale *to review* (#1948) in its transaction, as `sell_offer` does. The proposal's rules are the
-// domain's and are not restated: a lot is an open Direct offer in no other proposal, nothing changes
-// once a proposal is sold or declined, and each refusal is the app's own sentence.
+// domain's and are not restated: a lot is an open Direct offer in no other proposal, lots and their
+// prices change only while a proposal is being prepared — a sent one is fixed until the collector
+// reopens it in the app (#2307) — and each refusal is the app's own sentence.
 //
 // **No send, no decline, no link.** Marking a proposal sent, declining it, and the buyer's link and
 // document stay in the app — the collector decided on 2026-11-01 that what reaches the buyer is
@@ -220,7 +221,7 @@ export const listProposalsOperation: Operation = {
       type: "string[]",
       required: false,
       description:
-        "Restrict to these statuses: `preparing` (being put together), `sent` (gone to the buyer), `sold` (turned into a sale) and `declined`. Left out, every status.",
+        "Restrict to these statuses: `preparing` (being put together — the only one whose lots change), `sent` (gone to the buyer, fixed as it went), `sold` (turned into a sale) and `declined`. Left out, every status.",
       values: AGENT_PROPOSAL_STATUSES,
     },
   ],
@@ -340,7 +341,7 @@ export const addProposalLotsOperation: Operation = {
   method: "POST",
   path: "/proposals/{proposal}/lots",
   description:
-    "Make offers already listed on the Direct platform lots of a proposal, as the app's Add offers… does. Each must be an open Direct offer in no other proposal; one that is not refuses the call by name and nothing is added. The new lots take the next lot numbers. For copies with no offer yet, use `make_proposal_lots`.",
+    "Make offers already listed on the Direct platform lots of a proposal, as the app's Add offers… does. Each must be an open Direct offer in no other proposal; one that is not refuses the call by name and nothing is added. Only a proposal being prepared takes lots: a sent one stays as the buyer saw it until the collector reopens it. The new lots take the next lot numbers. For copies with no offer yet, use `make_proposal_lots`.",
   writes: true,
   parameters: [
     PROPOSAL_PARAMETER,
@@ -392,7 +393,7 @@ export const makeProposalLotsOperation: Operation = {
   method: "POST",
   path: "/proposals/{proposal}/lots/new",
   description:
-    "Make new lots of a proposal from copies, as the app's New lots… does: new offers on the Direct platform, titled from its templates and priced at their estimate where the copies have one, become the proposal's next lots. A copy sold or already on an open Direct offer refuses the call and nothing is made.",
+    "Make new lots of a proposal from copies, as the app's New lots… does: new offers on the Direct platform, titled from its templates and priced at their estimate where the copies have one, become the proposal's next lots. A copy sold or already on an open Direct offer refuses the call and nothing is made, as does a proposal that is not being prepared.",
   writes: true,
   parameters: [
     PROPOSAL_PARAMETER,
@@ -443,7 +444,7 @@ export const removeProposalLotOperation: Operation = {
   method: "DELETE",
   path: "/proposals/{proposal}/lots/{lot}",
   description:
-    "Take a lot out of a proposal. The offer stays, an ordinary Direct offer. While the proposal is being prepared the lots after it move up a number; once it is sent they keep theirs, since the buyer holds them.",
+    "Take a lot out of a proposal being prepared. The offer stays, an ordinary Direct offer. The lots after it move up a number — unless the proposal was sent before and reopened, when they keep theirs, since the buyer holds them. A sent proposal is refused: it stays as the buyer saw it until the collector reopens it.",
   writes: true,
   parameters: [PROPOSAL_PARAMETER, LOT_PARAMETER],
   result: { kind: "object", description: "The proposal as it now stands, in `get_proposal`'s shape — renumbered if it was." },
@@ -473,7 +474,7 @@ export const setProposalLotPriceOperation: Operation = {
   method: "PATCH",
   path: "/proposals/{proposal}/lots/{lot}/price",
   description:
-    "Price one lot of a proposal, as its price field on the proposal's screen does, in the lot's own currency. Only an open lot is priced, and only on a proposal that still takes changes to its lots; a closed one is refused with the reason. The figure is the offer's own, so the lot's offer shows it everywhere.",
+    "Price one lot of a proposal, as its price field on the proposal's screen does, in the lot's own currency. Only an open lot is priced, and only on a proposal being prepared; a sent one, fixed as the buyer saw it until the collector reopens it, and a closed one are refused with the reason. The figure is the offer's own, so the lot's offer shows it everywhere.",
   writes: true,
   parameters: [
     PROPOSAL_PARAMETER,

@@ -22,7 +22,7 @@ const CHIP: React.CSSProperties = {
 
 const STATUS: Record<ProposalStatus, { token: string | null; title: string }> = {
   preparing: { token: "info", title: "Lots and prices still being put together" },
-  sent: { token: "accent", title: "Sent to the buyer — prices can still change" },
+  sent: { token: "accent", title: "Sent to the buyer — fixed as it went until it is reopened" },
   sold: { token: "success", title: "Sold — the lots the buyer took became a sale" },
   declined: { token: null, title: "Declined — its open lots were withdrawn" },
 };
@@ -53,18 +53,24 @@ export function proposalTotalText(total: string, currency: string, unpriced: num
 /**
  * *New proposal* (#2287): from the list of proposals the contact is picked here, from a contact's page
  * it is that contact and the dialog only confirms. Opens the new proposal's screen, where its lots are
- * added.
+ * added — or, from *New offer*'s Proposal field (#2304), hands the proposal back to be chosen there.
  */
 export function NewProposalDialog({
   collectionId,
   collectionSlug,
   contact,
+  zIndexBase,
+  onMade,
   onClose,
 }: {
   collectionId: string;
   collectionSlug: string;
   /** The contact it is for, when it is made from the contact's page. */
   contact?: { id: string; name: string };
+  /** Above the dialog it was opened from, where that is not a page. */
+  zIndexBase?: number;
+  /** Given, the new proposal is handed here rather than opened. */
+  onMade?: (made: { proposalId: string; proposalNo: number }) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -89,12 +95,13 @@ export function NewProposalDialog({
         setError(result.message);
         return;
       }
-      router.push(`/c/${collectionSlug}/offers/proposals/${result.proposalNo}`);
+      if (onMade) onMade({ proposalId: result.proposalId, proposalNo: result.proposalNo });
+      else router.push(`/c/${collectionSlug}/offers/proposals/${result.proposalNo}`);
     });
   }
 
   return (
-    <DialogShell title="New proposal" onClose={close}>
+    <DialogShell title="New proposal" onClose={close} zIndexBase={zIndexBase}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

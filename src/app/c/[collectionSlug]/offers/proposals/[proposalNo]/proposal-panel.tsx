@@ -13,6 +13,7 @@ import {
   isProposalOpen,
   parseProposalLotPacking,
   proposalMoveRefusal,
+  proposalTakesLots,
   type ProposalLotPacking,
 } from "@/lib/proposal-rules";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -33,6 +34,7 @@ import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
 import { LotPhotos, ProposalBuyerCard } from "./proposal-buyer-parts";
 import { ProposalDocumentDialog } from "./proposal-document-dialog";
+import { Callout } from "../../lot-builder/lot-builder-chrome";
 
 /** Where *New lots…*'s last answer — an offer each, or one for all — is remembered (#2299). */
 const PACKING_KEY = "proposal-new-lots-packing";
@@ -117,6 +119,10 @@ export function ProposalPanel({
   if (isError || !screen) return <p style={{ ...META, color: "var(--color-error)" }}>The proposal could not be read.</p>;
 
   const open = isProposalOpen(screen.status);
+  // Lots, their titles and prices change only while it is being prepared: sent, it stays as the buyer
+  // saw it until it is reopened (#2307).
+  const editable = proposalTakesLots(screen.status);
+  const reopened = screen.status === "preparing" && screen.sentOn !== null;
   const sendRefusal = proposalMoveRefusal(screen.status, "send", screen.lots.length);
   const hasOpenLot = screen.lots.some((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state));
   const refresh = () => void invalidateAll(collectionId);
@@ -150,6 +156,10 @@ export function ProposalPanel({
 
   function send() {
     run(async () => (await import("@/app/actions/proposals")).moveProposalAction(proposalId, "send"), `Proposal #${screen!.proposalNo} marked sent`);
+  }
+
+  function reopen() {
+    run(async () => (await import("@/app/actions/proposals")).moveProposalAction(proposalId, "reopen"), `Proposal #${screen!.proposalNo} reopened`);
   }
 
   function decline() {
@@ -205,7 +215,7 @@ export function ProposalPanel({
           <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
             <ProposalStatusChip status={screen.status} />
             <span style={META}>made {screen.createdOn}</span>
-            {screen.sentOn && <span style={META}>sent {screen.sentOn}</span>}
+            {screen.sentOn && <span style={META}>{reopened ? "last sent" : "sent"} {screen.sentOn}</span>}
             {screen.closedOn && <span style={META}>closed {screen.closedOn}</span>}
             {screen.sale && (
               <Link href={`/c/${collectionSlug}/sales/${screen.sale.saleId}`} style={{ ...LINK, fontSize: "0.8125rem" }}>
@@ -220,16 +230,27 @@ export function ProposalPanel({
         <span style={{ flex: 1 }} />
         {open && (
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
-              <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("new")}>
-                New lots…
-              </button>
-            </Tooltip>
-            <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("add")}>
-              Add offers…
-            </button>
+            {editable && (
+              <>
+                <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
+                  <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("new")}>
+                    New lots…
+                  </button>
+                </Tooltip>
+                <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={() => setDialog("add")}>
+                  Add offers…
+                </button>
+              </>
+            )}
+            {screen.status === "sent" && (
+              <Tooltip content="Back to Preparing, to change its lots or their prices — then send it again">
+                <button type="button" style={SECONDARY_BUTTON} disabled={isPending} onClick={reopen}>
+                  Reopen
+                </button>
+              </Tooltip>
+            )}
             {screen.status === "preparing" && (
-              <Tooltip content={sendRefusal ?? "It has gone to the buyer — the prices can still change"}>
+              <Tooltip content={sendRefusal ?? "It has gone to the buyer — it stays as it went until you reopen it"}>
                 <button
                   type="button"
                   style={{ ...PRIMARY_BUTTON, opacity: sendRefusal ? 0.5 : 1 }}
@@ -268,6 +289,15 @@ export function ProposalPanel({
         )}
       </div>
 
+      {screen.status === "sent" && (
+        <Callout>Sent — it stays as the buyer saw it. Reopen it to add or take out lots or change their prices.</Callout>
+      )}
+      {reopened && (
+        <Callout tone="warning">
+          Reopened — the buyer was sent an earlier version on {screen.sentOn}. Send it again once it is ready.
+        </Callout>
+      )}
+
       {open && screen.lots.length > 0 && (
         <ProposalBuyerCard
           screen={screen}
@@ -299,7 +329,7 @@ export function ProposalPanel({
             <Link href={`/c/${collectionSlug}/inventory`} style={LINK}>
               Copies
             </Link>{" "}
-            list and generate offers on {screen.platform.name} into this proposal.
+            list and choose this proposal in New offer or Generate offers.
           </p>
         ) : (
           <ul style={{ margin: 0, padding: 0 }}>
@@ -307,11 +337,11 @@ export function ProposalPanel({
               <LotRow
                 key={lot.offerId}
                 lot={lot}
-                prepare={open ? prepare[lot.offerId] : undefined}
+                prepare={editable ? prepare[lot.offerId] : undefined}
                 photos={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
                 collectionId={collectionId}
                 onHandedOut={handedOut}
-                open={open}
+                editable={editable}
                 collectionSlug={collectionSlug}
                 priceRef={(el) => {
                   priceRefs.current.set(lot.offerId, el);
@@ -452,7 +482,7 @@ function LotRow({
   photos,
   collectionId,
   onHandedOut,
-  open,
+  editable,
   collectionSlug,
   priceRef,
   onEnter,
@@ -460,14 +490,15 @@ function LotRow({
   onRemove,
 }: {
   lot: ProposalLot;
-  /** Its Prepare row while the proposal is open and the lot is too — what its title and price are
-   *  edited through. */
+  /** Its Prepare row while the proposal is being prepared and the lot is open — what its title and
+   *  price are edited through. */
   prepare: PrepareOffer | undefined;
   /** Its photos as the buyer is sent them, while the proposal is open and the lot still offered. */
   photos: ProposalLotPhotos | undefined;
   collectionId: string;
   onHandedOut: () => void;
-  open: boolean;
+  /** The proposal is being prepared, so the lot can be taken out (#2307). */
+  editable: boolean;
   collectionSlug: string;
   priceRef: (el: HTMLInputElement | null) => void;
   onEnter: () => void;
@@ -508,7 +539,7 @@ function LotRow({
           {lot.price ? `${lot.price} ${lot.currency}` : "—"}
         </span>
       )}
-      {open && (
+      {editable && (
         <RowActionsMenu
           ariaLabel={`Offer #${lot.offerNo} actions`}
           actions={[{ key: "remove", label: "Take out of the proposal", icon: "remove", onSelect: onRemove }]}

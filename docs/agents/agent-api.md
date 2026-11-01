@@ -1065,7 +1065,8 @@ more: put lots together for them, price them, and record which they took.
 **Every write is the screen's own path** in `proposals.ts`, and every rule is the domain's —
 `proposalLotsRefusal`, `proposalLotRefusal`, the conversion's refusals — relayed with the app's own
 sentence (`OfferActionBlockedError` → `invalid_request`). Nothing here restates one, so #2307's
-*a sent proposal is fixed* reaches the agent with no change here. The one addition to the domain is
+*a sent proposal is fixed* reached the agent with no change to any handler — only the descriptions
+now say so — and `set_offer_price` on a sent lot is refused by `patchOffer` itself. The one addition to the domain is
 `convertProposalToSaleThroughApi`: the screen's conversion with `markSaleWrittenByApi` in its
 transaction, so a sale the agent records waits for the collector's *Confirm* (#1948) — created or
 added to — exactly as `sell_offer`'s does. `countProposals` was added beside the list for `total`,

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { listOpenProposals } from "@/lib/proposals";
+import { listPreparingProposals } from "@/lib/proposals";
 
-// The proposals still open (#2287) — what the offer generator offers to put its new offers into.
+// The proposals being prepared (#2287, #2307) — the only ones that take lots, so what New offer's
+// Proposal field (#2304) and the offer generator's Into proposal offer to put new offers into.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -15,7 +16,7 @@ export async function GET(
 
   const { collectionId } = await params;
   try {
-    return NextResponse.json({ items: await listOpenProposals(session.user.id, collectionId) });
+    return NextResponse.json({ items: await listPreparingProposals(session.user.id, collectionId) });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

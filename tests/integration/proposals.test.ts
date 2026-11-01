@@ -13,7 +13,7 @@ import {
   getDirectPlatform,
   getProposalLotsPrepare,
   getProposalScreen,
-  listOpenProposals,
+  listPreparingProposals,
   listProposalLotCandidates,
   listProposalsPaginated,
   moveProposal,
@@ -200,7 +200,7 @@ describe("Proposals (#2287)", () => {
     await assert.rejects(removeProposalLot(userId, proposalId, lot), /not a lot of this proposal/);
   });
 
-  it("is marked sent once it has a lot, prices still editable", async () => {
+  it("is marked sent once it has a lot, and is then fixed (#2307)", async () => {
     const { proposalId } = await createProposal(userId, collectionId, buyerId);
     await assert.rejects(moveProposal(userId, proposalId, "send"), /at least one lot/);
     const lot = await offer(directId, "5.00");
@@ -210,9 +210,9 @@ describe("Proposals (#2287)", () => {
     assert.equal(screen.status, "sent");
     assert.ok(screen.sentOn);
     await assert.rejects(moveProposal(userId, proposalId, "send"), /already been sent/);
-    // Still open: its lots still have their Prepare rows, and still take more.
-    assert.ok((await getProposalLotsPrepare(userId, collectionId, proposalId))[lot]);
-    await addProposalLots(userId, proposalId, [await offer(directId)]);
+    // Fixed as the buyer saw it (#2307): no Prepare rows to price with, and no more lots.
+    assert.deepEqual(await getProposalLotsPrepare(userId, collectionId, proposalId), {});
+    await assert.rejects(addProposalLots(userId, proposalId, [await offer(directId)]), /has been sent/);
   });
 
   it("declined, withdraws its open lots, keeps the closed ones, and changes no more", async () => {
@@ -238,7 +238,7 @@ describe("Proposals (#2287)", () => {
     await assert.rejects(removeProposalLot(userId, proposalId, open), /declined/);
   });
 
-  it("lists every proposal newest first, narrowed by status, and the open ones for the generator", async () => {
+  it("lists every proposal newest first, narrowed by status, and the ones being prepared for the generator", async () => {
     const { proposalId, proposalNo } = await createProposal(userId, collectionId, otherBuyerId);
     const { items } = await listProposalsPaginated(userId, collectionId);
     assert.equal(items[0]!.proposalId, proposalId);
@@ -246,9 +246,13 @@ describe("Proposals (#2287)", () => {
     assert.ok(items.every((p, i) => i === 0 || p.proposalNo < items[i - 1]!.proposalNo));
     const declined = await listProposalsPaginated(userId, collectionId, { statuses: ["declined"] });
     assert.ok(declined.items.length > 0 && declined.items.every((p) => p.status === "declined"));
-    const open = await listOpenProposals(userId, collectionId);
-    assert.ok(open.some((p) => p.proposalNo === proposalNo && p.contactName === "Anna Nowak"));
-    assert.ok(open.every((p) => p.status === "preparing" || p.status === "sent"));
+    const preparing = await listPreparingProposals(userId, collectionId);
+    assert.ok(preparing.some((p) => p.proposalNo === proposalNo && p.contactName === "Anna Nowak"));
+    // Only a proposal being prepared takes lots (#2307), so only those are offered.
+    assert.ok(preparing.every((p) => p.status === "preparing"));
+    const sent = await listProposalsPaginated(userId, collectionId, { statuses: ["sent"] });
+    assert.ok(sent.items.length > 0);
+    assert.ok(sent.items.every((s) => !preparing.some((p) => p.proposalId === s.proposalId)));
   });
 
   it("puts the offers a pass generates on Direct into the proposal picked", async () => {

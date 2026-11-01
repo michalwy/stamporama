@@ -62,8 +62,8 @@ elsewhere — nothing is special about a lot.
 
 ### 5. Its status
 
-`preparing` while lots and prices change; `sent` once it has gone to the buyer (`sentAt`), prices still
-editable; then closed (`closedAt`) — `sold` once converted (#2289), or `declined` by hand, which
+`preparing` while lots and prices change; `sent` once it has gone to the buyer (`sentAt`) — prices
+still editable as first decided, **fixed since #2307** (§9); then closed (`closedAt`) — `sold` once converted (#2289), or `declined` by hand, which
 **withdraws every lot still open**, each through the offer's own transition. A closed proposal takes
 no lots and changes no more. Marking it sent needs a lot. The rules are `proposal-rules.ts` (pure).
 
@@ -107,6 +107,23 @@ The message comes from the **Direct platform's** proposal message template
 no template, no message (#1692). The document reads like a post's preview (#2212) and is printed or
 shared by a live link (`ProposalShareToken`) that follows the prices until the proposal closes and then
 says only that it is closed. Handing any of the three out moves a Preparing proposal to Sent.
+
+### 9. A sent proposal is fixed (#2307), and New offer makes a lot (#2304)
+
+Added by #2307 and #2304, which built them together on 2026-11-01, their *to be confirmed* points as
+written. §5's *prices still editable* is replaced: **only a Preparing proposal takes lots and changes
+to them** (`proposalTakesLots`). Sent, no lot is added or taken out and no lot's title, price, format
+or platform changes — refused on the proposal's screen, in the agent API, and on the lot's own offer
+screen (`patchOffer` / `updateOffer` ask `sentProposalLot`), each with the reason. The offers' own
+states are untouched, and selling or declining a sent proposal needs no reopening. **Reopen** moves
+Sent back to Preparing and keeps `sentAt`, which is how the screen knows the buyer has seen an
+earlier version; sending again stamps the new time. No column was added. A reopened proposal does not
+renumber its lots when one is taken out (`proposalRenumbersLots`): the buyer still holds §8's numbers.
+
+Lots now also join through *New offer* (§2's list gains a fourth way): its **Proposal** field makes the
+form's offer on Direct and the chosen proposal's next lot in one transaction (`createProposalLot`,
+`writeProposalLots` as the `inTransaction` hook). It and the generator's *Into proposal* list the
+Preparing proposals only and share one remembered choice per collection in the browser.
 
 ## Consequences
 

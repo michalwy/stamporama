@@ -51,6 +51,7 @@ import {
   withdrawOfferOrPost,
   type FacebookLotCreated,
 } from "@/lib/facebook-posts";
+import { createProposalLot, type ProposalLotCreated } from "@/lib/proposals";
 import type { FacebookApprovalClosing } from "@/lib/facebook-post-rules";
 import {
   attachOfferCopyPhotos,
@@ -514,6 +515,33 @@ export async function createFacebookLotAction(
     return { status: "success", ...created };
   } catch (e) {
     return fail(e, "Failed to make the lot. Please try again.");
+  }
+}
+
+export type CreateProposalLotActionState =
+  | ({ status: "success" } & ProposalLotCreated)
+  | { status: "error"; message: string };
+
+/** *New offer* with a proposal chosen (#2304): the form's offer, seeded with the copies picked, made
+ *  as the proposal's next lot — or nothing, when the proposal would refuse it. */
+export async function createProposalLotAction(
+  collectionId: string,
+  proposalId: string,
+  formData: FormData,
+  seedItemIds: string[],
+  seedPerCopy: boolean
+): Promise<CreateProposalLotActionState> {
+  const session = await getSession();
+  const parsed = await readOfferInput(collectionId, formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const created = await createProposalLot(session.user.id, collectionId, proposalId, parsed.input, {
+      seedItemIds,
+      seedPerCopy,
+    });
+    return { status: "success", ...created };
+  } catch (e) {
+    return fail(e, "Failed to create the offer. Please try again.");
   }
 }
 

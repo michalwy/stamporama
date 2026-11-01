@@ -22,7 +22,12 @@ import {
   normalizeListingType,
   priceLabel,
 } from "@/lib/offer-rules";
-import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import {
+  PurchaseContactSelect,
+  type PlatformOfferDefaults,
+} from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import type { ProposalTakingLots } from "@/lib/proposals";
+import { baseBtn } from "@/app/button-style";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import {
   fromLocalInputValue,
@@ -159,8 +164,25 @@ export interface OfferFormDialogProps {
    *  auction closing when the post's auctions do, where it has one; and made Preparing or Ready only,
    *  since it goes up with the post. */
   facebookLot?: FacebookLotFormTarget;
+  /** *New offer*'s Proposal field (#2304), under Platform, create only: the offer becomes the chosen
+   *  proposal's next lot. Choosing a proposal moves the offer onto Direct; choosing another platform
+   *  sets the field back to *None*. */
+  proposal?: OfferFormProposalField;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+}
+
+/** What the Proposal field (#2304) is given: the choices, the choice, and the Direct platform a
+ *  proposal's lots are on. */
+export interface OfferFormProposalField {
+  direct: { id: string; name: string } & PlatformOfferDefaults;
+  /** The proposals being prepared — the only ones that take lots (#2307). */
+  proposals: readonly ProposalTakingLots[];
+  /** The proposal chosen, or "" for none. */
+  value: string;
+  onChange: (proposalId: string) => void;
+  /** *New proposal…*: start one for a contact, which the caller then chooses. */
+  onNewProposal: () => void;
 }
 
 /** What the offer form fixes for a new lot of a post (#2291). */
@@ -199,6 +221,7 @@ export function OfferFormDialog({
   titleItemIds,
   dismissable = true,
   facebookLot,
+  proposal,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -217,6 +240,9 @@ export function OfferFormDialog({
     : lastDefaults?.listingDate || todayIso();
   const priceControlled = priceValue !== undefined;
   const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
+  // The platform field is the collector's own text box, so a proposal chosen (#2304) puts Direct in it
+  // by drawing it afresh, seeded with Direct.
+  const [platformSeed, setPlatformSeed] = useState<{ key: number; id: string; name: string } | null>(null);
 
   // ── Facebook (#1544; ADR-0061) ──────────────────────────────────────────────────────────────
   // Whether the picked platform is Facebook, and its groups, asked of the server whenever the
@@ -408,6 +434,42 @@ export function OfferFormDialog({
   });
   const shownTitle = typedTitle ?? (platformId && titleKey ? (generatedTitle ?? "") : "");
 
+  function choosePlatform(id: string, _name: string, platform?: PlatformOfferDefaults) {
+    setPlatformId(id);
+    // A group belongs to its platform (#1544): another platform's is never carried over.
+    if (id !== platformId) setFacebookGroupId("");
+    // A picked platform carries its currency (null when unset); a typed name is an
+    // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
+    if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
+    // …how it sells by default (#449), re-seeded while the collector has not answered
+    // the question themselves, so switching from an auction platform to a quick-buy one
+    // does not leave the wrong format behind…
+    if (!isEdit && !listingTypeTouched) {
+      setListingType(normalizeListingType(id ? platform?.defaultListingType : null));
+    }
+    // …and the opening figure that goes with it (#362/#449), on the same rule: switching
+    // platforms mid-form must not leave the previous house's starting price behind.
+    if (!isEdit) setPlatformStartingPrice((id && platform?.defaultStartingPrice) || null);
+    if (!isEdit && !startingPriceTyped) {
+      setStartingPrice((id && platform?.defaultStartingPrice) || "");
+    }
+    // A proposal's lots are on Direct (#2304): another platform is no lot of one.
+    if (proposal?.value && id !== proposal.direct.id) proposal.onChange("");
+  }
+
+  // A proposal chosen (#2304) puts the offer on Direct, as picking Direct in the field would — chosen
+  // here, made with *New proposal…*, or the remembered one the form opens on. Followed while rendering,
+  // on the value the field last saw, so a choice arriving from the caller moves the platform too.
+  const [seenProposal, setSeenProposal] = useState("");
+  if (proposal && !isEdit && proposal.value !== seenProposal) {
+    setSeenProposal(proposal.value);
+    if (proposal.value && platformId !== proposal.direct.id) {
+      const { direct } = proposal;
+      setPlatformSeed((prev) => ({ key: (prev?.key ?? 0) + 1, id: direct.id, name: direct.name }));
+      choosePlatform(direct.id, direct.name, direct);
+    }
+  }
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // The group a new auction is made in becomes the one every shortcut starts on (#1663).
@@ -460,34 +522,58 @@ export function OfferFormDialog({
               idFieldName="platformId"
               nameFieldName="platformName"
               role="platform"
-              initialContactId={offer?.platformId ?? initialPlatform?.id}
-              initialContactName={offer?.platformName ?? initialPlatform?.name}
+              key={platformSeed?.key}
+              initialContactId={platformSeed?.id ?? offer?.platformId ?? initialPlatform?.id}
+              initialContactName={platformSeed?.name ?? offer?.platformName ?? initialPlatform?.name}
               inputId="offer-platform"
               placeholder="e.g. Delcampe, Allegro, Colnect…"
               disabled={isPending}
-              onSelectionChange={(id, _name, platform) => {
-                setPlatformId(id);
-                // A group belongs to its platform (#1544): another platform's is never carried over.
-                if (id !== platformId) setFacebookGroupId("");
-                // A picked platform carries its currency (null when unset); a typed name is an
-                // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
-                if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
-                // …how it sells by default (#449), re-seeded while the collector has not answered
-                // the question themselves, so switching from an auction platform to a quick-buy one
-                // does not leave the wrong format behind…
-                if (!isEdit && !listingTypeTouched) {
-                  setListingType(normalizeListingType(id ? platform?.defaultListingType : null));
-                }
-                // …and the opening figure that goes with it (#362/#449), on the same rule: switching
-                // platforms mid-form must not leave the previous house's starting price behind.
-                if (!isEdit) setPlatformStartingPrice((id && platform?.defaultStartingPrice) || null);
-                if (!isEdit && !startingPriceTyped) {
-                  setStartingPrice((id && platform?.defaultStartingPrice) || "");
-                }
-              }}
+              onSelectionChange={choosePlatform}
             />
             )}
           </div>
+
+          {/* The proposal the offer becomes a lot of (#2304), under the platform it moves onto Direct. */}
+          {proposal && !isEdit && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="offer-proposal">Proposal</LabelWithError>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <select
+                  id="offer-proposal"
+                  value={proposal.value}
+                  onChange={(e) => proposal.onChange(e.target.value)}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, flex: 1, minWidth: 0, cursor: "pointer" }}
+                >
+                  <option value="">None</option>
+                  {proposal.proposals.map((p) => (
+                    <option key={p.proposalId} value={p.proposalId}>
+                      {`Proposal #${p.proposalNo} · ${p.contactName}`}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={proposal.onNewProposal}
+                  disabled={isPending}
+                  style={{
+                    ...baseBtn,
+                    flexShrink: 0,
+                    border: "1px solid var(--color-border-strong)",
+                    background: "var(--color-bg-elevated)",
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  New proposal…
+                </button>
+              </div>
+              {proposal.value && (
+                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                  Made on {proposal.direct.name} as the proposal&apos;s next lot.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* The Facebook group the offer is in, and an auction's bid increment (#1544; ADR-0061) —
               asked only on the Facebook platform, where the group is required. Picking one on a new

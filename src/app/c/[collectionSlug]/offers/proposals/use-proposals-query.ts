@@ -2,7 +2,13 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { PrepareOffer } from "@/lib/offers";
-import type { ProposalListItem, ProposalLotCandidate, ProposalSaleOptions, ProposalScreen } from "@/lib/proposals";
+import type {
+  ProposalListItem,
+  ProposalLotCandidate,
+  ProposalSaleOptions,
+  ProposalScreen,
+  ProposalTakingLots,
+} from "@/lib/proposals";
 import type { ProposalLotPhotos, ProposalMessage } from "@/lib/proposal-handout";
 import type { ProposalStatus } from "@/lib/proposal-rules";
 
@@ -12,7 +18,7 @@ import type { ProposalStatus } from "@/lib/proposal-rules";
 export const proposalKeys = {
   list: (collectionId: string, statuses: readonly ProposalStatus[]) =>
     ["offers", collectionId, "proposals", "list", statuses] as const,
-  open: (collectionId: string) => ["offers", collectionId, "proposals", "open"] as const,
+  preparing: (collectionId: string) => ["offers", collectionId, "proposals", "preparing"] as const,
   screen: (collectionId: string, proposalId: string) =>
     ["offers", collectionId, "proposals", "screen", proposalId] as const,
   prepare: (collectionId: string, proposalId: string) =>
@@ -47,13 +53,14 @@ export function useProposalsInfinite(collectionId: string, statuses: readonly Pr
   });
 }
 
-/** The proposals still open — the offer generator's *Into proposal* choices. */
-export function useOpenProposals(collectionId: string, enabled: boolean) {
-  return useQuery<{ proposalId: string; proposalNo: number; contactName: string; status: ProposalStatus }[]>({
+/** The proposals being prepared — the only ones that take lots (#2307), so *New offer*'s Proposal
+ *  field (#2304) and the offer generator's *Into proposal* choices. */
+export function usePreparingProposals(collectionId: string, enabled: boolean) {
+  return useQuery<ProposalTakingLots[]>({
     enabled,
-    queryKey: proposalKeys.open(collectionId),
+    queryKey: proposalKeys.preparing(collectionId),
     queryFn: async () => {
-      const res = await fetch(`/api/collections/${collectionId}/proposals/open`);
+      const res = await fetch(`/api/collections/${collectionId}/proposals/preparing`);
       if (!res.ok) throw new Error("Failed to fetch the proposals");
       return (await res.json()).items;
     },
