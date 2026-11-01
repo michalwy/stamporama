@@ -3,20 +3,21 @@
 import { useState, useTransition } from "react";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
-import type { FacebookPostPhotoSettings } from "@/lib/facebook-post-photo-settings";
+import type { LotGroupPhotoSettings } from "@/lib/offer-lot-groups";
+import type { LotGroup } from "@/lib/offer-lot-group-rules";
 import { POST_PHOTO_SETTINGS, type PostPhotoSetting } from "@/lib/facebook-post-photo-settings-rules";
 import type { OfferPhotoConfigInput } from "@/lib/offer-photo-config";
-import { PhotoSettingsDialog } from "../../[offerId]/photo-settings-dialog";
-import { useInvalidateOffers } from "../../use-offers-query";
+import { PhotoSettingsDialog } from "../[offerId]/photo-settings-dialog";
 
-// *Photo settings…* on a post's screen (#2032): every lot's photo settings in one dialog — the offer's
-// own, opened over all of them — while the post is not yet up. What the lots share is shown; a setting
+// *Photo settings…* on a post's screen (#2032), and on a proposal's (#2313): every lot's photo settings
+// in one dialog — the offer's own, opened over all of them — while the post is not yet up, or the
+// proposal is being prepared. What the lots share is shown; a setting
 // they do not share reads *Differs by lot* and is left alone unless changed. Saving writes only what
 // was changed, to every lot, and — unless unticked, as on an offer (#328) — regenerates the photos of
 // each lot whose settings changed.
 
 /** What the lots share, as the offer dialog's `config`; a differing setting's place holds a blank. */
-function sharedConfig(settings: FacebookPostPhotoSettings["settings"]): OfferPhotoConfigInput {
+function sharedConfig(settings: LotGroupPhotoSettings["settings"]): OfferPhotoConfigInput {
   const value = <K extends PostPhotoSetting>(key: K, blank: OfferPhotoConfigInput[K]) => {
     const shared = settings[key];
     return (shared.same ? shared.value : blank) as OfferPhotoConfigInput[K];
@@ -33,18 +34,20 @@ function sharedConfig(settings: FacebookPostPhotoSettings["settings"]): OfferPho
   };
 }
 
-export function PostPhotoSettingsButton({
+export function LotPhotoSettingsButton({
   collectionId,
-  postId,
+  group,
   disabled,
+  onSaved,
 }: {
   collectionId: string;
-  postId: string;
+  group: LotGroup;
   disabled: boolean;
+  /** The lots' settings were written — their screen is read again. */
+  onSaved: () => void;
 }) {
-  const { invalidateAll } = useInvalidateOffers();
   const { toast } = useToast();
-  const [open, setOpen] = useState<FacebookPostPhotoSettings | null>(null);
+  const [open, setOpen] = useState<LotGroupPhotoSettings | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
 
@@ -52,8 +55,8 @@ export function PostPhotoSettingsButton({
   function openDialog() {
     setError(undefined);
     startTransition(async () => {
-      const { getFacebookPostPhotoSettingsAction } = await import("@/app/actions/facebook-post-photos");
-      const result = await getFacebookPostPhotoSettingsAction(postId);
+      const { getLotGroupPhotoSettingsAction } = await import("@/app/actions/offer-lot-groups");
+      const result = await getLotGroupPhotoSettingsAction(group);
       if (result.status === "error") toast({ message: result.message, tone: "error" });
       else setOpen(result.settings);
     });
@@ -63,8 +66,8 @@ export function PostPhotoSettingsButton({
     setError(undefined);
     const regenerate = formData.get("regeneratePhotos") != null;
     startTransition(async () => {
-      const { updateFacebookPostPhotoSettingsAction } = await import("@/app/actions/facebook-post-photos");
-      const result = await updateFacebookPostPhotoSettingsAction(postId, formData);
+      const { updateLotGroupPhotoSettingsAction } = await import("@/app/actions/offer-lot-groups");
+      const result = await updateLotGroupPhotoSettingsAction(group, formData);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -77,7 +80,7 @@ export function PostPhotoSettingsButton({
       }
       const saved = count === 1 ? "Photo settings saved on 1 lot" : `Photo settings saved on ${count} lots`;
       if (!regenerate) {
-        invalidateAll(collectionId);
+        onSaved();
         toast({ message: saved });
         return;
       }
@@ -85,7 +88,7 @@ export function PostPhotoSettingsButton({
       // set sold — is reported, and the rest go ahead.
       const { generateOffersPhotosAction } = await import("@/app/actions/offers");
       const queued = await generateOffersPhotosAction(result.changed);
-      invalidateAll(collectionId);
+      onSaved();
       const skipped = queued.result?.skipped ?? [];
       if (skipped.length === 0) {
         toast({ message: `${saved} — their photos are being regenerated` });
@@ -117,6 +120,7 @@ export function PostPhotoSettingsButton({
           bulk={{
             lotCount: open.lotCount,
             differing: new Set(POST_PHOTO_SETTINGS.filter((key) => !open.settings[key].same)),
+            subject: group.kind,
           }}
         />
       )}

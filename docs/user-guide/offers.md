@@ -3176,7 +3176,8 @@ Four ways, all while the proposal is **Preparing** — a sent one takes no lots 
 the next **New offer** and the next **Generate offers** open on it, without your choosing it again —
 for as long as it is being prepared. Once it is sent, sold or declined they open on *None* again.
 
-A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.
+A lot's **⋮** menu has **Take this lot out of the proposal**: the offer stays, as an ordinary Direct
+offer.
 
 ### Lot numbers
 
@@ -3189,12 +3190,46 @@ ones after it up a number, so what the buyer first gets has no gaps. Once it has
 numbers stay as they are — the buyer has them — so a proposal reopened to change it leaves a gap where
 a lot was taken out.
 
-### Pricing
+### Working on the lots
 
-The proposal's screen lists its lots by lot number. While the proposal is **Preparing**, each lot's
-title and price are edited in place, exactly as a post's lots are on the
-[Facebook post's screen](facebook.md): **Enter** in a price saves it and moves to the next lot's. The
-**total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
+The proposal's screen works like a [Facebook post's](facebook.md#a-post-with-several-lots): its lots
+are listed the same way and, while the proposal is **Preparing**, worked on with the same tools.
+
+**Each lot's row** shows the lot's photos — the ones the buyer is sent — and, while it has none yet,
+its first copy's own photo with a dashed edge and *The copy's photo — none to send yet*, so you always
+see which stamps it is. Then its **lot number**, its **offer** — the offer's number with an arrow,
+which opens the offer — and its title, its **price**, **state**, number of **sets**, and its **sale**
+once it is sold. A lot's **⋮** menu opens its offer, takes a **Ready** lot **Back to preparing**, and
+takes the lot out of the proposal.
+
+**While the proposal is Preparing**, as on a post that is not up yet:
+
+- **Pricing and readying from the rows.** Each lot's title is edited in place and its price typed into
+  its price table: **Enter** saves it and moves to the next lot's. The row says what still stops the
+  lot from being marked ready. Above the lots, **Use estimated price**, **Check covers** and **Mark
+  ready** act on every lot — see
+  [Pricing the lots and marking them ready](facebook.md#pricing-the-lots-and-marking-them-ready).
+  Saving one lot's price or title refreshes only that lot, so a run of prices typed down the list stays
+  quick.
+- **Photo settings…** — every lot's photo settings in one dialog, and their photos made again, instead
+  of opening each lot's offer. It works exactly as on a post: a setting the lots share shows its value,
+  one where they differ says **Differs by lot**, and only what you change is written.
+- **Regenerate lot texts…**, **Title template for all lots…**, **Add to titles…** and **Remove from
+  titles…** — every lot's title and description written again, given one title template, or the same
+  words put on or taken off every title, as on a post. A lot whose text is out of date is marked so in
+  its row, and a line above the lots offers to regenerate just those. The title template opens on the
+  one the lots were last given, or else the Direct platform's.
+- **The order of the lots** — drag a lot by its ⠿, or sort them all by **catalogue number** or
+  **price**; the lot numbers follow, and so does everything the buyer is sent — see
+  [Changing the order of the lots](facebook.md#changing-the-order-of-the-lots). Once the proposal has
+  been sent and reopened, the buyer already holds the numbers, so reorder only when you will send it
+  again.
+
+Once it is sent, the rows show the lots as they stand and none of these tools is offered until the
+proposal is reopened. What only a post has — its group, its layout, the post text and captions,
+auctions, publishing — has no place on a proposal.
+
+The **total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
 zero but named beside the total (*2 unpriced*).
 
 ### What the buyer is sent
@@ -3208,8 +3243,9 @@ While the proposal is open, the card above its lots holds everything for the buy
   nothing is made up for you.
 - **Photos** — **Download all** gives every lot's photos in one ZIP, each file named for its lot
   (`lot-02-…`). Each lot's row also shows its photos, to enlarge, **copy** (to paste straight into a
-  chat) or download one by one. They are the lot's offer photos, by its offer photo settings;
-  generate them on the offer as usual. A withdrawn lot's photos are left out.
+  chat) or download one by one. They are the lot's offer photos, by its offer photo settings —
+  **Mark ready** makes the missing ones, and **Photo settings…** changes and remakes them for every lot
+  at once. A withdrawn lot's photos are left out.
 - **Document** — **Print or share…** opens the document: the proposal's number, every lot with its
   number, title, price and photos, and the total, in the proposal's language — nothing else from your
   collection. Open it to print or save as a PDF, or make a **link** the buyer opens without an

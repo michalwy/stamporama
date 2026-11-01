@@ -4,8 +4,6 @@ import { Fragment, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  FACEBOOK_LOT_SORT_LABEL,
-  FACEBOOK_LOT_SORTS,
   FACEBOOK_POST_STAGE_LABEL,
   facebookLotPrice,
   facebookPostLink,
@@ -13,48 +11,28 @@ import {
   facebookPostStage,
   isFacebookLotClosed,
   isFacebookLotPosted,
-  sortFacebookLots,
-  type FacebookLotSort,
-  type FacebookTitleEdge,
-  type FacebookTitleWordsMode,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { canPreviewFacebookPost } from "@/lib/facebook-post-preview-rules";
 import { languageLabel } from "@/lib/languages";
-import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
+import { lotGroupName } from "@/lib/offer-lot-group-rules";
 import { facebookLotsInView, isFacebookLotForSale } from "@/lib/facebook-post-ui-state";
-import {
-  isAuctionListing,
-  isTerminalState,
-  manualTransitions,
-  OFFER_LISTING_TYPE_LABEL,
-  pricingReadyFor,
-} from "@/lib/offer-rules";
-import { isCoverReadinessBlocker, isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
+import { isAuctionListing, isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
-import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
-import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
-import {
-  DragGrip,
-  dragStyle,
-  InsertionLine,
-  showLineAt,
-  useReorderList,
-  type DragList,
-} from "@/app/c/[collectionSlug]/shared/reorder-list";
+import { showLineAt } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { TranslationGapLinks } from "@/app/c/[collectionSlug]/shared/title-preview";
 import { gapKey } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { useToast } from "@/app/toast-provider";
 import { ActivateOfferDialog, type PublishTarget } from "../../activate-offer-dialog";
 import { BackToReadyDialog, backToReadyDone } from "../../back-to-ready-dialog";
-import { OfferStateChip, PendingLinkMark } from "../../offer-badges";
+import { PendingLinkMark } from "../../offer-badges";
 import { SellOfferFlowDialog, type SellableOfferSubject } from "../../sell-offer-flow-dialog";
 import {
   useFacebookPostCatalogueFill,
@@ -63,25 +41,28 @@ import {
   useInvalidateOffers,
 } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
-import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-walk";
-import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../../prepare/prepare-offer-parts";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "../delete-post-dialog";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { NewLotFlow, type NewLotPost, type NewLotSource } from "./new-lot-flow";
-import { PostPhotoSettingsButton } from "./post-photo-settings";
-import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
-import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
+import {
+  DropLine,
+  GroupLotRow,
+  LOT_LIST,
+  priceFact,
+  saleFact,
+  stateFact,
+  textFacts,
+  type LotFact,
+} from "../../lots/lot-row";
+import { useLotGroupTools } from "../../lots/use-lot-group-tools";
 import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
 import { PostPriceTotalsBar } from "./post-price-totals-bar";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
-import { catalogueFillEntries, type CatalogueFillGroup, type CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import { AuctionLotCatalogValuesDialog } from "../../../auctions/auction-lot-catalog-values-dialog";
 
 // A Facebook post's own screen (#1842): the one place every offer in the post is seen with its state,
 // and the post is managed as one. Until it existed the post was seen from any lot's Facebook card,
@@ -99,6 +80,10 @@ import { AuctionLotCatalogValuesDialog } from "../../../auctions/auction-lot-cat
 //   goes there. *Back to preparing* (#2115) is its counterpart before the post is up: every Ready lot
 //   back to Preparing in one go, and each lot's `⋮` the same for that lot alone.
 // - **The kit**: the layout, the post's text and the photos' ZIP, above the lots.
+// - **The lots' row and the tools over them** — photo settings, texts and titles, pricing and readying,
+//   the order — are shared with a proposal's screen (#2313): `GroupLotRow` and `useLotGroupTools` in
+//   `offers/lots/`. What only a post has stays here: its kit, captions, links, untranslated names,
+//   ticks, totals and moves.
 // - **The lots**, listed once (#1863), in lot order and so in posting order: each row is the lot's
 //   photo (its upload set, laid out as text), the lot number, the offer (linking to it), its type, its
 //   price — an auction's current bid once one is recorded, else its starting price — its state, its
@@ -174,39 +159,6 @@ const CARD_TITLE: React.CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
-// The post's lots (#1863): one row per lot, which wraps onto the next line rather than shrinking the
-// photo — large enough to recognise the stamps — or the caption.
-const LOT_LIST: React.CSSProperties = { listStyle: "none", margin: 0, padding: 0 };
-
-const LOT_ROW_PAD = "0.875rem";
-
-// The tick cell comes first and runs the row's whole height (#2082, as on every list row, #1589), so
-// the row itself does not wrap: what follows the cell does, in `LOT_BODY`.
-const LOT_ROW: React.CSSProperties = {
-  display: "flex",
-  alignItems: "stretch",
-  padding: `${LOT_ROW_PAD} 0`,
-  borderBottom: "1px solid var(--color-border)",
-};
-
-const LOT_BODY: React.CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "flex-start",
-  gap: "0.75rem 1.25rem",
-};
-
-const LOT_FACTS: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "auto 1fr",
-  gap: "0.25rem 0.75rem",
-  margin: "0.5rem 0 0",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-};
-
 const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
 // *Next lot ↓* (#1980): a link in the warning's own line, not a button beside it.
@@ -231,36 +183,9 @@ type Dialog =
   | { kind: "takeOut"; lot: FacebookKitLot }
   | { kind: "addLots" }
   | { kind: "newLot"; source: NewLotSource }
-  | { kind: "regenerate"; scope: RegenerateScope }
-  | { kind: "titleTemplate" }
-  | { kind: "titleWords"; mode: FacebookTitleWordsMode }
   | { kind: "sell"; lots: FacebookKitLot[] }
   | { kind: "deletePost" }
-  | { kind: "preview" }
-  /** *Fill catalogue values* (#2220): the whole post's, or one lot's from its row. */
-  | { kind: "fillCatalogue"; groups: CatalogueFillGroup<CatalogueFillLine>[] };
-
-/** What a run over the post's lots could not do, named against its lot (#323's rule, #2031). */
-interface LotSkip {
-  offerId: string;
-  message: string;
-}
-
-/** Which covers walk is open (#2031): one lot's, from its row, or every lot's in one pass — the photos
- *  not yet checked, or every one again on Ready lots (#2114). */
-type CoverWalk =
-  | { kind: "lot"; offerId: string; mode: "unchecked" | "all"; includeOtherAreas: boolean }
-  | { kind: "post"; offers: { id: string; offerNo: number }[]; mode: "unchecked" | "all" };
-
-/** The lot has no stated price yet — the figure *Use estimated price* fills. */
-function unpriced(offer: PrepareOffer): boolean {
-  return !pricingReadyFor(offer.listingType, "ready", offer.price, offer.startingPrice);
-}
-
-/** How many of the lot's photos its ready gate still wants checked for symbols (#1665). */
-function uncheckedCovers(offer: PrepareOffer): number {
-  return offer.readyBlockers.find(isCoverReadinessBlocker)?.count ?? 0;
-}
+  | { kind: "preview" };
 
 export function FacebookPostPanel({
   collectionId,
@@ -296,12 +221,6 @@ export function FacebookPostPanel({
   // The lots' copies as *Fill catalogue values* lines (#2220), asked while the lots are priced.
   const { data: fill } = useFacebookPostCatalogueFill(collectionId, postId, notUp);
   const fillLines = notUp ? (fill ?? null) : null;
-  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
-  const areaNameById = new Map(areas.map((a) => [a.id, a.name]));
-  const [lotSkips, setLotSkips] = useState<LotSkip[]>([]);
-  const [coverWalk, setCoverWalk] = useState<CoverWalk | null>(null);
-  // The lots' price fields, by offer id — Enter moves down them in lot order (#2031).
-  const priceInputs = useRef(new Map<string, HTMLInputElement>());
   // The prices being typed, by offer id, for the post's totals (#2218) — each with the saved figure it
   // was typed over, so one left behind by a save no longer counts.
   const [priceDrafts, setPriceDrafts] = useState<ReadonlyMap<string, PriceDraft>>(() => new Map());
@@ -315,17 +234,32 @@ export function FacebookPostPanel({
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const [steppedTo, setSteppedTo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  // The order just asked for (#1986), drawn until the screen is read again — so a dragged row stays
-  // where it was dropped rather than jumping back for the round trip.
-  const [movedOrder, setMovedOrder] = useState<string[] | null>(null);
   // The lots ticked to be sold together (#2050), by offer id. Only a lot that can still be sold has a
   // box; one that has sold since it was ticked simply drops out of `tickedLots`.
   const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
 
   const serverLots = screen?.kit.lots ?? [];
-  const lots = movedOrder
-    ? movedOrder.flatMap((id) => serverLots.find((l) => l.offerId === id) ?? [])
-    : serverLots;
+  const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
+  // The tools a post's lots share with a proposal's (#2313): photo settings, texts and titles, pricing
+  // and readying, and the order — offered while the post is not up.
+  const tools = useLotGroupTools({
+    collectionId,
+    group: { kind: "post", id: postId },
+    groupName: lotGroupName("post", screen?.postNo ?? 0),
+    lots: serverLots,
+    editable: notUp,
+    reorderable,
+    prepareRows,
+    fillLines,
+    lotTexts: screen?.lotTexts ?? null,
+    lotTitles: screen?.lotTitles ?? null,
+    language: screen?.translations?.language ?? null,
+    areas,
+    generatingNote: "Photos being generated — Publish waits for them.",
+    refresh: () => invalidateAll(collectionId),
+  });
+  const lots = tools.lots;
+  const drag = tools.drag;
   // *Still for sale* (#2081): offered once the post is up and has more than one lot — before that no
   // lot can be sold or withdrawn, and a post of one has nothing to narrow. Remembered per post.
   const [stillForSale, setStillForSale] = useFacebookPostStillForSale(collectionId, postId);
@@ -336,49 +270,6 @@ export function FacebookPostPanel({
   // Ticks outlive the chip — it never touches `ticked` — and what is counted and handed to *Sell…* is the
   // ticked lots in view. The chip hides only lots that can no longer be sold, which never count anyway.
   const tickedLots = lotsInView.filter((l) => ticked.has(l.offerId) && !isTerminalState(l.state));
-  const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
-
-  // The lots in their new order, numbered from it (#1986); the server writes the numbers.
-  function reorder(offerIds: string[]) {
-    if (!screen || isPending || offerIds.every((id, i) => id === lots[i]?.offerId)) return;
-    setError(undefined);
-    setMovedOrder(offerIds);
-    startTransition(async () => {
-      const { reorderFacebookLotsAction } = await import("@/app/actions/facebook");
-      const result = await reorderFacebookLotsAction(postId, offerIds);
-      if (result.status === "error") toast({ message: result.message, tone: "error" });
-      await invalidateAll(collectionId);
-      setMovedOrder(null);
-    });
-  }
-
-  const drag = useReorderList(
-    reorderable,
-    (from, to) => {
-      const next = lots.map((l) => l.offerId);
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      reorder(next);
-    },
-    { handleOnly: true }
-  );
-
-  function sortLots(by: FacebookLotSort) {
-    reorder(sortFacebookLots(lots, by));
-  }
-
-  // Enter in a lot's price field: the next lot's, in the order drawn; the last one is left, which saves it.
-  function focusAfter(offerId: string) {
-    const index = lots.findIndex((l) => l.offerId === offerId);
-    const next = lots.slice(index + 1).find((l) => priceInputs.current.has(l.offerId));
-    const el = next ? priceInputs.current.get(next.offerId) : undefined;
-    if (el) {
-      el.focus();
-      el.select();
-    } else {
-      priceInputs.current.get(offerId)?.blur();
-    }
-  }
 
   if (isLoading) return <p style={MUTED}>Loading…</p>;
   if (isError || !screen) {
@@ -394,7 +285,7 @@ export function FacebookPostPanel({
     );
   }
 
-  const { kit, postNo, title, translations, lotTexts, lotTitles } = screen;
+  const { kit, postNo, title, translations, lotTexts } = screen;
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
   const pendingLot = lots.find((l) => l.state === "pending");
@@ -465,126 +356,12 @@ export function FacebookPostPanel({
     });
   }
 
-  // The lots' titles and descriptions from their templates (#1983); the ticked hand-written ones too.
-  function regenerate(offerIds: string[], overwrite: string[]) {
-    setError(undefined);
-    startTransition(async () => {
-      const { regenerateFacebookLotTextsAction } = await import("@/app/actions/facebook");
-      const result = await regenerateFacebookLotTextsAction(postId, offerIds, overwrite);
-      if (result.status === "error") {
-        setError(result.message);
-        return;
-      }
-      setDialog({ kind: "none" });
-      invalidateAll(collectionId);
-      toast({ message: result.count === 1 ? "1 lot's texts regenerated" : `${result.count} lots' texts regenerated` });
-    });
-  }
-
-  // Every lot's title from one template (#2033); the ticked hand-written ones too.
-  function retitle(template: string, overwrite: string[]) {
-    setError(undefined);
-    startTransition(async () => {
-      const { setFacebookPostTitleTemplateAction } = await import("@/app/actions/facebook");
-      const result = await setFacebookPostTitleTemplateAction(postId, template, overwrite);
-      if (result.status === "error") {
-        setError(result.message);
-        return;
-      }
-      setDialog({ kind: "none" });
-      invalidateAll(collectionId);
-      toast({ message: result.count === 1 ? "1 lot's title written from the template" : `${result.count} lots' titles written from the template` });
-    });
-  }
-
-  // The same words on, or off, the start or end of every lot's title (#2033).
-  function changeTitleWords(mode: FacebookTitleWordsMode, words: string, edge: FacebookTitleEdge) {
-    setError(undefined);
-    startTransition(async () => {
-      const { changeFacebookLotTitleWordsAction } = await import("@/app/actions/facebook");
-      const result = await changeFacebookLotTitleWordsAction(postId, words, edge, mode);
-      if (result.status === "error") {
-        setError(result.message);
-        return;
-      }
-      setDialog({ kind: "none" });
-      invalidateAll(collectionId);
-      toast({ message: result.count === 1 ? "1 title changed" : `${result.count} titles changed` });
-    });
-  }
-
-  const outOfDateCount = lotTexts ? lots.filter((l) => lotTexts[l.offerId]?.outOfDate).length : 0;
-
-  /* ── Pricing and readying every lot (#2031) — the Prepare screen's bulk actions, over the post ── */
-  const prepared = prepareRows ? lots.flatMap((l) => prepareRows[l.offerId] ?? []) : [];
-  const estimable = prepared.filter((o) => unpriced(o) && o.suggestedPrice !== null);
-  const toCover = prepared.filter((o) => uncheckedCovers(o) > 0);
-  const coverCount = toCover.reduce((sum, o) => sum + uncheckedCovers(o), 0);
-  const toReady = prepared.filter((o) => lots.find((l) => l.offerId === o.id)?.state === "preparing");
-  // With nothing left unchecked, *Check covers* walks every photo of the lots that apply covers again —
-  // a cover found wrong at the last look, on a Ready lot (#2114).
-  const toReview = prepared.filter((o) => o.covers.needed && o.covers.photoCount > 0);
-  const coverWalkOffers = toCover.length > 0 ? toCover : toReview;
   // The lots whose photos are being made — *Publish…* waits for them (#2114).
   const photoRunLots = lots.filter((l) => prepareRows?.[l.offerId]?.readyBlockers.some(isPhotoRunBlocker));
   const publishHeld =
     photoRunLots.length > 0
       ? `Waiting for the photos of ${photoRunLots.map((l) => `lot ${l.lotNo ?? lots.indexOf(l) + 1}`).join(", ")} — Publish once they are done, so the new ones go up.`
       : null;
-  const lotNoOf = (offerId: string) => {
-    const lot = lots.find((l) => l.offerId === offerId);
-    return lot ? `Lot ${lot.lotNo ?? lots.indexOf(lot) + 1}` : "A lot";
-  };
-
-  // *Fill catalogue values* (#2220): one group per lot being priced, in the post's order — the lots the
-  // pricing tools work on, so N counts only what those lots are missing.
-  const fillGroupOf = (lot: FacebookKitLot): CatalogueFillGroup<CatalogueFillLine> => ({
-    key: lot.offerId,
-    label: lotNoOf(lot.offerId),
-    title: `${lotNoOf(lot.offerId)} · ${prepareRows?.[lot.offerId]?.name ?? lot.title}`,
-    lines: fillLines?.[lot.offerId] ?? [],
-  });
-  const fillGroups = prepareRows && fillLines ? lots.filter((l) => prepareRows[l.offerId]).map(fillGroupOf) : [];
-  const fillCount = catalogueFillEntries(fillGroups.flatMap((g) => g.lines)).length;
-
-  function applyEstimates() {
-    if (estimable.length === 0) return;
-    setLotSkips([]);
-    startTransition(async () => {
-      const { applyEstimatedPricesAction } = await import("@/app/actions/offers");
-      const result = await applyEstimatedPricesAction(
-        collectionId,
-        estimable.map((o) => o.id)
-      );
-      invalidateAll(collectionId);
-      setLotSkips(result.skipped);
-      const n = result.succeeded.length;
-      if (n > 0) toast({ message: `${n} lot${n === 1 ? "" : "s"} priced at ${n === 1 ? "its" : "their"} estimated value` });
-    });
-  }
-
-  // Every lot still being prepared (#1893): missing photos are generated first and the lot turns Ready
-  // once they are done; a lot that cannot be readied is named with its reason.
-  function markLotsReady() {
-    if (toReady.length === 0) return;
-    setLotSkips([]);
-    startTransition(async () => {
-      const { markOffersReadyAction } = await import("@/app/actions/offers");
-      const result = await markOffersReadyAction(toReady.map((o) => o.id));
-      invalidateAll(collectionId);
-      setLotSkips(result.skipped);
-      const waiting = result.awaitingPhotos.length;
-      const ready = result.succeeded.length - waiting;
-      const parts = [
-        ...(ready > 0 ? [`${ready} lot${ready === 1 ? "" : "s"} marked ready`] : []),
-        ...(waiting > 0
-          ? [`${waiting} ${waiting === 1 ? "turns" : "turn"} ready once ${waiting === 1 ? "its" : "their"} photos are done`]
-          : []),
-      ];
-      if (parts.length > 0) toast({ message: parts.join(" · ") });
-    });
-  }
-
   const gapsByKey = new Map((translations?.gaps ?? []).map((g) => [gapKey(g), g]));
   const untranslatedOf = (lot: FacebookKitLot): TitleFallback[] =>
     (translations?.byLot[lot.offerId] ?? []).flatMap((key) => gapsByKey.get(key) ?? []);
@@ -716,6 +493,52 @@ export function FacebookPostPanel({
       else next.add(offerId);
       return next;
     });
+  }
+
+  // What a lot's row says of it (#1863): its type, its price once it is no longer typed in the row, its
+  // state, its listing link, its sale, and — while the post is not up — its texts and untranslated names.
+  function lotFacts(lot: FacebookKitLot, priced: boolean): LotFact[] {
+    const price = facebookLotPrice(lot);
+    const untranslated = translations?.language ? untranslatedOf(lot) : [];
+    return [
+      { key: "type", label: "Type", value: OFFER_LISTING_TYPE_LABEL[lot.listingType] },
+      ...(priced ? [] : [priceFact(price.label, price.amount, lot.currency)]),
+      stateFact(lot.state),
+      {
+        key: "link",
+        label: "Link",
+        value: lot.url ? (
+          <>
+            <a href={lot.url} target="_blank" rel="noreferrer" style={LINK}>
+              link ↗
+            </a>
+            {lot.state === "pending" && <> <PendingLinkMark /></>}
+          </>
+        ) : (
+          <span style={MUTED}>—</span>
+        ),
+      },
+      saleFact(collectionSlug, screen!.sales[lot.offerId] ?? []),
+      ...textFacts(lotTexts?.[lot.offerId] ?? null),
+      ...(translations?.language && untranslated.length > 0
+        ? [
+            {
+              key: "untranslated",
+              label: "Untranslated",
+              tone: "warning" as const,
+              value: (
+                <TranslationGapLinks
+                  collectionId={collectionId}
+                  language={translations.language}
+                  gaps={untranslated}
+                  withLanguage={false}
+                  onSaved={refreshTexts}
+                />
+              ),
+            },
+          ]
+        : []),
+    ];
   }
 
   function lotActions(lot: FacebookKitLot): RowAction[] {
@@ -922,23 +745,7 @@ export function FacebookPostPanel({
                   </button>
                 </p>
               )}
-              {outOfDateCount > 0 && (
-                <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>
-                  {outOfDateCount === 1 ? "1 lot's text is" : `${outOfDateCount} lots' texts are`} out of date — the
-                  templates now give other words.{" "}
-                  <button
-                    type="button"
-                    style={STEP_LINK}
-                    disabled={isPending}
-                    onClick={() => {
-                      setError(undefined);
-                      setDialog({ kind: "regenerate", scope: "outOfDate" });
-                    }}
-                  >
-                    Regenerate {outOfDateCount === 1 ? "it" : "them"}…
-                  </button>
-                </p>
-              )}
+              {tools.textWarning}
               <div
                 style={{
                   display: "flex",
@@ -950,55 +757,7 @@ export function FacebookPostPanel({
               >
                 <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
-                  {lots.length > 0 && !lots.some((l) => isFacebookLotPosted(l.state)) && (
-                    <PostPhotoSettingsButton collectionId={collectionId} postId={postId} disabled={isPending} />
-                  )}
-                  {lotTitles && (
-                    <>
-                      <DialogSecondaryButton
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => {
-                          setError(undefined);
-                          setDialog({ kind: "titleTemplate" });
-                        }}
-                      >
-                        Title template for all lots…
-                      </DialogSecondaryButton>
-                      <DialogSecondaryButton
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => {
-                          setError(undefined);
-                          setDialog({ kind: "titleWords", mode: "add" });
-                        }}
-                      >
-                        Add to titles…
-                      </DialogSecondaryButton>
-                      <DialogSecondaryButton
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => {
-                          setError(undefined);
-                          setDialog({ kind: "titleWords", mode: "remove" });
-                        }}
-                      >
-                        Remove from titles…
-                      </DialogSecondaryButton>
-                    </>
-                  )}
-                  {lotTexts && (
-                    <DialogSecondaryButton
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => {
-                        setError(undefined);
-                        setDialog({ kind: "regenerate", scope: "all" });
-                      }}
-                    >
-                      Regenerate lot texts…
-                    </DialogSecondaryButton>
-                  )}
+                  {tools.headingButtons}
                   {moves.addLots && (
                     <DialogSecondaryButton
                       type="button"
@@ -1045,106 +804,7 @@ export function FacebookPostPanel({
                   {notAdded}
                 </p>
               )}
-              {prepareRows && (
-                <div
-                  style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", margin: "0.75rem 0 0" }}
-                >
-                  {fillCount > 0 && (
-                    <Tooltip content="Type every missing catalogue value of the post's lots down one list, Tab to the next, saved at once.">
-                      <DialogSecondaryButton
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => setDialog({ kind: "fillCatalogue", groups: fillGroups })}
-                      >
-                        <Icon name="prices" size="sm" /> Fill catalogue values ({fillCount})
-                      </DialogSecondaryButton>
-                    </Tooltip>
-                  )}
-                  <Tooltip
-                    content={
-                      estimable.length > 0
-                        ? "Give the lots that have no price yet their estimated value — catalogue × the learned realisation ratio. Lots with a price keep it."
-                        : "No lot is without a price and has an estimated value to take."
-                    }
-                  >
-                    <DialogSecondaryButton
-                      type="button"
-                      disabled={isPending || estimable.length === 0}
-                      onClick={applyEstimates}
-                    >
-                      Use estimated price{estimable.length > 0 ? ` (${estimable.length})` : ""}
-                    </DialogSecondaryButton>
-                  </Tooltip>
-                  <Tooltip
-                    content={
-                      toCover.length > 0
-                        ? "Go through the lots' photos not yet checked for symbols, lot after lot in one walk — covers carry on from photo to photo."
-                        : toReview.length > 0
-                          ? "Every photo is checked. Go through them all again, lot after lot — a Ready lot stays Ready and its photos are made again."
-                          : "No lot has photos to check for symbols."
-                    }
-                  >
-                    <DialogSecondaryButton
-                      type="button"
-                      disabled={isPending || coverWalkOffers.length === 0}
-                      onClick={() =>
-                        setCoverWalk({
-                          kind: "post",
-                          offers: coverWalkOffers.map((o) => ({ id: o.id, offerNo: o.offerNo })),
-                          mode: toCover.length > 0 ? "unchecked" : "all",
-                        })
-                      }
-                    >
-                      Check covers{coverCount > 0 ? ` (${coverCount})` : ""}
-                    </DialogSecondaryButton>
-                  </Tooltip>
-                  <Tooltip
-                    content={
-                      toReady.length > 0
-                        ? "Mark every lot still being prepared ready. Missing or out-of-date photos are generated first, and the lot turns ready once they are done; a lot that cannot be readied is named below."
-                        : "Every lot is ready."
-                    }
-                  >
-                    <DialogSecondaryButton type="button" disabled={isPending || toReady.length === 0} onClick={markLotsReady}>
-                      <Icon name="check" size="sm" /> Mark ready{toReady.length > 0 ? ` (${toReady.length})` : ""}
-                    </DialogSecondaryButton>
-                  </Tooltip>
-                  <span style={MUTED}>Type each lot&apos;s price — Enter moves to the next.</span>
-                </div>
-              )}
-              {lotSkips.length > 0 && (
-                <div
-                  role="status"
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.25rem",
-                    margin: "0.5rem 0 0",
-                    color: "var(--color-warning)",
-                    fontSize: "0.8125rem",
-                  }}
-                >
-                  {lotSkips.map((skip, i) => (
-                    <span key={`${skip.offerId}-${i}`}>
-                      <strong style={{ fontWeight: 600 }}>{lotNoOf(skip.offerId)}</strong> {skip.message}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {reorderable && (
-                <p style={{ ...MUTED, margin: "0.5rem 0 0" }}>
-                  Drag a lot by its ⠿ to move it, or sort the post by{" "}
-                  {FACEBOOK_LOT_SORTS.map((by, i) => (
-                    <Fragment key={by}>
-                      {i > 0 && (i === FACEBOOK_LOT_SORTS.length - 1 ? " or " : ", ")}
-                      <button type="button" style={STEP_LINK} disabled={isPending} onClick={() => sortLots(by)}>
-                        {FACEBOOK_LOT_SORT_LABEL[by]}
-                      </button>
-                    </Fragment>
-                  ))}
-                  .
-                </p>
-              )}
+              {tools.lotBar}
               {narrowable && (
                 <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 0.75rem", margin: "0.75rem 0 0" }}>
                   <FilterChip
@@ -1190,69 +850,49 @@ export function FacebookPostPanel({
                 <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
                   {lotsInView.map((lot, index) => {
                     const { photos, caption } = lotKit(lot);
+                    const pricing = tools.rowPricing(lot, {
+                      onPriceDraft: (text) => {
+                        const row = prepareRows?.[lot.offerId];
+                        if (!row) return;
+                        setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
+                      },
+                      onPriceSaved: (field, value) => void settlePostLotPrice(collectionId, postId, lot.offerId, field, value),
+                      onTitleChanged: () => void settlePostLot(collectionId, postId, lot.offerId),
+                    });
                     return (
                       <Fragment key={lot.offerId}>
                         {showLineAt(drag, index) && <DropLine />}
-                        <LotRow
-                          lotNo={movedOrder ? index + 1 : (lot.lotNo ?? index + 1)}
+                        <GroupLotRow
+                          lotNo={tools.lotNoAt(lot, index)}
                           drag={drag}
                           index={index}
                           rowRef={(el) => {
                             if (el) rowRefs.current.set(lot.offerId, el);
                             else rowRefs.current.delete(lot.offerId);
                           }}
-                          collectionId={collectionId}
                           collectionSlug={collectionSlug}
                           lot={lot}
-                          sales={screen.sales[lot.offerId] ?? []}
                           photos={photos}
+                          // Captioned, the lot's one photo; as text, its upload set, wrapping within the row.
+                          photoStyle={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}
                           caption={caption}
-                          untranslated={translations?.language ? untranslatedOf(lot) : []}
-                          language={translations?.language ?? null}
-                          onTranslated={refreshTexts}
-                          text={lotTexts?.[lot.offerId] ?? null}
+                          facts={lotFacts(lot, !!pricing)}
                           actions={lotActions(lot)}
-                          ticked={isTerminalState(lot.state) ? null : ticked.has(lot.offerId)}
-                          onToggleTicked={() => toggleTicked(lot.offerId)}
-                          prepare={prepareRows?.[lot.offerId] ?? null}
-                          priceRef={(el) => {
-                            if (el) priceInputs.current.set(lot.offerId, el);
-                            else priceInputs.current.delete(lot.offerId);
+                          select={{
+                            ticked: isTerminalState(lot.state) ? null : ticked.has(lot.offerId),
+                            onToggle: () => toggleTicked(lot.offerId),
                           }}
-                          onPriceEnter={() => focusAfter(lot.offerId)}
-                          onPriceDraft={(text) => {
-                            const row = prepareRows?.[lot.offerId];
-                            if (!row) return;
-                            setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
-                          }}
-                          onPriceSaved={(field, value) =>
-                            void settlePostLotPrice(collectionId, postId, lot.offerId, field, value)
-                          }
-                          onTitleChanged={() => void settlePostLot(collectionId, postId, lot.offerId)}
-                          onFillCatalogue={(() => {
-                            // The `—` under Catalogue is a link only while the lot has values to type.
-                            if (!prepareRows?.[lot.offerId] || !fillLines) return undefined;
-                            const group = fillGroupOf(lot);
-                            if (catalogueFillEntries(group.lines).length === 0) return undefined;
-                            return () => setDialog({ kind: "fillCatalogue", groups: [group] });
-                          })()}
-                          onCheckCovers={(mode) => {
-                            const covers = prepareRows?.[lot.offerId]?.covers;
-                            setCoverWalk({
-                              kind: "lot",
-                              offerId: lot.offerId,
-                              mode,
-                              includeOtherAreas: covers ? covers.photoCount === 0 : false,
-                            });
-                          }}
+                          pricing={pricing}
                         />
                       </Fragment>
                     );
                   })}
                   {showLineAt(drag, lotsInView.length) && <DropLine />}
                 </ol>
-                {prepareRows && prepared.length > 0 && (
-                  <PostPriceTotalsBar totals={postPriceTotals(prepared, priceDrafts, prepared[0].currency)} />
+                {prepareRows && tools.prepared.length > 0 && (
+                  <PostPriceTotalsBar
+                    totals={postPriceTotals(tools.prepared, priceDrafts, tools.prepared[0].currency)}
+                  />
                 )}
               </div>
             </>
@@ -1380,77 +1020,7 @@ export function FacebookPostPanel({
         />
       )}
 
-      {dialog.kind === "regenerate" && lotTexts && (
-        <RegenerateLotTextsDialog
-          postNo={postNo}
-          lots={lots}
-          lotTexts={lotTexts}
-          initialScope={dialog.scope}
-          isPending={isPending}
-          error={error}
-          onCancel={close}
-          onSubmit={regenerate}
-        />
-      )}
-
-      {dialog.kind === "titleTemplate" && lotTitles && (
-        <LotTitleTemplateDialog
-          collectionId={collectionId}
-          language={translations?.language ?? null}
-          postNo={postNo}
-          lots={lots}
-          initialTemplate={lotTitles.template}
-          handWritten={lotTitles.handWritten}
-          isPending={isPending}
-          error={error}
-          onCancel={close}
-          onSubmit={retitle}
-        />
-      )}
-
-      {dialog.kind === "titleWords" && lotTitles && (
-        <LotTitleWordsDialog
-          postNo={postNo}
-          lots={lots}
-          mode={dialog.mode}
-          isPending={isPending}
-          error={error}
-          onCancel={close}
-          onSubmit={(words, edge) => changeTitleWords(dialog.mode, words, edge)}
-        />
-      )}
-
-      {coverWalk?.kind === "lot" && (
-        <OfferCoverWalk
-          collectionId={collectionId}
-          offerId={coverWalk.offerId}
-          mode={coverWalk.mode}
-          includeOtherAreas={coverWalk.includeOtherAreas}
-          onClose={() => setCoverWalk(null)}
-          onChanged={() => void invalidateAll(collectionId)}
-        />
-      )}
-      {coverWalk?.kind === "post" && (
-        <OffersCoverWalk
-          collectionId={collectionId}
-          offers={coverWalk.offers}
-          mode={coverWalk.mode}
-          onClose={() => setCoverWalk(null)}
-          onChanged={() => void invalidateAll(collectionId)}
-        />
-      )}
-
-      {dialog.kind === "fillCatalogue" && (
-        <AuctionLotCatalogValuesDialog
-          collectionId={collectionId}
-          groups={dialog.groups}
-          areaNameById={areaNameById}
-          primaryVendorByArea={primaryVendorByArea}
-          vendorMapFor={vendorMapFor}
-          onClose={() => setDialog({ kind: "none" })}
-          onSaved={() => void invalidateAll(collectionId)}
-        />
-      )}
+      {tools.dialogs}
 
       {dialog.kind === "preview" && (
         <PostPreviewDialog
@@ -1503,274 +1073,5 @@ export function FacebookPostPanel({
         />
       )}
     </div>
-  );
-}
-
-/** Where a dragged lot lands (#1986) — a list item of its own, since the lots are an `<ol>`. */
-function DropLine() {
-  return (
-    <li aria-hidden style={{ listStyle: "none" }}>
-      <InsertionLine />
-    </li>
-  );
-}
-
-/** One lot of the post (#1863): its photos, what it is and where it stands, its caption, its `⋮`. */
-function LotRow({
-  lotNo,
-  drag,
-  index,
-  rowRef,
-  collectionId,
-  collectionSlug,
-  lot,
-  sales,
-  photos,
-  caption,
-  untranslated,
-  language,
-  onTranslated,
-  text,
-  actions,
-  ticked,
-  onToggleTicked,
-  prepare,
-  priceRef,
-  onPriceEnter,
-  onPriceDraft,
-  onPriceSaved,
-  onTitleChanged,
-  onFillCatalogue,
-  onCheckCovers,
-}: {
-  /** The lot's number in the order drawn — its own, or the one a move just gave it (#1986). */
-  lotNo: number;
-  /** The lots' drag-to-reorder, null once the post is up (#1986). */
-  drag: DragList | null;
-  index: number;
-  rowRef: (el: HTMLLIElement | null) => void;
-  collectionId: string;
-  collectionSlug: string;
-  lot: FacebookKitLot;
-  sales: { id: string; saleNo: number }[];
-  photos: React.ReactNode;
-  caption: React.ReactNode | null;
-  /** The names this lot's part of the post prints untranslated (#1889), each entered from here
-   *  (#1980); empty when none. */
-  untranslated: TitleFallback[];
-  /** The post's language, the one `untranslated` is missing. */
-  language: string | null;
-  onTranslated: () => void;
-  /** Where its title and description stand against their templates (#1983); null once the post is up. */
-  text: OfferTextStatus | null;
-  actions: RowAction[];
-  /** Whether the lot is ticked to be sold with others (#2050); null when it can no longer be sold. */
-  ticked: boolean | null;
-  onToggleTicked: () => void;
-  /** The lot as a Prepare row (#2031) while the post is not up — its price, title and readiness are then
-   *  edited here; null once the post is up, or until the rows are read. */
-  prepare: PrepareOffer | null;
-  priceRef: (el: HTMLInputElement | null) => void;
-  onPriceEnter: () => void;
-  /** The lot's price as it is typed, for the post's totals (#2218). */
-  onPriceDraft: (text: string) => void;
-  onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
-  /** The title was saved — the lot is read again, and only it (#2221). */
-  onTitleChanged: () => void;
-  /** Opens *Fill catalogue values* for this lot (#2220); absent while it has none to type. */
-  onFillCatalogue?: () => void;
-  /** Opens the lot's covers walk: the photos not yet checked, or every one again (#2114). */
-  onCheckCovers: (mode: "unchecked" | "all") => void;
-}) {
-  const price = facebookLotPrice(lot);
-  const item = drag?.itemProps(index);
-  const textMarks = text ? [text.outOfDate && "Out of date", text.handWritten && "Written by hand"].filter(Boolean) : [];
-  return (
-    <li
-      {...item}
-      ref={(el) => {
-        rowRef(el);
-        item?.ref(el);
-      }}
-      style={{ ...LOT_ROW, ...dragStyle(drag, index) }}
-    >
-      {/* The tick, to the row's top and bottom edges (#2082); a lot that can no longer be sold keeps the
-          cell empty, so the photos stay in line. */}
-      {ticked !== null ? (
-        <CheckCell bleed={{ top: LOT_ROW_PAD, bottom: LOT_ROW_PAD }} style={SELECT_STRIP}>
-          <input
-            type="checkbox"
-            checked={ticked}
-            onChange={onToggleTicked}
-            aria-label={`Tick lot ${lotNo}`}
-            style={{ cursor: "pointer" }}
-          />
-        </CheckCell>
-      ) : (
-        <div aria-hidden style={SELECT_STRIP} />
-      )}
-      <div style={LOT_BODY}>
-        {/* Captioned, the lot's one photo; as text, its upload set, wrapping within the row. */}
-        <div style={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}>{photos}</div>
-        <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-            <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
-              {drag && (
-                <span
-                  {...drag.handleProps(index)}
-                  style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
-                >
-                  <DragGrip label="Drag to move this lot" />
-                </span>
-              )}
-              <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
-              {!prepare && (
-                <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
-                  <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-                  <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
-                    {lot.title}
-                  </Link>
-                </span>
-              )}
-            </p>
-            <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
-          </div>
-          {/* While the post is not up (#2031): the title edited in place — the offer's number is the link
-              then — the price table with the lot's own figure, and, while it is being prepared, what still
-              stops it from being marked ready. */}
-          {prepare && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", margin: "0.375rem 0 0" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", minWidth: 0 }}>
-                <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ ...LINK, flexShrink: 0 }}>
-                  <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
-                </Link>
-                <PrepareTitleField offer={prepare} onChanged={onTitleChanged} inputWidth="24rem" />
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                <PreparePriceField
-                  ref={priceRef}
-                  offer={prepare}
-                  onEnter={onPriceEnter}
-                  onSaved={onPriceSaved}
-                  onDraft={onPriceDraft}
-                  onFillCatalogue={onFillCatalogue}
-                />
-              </div>
-              {lot.state === "preparing" && (
-                <PrepareReadiness offer={prepare} onCheckCovers={() => onCheckCovers("unchecked")} />
-              )}
-              {lot.state === "ready" && <ReadyLotPhotos offer={prepare} onCheckCovers={onCheckCovers} />}
-            </div>
-          )}
-          <dl style={LOT_FACTS}>
-            <dt style={MUTED}>Type</dt>
-            <dd style={{ margin: 0 }}>{OFFER_LISTING_TYPE_LABEL[lot.listingType]}</dd>
-            {!prepare && (
-              <>
-                <dt style={MUTED}>{price.label}</dt>
-                <dd style={{ margin: 0 }}>
-                  {price.amount ? (
-                    <>
-                      {price.amount} {lot.currency}
-                    </>
-                  ) : (
-                    <span style={MUTED}>—</span>
-                  )}
-                </dd>
-              </>
-            )}
-            <dt style={MUTED}>State</dt>
-            <dd style={{ margin: 0 }}>
-              <OfferStateChip state={lot.state} />
-            </dd>
-            <dt style={MUTED}>Link</dt>
-            <dd style={{ margin: 0 }}>
-              {lot.url ? (
-                <>
-                  <a href={lot.url} target="_blank" rel="noreferrer" style={LINK}>
-                    link ↗
-                  </a>
-                  {lot.state === "pending" && <> <PendingLinkMark /></>}
-                </>
-              ) : (
-                <span style={MUTED}>—</span>
-              )}
-            </dd>
-            <dt style={MUTED}>Sale</dt>
-            <dd style={{ margin: 0 }}>
-              {sales.length > 0 ? (
-                sales.map((sale, i) => (
-                  <span key={sale.id}>
-                    {i > 0 && ", "}
-                    <Link href={`/c/${collectionSlug}/sales/${sale.id}`} style={LINK}>
-                      Sale #{sale.saleNo}
-                    </Link>
-                  </span>
-                ))
-              ) : (
-                <span style={MUTED}>—</span>
-              )}
-            </dd>
-            {text && textMarks.length > 0 && (
-              <>
-                <dt style={MUTED}>Text</dt>
-                <dd style={{ margin: 0, color: text.outOfDate ? "var(--color-warning)" : "var(--color-text-secondary)" }}>
-                  {textMarks.join(" · ")}
-                </dd>
-              </>
-            )}
-            {language && untranslated.length > 0 && (
-              <>
-                <dt style={MUTED}>Untranslated</dt>
-                <dd style={{ margin: 0, color: "var(--color-warning)" }}>
-                  <TranslationGapLinks
-                    collectionId={collectionId}
-                    language={language}
-                    gaps={untranslated}
-                    withLanguage={false}
-                    onSaved={onTranslated}
-                  />
-                </dd>
-              </>
-            )}
-          </dl>
-        </div>
-        {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}
-      </div>
-    </li>
-  );
-}
-
-/**
- * A Ready lot's photos on the post's screen (#2114), under its price while the post is not up: its
- * covers walked again — the photos not yet checked while there are any, every one otherwise — and,
- * while its photos are being made again, that *Publish…* waits for them. The lot stays Ready.
- */
-function ReadyLotPhotos({
-  offer,
-  onCheckCovers,
-}: {
-  offer: PrepareOffer;
-  onCheckCovers: (mode: "unchecked" | "all") => void;
-}) {
-  const generating = offer.readyBlockers.some(isPhotoRunBlocker);
-  const { covers } = offer;
-  const walkable = covers.needed && covers.photoCount + covers.otherCount > 0;
-  if (!generating && !walkable) return null;
-  return (
-    <p style={{ ...MUTED, margin: 0, display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
-      {walkable && (
-        <Tooltip content="Change the covers on this lot's photos. It stays Ready, and its photos are made again.">
-          <button
-            type="button"
-            onClick={() => onCheckCovers(covers.uncheckedCount > 0 ? "unchecked" : "all")}
-            style={STEP_LINK}
-          >
-            {covers.uncheckedCount > 0 ? `Check covers (${covers.uncheckedCount})` : "Review every photo"}
-          </button>
-        </Tooltip>
-      )}
-      {generating && <span>Photos being generated — Publish waits for them.</span>}
-    </p>
   );
 }

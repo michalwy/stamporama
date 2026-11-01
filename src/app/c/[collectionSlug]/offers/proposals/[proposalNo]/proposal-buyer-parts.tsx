@@ -9,6 +9,7 @@ import { useToast } from "@/app/toast-provider";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { canCopyImages, copyImageAt } from "@/app/c/[collectionSlug]/shared/copy-image";
+import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import type { ProposalScreen } from "@/lib/proposals";
 import type { ProposalLotPhotos } from "@/lib/proposal-handout";
 import { useProposalMessage } from "../use-proposals-query";
@@ -152,7 +153,9 @@ export function ProposalBuyerCard({
             </Tooltip>
           ) : (
             <p style={{ ...META, margin: 0 }}>
-              {photos === undefined ? "Loading the photos…" : "No photos yet — generate them on the lots' offers."}
+              {photos === undefined
+                ? "Loading the photos…"
+                : "No photos yet — Mark ready makes the lots' photos, or Photo settings… with Regenerate."}
             </p>
           )}
         </div>
@@ -174,24 +177,57 @@ export function ProposalBuyerCard({
 }
 
 /** A lot's photos on its row — the ones the buyer is sent, each to enlarge, copy or download under the
- *  name the archive gives it. */
+ *  name the archive gives it. While the lot has none yet, its first copy's own photo stands in (#2313),
+ *  so its stamps are always in view, said to be the copy's and not something to send. */
 export function LotPhotos({
   collectionId,
   lot,
+  copyPhotoId,
   onHandedOut,
 }: {
   collectionId: string;
+  /** Its photos as the buyer is sent them; absent once the proposal is closed or the lot withdrawn. */
   lot: ProposalLotPhotos | undefined;
+  /** Its first copy's front photo, or null when no copy has one. */
+  copyPhotoId: string | null;
   onHandedOut: () => void;
 }) {
   const { toast } = useToast();
   const [viewing, setViewing] = useState<number | null>(null);
-  if (!lot) return null;
-  if (lot.images.length === 0) {
+  if (!lot || lot.images.length === 0) {
+    const generating = lot?.status === "queued" || lot?.status === "running";
     return (
-      <p style={{ ...META, margin: 0 }}>
-        {lot.status === "queued" || lot.status === "running" ? "Generating the photos…" : "No photos to send yet."}
-      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", width: THUMB_SIZE }}>
+        {copyPhotoId ? (
+          <ThumbPreview
+            src={`/api/collections/${collectionId}/photos/${copyPhotoId}/full`}
+            thumbSrc={`/api/collections/${collectionId}/photos/${copyPhotoId}/thumb`}
+            label="The first copy"
+            style={{ display: "block", width: THUMB_SIZE, height: THUMB_SIZE }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- served by our own photo routes */}
+            <img
+              src={`/api/collections/${collectionId}/photos/${copyPhotoId}/thumb`}
+              alt="The first copy"
+              loading="lazy"
+              style={{
+                display: "block",
+                width: THUMB_SIZE,
+                height: THUMB_SIZE,
+                objectFit: THUMB_OBJECT_FIT,
+                border: "1px dashed var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                background: "var(--color-bg-subtle)",
+              }}
+            />
+          </ThumbPreview>
+        ) : null}
+        {lot && (
+          <span style={{ ...META, lineHeight: 1.3 }}>
+            {generating ? "Generating the photos…" : copyPhotoId ? "The copy's photo — none to send yet" : "No photos to send yet"}
+          </span>
+        )}
+      </div>
     );
   }
   const src = (photoId: string, variant: "thumb" | "full") =>

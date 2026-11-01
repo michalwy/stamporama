@@ -12,13 +12,17 @@ import {
   createOffer,
   GenerationChangedError,
   OfferActionBlockedError,
+  offersTextStatus,
   readPrepareOffers,
   setOfferState,
   withdrawOpenOffersTx,
   writeGeneratedOffers,
   type OfferInput,
+  type OfferTextStatus,
   type PrepareOffer,
 } from "./offers";
+import { readKitLots } from "./facebook-auctions";
+import { readLotCopyPhotos, readLotGroupTitles, readLotSales, type LotGroupTitles } from "./offer-lot-groups";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { ensureModulePlatforms } from "./platforms";
 import { parsePrice } from "./sale-rules";
@@ -321,6 +325,13 @@ export interface ProposalLot {
   price: string | null;
   currency: string;
   setCount: number;
+  /** The lowest of its copies' catalogue numbers as a sort key — what sorting the lots by catalogue
+   *  number orders them by (#2313); null when none carries one, and while the proposal is not being
+   *  prepared, since only then can the lots be put in another order. */
+  catalogSortKey: string | null;
+  /** Its first copy's front photo (#2313), which its row shows while the lot has no photo of its own,
+   *  so its stamps are always in view; null when no copy has one. */
+  copyPhotoId: string | null;
 }
 
 export interface ProposalScreen {
@@ -342,6 +353,58 @@ export interface ProposalScreen {
   total: string;
   unpriced: number;
   currency: string;
+  /** Keyed by the lot's offer id: the sales it left on (#2313), as a post's screen has them. */
+  sales: Record<string, { id: string; saleNo: number }[]>;
+  /** By the lot's offer id: where its title and description stand against their templates (#1983) —
+   *  out of date, written by hand — or null unless the proposal is being prepared (#2307). */
+  lotTexts: Record<string, OfferTextStatus> | null;
+  /** What *Title template for all lots…* works from (#2033), or null unless it is being prepared. */
+  lotTitles: LotGroupTitles | null;
+}
+
+const SCREEN_LOT_SELECT = {
+  id: true,
+  offerNo: true,
+  proposalLotNo: true,
+  name: true,
+  ...LOT_FIGURES_SELECT,
+  _count: { select: { sets: true } },
+} as const;
+
+type ScreenLotRow = Prisma.OfferGetPayload<{ select: typeof SCREEN_LOT_SELECT }>;
+
+/** The lots as the screen lists them, in the order given. The catalogue sort keys are read only while
+ *  the lots can be put in another order. */
+async function readScreenLots(
+  collectionId: string,
+  rows: readonly ScreenLotRow[],
+  editable: boolean,
+  firstIndex = 0
+): Promise<ProposalLot[]> {
+  const ids = rows.map((r) => r.id);
+  const [kitLots, copyPhotos] = await Promise.all([
+    editable ? readKitLots(collectionId, { id: { in: ids } }) : Promise.resolve([]),
+    readLotCopyPhotos(collectionId, ids),
+  ]);
+  const sortKeys = new Map(kitLots.map((l) => [l.offerId, l.catalogSortKey]));
+  const figures = totalLots(rows);
+  return rows.map((lot, i) => {
+    const f = figures[i]!;
+    const stated = f.listingType === "auction" ? f.startingPrice : f.price;
+    return {
+      offerId: lot.id,
+      offerNo: lot.offerNo,
+      lotNo: lot.proposalLotNo ?? firstIndex + i + 1,
+      title: offerNumberLabel(lot.name, lot.offerNo),
+      state: f.state,
+      listingType: f.listingType,
+      price: stated !== null && Number(stated) > 0 ? stated : null,
+      currency: lot.currency,
+      setCount: lot._count.sets,
+      catalogSortKey: sortKeys.get(lot.id) ?? null,
+      copyPhotoId: copyPhotos[lot.id] ?? null,
+    };
+  });
 }
 
 export async function getProposalScreen(ownerId: string, proposalId: string): Promise<ProposalScreen | null> {
@@ -359,52 +422,97 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       sale: { select: { id: true, saleNo: true, platform: { select: { name: true } } } },
       lots: {
         orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
-        select: {
-          id: true,
-          offerNo: true,
-          proposalLotNo: true,
-          name: true,
-          ...LOT_FIGURES_SELECT,
-          _count: { select: { sets: true } },
-        },
+        select: SCREEN_LOT_SELECT,
       },
     },
   });
   if (!row) return null;
   const { baseCurrency } = await assertCollectionOwner(ownerId, row.collectionId);
   const platform = await getDirectPlatform(row.collectionId);
-  const figures = totalLots(row.lots);
-  const { total, unpriced } = proposalTotal(figures);
+  const status = proposalStatusOf(row.status);
+  const editable = proposalTakesLots(status);
+  const { total, unpriced } = proposalTotal(totalLots(row.lots));
   const currency = row.lots[0]?.currency ?? (await directCurrency(row.collectionId, baseCurrency));
+  const ids = row.lots.map((lot) => lot.id);
+  const [lots, sales, lotTexts, lotTitles] = await Promise.all([
+    readScreenLots(row.collectionId, row.lots, editable),
+    readLotSales(ids),
+    editable ? offersTextStatus(ownerId, row.collectionId, ids).then((m) => Object.fromEntries(m)) : null,
+    editable ? readLotGroupTitles(row.collectionId, platform.id, ids) : null,
+  ]);
   return {
     proposalId: row.id,
     proposalNo: row.proposalNo,
     collectionId: row.collectionId,
-    status: proposalStatusOf(row.status),
+    status,
     contact: row.contact,
     createdOn: row.createdAt.toISOString().slice(0, 10),
     sentOn: row.sentAt?.toISOString().slice(0, 10) ?? null,
     closedOn: row.closedAt?.toISOString().slice(0, 10) ?? null,
     platform,
     sale: row.sale && { saleId: row.sale.id, saleNo: row.sale.saleNo, platformName: row.sale.platform.name },
-    lots: row.lots.map((lot, i) => {
-      const f = figures[i]!;
-      const stated = f.listingType === "auction" ? f.startingPrice : f.price;
-      return {
-        offerId: lot.id,
-        offerNo: lot.offerNo,
-        lotNo: lot.proposalLotNo ?? i + 1,
-        title: offerNumberLabel(lot.name, lot.offerNo),
-        state: f.state,
-        listingType: f.listingType,
-        price: stated !== null && Number(stated) > 0 ? stated : null,
-        currency: lot.currency,
-        setCount: lot._count.sets,
-      };
-    }),
+    lots,
     total,
     unpriced,
     currency,
+    sales,
+    lotTexts,
+    lotTitles,
+  };
+}
+
+/** One lot of a proposal as its screen shows it (#2313): what changes when a price, a title or the
+ *  lot's own state is saved from its row — written into the screen in place of reading every lot. */
+export interface ProposalLotUpdate {
+  lot: ProposalLot;
+  /** Its Prepare row; null unless the proposal is being prepared and the lot is open. */
+  prepare: PrepareOffer | null;
+  /** Where its title and description stand (#1983); null unless the proposal is being prepared. */
+  text: OfferTextStatus | null;
+  /** Whether its title was written by hand — its place in `lotTitles.handWritten` (#2033). */
+  handWritten: boolean;
+  /** The proposal's total and unpriced count with the lot's figure in them. */
+  total: string;
+  unpriced: number;
+}
+
+/**
+ * One lot of a proposal, read as {@link getProposalScreen} and {@link getProposalLotsPrepare} read
+ * every lot (#2313, #2221's rule for a post): pricing twenty lots one after another re-read every lot
+ * for each figure. Null for an offer that is not a lot of this proposal — taken out, or the proposal
+ * gone.
+ */
+export async function getProposalLot(
+  ownerId: string,
+  collectionId: string,
+  proposalId: string,
+  offerId: string
+): Promise<ProposalLotUpdate | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const proposal = await prisma.proposal.findFirst({
+    where: { id: proposalId, collectionId },
+    select: {
+      status: true,
+      lots: { orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }], select: { ...SCREEN_LOT_SELECT, nameEdited: true } },
+    },
+  });
+  const index = proposal?.lots.findIndex((l) => l.id === offerId) ?? -1;
+  if (!proposal || index < 0) return null;
+  const own = proposal.lots[index]!;
+  const editable = proposalTakesLots(proposalStatusOf(proposal.status));
+  const { total, unpriced } = proposalTotal(totalLots(proposal.lots));
+  const [[lot], prepare, text] = await Promise.all([
+    readScreenLots(collectionId, [own], editable, index),
+    editable ? readPrepareOffers(ownerId, collectionId, [offerId], OPEN_OFFER_STATES) : Promise.resolve([]),
+    editable ? offersTextStatus(ownerId, collectionId, [offerId]) : Promise.resolve(new Map<string, OfferTextStatus>()),
+  ]);
+  return {
+    lot: lot!,
+    prepare: prepare[0] ?? null,
+    text: text.get(offerId) ?? null,
+    handWritten: own.nameEdited,
+    total,
+    unpriced,
   };
 }
 

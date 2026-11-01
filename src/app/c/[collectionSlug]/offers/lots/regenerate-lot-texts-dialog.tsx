@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
-import type { FacebookKitLot } from "@/lib/facebook-auctions";
+import type { GroupLotLabel } from "@/lib/offer-lot-group-rules";
 import type { OfferTextStatus } from "@/lib/offers";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 
@@ -38,14 +38,14 @@ const HEADING: React.CSSProperties = {
 export type RegenerateScope = "outOfDate" | "all";
 
 /**
- * *Regenerate lot texts…* on a post's screen (#1983): every lot's title and description rendered again
- * from its templates, as each offer's own ↻ does — or, when some read otherwise than their templates
- * now give, just those. A lot whose text was written by hand is listed and replaced only when ticked;
- * left unticked, its hand-written words stay and anything of it still following a template is brought
- * back in step.
+ * *Regenerate lot texts…* on a post's or a proposal's screen (#1983, #2313): every lot's title and
+ * description rendered again from its templates, as each offer's own ↻ does — or, when some read
+ * otherwise than their templates now give, just those. A lot whose text was written by hand is listed
+ * and replaced only when ticked; left unticked, its hand-written words stay and anything of it still
+ * following a template is brought back in step.
  */
 export function RegenerateLotTextsDialog({
-  postNo,
+  groupName,
   lots,
   lotTexts,
   initialScope,
@@ -54,8 +54,9 @@ export function RegenerateLotTextsDialog({
   onCancel,
   onSubmit,
 }: {
-  postNo: number;
-  lots: readonly FacebookKitLot[];
+  /** How the title names the group: `post #4`, `proposal #2`. */
+  groupName: string;
+  lots: readonly GroupLotLabel[];
   lotTexts: Record<string, OfferTextStatus>;
   initialScope: RegenerateScope;
   isPending: boolean;
@@ -84,7 +85,7 @@ export function RegenerateLotTextsDialog({
 
   return (
     <DialogShell
-      title={`Regenerate lot texts of post #${postNo}`}
+      title={`Regenerate lot texts of ${groupName}`}
       maxWidth="40rem"
       onClose={() => {
         if (!isPending) onCancel();
@@ -94,7 +95,7 @@ export function RegenerateLotTextsDialog({
         <DialogBody>
           <p style={TEXT}>
             Each lot&apos;s title and description is written again from its templates, as the offer&apos;s own
-            Regenerate does. The post&apos;s text and captions follow at once.
+            Regenerate does. Whatever is written from them follows at once.
           </p>
           {outOfDate.length > 0 && (
             <div role="radiogroup" aria-label="Which lots" style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
