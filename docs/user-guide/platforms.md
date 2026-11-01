@@ -602,6 +602,15 @@ Leave it empty and sales on this platform offer no message.
 The Facebook platform has no such field here: its message is set on the Groups tab of
 **Settings → Facebook**, where each group can follow it or have its own ([Facebook](facebook.md#buyer-messages)).
 
+## Proposal message
+
+The **Direct** platform has one more template, **Proposal message**: the text you send a buyer with a
+[proposal](offers.md#what-the-buyer-is-sent) — your own words around its lots and prices. Its
+placeholders are `{buyer}` (the contact's name), `{lots}` (the lots not withdrawn, one per line, each
+with its lot number and price: `2. Austria 1850 Mercury — 25 zł`), `{total}` and `{proposal}` (the
+proposal's number). Amounts take `:code` or `:none` as in the other messages, and `{proposal:3}` pads
+the number. Leave it empty and proposals offer no message. No other platform has the field.
+
 ## Listing text limits
 
 Under the templates sits **Listing text limits** — **Max title (characters)**, **Max description

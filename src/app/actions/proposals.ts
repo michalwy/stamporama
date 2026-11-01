@@ -8,11 +8,13 @@ import {
   addProposalLots,
   convertProposalToSale,
   createProposal,
+  markProposalHandedOut,
   moveProposal,
   removeProposalLot,
   type ProposalSaleInput,
   type ProposalSaleResult,
 } from "@/lib/proposals";
+import { createProposalShareToken, revokeProposalShareToken } from "@/lib/proposal-handout";
 import type { ProposalMove } from "@/lib/proposal-rules";
 
 // Proposals (#2287; ADR-0075). Every action reports a message rather than throwing: a refusal — a
@@ -82,5 +84,48 @@ export async function convertProposalToSaleAction(
     return { status: "success", ...(await convertProposalToSale(session.user.id, proposalId, input)) };
   } catch (err) {
     return failure(err, "Failed to turn the proposal into a sale.");
+  }
+}
+
+/**
+ * Something was handed to the buyer in the browser — the message or a photo copied, the photos
+ * downloaded (#2288) — so a proposal being prepared becomes Sent. `moved` says whether it did, so the
+ * screen re-reads only when something changed.
+ */
+export async function markProposalHandedOutAction(
+  proposalId: string
+): Promise<{ status: "success"; moved: boolean } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", moved: await markProposalHandedOut(session.user.id, proposalId) };
+  } catch (err) {
+    return failure(err, "Failed to mark the proposal sent.");
+  }
+}
+
+/** Generate the proposal's link for the buyer, replacing any it had — a proposal has one link, and
+ *  asking for a new one is asking for the old one to stop working. Making it is handing the document
+ *  out, so a proposal being prepared becomes Sent (#2288). */
+export async function createProposalShareLinkAction(
+  proposalId: string
+): Promise<{ status: "success"; token: string } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const { token } = await createProposalShareToken(session.user.id, proposalId);
+    await markProposalHandedOut(session.user.id, proposalId);
+    return { status: "success", token };
+  } catch (err) {
+    return failure(err, "Failed to create the link. Please try again.");
+  }
+}
+
+/** Withdraw the link: from then on its address shows nothing of the proposal. */
+export async function revokeProposalShareLinkAction(proposalId: string): Promise<ProposalActionState> {
+  const session = await getSession();
+  try {
+    await revokeProposalShareToken(session.user.id, proposalId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to withdraw the link. Please try again.");
   }
 }

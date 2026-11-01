@@ -223,6 +223,7 @@ model Collection {
   // Buyers' links to Facebook posts' previews (#2212), kept here too so a link outliving its post
   // still goes with the collection.
   facebookPostPreviewTokens FacebookPostPreviewToken[]
+  proposalShareTokens       ProposalShareToken[]
   proposals       Proposal[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
@@ -3071,6 +3072,8 @@ model Proposal {
   contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
   sale       Sale?      @relation(fields: [saleId], references: [id], onDelete: SetNull)
   lots       Offer[]    @relation("OfferProposal")
+  // The buyer's link to the proposal's document (#2288), when one has been made.
+  shareToken ProposalShareToken?
 
   @@unique([collectionId, proposalNo])
   @@index([collectionId])
@@ -3118,6 +3121,41 @@ model FacebookPostPreviewToken {
 
   @@index([collectionId])
   @@map("facebook_post_preview_token")
+}
+
+// **A buyer's link to a proposal's document** (#2288) — the proposal as the buyer is sent it: every lot
+// with its number, title, price and photos, and the total, as a page they open without an account.
+//
+// `FacebookPostPreviewToken`'s shape (#2212) with the post swapped for **one proposal**, and the same
+// security argument: the token names one proposal, and everything the page shows is that proposal's
+// document — nothing else from the collection. One row per proposal; a new link replaces the row.
+//
+// **The link stays live** until the proposal closes: it follows the prices, and marks a lot no longer
+// available once it is withdrawn. Once the proposal is sold or declined — or deleted, which sets
+// `proposalId` null — the page says only that the offer is closed, in `language`, the proposal's
+// language as last read.
+//
+// The hash resolves a request and the seal is for display (#681), with the same best-effort sealing.
+model ProposalShareToken {
+  id           String    @id @default(cuid())
+  collectionId String
+  proposalId   String?   @unique
+  // SHA-256 hex of the raw token (prefix "stmpd_"). The only form a lookup ever touches.
+  tokenHash    String    @unique
+  // The same raw token, sealed (`secret-box.ts`); null on an install with no key configured.
+  tokenSealed  String?
+  // The proposal's language when the link was made or last opened — what the notice speaks once the
+  // proposal is gone. Null is English.
+  language     String?
+  createdAt    DateTime  @default(now())
+  // When a buyer last opened it — the collector's one sign that the link reached anybody.
+  lastUsedAt   DateTime?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  proposal   Proposal?  @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  @@index([collectionId])
+  @@map("proposal_share_token")
 }
 
 // What was listed for a kind of stamp — the **key → category** register (#488; ADR-0026, generalised
@@ -5554,6 +5592,12 @@ model Offer {
   // Direct platform. Null on every other offer. `SetNull`: deleting a proposal leaves its lots as
   // ordinary Direct offers, and deleting an offer simply takes it out of its proposal.
   proposalId     String?
+  // Its lot number in that proposal (#2288) — what the buyer is sent, the photos, the document and
+  // the message alike, so *I'll take 2, 5 and 7* is ticked as said (#2289). The next free number on
+  // joining; a lot taken out renumbers the rest only while the proposal is being prepared, since once
+  // it is sent the buyer holds the numbers. Null off a proposal; left as it was when a proposal is
+  // deleted under it, which nothing reads.
+  proposalLotNo  Int?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside
@@ -5702,6 +5746,8 @@ model Offer {
   @@index([proposalId])
   // One lot number per post; offers outside a post carry nulls, which never collide.
   @@unique([facebookPostId, facebookLotNo])
+  // And one per proposal (#2288), the same way.
+  @@unique([proposalId, proposalLotNo])
   // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
   // enforceable rather than merely intended.
   @@unique([collectionId, delcampeItemId])
@@ -7304,6 +7350,11 @@ model Platform {
   // happens next, with `buyer-message-rules.ts`'s placeholders. Null or blank is no message. Not read
   // on the Facebook platform: there it is `facebook_defaults`' and each group's, under #1661's rule.
   buyerMessageTemplate String?
+  // The message a proposal's buyer is sent with its lots and prices (#2288), with
+  // `proposal-message-rules.ts`'s placeholders — as a post's text comes from its group's template.
+  // Read on the Direct platform only, the one a proposal's lots are on, and written empty on every
+  // other. Null or blank is no message: templates are explicit only (#1692).
+  proposalMessageTemplate String?
   // What the platform's description field accepts (#319): `plain` | `html` | `markdown`. Marketplaces
   // disagree — some show plain text with its line breaks, some take raw HTML, some paste rich text —
   // and the app renders and copies the description accordingly (ADR-0019). **Seeded** onto every

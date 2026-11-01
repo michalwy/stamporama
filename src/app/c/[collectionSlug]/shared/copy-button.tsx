@@ -83,6 +83,7 @@ export function CopyButton({
   disabled = false,
   format,
   html: formattedHtml,
+  onCopied,
 }: {
   /** The text to copy. Empty or null disables the button — there is nothing to hand over. */
   value: string | null | undefined;
@@ -97,6 +98,8 @@ export function CopyButton({
   /** The text already formatted, as sanitised HTML (#1772): copied on `text/html` beside `value` on
    * `text/plain`. Not combined with `format`. */
   html?: string;
+  /** Told once the text is on the clipboard — a proposal's message copied marks it sent (#2288). */
+  onCopied?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -162,7 +165,10 @@ export function CopyButton({
       return;
     }
     const source = value ?? "";
-    const done = () => flash(true);
+    const done = () => {
+      flash(true);
+      onCopied?.();
+    };
     const oops = () => flash(false);
 
     if (formattedHtml === undefined && (mode === "source" || !hasChoice)) {

@@ -35,7 +35,7 @@ Each physical copy a collector owns is a separate item (no quantity field — se
 3. **Trading** — scope agreement and progress tracking with other collectors
 4. **Purchases** — what was bought, where, for how much, in what condition
 5. **Sales** — what was sold, where listed, final price, profit/loss, and the conversation with the buyer (ADR-0073);
-   an offer prepared for one buyer is a **proposal**, its lots ordinary offers on a Direct platform (ADR-0075)
+   an offer prepared for one buyer is a **proposal**, its lots ordinary offers on a Direct platform (ADR-0075), sent to them as photos, a document or live link, and a message
 6. **Stamp hunting** — want list, auction tracking, price history. A want is an **acceptance
    criterion, not a disposition** (ADR-0032): a stamp plus what would satisfy it, on condition,
    certificate and format, where an empty set means "any". It closes only when the collector says

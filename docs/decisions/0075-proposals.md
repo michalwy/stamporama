@@ -88,7 +88,22 @@ passes and which still refuses an offer that is not a lot of a proposal.
 
 ### 7. Out of scope
 
-The agent API (no operation reads or writes a proposal), and what the buyer is sent (#2288).
+The agent API (no operation reads or writes a proposal), and what the buyer is sent (#2288, since built —
+§8).
+
+### 8. What the buyer is sent (#2288)
+
+Added by #2288, which built it. A lot carries a **lot number** in its proposal (`Offer.proposalLotNo`,
+unique per proposal), replacing §2's *there is no lot number of the proposal's own*: the photos, the
+document and the message all number the lots the way the proposal's screen does, so the buyer's
+*I'll take 2, 5 and 7* is ticked as said (#2289). A joining lot takes the next number; a lot taken out
+renumbers the rest only while the proposal is Preparing, since once it is Sent the buyer holds them.
+
+The message comes from the **Direct platform's** proposal message template
+(`Platform.proposalMessageTemplate`, read on Direct only), as a post's text comes from its group's —
+no template, no message (#1692). The document reads like a post's preview (#2212) and is printed or
+shared by a live link (`ProposalShareToken`) that follows the prices until the proposal closes and then
+says only that it is closed. Handing any of the three out moves a Preparing proposal to Sent.
 
 ## Consequences
 

@@ -12,18 +12,29 @@ import { isProposalOpen, proposalMoveRefusal } from "@/lib/proposal-rules";
 import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
 import type { PrepareOffer } from "@/lib/offers";
 import type { ProposalLot } from "@/lib/proposals";
+import type { ProposalLotPhotos } from "@/lib/proposal-handout";
 import { OfferStateChip } from "../../offer-badges";
 import { useInvalidateOffers } from "../../use-offers-query";
 import { useInvalidateSales } from "../../../sales/use-sales-query";
 import { PreparePriceField, PrepareTitleField } from "../../prepare/prepare-offer-parts";
-import { useProposalLotsPrepare, useProposalScreen } from "../use-proposals-query";
+import { useProposalLotsPrepare, useProposalPhotos, useProposalScreen } from "../use-proposals-query";
 import { ProposalStatusChip, proposalTotalText } from "../proposal-parts";
 import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
+import { LotPhotos, ProposalBuyerCard } from "./proposal-buyer-parts";
+import { ProposalDocumentDialog } from "./proposal-document-dialog";
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
 const META: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-text-muted)" };
+
+const LOT_NO: React.CSSProperties = {
+  flexShrink: 0,
+  fontSize: "0.875rem",
+  fontWeight: 700,
+  color: "var(--color-text-primary)",
+  whiteSpace: "nowrap",
+};
 
 const SECONDARY_BUTTON: React.CSSProperties = {
   ...baseBtn,
@@ -54,6 +65,10 @@ const LOT_ROW: React.CSSProperties = {
  * *Generate offers* on Direct puts new ones straight in. *Mark sent* once it has gone to the buyer —
  * prices stay editable — and *Decline…* withdraws the lots still open. *Convert to sale…* (#2289)
  * sells the lots the buyer took, withdraws the rest and closes it as Sold, linking the sale.
+ *
+ * Each lot carries its lot number (#2288), and while the proposal is open the card above the lots holds
+ * what the buyer is sent — the message, the photos, the document — numbering the lots alike, with
+ * each lot's photos on its row. Handing any of them out marks a proposal being prepared sent.
  */
 export function ProposalPanel({
   collectionId,
@@ -66,10 +81,11 @@ export function ProposalPanel({
 }) {
   const { data: screen, isLoading, isError } = useProposalScreen(collectionId, proposalId);
   const { data: prepare = {} } = useProposalLotsPrepare(collectionId, proposalId);
+  const { data: photos } = useProposalPhotos(collectionId, proposalId);
   const { invalidateAll } = useInvalidateOffers();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { toast } = useToast();
-  const [dialog, setDialog] = useState<"add" | "decline" | "convert" | null>(null);
+  const [dialog, setDialog] = useState<"add" | "decline" | "convert" | "document" | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const priceRefs = useRef(new Map<string, HTMLInputElement | null>());
@@ -94,6 +110,19 @@ export function ProposalPanel({
       toast({ message: done });
       refresh();
     });
+  }
+
+  /** Something went to the buyer (#2288): a proposal being prepared is now sent. */
+  function handedOut() {
+    if (screen!.status !== "preparing") return;
+    void import("@/app/actions/proposals")
+      .then(({ markProposalHandedOutAction }) => markProposalHandedOutAction(proposalId))
+      .then((result) => {
+        if (result.status === "success" && result.moved) {
+          toast({ message: `Proposal #${screen!.proposalNo} marked sent` });
+          refresh();
+        }
+      });
   }
 
   function send() {
@@ -192,6 +221,16 @@ export function ProposalPanel({
         )}
       </div>
 
+      {open && screen.lots.length > 0 && (
+        <ProposalBuyerCard
+          screen={screen}
+          collectionSlug={collectionSlug}
+          photos={photos}
+          onHandedOut={handedOut}
+          onOpenDocument={() => setDialog("document")}
+        />
+      )}
+
       {error && dialog === null && (
         <p role="alert" style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-error)" }}>
           {error}
@@ -222,6 +261,9 @@ export function ProposalPanel({
                 key={lot.offerId}
                 lot={lot}
                 prepare={open ? prepare[lot.offerId] : undefined}
+                photos={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
+                collectionId={collectionId}
+                onHandedOut={handedOut}
                 open={open}
                 collectionSlug={collectionSlug}
                 priceRef={(el) => {
@@ -303,6 +345,16 @@ export function ProposalPanel({
           }}
         />
       )}
+      {dialog === "document" && (
+        <ProposalDocumentDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          proposalId={proposalId}
+          proposalNo={screen.proposalNo}
+          onClose={() => setDialog(null)}
+          onChanged={refresh}
+        />
+      )}
       {dialog === "decline" && (
         <ConfirmDialog
           title="Decline the proposal?"
@@ -326,6 +378,9 @@ export function ProposalPanel({
 function LotRow({
   lot,
   prepare,
+  photos,
+  collectionId,
+  onHandedOut,
   open,
   collectionSlug,
   priceRef,
@@ -337,6 +392,10 @@ function LotRow({
   /** Its Prepare row while the proposal is open and the lot is too — what its title and price are
    *  edited through. */
   prepare: PrepareOffer | undefined;
+  /** Its photos as the buyer is sent them, while the proposal is open and the lot still offered. */
+  photos: ProposalLotPhotos | undefined;
+  collectionId: string;
+  onHandedOut: () => void;
   open: boolean;
   collectionSlug: string;
   priceRef: (el: HTMLInputElement | null) => void;
@@ -349,6 +408,9 @@ function LotRow({
     <li style={LOT_ROW}>
       <div style={{ flex: "1 1 16rem", minWidth: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", minWidth: 0 }}>
+          <Tooltip content="The lot's number — the one the buyer's photos, document and message carry">
+            <span style={LOT_NO}>Lot {lot.lotNo}</span>
+          </Tooltip>
           <Link href={href} style={{ ...LINK, flexShrink: 0 }}>
             <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
           </Link>
@@ -366,6 +428,7 @@ function LotRow({
             {lot.setCount} {lot.setCount === 1 ? "set" : "sets"}
           </span>
         </div>
+        <LotPhotos collectionId={collectionId} lot={photos} onHandedOut={onHandedOut} />
       </div>
       {prepare ? (
         <PreparePriceField ref={priceRef} offer={prepare} onEnter={onEnter} onSaved={onChanged} />

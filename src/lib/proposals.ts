@@ -272,6 +272,8 @@ export async function listOpenProposals(
 export interface ProposalLot {
   offerId: string;
   offerNo: number;
+  /** Its number in the proposal (#2288) — the one the buyer's photos, document and message carry. */
+  lotNo: number;
   title: string;
   state: OfferState;
   listingType: OfferListingType;
@@ -316,10 +318,11 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       contact: { select: { id: true, name: true } },
       sale: { select: { id: true, saleNo: true, platform: { select: { name: true } } } },
       lots: {
-        orderBy: { offerNo: "asc" },
+        orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
         select: {
           id: true,
           offerNo: true,
+          proposalLotNo: true,
           name: true,
           ...LOT_FIGURES_SELECT,
           _count: { select: { sets: true } },
@@ -350,6 +353,7 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       return {
         offerId: lot.id,
         offerNo: lot.offerNo,
+        lotNo: lot.proposalLotNo ?? i + 1,
         title: offerNumberLabel(lot.name, lot.offerNo),
         state: f.state,
         listingType: f.listingType,
@@ -373,7 +377,7 @@ export async function getProposalLotsPrepare(
 ): Promise<Record<string, PrepareOffer>> {
   const proposal = await prisma.proposal.findFirst({
     where: { id: proposalId, collectionId },
-    select: { status: true, lots: { select: { id: true }, orderBy: { offerNo: "asc" } } },
+    select: { status: true, lots: { select: { id: true }, orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }] } },
   });
   if (!proposal) throw new Error("Proposal not found.");
   await assertCollectionOwner(ownerId, collectionId);
@@ -424,7 +428,8 @@ export async function listProposalLotCandidates(ownerId: string, proposalId: str
 /**
  * Make `offerIds` lots of the proposal, inside `tx` — what *Add offers…* and the offer generator
  * (#1287) both write through. Every offer is asked `proposalLotRefusal` first, and one refused
- * refuses them all by name, so nothing is half added.
+ * refuses them all by name, so nothing is half added. The new lots take the next free lot numbers
+ * (#2288), in offer-number order.
  */
 export async function writeProposalLots(
   tx: DbTransaction,
@@ -463,7 +468,31 @@ export async function writeProposalLots(
     );
     if (refusal) throw new OfferActionBlockedError("not-eligible", refusal);
   }
-  await tx.offer.updateMany({ where: { id: { in: [...offerIds] } }, data: { proposalId } });
+  const last = await tx.offer.aggregate({ where: { proposalId }, _max: { proposalLotNo: true } });
+  const first = (last._max.proposalLotNo ?? 0) + 1;
+  const joining = [...offers].sort((a, b) => a.offerNo - b.offerNo);
+  for (const [index, offer] of joining.entries()) {
+    await tx.offer.update({ where: { id: offer.id }, data: { proposalId, proposalLotNo: first + index } });
+  }
+}
+
+/**
+ * Number the proposal's lots 1…n again in their order (#2288) — after one is taken out of a proposal
+ * still being prepared, so what the buyer is first sent has no gaps. Never once it is sent: the buyer
+ * holds the numbers then. Through negatives first, since the unique index is checked row by row.
+ */
+async function renumberProposalLots(tx: DbTransaction, proposalId: string): Promise<void> {
+  const lots = await tx.offer.findMany({
+    where: { proposalId },
+    orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
+    select: { id: true },
+  });
+  for (const [index, lot] of lots.entries()) {
+    await tx.offer.update({ where: { id: lot.id }, data: { proposalLotNo: -1 - index } });
+  }
+  for (const [index, lot] of lots.entries()) {
+    await tx.offer.update({ where: { id: lot.id }, data: { proposalLotNo: index + 1 } });
+  }
 }
 
 /** *Add offers…* on the proposal's screen: existing Direct offers become its lots. */
@@ -473,16 +502,20 @@ export async function addProposalLots(ownerId: string, proposalId: string, offer
   await prisma.$transaction((tx) => writeProposalLots(tx, collectionId, proposalId, offerIds));
 }
 
-/** Take a lot out of an open proposal: the offer stays, an ordinary Direct offer. */
+/** Take a lot out of an open proposal: the offer stays, an ordinary Direct offer. While the proposal
+ *  is being prepared the lots after it move up a number; once it is sent they keep theirs (#2288). */
 export async function removeProposalLot(ownerId: string, proposalId: string, offerId: string): Promise<void> {
   const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
   const closed = proposalLotsRefusal(status);
   if (closed) throw new OfferActionBlockedError("not-eligible", closed);
-  const { count } = await prisma.offer.updateMany({
-    where: { id: offerId, collectionId, proposalId },
-    data: { proposalId: null },
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.offer.updateMany({
+      where: { id: offerId, collectionId, proposalId },
+      data: { proposalId: null, proposalLotNo: null },
+    });
+    if (count === 0) throw new OfferActionBlockedError("not-eligible", "That offer is not a lot of this proposal.");
+    if (status === "preparing") await renumberProposalLots(tx, proposalId);
   });
-  if (count === 0) throw new OfferActionBlockedError("not-eligible", "That offer is not a lot of this proposal.");
 }
 
 // ── Moves ────────────────────────────────────────────────────────────────────────────────────────
@@ -496,7 +529,7 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
   const { status } = await assertProposalOwner(ownerId, proposalId);
   const lots = await prisma.offer.findMany({
     where: { proposalId },
-    orderBy: { offerNo: "asc" },
+    orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
     select: { id: true, state: true },
   });
   const refusal = proposalMoveRefusal(status, move, lots.length);
@@ -525,6 +558,8 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
 export interface ProposalSaleLot {
   offerId: string;
   offerNo: number;
+  /** Its lot number (#2288) — the one the buyer answers with. */
+  lotNo: number;
   title: string;
   state: OfferState;
   /** What it is offered at, or null while it has no price. */
@@ -546,7 +581,7 @@ export interface ProposalSaleCandidate {
 }
 
 export interface ProposalSaleOptions {
-  /** The lots still open, by offer number. */
+  /** The lots still open, in lot order (#2288). */
   lots: ProposalSaleLot[];
   /** The contact's sales not yet sent, newest first. */
   sales: ProposalSaleCandidate[];
@@ -582,8 +617,8 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
       contactId: true,
       lots: {
         where: { state: { in: [...OPEN_OFFER_STATES] } },
-        orderBy: { offerNo: "asc" },
-        select: { id: true, offerNo: true, name: true, ...LOT_FIGURES_SELECT },
+        orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
+        select: { id: true, offerNo: true, proposalLotNo: true, name: true, ...LOT_FIGURES_SELECT },
       },
     },
   });
@@ -610,6 +645,7 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
       return {
         offerId: lot.id,
         offerNo: lot.offerNo,
+        lotNo: lot.proposalLotNo ?? i + 1,
         title: offerNumberLabel(lot.name, lot.offerNo),
         state: f.state,
         price: stated !== null && Number(stated) > 0 ? stated : null,
@@ -747,4 +783,23 @@ export async function convertProposalToSale(
   );
   const { saleNo } = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { saleNo: true } });
   return { saleId, saleNo, created };
+}
+
+/**
+ * Something was made for the buyer — the photos, the document or its link, or the message (#2288) —
+ * so a proposal being prepared is now **Sent**, as *Mark sent* would make it. A proposal already sent
+ * or closed, or one with no lots yet, is left as it is: this is a consequence of handing something
+ * out, never a refusal of it. Returns whether it moved.
+ */
+export async function markProposalHandedOut(ownerId: string, proposalId: string): Promise<boolean> {
+  const { status } = await assertProposalOwner(ownerId, proposalId);
+  if (status !== "preparing") return false;
+  const lots = await prisma.offer.count({ where: { proposalId } });
+  if (proposalMoveRefusal(status, "send", lots)) return false;
+  // Conditional on the status read, so two hand-outs at once move it once.
+  const { count } = await prisma.proposal.updateMany({
+    where: { id: proposalId, status: "preparing" },
+    data: { status: proposalStatusAfter("send"), sentAt: new Date() },
+  });
+  return count > 0;
 }

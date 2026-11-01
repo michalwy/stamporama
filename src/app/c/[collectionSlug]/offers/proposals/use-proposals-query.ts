@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { PrepareOffer } from "@/lib/offers";
 import type { ProposalListItem, ProposalLotCandidate, ProposalSaleOptions, ProposalScreen } from "@/lib/proposals";
+import type { ProposalLotPhotos, ProposalMessage } from "@/lib/proposal-handout";
 import type { ProposalStatus } from "@/lib/proposal-rules";
 
 // Proposals (#2287). Every key is under the offers key, `["offers", collectionId, …]`, so a write to
@@ -20,6 +21,12 @@ export const proposalKeys = {
     ["offers", collectionId, "proposals", "candidates", proposalId] as const,
   saleOptions: (collectionId: string, proposalId: string) =>
     ["offers", collectionId, "proposals", "sale-options", proposalId] as const,
+  photos: (collectionId: string, proposalId: string) =>
+    ["offers", collectionId, "proposals", "photos", proposalId] as const,
+  message: (collectionId: string, proposalId: string) =>
+    ["offers", collectionId, "proposals", "message", proposalId] as const,
+  shareLink: (collectionId: string, proposalId: string) =>
+    ["offers", collectionId, "proposals", "share-link", proposalId] as const,
 };
 
 /** Every proposal, newest first and a page at a time. */
@@ -94,6 +101,33 @@ export function useProposalSaleOptions(collectionId: string, proposalId: string)
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/sale-options`);
       if (!res.ok) throw new Error("Failed to fetch the lots");
+      return res.json();
+    },
+  });
+}
+
+/** Each lot's photos, in lot order (#2288) — what the buyer is sent, by the offer photo rules. Asked
+ *  again every few seconds while a lot's photos are still being made, so they appear when done. */
+export function useProposalPhotos(collectionId: string, proposalId: string) {
+  return useQuery<ProposalLotPhotos[]>({
+    queryKey: proposalKeys.photos(collectionId, proposalId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/photos`);
+      if (!res.ok) throw new Error("Failed to fetch the photos");
+      return (await res.json()).lots;
+    },
+    refetchInterval: (query) =>
+      query.state.data?.some((lot) => lot.status === "queued" || lot.status === "running") ? 4000 : false,
+  });
+}
+
+/** The message to the buyer (#2288), from the Direct platform's template. */
+export function useProposalMessage(collectionId: string, proposalId: string) {
+  return useQuery<ProposalMessage>({
+    queryKey: proposalKeys.message(collectionId, proposalId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/message`);
+      if (!res.ok) throw new Error("Failed to fetch the message");
       return res.json();
     },
   });

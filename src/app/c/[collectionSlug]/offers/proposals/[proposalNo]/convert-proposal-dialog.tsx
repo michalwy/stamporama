@@ -175,6 +175,8 @@ export function ConvertProposalDialog({
                               disabled={isPending || nothing}
                               onChange={() => toggle(lot)}
                             />
+                            {/* The number the buyer answers with (#2288). */}
+                            <strong style={{ whiteSpace: "nowrap" }}>Lot {lot.lotNo}</strong>
                             <EntityNoChip entity="offer" no={lot.offerNo} prefix="o" />
                             <span style={{ flex: 1, minWidth: 0, opacity: nothing ? 0.6 : 1 }}>
                               {lot.title}
