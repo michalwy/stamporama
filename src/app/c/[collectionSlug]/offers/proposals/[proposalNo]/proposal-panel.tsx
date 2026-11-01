@@ -34,7 +34,10 @@ import {
   useProposalScreen,
   useSettleProposalLot,
 } from "../use-proposals-query";
-import { ProposalStatusChip, proposalTotalText } from "../proposal-parts";
+import { ProposalStatusChip } from "../proposal-parts";
+import { LotGroupSummaryBar } from "../../lots/lot-group-summary-bar";
+import { PostPriceTotalsBar } from "../../posts/[postNo]/post-price-totals-bar";
+import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
 import { LotPhotos, ProposalBuyerCard } from "./proposal-buyer-parts";
@@ -134,6 +137,8 @@ export function ProposalPanel({
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const { settleLot, settleLotPrice } = useSettleProposalLot(collectionId, proposalId);
+  // The prices being typed, by offer id, for the totals pinned under the lots (#2326, a post's #2218).
+  const [priceDrafts, setPriceDrafts] = useState<ReadonlyMap<string, PriceDraft>>(() => new Map());
   // Lots, their titles and prices change only while it is being prepared: sent, it stays as the buyer
   // saw it until it is reopened (#2307).
   const editable = !!screen && proposalTakesLots(screen.status);
@@ -385,6 +390,10 @@ export function ProposalPanel({
               </div>
             )}
           </div>
+          {/* What the lots come to (#2326), whatever the proposal's state. */}
+          <div style={{ margin: "0.75rem 0 0" }}>
+            <LotGroupSummaryBar collectionId={collectionId} group={{ kind: "proposal", id: proposalId }} />
+          </div>
           {tools.textWarning}
           {tools.lotBar}
         </div>
@@ -402,6 +411,11 @@ export function ProposalPanel({
             {tools.lots.map((toolLot, index) => {
               const lot = screen.lots.find((l) => l.offerId === toolLot.offerId)!;
               const pricing = tools.rowPricing(toolLot, {
+                onPriceDraft: (text) => {
+                  const row = prepare?.[lot.offerId];
+                  if (!row) return;
+                  setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
+                },
                 onPriceSaved: (field, value) => void settleLotPrice(lot.offerId, field, value),
                 onTitleChanged: () => void settleLot(lot.offerId),
               });
@@ -432,23 +446,14 @@ export function ProposalPanel({
             {showLineAt(tools.drag, tools.lots.length) && <DropLine />}
           </ol>
         )}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: "0.75rem",
-            padding: "0.75rem 1.25rem",
-            background: "var(--color-bg-page)",
-            fontSize: "0.9375rem",
-            color: "var(--color-text-primary)",
-          }}
-        >
-          <Tooltip content="The lots not withdrawn, at their prices; a lot with no price yet is counted apart">
-            <span>
-              Total <strong>{proposalTotalText(screen.total, screen.currency, screen.unpriced)}</strong>
-            </span>
-          </Tooltip>
-        </div>
+        {/* Pinned to the window's bottom edge while the lots are priced (#2326), as a post's (#2218): it
+            follows the prices as they are typed, the summary over the lots the saved ones. */}
+        {editable && tools.prepared.length > 0 && (
+          <PostPriceTotalsBar
+            title="Proposal total"
+            totals={postPriceTotals(tools.prepared, priceDrafts, tools.prepared[0].currency)}
+          />
+        )}
       </section>
 
       {dialog === "add" && (

@@ -803,6 +803,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `facebook-captioned-posts.test.ts`, `facebook-post-prepare.test.ts` and `offer-photo-generation.test.ts`
   (the batch against each offer alone, bidding elsewhere included).
 
+- **A post's lots have a summary at the top, in every state** (#2326) — the same `LotGroupSummaryBar` a
+  proposal's screen draws, over saved prices; the pinned bar below follows the typing. See
+  [`offers.md`](offers.md) (#2326's entry) for its read and its counting rules.
 - **A post being priced shows its totals in a bar pinned to the bottom of the window** (#2218, settled
   with the collector on 2026-10-27; the issue's *to be confirmed* points implemented as written).
   `PostPriceTotalsBar` (`offers/posts/[postNo]/post-price-totals-bar.tsx`) under the lots, in one box with

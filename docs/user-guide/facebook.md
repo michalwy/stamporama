@@ -752,6 +752,17 @@ of that figure's total; either says **over N of M lots** rather than counting th
 What the prices make against a figure is worked out over the lots that have both. The bar is gone once
 the post is up.
 
+**The lots' summary** sits at the top of the lots whatever the post's state — before it goes up and
+after. Its first line is the lots' **price total** (in the collection's base currency), with how many
+lots, sets and copies the post holds and how many lots have no price yet. **More** opens the lots'
+**catalogue value**, **estimated value**, **market value** and **purchase cost**, each with what the
+prices make against it, signed and coloured as on a lot's row — against the purchase cost that is the
+post's **profit** or **loss**. The figures are the lots' own price tables added up; a lot without a
+figure is left out of that figure and the line says **over N of M lots**. Withdrawn lots are left out.
+Once lots have sold, a **Sold** line says what their sales brought in and the profit on them. Whether
+**More** is open is remembered, as on the Offers list. The summary follows saved prices; the total
+pinned at the bottom follows them as you type.
+
 **Publish…** waits while any lot's photos are being made again: it is held, and a line beside it names
 the lots, so the post never goes up with the old covers. It is offered again as soon as they are done.
 
