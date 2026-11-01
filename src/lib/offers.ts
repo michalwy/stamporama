@@ -6133,13 +6133,21 @@ export async function listOfferCopies(ownerId: string, offerId: string): Promise
 export async function listComposableCopies(
   ownerId: string,
   collectionId: string,
-  opts: { offerId?: string; areaIds?: string[]; search?: string; year?: number | "none" } = {}
+  opts: {
+    offerId?: string;
+    /** Only the copies not yet offered on this platform (#2299) — what Generate offers would take there. */
+    notOfferedPlatformId?: string;
+    areaIds?: string[];
+    search?: string;
+    year?: number | "none";
+  } = {}
 ): Promise<ItemListItem[]> {
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     forSale: true,
     deliveryStates: ["delivered"],
     excludeGone: true,
     notInOfferId: opts.offerId,
+    notOfferedPlatformId: opts.notOfferedPlatformId,
     areaIds: opts.areaIds,
     search: opts.search,
     year: opts.year,

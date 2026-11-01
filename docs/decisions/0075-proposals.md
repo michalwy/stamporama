@@ -34,10 +34,12 @@ screen titles and prices its lots through the Prepare rows a post's screen uses 
 listed by offer number; there is no lot number of the proposal's own (a post's exists because the
 group's buyers bid on *lot 3*; #2288 numbers what the buyer is sent).
 
-Lots join a proposal two ways: *Add offers…* on its screen takes Direct offers already made, open and
+Lots join a proposal three ways: *Add offers…* on its screen takes Direct offers already made, open and
 in no other proposal; the Copies list's *Generate offers* on Direct takes an open proposal to put the
 offers it **creates** into (`GeneratorRequest.proposalId`, written in the pass's own transaction as
-the post is, #2030). An offer that only receives sets stays where it is.
+the post is, #2030). An offer that only receives sets stays where it is. And since #2299 *New lots…*
+on its screen makes new Direct offers of copies picked there — an offer each or one for all — written
+as the generator writes them, in the same transaction as their joining.
 
 ### 3. The lots are on a **Direct** platform
 
@@ -50,7 +52,8 @@ over a generic platform already called *Direct* (in any case) where there is one
 the contacts that stood for a module.
 
 A proposal's lots are on Direct whatever its switch says: `getDirectPlatform` finds it switched on or
-off. Switched off, the Copies bar does not offer it, so new lots come from *Add offers…* alone.
+off. Switched off, the Copies bar does not offer it, so new lots come from the proposal's own screen
+alone — *Add offers…*, and *New lots…* since #2299.
 
 ### 4. A copy may be in a proposal and listed elsewhere at once
 

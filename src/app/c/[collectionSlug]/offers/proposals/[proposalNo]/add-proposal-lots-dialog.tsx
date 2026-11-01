@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, PICKER_DIALOG_HEIGHT } from "@/app/dialog-shell";
+import { baseBtn } from "@/app/button-style";
 import { formControl } from "@/app/control-style";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -36,7 +37,7 @@ const MUTED: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-
 /**
  * *Add offers…* on a proposal's screen (#2287): the Direct offers already made that could be its lots —
  * open and in no proposal — picked here. The server asks each again on save, since the list is a
- * moment old by then.
+ * moment old by then. With none to add it offers *New lots…* (#2299), which makes them from copies.
  */
 export function AddProposalLotsDialog({
   collectionId,
@@ -46,6 +47,7 @@ export function AddProposalLotsDialog({
   error,
   onCancel,
   onSubmit,
+  onNewLots,
 }: {
   collectionId: string;
   proposalId: string;
@@ -55,6 +57,8 @@ export function AddProposalLotsDialog({
   error?: string;
   onCancel: () => void;
   onSubmit: (offerIds: string[]) => void;
+  /** Open *New lots…* in this dialog's place. */
+  onNewLots: () => void;
 }) {
   const { data: offers = [], isLoading } = useProposalLotCandidates(collectionId, proposalId);
   const [search, setSearch] = useState("");
@@ -95,10 +99,24 @@ export function AddProposalLotsDialog({
           {isLoading ? (
             <p style={MUTED}>Loading…</p>
           ) : offers.length === 0 ? (
-            <p style={MUTED}>
-              No offer can be added: a proposal takes {platformName} offers that are still open and in no other
-              proposal. Generate offers on {platformName} from the Copies list to make some.
-            </p>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "0.75rem" }}>
+              <p style={{ ...MUTED, margin: 0 }}>
+                No offer can be added: a proposal takes {platformName} offers that are still open and in no other
+                proposal. Make new ones from your copies instead.
+              </p>
+              <button
+                type="button"
+                style={{
+                  ...baseBtn,
+                  border: "1px solid var(--color-border-strong)",
+                  background: "var(--color-bg-elevated)",
+                  color: "var(--color-text-primary)",
+                }}
+                onClick={onNewLots}
+              >
+                New lots…
+              </button>
+            </div>
           ) : (
             <>
               <TextInput

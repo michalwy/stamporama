@@ -201,6 +201,35 @@ export function proposalLotCurrency(currencies: readonly string[]): { ok: true; 
   return { ok: false, message: `The ticked lots are in ${distinct.join(" and ")} — a sale is in one currency.` };
 }
 
+// ── New lots from copies (#2299) ─────────────────────────────────────────────────────────────────
+
+/** How *New lots…* makes offers of the copies picked: an offer each, or one offer holding them all. */
+export type ProposalLotPacking = "each" | "together";
+
+export const PROPOSAL_LOT_PACKINGS: readonly ProposalLotPacking[] = ["each", "together"];
+
+/** The choice when none has been made in this collection yet. */
+export const DEFAULT_PROPOSAL_LOT_PACKING: ProposalLotPacking = "each";
+
+/** A stored or sent packing, or null when it is not one — the caller falls back or refuses. */
+export function parseProposalLotPacking(raw: unknown): ProposalLotPacking | null {
+  return typeof raw === "string" && (PROPOSAL_LOT_PACKINGS as readonly string[]).includes(raw)
+    ? (raw as ProposalLotPacking)
+    : null;
+}
+
+/**
+ * The new offers the copies picked make, each as its sets of copies: an offer of one copy each, or one
+ * offer of **one set** holding them all. One set, not a set each: a lot with several sets is sold as
+ * that many at its price (#2289), so copies of different stamps sold together are one set. A copy
+ * picked twice counts once; nothing picked makes nothing.
+ */
+export function proposalNewLotSets(itemIds: readonly string[], packing: ProposalLotPacking): string[][][] {
+  const ids = [...new Set(itemIds)];
+  if (ids.length === 0) return [];
+  return packing === "each" ? ids.map((id) => [[id]]) : [[ids]];
+}
+
 /** Read a proposal's number off its address (`/offers/proposals/4`), or undefined. */
 export function parseProposalNo(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) return undefined;

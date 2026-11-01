@@ -3129,14 +3129,21 @@ it sells in one place, the other offers are handled like any copy sold elsewhere
 
 ### Giving it lots
 
-Two ways, both while the proposal is open:
+Three ways, all while the proposal is open:
 
-- **From the copies.** Tick the copies on the [Copies](inventory.md) list, choose **Direct** in the
+- **New lots…** on the proposal's screen. Pick the copies in the copy picker — with its area tree,
+  years and search — which shows the copies for sale and in hand that are on no open Direct offer.
+  With several picked, choose **An offer each** or **One offer for all**: each copy becomes a lot of
+  its own, or all of them one lot, sold together. Your last choice is already chosen next time. The
+  new lots are Direct offers being prepared, titled as Generate offers titles them, priced at their
+  **estimated value** where they have one — correct the price on the proposal as any lot's.
+- **From the copies list.** Tick the copies on the [Copies](inventory.md) list, choose **Direct** in the
   quick-offer bar and **Generate offers**. **Into proposal** in the dialog picks one of your open
   proposals, and the offers the pass creates become its lots. An existing offer that only receives
   sets stays where it is.
 - **Offers already made.** **Add offers…** on the proposal's screen lists the Direct offers that are
-  still open and in no other proposal; tick the ones to add.
+  still open and in no other proposal; tick the ones to add. When there are none, it offers
+  **New lots…** instead.
 
 A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.
 

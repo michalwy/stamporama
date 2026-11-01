@@ -4,11 +4,15 @@ import { prisma, type DbTransaction } from "./db";
 import { allocateEntityNumber } from "./items";
 import { OPEN_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
 import { offerNumberLabel } from "./offer-set-rules";
+import { formatItemNo } from "./item-number";
 import {
+  applyEstimatedPrices,
+  GenerationChangedError,
   OfferActionBlockedError,
   readPrepareOffers,
   setOfferState,
   withdrawOpenOffersTx,
+  writeGeneratedOffers,
   type PrepareOffer,
 } from "./offers";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
@@ -25,9 +29,11 @@ import {
   proposalSaleTargetRefusal,
   proposalLotsRefusal,
   proposalMoveRefusal,
+  proposalNewLotSets,
   proposalStatusAfter,
   proposalStatusOf,
   proposalTotal,
+  type ProposalLotPacking,
   type ProposalMove,
   type ProposalStatus,
 } from "./proposal-rules";
@@ -516,6 +522,57 @@ export async function removeProposalLot(ownerId: string, proposalId: string, off
     if (count === 0) throw new OfferActionBlockedError("not-eligible", "That offer is not a lot of this proposal.");
     if (status === "preparing") await renumberProposalLots(tx, proposalId);
   });
+}
+
+/** What *New lots…* made: how many lots, and how many of them have no estimate to be priced at. */
+export interface ProposalNewLotsResult {
+  lots: number;
+  unpriced: number;
+}
+
+/**
+ * *New lots…* on the proposal's screen (#2299): the copies picked become new Direct offers that are
+ * the proposal's next lots — an offer each, or one offer of them all (`proposalNewLotSets`). Each is
+ * made exactly as Generate offers makes one (`writeGeneratedOffers`: Preparing, titled from Direct's
+ * templates) and joins the proposal in the same transaction, so a proposal closed meanwhile, or a copy
+ * sold or put on another Direct offer since it was picked, makes nothing. Each new lot then takes its
+ * estimated price where it has one, as *Use estimated price* gives it, and is priced on the proposal
+ * like any lot.
+ */
+export async function makeProposalLots(
+  ownerId: string,
+  proposalId: string,
+  itemIds: readonly string[],
+  packing: ProposalLotPacking
+): Promise<ProposalNewLotsResult> {
+  const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
+  const closed = proposalLotsRefusal(status);
+  if (closed) throw new OfferActionBlockedError("not-eligible", closed);
+  const newOffers = proposalNewLotSets(itemIds, packing);
+  if (newOffers.length === 0) throw new OfferActionBlockedError("empty", "Pick at least one copy.");
+  const direct = await getDirectPlatform(collectionId);
+
+  let createdOfferIds: string[];
+  try {
+    ({ createdOfferIds } = await writeGeneratedOffers(
+      ownerId,
+      collectionId,
+      { platformId: direct.id, state: "preparing", facebookGroupId: null, endsAt: null, newOffers, additions: [] },
+      { inTransaction: (tx, created) => writeProposalLots(tx, collectionId, proposalId, created) }
+    ));
+  } catch (e) {
+    if (e instanceof GenerationChangedError && e.drift.kind === "copy") {
+      const item = await prisma.item.findFirst({ where: { id: e.drift.itemId, collectionId }, select: { itemNo: true } });
+      const copy = item ? `Copy ${formatItemNo(item.itemNo)}` : "A copy";
+      throw new OfferActionBlockedError(
+        "not-eligible",
+        `${copy} has sold or gone onto another ${direct.name} offer since it was picked. No lot was made.`
+      );
+    }
+    throw e;
+  }
+  const { skipped } = await applyEstimatedPrices(ownerId, collectionId, createdOfferIds);
+  return { lots: createdOfferIds.length, unpriced: skipped.length };
 }
 
 // ── Moves ────────────────────────────────────────────────────────────────────────────────────────

@@ -70,6 +70,12 @@ interface ComposeSetDialogProps {
   /** Pick the copies of an offer not made yet (#2291) — *New lot…* on a post's screen — rather than add
    *  them: handed over with how they are packaged, and the title is the next step's to show. */
   onPick?: (copies: ItemListItem[], perCopy: boolean) => void;
+  /** Pick the copies of **new offers** (#2299, *New lots…* on a proposal) rather than of a set: only the
+   *  copies not yet offered on the platform are listed — what Generate offers would take there — and
+   *  with several picked the footer asks whether each becomes an offer of its own or all one offer
+   *  together, starting at `perCopy` (the last answer). Both go to `onPick`; the caller makes the
+   *  offers and hands back `isPending` and `error`. */
+  newOffers?: { platformName: string; perCopy: boolean; isPending: boolean; error?: string };
   /** The dialog's title; *Add set* unless given. */
   title?: string;
   onClose: () => void;
@@ -98,6 +104,7 @@ export function ComposeSetDialog({
   locations,
   baseCurrency,
   onPick,
+  newOffers,
   title = "Add set",
   onClose,
   onDone,
@@ -130,7 +137,8 @@ export function ComposeSetDialog({
     offerId,
     areaIds,
     { areaId, includeSubAreas },
-    true
+    true,
+    newOffers ? platformId : null
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -198,6 +206,9 @@ export function ComposeSetDialog({
   );
 
   const multi = selectedIds.length > 1;
+  // New offers (#2299): an offer each or one for all, starting at the caller's remembered answer.
+  const [offerEach, setOfferEach] = useState(newOffers?.perCopy ?? true);
+  const busy = isPending || !!newOffers?.isPending;
 
   // Title language for this add (#297). The collection's languages come from its platforms; when
   // there is only the default one there is nothing to choose and no selector renders. "" means the
@@ -320,7 +331,9 @@ export function ComposeSetDialog({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? `No copies available to add. Copies must be For sale and delivered (in hand), unsold${offerId ? ", and not already in this offer" : ""}.`
+                  ? newOffers
+                    ? `No copies available. Copies must be For sale and delivered (in hand), unsold, and on no open ${newOffers.platformName} offer.`
+                    : `No copies available to add. Copies must be For sale and delivered (in hand), unsold${offerId ? ", and not already in this offer" : ""}.`
                   : "No copies match your filter."}
               </p>
             ) : (
@@ -475,28 +488,51 @@ export function ComposeSetDialog({
         />
       )}
 
-      <DialogFooter error={error}>
-        <DialogSecondaryButton onClick={onClose} disabled={isPending}>
+      <DialogFooter error={error ?? newOffers?.error}>
+        <DialogSecondaryButton onClick={onClose} disabled={busy}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {/* Single copy → one plain Add. Several → two ways to add them: as a quantity of
-              separate single-copy sets, or as one set sold together (a series). */}
-          {multi ? (
-            <>
-              <DialogSecondaryButton onClick={() => submit(false)} disabled={isPending}>
-                {isPending ? "Adding…" : `Add as one set${hiddenNote}`}
-              </DialogSecondaryButton>
-              <DialogPrimaryButton type="button" onClick={() => submit(true)} disabled={isPending}>
-                {isPending ? "Adding…" : `Add as ${selectedIds.length} sets${hiddenNote}`}
-              </DialogPrimaryButton>
-            </>
-          ) : (
-            <DialogPrimaryButton type="button" onClick={() => submit(false)} disabled={isPending || selectedIds.length === 0}>
-              {isPending ? "Adding…" : `Add copy${hiddenNote}`}
+        {newOffers ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            {/* Several copies: asked each time, the last answer already chosen (#2299). */}
+            {multi && (
+              <div role="radiogroup" aria-label="Offers" style={{ display: "flex", gap: "0.875rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", cursor: "pointer" }}>
+                  <input type="radio" name="new-offers-packing" checked={offerEach} disabled={busy} onChange={() => setOfferEach(true)} />
+                  An offer each
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", cursor: "pointer" }}>
+                  <input type="radio" name="new-offers-packing" checked={!offerEach} disabled={busy} onChange={() => setOfferEach(false)} />
+                  One offer for all
+                </label>
+              </div>
+            )}
+            <DialogPrimaryButton type="button" onClick={() => submit(offerEach)} disabled={busy || selectedIds.length === 0}>
+              {busy
+                ? "Making…"
+                : `${multi && offerEach ? `Make ${selectedIds.length} offers` : "Make one offer"}${hiddenNote}`}
             </DialogPrimaryButton>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {/* Single copy → one plain Add. Several → two ways to add them: as a quantity of
+                separate single-copy sets, or as one set sold together (a series). */}
+            {multi ? (
+              <>
+                <DialogSecondaryButton onClick={() => submit(false)} disabled={isPending}>
+                  {isPending ? "Adding…" : `Add as one set${hiddenNote}`}
+                </DialogSecondaryButton>
+                <DialogPrimaryButton type="button" onClick={() => submit(true)} disabled={isPending}>
+                  {isPending ? "Adding…" : `Add as ${selectedIds.length} sets${hiddenNote}`}
+                </DialogPrimaryButton>
+              </>
+            ) : (
+              <DialogPrimaryButton type="button" onClick={() => submit(false)} disabled={isPending || selectedIds.length === 0}>
+                {isPending ? "Adding…" : `Add copy${hiddenNote}`}
+              </DialogPrimaryButton>
+            )}
+          </div>
+        )}
       </DialogFooter>
     </DialogShell>,
     document.body

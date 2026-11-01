@@ -8,14 +8,16 @@ import {
   addProposalLots,
   convertProposalToSale,
   createProposal,
+  makeProposalLots,
   markProposalHandedOut,
   moveProposal,
   removeProposalLot,
+  type ProposalNewLotsResult,
   type ProposalSaleInput,
   type ProposalSaleResult,
 } from "@/lib/proposals";
 import { createProposalShareToken, revokeProposalShareToken } from "@/lib/proposal-handout";
-import type { ProposalMove } from "@/lib/proposal-rules";
+import { parseProposalLotPacking, type ProposalMove } from "@/lib/proposal-rules";
 
 // Proposals (#2287; ADR-0075). Every action reports a message rather than throwing: a refusal — a
 // closed proposal, an offer not on Direct — is the collector's to read.
@@ -51,6 +53,22 @@ export async function addProposalLotsAction(proposalId: string, offerIds: string
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to add the offers.");
+  }
+}
+
+/** *New lots…* (#2299): the copies picked become new Direct offers that are the proposal's lots. */
+export async function makeProposalLotsAction(
+  proposalId: string,
+  itemIds: string[],
+  packing: string
+): Promise<({ status: "success" } & ProposalNewLotsResult) | { status: "error"; message: string }> {
+  const session = await getSession();
+  const parsed = parseProposalLotPacking(packing);
+  if (!parsed) return { status: "error", message: "Choose an offer each or one offer for all." };
+  try {
+    return { status: "success", ...(await makeProposalLots(session.user.id, proposalId, itemIds, parsed)) };
+  } catch (err) {
+    return failure(err, "Failed to make the lots.");
   }
 }
 
