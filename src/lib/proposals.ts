@@ -4,12 +4,25 @@ import { prisma, type DbTransaction } from "./db";
 import { allocateEntityNumber } from "./items";
 import { OPEN_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
 import { offerNumberLabel } from "./offer-set-rules";
-import { OfferActionBlockedError, readPrepareOffers, setOfferState, type PrepareOffer } from "./offers";
+import {
+  OfferActionBlockedError,
+  readPrepareOffers,
+  setOfferState,
+  withdrawOpenOffersTx,
+  type PrepareOffer,
+} from "./offers";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { ensureModulePlatforms } from "./platforms";
+import { parsePrice } from "./sale-rules";
+import { isSaleSent, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
+import { recordProposalSaleLines, soldItemIds, type SaleLineDraft } from "./sales";
 import {
   isProposalOpen,
+  proposalConversionRefusal,
+  proposalLotCurrency,
   proposalLotRefusal,
+  proposalSaleLotRefusal,
+  proposalSaleTargetRefusal,
   proposalLotsRefusal,
   proposalMoveRefusal,
   proposalStatusAfter,
@@ -280,6 +293,9 @@ export interface ProposalScreen {
   closedOn: string | null;
   /** The Direct platform the lots are offered on. */
   platform: { id: string; name: string; enabled: boolean };
+  /** The sale its accepted lots went into (#2289), once sold — null before, and if that sale was
+   *  deleted since. */
+  sale: { saleId: string; saleNo: number; platformName: string } | null;
   lots: ProposalLot[];
   total: string;
   unpriced: number;
@@ -298,6 +314,7 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       sentAt: true,
       closedAt: true,
       contact: { select: { id: true, name: true } },
+      sale: { select: { id: true, saleNo: true, platform: { select: { name: true } } } },
       lots: {
         orderBy: { offerNo: "asc" },
         select: {
@@ -326,6 +343,7 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
     sentOn: row.sentAt?.toISOString().slice(0, 10) ?? null,
     closedOn: row.closedAt?.toISOString().slice(0, 10) ?? null,
     platform,
+    sale: row.sale && { saleId: row.sale.id, saleNo: row.sale.saleNo, platformName: row.sale.platform.name },
     lots: row.lots.map((lot, i) => {
       const f = figures[i]!;
       const stated = f.listingType === "auction" ? f.startingPrice : f.price;
@@ -498,4 +516,235 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
       ...(move === "send" ? { sentAt: now } : { closedAt: now }),
     },
   });
+}
+
+// ── Becoming a sale (#2289) ──────────────────────────────────────────────────────────────────────
+
+/** A lot as *Convert to sale…* lists it: what it is offered at, and how many of its sets are still
+ *  there to sell — each sells at the lot's price, as an offer's sets do. */
+export interface ProposalSaleLot {
+  offerId: string;
+  offerNo: number;
+  title: string;
+  state: OfferState;
+  /** What it is offered at, or null while it has no price. */
+  price: string | null;
+  currency: string;
+  setsToSell: number;
+}
+
+/** One of the contact's sales still open, on any platform, as the dialog offers it. */
+export interface ProposalSaleCandidate {
+  saleId: string;
+  saleNo: number;
+  platformName: string;
+  /** `YYYY-MM-DD`. */
+  soldOn: string;
+  status: SaleStatus;
+  currency: string;
+  lineCount: number;
+}
+
+export interface ProposalSaleOptions {
+  /** The lots still open, by offer number. */
+  lots: ProposalSaleLot[];
+  /** The contact's sales not yet sent, newest first. */
+  sales: ProposalSaleCandidate[];
+  /** The Direct platform a new sale is on. */
+  platformName: string;
+}
+
+/** The sets of `offerIds` whose copies have not left yet, by offer — what each lot can still sell. */
+async function setsToSell(offerIds: readonly string[]): Promise<Map<string, { offerSetId: string; itemIds: string[] }[]>> {
+  const sets = await prisma.offerSet.findMany({
+    where: { offerId: { in: [...offerIds] } },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: { id: true, offerId: true, items: { select: { itemId: true } } },
+  });
+  const sold = await soldItemIds([...new Set(sets.flatMap((set) => set.items.map((i) => i.itemId)))]);
+  const byOffer = new Map<string, { offerSetId: string; itemIds: string[] }[]>();
+  for (const set of sets) {
+    // A set is whole or nothing: one copy gone retires it, as on every sale.
+    if (set.items.length === 0 || set.items.some((i) => sold.has(i.itemId))) continue;
+    const list = byOffer.get(set.offerId) ?? [];
+    list.push({ offerSetId: set.id, itemIds: set.items.map((i) => i.itemId) });
+    byOffer.set(set.offerId, list);
+  }
+  return byOffer;
+}
+
+/** What *Convert to sale…* offers: the lots still open, and the contact's sales still open. */
+export async function getProposalSaleOptions(ownerId: string, proposalId: string): Promise<ProposalSaleOptions> {
+  const { collectionId } = await assertProposalOwner(ownerId, proposalId);
+  const proposal = await prisma.proposal.findUniqueOrThrow({
+    where: { id: proposalId },
+    select: {
+      contactId: true,
+      lots: {
+        where: { state: { in: [...OPEN_OFFER_STATES] } },
+        orderBy: { offerNo: "asc" },
+        select: { id: true, offerNo: true, name: true, ...LOT_FIGURES_SELECT },
+      },
+    },
+  });
+  const sets = await setsToSell(proposal.lots.map((lot) => lot.id));
+  const figures = totalLots(proposal.lots);
+  const sales = await prisma.sale.findMany({
+    where: { collectionId, buyerId: proposal.contactId, status: { in: [...UNSENT_SALE_STATUSES] } },
+    orderBy: [{ soldAt: "desc" }, { saleNo: "desc" }],
+    select: {
+      id: true,
+      saleNo: true,
+      soldAt: true,
+      status: true,
+      currency: true,
+      platform: { select: { name: true } },
+      _count: { select: { lines: true } },
+    },
+  });
+  const direct = await getDirectPlatform(collectionId);
+  return {
+    lots: proposal.lots.map((lot, i) => {
+      const f = figures[i]!;
+      const stated = f.listingType === "auction" ? f.startingPrice : f.price;
+      return {
+        offerId: lot.id,
+        offerNo: lot.offerNo,
+        title: offerNumberLabel(lot.name, lot.offerNo),
+        state: f.state,
+        price: stated !== null && Number(stated) > 0 ? stated : null,
+        currency: lot.currency,
+        setsToSell: sets.get(lot.id)?.length ?? 0,
+      };
+    }),
+    sales: sales.map((sale) => ({
+      saleId: sale.id,
+      saleNo: sale.saleNo,
+      platformName: sale.platform.name,
+      soldOn: sale.soldAt.toISOString().slice(0, 10),
+      status: sale.status as SaleStatus,
+      currency: sale.currency,
+      lineCount: sale._count.lines,
+    })),
+    platformName: direct.name,
+  };
+}
+
+/** What *Convert to sale…* is asked: the lots the buyer took, each at the price typed for it, and the
+ *  sale they go into. */
+export interface ProposalSaleInput {
+  lots: readonly { offerId: string; price: string }[];
+  target: { saleId: string } | { newSale: true };
+}
+
+export interface ProposalSaleResult {
+  saleId: string;
+  saleNo: number;
+  /** A new Direct sale was started. */
+  created: boolean;
+}
+
+/** Today at UTC midnight — the shape `Sale.soldAt` (`@db.Date`) stores. */
+function todayUtcDate(): Date {
+  return new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+}
+
+/**
+ * *Convert to sale…* (#2289; ADR-0075 §6): the ticked lots are sold — every set each still has, at
+ * the price typed for the lot — into a new sale on Direct for the proposal's contact, dated today, or
+ * into one of the contact's sales not yet sent, **on any platform**, which keeps its platform, buyer,
+ * currency and fees. The lots not ticked are withdrawn and the proposal closes as Sold, naming the
+ * sale — all in the sale's own transaction, so nothing is half done. A currency the sale does not
+ * share is refused, not converted.
+ */
+export async function convertProposalToSale(
+  ownerId: string,
+  proposalId: string,
+  input: ProposalSaleInput
+): Promise<ProposalSaleResult> {
+  const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
+  const ticked = new Map(input.lots.map((lot) => [lot.offerId, lot.price]));
+  const refusal = proposalConversionRefusal(status, ticked.size);
+  if (refusal) throw new OfferActionBlockedError("bad-transition", refusal);
+
+  const proposal = await prisma.proposal.findUniqueOrThrow({
+    where: { id: proposalId },
+    select: { contactId: true, lots: { select: { id: true, offerNo: true, state: true, currency: true } } },
+  });
+  const lotById = new Map(proposal.lots.map((lot) => [lot.id, lot]));
+  const sets = await setsToSell([...ticked.keys()]);
+  const drafts: SaleLineDraft[] = [];
+  const currencies: string[] = [];
+  for (const [offerId, rawPrice] of ticked) {
+    const lot = lotById.get(offerId);
+    const lotRefusal = proposalSaleLotRefusal({
+      offerNo: lot?.offerNo ?? 0,
+      state: (lot?.state ?? "withdrawn") as OfferState,
+      inProposal: lot !== undefined,
+      hasSetToSell: (sets.get(offerId)?.length ?? 0) > 0,
+    });
+    if (lotRefusal || !lot) throw new OfferActionBlockedError("not-eligible", lotRefusal ?? "That offer is not a lot of this proposal.");
+    const price = parsePrice(rawPrice);
+    if (!price.ok) throw new OfferActionBlockedError("unpriced", `Offer #${lot.offerNo}: ${price.message}`);
+    currencies.push(lot.currency);
+    for (const set of sets.get(offerId)!) {
+      drafts.push({ offerId, offerSetId: set.offerSetId, price: price.value, itemIds: set.itemIds });
+    }
+  }
+  const currency = proposalLotCurrency(currencies);
+  if (!currency.ok) throw new OfferActionBlockedError("not-eligible", currency.message);
+
+  if ("saleId" in input.target) {
+    const sale = await prisma.sale.findFirst({
+      where: { id: input.target.saleId, collectionId },
+      select: { saleNo: true, buyerId: true, status: true, currency: true },
+    });
+    if (!sale) throw new OfferActionBlockedError("not-eligible", "That sale is not in this collection.");
+    const targetRefusal = proposalSaleTargetRefusal(
+      { saleNo: sale.saleNo, buyerId: sale.buyerId, sent: isSaleSent(sale.status), currency: sale.currency },
+      proposal.contactId,
+      currency.currency
+    );
+    if (targetRefusal) throw new OfferActionBlockedError("not-eligible", targetRefusal);
+  } else {
+    // Whoever a proposal is sold to is a buyer from now on, as a Facebook buyer becomes one.
+    await prisma.contact.update({ where: { id: proposal.contactId }, data: { buyer: true } });
+  }
+
+  const direct = await getDirectPlatform(collectionId);
+  const notTaken = proposal.lots.filter((lot) => !ticked.has(lot.id)).map((lot) => lot.id);
+  const { saleId, created } = await recordProposalSaleLines(
+    ownerId,
+    collectionId,
+    "saleId" in input.target
+      ? { saleId: input.target.saleId }
+      : {
+          header: {
+            platformId: direct.id,
+            buyerId: proposal.contactId,
+            externalRef: null,
+            transactionUrl: null,
+            soldAt: todayUtcDate(),
+            currency: currency.currency,
+            buyerHandling: null,
+            buyerPaidTotal: null,
+            commission: null,
+          },
+          offerCurrency: currency.currency,
+        },
+    drafts,
+    async (tx, saleId) => {
+      // Closed only while still open: a proposal sold or declined meanwhile rolls the sale back.
+      const { count } = await tx.proposal.updateMany({
+        where: { id: proposalId, status: { in: ["preparing", "sent"] } },
+        data: { status: "sold", closedAt: new Date(), saleId },
+      });
+      if (count === 0) {
+        throw new OfferActionBlockedError("bad-transition", "This proposal was closed meanwhile — nothing was sold.");
+      }
+      await withdrawOpenOffersTx(tx, notTaken);
+    }
+  );
+  const { saleNo } = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { saleNo: true } });
+  return { saleId, saleNo, created };
 }

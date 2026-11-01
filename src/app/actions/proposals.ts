@@ -4,7 +4,15 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
-import { addProposalLots, createProposal, moveProposal, removeProposalLot } from "@/lib/proposals";
+import {
+  addProposalLots,
+  convertProposalToSale,
+  createProposal,
+  moveProposal,
+  removeProposalLot,
+  type ProposalSaleInput,
+  type ProposalSaleResult,
+} from "@/lib/proposals";
 import type { ProposalMove } from "@/lib/proposal-rules";
 
 // Proposals (#2287; ADR-0075). Every action reports a message rather than throwing: a refusal — a
@@ -61,5 +69,18 @@ export async function moveProposalAction(proposalId: string, move: ProposalMove)
     return { status: "success" };
   } catch (err) {
     return failure(err, move === "send" ? "Failed to mark the proposal sent." : "Failed to decline the proposal.");
+  }
+}
+
+/** *Convert to sale…* (#2289): the ticked lots sold, the rest withdrawn, the proposal Sold. */
+export async function convertProposalToSaleAction(
+  proposalId: string,
+  input: ProposalSaleInput
+): Promise<({ status: "success" } & ProposalSaleResult) | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await convertProposalToSale(session.user.id, proposalId, input)) };
+  } catch (err) {
+    return failure(err, "Failed to turn the proposal into a sale.");
   }
 }

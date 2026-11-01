@@ -3155,7 +3155,28 @@ lot. A sent proposal still takes lots and price changes.
 
 **Decline…** closes it as **Declined** and **withdraws every lot still open**; the copies stay in
 your inventory. A declined proposal changes no more. A proposal becomes **Sold** once the lots the
-buyer took are sold.
+buyer took are sold — see below.
+
+### Selling it
+
+When the buyer answers, **Convert to sale…** on the proposal's screen records what they took:
+
+1. **Tick the lots the buyer took.** Each comes at its proposal price; change it there for a buyer
+   who haggled — the sale gets the new price, the lot keeps its own. A lot with several sets sells
+   all of them, each at that price. A lot whose copies have sold elsewhere meanwhile can't be ticked.
+2. **Choose the sale.** **A new sale** is on Direct, to the proposal's contact, dated today. Or pick
+   one of the contact's **sales still open** — on **any** platform, typically the Facebook sale they
+   have just bought from. That sale keeps its platform, buyer, currency and fees, and the lots join it
+   at the prices you ticked them at, so everything goes in one parcel. A sale in another currency than
+   the lots is shown but can't be picked.
+3. **Sell.** The ticked lots are sold, **the lots not ticked are withdrawn**, and the proposal closes
+   as **Sold**.
+
+Ticking nothing is not a sale: a buyer who takes nothing has declined, so use **Decline…**.
+
+The proposal's screen then links to its sale (*sold in sale #12 on Facebook*), and the sale's screen
+says *from proposal #4*. Only a proposal's lots can join a sale on another platform this way — any
+other offer still sells only into a sale on its own platform.
 
 ## Related
 

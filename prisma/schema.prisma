@@ -3063,14 +3063,19 @@ model Proposal {
   sentAt       DateTime?
   // When it was sold or declined; null while it is open.
   closedAt     DateTime?
+  // The sale its accepted lots went into (#2289) — a new Direct sale or the buyer's open sale on any
+  // platform. Null until it is sold, and again if that sale is deleted (`SetNull`).
+  saleId       String?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sale       Sale?      @relation(fields: [saleId], references: [id], onDelete: SetNull)
   lots       Offer[]    @relation("OfferProposal")
 
   @@unique([collectionId, proposalNo])
   @@index([collectionId])
   @@index([contactId])
+  @@index([saleId])
   @@map("proposal")
 }
 
@@ -6183,6 +6188,8 @@ model Sale {
   /** The buyer's link for choosing their own copy (#699), or none. At most one — see
    *  {@link SaleShareToken}. */
   shareToken    SaleShareToken?
+  // The proposals whose accepted lots came into this sale (#2289).
+  proposals     Proposal[]
 
   @@unique([collectionId, saleNo])
   @@index([collectionId])

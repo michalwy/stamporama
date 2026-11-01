@@ -127,6 +127,80 @@ export function proposalTotal(lots: readonly ProposalTotalLot[]): { total: strin
   return { total: (cents / 100).toFixed(2), unpriced };
 }
 
+// ── Becoming a sale (#2289) ──────────────────────────────────────────────────────────────────────
+//
+// *Convert to sale…* sells the lots the buyer took — ticked, at the price in the dialog — into a new
+// Direct sale or one of the contact's sales still open on **any** platform (ADR-0075 §6), withdraws
+// the rest and closes the proposal as Sold.
+
+/** Why *Convert to sale…* cannot be made on a proposal in `status` with `ticked` lots ticked, or null
+ *  when it can. Ticking nothing is not a conversion: a buyer who takes nothing has declined. */
+export function proposalConversionRefusal(status: ProposalStatus, ticked: number): string | null {
+  if (!isProposalOpen(status)) {
+    return `This proposal is ${PROPOSAL_STATUS_LABEL[status].toLowerCase()} — it does not change any more.`;
+  }
+  if (ticked === 0) return "Tick the lots the buyer took. If they took none, decline the proposal instead.";
+  return null;
+}
+
+/** A ticked lot as the conversion sees it. */
+export interface ProposalSaleLotFacts {
+  offerNo: number;
+  state: OfferState;
+  /** Whether the offer is a lot of this proposal. */
+  inProposal: boolean;
+  /** Whether it still has a set whose copies have not left. */
+  hasSetToSell: boolean;
+}
+
+/** Why a ticked lot cannot be sold, or null when it can: a lot of this proposal, still open, with a
+ *  set left to sell. */
+export function proposalSaleLotRefusal(facts: ProposalSaleLotFacts): string | null {
+  const ref = `Offer #${facts.offerNo}`;
+  if (!facts.inProposal) return `${ref} is not a lot of this proposal.`;
+  if ((CLOSED_OFFER_STATES as readonly OfferState[]).includes(facts.state)) {
+    return `${ref} is ${facts.state} — only an open lot can be sold.`;
+  }
+  if (!facts.hasSetToSell) return `${ref} has nothing left to sell — its copies have gone elsewhere.`;
+  return null;
+}
+
+/** An open sale the lots could join, as the conversion checks it. */
+export interface ProposalSaleTargetFacts {
+  saleNo: number;
+  buyerId: string | null;
+  /** The parcel has gone — *Sent* or *Delivered*. */
+  sent: boolean;
+  currency: string;
+}
+
+/**
+ * Why the lots, in `lotCurrency`, cannot join the sale for the proposal's contact, or null when they
+ * can. The sale may be on any platform; it must be the contact's, not yet sent, and in the lots'
+ * currency — a mismatch is refused rather than converted.
+ */
+export function proposalSaleTargetRefusal(
+  sale: ProposalSaleTargetFacts,
+  contactId: string,
+  lotCurrency: string
+): string | null {
+  const ref = `Sale #${sale.saleNo}`;
+  if (sale.buyerId !== contactId) return `${ref} is not this contact's.`;
+  if (sale.sent) return `${ref} has already been sent — choose an open sale or a new one.`;
+  if (sale.currency !== lotCurrency) {
+    return `${ref} is in ${sale.currency}, but the lots are in ${lotCurrency} — a sale is in one currency.`;
+  }
+  return null;
+}
+
+/** The one currency the ticked lots are in, or a refusal when they are in more than one. */
+export function proposalLotCurrency(currencies: readonly string[]): { ok: true; currency: string } | { ok: false; message: string } {
+  const distinct = [...new Set(currencies)];
+  if (distinct.length === 1) return { ok: true, currency: distinct[0]! };
+  if (distinct.length === 0) return { ok: false, message: "Tick the lots the buyer took." };
+  return { ok: false, message: `The ticked lots are in ${distinct.join(" and ")} — a sale is in one currency.` };
+}
+
 /** Read a proposal's number off its address (`/offers/proposals/4`), or undefined. */
 export function parseProposalNo(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) return undefined;

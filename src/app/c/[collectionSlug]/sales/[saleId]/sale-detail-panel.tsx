@@ -389,6 +389,16 @@ export function SaleDetailPanel({
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             {sale.buyerName ? `to ${sale.buyerName}` : "buyer unknown"}
           </span>
+          {/* The proposals whose accepted lots came into this sale (#2289). */}
+          {sale.proposals.map((p) => (
+            <Link
+              key={p.proposalId}
+              href={`/c/${params.collectionSlug}/offers/proposals/${p.proposalNo}`}
+              style={{ fontSize: "0.8125rem", color: "var(--color-accent)" }}
+            >
+              from proposal #{p.proposalNo}
+            </Link>
+          ))}
           {/* The header's buttons sit on the right, whichever of them are drawn. */}
           <span style={{ marginLeft: "auto" }} />
           {/* What was said with the buyer (#2149), in a panel at the side (#2153) — kept on the buyer,

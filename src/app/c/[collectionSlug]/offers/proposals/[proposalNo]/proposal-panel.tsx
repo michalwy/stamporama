@@ -9,14 +9,17 @@ import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { isProposalOpen, proposalMoveRefusal } from "@/lib/proposal-rules";
+import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
 import type { PrepareOffer } from "@/lib/offers";
 import type { ProposalLot } from "@/lib/proposals";
 import { OfferStateChip } from "../../offer-badges";
 import { useInvalidateOffers } from "../../use-offers-query";
+import { useInvalidateSales } from "../../../sales/use-sales-query";
 import { PreparePriceField, PrepareTitleField } from "../../prepare/prepare-offer-parts";
 import { useProposalLotsPrepare, useProposalScreen } from "../use-proposals-query";
 import { ProposalStatusChip, proposalTotalText } from "../proposal-parts";
 import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
+import { ConvertProposalDialog } from "./convert-proposal-dialog";
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)" };
 
@@ -49,7 +52,8 @@ const LOT_ROW: React.CSSProperties = {
  * the Direct platform, titled and priced here in place while the proposal is open, as a post's lots
  * are (#2031) — and the total. *Add offers…* takes Direct offers already made; the Copies list's
  * *Generate offers* on Direct puts new ones straight in. *Mark sent* once it has gone to the buyer —
- * prices stay editable — and *Decline…* withdraws the lots still open.
+ * prices stay editable — and *Decline…* withdraws the lots still open. *Convert to sale…* (#2289)
+ * sells the lots the buyer took, withdraws the rest and closes it as Sold, linking the sale.
  */
 export function ProposalPanel({
   collectionId,
@@ -63,8 +67,9 @@ export function ProposalPanel({
   const { data: screen, isLoading, isError } = useProposalScreen(collectionId, proposalId);
   const { data: prepare = {} } = useProposalLotsPrepare(collectionId, proposalId);
   const { invalidateAll } = useInvalidateOffers();
+  const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { toast } = useToast();
-  const [dialog, setDialog] = useState<"add" | "decline" | null>(null);
+  const [dialog, setDialog] = useState<"add" | "decline" | "convert" | null>(null);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const priceRefs = useRef(new Map<string, HTMLInputElement | null>());
@@ -74,6 +79,7 @@ export function ProposalPanel({
 
   const open = isProposalOpen(screen.status);
   const sendRefusal = proposalMoveRefusal(screen.status, "send", screen.lots.length);
+  const hasOpenLot = screen.lots.some((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state));
   const refresh = () => void invalidateAll(collectionId);
 
   function run(action: () => Promise<{ status: "success" } | { status: "error"; message: string }>, done: string) {
@@ -130,6 +136,11 @@ export function ProposalPanel({
             <span style={META}>made {screen.createdOn}</span>
             {screen.sentOn && <span style={META}>sent {screen.sentOn}</span>}
             {screen.closedOn && <span style={META}>closed {screen.closedOn}</span>}
+            {screen.sale && (
+              <Link href={`/c/${collectionSlug}/sales/${screen.sale.saleId}`} style={{ ...LINK, fontSize: "0.8125rem" }}>
+                sold in sale #{screen.sale.saleNo} on {screen.sale.platformName}
+              </Link>
+            )}
             <Tooltip content="The platform a proposal's lots are offered on — selling straight to one person">
               <span style={META}>on {screen.platform.name}</span>
             </Tooltip>
@@ -153,6 +164,22 @@ export function ProposalPanel({
                 </button>
               </Tooltip>
             )}
+            <Tooltip
+              content={
+                hasOpenLot
+                  ? "Sell the lots the buyer took — the rest are withdrawn"
+                  : "No lot is still open — add one, or decline the proposal"
+              }
+            >
+              <button
+                type="button"
+                style={{ ...PRIMARY_BUTTON, opacity: hasOpenLot ? 1 : 0.5 }}
+                disabled={isPending || !hasOpenLot}
+                onClick={() => setDialog("convert")}
+              >
+                Convert to sale…
+              </button>
+            </Tooltip>
             <button
               type="button"
               style={{ ...SECONDARY_BUTTON, color: "var(--color-error)" }}
@@ -243,6 +270,37 @@ export function ProposalPanel({
               `${offerIds.length} ${offerIds.length === 1 ? "offer" : "offers"} added to the proposal`
             )
           }
+        />
+      )}
+      {dialog === "convert" && (
+        <ConvertProposalDialog
+          collectionId={collectionId}
+          proposalId={proposalId}
+          contactId={screen.contact.id}
+          contactName={screen.contact.name}
+          isPending={isPending}
+          error={error}
+          onCancel={() => {
+            setDialog(null);
+            setError(undefined);
+          }}
+          onSubmit={(input) => {
+            setError(undefined);
+            startTransition(async () => {
+              const result = await (await import("@/app/actions/proposals")).convertProposalToSaleAction(proposalId, input);
+              if (result.status === "error") {
+                setError(result.message);
+                return;
+              }
+              setDialog(null);
+              const n = input.lots.length;
+              toast({
+                message: `${n} ${n === 1 ? "lot" : "lots"} sold ${result.created ? "in new sale" : "into sale"} #${result.saleNo} · ${screen.contact.name}`,
+              });
+              // A sale retires copies and flips the lots, so the sales' invalidation covers the offers too.
+              invalidateSales(collectionId);
+            });
+          }}
         />
       )}
       {dialog === "decline" && (
