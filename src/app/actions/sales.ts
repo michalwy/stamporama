@@ -44,6 +44,7 @@ import { assertCollectionOwner } from "@/lib/platform-category";
 import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
 import { sellPhoneOffer, type PhoneOfferSaleInput } from "@/lib/phone-offers";
 import { removeSaleAttachment } from "@/lib/sale-attachments";
+import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
@@ -353,7 +354,8 @@ export async function swapSaleLineSetAction(
 export async function removeSaleLineAction(lineId: string): Promise<SaleActionState> {
   const session = await getSession();
   try {
-    await removeSaleLine(session.user.id, lineId);
+    // An offer back on sale may have had its cleaned-up images queued again (#2317).
+    if ((await removeSaleLine(session.user.id, lineId)) > 0) kickOfferPhotoWorker();
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to remove the sold unit.");
@@ -425,7 +427,8 @@ export async function markSaleCopiesPackedAction(saleId: string): Promise<SaleAc
 export async function deleteSaleAction(saleId: string): Promise<SaleActionState> {
   const session = await getSession();
   try {
-    await deleteSale(session.user.id, saleId);
+    // An offer back on sale may have had its cleaned-up images queued again (#2317).
+    if ((await deleteSale(session.user.id, saleId)) > 0) kickOfferPhotoWorker();
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the sale.");
