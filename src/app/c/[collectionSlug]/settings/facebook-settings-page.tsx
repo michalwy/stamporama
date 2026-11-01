@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { multiLineFormControl } from "@/app/control-style";
 import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -46,6 +46,8 @@ import {
 } from "./facebook-settings-cases";
 import type { PlatformListItem } from "@/lib/platforms";
 import { ModulePlatformTab } from "./module-platform-tab";
+import { SettingsPageAction } from "./settings-page-frame";
+import { NewFacebookPostDialog } from "../offers/posts/new-post-dialog";
 import { SETTINGS_FIELD_SELECT_STYLE } from "./settings-field-grid";
 import {
   AddRowAction,
@@ -97,13 +99,50 @@ export function FacebookSettingsBody({
   platform: PlatformListItem;
   groups: FacebookGroupList;
 }) {
-  if (part === "platform") return <ModulePlatformTab collectionId={collectionId} platform={platform} />;
+  const newPost = groups.platformId && groups.groups.some((g) => g.archivedAt === null) && (
+    <NewPostAction collectionId={collectionId} platformId={groups.platformId} />
+  );
+  if (part === "platform") {
+    return (
+      <>
+        {newPost}
+        <ModulePlatformTab collectionId={collectionId} platform={platform} />
+      </>
+    );
+  }
   return groups.platformId ? (
-    <GroupsListDetail collectionId={collectionId} list={groups} />
+    <>
+      {newPost}
+      <GroupsListDetail collectionId={collectionId} list={groups} />
+    </>
   ) : (
     <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
       The Facebook platform is not set up yet. Reload the page to create it.
     </p>
+  );
+}
+
+/** *New post…* in the page's header (#2291): a post made by hand in one of the groups, empty, opened on
+ *  its screen where its lots are made. */
+function NewPostAction({ collectionId, platformId }: { collectionId: string; platformId: string }) {
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <SettingsPageAction>
+        <DialogSecondaryButton type="button" onClick={() => setOpen(true)}>
+          New post…
+        </DialogSecondaryButton>
+      </SettingsPageAction>
+      {open && (
+        <NewFacebookPostDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          platformId={platformId}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

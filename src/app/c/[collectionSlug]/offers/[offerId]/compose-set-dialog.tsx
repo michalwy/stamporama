@@ -32,6 +32,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import type { OfferTitlePreview } from "@/lib/offers";
+import type { ItemListItem } from "@/lib/items";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -57,13 +58,20 @@ const HINT_STYLE: React.CSSProperties = {
 
 interface ComposeSetDialogProps {
   collectionId: string;
-  offerId: string;
+  /** The offer the set is added to — or null while the offer is not made yet (#2291), when the copies
+   *  picked go to `onPick` instead of into a set. */
+  offerId: string | null;
   platformId: string;
   /** The platform's listing language (#293) — the language selector's default (#297). */
   platformTitleLanguage: string | null;
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
+  /** Pick the copies of an offer not made yet (#2291) — *New lot…* on a post's screen — rather than add
+   *  them: handed over with how they are packaged, and the title is the next step's to show. */
+  onPick?: (copies: ItemListItem[], perCopy: boolean) => void;
+  /** The dialog's title; *Add set* unless given. */
+  title?: string;
   onClose: () => void;
   onDone: () => void;
 }
@@ -89,6 +97,8 @@ export function ComposeSetDialog({
   areas,
   locations,
   baseCurrency,
+  onPick,
+  title = "Add set",
   onClose,
   onDone,
 }: ComposeSetDialogProps) {
@@ -183,7 +193,7 @@ export function ComposeSetDialog({
     collectionId,
     selectedIds,
     platformId,
-    offerId,
+    offerId ?? undefined,
     selectedIds.length > 0
   );
 
@@ -194,7 +204,9 @@ export function ComposeSetDialog({
   // collection's default language.
   const { titleLanguages } = useTitleLanguages(collectionId);
   const [language, setLanguage] = useState(() => normalizeLanguage(platformTitleLanguage) ?? "");
-  const choosable = titleLanguages.length > 0;
+  // Picking for an offer not made yet (#2291) there is no offer to preview a title against — the next
+  // step shows it — so neither the preview nor the language is offered.
+  const choosable = !!offerId && titleLanguages.length > 0;
   const languageOverride = choosable ? language || null : undefined;
 
   // Live preview of the title the selection will get, rendered by the server (only it can resolve
@@ -209,7 +221,7 @@ export function ComposeSetDialog({
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
-      if (selectedIds.length === 0) {
+      if (selectedIds.length === 0 || !offerId) {
         setPreview(null);
         return;
       }
@@ -246,6 +258,13 @@ export function ComposeSetDialog({
       return;
     }
     setError(undefined);
+    if (onPick || !offerId) {
+      onPick?.(
+        copies.filter((c) => selected.has(c.id)),
+        multi ? perCopy : false
+      );
+      return;
+    }
     startTransition(async () => {
       const { addOfferSetAction } = await import("@/app/actions/offers");
       const result = await addOfferSetAction(offerId, selectedIds, {
@@ -263,7 +282,7 @@ export function ComposeSetDialog({
     // The translation popovers (#300, #1733) are Escape layers of their own, opened above this one,
     // so Escape closes them first without this dialog stepping aside.
     <DialogShell
-      title="Add set"
+      title={title}
       onClose={onClose}
       maxWidth="min(96vw, 100rem)"
       height={PICKER_DIALOG_HEIGHT}
@@ -301,7 +320,7 @@ export function ComposeSetDialog({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? "No copies available to add. Copies must be For sale and delivered (in hand), unsold, and not already in this offer."
+                  ? `No copies available to add. Copies must be For sale and delivered (in hand), unsold${offerId ? ", and not already in this offer" : ""}.`
                   : "No copies match your filter."}
               </p>
             ) : (

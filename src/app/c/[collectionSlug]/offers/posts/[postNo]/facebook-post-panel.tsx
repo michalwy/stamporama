@@ -24,7 +24,13 @@ import { languageLabel } from "@/lib/languages";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { facebookLotsInView, isFacebookLotForSale } from "@/lib/facebook-post-ui-state";
-import { isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL, pricingReadyFor } from "@/lib/offer-rules";
+import {
+  isAuctionListing,
+  isTerminalState,
+  manualTransitions,
+  OFFER_LISTING_TYPE_LABEL,
+  pricingReadyFor,
+} from "@/lib/offer-rules";
 import { isCoverReadinessBlocker, isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -61,6 +67,7 @@ import { OfferCoverWalk, OffersCoverWalk } from "../../[offerId]/offer-cover-wal
 import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../../prepare/prepare-offer-parts";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "../delete-post-dialog";
 import { AddLotsDialog } from "./add-lots-dialog";
+import { NewLotFlow, type NewLotPost, type NewLotSource } from "./new-lot-flow";
 import { PostPhotoSettingsButton } from "./post-photo-settings";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
@@ -70,6 +77,9 @@ import { PostPriceTotalsBar } from "./post-price-totals-bar";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 import { catalogueFillEntries, type CatalogueFillGroup, type CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { CollectionAreaData } from "@/lib/areas";
+import type { LocationData } from "@/lib/locations";
+import type { StampConditionData } from "@/lib/conditions";
+import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { AuctionLotCatalogValuesDialog } from "../../../auctions/auction-lot-catalog-values-dialog";
 
@@ -97,6 +107,9 @@ import { AuctionLotCatalogValuesDialog } from "../../../auctions/auction-lot-cat
 //   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up.
 // - **Add lots…** (#1870), beside the lots' heading while the post is not up: offers picked from those
 //   that could join become its next lots, and any the server turns away is named under the heading.
+// - **New lot…** and **New lot from a new item…** (#2291), beside it: a new offer made as the post's
+//   next lot — from copies in the app, or from a stamp not yet in it — and the next one offered at once,
+//   so a post made by hand is filled lot by lot without leaving it. A post with no lot yet says so.
 // - **Untranslated names** (#1889), while the post is not up: each lot's row names those its part of
 //   the post prints in the default language, as #1733's links — the translation is entered there, is
 //   the entity's own, and saving it re-renders the lots' texts at once, so the name leaves every row
@@ -217,6 +230,7 @@ type Dialog =
   | { kind: "withdrawLot"; lot: FacebookKitLot }
   | { kind: "takeOut"; lot: FacebookKitLot }
   | { kind: "addLots" }
+  | { kind: "newLot"; source: NewLotSource }
   | { kind: "regenerate"; scope: RegenerateScope }
   | { kind: "titleTemplate" }
   | { kind: "titleWords"; mode: FacebookTitleWordsMode }
@@ -253,6 +267,9 @@ export function FacebookPostPanel({
   collectionSlug,
   baseCurrency,
   areas,
+  locations,
+  conditions,
+  certificateStatuses,
   postId,
   today,
 }: {
@@ -261,6 +278,10 @@ export function FacebookPostPanel({
   baseCurrency: string;
   /** For the catalogue chips of *Fill catalogue values* (#2220). */
   areas: CollectionAreaData[];
+  /** For *New lot…*'s copy picker and new-item form (#2291). */
+  locations: LocationData[];
+  conditions: StampConditionData[];
+  certificateStatuses: CertificateStatusData[];
   postId: string;
   /** Server-computed "today", for *Sell*'s new-sale step — as the offer screen passes it. */
   today: string;
@@ -377,6 +398,16 @@ export function FacebookPostPanel({
   const moves = facebookPostMoves(lots);
   const stage = facebookPostStage(lots);
   const pendingLot = lots.find((l) => l.state === "pending");
+  // What *New lot…* fixes (#2291): the post's platform and group, its lots' type unless the group mixes
+  // them, and the closing time its auctions share.
+  const newLotPost: NewLotPost = {
+    postId,
+    postNo,
+    platform: screen.platform,
+    groupId: kit.group.id,
+    listingType: !screen.mixedListingTypes && serverLots.length > 0 ? serverLots[0].listingType : null,
+    endsAt: serverLots.find((l) => isAuctionListing(l.listingType) && l.endsAt !== null)?.endsAt ?? null,
+  };
   const postLink = facebookPostLink(lots);
 
   function close() {
@@ -774,7 +805,11 @@ export function FacebookPostPanel({
           />
         </div>
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-          {lots.length > 1 ? `A Facebook post of ${lots.length} lots in ` : "A Facebook post of one offer, posted alone, in "}
+          {lots.length > 1
+            ? `A Facebook post of ${lots.length} lots in `
+            : lots.length === 0
+              ? "A Facebook post with no lots yet, in "
+              : "A Facebook post of one offer, posted alone, in "}
           <a href={kit.group.url} target="_blank" rel="noreferrer" style={LINK}>
             {kit.group.name} ↗
           </a>
@@ -854,7 +889,9 @@ export function FacebookPostPanel({
           <p style={{ ...MUTED, margin: moves.backToPreparing ? "0.5rem 0 0" : 0 }}>
             {moves.waiting.length > 0
               ? `Every lot must be Ready before the post goes up: ${moves.waiting.map((n) => `lot ${n}`).join(", ")}.`
-              : "Every lot is sold or withdrawn."}
+              : lots.length === 0
+                ? "No lots yet — make them with New lot…, or add offers that exist with Add lots…."
+                : "Every lot is sold or withdrawn."}
           </p>
         )}
         {error && dialog.kind === "none" && (
@@ -913,7 +950,7 @@ export function FacebookPostPanel({
               >
                 <h3 style={{ ...CARD_TITLE, margin: 0 }}>Lots</h3>
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
-                  {!lots.some((l) => isFacebookLotPosted(l.state)) && (
+                  {lots.length > 0 && !lots.some((l) => isFacebookLotPosted(l.state)) && (
                     <PostPhotoSettingsButton collectionId={collectionId} postId={postId} disabled={isPending} />
                   )}
                   {lotTitles && (
@@ -973,6 +1010,33 @@ export function FacebookPostPanel({
                     >
                       Add lots…
                     </DialogSecondaryButton>
+                  )}
+                  {/* A new offer made as the post's next lot (#2291), from copies in the app or a new item. */}
+                  {moves.addLots && (
+                    <>
+                      <DialogSecondaryButton
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          setError(undefined);
+                          setDialog({ kind: "newLot", source: "copies" });
+                        }}
+                      >
+                        New lot…
+                      </DialogSecondaryButton>
+                      <Tooltip content="A lot of a stamp not yet in the app: its copy is made first, For sale, then the lot from it.">
+                        <DialogSecondaryButton
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => {
+                            setError(undefined);
+                            setDialog({ kind: "newLot", source: "newItem" });
+                          }}
+                        >
+                          New lot from a new item…
+                        </DialogSecondaryButton>
+                      </Tooltip>
+                    </>
                   )}
                 </div>
               </div>
@@ -1122,6 +1186,7 @@ export function FacebookPostPanel({
               {/* The lots and, under them, the post's totals (#2218) — one box, so the bar is pinned to the
                   window's bottom edge only while some lot is on screen. */}
               <div>
+                {lots.length === 0 && <p style={{ ...MUTED, margin: "0.75rem 0 0" }}>No lots yet.</p>}
                 <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
                   {lotsInView.map((lot, index) => {
                     const { photos, caption } = lotKit(lot);
@@ -1281,6 +1346,24 @@ export function FacebookPostPanel({
           error={error}
           onClose={close}
           onConfirm={() => takeOut(dialog.lot)}
+        />
+      )}
+
+      {dialog.kind === "newLot" && (
+        <NewLotFlow
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          baseCurrency={baseCurrency}
+          post={newLotPost}
+          source={dialog.source}
+          onCreated={(created) => {
+            invalidateAll(collectionId);
+            toast({ message: `Offer #${created.offerNo} is now lot ${created.lotNo}` });
+          }}
+          onClose={close}
         />
       )}
 

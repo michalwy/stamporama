@@ -20,6 +20,7 @@ import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/fa
 import {
   addFacebookLots,
   changeFacebookLotTitleWords,
+  createEmptyFacebookPost,
   createFacebookPost,
   deleteFacebookPost,
   readFacebookPostDeletion,
@@ -163,6 +164,20 @@ export async function createFacebookPostAction(
     return { status: "success", postId, postNo };
   } catch (err) {
     return failure(err, "Failed to put the offers into one post.");
+  }
+}
+
+/** Make a post by hand, empty, with its group, title and layout — null follows the group's (#2291). */
+export async function createEmptyFacebookPostAction(
+  collectionId: string,
+  values: { groupId: string; title: string; layout: FacebookMultiLotLayout | null }
+): Promise<FacebookPostActionState> {
+  const session = await getSession();
+  try {
+    const { postId, postNo } = await createEmptyFacebookPost(session.user.id, collectionId, values);
+    return { status: "success", postId, postNo };
+  } catch (err) {
+    return failure(err, "Failed to make the post.");
   }
 }
 

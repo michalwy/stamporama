@@ -25,7 +25,8 @@ import { InventoryItemRow } from "./inventory-item-row";
 import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
-import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
+import { OfferFormDialog, type FacebookLotFormTarget } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
+import type { FacebookLotCreated } from "@/lib/facebook-posts";
 import {
   useComposeTargets,
   useComposeTargetSetCopies,
@@ -143,6 +144,9 @@ export interface AddToOfferDialogProps {
    * (#372) needs, which reaches this dialog through `startInCreate` and so never sees the footer
    * control that would otherwise let the choice be changed. */
   initialPackaging?: "per-copy" | "one-set";
+  /** Make the offer as a post's next lot (#2291) — *New lot…* on its screen, with `startInCreate` and
+   *  `initialPlatform` the post's: the form fixes what the post fixes, and the offer is made in it. */
+  facebookLot?: FacebookLotFormTarget & { postId: string; onCreated: (created: FacebookLotCreated) => void };
   onClose: () => void;
   onDone: () => void;
 }
@@ -181,6 +185,7 @@ export function AddToOfferDialog({
   startInCreate = false,
   initialTargetOfferId,
   initialPackaging = "per-copy",
+  facebookLot,
   onClose,
   onDone,
 }: AddToOfferDialogProps) {
@@ -409,12 +414,10 @@ export function AddToOfferDialog({
     const usedPlatformId = (formData.get("platformId") as string | null) ?? "";
     startTransition(async () => {
       const actions = await import("@/app/actions/offers");
-      const created = await actions.createOfferAction(
-        collectionId,
-        formData,
-        offerItemIds,
-        offerItemIds.length > 1 && packaging === "per-copy"
-      );
+      const perCopy = offerItemIds.length > 1 && packaging === "per-copy";
+      const created = facebookLot
+        ? await actions.createFacebookLotAction(collectionId, facebookLot.postId, formData, offerItemIds, perCopy)
+        : await actions.createOfferAction(collectionId, formData, offerItemIds, perCopy);
       if (created.status !== "success") {
         // Nothing was created (the create + seed commit together), so the picker stays open to retry.
         setCreateError(created.message);
@@ -425,6 +428,7 @@ export function AddToOfferDialog({
       invalidateAll(collectionId);
       invalidateList(collectionId);
       invalidateContacts(collectionId);
+      if (facebookLot && "lotNo" in created) facebookLot.onCreated(created);
       onDone();
     });
   }
@@ -636,6 +640,8 @@ export function AddToOfferDialog({
         collectionId={collectionId}
         baseCurrency={baseCurrency}
         initialPlatform={initialPlatform}
+        facebookLot={facebookLot}
+        {...(facebookLot ? { title: "New lot", submitLabel: "Make lot" } : {})}
         isPending={isPending}
         error={createError}
         zIndexBase={110}

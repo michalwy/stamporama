@@ -958,7 +958,8 @@ export function facebookPostStage(lots: readonly { state: string }[]): FacebookP
   if (lots.some((l) => l.state === "pending")) return "pending";
   if (lots.some((l) => l.state === "active" || l.state === "paused")) return "up";
   if (lots.some((l) => isFacebookLotPosted(l.state))) return "over";
-  return lots.every((l) => l.state === "ready") ? "ready" : "preparing";
+  // A post made by hand with no lot yet (#2291) is being prepared, not ready.
+  return lots.length > 0 && lots.every((l) => l.state === "ready") ? "ready" : "preparing";
 }
 
 /** A post's number as a list filter carries it (#1842): a positive whole number, else no filter. */
@@ -1082,7 +1083,8 @@ export function facebookLotAddRefusal(
   if (offer.facebookPostId === post.postId) return "is already a lot of this post";
   if (inPostOfSeveral(offer)) return "is already a lot of another post";
   if (isFacebookLotPosted(offer.state)) return "is already up or closed";
-  if (!post.mixedListingTypes && !post.lotTypes.includes(offer.listingType)) {
+  // A post with no lot yet (#2291) holds no type, so it takes either.
+  if (!post.mixedListingTypes && post.lotTypes.length > 0 && !post.lotTypes.includes(offer.listingType)) {
     const kind = isAuctionListing(offer.listingType) ? "an auction" : "a quick buy";
     const lots = post.lotTypes.every((t) => isAuctionListing(t)) ? "auctions" : "quick buys";
     return `is ${kind} and this post's lots are ${lots}`;

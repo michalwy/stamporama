@@ -502,6 +502,25 @@ the order the preview lists them. An existing offer that only receives sets is n
 The message after the pass opens the post's screen ([Generating offers in
 bulk](inventory.md#generating-offers-in-bulk)).
 
+**A post can start empty.** To put a post together as the stamps come out of the stock book — *PRL
+1951–62, blocks*, lot after lot — choose **New post…** on the [list of posts](#the-list-of-posts) or in
+the header of **Settings → Facebook**. Give its **group**, its **title** and its **layout** (the group's,
+unless you choose one), and **Make post**: the post opens on its screen, *being prepared*, with *No lots
+yet*. Make its lots there one by one with **New lot…** — or add offers you already have with **Add
+lots…** — and it is published as any post once every lot is Ready. A post with no lots can be deleted
+from the **⋮** beside its title.
+
+**New lot…**, beside **Add lots…** on the post's screen until the post is up, makes a new offer that
+becomes the post's next lot. Pick its copies — **Add as one set** for a series sold together, or one set
+each — then the ordinary new-offer form beside them asks the title, the price and the rest. It is on
+Facebook in the post's group, and neither can be changed there; it is of the post's type (auction or
+quick buy) unless the group's posts may mix them — the first lot of an empty post may be either — an
+auction closes when the post's auctions do, and its status is *Preparing* or *Ready*, since it goes up
+with the post. **New lot from a new item…** does the same for a stamp not yet in the app, as **Sell a
+new item** does: describe the copy first — it is saved *For sale* — then the lot is made from it. Once a
+lot is made, the next one is offered straight away: **Next lot** starts again, **Cancel** when you are
+done. A copy saved for a new item stays in your inventory even if you stop before its lot is made.
+
 The post gets a **number** of its own — **Post #12** — counted per collection like an offer's, and
 never given to another post, even after this one is gone. It is named by both wherever it is named —
 **Post #12 · Generalgouvernement 1940–44** — on its screen, in the list of posts and on each lot's
@@ -617,7 +636,9 @@ posts of several lots and posts of one offer alike, so it is the whole of Facebo
 Each row shows the post's number, title and group, where it stands (being prepared, ready to post,
 waiting for approval, up in the group, or over), how many lots it holds and how many of them are still
 for sale — neither sold nor withdrawn — and its layout (**Text** or **Captions**), or **Posted alone**
-for a post of one offer; then the day it went up and its link. Click a row to open the post's screen.
+for a post of one offer — **No lots yet** for a post made by hand that has none; then the day it went
+up and its link. Click a row to open the post's screen. **New post…** at the right of the toolbar
+makes a post by hand ([above](#a-post-with-several-lots)).
 Narrow the list with the **group** filter, the **stage** chips and **No title**; click a lit chip again
 to show every post. The list remembers its filters for the collection: leave it and come back — from
 the sidebar, a post's screen or Quick jump — and it shows the same group and chips, and a reload or a
@@ -649,7 +670,8 @@ bar: it lists the posts of their group not yet up, newest first, by number and t
 screen, **Add lots…** beside the *Lots* heading lists the offers that could join and adds the ones you
 pick; each row says which lot it will become. An offer joins on the same conditions as for **Post
 together** — a Facebook offer in the post's group, not yet posted, in no other post of several lots,
-and of the post's listing type unless the group's posts may mix them; its post of one goes. A post of
+and of the post's listing type unless the group's posts may mix them (a post with no lots yet takes
+either); its post of one goes. A post of
 one that gains a lot this way keeps the title it has as its own. One that does not qualify is named with
 the reason and the others are added; on the **Offers** screen it stays ticked. A post waiting for
 approval or up in the group takes no new lots.

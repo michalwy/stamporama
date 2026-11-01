@@ -18,6 +18,7 @@ import {
   OFFER_LISTING_TYPE_LABEL,
   type OfferListingType,
   isAuctionListing,
+  isLiveState,
   normalizeListingType,
   priceLabel,
 } from "@/lib/offer-rules";
@@ -153,8 +154,22 @@ export interface OfferFormDialogProps {
   /** Off while something drawn in the dialog owns Escape itself — a filter menu over the copies
    *  (#1795) — so one press closes that and not the dialog under it. */
   dismissable?: boolean;
+  /** A new lot of a Facebook post (#2291): on the post's platform (`initialPlatform`) and in its group,
+   *  neither changed here; of the post's type where it has one and the group does not mix them; an
+   *  auction closing when the post's auctions do, where it has one; and made Preparing or Ready only,
+   *  since it goes up with the post. */
+  facebookLot?: FacebookLotFormTarget;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
+}
+
+/** What the offer form fixes for a new lot of a post (#2291). */
+export interface FacebookLotFormTarget {
+  groupId: string;
+  /** The type every lot of the post is, or null where the post has none yet or the group mixes them. */
+  listingType: OfferListingType | null;
+  /** The closing time the post's auctions share, or null where none has one yet. */
+  endsAt: string | null;
 }
 
 /** Create or edit an offer's header (ADR-0013): platform, asking price + currency, optional
@@ -183,6 +198,7 @@ export function OfferFormDialog({
   copies,
   titleItemIds,
   dismissable = true,
+  facebookLot,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -193,7 +209,9 @@ export function OfferFormDialog({
   // seeds the date from the offer itself and has no status field (lifecycle controls own it). The URL
   // is never remembered — always specific to the individual offer.
   const [lastDefaults] = useLastOfferDefaults(collectionId);
-  const defaultState = lastDefaults?.state ?? "preparing";
+  // A lot goes up with its post (#2291), so it is never made live on its own.
+  const lotStates = facebookLot ? CREATABLE_OFFER_STATES.filter((s) => !isLiveState(s)) : CREATABLE_OFFER_STATES;
+  const defaultState = lastDefaults?.state && lotStates.includes(lastDefaults.state) ? lastDefaults.state : "preparing";
   const defaultListingDate = isEdit
     ? formatListingDate(offer!.listingDate)
     : lastDefaults?.listingDate || todayIso();
@@ -217,11 +235,11 @@ export function OfferFormDialog({
   });
   const isFacebook = !!platformId && facebookChoices?.isFacebook === true;
   const facebookGroups: FacebookGroupChoice[] = facebookChoices?.groups ?? [];
-  const [facebookGroupId, setFacebookGroupId] = useState(offer?.facebookGroupId ?? "");
+  const [facebookGroupId, setFacebookGroupId] = useState(offer?.facebookGroupId ?? facebookLot?.groupId ?? "");
   const facebookGroup = isFacebook ? facebookGroups.find((g) => g.id === facebookGroupId) : undefined;
   // A lot of a multi-lot post shares the post's group, so its group is not changed here.
-  const inFacebookPost = !!offer?.facebookPostId;
-  const [bidIncrement, setBidIncrement] = useState(offer?.bidIncrement ?? "");
+  const inFacebookPost = !!offer?.facebookPostId || !!facebookLot;
+  const [ownBidIncrement, setBidIncrement] = useState(offer?.bidIncrement ?? "");
   const [bidIncrementTouched, setBidIncrementTouched] = useState(false);
   // The group's opening figure on a new auction: its amount, or its share of the copies' catalogue
   // value where the caller states one (#230, #1829) — already in this offer's currency, since the
@@ -257,10 +275,19 @@ export function OfferFormDialog({
   // starting-price one — the two prices only make sense once you know which format you are in.
   // Seeded from the platform's own default (the price fallback's rule, #362): read at creation, and
   // stopped re-seeding the moment the collector answers the question themselves.
-  const [listingType, setListingType] = useState<OfferListingType>(
+  const [ownListingType, setListingType] = useState<OfferListingType>(
     normalizeListingType(isEdit ? offer!.listingType : initialPlatform?.defaultListingType)
   );
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
+  // A new lot of a post (#2291) has its group from the start, so the group's defaults are read as they
+  // arrive rather than seeded by a pick: its type — or the post's, fixed — its increment and when it
+  // closes — the post's time where its auctions have one — each until the collector answers it.
+  const [openedAt] = useState(() => new Date());
+  const listingType: OfferListingType = facebookLot
+    ? (facebookLot.listingType ?? (listingTypeTouched ? ownListingType : (facebookGroup?.listingType ?? ownListingType)))
+    : ownListingType;
+  const bidIncrement =
+    facebookLot && !bidIncrementTouched ? (facebookGroup?.bidIncrement ?? "") : ownBidIncrement;
   // A Facebook offer is an auction or a quick buy like any other (#1671); its group only seeds which.
   const isAuction = isAuctionListing(listingType);
   // An offer's own Facebook post template (#1780) is for the type it was written for: a change of
@@ -283,8 +310,13 @@ export function OfferFormDialog({
   );
   // When the auction closes (#490), held as the field's local-time value and converted to an instant
   // on submit. Never seeded from the last offer: a closing time belongs to one listing.
-  const [endsAt, setEndsAt] = useState(toLocalInputValue(offer?.endsAt));
+  const [ownEndsAt, setEndsAt] = useState(toLocalInputValue(offer?.endsAt));
   const [endsAtTouched, setEndsAtTouched] = useState(false);
+  const endsAt = facebookLot?.endsAt
+    ? toLocalInputValue(facebookLot.endsAt)
+    : facebookLot && !endsAtTouched
+      ? toLocalInputValue(facebookGroup ? facebookDefaultEndsAt(openedAt, facebookGroup.auctionDays, facebookGroup.closingTime) : null)
+      : ownEndsAt;
   // Where a parent's suggested figure lands (#449). It is what one would ask for the goods, which on
   // an auction is what one would open at — so it fills the starting price there and leaves the
   // current one blank, rather than recording a bid nobody placed.
@@ -411,9 +443,18 @@ export function OfferFormDialog({
               about none of them in particular, and purely advisory. */}
           {notice && <div style={{ marginBottom: "0.875rem" }}>{notice}</div>}
 
-          {/* Platform */}
+          {/* Platform — a lot's is its post's (#2291), stated rather than asked. */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="offer-platform">Platform</LabelWithError>
+            {facebookLot && initialPlatform ? (
+              <>
+                <input type="hidden" name="platformId" value={initialPlatform.id} />
+                <input type="hidden" name="platformName" value={initialPlatform.name} />
+                <div id="offer-platform" style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
+                  {initialPlatform.name}
+                </div>
+              </>
+            ) : (
             <PurchaseContactSelect
               collectionId={collectionId}
               idFieldName="platformId"
@@ -445,6 +486,7 @@ export function OfferFormDialog({
                 }
               }}
             />
+            )}
           </div>
 
           {/* The Facebook group the offer is in, and an auction's bid increment (#1544; ADR-0061) —
@@ -469,7 +511,7 @@ export function OfferFormDialog({
                 />
                 {inFacebookPost && (
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
-                    A lot shares its post&apos;s group.
+                    {facebookLot ? "A new lot is in its post's group." : <>A lot shares its post&apos;s group.</>}
                   </p>
                 )}
               </div>
@@ -518,16 +560,17 @@ export function OfferFormDialog({
           <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-listing-type">Listing type</LabelWithError>
+              {facebookLot?.listingType && <input type="hidden" name="listingType" value={listingType} />}
               <select
                 id="offer-listing-type"
-                name="listingType"
+                name={facebookLot?.listingType ? undefined : "listingType"}
                 value={listingType}
                 onChange={(e) => {
                   setListingType(normalizeListingType(e.target.value));
                   setListingTypeTouched(true);
                 }}
-                disabled={isPending}
-                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                disabled={isPending || !!facebookLot?.listingType}
+                style={{ ...INPUT_STYLE, cursor: facebookLot?.listingType ? "not-allowed" : "pointer" }}
               >
                 {OFFER_LISTING_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -535,6 +578,11 @@ export function OfferFormDialog({
                   </option>
                 ))}
               </select>
+              {facebookLot?.listingType && (
+                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                  The post&apos;s lots are {isAuction ? "auctions" : "quick buys"}.
+                </p>
+              )}
               {ownTemplateDropped && (
                 <p role="alert" style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.25rem 0 0" }}>
                   {isFacebook
@@ -674,7 +722,7 @@ export function OfferFormDialog({
                   disabled={isPending}
                   style={{ ...INPUT_STYLE, cursor: "pointer" }}
                 >
-                  {CREATABLE_OFFER_STATES.map((s) => (
+                  {lotStates.map((s) => (
                     <option key={s} value={s}>
                       {OFFER_STATE_LABEL[s]}
                     </option>
@@ -711,10 +759,15 @@ export function OfferFormDialog({
                   setEndsAt(e.target.value);
                   setEndsAtTouched(true);
                 }}
-                disabled={isPending}
+                disabled={isPending || !!facebookLot?.endsAt}
                 style={INPUT_STYLE}
               />
               <input type="hidden" name="endsAt" value={fromLocalInputValue(endsAt)} />
+              {facebookLot?.endsAt && (
+                <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                  Every auction of the post closes at this time.
+                </p>
+              )}
             </div>
           )}
 

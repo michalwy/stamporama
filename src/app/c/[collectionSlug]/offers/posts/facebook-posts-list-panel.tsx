@@ -23,6 +23,7 @@ import {
   type FacebookPostFilters,
 } from "../use-offers-query";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "./delete-post-dialog";
+import { NewFacebookPostDialog } from "./new-post-dialog";
 import { postsViewNarrowings, type PostsNarrowing } from "./posts-view-params";
 import { usePostsView } from "./use-posts-view";
 
@@ -48,6 +49,8 @@ interface FacebookPostsListPanelProps {
   collectionSlug: string;
   /** The groups the collection's posts are in — the group filter's options. */
   groups: { id: string; name: string; archived: boolean }[];
+  /** The Facebook platform, while it is switched on — what *New post…* makes a post in (#2291). */
+  facebookPlatformId: string | null;
 }
 
 /**
@@ -62,7 +65,13 @@ interface FacebookPostsListPanelProps {
  * post of one lot — so the list is the whole of Facebook, published or not. *Not in a post yet*, the
  * offers in no post that sat above the rows (#1989, #1991), went with that: there are none.
  */
-export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }: FacebookPostsListPanelProps) {
+export function FacebookPostsListPanel({
+  collectionId,
+  collectionSlug,
+  groups,
+  facebookPlatformId,
+}: FacebookPostsListPanelProps) {
+  const [creating, setCreating] = useState(false);
   const knownGroups = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
   const { view, setView, clearFilters } = usePostsView(collectionId, `/c/${collectionSlug}/offers/posts`, knownGroups);
   const { groups: groupIds, stage, untitled } = view;
@@ -127,6 +136,25 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
             active={untitled}
             onClick={() => setView({ untitled: !untitled })}
           />
+          {/* A post made by hand, empty, its lots then made on its screen (#2291). */}
+          {facebookPlatformId && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              style={{
+                ...FILTER_CONTROL_STYLE,
+                marginLeft: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--color-action-primary)",
+                border: "none",
+                padding: "0.375rem 0.875rem",
+              }}
+            >
+              New post…
+            </button>
+          )}
         </div>
         {hasActiveFilters && (
           <div style={LIST_BANNER_STYLE}>
@@ -173,7 +201,7 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {hasActiveFilters
               ? "No posts match this filter."
-              : "No Facebook posts yet. Every Facebook offer is in a post from the moment it is made; several go into one with Post together in Offers."}
+              : "No Facebook posts yet. Every Facebook offer is in a post from the moment it is made; several go into one with Post together in Offers, or make a post with New post… and its lots on its screen."}
           </div>
         )}
 
@@ -192,6 +220,14 @@ export function FacebookPostsListPanel({ collectionId, collectionSlug, groups }:
           </>
         )}
       </div>
+      {creating && facebookPlatformId && (
+        <NewFacebookPostDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          platformId={facebookPlatformId}
+          onClose={() => setCreating(false)}
+        />
+      )}
     </div>
   );
 }
@@ -301,7 +337,11 @@ function FacebookPostRow({
               {FACEBOOK_POST_STAGE_LABEL[post.stage]}
             </span>
           </Tooltip>
-          {post.lotCount > 1 ? (
+          {post.lotCount === 0 ? (
+            <Tooltip content="A post made by hand, its lots still to be made or added">
+              <span style={CHIP}>No lots yet</span>
+            </Tooltip>
+          ) : post.lotCount > 1 ? (
             <>
               <Tooltip content="Lots in the post, and how many are neither sold nor withdrawn">
                 <span style={CHIP}>

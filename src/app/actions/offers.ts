@@ -44,10 +44,12 @@ import type { PlanChecklistSlot } from "@/lib/offer-photo-plan";
 import { parseOfferPhotoConfigInput, readPhotoConfigFields } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
 import {
+  createFacebookLot,
   publishOfferOrPost,
   readFacebookApprovalClosing,
   rejectOfferOrPost,
   withdrawOfferOrPost,
+  type FacebookLotCreated,
 } from "@/lib/facebook-posts";
 import type { FacebookApprovalClosing } from "@/lib/facebook-post-rules";
 import {
@@ -487,6 +489,31 @@ export async function createOfferAction(
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to create the offer. Please try again.");
+  }
+}
+
+export type CreateFacebookLotActionState =
+  | ({ status: "success" } & FacebookLotCreated)
+  | { status: "error"; message: string };
+
+/** Make a new offer as a post's next lot (#2291) — *New lot…* on the post's screen: the offer form's
+ *  answers, seeded with the copies picked, on Facebook in the post's group. */
+export async function createFacebookLotAction(
+  collectionId: string,
+  postId: string,
+  formData: FormData,
+  seedItemIds: string[],
+  seedPerCopy: boolean
+): Promise<CreateFacebookLotActionState> {
+  const session = await getSession();
+  const parsed = await readOfferInput(collectionId, formData);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const created = await createFacebookLot(session.user.id, postId, parsed.input, { seedItemIds, seedPerCopy });
+    kickOfferPhotoWorker(); // a captioned post's new lot had its photo queued (#1861)
+    return { status: "success", ...created };
+  } catch (e) {
+    return fail(e, "Failed to make the lot. Please try again.");
   }
 }
 
