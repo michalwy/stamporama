@@ -668,7 +668,11 @@ join it, as its next lots in the order you ticked or picked them; the auctions a
 post's closing time. On the **Offers** screen, tick them and choose **Add to post…** in the selection
 bar: it lists the posts of their group not yet up, newest first, by number and title. On the post's
 screen, **Add lots…** beside the *Lots* heading lists the offers that could join and adds the ones you
-pick; each row says which lot it will become. An offer joins on the same conditions as for **Post
+pick; each row says which lot it will become. A row shows the offer's first photo and its stamps —
+catalogue number, condition and issue with its year, a line per set, up to three and then *+N more* —
+with its title above them when it has one of its own, so an untitled offer is told apart without
+opening it. The search finds an offer by any catalogue number it holds, an issue's or a stamp's name,
+its title or its number. An offer joins on the same conditions as for **Post
 together** — a Facebook offer in the post's group, not yet posted, in no other post of several lots,
 and of the post's listing type unless the group's posts may mix them (a post with no lots yet takes
 either); its post of one goes. A post of

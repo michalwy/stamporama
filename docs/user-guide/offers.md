@@ -3149,7 +3149,11 @@ Three ways, all while the proposal is open:
   proposals, and the offers the pass creates become its lots. An existing offer that only receives
   sets stays where it is.
 - **Offers already made.** **Add offers…** on the proposal's screen lists the Direct offers that are
-  still open and in no other proposal; tick the ones to add. When there are none, it offers
+  still open and in no other proposal; tick the ones to add. Each row shows the offer's first photo
+  and its stamps — catalogue number, condition and issue with its year, a line per set, up to three
+  and then *+N more* — with its title above them only when it has one of its own, so offers made in a
+  batch are told apart without opening them. The search finds an offer by any catalogue number it
+  holds, an issue's or a stamp's name, its title or its number. When there are none, it offers
   **New lots…** instead.
 
 A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.

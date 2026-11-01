@@ -215,9 +215,19 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
     const preparing = await offer({ state: "preparing" });
     const elsewhere = await offer({ group: otherGroupId });
     const quickBuy = await offer({ quickBuy: true });
-    const ids = (await listFacebookLotCandidates(userId, collectionId, post.postId)).map((o) => o.offerId);
+    const candidates = await listFacebookLotCandidates(userId, collectionId, post.postId);
+    const ids = candidates.map((o) => o.offerId);
     assert.ok(ids.includes(free) && ids.includes(preparing));
     for (const id of [a, b, elsewhere, quickBuy]) assert.ok(!ids.includes(id));
+
+    // Each row shows what the offer holds (#2309): its set's stamp and condition, found by name.
+    const { contents } = candidates.find((o) => o.offerId === free)!;
+    assert.deepEqual(contents.sets, [
+      { catalog: "Mercury", conditions: [{ id: conditionId, abbreviation: "U" }], issue: null },
+    ]);
+    assert.equal(contents.moreSets, 0);
+    assert.equal(contents.photoId, null);
+    assert.ok(contents.searchText.includes("mercury"));
 
     await assert.rejects(() => listFacebookLotCandidates(otherUserId, collectionId, post.postId));
     await assert.rejects(() => addFacebookLots(otherUserId, post.postId, [free]));

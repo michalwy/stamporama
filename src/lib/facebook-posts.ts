@@ -39,6 +39,8 @@ import {
 } from "./facebook-post-rules";
 import { allocateEntityNumber } from "./items";
 import { deleteVariants } from "./offer-photo-generation";
+import { readOfferPickerContents } from "./offer-picker-contents";
+import type { OfferPickerContents } from "./offer-picker-contents-rules";
 import {
   OfferActionBlockedError,
   createOffer,
@@ -428,6 +430,9 @@ async function joinPostAsNextLot(tx: DbTransaction, postId: string, offerId: str
   return lotNo;
 }
 
+/** An offer *Add lots…* lists (#1870), with what its row shows of it (#2309). */
+export type FacebookLotCandidate = FacebookKitLot & { contents: OfferPickerContents };
+
 /**
  * The offers that could join a post as further lots (#1870) — what its screen's *Add lots…* picks
  * from: Facebook offers in the post's group, alone in a post of one (#2116) or in none, not yet up,
@@ -439,7 +444,7 @@ export async function listFacebookLotCandidates(
   ownerId: string,
   collectionId: string,
   postId: string
-): Promise<FacebookKitLot[]> {
+): Promise<FacebookLotCandidate[]> {
   const post = await prisma.facebookPost.findFirst({
     where: { id: postId, collectionId },
     select: { collectionId: true, groupId: true, lots: { select: { listingType: true, state: true } } },
@@ -464,7 +469,12 @@ export async function listFacebookLotCandidates(
     state: { in: OFFER_STATES.filter((s) => !isFacebookLotPosted(s)) },
   });
   // A post with no lot yet (#2291) holds no type, so it takes either.
-  return mixes || types.length === 0 ? offers : offers.filter((o) => types.includes(o.listingType));
+  const taken = mixes || types.length === 0 ? offers : offers.filter((o) => types.includes(o.listingType));
+  const contents = await readOfferPickerContents(
+    post.collectionId,
+    taken.map((o) => o.offerId)
+  );
+  return taken.map((o) => ({ ...o, contents: contents.get(o.offerId)! }));
 }
 
 /**

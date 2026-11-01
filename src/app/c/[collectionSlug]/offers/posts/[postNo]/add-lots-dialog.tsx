@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, PICKER_DIALOG_HEIGHT } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
+import { offerPickerMatches } from "@/lib/offer-picker-contents-rules";
 import { OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { OfferStateChip } from "../../offer-badges";
+import { OfferPickerContentsView } from "../../offer-picker-contents";
 import { useFacebookLotCandidates } from "../../use-offers-query";
 
 const SEARCH_STYLE: React.CSSProperties = {
@@ -67,9 +69,8 @@ export function AddLotsDialog({
   const [localError, setLocalError] = useState<string | undefined>();
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase().replace(/^#/, "");
-    if (!q) return offers;
-    return offers.filter((o) => o.title.toLowerCase().includes(q) || String(o.offerNo) === q);
+    if (!search.trim()) return offers;
+    return offers.filter((o) => offerPickerMatches(o, search));
   }, [offers, search]);
 
   function toggle(offerId: string) {
@@ -112,7 +113,7 @@ export function AddLotsDialog({
               <TextInput
                 type="search"
                 aria-label="Find an offer"
-                placeholder="Find by title or offer number"
+                placeholder="Find by catalogue number, issue, title or offer number"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{ ...SEARCH_STYLE, marginBottom: "0.5rem" }}
@@ -134,7 +135,7 @@ export function AddLotsDialog({
                             onChange={() => toggle(offer.offerId)}
                           />
                           <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
-                          <span style={{ flex: 1, minWidth: 0 }}>{offer.title}</span>
+                          <OfferPickerContentsView collectionId={collectionId} contents={offer.contents} />
                           <span style={MUTED}>{OFFER_LISTING_TYPE_LABEL[offer.listingType]}</span>
                           <OfferStateChip state={offer.state} />
                           <span style={{ ...MUTED, minWidth: "3.5rem", textAlign: "right" }}>
