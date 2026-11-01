@@ -686,8 +686,9 @@ Until a post is up — while it is being prepared or Ready — its screen does f
 **Prepare** screen does for offers, so a post being prepared is worked through on its own screen
 without opening an offer. Each lot's row carries:
 
-- **Its title**, edited in place: click it to change it, as on the offer's own screen. Emptying it
-  gives the offer back its generated title. The offer's number beside it opens the offer.
+- **Its title**, a link that opens the lot's offer, as the offer's number beside it does. The pencil
+  beside the title edits it in place, as on the offer's own screen. Emptying it gives the offer back
+  its generated title.
 - **Its price table**, compact: *Minimum*, *Catalogue*, *Estimated*, *Market* and *Cost*, with the
   profit each would make, and the lot's own price — an auction's **Starting price**, a quick buy's
   **Your price** — typed in the last column. **Enter** saves the price and moves to the next lot's,

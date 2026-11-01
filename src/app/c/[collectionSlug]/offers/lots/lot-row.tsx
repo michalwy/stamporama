@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Icon } from "@/app/icons";
 import type { OfferTextStatus, PrepareOffer } from "@/lib/offers";
 import type { OfferState } from "@/lib/offer-rules";
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
@@ -15,7 +14,7 @@ import { OfferStateChip } from "../offer-badges";
 import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../prepare/prepare-offer-parts";
 
 // One lot of a group worked on from its screen (#1863, #2313) — a Facebook post's lot, or a proposal's:
-// its photos, its number, its offer (a link, marked as one), where it stands, and its `⋮`. While the
+// its photos, its number, its offer (its number and title, both links to it), where it stands, and its `⋮`. While the
 // group may still change, its title is edited in place and its price typed into the compact price table,
 // with what still stops it from being marked ready (#2031). What only one of the screens has — a post's
 // caption, its listing link, its untranslated names — comes in as facts and slots, so the row itself is
@@ -128,16 +127,15 @@ export function textFacts(text: OfferTextStatus | null): LotFact[] {
   return [{ key: "text", label: "Text", value: marks.join(" · "), tone: text.outOfDate ? "warning" : "secondary" }];
 }
 
-/** The lot's offer, plainly a link to it (#2313): its number with the open-arrow, not a bare label. */
-export function OfferLink({ collectionSlug, offerId, offerNo }: { collectionSlug: string; offerId: string; offerNo: number }) {
+/** The lot's offer number, a link to the offer as the title beside it is (#2313, #2324). */
+function OfferLink({ href, offerNo }: { href: string; offerNo: number }) {
   return (
     <Link
-      href={`/c/${collectionSlug}/offers/${offerId}`}
+      href={href}
       aria-label={`Open offer #${offerNo}`}
-      style={{ ...LINK, flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "0.125rem" }}
+      style={{ ...LINK, flexShrink: 0, display: "inline-flex", alignItems: "center" }}
     >
       <EntityNoChip entity="offer" no={offerNo} prefix="o" />
-      <Icon name="open" size="sm" />
     </Link>
   );
 }
@@ -207,6 +205,7 @@ export function GroupLotRow({
 }) {
   const item = drag?.itemProps(index);
   const prepare = pricing?.prepare ?? null;
+  const offerHref = `/c/${collectionSlug}/offers/${lot.offerId}`;
   return (
     <li
       {...item}
@@ -246,8 +245,8 @@ export function GroupLotRow({
               <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
               {!prepare && (
                 <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
-                  <OfferLink collectionSlug={collectionSlug} offerId={lot.offerId} offerNo={lot.offerNo} />
-                  <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={LINK}>
+                  <OfferLink href={offerHref} offerNo={lot.offerNo} />
+                  <Link href={offerHref} style={LINK}>
                     {lot.title}
                   </Link>
                 </span>
@@ -255,14 +254,14 @@ export function GroupLotRow({
             </p>
             <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
           </div>
-          {/* While the group may still change (#2031): the title edited in place — the offer's number is
-              the link then — the price table with the lot's own figure, and, while it is being prepared,
-              what still stops it from being marked ready. */}
+          {/* While the group may still change (#2031): the title, still the link to the offer, edited in
+              place from the pencil beside it (#2324) — the price table with the lot's own figure, and,
+              while it is being prepared, what still stops it from being marked ready. */}
           {pricing && prepare && (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", margin: "0.375rem 0 0" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: "0.375rem", minWidth: 0 }}>
-                <OfferLink collectionSlug={collectionSlug} offerId={lot.offerId} offerNo={lot.offerNo} />
-                <PrepareTitleField offer={prepare} onChanged={pricing.onTitleChanged} inputWidth="24rem" />
+                <OfferLink href={offerHref} offerNo={lot.offerNo} />
+                <PrepareTitleField offer={prepare} onChanged={pricing.onTitleChanged} inputWidth="24rem" href={offerHref} />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-start" }}>
                 <PreparePriceField

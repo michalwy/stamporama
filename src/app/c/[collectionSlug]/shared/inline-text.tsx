@@ -25,6 +25,7 @@ const EDIT_CONTROL: React.CSSProperties = {
   cursor: "pointer",
   color: "var(--color-text-muted)",
   lineHeight: 1,
+  flexShrink: 0,
 };
 
 /** A click-to-edit inline field: shows `display`, and on click swaps to an input that commits on
@@ -90,7 +91,8 @@ export function InlineText({
   if (!editing) {
     if (editControl) {
       return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+        // Never wider than its box, so a long display can shorten itself and the pencil stays in sight.
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", maxWidth: "100%" }}>
           {display}
           <Tooltip content={editAriaLabel}>
             <button
