@@ -115,7 +115,6 @@ describe("a post's lots as Prepare rows (#2031)", () => {
         startingPrice: null,
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

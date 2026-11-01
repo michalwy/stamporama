@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, patchOffer, type OfferInput } from "../../src/lib/offers";
+import { createOffer, patchOffer, type NewOfferInput } from "../../src/lib/offers";
 import {
   changeLotGroupTitleWords,
   getLotGroupPhotoSettings,
@@ -42,8 +42,8 @@ describe("A proposal's lots are worked on as a post's are (#2313)", () => {
     return (await createItem(userId, collectionId, { stampId, conditionId, forSale: true, deliveryState: "delivered" })).id;
   }
 
-  function input(price: string): OfferInput {
-    return { platformId: directId, url: null, price, startingPrice: null, currency: "EUR", listingDate: null, state: "preparing" };
+  function input(price: string): NewOfferInput {
+    return { platformId: directId, url: null, price, startingPrice: null, currency: "EUR", listingDate: null };
   }
 
   async function lot(name: string, price = "5.00"): Promise<string> {

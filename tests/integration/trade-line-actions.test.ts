@@ -226,7 +226,6 @@ async function listOnMarketplace(itemId: string): Promise<void> {
     price: "12.50",
     currency: "EUR",
     listingDate: null,
-    state: "preparing",
   });
   await addOfferSet(f.userId, offerId, [itemId]);
   await setOfferState(f.userId, offerId, "ready");

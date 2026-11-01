@@ -117,7 +117,6 @@ describe("per-offer title language + fallback flags (#297, #298)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
   }
 

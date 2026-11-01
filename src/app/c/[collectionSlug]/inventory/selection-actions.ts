@@ -61,7 +61,7 @@ export interface SelectionActionInput {
    * set aside from it. */
   exclusion: { platformName: string; excluded: boolean } | null;
   /** Set while quick offer mode is armed (#537). */
-  quickOffer: { platformName: string; stateLabel: string } | null;
+  quickOffer: { platformName: string } | null;
   /** A write is under way; the one action that fires one outright waits for it. */
   isPending: boolean;
   on: {
@@ -227,7 +227,7 @@ export function buildSelectionActions(input: SelectionActionInput): SelectionAct
         ? ` Applies to the ${listable} of the ${inView} copies in view that are for sale and in hand.`
         : "";
     const quickHint = quickOffer
-      ? `Created straight away on ${quickOffer.platformName} as ${quickOffer.stateLabel}, with no dialog.`
+      ? `Created straight away on ${quickOffer.platformName} as Preparing, with no dialog.`
       : undefined;
     for (const shortcut of newOfferShortcuts(listable)) {
       actions.push({

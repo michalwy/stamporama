@@ -270,7 +270,6 @@ describe("entity short numbers + quick jump (#431/#432)", () => {
         price: "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [item.id] }
     );

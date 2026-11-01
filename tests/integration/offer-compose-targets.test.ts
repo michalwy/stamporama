@@ -127,7 +127,6 @@ describe("Add-to-offer picker targets (#867)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     offerSetId = await addOfferSet(userId, offerId, [listed]);
 
@@ -152,7 +151,6 @@ describe("Add-to-offer picker targets (#867)", () => {
       price: "1.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     foreignSetId = await addOfferSet(otherUserId, foreignOffer, [foreignItem.id]);
   });
@@ -282,7 +280,6 @@ describe("Add-to-offer picker targets (#867)", () => {
       price: "4.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, liveOfferId, [copyId]);
     await setOfferState(userId, liveOfferId, "ready");

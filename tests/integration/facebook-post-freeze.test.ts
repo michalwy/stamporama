@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, patchOffer, repostOffer, setOfferState, type OfferInput } from "../../src/lib/offers";
+import { createOffer, patchOffer, repostOffer, setOfferState, type NewOfferInput } from "../../src/lib/offers";
 import { createFacebookGroup, updateFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
 import { freezeUnfrozenFacebookPosts, getFacebookOfferKit } from "../../src/lib/facebook-auctions";
@@ -83,7 +83,7 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
     return (await createItem(userId, collectionId, { stampId, conditionId, forSale: true })).id;
   }
 
-  function input(overrides: Partial<OfferInput> = {}): OfferInput {
+  function input(overrides: Partial<NewOfferInput> = {}): NewOfferInput {
     return {
       platformId: facebookId,
       url: null,
@@ -91,13 +91,12 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
       startingPrice: "3.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: groupId,
       ...overrides,
     };
   }
 
-  async function offer(state: "preparing" | "ready" = "ready", overrides: Partial<OfferInput> = {}) {
+  async function offer(state: "preparing" | "ready" = "ready", overrides: Partial<NewOfferInput> = {}) {
     const id = await createOffer(userId, collectionId, input(overrides), { seedItemIds: [await newItem()] });
     if (state === "ready") await setOfferState(userId, id, "ready");
     return id;
@@ -199,14 +198,6 @@ describe("A published Facebook offer's post text is frozen (#1800)", () => {
 
     await repostOffer(userId, id, "https://www.facebook.com/groups/180000/posts/7");
     assert.match(await postText(id), /now only 7\.50 zł$/, "reposted, it reads as posted again");
-  });
-
-  it("freezes an offer created already up", async () => {
-    await editTemplates({});
-    const id = await createOffer(userId, collectionId, input({ state: "active" }), {
-      seedItemIds: [await newItem()],
-    });
-    assert.notEqual(await snapshot(id), null);
   });
 
   it("freezes, at start-up, every offer already up with none, and nothing else", async () => {

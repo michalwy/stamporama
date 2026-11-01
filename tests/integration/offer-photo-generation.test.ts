@@ -169,7 +169,6 @@ describe("offer photo generation (#311)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     // Sides + collage numbers: without them there is nothing to lay out.
     await updateOfferPhotoConfig(userId, offerId, {
@@ -350,7 +349,6 @@ describe("offer photo generation (#311)", () => {
       price: "1.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await assert.rejects(
       () => enqueueOfferPhotoGeneration(userId, bare),
@@ -583,7 +581,6 @@ describe("offer photo generation (#311)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, secondId, {
       photoSides: "front",
@@ -613,7 +610,6 @@ describe("offer photo generation (#311)", () => {
       price: "3.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
 
     // Both generated offers carry the *same* name, which the generated titles make likely.
@@ -696,7 +692,6 @@ describe("offer photo generation (#311)", () => {
       price: "1.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await assert.rejects(
       () => buildOfferPhotoArchive(userId, empty),
@@ -1045,7 +1040,6 @@ describe("offer photo generation (#311)", () => {
         price: "10.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
     const selling = await newOffer();
     const sets = [await addOfferSet(userId, selling, [itemIds[0]]), await addOfferSet(userId, selling, [itemIds[1]])];

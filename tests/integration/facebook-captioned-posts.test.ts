@@ -165,7 +165,6 @@ describe("a captioned Facebook post (#1841)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [await newItem(true)] }

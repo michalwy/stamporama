@@ -114,7 +114,6 @@ describe("an offer's specification (#1758)", () => {
         price: "10.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
       });
       return id;
     };

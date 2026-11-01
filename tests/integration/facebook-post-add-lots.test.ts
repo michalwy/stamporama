@@ -92,7 +92,6 @@ describe("adding offers to an existing multi-lot post (#1870)", () => {
         startingPrice: opts.quickBuy ? null : "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: opts.group ?? groupId,
         listingType: opts.quickBuy ? "fixed" : "auction",
       },

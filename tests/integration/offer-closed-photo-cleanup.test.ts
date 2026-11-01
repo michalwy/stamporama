@@ -124,7 +124,6 @@ describe("closed-offer photo cleanup (#512)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",
@@ -303,7 +302,6 @@ describe("closed-offer photo cleanup (#512)", () => {
       price: "12.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const stamp = await prisma.stamp.create({
       data: { collectionId, name: `Stamp sold-${Date.now()}`, primaryCatalogSortKey: catalogSortKeyOf("1") },

@@ -74,7 +74,6 @@ describe("ready / active offers require a price (#336)", () => {
       price,
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await newItem()]);
     return offerId;
@@ -113,49 +112,26 @@ describe("ready / active offers require a price (#336)", () => {
     assert.equal(await stateOf(offerId), "active");
   });
 
-  it("blocks creating an offer directly as ready or active with no price", async () => {
+  it("creates an unpriced offer and its duplicate Preparing, asking for a price only on the way up (#2322)", async () => {
     const itemId = await newItem();
-    for (const state of ["ready", "active"] as const) {
-      await assert.rejects(
-        () =>
-          createOffer(
-            userId,
-            collectionId,
-            {
-              platformId,
-              url: null,
-              price: "0.00",
-              currency: "EUR",
-              listingDate: null,
-              state,
-            },
-            { seedItemIds: [itemId] }
-          ),
-        /asking price/i
-      );
-    }
-    // Nothing half-open left behind: the copy is still free to be listed.
-    const offers = await prisma.offer.count({ where: { collectionId, sets: { some: { items: { some: { itemId } } } } } });
-    assert.equal(offers, 0);
-  });
-
-  it("blocks duplicating an offer straight into an unpriced active listing", async () => {
-    const sourceId = await preparedOffer("5.00");
-    const other = (
-      await prisma.platform.create({ data: { collectionId, name: `Ebay-${Date.now()}` } })
-    ).id;
-    await assert.rejects(
-      () =>
-        duplicateOffer(userId, sourceId, {
-          platformId: other,
-          url: null,
-          price: "0.00",
-          currency: "EUR",
-          listingDate: null,
-          state: "active",
-        }),
-      /asking price/i
+    const offerId = await createOffer(
+      userId,
+      collectionId,
+      { platformId, url: null, price: "0.00", currency: "EUR", listingDate: null },
+      { seedItemIds: [itemId] }
     );
+    assert.equal(await stateOf(offerId), "preparing");
+    await assert.rejects(() => setOfferState(userId, offerId, "ready"), /asking price/i);
+
+    const other = (await prisma.platform.create({ data: { collectionId, name: `Ebay-${Date.now()}` } })).id;
+    const { id } = await duplicateOffer(userId, offerId, {
+      platformId: other,
+      url: null,
+      price: "0.00",
+      currency: "EUR",
+      listingDate: null,
+    });
+    assert.equal(await stateOf(id), "preparing");
   });
 
   it("refuses to clear the price of an offer already ready or active", async () => {
@@ -173,7 +149,6 @@ describe("ready / active offers require a price (#336)", () => {
           price: "0.00",
           currency: "EUR",
           listingDate: null,
-          state: "active",
         }),
       /asking price/i
     );

@@ -110,7 +110,6 @@ describe("deleting a Facebook post with its offers (#2060)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

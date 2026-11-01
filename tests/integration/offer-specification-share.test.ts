@@ -93,7 +93,6 @@ describe("an offer's specification share link (#1760)", () => {
         price: "10.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
       });
     offerId = await newOffer();
     await addOfferSet(userId, offerId, [kept, backOnly, soldElsewhere]);

@@ -15,7 +15,6 @@ import {
   parsePrice,
   normalizeUrl,
   parseOfferDate,
-  isCreatableOfferState,
   isOfferListingType,
   isAuctionListing,
   normalizeListingType,
@@ -28,7 +27,6 @@ import {
   OFFER_LISTING_TYPES,
   OFFER_STATES,
   CLOSED_OFFER_STATES,
-  CREATABLE_OFFER_STATES,
   LIVE_OFFER_STATES,
 } from "../../src/lib/offer-rules";
 
@@ -290,18 +288,6 @@ describe("parseOfferDate", () => {
     assert.equal(parseOfferDate("2026-7-4").ok, false);
     assert.equal(parseOfferDate("24-07-2026").ok, false);
     assert.equal(parseOfferDate("2026-02-31").ok, false); // JS rollover guard
-  });
-});
-
-describe("isCreatableOfferState", () => {
-  it("accepts only preparing / ready / active", () => {
-    assert.deepEqual([...CREATABLE_OFFER_STATES], ["preparing", "ready", "active"]);
-    assert.equal(isCreatableOfferState("preparing"), true);
-    assert.equal(isCreatableOfferState("active"), true);
-    assert.equal(isCreatableOfferState("paused"), false);
-    assert.equal(isCreatableOfferState("sold"), false);
-    assert.equal(isCreatableOfferState("withdrawn"), false);
-    assert.equal(isCreatableOfferState("nope"), false);
   });
 });
 

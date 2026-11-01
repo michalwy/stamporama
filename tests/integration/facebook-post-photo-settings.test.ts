@@ -79,7 +79,6 @@ describe("a Facebook post's photo settings for every lot (#2032)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

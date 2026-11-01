@@ -138,7 +138,7 @@ describe("selection actions", () => {
     const actions = buildSelectionActions(
       input({
         collision: { offerRef: "#12", offerLabel: "Poland 1950", platformName: "Colnect" },
-        quickOffer: { platformName: "Colnect", stateLabel: "Preparing" },
+        quickOffer: { platformName: "Colnect" },
       })
     );
     const hints = Object.fromEntries(actions.map((a) => [a.key, a.hint]));
@@ -166,7 +166,7 @@ describe("selection actions", () => {
 
   it("says quick offer mode on the new-offer entries when nothing collides", () => {
     const actions = buildSelectionActions(
-      input({ quickOffer: { platformName: "Colnect", stateLabel: "Preparing" } })
+      input({ quickOffer: { platformName: "Colnect" } })
     );
     const entry = actions.find((a) => a.key === "new-offer-one-set");
     assert.equal(entry?.hint, "Created straight away on Colnect as Preparing, with no dialog.");

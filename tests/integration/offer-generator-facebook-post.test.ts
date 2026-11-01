@@ -50,7 +50,6 @@ describe("Generate offers into a new post (#2030)", () => {
   function singles(itemIds: string[], extra: Partial<GeneratorInput> = {}): GeneratorInput {
     return {
       platformId: facebookId,
-      state: "preparing",
       mode: "singles",
       packaging: "multi",
       itemIds,
@@ -166,7 +165,6 @@ describe("Generate offers into a new post (#2030)", () => {
         price: "0.00",
         currency: "",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [await copy(shared)] }

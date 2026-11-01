@@ -1,7 +1,6 @@
 "use client";
 
 import type { PlatformData } from "@/lib/platforms";
-import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { LIST_BANNER_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
@@ -14,19 +13,19 @@ import type { FacebookGroupChoiceState } from "@/app/c/[collectionSlug]/offers/u
  * dialog.
  *
  * The use case is a bulk pass — a hundred and seventy-eight copies, each its own offer on one
- * platform, all starting in the same status, with the price and the listing URL still to come. The
+ * platform, all starting Preparing like every new offer (#2322), with the price and the listing URL still to come. The
  * ordinary flow asks for those two things per copy in a dialog, which is a mouse trip from the row
  * to the confirm button and back, once per item. Here the only per-item act left is the click on the
  * row.
  *
  * The bar is the mode's whole affordance, deliberately: what makes a silent create safe is that it
- * is impossible not to see *which* platform and *which* status the next click will use, and how many
+ * is impossible not to see *which* platform the next click will use, and how many
  * offers the pass has made so far. That is also why the mode is **not remembered across visits** —
  * a collector returning tomorrow and clicking the same row entry would get an offer with no dialog
  * and no warning, which is the one thing this must never do. Arming it is one click and it says so.
  *
- * Only the parameters an offer cannot be created without are here — the platform, the status and,
- * on Facebook, the group the offer is in (#1663), whose defaults then type and price it. The price and the URL are
+ * Only the parameters an offer cannot be created without are here — the platform and, on Facebook,
+ * the group the offer is in (#1663), whose defaults then type and price it. The price and the URL are
  * left unset on purpose (the offer's own screen is where they land, once the listing exists) — that
  * is what makes this pass a *bulk* one, and it is exactly what #234's remembered values could not
  * do, since pre-filling a dialog still leaves the dialog.
@@ -36,8 +35,6 @@ export function QuickOfferBar({
   platformId,
   onPlatformIdChange,
   facebook,
-  state,
-  onStateChange,
   created,
   error,
   isPending,
@@ -51,8 +48,6 @@ export function QuickOfferBar({
   onPlatformIdChange: (id: string) => void;
   /** On Facebook, the group every offer of the pass is an auction in (#1663). */
   facebook: FacebookGroupChoiceState;
-  state: OfferState;
-  onStateChange: (state: OfferState) => void;
   /** How many offers this pass has created — the only feedback a dialog-less create leaves behind. */
   created: number;
   /** A create that failed, reported here because there is no dialog to report into. */
@@ -126,30 +121,14 @@ export function QuickOfferBar({
         </label>
       )}
 
-      <label style={FIELD}>
-        <span style={FIELD_LABEL}>Status</span>
-        <select
-          value={state}
-          onChange={(e) => onStateChange(e.target.value as OfferState)}
-          aria-label="Status new quick offers start in"
-          style={SELECT_STYLE}
-        >
-          {CREATABLE_OFFER_STATES.map((s) => (
-            <option key={s} value={s}>
-              {OFFER_STATE_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <Tooltip
         content={
           blocked ??
           (facebook.group
             ? facebook.group.listingType === "auction"
-              ? `Every "Add to new offer" now creates an auction straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with the group's starting price, increment and closing time and no listing URL — set that on the offer itself once the post exists.`
-              : `Every "Add to new offer" now creates a quick buy straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with no price and no listing URL — set those on the offer itself once the post exists.`
-            : `Every "Add to new offer" now creates the offer straight away on ${platform?.name} as ${OFFER_STATE_LABEL[state]}, with no asking price and no listing URL — set those on the offer itself once the listing exists.`)
+              ? `Every "Add to new offer" now creates an auction straight away in ${facebook.group.name} as Preparing, with the group's starting price, increment and closing time and no listing URL — set that on the offer itself once the post exists.`
+              : `Every "Add to new offer" now creates a quick buy straight away in ${facebook.group.name} as Preparing, with no price and no listing URL — set those on the offer itself once the post exists.`
+            : `Every "Add to new offer" now creates the offer straight away on ${platform?.name} as Preparing, with no asking price and no listing URL — set those on the offer itself once the listing exists.`)
         }
       >
         <span
@@ -170,7 +149,7 @@ export function QuickOfferBar({
             {created} offer{created === 1 ? "" : "s"} created
           </span>
         )}
-        {/* The same platform and status, over many copies at once (#1287): complete sets or singles,
+        {/* The same platform, over many copies at once (#1287): complete sets or singles,
             previewed before anything is written. */}
         <Tooltip
           content={

@@ -99,7 +99,6 @@ describe("a Facebook post's preview for a buyer (#2212)", () => {
         startingPrice: "5.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
         listingType: "auction",
         name,

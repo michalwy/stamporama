@@ -110,7 +110,6 @@ describe("per-set catalogue value + cost (#378)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     const detail = await getOfferDetail(userId, offerId);

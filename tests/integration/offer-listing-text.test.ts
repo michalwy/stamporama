@@ -132,7 +132,7 @@ describe("offer description + private note (#266, #267)", () => {
     return createOffer(
       userId,
       collectionId,
-      { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing" },
+      { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null },
       seedItemIds ? { seedItemIds } : {}
     );
   }
@@ -438,7 +438,6 @@ describe("offer description + private note (#266, #267)", () => {
       price: "7.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const detail = await getOfferDetail(userId, id);
     assert.equal(detail?.name, "Mi 12 Mercury");
@@ -452,7 +451,7 @@ describe("offer description + private note (#266, #267)", () => {
       return createOffer(
         userId,
         collectionId,
-        { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing", name },
+        { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, name },
         { seedItemIds }
       );
     }

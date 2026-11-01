@@ -158,7 +158,6 @@ async function offerOver(itemIds: string[]): Promise<string> {
     price: "12.50",
     currency: "EUR",
     listingDate: null,
-    state: "preparing",
   });
   await addOfferSet(f.userId, offerId, itemIds);
   return offerId;
@@ -226,30 +225,6 @@ describe("reserving committed copies (#639)", () => {
     const offerId = await offerOver([itemId]);
     await activate(offerId);
     assert.equal(await stateOf(offerId), "active");
-  });
-
-  it("refuses to create an offer straight as active around a committed copy", async () => {
-    const itemId = await copy();
-    const { tradeId } = await tradePromising([itemId]);
-    await agree(tradeId);
-
-    await assert.rejects(
-      () =>
-        createOffer(
-          f.userId,
-          f.collectionId,
-          {
-            platformId: f.platformId,
-            url: null,
-            price: "9.00",
-            currency: "EUR",
-            listingDate: null,
-            state: "active",
-          },
-          { seedItemIds: [itemId] }
-        ),
-      /promised in an agreed trade/
-    );
   });
 
   it("refuses a committed copy joining a listing that is already live, and allows it on a draft", async () => {

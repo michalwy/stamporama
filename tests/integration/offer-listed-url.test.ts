@@ -84,7 +84,6 @@ describe("recording a listing's URL (#412)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [itemId]);
     await setOfferState(userId, offerId, "ready");

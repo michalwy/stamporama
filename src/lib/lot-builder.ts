@@ -682,8 +682,6 @@ export async function commitLotProposal(
       // offer's own screen, where they always have.
       price: "0.00",
       currency: "",
-      listingDate: null,
-      state: "preparing",
       // On Facebook, the group and its closing time (#1663); the rest of the group's defaults are
       // read as the offer is made.
       ...readFacebookCreateChoice(input.facebook),

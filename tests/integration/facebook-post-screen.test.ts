@@ -116,7 +116,6 @@ describe("a multi-lot Facebook post's screen (#1842)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

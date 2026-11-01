@@ -93,7 +93,6 @@ describe("packing or writing off takes a copy off its location (#2278)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const sets: { setId: string; itemId: string }[] = [];
     for (const ref of refs) {

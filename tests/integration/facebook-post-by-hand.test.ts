@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, type OfferInput } from "../../src/lib/offers";
+import { createOffer, type NewOfferInput } from "../../src/lib/offers";
 import { createFacebookGroup, setFacebookGroupArchived } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import {
@@ -82,7 +82,7 @@ describe("a Facebook post made by hand, its lots made on its screen (#2291)", ()
 
   /** What the offer form sends for a lot — on another platform and in another group on purpose, which
    *  the post overrides. */
-  function lotInput(overrides: Partial<OfferInput> = {}): OfferInput {
+  function lotInput(overrides: Partial<NewOfferInput> = {}): NewOfferInput {
     return {
       platformId: otherPlatformId,
       url: null,
@@ -90,7 +90,6 @@ describe("a Facebook post made by hand, its lots made on its screen (#2291)", ()
       startingPrice: "3.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: otherGroupId,
       listingType: "auction",
       ...overrides,
@@ -157,7 +156,7 @@ describe("a Facebook post made by hand, its lots made on its screen (#2291)", ()
     const first = await createFacebookLot(userId, post.postId, lotInput(), { seedItemIds: [await copy()] });
     assert.equal(first.lotNo, 1);
     assert.equal(first.postNo, post.postNo);
-    const second = await createFacebookLot(userId, post.postId, lotInput({ state: "ready" }), {
+    const second = await createFacebookLot(userId, post.postId, lotInput(), {
       seedItemIds: [await copy(), await copy()],
       seedPerCopy: true,
     });
@@ -181,7 +180,7 @@ describe("a Facebook post made by hand, its lots made on its screen (#2291)", ()
       assert.equal(o.facebookGroupId, groupId, "in the post's group");
       assert.equal(o.facebookPostId, post.postId);
     }
-    assert.deepEqual(offers.map((o) => o.state), ["preparing", "ready"]);
+    assert.deepEqual(offers.map((o) => o.state), ["preparing", "preparing"], "every new offer starts Preparing (#2322)");
     assert.deepEqual(offers.map((o) => o._count.sets), [1, 2], "the copies picked, packaged as asked");
     const row = await prisma.facebookPost.findUniqueOrThrow({ where: { id: post.postId } });
     assert.equal(row.title, "Blocks", "the post keeps its title");
@@ -213,13 +212,10 @@ describe("a Facebook post made by hand, its lots made on its screen (#2291)", ()
     for (const e of ends) assert.deepEqual(e.endsAt, closes, "the post's first auction's");
   });
 
-  it("makes a lot neither live on its own nor in a post that is up", async () => {
+  it("makes no lot in a post that is up", async () => {
     const post = await createEmptyFacebookPost(userId, collectionId, { groupId, title: "Up", layout: null });
-    await assert.rejects(
-      async () => createFacebookLot(userId, post.postId, lotInput({ state: "active" }), { seedItemIds: [await copy()] }),
-      /goes up with its post/
-    );
-    const lot = await createFacebookLot(userId, post.postId, lotInput({ state: "ready" }), { seedItemIds: [await copy()] });
+    const lot = await createFacebookLot(userId, post.postId, lotInput(), { seedItemIds: [await copy()] });
+    await prisma.offer.update({ where: { id: lot.offerId }, data: { state: "ready" } });
     await publishOfferOrPost(userId, lot.offerId, "https://www.facebook.com/groups/229101/posts/1", "active");
     const offersBefore = await prisma.offer.count({ where: { collectionId } });
     await assert.rejects(

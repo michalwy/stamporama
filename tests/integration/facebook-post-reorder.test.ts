@@ -96,7 +96,6 @@ describe("reordering a multi-lot post's lots (#1986)", () => {
         startingPrice: start,
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
         listingType: "auction",
       },

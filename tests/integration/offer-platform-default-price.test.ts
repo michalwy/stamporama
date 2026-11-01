@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer } from "../../src/lib/offers";
+import { createOffer, setOfferState } from "../../src/lib/offers";
 
 // A platform's default starting price (#362, narrowed to auctions in #449) is the server's *last*
 // fallback: a new auction takes it only when nothing was submitted (which is the whole rule here —
@@ -102,7 +102,6 @@ describe("platform default starting price (#362/#449)", () => {
       price: "0.00", // what the form action sends for a blank price
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(await startingPriceOf(offerId), "5.00");
     // …and nothing is invented for the current price: nobody has bid yet.
@@ -117,7 +116,6 @@ describe("platform default starting price (#362/#449)", () => {
       price: "0.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(await startingPriceOf(offerId), "12.50");
   });
@@ -132,7 +130,6 @@ describe("platform default starting price (#362/#449)", () => {
       price: "0.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(await priceOf(offerId), "0.00");
     assert.equal(await startingPriceOf(offerId), null);
@@ -145,7 +142,6 @@ describe("platform default starting price (#362/#449)", () => {
       price: "0.00", // what the form action sends for a blank price
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(await priceOf(offerId), "0.00");
   });
@@ -160,10 +156,10 @@ describe("platform default starting price (#362/#449)", () => {
         price: "0.00", // what the form action sends for a blank price
         currency: "EUR",
         listingDate: null,
-        state: "ready",
       },
       { seedItemIds: [await newItem()] }
     );
+    await setOfferState(userId, offerId, "ready");
     const offer = await prisma.offer.findUniqueOrThrow({
       where: { id: offerId },
       select: { price: true, startingPrice: true, state: true },
@@ -174,21 +170,18 @@ describe("platform default starting price (#362/#449)", () => {
   });
 
   it("still refuses a ready offer when neither the form nor the platform prices it", async () => {
-    await assert.rejects(
-      createOffer(
-        userId,
-        collectionId,
-        {
-          platformId: plainPlatformId,
-          url: null,
-          price: "0.00", // what the form action sends for a blank price
-          currency: "EUR",
-          listingDate: null,
-          state: "ready",
-        },
-        { seedItemIds: [await newItem()] }
-      ),
-      /asking price/
+    const offerId = await createOffer(
+      userId,
+      collectionId,
+      {
+        platformId: plainPlatformId,
+        url: null,
+        price: "0.00", // what the form action sends for a blank price
+        currency: "EUR",
+        listingDate: null,
+      },
+      { seedItemIds: [await newItem()] }
     );
+    await assert.rejects(setOfferState(userId, offerId, "ready"), /asking price/);
   });
 });

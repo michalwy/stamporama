@@ -117,7 +117,6 @@ describe("The message to a buyer (#1815)", () => {
         price,
         currency: platformId === delcampeId ? "EUR" : "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
         ...(groupId ? { listingType: "fixed" as const } : {}),
       },

@@ -6405,12 +6405,10 @@ export interface OfferInput {
    * does would describe a format this listing is not in. On a connected platform the sync (#481)
    * keeps this current on its own — including through a marketplace's automatic relist. */
   endsAt?: Date | null;
-  /** The date the listing went live (#257), or null when not recorded. Stored on create + edit. */
+  /** The date the listing went live (#257), or null when not recorded. Edited on the header form
+   *  only: a new offer is not up, so it has none until **Publish** stamps it (#2322) —
+   *  {@link NewOfferInput} states none. */
   listingDate: Date | null;
-  /** The status to create the offer in (#257): `preparing` (default), or a live `ready` / `active`
-   * when the offer lists something. Ignored by {@link updateOffer} — an existing offer's lifecycle is
-   * driven by its dedicated controls, not the header form. */
-  state: OfferState;
   /** The Facebook group the auction is in (#1544; ADR-0061) — required on the Facebook platform and
    * ignored on every other. */
   facebookGroupId?: string | null;
@@ -6423,6 +6421,16 @@ export interface OfferInput {
    *  creation itself. Ignored by {@link updateOffer}, whose form has no title. */
   name?: string | null;
 }
+
+/**
+ * What a new offer is made from (#2322): an {@link OfferInput} with no listing date — `null` is the
+ * only one it may state — and, like the offer input itself, no status. Every offer the app makes starts `preparing` and goes through its
+ * ordinary life from there: **Mark ready**, where its photos are made and its checks are asked, then
+ * **Publish** / **Activate**, which stamps the listing date. A listing already up elsewhere is recorded
+ * the same way. Settled with the collector on 2026-11-01, after a remembered *Active* had made every
+ * later offer skip **Mark ready** unnoticed.
+ */
+export type NewOfferInput = Omit<OfferInput, "listingDate"> & { listingDate?: null };
 
 /**
  * Everything a header form says about how an offer is priced (#449), resolved in one place so the
@@ -6490,10 +6498,9 @@ function missingPriceField(
 }
 
 /**
- * Create an offer on a platform (ADR-0013, #188). It starts `preparing` unless the collector states
- * a live status up front (#257): `ready` / `active` are honoured only when the offer lists something,
- * so `opts.seedItemIds` (the quick-start / add-to-offer create path, #189/#241) seeds its first set
- * **atomically** — offer + set + live status commit together, or nothing does. `opts.seedPerCopy`
+ * Create an offer on a platform (ADR-0013, #188). It starts `preparing`, always (#2322).
+ * `opts.seedItemIds` (the quick-start / add-to-offer create path, #189/#241) seeds its first set
+ * **atomically** — offer + set commit together, or nothing does. `opts.seedPerCopy`
  * splits that seed into one single-copy set each (#372), the shape a quantity listing needs.
  * Currency is inherited
  * from the platform (#196) — locked to the platform's, or set from `input.currency` on the first
@@ -6502,7 +6509,7 @@ function missingPriceField(
 export async function createOffer(
   ownerId: string,
   collectionId: string,
-  input: OfferInput,
+  input: NewOfferInput,
   opts: {
     seedItemIds?: string[];
     seedPerCopy?: boolean;
@@ -6607,7 +6614,7 @@ async function assertNotInAnotherFacebookAuction(
  *  many offers in **one** transaction (#1287) creates each exactly as `createOffer` does. */
 interface PreparedOfferCreation {
   collectionId: string;
-  input: OfferInput;
+  input: NewOfferInput;
   platform: Awaited<ReturnType<typeof assertPlatform>>;
   currency: string;
   pricing: ReturnType<typeof resolveOfferPricing>;
@@ -6621,7 +6628,7 @@ interface PreparedOfferCreation {
 async function prepareOfferCreation(
   ownerId: string,
   collectionId: string,
-  input: OfferInput,
+  input: NewOfferInput,
   opts: {
     seedItemIds?: string[];
     seedPerCopy?: boolean;
@@ -6647,34 +6654,16 @@ async function prepareOfferCreation(
     facebook.currency ??
     (await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency));
 
-  const targetState = input.state;
-  if (isTerminalState(targetState)) {
-    throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
-  }
-
   // Seed copies for the quick-start / add-to-offer create path (#189/#241): validate addability up
-  // front, then write the first set inside the transaction. A chosen live status can then be honoured.
+  // front, then write the first set inside the transaction. The offer starts `preparing` (#2322), so
+  // none of what a live status asks — sets, a price, copies nobody has promised (#639) — is asked here:
+  // **Mark ready** and **Publish** ask it.
   const requestedSeed = opts.seedSets ? opts.seedSets.flat() : opts.seedItemIds;
   const seedIds = requestedSeed?.length
     ? await assertAddableCopies(collectionId, requestedSeed)
     : [];
   if (requestedSeed?.length && seedIds.length === 0) {
     throw new OfferActionBlockedError("empty", "That copy can't be listed — it may have already sold.");
-  }
-  // A live status (ready / active) requires the offer to actually list something (#246). Reject it
-  // before creating anything, so no half-open draft is left behind.
-  if (requiresSets(targetState) && seedIds.length === 0) {
-    throw new OfferActionBlockedError(
-      "empty",
-      `An offer can't start ${targetState} with no sets — compose it first, then advance it.`
-    );
-  }
-  // Created straight as `active` (#257) skips the transition the reservation gate sits on, so it is
-  // asked here too (#639). Only for a live status: an offer created `preparing` around a promised
-  // copy is a draft, and drafts compete for nothing.
-  if (targetState === "active") {
-    const refusal = await offerCommitmentRefusal(collectionId, seedIds);
-    if (refusal) throw new OfferActionBlockedError("trade-committed", refusal);
   }
   // A Facebook auction refuses copies another one that is up already holds (ADR-0061 §5), at any
   // state: putting them in is what the rule forbids, not only going live with them.
@@ -6696,8 +6685,7 @@ async function prepareOfferCreation(
   // the live price that follows from it — each falling back to the platform's own defaults (#362).
   // Those defaults are the *lowest* priority suggestion: a lot's suggested price (#190) and the
   // copies' catalog value (#230) both reach the form as a filled-in figure, so anything submitted
-  // here already outranks them. Resolved before the live-status checks, so creating an auction
-  // straight as `ready` on a house one always opens at the same figure is not rejected as unpriced.
+  // here already outranks them.
   //
   // A Facebook group opening at a share of catalogue value (#1663) has that share worked out here,
   // over the seed, for a creation no form priced — the Lot builder, quick offer mode, a composed
@@ -6717,20 +6705,6 @@ async function prepareOfferCreation(
         }
       : facebook;
   const pricing = resolveOfferPricing(input, input.price, facebookPricingDefaults(platform, facebookDefaults));
-  const price = pricing.price;
-
-  // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
-  // `active` skips the transition, so the same rule applies here.
-  //
-  // On an auction the figure that has to exist is the **starting** price (#449): the current one is
-  // an observation of the bidding, and a listing nobody has bid on has none to make.
-  const missing = missingPriceField(pricing.listingType, targetState, price, pricing.startingPrice);
-  if (missing) {
-    throw new OfferActionBlockedError(
-      "unpriced",
-      `An offer can't start ${targetState} with no ${missing} — set a price first.`
-    );
-  }
 
   // Generate the listing texts (#209/#210, #266, #267) from the platform's configured templates over
   // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
@@ -6816,10 +6790,8 @@ async function writeOfferCreation(
       facebookGroupId: facebook.facebookGroupId,
       bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
       currency,
-      listingDate: input.listingDate,
-      // Set the target state directly (creation states the real-world status; the step-through
-      // graph governs later manual changes). Guarded above against terminal / set-less-live.
-      state: input.state,
+      // Every new offer starts Preparing (#2322), with no listing date until **Publish** stamps one.
+      state: "preparing",
     },
     select: { id: true },
   });
@@ -6850,16 +6822,9 @@ async function finishOfferCreation(
   // moment and the offer would otherwise sit with a blank Allegro card until something was added.
   await backfillAllegroCategory(ownerId, offerId);
   await backfillDelcampeCategory(offerId); // #609, the same question on the marketplace next door
-  await placeCreatedOffer(offerId, prepared.input.state);
-}
-
-/** A new Facebook offer is in a post from the moment it is made (#2116): its post of one lot, unless
- *  the write that made it already put it in a post (Generate offers' *In a new post*, #2030). One
- *  created already up — Pending or Active — is published as it is made, so its post text is frozen
- *  there and then (#1800), after the texts the offer's id completes. */
-async function placeCreatedOffer(offerId: string, state: OfferState): Promise<void> {
+  // A new Facebook offer is in a post from the moment it is made (#2116): its post of one lot, unless
+  // the write that made it already put it in a post (Generate offers' *In a new post*, #2030).
   await placeInOneLotFacebookPost(offerId);
-  if (isLiveState(state)) await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
 }
 
 /**
@@ -6999,7 +6964,7 @@ export interface DuplicateOfferResult {
 export async function duplicateOffer(
   ownerId: string,
   sourceOfferId: string,
-  input: OfferInput
+  input: NewOfferInput
 ): Promise<DuplicateOfferResult> {
   const ref = await assertOfferOwner(ownerId, sourceOfferId);
   const platform = await assertPlatform(ref.collectionId, input.platformId);
@@ -7045,34 +7010,10 @@ export async function duplicateOffer(
     })
     .filter((s) => s.itemIds.length > 0);
 
-  const targetState = input.state;
-  if (isTerminalState(targetState)) {
-    throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
-  }
-  // A live status (ready / active) requires ≥1 set (#246): reject when every source copy had sold and
-  // the clone would be empty, before creating anything.
-  if (requiresSets(targetState) && cloneSets.length === 0) {
-    throw new OfferActionBlockedError(
-      "empty",
-      `Nothing left to list — every copy has sold elsewhere, so the copy can't start ${targetState}.`
-    );
-  }
-  // Same pricing rules as a fresh creation (#336, #449): the clone is priced — and its format
-  // chosen — for its own platform, so a blank price cannot start it prepared or live either, and an
-  // auction still needs its opening figure.
+  // Same pricing rules as a fresh creation (#449): the clone's format and opening figure are chosen
+  // for its own platform. It starts `preparing` like every new offer (#2322), so nothing about it has
+  // to be priced yet.
   const pricing = resolveOfferPricing(input, input.price, facebookPricingDefaults(platform, facebook));
-  const missing = missingPriceField(
-    pricing.listingType,
-    targetState,
-    pricing.price,
-    pricing.startingPrice
-  );
-  if (missing) {
-    throw new OfferActionBlockedError(
-      "unpriced",
-      `An offer can't start ${targetState} with no ${missing} — set a price first.`
-    );
-  }
   await assertNotInAnotherFacebookAuction(
     ref.collectionId,
     { id: null, facebookGroupId: facebook.facebookGroupId },
@@ -7124,8 +7065,7 @@ export async function duplicateOffer(
         facebookGroupId: facebook.facebookGroupId, // #1544, as in `createOffer`
         bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
         currency,
-        listingDate: input.listingDate,
-        state: targetState,
+        state: "preparing", // #2322, as in `createOffer`
       },
       select: { id: true },
     });
@@ -7150,7 +7090,7 @@ export async function duplicateOffer(
   });
 
   await syncOfferContextTexts(ownerId, id, platform); // #415, as in `createOffer`
-  await placeCreatedOffer(id, targetState); // #2116 and #1800, as in `createOffer`
+  await placeInOneLotFacebookPost(id); // #2116, as in `createOffer`
   return { id, skippedCopies };
 }
 
@@ -8480,15 +8420,15 @@ export async function addItemsToOfferSet(
 // ── Generating offers in bulk (#1287) ────────────────────────────────────────
 
 /**
- * Why an offer on `platformId` could not be created in `state` the way quick offer mode creates one —
- * no price, no URL (#537) — or null when it could. The refusals `createOffer` raises before writing
- * anything, asked ahead so a bulk pass says so in its preview rather than on confirming.
+ * Why an offer on `platformId` could not be created the way quick offer mode creates one — no price,
+ * no URL (#537) — or null when it could. The refusals `createOffer` raises before writing anything,
+ * asked ahead so a bulk pass says so in its preview rather than on confirming. The offers start
+ * Preparing (#2322), so a price is not one of them.
  */
 export async function quickOfferCreationBlock(
   ownerId: string,
   collectionId: string,
   platformId: string,
-  state: OfferState,
   facebookGroupId: string | null = null
 ): Promise<string | null> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -8505,26 +8445,8 @@ export async function quickOfferCreationBlock(
   if (!platform.platformCurrency && !facebook.currency) {
     return "This platform has no currency yet. List one offer on it through the ordinary form first — that is where its currency is set.";
   }
-  // A share of catalogue value is worked out per offer, over its own copies, as each is written; an
-  // offer whose copies carry none is refused then, by name, like any unpriced creation.
-  // A quick buy has no starting price to work out, so it is asked for its asking price below.
-  if (facebook.startingPricePercent !== null && facebook.listingType === "auction") return null;
-  const pricing = resolveOfferPricing({}, "0.00", facebookPricingDefaults(platform, facebook));
-  const missing = missingPriceField(pricing.listingType, state, pricing.price, pricing.startingPrice);
-  return missing
-    ? `An offer can't start ${OFFER_STATE_LABEL_LOWER[state]} with no ${missing}, and these offers are created without one. Start them as Preparing instead.`
-    : null;
+  return null;
 }
-
-const OFFER_STATE_LABEL_LOWER: Record<OfferState, string> = {
-  preparing: "preparing",
-  ready: "ready",
-  pending: "pending",
-  active: "active",
-  paused: "paused",
-  sold: "sold",
-  withdrawn: "withdrawn",
-};
 
 /** A generated pass refused because a copy or an offer is no longer where its plan put it (#717). The
  *  caller names it; this module only knows which. */
@@ -8538,7 +8460,6 @@ export class GenerationChangedError extends OfferActionBlockedError {
 
 export interface GeneratedOffersInput {
   platformId: string;
-  state: OfferState;
   /** On Facebook, the group every new offer is an auction in and when it closes (#1663). */
   facebookGroupId: string | null;
   endsAt: Date | null;
@@ -8552,7 +8473,7 @@ export interface GeneratedOffersInput {
  * Write a generated pass (#1287) — **all of it or none of it**, in one transaction.
  *
  * Every new offer is created exactly as quick offer mode creates one (`createOfferAction` with a
- * platform and a status and nothing else): no price, no URL, texts generated from the platform's
+ * platform and nothing else, Preparing): no price, no URL, texts generated from the platform's
  * templates. Every added set is added exactly as `addOfferSet` adds one — its title from the platform's
  * template, at the end of the offer's order — and a listed offer receiving sets is flagged as changed
  * after listing (#542).
@@ -8606,8 +8527,8 @@ export async function writeGeneratedOffers(
       await prepareOfferCreation(
         ownerId,
         collectionId,
-        // What `readOfferInput` makes of quick offer mode's form: a platform, a status and — on
-        // Facebook — the group and its closing time (#1663), nothing else.
+        // What `readOfferInput` makes of quick offer mode's form: a platform and — on Facebook — the
+        // group and its closing time (#1663), nothing else.
         {
           platformId: input.platformId,
           url: null,
@@ -8615,8 +8536,6 @@ export async function writeGeneratedOffers(
           startingPrice: null,
           endsAt: input.endsAt,
           currency: "",
-          listingDate: null,
-          state: input.state,
           facebookGroupId: input.facebookGroupId,
         },
         { seedSets: sets }

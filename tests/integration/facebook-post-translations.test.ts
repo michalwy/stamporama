@@ -102,7 +102,6 @@ describe("a Facebook post's untranslated names (#1889)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

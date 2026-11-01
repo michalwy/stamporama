@@ -82,7 +82,6 @@ describe("choosing which set left on a sale line (#697)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const setIds: string[] = [];
     for (let i = 0; i < n; i++) setIds.push(await addOfferSet(userId, offerId, [await copy()]));

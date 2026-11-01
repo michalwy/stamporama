@@ -88,7 +88,6 @@ describe("changed-since-listed flag (#542)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
       listingType: overrides.listingType ?? "fixed",
       startingPrice: overrides.startingPrice ?? null,
     });
@@ -224,7 +223,6 @@ describe("changed-since-listed flag (#542)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await newCopy()]);
     await setOfferState(userId, offerId, "ready");
@@ -294,7 +292,6 @@ describe("changed-since-listed flag (#542)", () => {
       price: "12.00",
       currency: "EUR",
       listingDate: null,
-      state: "active",
     });
     assert.notEqual(await flag(offerId), null);
   });

@@ -133,7 +133,6 @@ describe("inventory availability + location-ref search", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, allegro, [bidHeld]);
     await setOfferState(userId, allegro, "ready");
@@ -146,7 +145,6 @@ describe("inventory availability + location-ref search", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, delcampe, [bidHeld]);
     await setOfferState(userId, delcampe, "withdrawn"); // pulled after the bid landed elsewhere
@@ -187,7 +185,6 @@ describe("inventory availability + location-ref search", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, other, [plain]);
     await setOfferState(userId, other, "ready");

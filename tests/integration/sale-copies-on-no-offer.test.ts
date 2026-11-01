@@ -104,7 +104,6 @@ describe("selling copies on no offer (#2021)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [ids.b]);
     await setOfferState(userId, offerId, "ready");

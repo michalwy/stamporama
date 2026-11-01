@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer } from "../../src/lib/offers";
+import { createOffer, setOfferState } from "../../src/lib/offers";
 import {
   addSaleLines,
   createSale,
@@ -65,7 +65,7 @@ describe("A proposal becomes a sale (#2289)", () => {
   ): Promise<string> {
     const seedItemIds: string[] = [];
     for (let i = 0; i < (opts.copies ?? 1); i++) seedItemIds.push(await copy());
-    return createOffer(
+    const offerId = await createOffer(
       userId,
       collectionId,
       {
@@ -75,11 +75,16 @@ describe("A proposal becomes a sale (#2289)", () => {
         startingPrice: null,
         currency: opts.currency ?? "EUR",
         listingDate: null,
-        state: opts.state ?? "preparing",
         ...(platformId === facebookId ? { facebookGroupId: groupId, listingType: "fixed" as const } : {}),
       },
       { seedItemIds, seedPerCopy: true }
     );
+    // Every offer starts Preparing (#2322) and goes up through its ordinary life.
+    if (opts.state === "active") {
+      await setOfferState(userId, offerId, "ready");
+      await setOfferState(userId, offerId, "active");
+    }
+    return offerId;
   }
 
   /** A contact with a proposal of `lots` lots on Direct, each at its price. */
@@ -346,10 +351,11 @@ describe("A proposal becomes a sale (#2289)", () => {
         startingPrice: null,
         currency: "EUR",
         listingDate: null,
-        state: "active",
       },
       { seedItemIds: [lotCopy.itemId] }
     );
+    await setOfferState(userId, elsewhere, "ready");
+    await setOfferState(userId, elsewhere, "active");
     const buyer = (await prisma.contact.create({ data: { collectionId, name: "Other buyer", buyer: true } })).id;
     const saleId = await createSale(userId, collectionId, header(facebookId, buyer));
     const [sellable] = await listSellableOffers(userId, collectionId, { offerId: elsewhere });

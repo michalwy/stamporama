@@ -27,7 +27,6 @@ describe("selling several offers into one sale (#2050)", () => {
       price,
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     for (let i = 0; i < sets; i++) {
       const item = await createItem(userId, collectionId, { stampId: stamp.id, conditionId: condition.id, forSale: true });

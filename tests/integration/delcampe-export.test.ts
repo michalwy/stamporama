@@ -86,7 +86,6 @@ describe("Delcampe Easy Uploader export (#610)", () => {
       price,
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, id, {
       photoSides: "front",
@@ -298,7 +297,6 @@ describe("Delcampe Easy Uploader export (#610)", () => {
       price: "1.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await assert.rejects(
       () => buildDelcampeUploadBundle(userId, collectionId, [elsewhere]),

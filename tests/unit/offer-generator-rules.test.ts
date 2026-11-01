@@ -12,7 +12,6 @@ import {
   keptFingerprint,
   keptResultingSetCount,
   parseGeneratorRequest,
-  canGenerateIntoPost,
   generatorPostRefusal,
   parsePlanFingerprint,
   planOffers,
@@ -575,7 +574,6 @@ describe("the generator request (#1287)", () => {
   it("round-trips through a query string", () => {
     const request = {
       platformId: "p1",
-      state: "preparing" as const,
       mode: "singles" as const,
       packaging: "separate" as const,
       mixing: { condition: false, certificate: false, format: false },
@@ -627,7 +625,6 @@ describe("the generator request (#1287)", () => {
   it("refuses a request missing a choice, rather than guessing it", () => {
     const params = generatorRequestParams({
       platformId: "p1",
-      state: "ready",
       mode: "checklists",
       packaging: "multi",
       itemIds: null,
@@ -636,31 +633,23 @@ describe("the generator request (#1287)", () => {
       skip: [],
       facebook: { facebookGroupId: null, endsAt: null },
     });
-    for (const key of ["platformId", "state", "mode", "packaging"]) {
+    for (const key of ["platformId", "mode", "packaging"]) {
       const without = new URLSearchParams(params);
       without.delete(key);
       assert.equal(parseGeneratorRequest(without), null, key);
     }
-    const paused = new URLSearchParams(params);
-    paused.set("state", "paused");
-    assert.equal(parseGeneratorRequest(paused), null);
+    // There is no status to choose (#2322): every offer a pass creates starts Preparing.
+    assert.equal(params.has("state"), false);
   });
 });
 
 describe("generating into a new post (#2030)", () => {
-  const asked = { state: "preparing" as const, facebookGroupId: "g1", newOffers: 3, title: "Germany 1960" };
+  const asked = { facebookGroupId: "g1", newOffers: 3, title: "Germany 1960" };
 
-  it("is offered only while the pass's offers are not yet up", () => {
-    assert.equal(canGenerateIntoPost("preparing"), true);
-    assert.equal(canGenerateIntoPost("ready"), true);
-    assert.equal(canGenerateIntoPost("active"), false);
-  });
-
-  it("asks Post together's rules of the pass: a group, not yet up, two lots and a title", () => {
+  it("asks Post together's rules of the pass: a group, two lots and a title", () => {
     assert.equal(generatorPostRefusal(asked), null);
-    assert.equal(generatorPostRefusal({ ...asked, state: "ready", newOffers: 2 }), null);
+    assert.equal(generatorPostRefusal({ ...asked, newOffers: 2 }), null);
     assert.match(generatorPostRefusal({ ...asked, facebookGroupId: null })!, /Only Facebook offers/);
-    assert.match(generatorPostRefusal({ ...asked, state: "active" })!, /not yet up/);
     assert.match(generatorPostRefusal({ ...asked, newOffers: 1 })!, /at least two new offers/);
     assert.match(generatorPostRefusal({ ...asked, title: "  " })!, /needs a title/);
   });

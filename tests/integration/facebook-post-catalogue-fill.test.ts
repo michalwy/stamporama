@@ -120,7 +120,6 @@ describe("a post's copies as Fill catalogue values lines (#2220)", () => {
         startingPrice: null,
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: itemIds }

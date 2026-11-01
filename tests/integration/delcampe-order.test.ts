@@ -39,7 +39,6 @@ describe("Delcampe order import (#612)", () => {
       price,
       currency: "USD",
       listingDate: null,
-      state: "preparing",
     });
     const stamp = await prisma.stamp.create({ data: { collectionId, name } });
     const item = await createItem(userId, collectionId, {

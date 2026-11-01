@@ -60,7 +60,7 @@ describe("offer listing date on publication (#320)", () => {
   });
 
   /** A composed `preparing` offer with one set, ready to be walked forward. */
-  async function preparedOffer(listingDate: Date | null): Promise<string> {
+  async function preparedOffer(): Promise<string> {
     const itemId = (
       await createItem(userId, collectionId, { stampId, conditionId, forSale: true })
     ).id;
@@ -69,8 +69,6 @@ describe("offer listing date on publication (#320)", () => {
       url: null,
       price: "5.00",
       currency: "EUR",
-      listingDate,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [itemId]);
     return offerId;
@@ -85,7 +83,7 @@ describe("offer listing date on publication (#320)", () => {
     ).listingDate;
 
   it("stamps today when a ready offer is activated", async () => {
-    const offerId = await preparedOffer(null);
+    const offerId = await preparedOffer();
     await setOfferState(userId, offerId, "ready");
     assert.equal(await dateOf(offerId), null, "marking ready is not publishing");
 
@@ -93,16 +91,12 @@ describe("offer listing date on publication (#320)", () => {
     assert.deepEqual(await dateOf(offerId), today());
   });
 
-  it("overwrites a date carried in from creation, because that offer went live now", async () => {
-    const old = new Date("2020-01-02T00:00:00.000Z");
-    const offerId = await preparedOffer(old);
-    await setOfferState(userId, offerId, "ready");
-    await setOfferState(userId, offerId, "active");
-    assert.deepEqual(await dateOf(offerId), today());
+  it("creates an offer with no listing date — it is not up (#2322)", async () => {
+    assert.equal(await dateOf(await preparedOffer()), null);
   });
 
   it("leaves the date alone on every other transition", async () => {
-    const offerId = await preparedOffer(null);
+    const offerId = await preparedOffer();
     await setOfferState(userId, offerId, "ready");
     await setOfferState(userId, offerId, "preparing");
     assert.equal(await dateOf(offerId), null, "stepping back is not publishing");
@@ -120,28 +114,5 @@ describe("offer listing date on publication (#320)", () => {
     assert.deepEqual(await dateOf(offerId), backdated, "resume leaves the correction standing");
 
     assert.deepEqual(published, today(), "and the publication itself did stamp it");
-  });
-
-  it("keeps the date typed into the creation dialog when the offer is created active", async () => {
-    // The exception the issue calls out: created straight as `active` (#257), the offer never passes
-    // through `setOfferState`, so what the collector entered stands.
-    const typed = new Date("2021-06-07T00:00:00.000Z");
-    const itemId = (
-      await createItem(userId, collectionId, { stampId, conditionId, forSale: true })
-    ).id;
-    const offerId = await createOffer(
-      userId,
-      collectionId,
-      {
-        platformId,
-        url: null,
-        price: "5.00",
-        currency: "EUR",
-        listingDate: typed,
-        state: "active",
-      },
-      { seedItemIds: [itemId] }
-    );
-    assert.deepEqual(await dateOf(offerId), typed);
   });
 });

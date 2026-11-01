@@ -80,7 +80,6 @@ describe("compose a series offer out of single offers (#1211)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     await prisma.offer.update({ where: { id: offerId }, data: { state } });

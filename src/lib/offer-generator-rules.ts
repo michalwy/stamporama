@@ -29,8 +29,8 @@ import {
 import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision-rules";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
-import { isCreatableOfferState, type OfferState } from "./offer-rules";
-import { facebookPostTitleRefusal, isFacebookLotPosted, type FacebookCreateChoice } from "./facebook-post-rules";
+import type { OfferState } from "./offer-rules";
+import { facebookPostTitleRefusal, type FacebookCreateChoice } from "./facebook-post-rules";
 
 // The choices ------------------------------------------------------------------------------------
 
@@ -680,7 +680,6 @@ export function skipReason(facts: SkipFacts): SkipReason | null {
  */
 export interface GeneratorRequest {
   platformId: string;
-  state: OfferState;
   mode: GeneratorMode;
   packaging: GeneratorPackaging;
   /** Which axes a complete set may mix (#2102), and which sets come first while one is mixed. Absent,
@@ -708,7 +707,6 @@ export interface GeneratorRequest {
 export function generatorRequestParams(request: GeneratorRequest): URLSearchParams {
   const params = new URLSearchParams();
   params.set("platformId", request.platformId);
-  params.set("state", request.state);
   params.set("mode", request.mode);
   params.set("packaging", request.packaging);
   // Spelled as Series from Singles spells them (#1265), and only what is on.
@@ -733,13 +731,12 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
 }
 
 /** Read a request off a query string. Null when a required choice is missing or unrecognised — a
- *  generator guessing at a platform, a status or a packaging would create offers nobody asked for. */
+ *  generator guessing at a platform or a packaging would create offers nobody asked for. */
 export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | null {
   const platformId = sp.get("platformId");
-  const state = sp.get("state");
   const mode = sp.get("mode");
   const packaging = sp.get("packaging");
-  if (!platformId || !isCreatableOfferState(state)) return null;
+  if (!platformId) return null;
   if (!GENERATOR_MODES.includes(mode as GeneratorMode)) return null;
   if (!GENERATOR_PACKAGINGS.includes(packaging as GeneratorPackaging)) return null;
   const ids = sp.get("ids");
@@ -750,7 +747,6 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
   }
   return {
     platformId,
-    state,
     mode: mode as GeneratorMode,
     packaging: packaging as GeneratorPackaging,
     mixing: {
@@ -770,28 +766,19 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
   };
 }
 
-/** Whether a pass in this status may put its offers into a new post (#2030): only one whose offers
- *  are not yet up — an offer that is up is already in a post of its own (#1989). */
-export function canGenerateIntoPost(state: OfferState): boolean {
-  return !isFacebookLotPosted(state);
-}
-
 /**
  * Why a pass cannot put the offers it creates into one new post (#2030), or null. *Post together*'s
- * rules as they bear on a pass: one Facebook group (the bar's), offers not yet up, at least two lots,
- * and a title. The listing type needs no asking here — every offer a pass creates starts as its
- * group's — and is asked again of the written offers when the post is made.
+ * rules as they bear on a pass: one Facebook group (the bar's), at least two lots, and a title. The
+ * offers a pass creates are never up — every one starts Preparing (#2322) — and the listing type needs
+ * no asking either: every one starts as its group's, and it is asked again of the written offers when
+ * the post is made.
  */
 export function generatorPostRefusal(request: {
-  state: OfferState;
   facebookGroupId: string | null;
   newOffers: number;
   title: string;
 }): string | null {
   if (!request.facebookGroupId) return "Only Facebook offers can go into a post — choose the group first.";
-  if (!canGenerateIntoPost(request.state)) {
-    return "Only offers not yet up can go into a new post — an offer that is up is in a post of its own.";
-  }
   if (request.newOffers < 2) return "A post with several lots needs at least two new offers.";
   return facebookPostTitleRefusal(request.title);
 }

@@ -65,16 +65,16 @@ describe("offer-owned composition + coordination", () => {
     z = await mk();
 
     // Overlap: copy x listed independently on two platforms.
-    offerA = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing" });
+    offerA = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "5.00", currency: "EUR", listingDate: null });
     setA = await addOfferSet(userId, offerA, [x]);
-    offerB = await createOffer(userId, collectionId, { platformId: allegroId, url: null, price: "6.00", currency: "EUR", listingDate: null, state: "preparing" });
+    offerB = await createOffer(userId, collectionId, { platformId: allegroId, url: null, price: "6.00", currency: "EUR", listingDate: null });
     setB = await addOfferSet(userId, offerB, [x]);
 
     // Quantity: copies y, z as separate single-copy sets, on both platforms.
-    offerQD = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "10.00", currency: "EUR", listingDate: null, state: "preparing" });
+    offerQD = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "10.00", currency: "EUR", listingDate: null });
     setQDy = await addOfferSet(userId, offerQD, [y]);
     setQDz = await addOfferSet(userId, offerQD, [z]);
-    offerQA = await createOffer(userId, collectionId, { platformId: allegroId, url: null, price: "11.00", currency: "EUR", listingDate: null, state: "preparing" });
+    offerQA = await createOffer(userId, collectionId, { platformId: allegroId, url: null, price: "11.00", currency: "EUR", listingDate: null });
     setQAy = await addOfferSet(userId, offerQA, [y]);
     await addOfferSet(userId, offerQA, [z]);
 

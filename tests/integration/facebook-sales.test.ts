@@ -8,7 +8,7 @@ import {
   listOffersPaginated,
   patchOffer,
   setOfferState,
-  type OfferInput,
+  type NewOfferInput,
 } from "../../src/lib/offers";
 import { addSaleLines, createSale } from "../../src/lib/sales";
 import { resolveSaleHeader, type SaleHeaderRaw } from "../../src/lib/sale-header-input";
@@ -97,13 +97,12 @@ describe("Selling a Facebook offer (#1777)", () => {
 
   /** A Facebook auction that is up, holding one set per copy, closing at `endsAt`. */
   async function auction(itemIds: string[], endsAt: Date = past): Promise<string> {
-    const input: OfferInput = {
+    const input: NewOfferInput = {
       platformId: facebookId,
       url: null,
       price: "0.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: groupId,
       startingPrice: "3.00",
     };
@@ -306,11 +305,12 @@ describe("Selling a Facebook offer (#1777)", () => {
         price: "25.00",
         currency: "EUR",
         listingDate: null,
-        state: "active",
         facebookGroupId: groupId,
       },
       { seedItemIds: [await newItem()] }
     );
+    await setOfferState(userId, offerId, "ready");
+    await setOfferState(userId, offerId, "active");
     assert.ok(!(await endedIds()).includes(offerId), "a quick buy never ends of itself");
     const saleId = await sell(offerId, header("Ola Kot", "https://www.facebook.com/ola.kot"));
     const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, include: { lines: true } });
@@ -331,7 +331,7 @@ describe("Selling a Facebook offer (#1777)", () => {
     const delcampeOffer = await createOffer(
       userId,
       collectionId,
-      { platformId: otherPlatformId, url: null, price: "4.00", currency: "EUR", listingDate: null, state: "preparing" },
+      { platformId: otherPlatformId, url: null, price: "4.00", currency: "EUR", listingDate: null },
       { seedItemIds: [await newItem()] }
     );
     assert.equal(await facebookOfferSaleCurrency(userId, collectionId, delcampeOffer), null);

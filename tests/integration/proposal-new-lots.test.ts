@@ -160,7 +160,7 @@ describe("a proposal's new lots (#2299)", () => {
       createOffer(
         userId,
         collectionId,
-        { platformId, url: null, price: "5.00", startingPrice: null, currency: "EUR", listingDate: null, state: "preparing" },
+        { platformId, url: null, price: "5.00", startingPrice: null, currency: "EUR", listingDate: null },
         { seedItemIds: [itemId] }
       );
     await offer(colnectId, onColnect);

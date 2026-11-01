@@ -69,8 +69,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   numbers are built in TypeScript — and is an idempotent no-op after. `prisma-text-trim` leaves the
   column alone like every `Json` column: a template's whitespace is part of what was posted. The
   integration test is `tests/integration/facebook-post-freeze.test.ts`; removing the transition freeze,
-  the Ready clear, the approval's closing write, the repost refreeze or the creation freeze each fails
-  it (checked when written).
+  the Ready clear, the approval's closing write or the repost refreeze each fails it (checked when
+  written; the creation freeze went with creating an offer already up, #2322).
 
 - **A post template is Markdown, limited to Facebook's editor** (#1772, decided with the collector on
   2026-10-11: bold, italic, `#`/`##` headings, bulleted and numbered lists, a quote — what the group
@@ -275,10 +275,10 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   2026-10-23; the issue's *to be confirmed* points implemented as written; amends #1989 and ADR-0061
   §2). **A post of one lot and a post of several differ only in their text templates** — the post's
   screen, number, title, moves and placeholders are the same. **Every creation route** ends in
-  `finishOfferCreation` → `placeCreatedOffer` (`createOffer`, `writeGeneratedOffers` — quick offer
-  mode, Generate offers, the Lot builder, Series from singles and the agent API's `draft_offer` all go
-  through those two) and `duplicateOffer` calls `placeCreatedOffer` itself: `placeInOneLotFacebookPost`
-  after the commit, before the freeze of an offer created already up. After the commit, not inside
+  `placeInOneLotFacebookPost` — from `finishOfferCreation` (`createOffer`, `writeGeneratedOffers` —
+  quick offer mode, Generate offers, the Lot builder, Series from singles and the agent API's
+  `draft_offer` all go through those two), and from `duplicateOffer` itself. No offer is created
+  already up since #2322, so there is no freeze to follow it. After the commit, not inside
   the creation's transaction, so Generate offers' *In a new post* (#2030), whose `inTransaction` hook
   makes the post first, leaves the placement a no-op and burns no post numbers on throwaway posts of
   one. `updateOffer` places an offer moved onto Facebook in any state, and a post of one **not yet up**

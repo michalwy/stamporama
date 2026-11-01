@@ -143,7 +143,6 @@ describe("translation gaps + in-place filling (#299, #300)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
   }
 

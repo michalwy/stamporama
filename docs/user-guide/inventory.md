@@ -1445,8 +1445,8 @@ copies](#listing-a-groups-copies).
 ### Quick offer mode
 
 Listing a hundred and seventy-eight copies one at a time means a hundred and seventy-eight trips
-through the create form, each asking for the same platform and the same status. **Quick offer mode**
-sets those once and takes the form out of the loop.
+through the create form, each asking for the same platform. **Quick offer mode** sets it once and
+takes the form out of the loop.
 
 Press **Quick offer mode** at the top of the list. A bar appears under the toolbar, pinned there
 while you scroll, with two things in it:
@@ -1455,7 +1455,6 @@ while you scroll, with two things in it:
 - **Group** — on Facebook only, the group the offers are in. It starts on the last group you
   used there, and until one is chosen the mode creates nothing on its own: **Add to new offer** opens
   the form instead, and the bar says why. See [Facebook](facebook.md#without-the-form).
-- **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
 
 When copies are ticked as well, this bar sits **above** the selection bar: quick offer mode is the
 mode you are in, the selection is what you are doing inside it. Like the selection bar, arming the
@@ -1467,7 +1466,8 @@ row, and the **New offer** buttons in the selection bar — creates the offer **
 no dialog. The menu entry says so while the mode is on: it reads *New offer on Colnect* rather than
 *Add to new offer*. The bar counts what the pass has created so far, and reports anything that failed.
 
-The new offers carry **no asking price and no listing URL** — except on Facebook, where a group that
+The new offers start **Preparing**, like every new offer, and carry **no asking price and no listing
+URL** — except on Facebook, where a group that
 starts its offers as auctions makes each an auction opening at the group's starting price. That is the point: the pass is about
 getting the listings made, and both of those belong on the offer's own screen once the listing
 exists. If you want the price filled in from the copy's Estimated value, use the ordinary
@@ -1575,12 +1575,10 @@ for sale, not in hand, set aside from the platform, in an offer in active biddin
 and how many copies the other mode would list.
 
 The new offers are created exactly as quick offer mode creates them: no asking price, no listing URL,
-titles and descriptions from the platform's templates. That is also why *Ready* and *Active* only work
-where the platform supplies a starting price of its own; otherwise the preview tells you to start the
-offers as *Preparing*.
+titles and descriptions from the platform's templates, and **Preparing** — each is marked ready and
+published on its own afterwards.
 
-**On Facebook, the new offers go straight into a new post.** While the bar's status is *Preparing*
-or *Ready*, **In a new post** starts ticked and the post's **title** is suggested from what the new
+**On Facebook, the new offers go straight into a new post.** **In a new post** starts ticked and the post's **title** is suggested from what the new
 offers hold: the deepest area holding every copy and the span of their issues' years —
 *Generalgouvernement 1940–44*, or *1940–44* alone when the copies share no area. The suggestion
 follows the preview — a change of what to list, an offer ticked or unticked — until you type in the
@@ -1592,8 +1590,7 @@ two lots, so where the pass would create only one offer the option starts untick
 message after the
 pass has **Open post**, the post's screen, where the lots are priced and put up together — no
 *Post together…* afterwards. The auctions among them share one closing time, as in any post.
-Untick it and the pass makes no post; on any other platform, or in a status past *Ready*, the option
-is not there.
+Untick it and the pass makes no post; on any other platform the option is not there.
 
 Confirming creates **all of the ticked offers or none of them**. If anything changed since the
 preview in a ticked offer — a copy sold or went onto another offer, or an offer due to receive sets

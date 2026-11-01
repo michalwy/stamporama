@@ -170,7 +170,6 @@ describe("offer photos grouped by checklist (#1673)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, lot.map((name) => itemIds.get(name)!));
   });

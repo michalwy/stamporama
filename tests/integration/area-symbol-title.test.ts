@@ -78,7 +78,6 @@ describe("{areaSymbol} in generated titles (#1740)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
 
   it("prints the area's own symbol, and nothing for a sub-area without one", async () => {

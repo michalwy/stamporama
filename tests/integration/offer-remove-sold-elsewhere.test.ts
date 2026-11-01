@@ -35,7 +35,6 @@ describe("removing an offer's sets sold elsewhere (#1805)", () => {
       price: "10.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     return id;
   };

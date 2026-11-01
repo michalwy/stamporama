@@ -88,7 +88,6 @@ describe("quick-buy refresh (#1718)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
       listingType,
       startingPrice: listingType === "auction" ? "1.00" : null,
     });

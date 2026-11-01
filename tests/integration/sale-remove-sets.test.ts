@@ -60,7 +60,6 @@ describe("removing ticked sold sets from a sale (#2315)", () => {
       price: "30.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemId of itemIds) await addOfferSet(userId, offerId, [itemId]);
     await setOfferState(userId, offerId, "ready");

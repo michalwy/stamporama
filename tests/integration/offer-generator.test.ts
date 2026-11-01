@@ -93,7 +93,6 @@ describe("offer generator (#1287)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     await prisma.offer.update({
@@ -106,7 +105,6 @@ describe("offer generator (#1287)", () => {
   function ticked(itemIds: string[], extra: Partial<GeneratorInput> = {}): GeneratorInput {
     return {
       platformId,
-      state: "preparing",
       mode: "checklists",
       packaging: "multi",
       itemIds,
@@ -473,16 +471,6 @@ describe("offer generator (#1287)", () => {
     await prisma.offer.update({ where: { id: targetId }, data: { state: "paused" } });
     await assert.rejects(commitOfferGeneration(userId, collectionId, input, preview.fingerprint), /Offer #\d+ has changed/);
     assert.equal((await offersHolding([single])).length, 0);
-  });
-
-  it("creates nothing at all when the status cannot be started without a price", async () => {
-    const [s1, s2] = await stamps(2);
-    const copies = [await copy(s1), await copy(s2)];
-    const input = ticked(copies, { mode: "singles", state: "ready" });
-    const preview = await previewOfferGeneration(userId, collectionId, input);
-    assert.ok(preview.creationBlock, "the preview says so before anything is confirmed");
-    await assert.rejects(commitOfferGeneration(userId, collectionId, input, preview.fingerprint));
-    assert.equal((await offersHolding(copies)).length, 0);
   });
 
   it("names a single by its issue and stamp, and an unnamed one not at all (#2046)", async () => {

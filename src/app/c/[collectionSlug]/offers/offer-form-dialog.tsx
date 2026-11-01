@@ -12,13 +12,10 @@ import {
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { OfferDetail } from "@/lib/offers";
 import {
-  CREATABLE_OFFER_STATES,
-  OFFER_STATE_LABEL,
   OFFER_LISTING_TYPES,
   OFFER_LISTING_TYPE_LABEL,
   type OfferListingType,
   isAuctionListing,
-  isLiveState,
   normalizeListingType,
   priceLabel,
 } from "@/lib/offer-rules";
@@ -33,7 +30,6 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from "@/app/c/[collectionSlug]/auctions/auction-format";
-import { useLastOfferDefaults } from "./use-last-offer-defaults";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { FacebookGroupChoice } from "@/lib/facebook-auctions";
 import { FacebookGroupSelect } from "./facebook-group-select";
@@ -56,13 +52,6 @@ const INPUT_STYLE: React.CSSProperties = {
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
-
-/** Today as `YYYY-MM-DD` in the local timezone — the listing-date default for a fresh offer. */
-function todayIso(): string {
-  const now = new Date();
-  const tz = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - tz).toISOString().slice(0, 10);
-}
 
 /** A stored listing date (UTC `@db.Date`) as `YYYY-MM-DD`, or "" when not recorded. */
 function formatListingDate(d: Date | string | null | undefined): string {
@@ -228,16 +217,8 @@ export function OfferFormDialog({
   const isEdit = !!offer;
   // Whether the price field shows: always when editing, opt-in (duplicate) otherwise.
   const showPriceField = isEdit || showPrice;
-  // Status + listing date pre-fills (#257): remembered per collection for a fresh offer; an edit
-  // seeds the date from the offer itself and has no status field (lifecycle controls own it). The URL
-  // is never remembered — always specific to the individual offer.
-  const [lastDefaults] = useLastOfferDefaults(collectionId);
-  // A lot goes up with its post (#2291), so it is never made live on its own.
-  const lotStates = facebookLot ? CREATABLE_OFFER_STATES.filter((s) => !isLiveState(s)) : CREATABLE_OFFER_STATES;
-  const defaultState = lastDefaults?.state && lotStates.includes(lastDefaults.state) ? lastDefaults.state : "preparing";
-  const defaultListingDate = isEdit
-    ? formatListingDate(offer!.listingDate)
-    : lastDefaults?.listingDate || todayIso();
+  // No status and no listing date on a new offer (#2322): every one starts Preparing and goes through
+  // Mark ready, and Publish stamps the date. An edit shows the offer's own date, to correct it.
   const priceControlled = priceValue !== undefined;
   const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The platform field is the collector's own text box, so a proposal chosen (#2304) puts Direct in it
@@ -776,9 +757,9 @@ export function OfferFormDialog({
           )}
 
           {/* Listing URL — always available; a fresh offer may not have a live listing yet, so it's
-              optional (#213 keeps it editable later). Never pre-filled from the last offer. Sits
-              ahead of status and date (#287): the URL is what you paste in from the listing, the
-              other two are usually left at their remembered values. */}
+              optional (#213 keeps it editable later). Never pre-filled from the last offer. A listing
+              already up elsewhere is recorded with it, and then marked ready and published like any
+              other (#2322). */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
             <TextInput
@@ -792,42 +773,20 @@ export function OfferFormDialog({
             />
           </div>
 
-          {/* Status + listing date (#257). Status is create-only — an existing offer's lifecycle is
-              driven by its own controls. A live status (Ready / Active) needs the offer to list
-              something and to carry an asking price (#336); the server rejects either and the
-              message lands on the dialog's error line. Both pre-fill from the last created
-              offer so repeated listings are fast. */}
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            {!isEdit && (
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="offer-state">Status</LabelWithError>
-                <select
-                  id="offer-state"
-                  name="state"
-                  defaultValue={defaultState}
-                  disabled={isPending}
-                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
-                >
-                  {lotStates.map((s) => (
-                    <option key={s} value={s}>
-                      {OFFER_STATE_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div style={{ flex: 1 }}>
+          {/* Listing date (#257) — edit only: a new offer is not up, and Publish stamps it (#2322). */}
+          {isEdit && (
+            <div style={FIELD_GAP}>
               <LabelWithError htmlFor="offer-listing-date">Listing date (optional)</LabelWithError>
               <input
                 id="offer-listing-date"
                 name="listingDate"
                 type="date"
-                defaultValue={defaultListingDate}
+                defaultValue={formatListingDate(offer!.listingDate)}
                 disabled={isPending}
                 style={INPUT_STYLE}
               />
             </div>
-          </div>
+          )}
 
           {/* When the auction closes (#490) — asked only of an auction, which is the only listing
               that ends of its own accord. It is what the "ended with a bid on it" flag is read

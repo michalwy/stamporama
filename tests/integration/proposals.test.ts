@@ -68,7 +68,6 @@ describe("Proposals (#2287)", () => {
         startingPrice: null,
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [await copy()] }
     );
@@ -260,7 +259,6 @@ describe("Proposals (#2287)", () => {
     const copies = [await copy(), await copy()];
     const input: GeneratorInput = {
       platformId: directId,
-      state: "preparing",
       mode: "singles",
       packaging: "multi",
       itemIds: copies,
@@ -281,7 +279,6 @@ describe("Proposals (#2287)", () => {
     const { proposalId } = await createProposal(userId, collectionId, buyerId);
     const colnectInput: GeneratorInput = {
       platformId: colnectId,
-      state: "preparing",
       mode: "singles",
       packaging: "separate",
       itemIds: [await copy()],

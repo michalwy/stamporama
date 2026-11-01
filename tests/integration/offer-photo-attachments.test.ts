@@ -154,7 +154,6 @@ describe("offer photo attachments (#313)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     ({ offerNo } = await prisma.offer.findUniqueOrThrow({
       where: { id: offerId },
@@ -679,7 +678,6 @@ describe("one photo per copy (#434)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

@@ -142,7 +142,6 @@ describe("covering symbols on offer photos (#1665)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

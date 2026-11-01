@@ -195,7 +195,6 @@ describe("unknown-variant listing text (#619)", () => {
       price: "12.50",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, itemIds);
     return (await getOfferDetail(userId, offerId))?.description ?? null;
