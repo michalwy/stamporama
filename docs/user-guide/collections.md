@@ -194,10 +194,13 @@ Wherever a stamp is listed — the **Issues** list stamp tree, the **Stamps** li
 pickers — a green badge sits beside its catalog numbers when you hold copies of it, so you can see
 what you already own without opening anything.
 
-The badge itself is one number — *“2 copies”* — followed by a **dot for each disposition present**,
-in the same vocabulary the copy rows use: green *in collection*, blue *for sale*, violet *for
-trade*. The dots say only *that* a disposition is there, never how many copies carry it. Copies with
-no disposition at all get no dot.
+The badge itself is one number — *“2 copies”* — followed by **three dots, always in the same
+places**: *in collection*, *for sale*, *for trade*, each in the colour the copy rows use for it —
+green, blue, violet. A **filled** dot means some copy carries that disposition; a faint **empty
+circle** means none does. So the position tells you which disposition a dot stands for, and
+*filled, empty, filled* reads as in collection and for trade, not for sale. The dots say only *that*
+a disposition is there, never how many copies carry it. Copies with no disposition fill no dot, so a
+badge whose copies carry none shows three empty circles.
 
 **Rest the pointer on the badge for the breakdown.** A small panel opens listing each disposition
 with its figure, and the variants' share of it in a column of its own. Under each disposition it
