@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ItemListItem } from "@/lib/items";
+import type { ItemIssueRef, ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
@@ -75,6 +75,9 @@ export interface CopyRowActions {
   /** When provided, each row gains a "View offers" action opening the read-only popup of every
    * offer that references the copy (#276). */
   onViewOffers?: (item: ItemListItem) => void;
+  /** When provided, each row gains *Show this issue's copies* (#2308), once per issue it carries —
+   * the Copies list's own, which narrows itself to that issue. */
+  onShowIssueCopies?: (issue: ItemIssueRef) => void;
   /** When provided, a row whose copy came from a purchase order gains a "Go to purchase"
    * link (#387/#557) — the address, so the entry is a real anchor. */
   purchaseHref?: (item: ItemListItem) => string | null;
@@ -276,6 +279,7 @@ export function InventoryCopyList({
   onAddToNewOffer,
   quickOffer,
   onViewOffers,
+  onShowIssueCopies,
   purchaseHref,
   onDispose,
   onRestore,
@@ -322,6 +326,7 @@ export function InventoryCopyList({
             onAddToNewOffer={onAddToNewOffer}
             quickOffer={quickOffer}
             onViewOffers={onViewOffers}
+            onShowIssueCopies={onShowIssueCopies}
             purchaseHref={purchaseHref}
             onDispose={onDispose}
             onRestore={onRestore}

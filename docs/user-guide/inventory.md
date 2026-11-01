@@ -109,7 +109,7 @@ that is filtering the list.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, subtype, certificate,
-location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box, though not the fields beside the box that it
+location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box and the issue filter, though not the fields beside the box that it
 searches. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It is only there to click while something is actually
 filtering, but its place on the row is held either way, so the first filter you switch on does not
@@ -174,6 +174,18 @@ right, from *which copies* to *how they are shown*.
   collection, and **Reset filters** leaves it as it is: it is how the box reads what you type, not a
   filter on the copies. Other ways into the same search — the copy pickers and quick-jump — keep
   searching every field.
+- **Issue** — a copy's row has **Show this issue's copies** (the issue icon beside the offer
+  icons, and in its **⋮** menu) to list every copy of the same issue — the way to gather the rest
+  of a set once a search has found one of its stamps. The search is cleared and the issue takes its
+  place; every other filter keeps narrowing, so with *For sale* and a condition ticked the list
+  shows the copies of that issue that can go into the offer. Copies already ticked stay ticked, so
+  the one you started from can be joined by its siblings in a single selection, and the list keeps
+  its sort and grouping. The issue shows as a chip above the list, with its name and year;
+  **×** on the chip or **Reset filters** removes it. A stamp filed in more than one issue, and a
+  piece carrying several stamps, offers the action once per issue — the menu names each one. While
+  the issue filter is set it wins over the **area** and **year** panels, which are left as they
+  were. It is kept in the page address, so the list survives a reload and can be linked, but like
+  the search it is not remembered once removed.
 - **Not offered on…** — pick a [platform](offers.md) to show only copies **marked for sale**
   that have **no offer** on it yet — your worklist of what still needs listing there. A copy
   already listed on a *different* platform still shows up, since the same copy can be offered on

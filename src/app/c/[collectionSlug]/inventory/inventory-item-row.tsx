@@ -10,7 +10,9 @@ import {
   moneySecondaryText,
   type MoneyLike,
 } from "@/app/stamp-display";
-import type { CandidateStamp, CarriedStamp, ItemListItem } from "@/lib/items";
+import type { CandidateStamp, CarriedStamp, ItemIssueRef, ItemListItem } from "@/lib/items";
+import { copyIssues } from "@/lib/copy-issue-filter";
+import { issueGroupLabel } from "@/lib/issue-groups";
 import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import {
@@ -578,6 +580,9 @@ interface InventoryItemRowProps {
    * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
    * question as a live one's, and the row carries no offer count to hide it by. */
   onViewOffers?: (item: ItemListItem) => void;
+  /** When provided, adds *Show this issue's copies* (#2308) — one entry per issue the copy carries,
+   * also on the row as an icon — narrowing the Copies list to that issue in place of its search. */
+  onShowIssueCopies?: (issue: ItemIssueRef) => void;
   /** When provided, adds the disposal entry (#395): *No longer held* on a copy still in hand, and
    * *Mark as held again* on one already disposed of. The two are one prop because they are one
    * axis — the row is always in exactly one of the two states. */
@@ -625,6 +630,7 @@ export function InventoryItemRow({
   onAddToNewOffer,
   quickOffer,
   onViewOffers,
+  onShowIssueCopies,
   purchaseHref,
   onDispose,
   onRestore,
@@ -710,7 +716,20 @@ export function InventoryItemRow({
       : { kind: "stamp", stampId: item.stampId }
   );
 
+  // The rest of this copy's set (#2308): one entry per issue the copy carries — a stamp filed in two
+  // issues, or a cover of several stamps, is a copy of each, and choosing one silently would hide
+  // the others. The issue is named in the hint only when there is more than one to tell apart.
+  const rowIssues = onShowIssueCopies ? copyIssues(item) : [];
+  const issueCopiesActions: RowAction[] = rowIssues.map((issue) => ({
+    key: `issue-copies:${issue.id}`,
+    label: "Show this issue's copies",
+    icon: "issues",
+    hint: rowIssues.length > 1 ? issueGroupLabel(issue.id, issue.name, issue.year) : undefined,
+    onSelect: () => onShowIssueCopies?.(issue),
+  }));
+
   const menuActions: RowAction[] = [
+    ...issueCopiesActions,
     ...(item.variantToSettle
       ? [{ key: "identify", label: "Identify variant", icon: "variant", onSelect: () => onIdentify?.(item) } as RowAction]
       : []),
@@ -870,6 +889,8 @@ export function InventoryItemRow({
           "edit-stamp",
           "add-to-offer",
           "add-to-new-offer",
+          // Beside the offer verbs (#2308): the step before them, gathering the rest of the set.
+          ...issueCopiesActions.map((a) => a.key),
         ])}
         visible={hovered}
       />
