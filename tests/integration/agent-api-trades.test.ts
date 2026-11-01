@@ -380,7 +380,23 @@ describe("the want, checklist and trade operations (#712)", () => {
       //     the collector's own item-ID box writes (#741). It sends nothing, claims nothing about a
       //     list, and clears no report — `markColnectApplied` stays forbidden by the import guard.
       //   - `set_stamp_colnect_ids` (#2173) is the same write for many stamps, on the same reasons.
-      const exempt = new Set(["set_stamp_colnect_id", "set_stamp_colnect_ids"]);
+      //   - The proposal operations (#2303) are about a **Proposal** (ADR-0075) — an offer the collector
+      //     prepares for one contact — and not a trade proposal to a partner, which `proposal` is
+      //     here for. None of them reaches the buyer: marking one sent, declining it and its link stay
+      //     in the app, and the import guard holds `moveProposal` and the link's writers out.
+      const exempt = new Set([
+        "set_stamp_colnect_id",
+        "set_stamp_colnect_ids",
+        "list_proposals",
+        "get_proposal",
+        "create_proposal",
+        "add_proposal_lots",
+        "make_proposal_lots",
+        "set_proposal_lot_price",
+        "remove_proposal_lot",
+        "get_proposal_sale_options",
+        "convert_proposal_to_sale",
+      ]);
       const offenders = OPERATIONS.filter((operation) => {
         if (exempt.has(operation.name)) return false;
         const words = operation.name.split("_");
@@ -443,7 +459,11 @@ describe("the want, checklist and trade operations (#712)", () => {
       assert.equal(draft.status, "preparing");
       // The other half of *absence, not a flag*: there is no status parameter on `create_trade` and
       // no operation that takes one.
-      const paths = OPERATIONS.map((operation) => `${operation.method} ${operation.path}`);
+      // `/proposals` is a Proposal's (#2303, ADR-0075) — an offer prepared for one contact, not a
+      // trade proposal — and has its own boundary: no send, no decline, no link.
+      const paths = OPERATIONS.filter((operation) => !operation.path.startsWith("/proposals")).map(
+        (operation) => `${operation.method} ${operation.path}`
+      );
       assert.ok(
         !paths.some((path) => /status|share|proposal|feedback|fulfil|close/.test(path)),
         paths.join(", ")

@@ -1243,3 +1243,76 @@ describe("the agent API's operation modules (#2198)", () => {
     }
   });
 });
+
+/**
+ * **A proposal is the agent's to put together and to sell, not to hand over** (#2303, ADR-0075). The
+ * writes it may make are the proposal screen's own — start one, add or make lots, take one out — and
+ * *Convert to sale…* in its API form, which marks the sale *to review* (#1948) in its transaction.
+ * Marking a proposal sent, declining it, the buyer's link, and the screen's unmarked conversion stay
+ * in the app: each writer of `proposals.ts` and `proposal-handout.ts` is read off its exports by verb,
+ * so one added later has to be placed. A lot's price is `patchOffer`, the offers' own write.
+ */
+const PROPOSAL_API_WRITES = [
+  "createProposal",
+  "addProposalLots",
+  "makeProposalLots",
+  "removeProposalLot",
+  "convertProposalToSaleThroughApi",
+];
+
+describe("the agent API's operation modules (#2303)", () => {
+  const proposalModule = path.join(AGENT_API, "operations/proposals.ts");
+  const domain = readFileSync(path.join(ROOT, "src/lib/proposals.ts"), "utf8");
+  const handout = readFileSync(path.join(ROOT, "src/lib/proposal-handout.ts"), "utf8");
+  const writerPattern =
+    /export async function ((?:create|update|set|delete|remove|add|make|move|mark|convert|write|revoke)[A-Za-z]*)\(/g;
+  const proposalWriters = [...domain.matchAll(writerPattern), ...handout.matchAll(writerPattern)].map((match) => match[1]);
+
+  it("reach the proposal writes from their own module and nowhere else", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      if (file === proposalModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (PROPOSAL_API_WRITES.includes(name)) misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(misplaced, [], `The proposal writes belong to operations/proposals.ts (#2303).\n  ${misplaced.join("\n  ")}`);
+    const names = importedBindings(proposalModule).map((binding) => binding.name);
+    for (const name of PROPOSAL_API_WRITES) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/proposals.ts`);
+    }
+  });
+
+  it("sell a proposal only with the to-review marker", () => {
+    const body = exportedFunctionBody(domain, "convertProposalToSaleThroughApi");
+    assert.equal(
+      [...body.matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      1,
+      "`convertProposalToSaleThroughApi` writes a sale without the to-review marker (#1948)"
+    );
+  });
+
+  it("reach no other writer of a proposal — no send, no decline, no link, no unmarked sale", () => {
+    for (const closed of ["moveProposal", "markProposalHandedOut", "convertProposalToSale", "createProposalShareToken", "revokeProposalShareToken"]) {
+      assert.ok(proposalWriters.includes(closed), `the walk did not find \`${closed}\` among the proposal writers`);
+    }
+    const closed = new Set(proposalWriters.filter((name) => !PROPOSAL_API_WRITES.includes(name)));
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (closed.has(name)) breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `Sending, declining and the buyer's link stay in the app (#2303).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("names only real exports", () => {
+    for (const name of PROPOSAL_API_WRITES) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of proposals.ts any more`);
+    }
+  });
+});

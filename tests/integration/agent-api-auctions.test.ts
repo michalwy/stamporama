@@ -394,9 +394,13 @@ describe("auction reads (#1036)", () => {
     // the collector's own sales, which the agent is allowed to write; `sale` alone cannot tell that
     // sale from an auction house's, so a name about attachments is judged by its other words —
     // `add_auction_sale_attachments` would still be caught.
+    //
+    // **Nor is a proposal's lot** (#2303). A proposal's lots are Direct offers put together for one
+    // buyer (ADR-0075), which the agent is allowed to add, price and take out — judged, like a
+    // purchase's, by the other words.
     const writeShaped = (name: string) => {
       const words = name.split("_");
-      const auctionWords = words.includes("purchase")
+      const auctionWords = words.includes("purchase") || words.includes("proposal")
         ? words.filter((word) => word !== "lot" && word !== "lots")
         : words.includes("attachments")
           ? words.filter((word) => word !== "sale" && word !== "sales")
@@ -462,6 +466,9 @@ describe("auction reads (#1036)", () => {
       // A purchase's lot is not the watchlist's, and a purchase name about an auction still is.
       for (const name of ["add_purchase_lot", "update_purchase_lot", "remove_purchase_lot"]) {
         assert.ok(!writeShaped(name), `${name} writes a purchase, not the watchlist`);
+      }
+      for (const name of ["add_proposal_lots", "set_proposal_lot_price", "remove_proposal_lot"]) {
+        assert.ok(!writeShaped(name), `${name} writes a proposal, not the watchlist`);
       }
       assert.ok(writeShaped("add_purchase_auction_lot"), "a purchase name about an auction must be caught");
     });
