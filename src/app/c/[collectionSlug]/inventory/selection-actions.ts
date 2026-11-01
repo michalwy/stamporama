@@ -1,5 +1,6 @@
 import type { IconName } from "@/app/icons";
 import type { RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import type { NewOfferPackaging } from "@/lib/new-offer-price";
 
 /**
  * One thing the Copies list's selection can be told to do (#991) — **the one list both of its
@@ -44,7 +45,7 @@ export interface SelectionAction {
   onSelect: () => void;
 }
 
-export type NewOfferPackaging = "one-set" | "per-copy";
+export type { NewOfferPackaging };
 
 export interface SelectionActionInput {
   /** The ticked copies in view (#1021) — what the non-listing actions act on. */

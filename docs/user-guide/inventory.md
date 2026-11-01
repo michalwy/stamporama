@@ -1167,7 +1167,8 @@ offer header form (platform, currency). When the copy has a [catalog value](#cop
 the **asking price** is pre-filled with its **Estimated value** — that catalog value corrected by how
 far the catalogue runs above what stamps fetch (see [the price table](offers.md#the-price-table)) —
 converted into the offer's currency and fully editable, so you can accept, adjust, or clear it. (A
-copy with no catalog value leaves the price blank, and so do several copies whose estimates differ.)
+copy with no catalog value leaves the price blank. Several copies are priced as the set they make —
+see [What is going into the new offer](#what-is-going-into-the-new-offer).)
 Creating the offer seeds it with this copy as a single-item set and returns you to the Inventory
 list. Add more copies later from the offer's compose screen — see [Offers](offers.md).
 
@@ -1377,8 +1378,17 @@ without closing the dialog.
   or variant — whatever their conditions — are tinted amber and marked *same stamp ×2*, and a warning
   at the top says how many stamps are doubled from the moment the form opens. Packaged **one set
   each**, no set holds anything twice, so there is nothing to warn about.
+- **The asking price** is suggested for **one set**, since an offer's price is what a buyer pays
+  for the set they take. Going in as **one set**, the copies are suggested at the **sum** of their
+  Estimated values, whatever the stamps — a three-value series at the three added together. Going in
+  **one set each**, they are suggested at **one piece's** Estimated value, when every copy has the
+  same one; copies whose estimates differ get no suggestion. A copy with **no Estimated value** leaves
+  the price blank either way, and the line under the price says how many copies have none, so a sum
+  never looks complete while it is not. On a [Facebook group](facebook.md) that opens at a share of
+  the catalogue value, that share is taken of the catalogue value on the same rule. Whatever you type
+  stays.
 - **Take a copy out** with the **−** on its row (or **Remove from this offer** in its **⋮** menu). The
-  summary and the warning follow at once. Only the offer being made loses it: the copy stays ticked on
+  summary, the warning and the suggested price follow at once. Only the offer being made loses it: the copy stays ticked on
   the Copies list. The last copy cannot be removed — cancel instead.
 
 The form's **Title** field starts with the title the platform's template gives these copies, and
