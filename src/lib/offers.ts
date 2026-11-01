@@ -7761,6 +7761,27 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
 }
 
 /**
+ * Withdraw the open offers among `offerIds` inside the caller's transaction (#2289) — the write
+ * {@link transitionOffer} makes for `→ withdrawn`, which every open state may take and which asks
+ * nothing and runs no hook. For a proposal converted into a sale, whose lots not taken must be
+ * withdrawn in the sale's own transaction. An offer no longer open is left as it is.
+ */
+export async function withdrawOpenOffersTx(tx: DbTransaction, offerIds: readonly string[]): Promise<void> {
+  if (offerIds.length === 0) return;
+  const now = new Date();
+  await tx.offer.updateMany({
+    where: { id: { in: [...offerIds] }, state: { in: [...OPEN_OFFER_STATES] } },
+    data: {
+      state: "withdrawn",
+      stateChangedAt: now,
+      closedAt: now,
+      readyAfterPhotosAt: null,
+      readyAfterPhotosRefusal: null,
+    },
+  });
+}
+
+/**
  * Take a Facebook offer that is up back to Ready (#1998): `active | paused → ready`, a move no manual
  * transition offers, since on every other platform a listing that went up stays a listing. On Facebook
  * the collector posts by hand, so a Publish can be a mistake, and a post can vanish from the group —

@@ -1076,15 +1076,27 @@ function assertSaleTakesLines(
  * the sale's platform, in the sale's currency and still sellable; the set is the offer's; the copies
  * are exactly the set's; none has left already. Returns the offers the drafts touch. Reads only, so
  * a sale not yet inserted can be checked against the platform and currency it will have.
+ *
+ * `proposalLots` is the one exception to *a sale is on one platform* (#2289, ADR-0075 §6): a
+ * proposal's accepted lots — Direct offers, every one a lot of a proposal — may join a sale on any
+ * platform, and are sold from any open state, since a proposal's lots are never put up anywhere.
  */
 async function checkSaleLineDrafts(
   ref: Pick<SaleRef, "collectionId" | "platformId" | "currency">,
-  drafts: readonly SaleLineDraft[]
+  drafts: readonly SaleLineDraft[],
+  opts: { proposalLots?: boolean } = {}
 ): Promise<string[]> {
   const offerIds = [...new Set(drafts.map((d) => d.offerId))];
   const offers = await prisma.offer.findMany({
     where: { id: { in: offerIds }, collectionId: ref.collectionId },
-    select: { id: true, platformId: true, currency: true, state: true, sets: { select: { id: true } } },
+    select: {
+      id: true,
+      platformId: true,
+      currency: true,
+      state: true,
+      proposalId: true,
+      sets: { select: { id: true } },
+    },
   });
   const offerById = new Map(offers.map((o) => [o.id, o]));
 
@@ -1093,7 +1105,10 @@ async function checkSaleLineDrafts(
     if (!offer) {
       throw new SaleActionBlockedError("bad-offer", "One of the offers is no longer available.");
     }
-    if (offer.platformId !== ref.platformId) {
+    if (opts.proposalLots && offer.proposalId === null) {
+      throw new SaleActionBlockedError("bad-offer", "Only a proposal's lots join a sale this way.");
+    }
+    if (!opts.proposalLots && offer.platformId !== ref.platformId) {
       throw new SaleActionBlockedError("bad-offer", "That offer is on a different platform than this sale.");
     }
     // A sale is single-currency (#196/#197): every offer it pulls in must match the sale's currency.
@@ -1106,7 +1121,7 @@ async function checkSaleLineDrafts(
       );
     }
     const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
-    if (!isSellableOfferState(state)) {
+    if (opts.proposalLots ? state === "sold" || state === "withdrawn" : !isSellableOfferState(state)) {
       throw new SaleActionBlockedError("bad-offer", "One of the offers is already sold or withdrawn.");
     }
 
@@ -1277,13 +1292,13 @@ async function insertSaleWithLines(
   collectionId: string,
   header: SaleHeaderInput,
   drafts: SaleLineDraft[],
-  opts: { offerCurrency?: string },
+  opts: { offerCurrency?: string; proposalLots?: boolean },
   alsoInTransaction?: (tx: DbTransaction, saleId: string) => Promise<unknown>
 ): Promise<string> {
   const prepared = await prepareSaleHeader(ownerId, collectionId, header, opts);
   const ref = { collectionId, platformId: header.platformId, currency: prepared.currency };
   assertSaleTakesLines({ status: "ordered" }, drafts, {});
-  const offerIds = await checkSaleLineDrafts(ref, drafts);
+  const offerIds = await checkSaleLineDrafts(ref, drafts, { proposalLots: opts.proposalLots });
   return refusingDoubleSale(() =>
     prisma.$transaction(async (tx) => {
       const id = await insertSaleHeader(tx, collectionId, prepared);
@@ -1292,6 +1307,47 @@ async function insertSaleWithLines(
       return id;
     })
   );
+}
+
+/** Where a proposal's accepted lots are sold (#2289): an open sale already there, or a new one. */
+export type ProposalSaleTarget = { saleId: string } | { header: SaleHeaderInput; offerCurrency: string };
+
+/**
+ * Sell a proposal's accepted lots (#2289) — into a sale already there, on **any** platform, or a new
+ * one — by every guard a sold set passes but the platform's (`checkSaleLineDrafts`' `proposalLots`),
+ * **in one transaction** with what the proposal does about it (`alsoInTransaction`: the rest of its
+ * lots withdrawn, the proposal closed). A new sale whose sets are refused is never left behind empty,
+ * and a proposal is never closed over lots that did not sell. A sale already *Sent* is refused.
+ */
+export async function recordProposalSaleLines(
+  ownerId: string,
+  collectionId: string,
+  target: ProposalSaleTarget,
+  drafts: SaleLineDraft[],
+  alsoInTransaction: (tx: DbTransaction, saleId: string) => Promise<unknown>
+): Promise<{ saleId: string; created: boolean }> {
+  if ("saleId" in target) {
+    const ref = await assertSaleOwner(ownerId, target.saleId);
+    if (ref.collectionId !== collectionId) throw new Error("Sale not found or access denied.");
+    assertSaleTakesLines(ref, drafts, {});
+    const offerIds = await checkSaleLineDrafts(ref, drafts, { proposalLots: true });
+    await refusingDoubleSale(() =>
+      prisma.$transaction(async (tx) => {
+        await writeSaleLines(tx, target.saleId, drafts, offerIds);
+        await alsoInTransaction(tx, target.saleId);
+      })
+    );
+    return { saleId: target.saleId, created: false };
+  }
+  const saleId = await insertSaleWithLines(
+    ownerId,
+    collectionId,
+    target.header,
+    drafts,
+    { offerCurrency: target.offerCurrency, proposalLots: true },
+    alsoInTransaction
+  );
+  return { saleId, created: true };
 }
 
 // ── Copies on no offer (#2021) ───────────────────────────────────────────────
@@ -2347,6 +2403,8 @@ export interface SaleDetail {
   platformName: string;
   buyerId: string | null;
   buyerName: string | null;
+  /** The proposals whose accepted lots came into this sale (#2289), by number — usually none. */
+  proposals: { proposalId: string; proposalNo: number }[];
   externalRef: string | null;
   /** Link to the transaction on the marketplace (#292), or null. Editable in place in any status. */
   transactionUrl: string | null;
@@ -2528,6 +2586,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       apiReviewCreated: true,
       apiReviewActions: true,
       createdAt: true,
+      proposals: { orderBy: { proposalNo: "asc" }, select: { id: true, proposalNo: true } },
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: { select: { name: true } },
       buyer: { select: { name: true } },
@@ -2679,6 +2738,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     platformName: sale.platform.name,
     buyerId: sale.buyerId,
     buyerName: sale.buyer?.name ?? null,
+    proposals: sale.proposals.map((p) => ({ proposalId: p.id, proposalNo: p.proposalNo })),
     externalRef: sale.externalRef,
     transactionUrl: sale.transactionUrl,
     baseCurrency,
@@ -3049,6 +3109,8 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
       where: { saleId: otherSaleId },
       data: { saleId: remainingSaleId },
     });
+    // A proposal sold into the other sale (#2289) names the sale its lots are now in.
+    await tx.proposal.updateMany({ where: { saleId: otherSaleId }, data: { saleId: remainingSaleId } });
     // The conversation about the other sale moves with it where it was with the remaining sale's
     // buyer; with another buyer it stays theirs and drops the sale as the delete below drops it (#2149).
     if (remainingRow.buyerId !== null) {

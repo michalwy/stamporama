@@ -4,7 +4,7 @@
 
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
-sent) and #2289 (a proposal becomes a sale) build on it.
+sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it.
 
 ## Context
 
@@ -69,12 +69,26 @@ no lots and changes no more. Marking it sent needs a lot. The rules are `proposa
 A sale is on one platform, and selling several offers together (#2050) asks them to share it. A
 proposal's buyer usually first bought on Facebook, and the accepted lots belong in that sale. So
 **#2289 allows Direct lots to join a sale on another platform**; nothing else does. This ADR records
-the exception; #2289 builds it.
+the exception; #2289 built it, on 2026-11-01, as written in its issue:
+
+- *Convert to sale…* on the proposal ticks the lots the buyer took, each at its proposal price, which
+  can be changed there, and sells **every set each still has** at that price — an offer's own *Sell*
+  writes the same lines. Ticking nothing is not a conversion.
+- They go into **a new sale on Direct** for the proposal's contact, dated today, or one of **the
+  contact's sales not yet sent, on any platform**, which keeps its platform, buyer, currency and fees.
+  A sale in another currency is refused, not converted.
+- A lot is sold from **any open state**: a proposal's lots are never put up anywhere, so *Preparing*
+  is as sellable as *Active*.
+- The lots not ticked are withdrawn and the proposal closes as *Sold*, in the sale's own transaction.
+  The proposal names its sale (`Proposal.saleId`, `SetNull`) and the sale lists the proposals that came
+  into it.
+
+The exception lives in one guard, `checkSaleLineDrafts`' `proposalLots`, which only the conversion
+passes and which still refuses an offer that is not a lot of a proposal.
 
 ### 7. Out of scope
 
-The agent API (no operation reads or writes a proposal), what the buyer is sent (#2288) and the sale
-(#2289).
+The agent API (no operation reads or writes a proposal), and what the buyer is sent (#2288).
 
 ## Consequences
 

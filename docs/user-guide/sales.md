@@ -843,6 +843,15 @@ When it [moves sold sets](#moving-sold-sets-to-another-sale) between two sales, 
 - **Nothing else changes.** A marked sale counts in your figures, retires its copies and moves
   through its statuses exactly like any other.
 
+## Sales from a proposal
+
+A [proposal](offers.md#proposals) — lots prepared for one buyer on the Direct platform — becomes a
+sale through **Convert to sale…** on its own screen ([Selling it](offers.md#selling-it)). Its lots go
+into a new Direct sale, or into one of the buyer's open sales on **any** platform: a Facebook sale
+with Direct lots added stays a Facebook sale, with its buyer, currency and fees, and is packed, sent
+and closed exactly as before. A sale that took a proposal's lots says **from proposal #N** in its
+header, a link to the proposal; merging it into another sale carries that link along.
+
 ## Merging two sales
 
 Sometimes two sales have to become one — two were recorded by mistake for the same buyer, or one

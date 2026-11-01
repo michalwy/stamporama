@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { PrepareOffer } from "@/lib/offers";
-import type { ProposalListItem, ProposalLotCandidate, ProposalScreen } from "@/lib/proposals";
+import type { ProposalListItem, ProposalLotCandidate, ProposalSaleOptions, ProposalScreen } from "@/lib/proposals";
 import type { ProposalStatus } from "@/lib/proposal-rules";
 
 // Proposals (#2287). Every key is under the offers key, `["offers", collectionId, …]`, so a write to
@@ -18,6 +18,8 @@ export const proposalKeys = {
     ["offers", collectionId, "proposals", "prepare", proposalId] as const,
   candidates: (collectionId: string, proposalId: string) =>
     ["offers", collectionId, "proposals", "candidates", proposalId] as const,
+  saleOptions: (collectionId: string, proposalId: string) =>
+    ["offers", collectionId, "proposals", "sale-options", proposalId] as const,
 };
 
 /** Every proposal, newest first and a page at a time. */
@@ -81,6 +83,18 @@ export function useProposalLotCandidates(collectionId: string, proposalId: strin
       const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/candidates`);
       if (!res.ok) throw new Error("Failed to fetch the offers");
       return (await res.json()).items;
+    },
+  });
+}
+
+/** What *Convert to sale…* offers (#2289): the open lots and the contact's open sales. */
+export function useProposalSaleOptions(collectionId: string, proposalId: string) {
+  return useQuery<ProposalSaleOptions>({
+    queryKey: proposalKeys.saleOptions(collectionId, proposalId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/sale-options`);
+      if (!res.ok) throw new Error("Failed to fetch the lots");
+      return res.json();
     },
   });
 }

@@ -10,6 +10,10 @@ import {
   proposalStatusAfter,
   proposalStatusOf,
   proposalTotal,
+  proposalConversionRefusal,
+  proposalLotCurrency,
+  proposalSaleLotRefusal,
+  proposalSaleTargetRefusal,
   type ProposalTotalLot,
 } from "../../src/lib/proposal-rules";
 
@@ -98,5 +102,45 @@ describe("a proposal's address (#2287)", () => {
   it("reads a positive whole number and nothing else", () => {
     assert.equal(parseProposalNo("4"), 4);
     for (const raw of ["0", "-1", "4a", "", "1.5"]) assert.equal(parseProposalNo(raw), undefined);
+  });
+});
+
+describe("a proposal becoming a sale (#2289)", () => {
+  it("is refused once closed, and when nothing is ticked", () => {
+    assert.equal(proposalConversionRefusal("preparing", 1), null);
+    assert.equal(proposalConversionRefusal("sent", 2), null);
+    assert.match(proposalConversionRefusal("sent", 0)!, /decline the proposal instead/);
+    assert.match(proposalConversionRefusal("sold", 1)!, /sold — it does not change/);
+    assert.match(proposalConversionRefusal("declined", 1)!, /declined — it does not change/);
+  });
+
+  it("sells a lot of this proposal that is open and has a set left, from any open state", () => {
+    const lot = { offerNo: 7, state: "preparing" as const, inProposal: true, hasSetToSell: true };
+    assert.equal(proposalSaleLotRefusal(lot), null);
+    assert.equal(proposalSaleLotRefusal({ ...lot, state: "ready" }), null);
+    assert.match(proposalSaleLotRefusal({ ...lot, inProposal: false })!, /Offer #7 is not a lot of this proposal/);
+    assert.match(proposalSaleLotRefusal({ ...lot, state: "withdrawn" })!, /Offer #7 is withdrawn/);
+    assert.match(proposalSaleLotRefusal({ ...lot, state: "sold" })!, /Offer #7 is sold/);
+    assert.match(proposalSaleLotRefusal({ ...lot, hasSetToSell: false })!, /nothing left to sell/);
+  });
+
+  it("joins the contact's sale not yet sent, in the lots' currency, on any platform", () => {
+    const sale = { saleNo: 12, buyerId: "c1", sent: false, currency: "PLN" };
+    assert.equal(proposalSaleTargetRefusal(sale, "c1", "PLN"), null);
+    assert.match(proposalSaleTargetRefusal({ ...sale, buyerId: "c2" }, "c1", "PLN")!, /Sale #12 is not this contact's/);
+    assert.match(proposalSaleTargetRefusal({ ...sale, buyerId: null }, "c1", "PLN")!, /not this contact's/);
+    assert.match(proposalSaleTargetRefusal({ ...sale, sent: true }, "c1", "PLN")!, /already been sent/);
+    assert.match(
+      proposalSaleTargetRefusal({ ...sale, currency: "EUR" }, "c1", "PLN")!,
+      /Sale #12 is in EUR, but the lots are in PLN/
+    );
+  });
+
+  it("takes the one currency the ticked lots share, and refuses a mix", () => {
+    assert.deepEqual(proposalLotCurrency(["PLN", "PLN"]), { ok: true, currency: "PLN" });
+    const mixed = proposalLotCurrency(["PLN", "EUR", "PLN"]);
+    assert.equal(mixed.ok, false);
+    assert.match(!mixed.ok ? mixed.message : "", /PLN and EUR/);
+    assert.equal(proposalLotCurrency([]).ok, false);
   });
 });
