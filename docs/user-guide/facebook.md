@@ -749,8 +749,11 @@ added up, or **Starting prices** for a post of auctions (an auction counts by it
 A price counts as soon as it is typed, before **Enter**, and **Esc** takes it back out. A lot with no
 price yet is left out of the price total, and a lot without a figure — no market value, no cost — out
 of that figure's total; either says **over N of M lots** rather than counting the missing figure as 0.
-What the prices make against a figure is worked out over the lots that have both. The bar is gone once
-the post is up.
+What the prices make against a figure is worked out over the lots that have both. Copies from an
+opening balance count at their opening value, and **Cost** then reads **Cost (incl. opening value)** —
+or **(estimate)** while a purchase lot is open; copies still without a cost are counted under it by why:
+*with no cost recorded*, *on open purchases with no estimate*, *on the opening balance with no value*.
+The bar is gone once the post is up.
 
 **The lots' summary** sits at the top of the lots whatever the post's state — before it goes up and
 after. Its first line is the lots' **price total** (in the collection's base currency), with how many
@@ -758,7 +761,10 @@ lots, sets and copies the post holds and how many lots have no price yet. **More
 **catalogue value**, **estimated value**, **market value** and **purchase cost**, each with what the
 prices make against it, signed and coloured as on a lot's row — against the purchase cost that is the
 post's **profit** or **loss**. The figures are the lots' own price tables added up; a lot without a
-figure is left out of that figure and the line says **over N of M lots**. Withdrawn lots are left out.
+figure is left out of that figure and the line says **over N of M lots**. The purchase cost counts
+copies from an opening balance at their opening value and then says **incl. opening value**, and the
+copies still without a cost are counted by why, as on the total at the bottom. Withdrawn lots are left
+out.
 Once lots have sold, a **Sold** line says what their sales brought in and the profit on them. Whether
 **More** is open is remembered, as on the Offers list. The summary follows saved prices; the total
 pinned at the bottom follows them as you type.

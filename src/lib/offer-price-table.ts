@@ -28,7 +28,8 @@
 // **#1843 shrank the notes further**: only Estimated (its share of the catalogue) and Cost (*estimate*,
 // while it is one) keep one. The catalogue a value was read in and Market's *no recorded results*
 // moved to their rows' tooltips. Minimum joined the rows that are always drawn — `—` on a platform
-// that sets none — and Cost became a price that can be clicked like the others.
+// that sets none — and Cost became a price that can be clicked like the others. #2333 drew Cost always,
+// `—` with why when it is missing, and marked it *incl. opening value* when an opening value is under it.
 
 import { offerCostTotals, type OfferSetCost } from "./offer-cost";
 import { isStatedRatio, type RatioBucketLevel } from "./realization-ratio";
@@ -210,8 +211,8 @@ export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" 
 export interface OfferPriceRow {
   key: OfferPriceRowKey;
   /** 2-dp string in the offer's currency; null only on the rows that are always drawn — Minimum on a
-   *  platform that sets none, Market with nothing recorded, and the offer's own price while it has
-   *  none. */
+   *  platform that sets none, Market with nothing recorded, Cost while no copy's is known, and the
+   *  offer's own price while it has none. */
   amount: string | null;
   /** Over the cost row; null on the cost row itself and wherever the cost is unknown. */
   margin: PriceMargin | null;
@@ -231,14 +232,15 @@ export interface OfferPriceFigures {
 
 const ROW_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
 
-/** The rows drawn whether or not they have a figure: Minimum (#1843) and Market (#1839), whose absence
- *  is itself worth saying, and the offer's own price, which is where it is set. */
-const ALWAYS_DRAWN: ReadonlySet<OfferPriceRowKey> = new Set(["minimum", "market", "own"]);
+/** The rows drawn whether or not they have a figure: Minimum (#1843), Market (#1839) and Cost (#2333),
+ *  whose absence is itself worth saying — a missing cost says why — and the offer's own price, which is
+ *  where it is set. */
+const ALWAYS_DRAWN: ReadonlySet<OfferPriceRowKey> = new Set(["minimum", "market", "cost", "own"]);
 
 /**
  * The table's rows, in the order the collector named them, the offer's own price last. A figure that
  * does not exist is left out, never drawn as `0.00` (#1184) — and a price of zero is no price, so the
- * prices drop out at zero too — except Minimum, Market and the offer's own price, which are drawn
+ * prices drop out at zero too — except Minimum, Market, Cost and the offer's own price, which are drawn
  * empty.
  * **A cost of zero is kept**: copies that cost nothing are a known cost, and every margin then reads
  * as the whole price.
@@ -251,7 +253,7 @@ export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
     const amount = figures[key];
     const value = amount === null ? NaN : Number(amount);
     if (key === "cost") {
-      if (known) rows.push({ key, amount, margin: null });
+      rows.push({ key, amount: known ? amount : null, margin: null });
       continue;
     }
     if (!(Number.isFinite(value) && value > 0)) {

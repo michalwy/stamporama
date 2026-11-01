@@ -99,14 +99,25 @@ rate, not delivered) is left out and named in the hover; with nothing known at a
 `—`. This applies to the offer's cost only: your holdings, the Overview and profit and loss keep
 counting such copies as pending.
 
+**Copies from an opening balance.** A copy brought in on an [opening balance](purchases.md) counts at
+its **opening value** — the same figure a sale's profit or loss counts it at — so a price set against
+it shows a profit or a loss. The cost is then labelled **cost incl. opening value**, because an opening
+value was never money spent, and the hover says how many copies are counted that way. Your holdings,
+money spent and the return on purchases still never count an opening value. A copy on an opening
+balance stated **without** a value has no cost and is left out.
+
+**When a cost is missing, it says why.** The hover counts the copies left out: *with no cost
+recorded* (they came from no purchase, or were dropped from one), *on an open purchase with no
+estimate*, or *on the opening balance with no value*.
+
 In the Sets header band — the strip holding the heading, the grouping and sorting controls, and the
 **Add set** / **Collapse all** buttons — the same two figures are given for the **whole listing**:
 the **total** across every set, and the **per set** average beside it. The total is what leaves the shelf if everything
 sells; the average is what one buyer takes, and is the same figure the **Catalogue** row of the
 [price table](#the-price-table) shows. An average divides only by the sets that actually carry a figure — an unpriced set is a
 gap in your data, not a set worth nothing — and the hover says how many of your sets were counted.
-The listing's cost is the sets' costs added up, estimates included, and is marked the same way when
-any of them is.
+The listing's cost is the sets' costs added up, estimates and opening values included, and is marked
+the same way when any of them is.
 
 ## Creating and composing an offer
 
@@ -249,7 +260,11 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
 - **Market** — what recorded results paid for copies like these; its hover says how many copies they
   cover. The row is **always there**: with nothing recorded it reads *—*, and its hover says there
   are no recorded results (or that none can be converted into the offer's currency).
-- **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open.
+- **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open and
+  **(incl. opening value)** when copies from an opening balance count at their opening value. The row
+  is **always there**: with no cost known it reads *—*, and its note says why — *3 copies with no cost
+  recorded*, *2 on open purchases with no estimate*, *1 on the opening balance with no value*. Where
+  only some copies are missing, the hover names them.
 - **Your price** — the offer's own price, last, with the base-currency equivalent in brackets
   (*≈ 0.22 PLN*) when the offer's currency differs from your collection's. It reads as plain text;
   **click it** to type a new one. On an auction this row is the **Current price** — where the
@@ -257,7 +272,7 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
 
 **Profit over cost** is one figure with its percentage — *−0.02 (−29%)* — green when it is a profit
 and in the warning colour when it is a loss. A figure that does not exist is left out rather than
-shown as 0.00 (Minimum and Market excepted), and so is every profit when the cost is unknown. Cost
+shown as 0.00 (Minimum, Market and Cost excepted), and so is every profit when the cost is unknown. Cost
 has no profit of its own — over itself it is always nothing.
 
 **Click a price to use it.** Minimum, Catalogue, Estimated, Market and Cost are drawn as links, and
@@ -1614,9 +1629,11 @@ value sits the lot's **cost**: what its copies cost you, the two figures a lot's
 between. It is counted exactly as an [offer's cost](#what-a-set-is-worth) is: a
 copy whose purchase lot is still open counts at its **estimated** cost and marks the figure `~`, muted
 and italic, with the hover saying how many copies are estimated and naming any that have no figure
-yet. A copy from an opening balance is left out, as on an offer. Pinning, rejecting or re-rolling
-updates it with the rest of the figures. Each copy in the list shows its own cost the same way, just
-before its catalogue value — the figures the lot's cost adds up: what it cost you, `~` and the
+yet. A copy from an opening balance counts at its opening value, as on an offer, and the figure is
+then labelled **Cost incl. opening value**; with no cost at all, the reason is written under the *—*.
+Pinning, rejecting or re-rolling updates it with the rest of the figures. Each copy in the list shows
+its own cost the same way, just before its catalogue value — the figures the lot's cost adds up: what
+it cost you, its **opening value** (so labelled) when it came from an opening balance, `~` and the
 estimate while its purchase lot is open, or *—* when there is nothing to count, with the hover
 saying why. Above the list comes the
 rest of it, stated rather than left to be noticed: the **sets that were left out** and what refused
@@ -3242,6 +3259,10 @@ value**, **estimated value**, **market value** and **purchase cost**, each with 
 against it, signed and coloured as on a lot's row — against the purchase cost that is the proposal's
 **profit** or **loss**. The figures are the lots' own price tables added up, in the collection's base
 currency; a lot without a figure is left out of that figure and the line says **over N of M lots**.
+Copies from an opening balance count at their opening value, and the purchase cost then says **incl.
+opening value** (an **estimate** is marked the same way); copies still without a cost are counted by
+why — *with no cost recorded*, *on open purchases with no estimate*, *on the opening balance with no
+value*.
 Withdrawn lots are left out. Once lots have sold, a **Sold** line says what their sale brought in and
 the profit on them, beside the asking figures. Whether **More** is open is remembered, as on the Offers
 list.

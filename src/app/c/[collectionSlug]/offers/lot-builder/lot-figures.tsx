@@ -7,7 +7,7 @@ import type { LotAxisReport } from "@/lib/lot-builder-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FIGURE_FRAME, SkeletonBlock } from "./lot-builder-chrome";
 import { faultReducedTotalHint } from "@/lib/fault-reduction";
-import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { costGapsOf, describeCostGaps, offerCostNotes } from "@/lib/offer-cost";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 
 // The lot builder's figures — **one** readout, and one line per question (#760).
@@ -252,22 +252,22 @@ function buildRows(
 /**
  * What the proposed lot's copies cost, beside its catalogue value (#1743) — the two figures a lot's
  * price is set between. Counted as an offer's COST is (#1736): an open lot's copies at their estimate,
- * the figure then marked, and the hover saying how many and naming any with no figure. The lot's side
+ * the figure then marked, and the hover saying how many and naming any with no figure; an opening
+ * balance's copies at their opening value, the label then marked (#2333). The lot's side
  * only: the pool's cost answers nothing a collector prices against.
  */
 function costRow(proposal: LotProposal, currency: string): FigureRow {
   const { cost } = proposal;
+  // A missing cost says why (#2333), under the dash rather than only in the hover.
+  const gaps = cost.amount === null ? describeCostGaps(costGapsOf(cost)) : [];
   return {
     key: "cost",
-    label: `Cost · ${currency}`,
-    hint: [
-      `What the lot's copies cost you — ${cost.knownCount} costed`,
-      ...offerCostEstimateNotes(cost.estimatedCount, cost.unestimated),
-      ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
-    ].join(" — "),
+    label: `${cost.opening ? "Cost incl. opening value" : "Cost"} · ${currency}`,
+    hint: [`What the lot's copies cost you — ${cost.knownCount} costed`, ...offerCostNotes(cost)].join(" — "),
     pool: null,
     lot: cost.amount === null ? "—" : `${cost.estimated ? "~" : ""}${cost.amount}`,
     lotEstimated: cost.estimated && cost.amount !== null,
+    note: gaps.length > 0 ? gaps.join(", ") : undefined,
   };
 }
 

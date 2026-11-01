@@ -27,10 +27,8 @@ function missingCostHint(
   switch (why) {
     case "pending":
       return `${costPendingHint(copy.costEstimateGap)} The ${whole}'s cost names it as a copy with no figure yet.`;
-    case "opening_balance":
-      return `From an opening balance: what it carries is an opening value, not money spent, so it is left out of the ${whole}'s cost — as on an offer.`;
     case "no_opening_value":
-      return "From an opening balance stated without a value — there is no cost to count.";
+      return `From an opening balance stated without a value — it has no cost, and is left out of the ${whole}'s cost.`;
     case "unrecorded":
       return `No cost recorded — it came from no purchase lot, or was dropped from one. Left out of the ${whole}'s cost.`;
   }
@@ -39,8 +37,9 @@ function missingCostHint(
 /**
  * What a copy cost, beside its catalogue value (#1746) — the two figures that decide whether it goes
  * into a lot or an offer. The very figure a summary's *Cost* adds up (`copyCostFigure`, which
- * `copiesCost` sums), so the rows and the total never disagree: the frozen cost basis, the open
- * lot's estimate marked `~` as everywhere (#1696), or *—* with the reason. Drawn through the copy
+ * `copiesCost` sums), so the rows and the total never disagree: the frozen cost basis, an opening
+ * balance's opening value named as one (#2333), the open lot's estimate marked `~` as everywhere
+ * (#1696), or *—* with the reason. Drawn through the copy
  * row's `valueAside` by the Lot builder and by the New offer dialog (#1793).
  */
 export function CopyCostAside({
@@ -61,6 +60,12 @@ export function CopyCostAside({
           "What this copy cost you (base currency), frozen when its purchase lot closed.",
           COST_FIGURE,
         ]
+      : figure.kind === "opening"
+        ? [
+            `${figure.amount} ${baseCurrency}`,
+            `Its opening value (base currency), from an opening balance — counted in the ${whole}'s cost so a price shows its profit or loss, but never money spent.`,
+            COST_FIGURE,
+          ]
       : figure.kind === "estimate"
         ? [
             `~${figure.amount} ${baseCurrency}`,
@@ -75,7 +80,7 @@ export function CopyCostAside({
   return (
     <Tooltip content={hint} align="end">
       <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.3rem" }}>
-        <span style={COST_LABEL}>cost</span>
+        <span style={COST_LABEL}>{figure.kind === "opening" ? "opening value" : "cost"}</span>
         <span style={style}>{text}</span>
       </span>
     </Tooltip>

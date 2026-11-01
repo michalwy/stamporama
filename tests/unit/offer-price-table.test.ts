@@ -204,7 +204,7 @@ describe("the table's rows", () => {
     );
   });
 
-  it("leave out a figure that does not exist, and a price of zero (#1184), but always draw Minimum, Market and the offer's own price", () => {
+  it("leave out a figure that does not exist, and a price of zero (#1184), but always draw Minimum, Market, Cost (#2333) and the offer's own price", () => {
     const rows = offerPriceRows({
       minimum: null,
       catalogue: "0.00",
@@ -219,6 +219,7 @@ describe("the table's rows", () => {
         ["minimum", null],
         ["estimated", "12.00"],
         ["market", null],
+        ["cost", null],
         ["own", null],
       ]
     );
@@ -294,7 +295,10 @@ describe("the price table's figures over an offer's sets", () => {
       estimatedCount: 0,
       unestimated: [],
       noneCount: 0,
+      openingCount: 0,
+      noOpeningValueCount: 0,
       estimated: false,
+      opening: false,
     },
     estimates: over.estimates ?? [copy()],
   });

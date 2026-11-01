@@ -1375,10 +1375,13 @@ without closing the dialog.
 
 - **The summary** above the rows says how many copies there are, their **catalogue value** and their
   **cost** together, in your collection currency. Cost follows the rule an offer's own cost does: a
-  copy whose purchase lot is still open counts at its estimate, and the figure is then marked `~`.
-  Hover a figure to see what it leaves out — copies with no catalogue value, no cost recorded, or no
-  estimate yet.
-- **Each row** shows the copy's cost just before its catalogue value.
+  copy whose purchase lot is still open counts at its estimate, and the figure is then marked `~`; a
+  copy from an opening balance counts at its opening value, and the figure is then labelled **Cost
+  incl. opening value**. Hover a figure to see what it leaves out — copies with no catalogue value, no
+  cost recorded, no estimate yet, or on the opening balance with no value; with no cost at all, the
+  reason is written under the *—*.
+- **Each row** shows the copy's cost just before its catalogue value — its **opening value**, so
+  labelled, for a copy from an opening balance.
 - **Order** the rows *As picked*, by **Catalogue value** or by **Cost** — highest first, so an
   expensive copy that slipped in stands out — or in the series' own order, for checking it for gaps
   and doubles:

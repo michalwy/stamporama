@@ -18,7 +18,7 @@ import {
   type NewOfferCopyGrouping,
   type NewOfferCopyOrder,
 } from "@/lib/new-offer-copies";
-import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { costGapsOf, describeCostGaps, offerCostNotes } from "@/lib/offer-cost";
 import { previewCopyChecklistSlotsAction } from "@/app/actions/offers";
 import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -168,11 +168,9 @@ export function NewOfferCopiesPanel({
       ? [`${catalogue.unpricedCount} cop${catalogue.unpricedCount === 1 ? "y has" : "ies have"} no catalogue value and ${catalogue.unpricedCount === 1 ? "is" : "are"} left out`]
       : []),
   ].join(" — ");
-  const costHint = [
-    `What these copies cost you — ${cost.knownCount} costed`,
-    ...offerCostEstimateNotes(cost.estimatedCount, cost.unestimated),
-    ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
-  ].join(" — ");
+  const costHint = [`What these copies cost you — ${cost.knownCount} costed`, ...offerCostNotes(cost)].join(" — ");
+  // A missing cost says why (#2333), under the dash rather than only in the hover.
+  const costGaps = cost.amount === null ? describeCostGaps(costGapsOf(cost)) : [];
 
   return (
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -220,9 +218,10 @@ export function NewOfferCopiesPanel({
         </Tooltip>
         <Tooltip content={costHint}>
           <SummaryFigure
-            label={`Cost · ${baseCurrency}`}
+            label={`${cost.opening ? "Cost incl. opening value" : "Cost"} · ${baseCurrency}`}
             value={cost.amount === null ? "—" : `${cost.estimated ? "~" : ""}${cost.amount}`}
             estimated={cost.estimated && cost.amount !== null}
+            note={costGaps.length > 0 ? costGaps.join(", ") : undefined}
           />
         </Tooltip>
         <div style={{ marginLeft: "auto" }}>
@@ -407,7 +406,7 @@ function GroupHeader({
           </span>
         </span>
         <span style={{ color: MUTED }}>
-          Cost{" "}
+          {cost.opening ? "Cost incl. opening value" : "Cost"}{" "}
           <span
             style={{
               color: "var(--color-text-primary)",

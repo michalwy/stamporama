@@ -7,6 +7,7 @@ import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { describeLotCoverage, type PostPriceKind, type PostTotalKey } from "@/lib/facebook-post-price-totals";
 import type { LotGroupSummary } from "@/lib/lot-group-summary-rules";
 import type { LotGroup } from "@/lib/offer-lot-group-rules";
+import { describeCostGaps, describeCostMarks } from "@/lib/offer-cost";
 import { formatPriceMargin, marginSign, type PriceMargin } from "@/lib/offer-price-table";
 import { AMOUNT_STYLE, FRAME_STYLE, LABEL_STYLE, NOTE_STYLE, ROW_STYLE, TOGGLE_STYLE } from "../offers-summary-bar";
 
@@ -15,7 +16,8 @@ import { AMOUNT_STYLE, FRAME_STYLE, LABEL_STYLE, NOTE_STYLE, ROW_STYLE, TOGGLE_S
 // **More** the catalogue, estimated and market values and the purchase cost, each with what the prices
 // make against it; against the cost that is the profit or loss. A line of its own once lots have sold.
 // The figures are `lotGroupSummary`'s over the saved prices — the totals pinned under the lots while they
-// are priced follow the typing.
+// are priced follow the typing. The purchase cost counts opening values and is marked so, and a cost
+// still missing says why (#2333).
 
 /** Under the offers key, so a write to any lot — a price saved, a lot sold — refreshes it. */
 export const lotGroupSummaryKey = (collectionId: string, group: LotGroup) =>
@@ -50,7 +52,7 @@ const ABOUT: Record<PostTotalKey, string> = {
   catalogue: "The lots' catalogue values, summed — each lot's as its price table shows it",
   estimated: "The lots' estimated values — catalogue × the learned realisation ratio — summed",
   market: "What recorded results paid for the lots' copies, summed",
-  cost: "What the lots' copies cost, summed",
+  cost: "What the lots' copies cost, summed — a copy from an opening balance at its opening value, never money spent",
 };
 
 const lots = (n: number) => `${n} lot${n === 1 ? "" : "s"}`;
@@ -158,6 +160,8 @@ export function LotGroupSummaryBar({ collectionId, group }: { collectionId: stri
         asking.columns.map((column) => {
           const over = describeLotCoverage(column.lots, asking.lotCount);
           const isCost = column.key === "cost";
+          const costMarks = isCost ? describeCostMarks(asking.cost) : null;
+          const costGaps = isCost ? describeCostGaps(asking.cost.gaps) : [];
           return (
             <div key={column.key} style={ROW_STYLE}>
               <Tooltip content={`${ABOUT[column.key]}, in ${currency}`}>
@@ -166,6 +170,7 @@ export function LotGroupSummaryBar({ collectionId, group }: { collectionId: stri
               <span style={AMOUNT_STYLE}>
                 {money(column.amount, currency)}
               </span>
+              {costMarks && column.amount !== null && <span style={NOTE_STYLE}>{costMarks}</span>}
               {column.margin && (
                 <Margin
                   margin={column.margin}
@@ -178,6 +183,9 @@ export function LotGroupSummaryBar({ collectionId, group }: { collectionId: stri
                 />
               )}
               {over && <span style={NOTE_STYLE}>{over}</span>}
+              {costGaps.length > 0 && (
+                <span style={{ ...NOTE_STYLE, color: "var(--color-warning)" }}>{costGaps.join(" · ")}</span>
+              )}
             </div>
           );
         })}
