@@ -76,8 +76,9 @@ export async function createCollection(
       await seedDefaultSubtypes(created.id, tx as never);
       await seedDefaultFaults(created.id, tx as never);
       await createFirstScanningProfile(tx as never, created.id);
-      // The five module platforms, one of each, switched off until their pages turn them on (#1955).
-      await tx.platform.createMany({ data: modulePlatformRows(created.id) });
+      // The six module platforms, one of each, switched off until their pages turn them on (#1955) —
+      // all but Direct (#2287).
+      await tx.platform.createMany({ data: modulePlatformRows(created.id, baseCurrency) });
       if (options?.seedDemo) {
         await seedDemoData(created.id, tx as never);
       }

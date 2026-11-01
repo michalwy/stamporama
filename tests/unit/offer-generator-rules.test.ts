@@ -602,6 +602,9 @@ describe("the generator request (#1287)", () => {
       const post = { ...facebook, postTitle };
       assert.deepEqual(parseGeneratorRequest(generatorRequestParams(post)), { ...post, skip: ["l1", "l2"] });
     }
+    // So does the proposal the new offers become lots of, on Direct (#2287).
+    const proposal = { ...request, proposalId: "p1" };
+    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(proposal)), { ...proposal, skip: ["l1", "l2"] });
     // The mixing switches and the priority, spelled as Series from Singles spells them (#2102).
     const mixed = {
       ...request,

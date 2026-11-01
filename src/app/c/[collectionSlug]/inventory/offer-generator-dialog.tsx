@@ -33,6 +33,8 @@ import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { useOpenProposals } from "@/app/c/[collectionSlug]/offers/proposals/use-proposals-query";
+import { PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
@@ -69,6 +71,10 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // The option starts ticked wherever a post can be made (#2105) — offers for a group nearly always go up
 // together — and its title is suggested from the area and the years of what the pass puts into new
 // offers. Both follow the plan and the ticks until the collector touches them; from then on theirs stands.
+//
+// On Direct, the offers it creates can instead become the lots of an open proposal (#2287) — the
+// lots for one buyer generated straight from the copies ticked for them. Picked here, none by default,
+// and like the post carried by the commit alone.
 
 /** Which copies the pass is over: the ticked ones in view, or everything the list's filters show. */
 export type OfferGeneratorInput =
@@ -80,6 +86,8 @@ export interface OfferGeneratorOutcome {
   changedOffers: number;
   /** The new post the created offers are the lots of (#2030), when one was asked for. */
   post: { postNo: number } | null;
+  /** The proposal the created offers became lots of (#2287), when one was picked. */
+  proposal: { proposalNo: number } | null;
 }
 
 const MODES: { value: GeneratorMode; label: string; hint: string }[] = [
@@ -221,6 +229,7 @@ export function OfferGeneratorDialog({
   platformName,
   state,
   facebook,
+  direct = false,
   input,
   onClose,
   onDone,
@@ -235,6 +244,8 @@ export function OfferGeneratorDialog({
   state: OfferState;
   /** On Facebook, the group every new offer is in and when an auction there closes (#1663). */
   facebook: FacebookCreateChoice;
+  /** The platform is Direct, whose new offers may become the lots of a proposal (#2287). */
+  direct?: boolean;
   input: OfferGeneratorInput;
   onClose: () => void;
   onDone: (outcome: OfferGeneratorOutcome) => void;
@@ -257,6 +268,10 @@ export function OfferGeneratorDialog({
   // Null until the collector ticks, unticks or types: until then the plan decides (#2105).
   const [inPostChoice, setInPostChoice] = useState<boolean | null>(null);
   const [typedTitle, setTypedTitle] = useState<string | null>(null);
+  // Into a proposal (#2287): on Direct only; empty is none.
+  const { data: openProposals = [] } = useOpenProposals(collectionId, direct);
+  const [proposalId, setProposalId] = useState("");
+  const intoProposal = direct && openProposals.some((p) => p.proposalId === proposalId) ? proposalId : "";
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const vendorMaps = useAreaVendorMaps(areas, collectionId);
@@ -329,7 +344,7 @@ export function OfferGeneratorDialog({
     setSkip(allTicked ? new Set(lines.map((line) => line.id)) : new Set());
   }
 
-  const created = `Create ${plural(newOffers, "offer", "offers")}${intoPost ? " in a new post" : ""}`;
+  const created = `Create ${plural(newOffers, "offer", "offers")}${intoPost ? " in a new post" : intoProposal ? " in the proposal" : ""}`;
   const actionLabel =
     changedOffers > 0 && newOffers > 0
       ? `${created}, add to ${changedOffers}`
@@ -346,6 +361,7 @@ export function OfferGeneratorDialog({
       ...request,
       skip: lines.flatMap((line) => (skip.has(line.id) ? [line.id] : [])),
       ...(intoPost ? { postTitle } : {}),
+      ...(intoProposal ? { proposalId: intoProposal } : {}),
     }).toString();
     startTransition(async () => {
       const { generateOffersAction } = await import("@/app/actions/offers");
@@ -355,6 +371,9 @@ export function OfferGeneratorDialog({
           createdOffers: result.createdOffers,
           changedOffers: result.changedOffers,
           post: result.post ? { postNo: result.post.postNo } : null,
+          proposal: intoProposal
+            ? { proposalNo: openProposals.find((p) => p.proposalId === intoProposal)!.proposalNo }
+            : null,
         });
       } else {
         setError(result.message);
@@ -479,6 +498,27 @@ export function OfferGeneratorDialog({
                 </span>
               )}
             </div>
+          )}
+
+          {direct && openProposals.length > 0 && (
+            <label style={{ ...OPTION, alignItems: "center", gap: "0.5rem" }}>
+              <span>Into proposal</span>
+              <select
+                aria-label="The proposal the new offers become lots of"
+                value={intoProposal}
+                onChange={(e) => setProposalId(e.target.value)}
+                disabled={isPending}
+                style={{ ...formControl, ...SELECT, fontSize: "0.8125rem" }}
+              >
+                <option value="">None</option>
+                {openProposals.map((p) => (
+                  <option key={p.proposalId} value={p.proposalId}>
+                    {`Proposal #${p.proposalNo} · ${p.contactName} · ${PROPOSAL_STATUS_LABEL[p.status]}`}
+                  </option>
+                ))}
+              </select>
+              {intoProposal && <span style={HINT}>— the new offers become its lots.</span>}
+            </label>
           )}
 
           {isLoading ? (

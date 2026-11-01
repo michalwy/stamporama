@@ -61,6 +61,7 @@ export type SettingsEntryKey =
   | "delcampe"
   | "facebook"
   | "philasearch"
+  | "direct"
   | "acceptance"
   | "bids"
   | "auction-reminder"
@@ -272,6 +273,12 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "selling",
     label: "Philasearch",
     hint: "The Philasearch platform a lot captured from its pages lands on, switched on here.",
+  },
+  {
+    key: "direct",
+    group: "selling",
+    label: "Direct",
+    hint: "The platform for selling straight to one person — what a proposal's lots are offered on.",
   },
 
   {

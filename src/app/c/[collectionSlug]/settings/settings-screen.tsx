@@ -95,6 +95,7 @@ import {
   ALLEGRO_PLATFORM_MODULE,
   COLNECT_PLATFORM_MODULE,
   DELCAMPE_PLATFORM_MODULE,
+  DIRECT_PLATFORM_MODULE,
   FACEBOOK_PLATFORM_MODULE,
   PHILASEARCH_PLATFORM_MODULE,
 } from "@/lib/platform-modules";
@@ -416,6 +417,8 @@ function entrySummary(
       return <PlatformSummary figures={figures(FACEBOOK_PLATFORM_MODULE)} />;
     case "philasearch":
       return <PlatformSummary figures={figures(PHILASEARCH_PLATFORM_MODULE)} />;
+    case "direct":
+      return <PlatformSummary figures={figures(DIRECT_PLATFORM_MODULE)} />;
     default:
       return undefined;
   }
@@ -985,6 +988,14 @@ function SettingsEntryBody({
         <ModulePlatformTab
           collectionId={collectionId}
           platform={modulePlatforms[PHILASEARCH_PLATFORM_MODULE]}
+        />
+      );
+    case "direct":
+      // The whole page (#2287): selling to one person needs nothing but its platform.
+      return (
+        <ModulePlatformTab
+          collectionId={collectionId}
+          platform={modulePlatforms[DIRECT_PLATFORM_MODULE]}
         />
       );
     case "acceptance":

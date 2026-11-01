@@ -12,13 +12,14 @@ both — a contact that sells, and a platform of the same name.
 
 ## The two kinds
 
-- **Module platforms** — **Allegro**, **Delcampe**, **Facebook**, **Philasearch** and **Colnect**.
-  Every collection has exactly one of each, named after its marketplace, because the app knows how
-  to work with them: [Allegro](allegro.md)'s account and listing profiles, [Delcampe](delcampe.md)'s
-  upload file, [Facebook](facebook.md)'s groups, Colnect's catalogue and lists, and the lots the
-  [Assistant](assistant.md) captures from Allegro and Philasearch. Each is configured on the
+- **Module platforms** — **Allegro**, **Delcampe**, **Facebook**, **Philasearch**, **Direct** and
+  **Colnect**. Every collection has exactly one of each, named after its marketplace, because the
+  app knows how to work with them: [Allegro](allegro.md)'s account and listing profiles,
+  [Delcampe](delcampe.md)'s upload file, [Facebook](facebook.md)'s groups, Colnect's catalogue and
+  lists, the lots the [Assistant](assistant.md) captures from Allegro and Philasearch, and the
+  [proposals](offers.md#proposals) you prepare for one buyer on Direct. Each is configured on the
   **Platform** tab of its own page in **Settings → Selling** (Colnect's in **Settings → Partners**;
-  Philasearch's page is that tab alone). They cannot be renamed or deleted.
+  Philasearch's and Direct's pages are that tab alone). They cannot be renamed or deleted.
 - **Your own platforms** — any other marketplace, under **Settings → Selling → Platforms**: the list
   on the left, the selected platform's settings beside it. **Add platform** starts a new one; a
   platform is renamed and edited in place and saved with **Save**.
@@ -33,7 +34,8 @@ picker for a new record** — a new offer, sale, purchase, auction sale or price
 quick-offer bar, the lot builder — and everything already recorded on it keeps showing it.
 
 A module platform starts **switched off**: switch it on on its page when you start using that
-marketplace. Until you do, the features hanging off it behave as if it were not set up — a lot the
+marketplace. **Direct** is the exception — it starts switched on, in your collection's currency,
+selling at a fixed price, because a proposal's lots have nowhere else to go. Until you do, the features hanging off it behave as if it were not set up — a lot the
 Assistant captures from Allegro has nowhere to land, for example. Switch one of your own platforms
 off when you stop using it: it leaves the pickers and keeps its history.
 

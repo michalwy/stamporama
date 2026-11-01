@@ -625,6 +625,7 @@ export function CollectionSidebar({
               `${base}/offers/allegro`,
               `${base}/offers/delcampe`,
               `${base}/offers/posts`,
+              `${base}/offers/proposals`,
             ])}
           >
             <NavItem
@@ -655,6 +656,14 @@ export function CollectionSidebar({
               href={`${base}/offers/listing`}
               label="Bulk Listing"
               active={isActive(`${base}/offers/listing`)}
+              nested
+            />
+            {/* Offers prepared for one contact each (#2287): composed and priced like any offer, for
+                one buyer rather than a platform, so under Offers after the batch screens. */}
+            <NavItem
+              href={`${base}/offers/proposals`}
+              label="Proposals"
+              active={isActive(`${base}/offers/proposals`)}
               nested
             />
           </NavGroup>

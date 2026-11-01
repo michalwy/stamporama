@@ -11,7 +11,7 @@ import { CLOSED_OFFER_STATES, isOfferState, type OfferState } from "./offer-rule
 import { TRADED_AWAY } from "./trade-exit";
 import { formatItemNo } from "./item-number";
 import { formatEntityNo } from "./quick-jump";
-import { FACEBOOK_PLATFORM_MODULE, usesPlatformCatalogue } from "./platform-modules";
+import { DIRECT_PLATFORM_MODULE, FACEBOOK_PLATFORM_MODULE, usesPlatformCatalogue } from "./platform-modules";
 import { resolveListedStampIds } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import {
@@ -26,6 +26,7 @@ import type { LotChecklist } from "./lot-builder-rules";
 import { readFacebookCreateChoice } from "./facebook-post-rules";
 import { writeFacebookPost } from "./facebook-posts";
 import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
+import { writeProposalLots } from "./proposals";
 import {
   findPlanDrift,
   fingerprintPlan,
@@ -624,6 +625,20 @@ export async function commitOfferGeneration(
     });
     if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
   }
+  // Into a proposal (#2287): the offers this pass creates become its lots, on Direct only. Asked again
+  // inside the transaction, where the lots are written, so a proposal closed since is refused there.
+  const proposalId = input.proposalId;
+  if (proposalId !== undefined) {
+    if ((await platformModuleOf(collectionId, input.platformId)) !== DIRECT_PLATFORM_MODULE) {
+      throw new OfferActionBlockedError("not-eligible", "Only offers on the Direct platform can be the lots of a proposal.");
+    }
+    if (postTitle !== undefined) {
+      throw new OfferActionBlockedError("not-eligible", "The new offers go into a post or a proposal, not both.");
+    }
+    if (newOffers.length === 0) {
+      throw new OfferActionBlockedError("empty", "This pass creates no new offer to put into the proposal.");
+    }
+  }
   const made: { post: OfferGeneratorResult["post"] } = { post: null };
 
   try {
@@ -637,13 +652,19 @@ export async function commitOfferGeneration(
         newOffers,
         additions: [...additions.values()],
       },
-      postTitle === undefined
-        ? {}
-        : {
+      postTitle !== undefined
+        ? {
             inTransaction: async (tx, createdOfferIds) => {
               made.post = await writeFacebookPost(tx, collectionId, createdOfferIds, postTitle);
             },
           }
+        : proposalId !== undefined
+          ? {
+              inTransaction: async (tx, createdOfferIds) => {
+                await writeProposalLots(tx, collectionId, proposalId, createdOfferIds);
+              },
+            }
+          : {}
     );
     // A post captioned from the start has its lots' photos queued now (#1861), as *Post together*'s.
     if (made.post) await syncFacebookPostLotPhotos(made.post.postId);
@@ -662,12 +683,16 @@ export async function commitOfferGeneration(
   }
 }
 
-async function isFacebookPlatform(collectionId: string, platformId: string): Promise<boolean> {
+async function platformModuleOf(collectionId: string, platformId: string): Promise<string | null> {
   const platform = await prisma.platform.findFirst({
     where: { id: platformId, collectionId },
     select: { platformModule: true },
   });
-  return platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
+  return platform?.platformModule ?? null;
+}
+
+async function isFacebookPlatform(collectionId: string, platformId: string): Promise<boolean> {
+  return (await platformModuleOf(collectionId, platformId)) === FACEBOOK_PLATFORM_MODULE;
 }
 
 /** A refusal in the collector's words: the copy or the offer by its number (#314). */

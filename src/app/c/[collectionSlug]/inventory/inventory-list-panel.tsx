@@ -8,6 +8,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { ItemListItem, ItemSortBy } from "@/lib/items";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
+import { DIRECT_PLATFORM_MODULE } from "@/lib/platform-modules";
 import {
   type CopyGroupMode,
   COPY_GROUP_MODES,
@@ -176,6 +177,8 @@ type DialogState =
       state: OfferState;
       /** The bar's Facebook group and closing time, read when the dialog opened (#1663). */
       facebook: FacebookCreateChoice;
+      /** The platform is Direct, so the new offers may go into a proposal (#2287). */
+      direct: boolean;
       input: OfferGeneratorInput;
     };
 
@@ -1458,6 +1461,7 @@ export function InventoryListPanel({
                         platformName: quickPlatform.name,
                         state: quickState,
                         facebook: quickFacebook.choice(),
+                        direct: quickPlatform.platformModule === DIRECT_PLATFORM_MODULE,
                         // What the collector can see (#1021): the ticked rows in view when there are
                         // any, else the list's filters — never a copy a filter hides.
                         input:
@@ -2252,9 +2256,10 @@ export function InventoryListPanel({
           platformName={dialog.platformName}
           state={dialog.state}
           facebook={dialog.facebook}
+          direct={dialog.direct}
           input={dialog.input}
           onClose={() => setDialog({ kind: "none" })}
-          onDone={({ createdOffers, changedOffers, post }) => {
+          onDone={({ createdOffers, changedOffers, post, proposal }) => {
             setDialog({ kind: "none" });
             rememberPlatform(dialog.platformId);
             if (dialog.facebook.facebookGroupId) {
@@ -2269,9 +2274,14 @@ export function InventoryListPanel({
               message:
                 `${createdOffers} offer${createdOffers === 1 ? "" : "s"} created` +
                 (post ? ` as the lots of post #${post.postNo}` : "") +
+                (proposal ? ` as lots of proposal #${proposal.proposalNo}` : "") +
                 (changedOffers > 0 ? `, ${changedOffers} existing offer${changedOffers === 1 ? "" : "s"} added to` : ""),
               // The post's screen is where the batch is priced and put up (#2030).
               ...(post ? { href: `/c/${collectionSlug}/offers/posts/${post.postNo}`, linkLabel: "Open post" } : {}),
+              // And a proposal's, where its lots are priced for the buyer (#2287).
+              ...(proposal
+                ? { href: `/c/${collectionSlug}/offers/proposals/${proposal.proposalNo}`, linkLabel: "Open proposal" }
+                : {}),
             });
           }}
         />

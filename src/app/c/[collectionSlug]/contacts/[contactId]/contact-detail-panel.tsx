@@ -54,6 +54,12 @@ import { CONTACT_ROLES } from "../contact-roles";
 import { ContactFormDialog } from "../contact-form-dialog";
 import { MergeContactsDialog } from "./merge-contacts-dialog";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
+import type { ProposalListItem } from "@/lib/proposals";
+import {
+  NewProposalDialog,
+  ProposalStatusChip,
+  proposalTotalText,
+} from "@/app/c/[collectionSlug]/offers/proposals/proposal-parts";
 import { useContactPage, useInvalidateContacts } from "../use-contacts-query";
 
 // A contact's own page (#1708): who the contact is, and what the collector has done with them — one
@@ -237,7 +243,15 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
               href={tradesHref}
             />
           )}
-          {!data.purchases && !data.sales && !data.auctions && !data.trades && (
+          {data.proposals && (
+            <ProposalsCard
+              proposals={data.proposals}
+              collectionId={collectionId}
+              collectionSlug={collectionSlug}
+              contact={{ id: contact.id, name: contact.name }}
+            />
+          )}
+          {!data.purchases && !data.sales && !data.auctions && !data.trades && !data.proposals && (
             <DetailCard title="Activity">
               <EmptyNote>
                 Nothing recorded with {contact.name} yet. Give the contact the Seller, Buyer, Auction
@@ -499,6 +513,63 @@ function PurchasesCard({
             );
           })}
         </RowList>
+      )}
+    </DetailCard>
+  );
+}
+
+/** The offers prepared for this contact alone (#2287), newest first, with *New proposal*. */
+function ProposalsCard({
+  proposals,
+  collectionId,
+  collectionSlug,
+  contact,
+}: {
+  proposals: ProposalListItem[];
+  collectionId: string;
+  collectionSlug: string;
+  contact: { id: string; name: string };
+}) {
+  const [creating, setCreating] = useState(false);
+  return (
+    <DetailCard
+      title="Proposals"
+      count={proposals.length}
+      actions={
+        <button type="button" style={DETAIL_BUTTON} onClick={() => setCreating(true)}>
+          <Icon name="add" size="sm" /> New proposal
+        </button>
+      }
+    >
+      {proposals.length === 0 ? (
+        <EmptyNote>No proposals yet — an offer prepared for {contact.name} alone.</EmptyNote>
+      ) : (
+        <RowList>
+          {proposals.map((p, i) => (
+            <RowLinkItem
+              key={p.proposalId}
+              first={i === 0}
+              href={`/c/${collectionSlug}/offers/proposals/${p.proposalNo}`}
+            >
+              <span style={META}>Proposal #{p.proposalNo}</span>
+              <ProposalStatusChip status={p.status} />
+              <span style={MUTED}>{p.sentOn ? `sent ${p.sentOn}` : `made ${p.createdOn}`}</span>
+              <span style={{ flex: 1 }} />
+              <span style={MUTED}>
+                {p.lotCount} {p.lotCount === 1 ? "lot" : "lots"}
+              </span>
+              <span style={AMOUNT}>{proposalTotalText(p.total, p.currency, p.unpriced)}</span>
+            </RowLinkItem>
+          ))}
+        </RowList>
+      )}
+      {creating && (
+        <NewProposalDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          contact={contact}
+          onClose={() => setCreating(false)}
+        />
       )}
     </DetailCard>
   );

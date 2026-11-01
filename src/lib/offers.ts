@@ -2551,6 +2551,9 @@ export interface OfferListItem {
    *  (#1862) — the row's *Post #N · lot M* chip, the title on its hover. `lotNo` is null in a post of
    *  one lot (#1989), whose chip is *Post #N*. Null for an offer in no post and off Facebook. */
   facebookPost: { postNo: number; title: string | null; lotNo: number | null } | null;
+  /** The proposal this offer is a lot of (#2287) — the row's *Proposal #N* chip, the contact on its
+   *  hover. Null for an offer in none. */
+  proposal: OfferProposalRef | null;
   /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
    *  changing the listing type drops it. */
   facebookOwnTemplate: boolean;
@@ -2589,6 +2592,7 @@ const OFFER_SELECT = {
   facebookPostId: true,
   facebookLotNo: true,
   facebookPost: { select: { postNo: true, title: true, _count: { select: { lots: true } } } },
+  proposal: { select: { proposalNo: true, contact: { select: { name: true } } } },
   facebookPostTemplate: true,
   readyAfterPhotosAt: true,
   readyAfterPhotosRefusal: true,
@@ -2621,6 +2625,7 @@ type OfferRow = {
   facebookPostId: string | null;
   facebookLotNo: number | null;
   facebookPost: { postNo: number; title: string | null; _count: { lots: number } } | null;
+  proposal: { proposalNo: number; contact: { name: string } } | null;
   facebookPostTemplate: string | null;
   readyAfterPhotosAt: Date | null;
   readyAfterPhotosRefusal: string | null;
@@ -2717,6 +2722,7 @@ function toListItem(
             lotNo: row.facebookPost._count.lots > 1 ? row.facebookLotNo : null,
           }
         : null,
+    proposal: row.proposal ? { proposalNo: row.proposal.proposalNo, contactName: row.proposal.contact.name } : null,
     facebookOwnTemplate: row.facebookPostTemplate !== null,
     readyAfterPhotos: row.readyAfterPhotosAt !== null,
     readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
@@ -5115,8 +5121,16 @@ export interface OfferSetsTotals {
   } | null;
 }
 
+/** The proposal an offer is a lot of (#2287), as its row and its own screen name it. */
+export interface OfferProposalRef {
+  proposalNo: number;
+  contactName: string;
+}
+
 export interface OfferDetail {
   id: string;
+  /** See {@link OfferProposalRef}; null for an offer in no proposal. */
+  proposal: OfferProposalRef | null;
   collectionId: string;
   /** The offer's short per-collection number (#416), shown beside the title on its own screen as it
    * is on the offer list (#1755). */
@@ -5442,6 +5456,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     where: { id: offerId },
     select: {
       id: true,
+      proposal: { select: { proposalNo: true, contact: { select: { name: true } } } },
       offerNo: true,
       name: true,
       description: true,
@@ -5822,6 +5837,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
 
   return {
     id: offer.id,
+    proposal: offer.proposal ? { proposalNo: offer.proposal.proposalNo, contactName: offer.proposal.contact.name } : null,
     collectionId: offer.collectionId,
     offerNo: offer.offerNo,
     // Both names rather than `offerDisplayLabel` (#1024). The offer's own screen is the one place

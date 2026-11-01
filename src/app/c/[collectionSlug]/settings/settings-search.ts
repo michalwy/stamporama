@@ -130,6 +130,13 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Listing templates" },
     { label: "Shipping options" },
   ],
+  // The whole page is the Direct platform's settings (#2287).
+  direct: [
+    { label: "Switched on", words: ["platform", "enabled", "off", "proposal"] },
+    { label: "Market" },
+    { label: "Listing templates" },
+    { label: "Shipping options" },
+  ],
   acceptance: [],
   bids: [
     { label: "Bargain floor" },

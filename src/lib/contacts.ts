@@ -599,6 +599,8 @@ export interface ContactMergeCandidate extends ContactData {
   priceObservationCount: number;
   /** Entries of the conversation log with it (#2149). */
   conversationEntryCount: number;
+  /** Proposals made for it (#2287). */
+  proposalCount: number;
 }
 
 const MERGE_COUNT_SELECT = {
@@ -610,6 +612,7 @@ const MERGE_COUNT_SELECT = {
       auctionSalesSeller: true,
       priceObservationsHouse: true,
       conversationEntries: true,
+      proposals: true,
     },
   },
 } as const;
@@ -646,6 +649,7 @@ export async function getContactMergePair(
       auctionSaleCount: _count.auctionSalesSeller,
       priceObservationCount: _count.priceObservationsHouse,
       conversationEntryCount: _count.conversationEntries,
+      proposalCount: _count.proposals,
     };
   };
   return { contact: toCandidate(contactId), other: toCandidate(otherContactId) };
@@ -688,6 +692,8 @@ export async function mergeContacts(
     });
     // The conversation log moves whole, with the sales its entries name (#2149).
     await tx.conversationEntry.updateMany({ where: { contactId: otherId }, data: { contactId: remainingId } });
+    // And the proposals made for them (#2287).
+    await tx.proposal.updateMany({ where: { contactId: otherId }, data: { contactId: remainingId } });
     // A profile is unique per collection, so the other's can never collide with the remaining's.
     await tx.contactFacebookProfile.updateMany({
       where: { contactId: otherId },

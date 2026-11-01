@@ -50,6 +50,7 @@ describe("settings navigation (#1469)", () => {
           "Delcampe",
           "Facebook",
           "Philasearch",
+          "Direct",
         ],
       ],
       ["Intake", ["Acceptance profiles", "Bid recommendation", "Auction reminder"]],
