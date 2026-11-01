@@ -82,6 +82,7 @@ function parsePlatformFields(formData: FormData): PlatformInput {
     defaultListingType: str(formData, "defaultListingType") || null,
     refreshQuickBuysAfterDays: refresh !== "" ? Number(refresh) : null,
     buyerMessageTemplate: str(formData, "buyerMessageTemplate") || null,
+    proposalMessageTemplate: str(formData, "proposalMessageTemplate") || null,
     ...limits.value,
     ...textLimits.value,
     photoSides: str(formData, "photoSides"),

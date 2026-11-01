@@ -134,6 +134,7 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   direct: [
     { label: "Switched on", words: ["platform", "enabled", "off", "proposal"] },
     { label: "Market" },
+    { label: "Proposal message", words: ["template", "buyer", "lots", "messenger"] },
     { label: "Listing templates" },
     { label: "Shipping options" },
   ],

@@ -8,6 +8,7 @@ import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input"
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { CoverColorPicker } from "@/app/c/[collectionSlug]/shared/photo-cover-editor";
 import { BuyerMessageTemplateField } from "@/app/c/[collectionSlug]/shared/buyer-message-template-field";
+import { ProposalMessageTemplateField } from "@/app/c/[collectionSlug]/shared/proposal-message-template-field";
 import { multiLineFormControl } from "@/app/control-style";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_LANGUAGES } from "@/lib/languages";
@@ -32,7 +33,7 @@ import {
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
-import { FACEBOOK_PLATFORM_MODULE, platformUsesSetting } from "@/lib/platform-modules";
+import { DIRECT_PLATFORM_MODULE, FACEBOOK_PLATFORM_MODULE, platformUsesSetting } from "@/lib/platform-modules";
 import {
   DEFAULT_PHOTO_COVER_COLOR,
   DEFAULT_PHOTO_COVER_STYLE,
@@ -172,6 +173,7 @@ export interface PlatformFieldsProps {
 export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) {
   const isModule = !!platform?.platformModule;
   const isFacebook = platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
+  const isDirect = platform?.platformModule === DIRECT_PLATFORM_MODULE;
   // What this platform's module does not use is not offered (#1944): Delcampe and Allegro have no
   // private note (#1957, #1956); Colnect no listing type, description format or title cap (#1959).
   // Nothing stored is left to show: `platforms.ts` writes such a setting empty on every save.
@@ -483,6 +485,19 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
               <BuyerMessageTemplateField
                 id="platform-buyer-message"
                 defaultValue={platform?.buyerMessageTemplate ?? ""}
+                style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
+              />
+            </div>
+          )}
+
+          {/* The message a proposal's buyer is sent (#2288) — Direct's alone, the platform a proposal's
+              lots are on. */}
+          {isDirect && (
+            <div>
+              <LabelWithError htmlFor="platform-proposal-message">Proposal message (optional)</LabelWithError>
+              <ProposalMessageTemplateField
+                id="platform-proposal-message"
+                defaultValue={platform?.proposalMessageTemplate ?? ""}
                 style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
               />
             </div>

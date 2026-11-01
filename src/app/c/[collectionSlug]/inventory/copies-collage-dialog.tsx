@@ -17,6 +17,7 @@ import { useToast } from "@/app/toast-provider";
 import { PhotoSettingsDialog } from "../offers/[offerId]/photo-settings-dialog";
 import { PhotoScaleListDialog } from "../shared/photo-scale-list-dialog";
 import { usePersistedCollectionValue } from "../shared/use-persisted-collection-value";
+import { asPng } from "../shared/copy-image";
 import type { CollagePlatformSeed, CopiesCollageImage, CopiesCollageResult } from "@/lib/copies-collage";
 import {
   COLLAGE_PACKAGINGS,
@@ -98,19 +99,6 @@ function save(blob: Blob, fileName: string) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-/** A clipboard takes PNG, not JPEG, so the picture is redrawn as one on its way there. */
-async function asPng(blob: Blob): Promise<Blob> {
-  const bitmap = await createImageBitmap(blob);
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((png) => (png ? resolve(png) : reject(new Error("PNG"))), "image/png")
-  );
 }
 
 function kib(bytes: number): string {

@@ -137,6 +137,9 @@ export interface PlatformData {
   /** The message a buyer is sent after a sale here (#1815), or null for none. Not read for the
    * Facebook platform, whose message is on Settings → Facebook (#1661). */
   buyerMessageTemplate: string | null;
+  /** The message a proposal's buyer is sent with its lots and prices (#2288), or null for none. Read
+   * on the Direct platform only, and written empty on every other. */
+  proposalMessageTemplate: string | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. */
   maxPhotos: number | null;
@@ -190,6 +193,7 @@ const PLATFORM_SELECT = {
   defaultListingType: true,
   refreshQuickBuysAfterDays: true,
   buyerMessageTemplate: true,
+  proposalMessageTemplate: true,
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -292,6 +296,9 @@ export interface PlatformInput {
   refreshQuickBuysAfterDays?: number | null;
   /** The message to a buyer after a sale here (#1815), or null for none. Blank stores null. */
   buyerMessageTemplate?: string | null;
+  /** The Direct platform's proposal message (#2288), or null for none. Blank stores null; ignored on
+   * every other platform. */
+  proposalMessageTemplate?: string | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -403,6 +410,8 @@ async function settingsData(
       ? refreshDays(data.refreshQuickBuysAfterDays)
       : null,
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
+    proposalMessageTemplate:
+      platformModule === DIRECT_PLATFORM_MODULE ? data.proposalMessageTemplate?.trim() || null : null,
     maxTitleLength: uses("maxTitleLength") ? (data.maxTitleLength ?? null) : null,
     maxDescriptionLength: data.maxDescriptionLength ?? null,
     maxPrivateNoteLength: uses("maxPrivateNoteLength") ? (data.maxPrivateNoteLength ?? null) : null,

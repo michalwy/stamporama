@@ -3140,18 +3140,51 @@ Two ways, both while the proposal is open:
 
 A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.
 
+### Lot numbers
+
+Every lot has a **lot number** — **Lot 1**, **Lot 2**… on the proposal's screen — and the same number
+is on everything the buyer is sent: the photos, the document and the message. So when the buyer
+answers *I'll take 2, 5 and 7*, those are the lots on your screen.
+
+A lot added later takes the next number. While the proposal is **Preparing**, taking a lot out moves
+the ones after it up a number, so what the buyer first gets has no gaps. Once it is **Sent** the
+numbers stay as they are — the buyer has them — and a gap is left where a lot was taken out.
+
 ### Pricing
 
-The proposal's screen lists its lots by offer number. While the proposal is open, each lot's title
+The proposal's screen lists its lots by lot number. While the proposal is open, each lot's title
 and price are edited in place, exactly as a post's lots are on the
 [Facebook post's screen](facebook.md): **Enter** in a price saves it and moves to the next lot's. The
 **total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
 zero but named beside the total (*2 unpriced*).
 
+### What the buyer is sent
+
+While the proposal is open, the card above its lots holds everything for the buyer:
+
+- **Message** — the text to send in a chat, with the lots numbered, their prices and the total, and a
+  copy button. It is written from the **proposal message** template on
+  **Settings → Selling → Direct** (see [Platforms](platforms.md)), in your own words around
+  placeholders such as `{buyer}`, `{lots}` and `{total}`. Without a template there is no message —
+  nothing is made up for you.
+- **Photos** — **Download all** gives every lot's photos in one ZIP, each file named for its lot
+  (`lot-02-…`). Each lot's row also shows its photos, to enlarge, **copy** (to paste straight into a
+  chat) or download one by one. They are the lot's offer photos, by its offer photo settings;
+  generate them on the offer as usual. A withdrawn lot's photos are left out.
+- **Document** — **Print or share…** opens the document: the proposal's number, every lot with its
+  number, title, price and photos, and the total, in the proposal's language — nothing else from your
+  collection. Open it to print or save as a PDF, or make a **link** the buyer opens without an
+  account. The link stays live: it follows your price changes, marks a withdrawn lot *No longer
+  available*, and once the proposal is sold or declined it says only that the offer is closed. A new
+  link replaces the old one; **Withdraw** ends it.
+
+**Making any of them marks a Preparing proposal Sent** — copying the message or a photo, downloading
+photos, opening the document or making its link — just as **Mark sent** would.
+
 ### Sent, declined
 
 A proposal starts **Preparing**. **Mark sent** once it has gone to the buyer — it needs at least one
-lot. A sent proposal still takes lots and price changes.
+lot — or let sending it do so (above). A sent proposal still takes lots and price changes.
 
 **Decline…** closes it as **Declined** and **withdraws every lot still open**; the copies stay in
 your inventory. A declined proposal changes no more. A proposal becomes **Sold** once the lots the
