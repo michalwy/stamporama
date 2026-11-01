@@ -117,6 +117,7 @@ export function MergeContactsDialog({
   const showAuctionSales = a && b && a.auctionSaleCount + b.auctionSaleCount > 0;
   const showObservations = a && b && a.priceObservationCount + b.priceObservationCount > 0;
   const showConversation = a && b && a.conversationEntryCount + b.conversationEntryCount > 0;
+  const showProposals = a && b && a.proposalCount + b.proposalCount > 0;
 
   return (
     <DialogShell title="Merge contacts" onClose={onClose} maxWidth={FORM_DIALOG_COLUMNS_WIDTH}>
@@ -200,6 +201,7 @@ export function MergeContactsDialog({
                   {showConversation && (
                     <CountRow label="Conversation entries" a={a.conversationEntryCount} b={b.conversationEntryCount} />
                   )}
+                  {showProposals && <CountRow label="Proposals" a={a.proposalCount} b={b.proposalCount} />}
                 </tbody>
               </table>
               {/* What goes with the other contact — said before it goes, the costly mistake. */}
@@ -227,8 +229,8 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-/** *3 purchases, 1 sale and 0 trades of X move* — with auction sales, observations and
- * conversation entries only when any. */
+/** *3 purchases, 1 sale and 0 trades of X move* — with auction sales, observations,
+ * conversation entries and proposals only when any. */
 function movesSentence(other: ContactMergeCandidate): ReactNode {
   const parts = [
     plural(other.purchaseCount, "purchase"),
@@ -237,6 +239,7 @@ function movesSentence(other: ContactMergeCandidate): ReactNode {
     ...(other.auctionSaleCount > 0 ? [plural(other.auctionSaleCount, "auction sale")] : []),
     ...(other.priceObservationCount > 0 ? [plural(other.priceObservationCount, "price observation")] : []),
     ...(other.conversationEntryCount > 0 ? [`${other.conversationEntryCount} conversation ${other.conversationEntryCount === 1 ? "entry" : "entries"}`] : []),
+    ...(other.proposalCount > 0 ? [plural(other.proposalCount, "proposal")] : []),
   ];
   const list = `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   const total =
@@ -245,7 +248,8 @@ function movesSentence(other: ContactMergeCandidate): ReactNode {
     other.tradeCount +
     other.auctionSaleCount +
     other.priceObservationCount +
-    other.conversationEntryCount;
+    other.conversationEntryCount +
+    other.proposalCount;
   return (
     <>
       {list} of <strong>{other.name}</strong> {total === 1 ? "moves" : "move"}

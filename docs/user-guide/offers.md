@@ -20,6 +20,7 @@ then a **Marketplaces** group holding one screen per platform, named for the pla
 - **Bulk listing** — where you post a batch that is prepared and ready to go live. See
   [Bulk listing](#bulk-listing--posting-a-prepared-batch). It is still reachable from the offer
   list's toolbar as well, which carries the platform filter across.
+- **Proposals** — the offers you prepare for one buyer each. See [Proposals](#proposals).
 - **Marketplaces → Allegro** — the other end of the same job: what has sold there and is still
   waiting to be recorded here. The screen itself is headed *Sold on Allegro*. See the
   [Allegro guide](allegro.md#sold-on-allegro).
@@ -3098,6 +3099,63 @@ The platform rows are each **complete in themselves** rather than a partition of
 listed on two marketplaces is counted in both rows' catalog and cost figures, because each row
 answers "what is on this platform". They will therefore not always add up to the total line, which
 counts that copy once.
+
+## Proposals
+
+A buyer who has just bought from you often writes asking whether you have more of something. A
+**proposal** is your answer: an offer prepared for **that one person** — the lots you choose for
+them, priced, sent, and later sold as whichever lots they take.
+
+**Proposals** under Offers in the sidebar lists them, newest first: each one's number, the contact
+it is for, where it stands, its lots — how many, and how many are still open — and its **total**.
+The chips above the list narrow it to one or more statuses. **New proposal** asks who it is for; a
+contact's page has **New proposal** too, for that contact (see
+[A contact's page](contacts.md#a-contacts-page)).
+
+### Its lots are ordinary offers on Direct
+
+Every lot of a proposal is an **ordinary offer** — sets of copies, a price, a title, photos — on the
+**Direct** platform: selling straight to one person. Facebook, Messenger or the phone are only how you
+reach the buyer, not where the stamps are sold. So everything an offer can do works on a lot as it
+does anywhere, and each lot's row on its offer list and its own screen say **Proposal #N**, a link
+back to the proposal.
+
+Every collection has the Direct platform, switched on, in your collection's currency and at a fixed
+price, with no commission or fees. Its settings are under **Settings → Selling → Direct** (see
+[Platforms](platforms.md)).
+
+A copy can be in a proposal and listed elsewhere at the same time, as across any two platforms. When
+it sells in one place, the other offers are handled like any copy sold elsewhere.
+
+### Giving it lots
+
+Two ways, both while the proposal is open:
+
+- **From the copies.** Tick the copies on the [Copies](inventory.md) list, choose **Direct** in the
+  quick-offer bar and **Generate offers**. **Into proposal** in the dialog picks one of your open
+  proposals, and the offers the pass creates become its lots. An existing offer that only receives
+  sets stays where it is.
+- **Offers already made.** **Add offers…** on the proposal's screen lists the Direct offers that are
+  still open and in no other proposal; tick the ones to add.
+
+A lot's **⋮** menu has **Take out of the proposal**: the offer stays, as an ordinary Direct offer.
+
+### Pricing
+
+The proposal's screen lists its lots by offer number. While the proposal is open, each lot's title
+and price are edited in place, exactly as a post's lots are on the
+[Facebook post's screen](facebook.md): **Enter** in a price saves it and moves to the next lot's. The
+**total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
+zero but named beside the total (*2 unpriced*).
+
+### Sent, declined
+
+A proposal starts **Preparing**. **Mark sent** once it has gone to the buyer — it needs at least one
+lot. A sent proposal still takes lots and price changes.
+
+**Decline…** closes it as **Declined** and **withdraws every lot still open**; the copies stay in
+your inventory. A declined proposal changes no more. A proposal becomes **Sold** once the lots the
+buyer took are sold.
 
 ## Related
 

@@ -19,6 +19,7 @@ import {
   PlatformSaleChip,
   ReadyWhenPhotosDoneChip,
   NotMarkedReadyChip,
+  ProposalChip,
 } from "../offer-badges";
 import {
   useOfferDetail,
@@ -967,6 +968,14 @@ export function OfferDetailPanel({
             what="title"
           />
           <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>on {offer.platformName}</span>
+          {/* A lot of a proposal names it, as its row does (#2287). */}
+          {offer.proposal && (
+            <ProposalChip
+              collectionSlug={collectionSlug}
+              proposalNo={offer.proposal.proposalNo}
+              contactName={offer.proposal.contactName}
+            />
+          )}
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />
             {/* Mark ready was pressed while the photos were all that stood in the way (#1893): the

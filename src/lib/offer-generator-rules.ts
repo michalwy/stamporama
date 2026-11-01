@@ -700,6 +700,9 @@ export interface GeneratorRequest {
   /** On Facebook, the title of the one new post the offers the pass creates become the lots of
    *  (#2030); absent, no post is made. Like `skip`, only the commit carries it. */
   postTitle?: string;
+  /** On Direct, the open proposal the offers the pass creates become the lots of (#2287); absent,
+   *  they are in none. Like `postTitle`, only the commit carries it. */
+  proposalId?: string;
 }
 
 export function generatorRequestParams(request: GeneratorRequest): URLSearchParams {
@@ -725,6 +728,7 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
   if (request.facebook.facebookGroupId) params.set("facebookGroupId", request.facebook.facebookGroupId);
   if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
   if (request.postTitle !== undefined) params.set("postTitle", request.postTitle);
+  if (request.proposalId) params.set("proposalId", request.proposalId);
   return params;
 }
 
@@ -762,6 +766,7 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     skip: (sp.get("skip") ?? "").split(",").filter(Boolean),
     facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
     ...(sp.has("postTitle") ? { postTitle: sp.get("postTitle") ?? "" } : {}),
+    ...(sp.get("proposalId") ? { proposalId: sp.get("proposalId")! } : {}),
   };
 }
 

@@ -134,6 +134,9 @@ model Collection {
   // And for `FacebookPost.postNo` (#1842): a post of several lots is named by its number on each of
   // its lots' rows, and a dissolved post retires it.
   nextFacebookPostNo Int  @default(1)
+  // And for `Proposal.proposalNo` (#2287; ADR-0075): what *Proposal #4* names on its lots and on the
+  // contact's page, never reused.
+  nextProposalNo Int  @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -220,6 +223,7 @@ model Collection {
   // Buyers' links to Facebook posts' previews (#2212), kept here too so a link outliving its post
   // still goes with the collection.
   facebookPostPreviewTokens FacebookPostPreviewToken[]
+  proposals       Proposal[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
@@ -3033,6 +3037,43 @@ model FacebookPost {
   @@map("facebook_post")
 }
 
+// **An offer prepared for one contact** (#2287; ADR-0075) — the answer to a buyer asking whether
+// there is more: lots chosen and priced for that person, sent to them, and then sold as whichever
+// lots they take (#2289) or declined.
+//
+// Built like a Facebook post: the proposal is the workspace and its lots are **ordinary offers**
+// (`Offer.proposalId`) on the collection's **Direct** platform — Facebook, Messenger or the phone are
+// only how the buyer is reached. So everything an offer can do works on a lot unchanged.
+//
+// `status` is `preparing` | `sent` | `sold` | `declined` (`proposal-rules.ts`). Prices stay editable
+// while it is sent; the two closed states are final. *Declined* withdraws the lots still open.
+//
+// **Cascades with its contact**: a proposal is one person's, and a contact deleted takes the offers
+// made for them out of their proposals (the lots' `SetNull`), never the offers themselves.
+model Proposal {
+  id           String    @id @default(cuid())
+  collectionId String
+  // Its short number within the collection, allocated by `allocateEntityNumber` from
+  // `Collection.nextProposalNo` and never reused.
+  proposalNo   Int
+  contactId    String
+  status       String    @default("preparing")
+  createdAt    DateTime  @default(now())
+  // When it was last marked sent to the buyer; null while it never was.
+  sentAt       DateTime?
+  // When it was sold or declined; null while it is open.
+  closedAt     DateTime?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  lots       Offer[]    @relation("OfferProposal")
+
+  @@unique([collectionId, proposalNo])
+  @@index([collectionId])
+  @@index([contactId])
+  @@map("proposal")
+}
+
 // **A buyer's link to a Facebook post's preview** (#2212) — the post as it will appear in the group,
 // its text and every lot with its number, title, price and photos, as a page a buyer opens without an
 // account while the group has yet to approve the post.
@@ -5504,6 +5545,10 @@ model Offer {
   // editing a template changes only offers not yet posted. Null until then, cleared again when the
   // offer is back in Ready; a repost takes it afresh. Shape: `FacebookFrozenLot`.
   facebookPostSnapshot Json?
+  // The proposal this offer is a lot of (#2287; ADR-0075) — an offer prepared for one contact, on the
+  // Direct platform. Null on every other offer. `SetNull`: deleting a proposal leaves its lots as
+  // ordinary Direct offers, and deleting an offer simply takes it out of its proposal.
+  proposalId     String?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside
@@ -5611,6 +5656,7 @@ model Offer {
   delcampeListingProfile DelcampeListingProfile? @relation("OfferDelcampeListingProfile", fields: [delcampeListingProfileId], references: [id], onDelete: SetNull)
   facebookGroup FacebookGroup? @relation("OfferFacebookGroup", fields: [facebookGroupId], references: [id], onDelete: Restrict)
   facebookPost  FacebookPost?  @relation("OfferFacebookPost", fields: [facebookPostId], references: [id], onDelete: SetNull)
+  proposal      Proposal?      @relation("OfferProposal", fields: [proposalId], references: [id], onDelete: SetNull)
   sets       OfferSet[]
   saleLines  SaleLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
@@ -5648,6 +5694,7 @@ model Offer {
   @@index([delcampeListingProfileId])
   @@index([facebookGroupId])
   @@index([facebookPostId])
+  @@index([proposalId])
   // One lot number per post; offers outside a post carry nulls, which never collide.
   @@unique([facebookPostId, facebookLotNo])
   // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
@@ -7165,6 +7212,8 @@ model Contact {
   facebookProfiles          ContactFacebookProfile[]
   // The conversation log with this contact (#2149; ADR-0073) — see `ConversationEntry`.
   conversationEntries       ConversationEntry[]
+  // The offers prepared for this person alone (#2287; ADR-0075) — see `Proposal`.
+  proposals                 Proposal[]
 
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])

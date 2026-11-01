@@ -267,6 +267,32 @@ export function InActiveBiddingChip() {
  *  screen, with a narrowing control beside the words that filters the list to the post's lots. Two
  *  targets in one chip because both answer "this post": where it is managed, and which rows are in it.
  *  The post's title (#1862) is on the chip's hover — a row has no room for it. */
+/** The proposal an offer is a lot of (#2287): its number, linking to the proposal's screen, and the
+ *  contact it is for on hover. On the offer's row and on its own screen alike. */
+export function ProposalChip({
+  collectionSlug,
+  proposalNo,
+  contactName,
+}: {
+  collectionSlug: string;
+  proposalNo: number;
+  contactName: string;
+}) {
+  return (
+    <span style={CHIP}>
+      <Tooltip content={`A lot of the proposal for ${contactName} — open it`}>
+        <Link
+          href={`/c/${collectionSlug}/offers/proposals/${proposalNo}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: "var(--color-accent)", textDecoration: "none" }}
+        >
+          Proposal #{proposalNo}
+        </Link>
+      </Tooltip>
+    </span>
+  );
+}
+
 export function FacebookPostChip({
   collectionSlug,
   postNo,

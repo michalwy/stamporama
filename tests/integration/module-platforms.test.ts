@@ -55,7 +55,7 @@ describe("Module platforms (#1955)", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("makes the five, once each, named after their modules and switched off", async () => {
+  it("makes the six, once each, named after their modules and switched off but for Direct", async () => {
     await ensureModulePlatforms(collectionId);
     await ensureModulePlatforms(collectionId);
     const rows = await prisma.platform.findMany({
@@ -67,8 +67,15 @@ describe("Module platforms (#1955)", () => {
       rows.map((r) => [r.platformModule, r.name, r.enabled]),
       [...MODULE_PLATFORMS]
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((m) => [m.module, m.name, false])
+        .map((m) => [m.module, m.name, m.module === "direct"])
     );
+    // Direct (#2287) sells in the collection's own currency at a fixed price from the start.
+    const direct = await prisma.platform.findFirstOrThrow({
+      where: { collectionId, platformModule: "direct" },
+      select: { platformCurrency: true, defaultListingType: true },
+    });
+    const { baseCurrency } = await prisma.collection.findUniqueOrThrow({ where: { id: collectionId } });
+    assert.deepEqual(direct, { platformCurrency: baseCurrency, defaultListingType: "fixed" });
     // Facebook's rules are why covering symbols exists (#1665), so its platform starts needing it.
     assert.deepEqual(
       rows.filter((r) => r.coverSymbols).map((r) => r.name),

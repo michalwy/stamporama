@@ -148,9 +148,10 @@ describe(`${THIS_MIGRATION} (#1955)`, () => {
   it("gives every collection its five module platforms, those no contact stood for switched off", async () => {
     for (const collectionId of [C, EMPTY]) {
       const modules = (await platforms(collectionId)).filter((p) => p.platformModule !== null);
+      // The five of #1955; Direct (#2287) came with a later migration of its own.
       assert.deepEqual(
         modules.map((p) => p.platformModule).sort(),
-        MODULE_PLATFORMS.map((m) => m.module).sort()
+        MODULE_PLATFORMS.map((m) => m.module).filter((m) => m !== "direct").sort()
       );
       for (const p of modules) {
         assert.equal(p.name, MODULE_PLATFORMS.find((m) => m.module === p.platformModule)!.name);

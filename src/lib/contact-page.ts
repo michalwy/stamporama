@@ -22,6 +22,7 @@ import {
 } from "./cost-to-catalog";
 import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
 import { readTradeBalance } from "./trade-valuation";
+import { listContactProposals, type ProposalListItem } from "./proposals";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   auctionPremiumTerms,
@@ -193,6 +194,10 @@ export interface ContactPage {
   auctions: ContactAuctions | null;
   /** Null when the contact is not an exchange partner and no trade was ever made with it. */
   trades: ContactTrades | null;
+  /** Every proposal made for the contact (#2287), newest first, whatever the period — a proposal is
+   *  work with the person rather than a figure of the period. Null when the contact is no buyer and
+   *  has none. */
+  proposals: ProposalListItem[] | null;
 }
 
 function isoDate(d: Date): string {
@@ -217,11 +222,12 @@ export async function getContactPage(
   const dateWhere = bounds.gte || bounds.lt ? bounds : undefined;
 
   const { collectionId } = contact;
-  const [purchaseCount, saleCount, auctionSaleCount, tradeCount] = await Promise.all([
+  const [purchaseCount, saleCount, auctionSaleCount, tradeCount, proposals] = await Promise.all([
     prisma.purchase.count({ where: purchaseWhere(contact) }),
     prisma.sale.count({ where: { collectionId, buyerId: contact.id } }),
     prisma.auctionSale.count({ where: { collectionId, sellerId: contact.id } }),
     prisma.trade.count({ where: { collectionId, partnerId: contact.id } }),
+    listContactProposals(collectionId, contact.id),
   ]);
 
   return {
@@ -247,6 +253,7 @@ export async function getContactPage(
       contact.exchangePartner || tradeCount > 0
         ? await readTrades(ownerId, contact, dateWhere)
         : null,
+    proposals: contact.buyer || proposals.length > 0 ? proposals : null,
   };
 }
 

@@ -118,6 +118,11 @@ Then one section for each part the contact plays:
   value is left out. A line with no value is never counted as zero: it is left out of the total and
   the figure says how many lines that is. A trade belongs to the period it was **started** in.
 
+- **Proposals** (the contact as **buyer**) — every [proposal](offers.md#proposals) you prepared
+  for them, newest first, with where it stands, its lots and its total, whatever the period. **New
+  proposal** starts one for this contact and opens it. The section shows for a buyer, or for any
+  contact with a proposal.
+
 The Purchases, Sales, Auctions and Trades sections end with the list of their purchases, sales,
 auction sales or trades in the period, and a row opens that one. An auction sale's row says how many of its lots are open, won and lost; a trade's
 row shows the pieces going each way and its value each way.

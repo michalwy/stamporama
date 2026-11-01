@@ -10,6 +10,9 @@ so in its own status. What those ADRs decide about a platform still holds; only 
 is* changed. #1956–#1959 trim each module page's Platform tab to what its platform uses, and #1960
 brings a platform's figures back on a page of its own.
 
+**Amended by [ADR-0075](0075-proposals.md)** (#2287): a sixth module platform, **Direct**, the platform
+a proposal's lots are offered on — and the one module platform that starts switched on.
+
 ## Context
 
 A marketplace was a `Contact` carrying the Platform role (ADR-0008), and its settings were split: the

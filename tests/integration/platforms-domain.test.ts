@@ -101,7 +101,7 @@ describe("Platforms (#1955)", () => {
       (await listPlatforms(userId, collectionId, "generic")).map((p) => p.name).sort(),
       ["Stamp forum", "eBay"].sort()
     );
-    assert.equal((await listPlatforms(userId, collectionId, "module")).length, 5);
+    assert.equal((await listPlatforms(userId, collectionId, "module")).length, 6);
   });
 
   it("refuses to delete a platform an offer names, or any module platform, and deletes one nothing names", async () => {

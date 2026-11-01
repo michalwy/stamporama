@@ -9,6 +9,7 @@ import { isOfferListingType } from "./offer-rules";
 import { normalizeMarketCode } from "./market-anchoring";
 import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 import {
+  DIRECT_PLATFORM_MODULE,
   FACEBOOK_PLATFORM_MODULE,
   MODULE_PLATFORMS,
   isModulePlatformName,
@@ -22,7 +23,7 @@ import {
 // record of its own, configured in one place in Settings, and the address book holds only people
 // and firms.
 //
-// Two kinds. The five **module platforms** (Allegro, Delcampe, Facebook, Philasearch, Colnect) exist
+// Two kinds. The six **module platforms** (Allegro, Delcampe, Facebook, Philasearch, Direct, Colnect) exist
 // once each per collection, carry their module's fixed name and are configured on that module's own
 // Settings page — `ensureModulePlatforms` makes them. Any number of **generic platforms** are added
 // under Settings → Platforms. Every platform has an on/off switch: one switched off is offered in no
@@ -423,7 +424,7 @@ async function settingsData(
 
 /**
  * The name a generic platform may carry, or a refusal: required, and none of the module
- * platforms' names (ignoring case) — those belong to the five, which every collection holds.
+ * platforms' names (ignoring case) — those belong to the six, which every collection holds.
  */
 function genericName(raw: string): string {
   const name = raw.trim();
@@ -433,10 +434,10 @@ function genericName(raw: string): string {
 }
 
 /**
- * Make sure the collection holds its five module platforms (#1955), creating any that is missing —
- * switched off, so nothing is offered until the collector turns it on on its page. Idempotent and
- * cheap once they exist: one read. The Facebook platform starts needing covers on its photos, since
- * Facebook's rules are why covering exists (#1665).
+ * Make sure the collection holds its six module platforms (#1955, #2287), creating any that is
+ * missing — switched off, so nothing is offered until the collector turns it on on its page, except
+ * Direct (`modulePlatformRows`). Idempotent and cheap once they exist: one read. The Facebook platform
+ * starts needing covers on its photos, since Facebook's rules are why covering exists (#1665).
  *
  * The caller must already have asserted ownership of `collectionId`.
  */
@@ -446,8 +447,12 @@ export async function ensureModulePlatforms(collectionId: string): Promise<void>
     select: { platformModule: true },
   });
   const have = new Set(existing.map((p) => p.platformModule));
-  const missing = modulePlatformRows(collectionId).filter((row) => !have.has(row.platformModule));
-  if (missing.length === 0) return;
+  if (MODULE_PLATFORMS.every((m) => have.has(m.module))) return;
+  const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { baseCurrency: true },
+  });
+  const missing = modulePlatformRows(collectionId, baseCurrency).filter((row) => !have.has(row.platformModule));
   await prisma.platform.createMany({
     data: missing,
     // Two requests creating them at once: the unique index answers, and the loser's rows are skipped.
@@ -455,22 +460,33 @@ export async function ensureModulePlatforms(collectionId: string): Promise<void>
   });
 }
 
-/** The five module platforms as a new collection is created with them (`createCollection`) —
- *  switched off, the Facebook one already needing covers. */
-export function modulePlatformRows(collectionId: string): {
+/** The six module platforms as a new collection is created with them (`createCollection`) —
+ *  switched off, the Facebook one already needing covers; Direct switched on instead, in the
+ *  collection's base currency at a fixed price (#2287), since a proposal's lots go nowhere else. */
+export function modulePlatformRows(
+  collectionId: string,
+  baseCurrency: string
+): {
   collectionId: string;
   name: string;
   platformModule: string;
   enabled: boolean;
   coverSymbols: boolean;
+  platformCurrency: string | null;
+  defaultListingType: string | null;
 }[] {
-  return MODULE_PLATFORMS.map((m) => ({
-    collectionId,
-    name: m.name,
-    platformModule: m.module,
-    enabled: false,
-    coverSymbols: m.module === FACEBOOK_PLATFORM_MODULE,
-  }));
+  return MODULE_PLATFORMS.map((m) => {
+    const direct = m.module === DIRECT_PLATFORM_MODULE;
+    return {
+      collectionId,
+      name: m.name,
+      platformModule: m.module,
+      enabled: direct,
+      coverSymbols: m.module === FACEBOOK_PLATFORM_MODULE,
+      platformCurrency: direct ? baseCurrency : null,
+      defaultListingType: direct ? "fixed" : null,
+    };
+  });
 }
 
 /** Every platform of the collection, name-ordered, each with the count of records naming it.

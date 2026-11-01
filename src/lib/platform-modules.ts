@@ -8,7 +8,7 @@
 // rules to fail. Checking them on a Delcampe listing would report a problem about a form nobody is
 // going to fill from here.
 //
-// Since #1955 (ADR-0071) the five modules are **platforms of their own**, one of each per collection,
+// Since #1955 (ADR-0071) the modules are **platforms of their own**, one of each per collection,
 // named after their module and configured on that module's own Settings page; nothing picks which
 // platform is which any more. `MODULE_PLATFORMS` is the list — read by whatever creates them and by
 // the name rule that keeps a generic platform from taking one of their names.
@@ -58,17 +58,27 @@ export const FACEBOOK_PLATFORM_MODULE = "facebook";
  */
 export const PHILASEARCH_PLATFORM_MODULE = "philasearch";
 
-/** The five module platforms, each with the fixed name its platform carries (#1955) — in the order
- *  the Settings navigation lists their pages. */
+/**
+ * The same, for **Direct** (#2287; ADR-0075) — selling straight to one person, the platform a
+ * proposal's lots are offered on. Facebook, Messenger or the phone are only how that buyer is
+ * reached; the stamps are sold here. Unlike the other five it starts **switched on**, in the
+ * collection's base currency and at a fixed price, since a proposal has nowhere else to put its lots.
+ * A marker for which `Platform` is Direct and nothing more: no listing half, no capture.
+ */
+export const DIRECT_PLATFORM_MODULE = "direct";
+
+/** The six module platforms, each with the fixed name its platform carries (#1955, #2287) — in the
+ *  order the Settings navigation lists their pages. */
 export const MODULE_PLATFORMS: readonly { module: string; name: string }[] = [
   { module: ALLEGRO_PLATFORM_MODULE, name: "Allegro" },
   { module: DELCAMPE_PLATFORM_MODULE, name: "Delcampe" },
   { module: FACEBOOK_PLATFORM_MODULE, name: "Facebook" },
   { module: PHILASEARCH_PLATFORM_MODULE, name: "Philasearch" },
+  { module: DIRECT_PLATFORM_MODULE, name: "Direct" },
   { module: COLNECT_PLATFORM_MODULE, name: "Colnect" },
 ];
 
-/** The fixed name of `module`'s platform, or null for an id that is not one of the five. */
+/** The fixed name of `module`'s platform, or null for an id that is not one of the six. */
 export function modulePlatformName(module: string | null | undefined): string | null {
   return MODULE_PLATFORMS.find((m) => m.module === module)?.name ?? null;
 }

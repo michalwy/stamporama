@@ -41,6 +41,7 @@ import {
   RefreshDueChip,
   ListingTypeChip,
   FacebookPostChip,
+  ProposalChip,
   ReadyWhenPhotosDoneChip,
   NotMarkedReadyChip,
 } from "./offer-badges";
@@ -376,6 +377,14 @@ export function OfferRow({
               title={offer.facebookPost.title}
               lotNo={offer.facebookPost.lotNo}
               onNarrow={onNarrowToPost ? () => onNarrowToPost(offer.facebookPost!.postNo) : undefined}
+            />
+          )}
+          {/* A lot of a proposal names it (#2287). */}
+          {offer.proposal && (
+            <ProposalChip
+              collectionSlug={collectionSlug}
+              proposalNo={offer.proposal.proposalNo}
+              contactName={offer.proposal.contactName}
             />
           )}
           <OfferStateChip state={offer.state} />
