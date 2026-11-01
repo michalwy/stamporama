@@ -17,7 +17,7 @@ import { FaultReducedNote } from "@/app/c/[collectionSlug]/shared/fault-reductio
 // and a per-platform breakdown. They are behind the expander because they cost a valuation pass to
 // read and answer a question ("am I pricing this right?") that is occasional, not per-visit.
 
-const LABEL_STYLE: React.CSSProperties = {
+export const LABEL_STYLE: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
   color: "var(--color-text-muted)",
@@ -28,7 +28,7 @@ const LABEL_STYLE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const AMOUNT_STYLE: React.CSSProperties = {
+export const AMOUNT_STYLE: React.CSSProperties = {
   fontSize: "1.0625rem",
   fontWeight: 700,
   color: "var(--color-text-primary)",
@@ -38,12 +38,12 @@ const AMOUNT_STYLE: React.CSSProperties = {
   textAlign: "right",
 };
 
-const NOTE_STYLE: React.CSSProperties = {
+export const NOTE_STYLE: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-muted)",
 };
 
-const FRAME_STYLE: React.CSSProperties = {
+export const FRAME_STYLE: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "0.375rem",
@@ -53,14 +53,14 @@ const FRAME_STYLE: React.CSSProperties = {
   background: "var(--color-bg-page)",
 };
 
-const ROW_STYLE: React.CSSProperties = {
+export const ROW_STYLE: React.CSSProperties = {
   display: "flex",
   alignItems: "baseline",
   gap: "0.75rem",
   flexWrap: "wrap",
 };
 
-const TOGGLE_STYLE: React.CSSProperties = {
+export const TOGGLE_STYLE: React.CSSProperties = {
   marginLeft: "auto",
   flexShrink: 0,
   alignSelf: "center",

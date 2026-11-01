@@ -55,6 +55,7 @@ import {
   type LotFact,
 } from "../../lots/lot-row";
 import { useLotGroupTools } from "../../lots/use-lot-group-tools";
+import { LotGroupSummaryBar } from "../../lots/lot-group-summary-bar";
 import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
 import { PostPriceTotalsBar } from "./post-price-totals-bar";
@@ -799,6 +800,10 @@ export function FacebookPostPanel({
                     </>
                   )}
                 </div>
+              </div>
+              {/* What the lots come to (#2326), whatever the post's state. */}
+              <div style={{ margin: "0.75rem 0 0" }}>
+                <LotGroupSummaryBar collectionId={collectionId} group={{ kind: "post", id: postId }} />
               </div>
               {notAdded && (
                 <p role="status" style={{ color: "var(--color-warning)", fontSize: "0.8125rem", margin: "0.5rem 0 0" }}>

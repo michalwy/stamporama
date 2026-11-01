@@ -53,13 +53,14 @@ const BAR: React.CSSProperties = {
 
 const lots = (n: number) => `${n} lot${n === 1 ? "" : "s"}`;
 
-export function PostPriceTotalsBar({ totals }: { totals: PostPriceTotals }) {
+/** `title` names the group: *Post total*, or *Proposal total* on a proposal's screen (#2326). */
+export function PostPriceTotalsBar({ totals, title = "Post total" }: { totals: PostPriceTotals; title?: string }) {
   const priceName = PRICE_NAME[totals.priceKind];
   const pricedOver = describeLotCoverage(totals.priced, totals.lotCount);
   return (
-    <div role="status" aria-label="Post totals" style={BAR}>
+    <div role="status" aria-label={title} style={BAR}>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem", fontSize: "0.8125rem" }}>
-        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>Post total</span>
+        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{title}</span>
         <span style={{ ...MUTED, fontSize: "0.75rem" }}>
           {lots(totals.lotCount)}, in {totals.currency}
           {totals.otherCurrency > 0 && ` · ${lots(totals.otherCurrency)} in another currency left out`}

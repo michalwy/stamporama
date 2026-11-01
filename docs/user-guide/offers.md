@@ -3235,8 +3235,21 @@ Once it is sent, the rows show the lots as they stand and none of these tools is
 proposal is reopened. What only a post has — its group, its layout, the post text and captions,
 auctions, publishing — has no place on a proposal.
 
-The **total** under the lots adds up the lots not withdrawn; a lot with no price yet is not counted as
-zero but named beside the total (*2 unpriced*).
+**The lots' summary** sits at the top of the lots in every state — Preparing, Sent, Sold or Declined.
+Its first line is the lots' **price total**, with how many lots, sets and copies the proposal holds and
+how many lots have no price yet (counted apart, never as zero). **More** opens the lots' **catalogue
+value**, **estimated value**, **market value** and **purchase cost**, each with what the prices make
+against it, signed and coloured as on a lot's row — against the purchase cost that is the proposal's
+**profit** or **loss**. The figures are the lots' own price tables added up, in the collection's base
+currency; a lot without a figure is left out of that figure and the line says **over N of M lots**.
+Withdrawn lots are left out. Once lots have sold, a **Sold** line says what their sale brought in and
+the profit on them, beside the asking figures. Whether **More** is open is remembered, as on the Offers
+list.
+
+While the proposal is being prepared, **the proposal's total** is also pinned to the bottom of the
+window under the lots, as on a post — see
+[Pricing the lots and marking them ready](facebook.md#pricing-the-lots-and-marking-them-ready): it follows the prices as they are
+typed, where the summary follows saved ones.
 
 ### What the buyer is sent
 
