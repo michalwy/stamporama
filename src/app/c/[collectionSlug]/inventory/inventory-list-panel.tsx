@@ -6,7 +6,9 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { StampSubtypeData } from "@/lib/subtypes";
-import type { ItemListItem, ItemSortBy } from "@/lib/items";
+import type { ItemIssueRef, ItemListItem, ItemSortBy } from "@/lib/items";
+import { ISSUE_FILTER_PARAM, showIssueCopiesUpdate } from "@/lib/copy-issue-filter";
+import { issueGroupLabel } from "@/lib/issue-groups";
 import type { CopyGroupAxes } from "@/lib/copy-groups";
 import { DIRECT_PLATFORM_MODULE } from "@/lib/platform-modules";
 import {
@@ -284,6 +286,48 @@ interface InventoryListPanelProps {
   /** The collection's stamp subtypes (ADR-0010) — drives the subtype filter (#1002), absent when empty. */
   subtypes: StampSubtypeData[];
   baseCurrency: string;
+  /** The issue the address narrows the list to (#2308), resolved by the page so its chip can name
+   *  it; null when none is set or the id is not this collection's. */
+  issueFilter: ItemIssueRef | null;
+}
+
+/** The issue filter's chip (#2308): the issue's name and year, and **×** to remove it. */
+function IssueFilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span
+      style={{
+        ...FILTER_CONTROL_STYLE,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        whiteSpace: "nowrap",
+        color: "var(--color-accent)",
+        borderColor: "var(--color-accent)",
+        background: "var(--color-accent-soft)",
+        fontWeight: 600,
+      }}
+    >
+      <Icon name="issues" />
+      Issue: {label}
+      <Tooltip content="Show every issue's copies again">
+        <button
+          type="button"
+          aria-label="Remove the issue filter"
+          onClick={onRemove}
+          style={{
+            display: "inline-flex",
+            border: "none",
+            background: "none",
+            padding: 0,
+            cursor: "pointer",
+            color: "inherit",
+          }}
+        >
+          <Icon name="close" />
+        </button>
+      </Tooltip>
+    </span>
+  );
 }
 
 export function InventoryListPanel({
@@ -296,6 +340,7 @@ export function InventoryListPanel({
   formats,
   subtypes,
   baseCurrency,
+  issueFilter,
 }: InventoryListPanelProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -349,6 +394,12 @@ export function InventoryListPanel({
   // visit narrowed to a phrase nobody remembers typing reads as a broken list rather than a
   // remembered one.
   const search = searchParams.get("search") ?? "";
+  // The issue a row's *Show this issue's copies* narrowed the list to (#2308): set in the search's
+  // place, kept in the address so the view reloads and links, and — like the search — never
+  // remembered. While it is set it wins over the area and the year, which are left as they were on
+  // the rail: they are shared with the other lists (#143), and an issue they would hide is still
+  // the one that was asked for.
+  const issueId = searchParams.get(ISSUE_FILTER_PARAM) ?? "";
   // The fields that box matches (#2238), ticked beside it and remembered per collection — apart from
   // the filters, so *Reset filters* leaves it alone, and outside the URL like the text itself. Sent
   // only with a search, so an empty box asks the request it always did.
@@ -558,7 +609,8 @@ export function InventoryListPanel({
 
   const filters: InventoryItemFilters = useMemo(
     () => ({
-      areaIds: filterAreaIds,
+      areaIds: issueId ? undefined : filterAreaIds,
+      issueId: issueId || undefined,
       search: search || undefined,
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
@@ -575,7 +627,7 @@ export function InventoryListPanel({
       faultIds: faultIds.length > 0 ? faultIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
-      year: year || undefined,
+      year: issueId ? undefined : year || undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
@@ -594,7 +646,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
+    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -1206,6 +1258,7 @@ export function InventoryListPanel({
           ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
           : undefined,
       onViewOffers: (it) => setDialog({ kind: "viewOffers", item: it }),
+      onShowIssueCopies: (issue) => updateParams(showIssueCopiesUpdate(issue.id)),
       purchaseHref: (it) =>
         it.purchase ? `/c/${collectionSlug}/purchases/${it.purchase.id}?lot=${it.lotId}` : null,
       onDispose: (it) => setDialog({ kind: "dispose", item: it }),
@@ -1218,6 +1271,7 @@ export function InventoryListPanel({
     }),
     [
       collectionSlug,
+      updateParams,
       scopedPlatform,
       applyPlatformExclusion,
       quickOfferActive,
@@ -1232,6 +1286,7 @@ export function InventoryListPanel({
   // here that silently re-shaped two other screens would be a bigger act than the button says.
   const hasResettableFilters =
     !!search ||
+    !!issueId ||
     conditionIds.length > 0 ||
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
@@ -1265,6 +1320,7 @@ export function InventoryListPanel({
     updateParams({
       ...Object.fromEntries(REMEMBERED_FILTER_KEYS.map((key) => [key, ""])),
       search: "",
+      [ISSUE_FILTER_PARAM]: "",
       notOfferedPlatform: "",
       excludedPlatform: "",
     });
@@ -1824,7 +1880,7 @@ export function InventoryListPanel({
                   #733's own objection — noise on a row this dense — still stands. */}
               <Tooltip
                 style={NO_SHRINK}
-                content="Clear every filter on this screen, the search box included. The area and the year are shared with the other lists and are left as they are."
+                content="Clear every filter on this screen, the search box and the issue included. The area and the year are shared with the other lists and are left as they are."
               >
                 <button
                   type="button"
@@ -1846,6 +1902,21 @@ export function InventoryListPanel({
               </Tooltip>
             </div>
           </ListToolbar>
+
+          {/* The issue filter (#2308), named where the search box would have said what narrowed the
+              list. In the flow like the alert below, for #864's reason. */}
+          {issueId && (
+            <div style={{ margin: "0.75rem 1rem 0", display: "flex" }}>
+              <IssueFilterChip
+                label={
+                  issueFilter && issueFilter.id === issueId
+                    ? issueGroupLabel(issueFilter.id, issueFilter.name, issueFilter.year)
+                    : "Unknown issue"
+                }
+                onRemove={() => updateParams({ [ISSUE_FILTER_PARAM]: "" })}
+              />
+            </div>
+          )}
 
           {/* A platform-exclusion write that failed (#506) has no dialog to report into, so it
               reports here, directly above the rows it did not change.
