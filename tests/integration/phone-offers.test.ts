@@ -85,7 +85,6 @@ describe("the phone offer read (#2008)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

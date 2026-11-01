@@ -343,7 +343,6 @@ describe("the offer operations (#711)", () => {
         price: "0.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [listedCopyId] }
     );
@@ -710,7 +709,6 @@ describe("the offer operations (#711)", () => {
           price: "0.00",
           currency: "EUR",
           listingDate: null,
-          state: "preparing",
         },
         {}
       );

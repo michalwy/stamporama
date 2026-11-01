@@ -84,7 +84,6 @@ describe("offers sold on a platform without a recorded sale (#499)", () => {
       price: "20.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await prisma.offer.update({ where: { id: offerId }, data: { name } });
     await addOfferSet(userId, offerId, itemIds);
@@ -332,7 +331,6 @@ describe("a listing sold on its platform counts as sold (#501)", () => {
         price,
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
       await prisma.offer.update({ where: { id: offerId }, data: { name } });
       await addOfferSet(userId, offerId, [itemId]);

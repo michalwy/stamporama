@@ -148,7 +148,6 @@ describe("merging two sales (#2041)", () => {
       price: "30.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [offered]);
     await setOfferState(userId, offerId, "ready");

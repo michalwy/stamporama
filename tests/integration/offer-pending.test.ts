@@ -78,7 +78,6 @@ describe("the Pending offer state (#1778)", () => {
       price: "12.50",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, itemIds);
     await setOfferState(userId, offerId, "ready");
@@ -140,7 +139,6 @@ describe("the Pending offer state (#1778)", () => {
       price: "12.50",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, preparing, [await newItem()]);
     await assert.rejects(() => setOfferState(userId, preparing, "pending"), /Cannot move/);

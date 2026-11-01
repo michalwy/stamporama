@@ -102,7 +102,6 @@ describe("faults in offer texts (#1559)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [thinnedCopy, soundCopy]);
     return offerId;

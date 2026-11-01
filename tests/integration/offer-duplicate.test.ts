@@ -57,7 +57,7 @@ describe("duplicate offer (list on another platform)", () => {
     c = await mk();
 
     // Source offer: a single-copy set (a) and a two-copy komplet (b + c).
-    source = await createOffer(userId, collectionId, { platformId: delcampeId, url: "https://del/x", price: "9.00", currency: "EUR", listingDate: null, state: "preparing" });
+    source = await createOffer(userId, collectionId, { platformId: delcampeId, url: "https://del/x", price: "9.00", currency: "EUR", listingDate: null });
     await addOfferSet(userId, source, [a]);
     komplet = await addOfferSet(userId, source, [b, c], "Pair");
   });
@@ -75,7 +75,6 @@ describe("duplicate offer (list on another platform)", () => {
       price: "12.00",
       currency: "USD", // ignored — Allegro is locked to PLN
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(skippedCopies, 0);
 
@@ -94,7 +93,7 @@ describe("duplicate offer (list on another platform)", () => {
 
   it("is an independent snapshot — editing one offer does not touch the other", async () => {
     const { id: cloneId } = await duplicateOffer(userId, source, {
-      platformId: allegroId, url: null, price: "12.00", currency: "PLN", listingDate: null, state: "preparing",
+      platformId: allegroId, url: null, price: "12.00", currency: "PLN", listingDate: null,
     });
     // Rename the source komplet; the clone's copy of it must be unaffected.
     await updateOfferSet(userId, komplet, "Renamed on source");
@@ -107,7 +106,7 @@ describe("duplicate offer (list on another platform)", () => {
 
   it("skips copies that have already sold, dropping a set left empty", async () => {
     // Sell copy `a` through a separate offer so it is globally retired.
-    const other = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "9.00", currency: "EUR", listingDate: null, state: "preparing" });
+    const other = await createOffer(userId, collectionId, { platformId: delcampeId, url: null, price: "9.00", currency: "EUR", listingDate: null });
     const otherSet = await addOfferSet(userId, other, [a]);
     await setOfferState(userId, other, "ready"); // preparing → ready → active (#246)
     await setOfferState(userId, other, "active"); // only a live listing can sell
@@ -119,7 +118,7 @@ describe("duplicate offer (list on another platform)", () => {
     await addSaleLines(userId, saleId, [{ offerId: other, offerSetId: otherSet, price: "9.00", itemIds: [a] }]);
 
     const { id, skippedCopies } = await duplicateOffer(userId, source, {
-      platformId: allegroId, url: null, price: "12.00", currency: "PLN", listingDate: null, state: "preparing",
+      platformId: allegroId, url: null, price: "12.00", currency: "PLN", listingDate: null,
     });
     assert.equal(skippedCopies, 1, "the sold copy is skipped");
 

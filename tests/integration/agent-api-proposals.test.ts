@@ -118,7 +118,7 @@ describe("the proposal operations (#2303)", () => {
     const id = await createOffer(
       userId,
       collectionId,
-      { platformId, url: null, price, startingPrice: null, currency: "PLN", listingDate: null, state: "preparing" },
+      { platformId, url: null, price, startingPrice: null, currency: "PLN", listingDate: null },
       { seedItemIds: [await copy()], seedPerCopy: true }
     );
     const { offerNo } = await prisma.offer.findUniqueOrThrow({ where: { id }, select: { offerNo: true } });

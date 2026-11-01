@@ -153,7 +153,6 @@ describe("umbrella collisions by listed variant (#1347)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     return offerId;
@@ -241,7 +240,6 @@ describe("umbrella collisions by listed variant (#1347)", () => {
   describe("the offer generator (#1287)", () => {
     const input = (itemIds: string[]): GeneratorInput => ({
       platformId: colnectId,
-      state: "preparing",
       mode: "singles",
       packaging: "multi",
       itemIds,

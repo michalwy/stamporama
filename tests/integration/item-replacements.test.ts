@@ -267,7 +267,6 @@ describe("replacement pairs (#1936)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(f.userId, offerId, [oldCopy.id]);
     const set = await prisma.offerSet.findFirstOrThrow({ where: { offerId }, select: { id: true } });

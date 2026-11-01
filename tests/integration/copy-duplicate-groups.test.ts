@@ -311,7 +311,6 @@ describe("duplicate groups", () => {
         price: "4.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: items.map((i) => i.id), seedPerCopy: true }
     );

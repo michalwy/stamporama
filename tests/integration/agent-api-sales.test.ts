@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createAssistantToken } from "../../src/lib/api-tokens";
-import { addOfferSet, createOffer, setOfferState, type OfferInput } from "../../src/lib/offers";
+import { addOfferSet, createOffer, setOfferState, type NewOfferInput } from "../../src/lib/offers";
 import { getSaleDetail } from "../../src/lib/sales";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
@@ -146,13 +146,12 @@ describe("the sale operations (#1949)", () => {
   /** A Facebook auction that is up — the group's default listing — one set per copy. */
   async function facebookOffer(copies: number): Promise<{ id: string; offerNo: number; setIds: string[] }> {
     const items = await Promise.all(Array.from({ length: copies }, () => newItem()));
-    const input: OfferInput = {
+    const input: NewOfferInput = {
       platformId: facebookId,
       url: null,
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: groupId,
       startingPrice: "3.00",
     };
@@ -358,7 +357,7 @@ describe("the sale operations (#1949)", () => {
       const id = await createOffer(
         userId,
         collectionId,
-        { platformId: delcampeId, url: null, price: "3.00", currency: "EUR", listingDate: null, state: "preparing" },
+        { platformId: delcampeId, url: null, price: "3.00", currency: "EUR", listingDate: null },
         { seedItemIds: [item] }
       );
       await setOfferState(userId, id, "ready");
@@ -377,7 +376,7 @@ describe("the sale operations (#1949)", () => {
       const id = await createOffer(
         userId,
         collectionId,
-        { platformId: delcampeId, url: null, price: "3.00", currency: "EUR", listingDate: null, state: "preparing" },
+        { platformId: delcampeId, url: null, price: "3.00", currency: "EUR", listingDate: null },
         { seedItemIds: [item] }
       );
       assert.match(

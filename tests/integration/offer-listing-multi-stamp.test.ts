@@ -125,7 +125,7 @@ describe("{catalog} on a multi-stamp copy (#749)", () => {
     return createOffer(
       userId,
       collectionId,
-      { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing" },
+      { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null },
       { seedItemIds: itemIds }
     );
   }

@@ -98,7 +98,6 @@ describe("changing a Facebook post's lot titles at once (#2033)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

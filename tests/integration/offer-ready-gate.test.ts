@@ -137,7 +137,6 @@ describe("marking an offer ready (#418)", () => {
       price: "12.50",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     return offerId;
@@ -417,7 +416,6 @@ describe("marking an offer ready with listing photos (#311)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

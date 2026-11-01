@@ -63,7 +63,7 @@ describe("offer filter counts + needs-action facet", () => {
 
     const newOffer = (platformId: string, price: string) =>
       createOffer(userId, collectionId, {
-        platformId, url: null, price, currency: "EUR", listingDate: null, state: "preparing",
+        platformId, url: null, price, currency: "EUR", listingDate: null,
       });
 
     // The same copy listed on both platforms — the collision the needs-action facet keys off.

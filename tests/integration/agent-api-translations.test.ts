@@ -357,7 +357,6 @@ describe("find_missing_translations and set_translations (#1452)", () => {
         price: "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
       const answer = await write(token, {
         language: "de",

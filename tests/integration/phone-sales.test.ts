@@ -90,7 +90,6 @@ describe("the phone's sales to do (#2007)", () => {
       price: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     const setIds: string[] = [];
     for (let i = 0; i < n; i++) {

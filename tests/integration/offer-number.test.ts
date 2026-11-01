@@ -88,7 +88,6 @@ describe("offer number (#416)", () => {
         price: "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [item.id] }
     );
@@ -132,7 +131,6 @@ describe("offer number (#416)", () => {
       price: "6.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.ok((await numberOf(id)) > (await numberOf(source)));
   });
@@ -165,7 +163,6 @@ describe("offer number (#416)", () => {
         price: "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [item.id] }
     );

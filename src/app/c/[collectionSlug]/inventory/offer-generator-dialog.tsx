@@ -3,7 +3,6 @@
 import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
-  canGenerateIntoPost,
   generatorPostRefusal,
   generatorRequestParams,
   generatorSelection,
@@ -16,7 +15,7 @@ import {
 import { NO_MIXING, type SeriesMixing } from "@/lib/series-recombination-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
+import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
 import { suggestGeneratorPostTitle } from "@/lib/generator-post-title";
 import { formatEntityNo } from "@/lib/quick-jump";
@@ -226,7 +225,6 @@ export function OfferGeneratorDialog({
   baseCurrency,
   platformId,
   platformName,
-  state,
   facebook,
   direct = false,
   input,
@@ -240,7 +238,6 @@ export function OfferGeneratorDialog({
   baseCurrency: string;
   platformId: string;
   platformName: string;
-  state: OfferState;
   /** On Facebook, the group every new offer is in and when an auction there closes (#1663). */
   facebook: FacebookCreateChoice;
   /** The platform is Direct, whose new offers may become the lots of a proposal (#2287). */
@@ -262,8 +259,9 @@ export function OfferGeneratorDialog({
   // The lines left out, by id — kept rather than the ticked ones, so every offer starts ticked and a
   // line the plan newly proposes after a change of mode or packaging is ticked too (#1887).
   const [skip, setSkip] = useState<ReadonlySet<string>>(() => new Set());
-  // In a new post (#2030): offered on Facebook only, and only while the bar's status is not yet up.
-  const offerPost = !!facebook.facebookGroupId && canGenerateIntoPost(state);
+  // In a new post (#2030): offered on Facebook only. The offers a pass creates start Preparing (#2322),
+  // so none of them is up yet.
+  const offerPost = !!facebook.facebookGroupId;
   // Null until the collector ticks, unticks or types: until then the plan decides (#2105).
   const [inPostChoice, setInPostChoice] = useState<boolean | null>(null);
   const [typedTitle, setTypedTitle] = useState<string | null>(null);
@@ -281,7 +279,6 @@ export function OfferGeneratorDialog({
   const request = useMemo(
     () => ({
       platformId,
-      state,
       mode,
       packaging,
       mixing: mode === "checklists" ? mixing : NO_MIXING,
@@ -293,7 +290,7 @@ export function OfferGeneratorDialog({
       skip: [] as string[],
       facebook,
     }),
-    [platformId, state, mode, packaging, mixing, priority, oneStampSets, input, targets, facebook]
+    [platformId, mode, packaging, mixing, priority, oneStampSets, input, targets, facebook]
   );
   // The preview's query never carries the ticks: a tick changes what is written, not the plan.
   const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
@@ -319,7 +316,7 @@ export function OfferGeneratorDialog({
   const postTitle = typedTitle ?? plan.title;
   const intoPost = offerPost && inPost;
   const postRefusal = intoPost
-    ? generatorPostRefusal({ state, facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
+    ? generatorPostRefusal({ facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
     : null;
   const canConfirm =
     !!preview && newOffers + changedOffers > 0 && !preview.creationBlock && !postRefusal && !isPending;
@@ -400,7 +397,7 @@ export function OfferGeneratorDialog({
             {input.kind === "ticked"
               ? `the ${plural(input.itemIds.length, "ticked copy", "ticked copies")} in view`
               : "the copies the list's filters show"}
-            , as <strong>{OFFER_STATE_LABEL[state]}</strong> offers with no asking price and no listing URL — the
+            , as <strong>{OFFER_STATE_LABEL.preparing}</strong> offers with no asking price and no listing URL — the
             same as quick offer mode.
           </div>
           {/* Which checklists count as sets an offer may be built on (#1617). */}
@@ -497,7 +494,7 @@ export function OfferGeneratorDialog({
               )}
               {!inPost && preview && newOffers < 2 && (
                 <span style={HINT}>
-                  {generatorPostRefusal({ state, facebookGroupId: facebook.facebookGroupId, newOffers, title: "" })}
+                  {generatorPostRefusal({ facebookGroupId: facebook.facebookGroupId, newOffers, title: "" })}
                 </span>
               )}
             </div>

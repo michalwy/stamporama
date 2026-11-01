@@ -50,10 +50,6 @@ import {
   useStampConditionCollisions,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import type { StampConditionCollision } from "@/lib/offers";
-import {
-  useLastOfferDefaults,
-  offerDefaultsFromForm,
-} from "@/app/c/[collectionSlug]/offers/use-last-offer-defaults";
 import { useInvalidateInventory } from "./use-inventory-query";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -325,7 +321,6 @@ export function AddToOfferDialog({
   // Creating the first offer for a platform sets its currency (#196); the platform picker reads the
   // currency from the cached contact search, so it must be invalidated too (#212).
   const { invalidateContacts } = useInvalidatePurchases();
-  const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
   const { toast } = useToast();
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
 
@@ -496,7 +491,6 @@ export function AddToOfferDialog({
           linkLabel: "Open proposal",
         });
       }
-      rememberOfferDefaults(offerDefaultsFromForm(formData));
       invalidateAll(collectionId);
       invalidateList(collectionId);
       invalidateContacts(collectionId);

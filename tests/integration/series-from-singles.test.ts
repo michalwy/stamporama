@@ -87,7 +87,6 @@ describe("series from singles (#1210)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     await prisma.offer.update({

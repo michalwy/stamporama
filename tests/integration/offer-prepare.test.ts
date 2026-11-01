@@ -129,7 +129,6 @@ describe("the Prepare screen (#1894)", () => {
       price: over.price ?? "0.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
       ...(over.auction ? { listingType: "auction" as const } : {}),
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);

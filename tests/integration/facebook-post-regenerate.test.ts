@@ -99,7 +99,6 @@ describe("regenerating a Facebook post's lot texts (#1983)", () => {
         startingPrice: "3.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
       },
       { seedItemIds: [item.id] }

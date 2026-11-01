@@ -232,7 +232,6 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     // A pending copy beside a frozen one, and a pending copy beside one with no estimate.
     await addOfferSet(userId, offerId, [cheapId, closedCheapId]);

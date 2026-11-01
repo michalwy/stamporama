@@ -222,7 +222,6 @@ describe("a copy photo's scale (#2061)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, collage(itemIds).config);
     await addOfferSet(userId, offerId, itemIds);

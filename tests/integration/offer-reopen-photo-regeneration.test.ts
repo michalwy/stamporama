@@ -109,7 +109,6 @@ describe("cleaned-up images made again when an offer is back on sale (#2317)", (
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

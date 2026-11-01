@@ -7,7 +7,7 @@ import {
   createOffer,
   quickOfferCreationBlock,
   writeGeneratedOffers,
-  type OfferInput,
+  type NewOfferInput,
 } from "../../src/lib/offers";
 import { commitLotProposal } from "../../src/lib/lot-builder";
 import type { LotBuilderRequest } from "../../src/lib/lot-builder-criteria";
@@ -161,15 +161,14 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
     return (await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true })).id;
   }
 
-  /** What quick offer mode sends: a platform, a status — and, on Facebook, the group. */
-  function quick(overrides: Partial<OfferInput> = {}): OfferInput {
+  /** What quick offer mode sends: a platform — and, on Facebook, the group. */
+  function quick(overrides: Partial<NewOfferInput> = {}): NewOfferInput {
     return {
       platformId: facebookId,
       url: null,
       price: "0.00",
       currency: "",
       listingDate: null,
-      state: "preparing",
       ...overrides,
     };
   }
@@ -216,30 +215,23 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
     assert.equal(stated.startingPrice?.toFixed(2), "7.00");
   });
 
-  it("states no opening figure over copies with no catalogue value, and refuses to start one Ready", async () => {
+  it("states no opening figure over copies with no catalogue value", async () => {
     const unpriced = await copy(null);
     const draft = await read(
       await createOffer(userId, collectionId, quick({ facebookGroupId: percentGroupId }), { seedItemIds: [unpriced] })
     );
     assert.equal(draft.startingPrice, null, "a share of nothing is no price");
-    const another = await copy(null);
-    await assert.rejects(
-      () =>
-        createOffer(userId, collectionId, quick({ facebookGroupId: percentGroupId, state: "ready" }), {
-          seedItemIds: [another],
-        }),
-      /no starting price/
-    );
+    assert.equal(draft.state, "preparing");
   });
 
   it("says before the generator runs that Facebook needs a group, and nothing more once it has one", async () => {
     assert.match(
-      (await quickOfferCreationBlock(userId, collectionId, facebookId, "ready")) ?? "",
+      (await quickOfferCreationBlock(userId, collectionId, facebookId)) ?? "",
       /Choose the Facebook group/
     );
-    assert.equal(await quickOfferCreationBlock(userId, collectionId, facebookId, "ready", amountGroupId), null);
+    assert.equal(await quickOfferCreationBlock(userId, collectionId, facebookId, amountGroupId), null);
     // A share of catalogue value is worked out per offer as it is written, so it blocks nothing ahead.
-    assert.equal(await quickOfferCreationBlock(userId, collectionId, facebookId, "ready", percentGroupId), null);
+    assert.equal(await quickOfferCreationBlock(userId, collectionId, facebookId, percentGroupId), null);
   });
 
   it("generates every new offer as an auction in the group, closing when the browser said", async () => {
@@ -247,7 +239,6 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
     const endsAt = new Date("2026-11-01T19:00:00.000Z");
     const { createdOfferIds } = await writeGeneratedOffers(userId, collectionId, {
       platformId: facebookId,
-      state: "ready",
       facebookGroupId: amountGroupId,
       endsAt,
       newOffers: [[[a]], [[b]]],
@@ -257,7 +248,7 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
     for (const offerId of createdOfferIds) {
       const offer = await read(offerId);
       assert.equal(offer.facebookGroupId, amountGroupId);
-      assert.equal(offer.state, "ready");
+      assert.equal(offer.state, "preparing");
       assert.equal(offer.startingPrice?.toFixed(2), "4.00", "the group's amount");
       assert.equal(offer.endsAt?.toISOString(), endsAt.toISOString());
     }
@@ -267,7 +258,6 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
       () =>
         writeGeneratedOffers(userId, collectionId, {
           platformId: facebookId,
-          state: "preparing",
           facebookGroupId: null,
           endsAt: null,
           newOffers: [[[c]]],
@@ -287,7 +277,6 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
       () =>
         writeGeneratedOffers(userId, collectionId, {
           platformId: facebookId,
-          state: "preparing",
           facebookGroupId: percentGroupId,
           endsAt: null,
           newOffers: [],
@@ -298,7 +287,6 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
     // The same addition, in the offer's own group, goes through.
     const written = await writeGeneratedOffers(userId, collectionId, {
       platformId: facebookId,
-      state: "preparing",
       facebookGroupId: amountGroupId,
       endsAt: null,
       newOffers: [],

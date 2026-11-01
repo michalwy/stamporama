@@ -383,17 +383,6 @@ export function auctionNeedsResolution(offer: ResolvableAuction, now: Date): boo
   return hasPrice(offer.price) || offer.inActiveBidding || (offer.bidderCount ?? 0) > 0;
 }
 
-/** The non-terminal states an offer may be *created* directly in (#257): the collector states the
- * listing's real-world status up front rather than stepping the draft through the lifecycle. `ready`
- * and `active` still require the offer to list something (see {@link requiresSets}) and to carry an
- * asking price (see {@link requiresPrice}); the caller gates on that. Terminal states (`sold` / `withdrawn`) and `paused` are excluded — you don't open
- * a listing already closed or paused. */
-export const CREATABLE_OFFER_STATES: readonly OfferState[] = ["preparing", "ready", "active"];
-
-export function isCreatableOfferState(value: unknown): value is OfferState {
-  return value === "preparing" || value === "ready" || value === "active";
-}
-
 /**
  * A safe, recognisable file-name stem for one offer — used for the archive and, since #326, for
  * every image inside it and every image downloaded on its own.

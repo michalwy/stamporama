@@ -17,7 +17,7 @@ import {
   setOfferState,
   withdrawOpenOffersTx,
   writeGeneratedOffers,
-  type OfferInput,
+  type NewOfferInput,
   type OfferTextStatus,
   type PrepareOffer,
 } from "./offers";
@@ -707,7 +707,7 @@ export async function makeProposalLots(
     ({ createdOfferIds } = await writeGeneratedOffers(
       ownerId,
       collectionId,
-      { platformId: direct.id, state: "preparing", facebookGroupId: null, endsAt: null, newOffers, additions: [] },
+      { platformId: direct.id, facebookGroupId: null, endsAt: null, newOffers, additions: [] },
       { inTransaction: (tx, created) => writeProposalLots(tx, collectionId, proposalId, created) }
     ));
   } catch (e) {
@@ -742,7 +742,7 @@ export async function createProposalLot(
   ownerId: string,
   collectionId: string,
   proposalId: string,
-  input: OfferInput,
+  input: NewOfferInput,
   opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
 ): Promise<ProposalLotCreated> {
   await assertCollectionOwner(ownerId, collectionId);

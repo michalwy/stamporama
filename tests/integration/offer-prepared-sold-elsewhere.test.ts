@@ -43,7 +43,6 @@ describe("a prepared offer holding a copy sold elsewhere (#1876)", () => {
       price: "10.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
       ...(platform === facebookId ? { facebookGroupId: groupId } : {}),
     });
   const stateOf = async (offerId: string) =>

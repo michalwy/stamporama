@@ -59,11 +59,11 @@ describe("sellable offers name a listing by its title (#1026)", () => {
     // Two live listings on one platform: one the collector named, one he did not. Only `active`
     // offers are sellable, so each goes preparing → ready → active once its set is composed.
     titledId = await createOffer(userId, collectionId, {
-      platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing",
+      platformId, url: null, price: "5.00", currency: "EUR", listingDate: null,
     });
     await addOfferSet(userId, titledId, [await mk()]);
     untitledId = await createOffer(userId, collectionId, {
-      platformId, url: null, price: "6.00", currency: "EUR", listingDate: null, state: "preparing",
+      platformId, url: null, price: "6.00", currency: "EUR", listingDate: null,
     });
     await addOfferSet(userId, untitledId, [await mk()]);
     for (const id of [titledId, untitledId]) {

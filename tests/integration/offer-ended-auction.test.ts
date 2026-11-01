@@ -79,7 +79,6 @@ describe("ended auctions with a bid (#490)", () => {
       endsAt: opts.endsAt,
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await prisma.offer.update({ where: { id: offerId }, data: { name: opts.name } });
     await addOfferSet(userId, offerId, [item.id]);
@@ -170,7 +169,6 @@ describe("ended auctions with a bid (#490)", () => {
       endsAt: ended,
       currency: "EUR",
       listingDate: null,
-      state: "active",
     });
     const row = await prisma.offer.findUniqueOrThrow({
       where: { id: offerId },

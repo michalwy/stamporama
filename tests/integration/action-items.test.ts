@@ -107,7 +107,6 @@ describe("action items notification centre (#367)", () => {
         price,
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
 
     // One copy on two platforms: the pair the bidding conflict is derived from.
@@ -213,7 +212,6 @@ describe("action items notification centre (#367)", () => {
         price,
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
       const setId = await addOfferSet(userId, id, [both]);
       await setOfferState(userId, id, "ready");

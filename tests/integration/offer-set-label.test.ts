@@ -119,7 +119,6 @@ describe("derived offer set label (#379)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, itemIds, title);
     const detail = await getOfferDetail(userId, offerId);
@@ -154,7 +153,6 @@ describe("derived offer set label (#379)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const setId = await addOfferSet(userId, offerId, northWest, "Komplet 1938");
     await updateOfferSet(userId, setId, "");
@@ -169,7 +167,6 @@ describe("derived offer set label (#379)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, northWest);
     const detail = await getOfferDetail(userId, offerId);

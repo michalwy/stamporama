@@ -120,7 +120,6 @@ describe("bulk listing workspace read model (#322)", () => {
       price: over.price ?? "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, itemIds);
     // Written directly, not through `setOfferState`: this batch is deliberately full of offers that

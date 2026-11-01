@@ -554,12 +554,9 @@ export async function draftOffer(
         // Only ever consulted on a platform that has no currency of its own yet (#196), which is
         // the collection's base currency and the one answer that cannot be wrong.
         currency: "",
-        listingDate: null,
-        // **`preparing`, always, and there is no parameter for it.** `ready` and `active` are the
-        // collector's to reach: `active` is a live claim on the copies and `ready` says the listing
-        // is assembled and about to be posted. This is the boundary as absence rather than as a
-        // flag — there is nothing here to set.
-        state: "preparing",
+        // Created `preparing`, as every offer is (#2322), and there is no parameter for it: `ready`
+        // and `active` are the collector's to reach — `active` is a live claim on the copies and
+        // `ready` says the listing is assembled and about to be posted.
         // The group, on Facebook (#1663); its settings — the listing type among them (#1671) — are
         // read as the offer is made. No closing time: it is a local time and only a browser knows
         // the zone (#490).

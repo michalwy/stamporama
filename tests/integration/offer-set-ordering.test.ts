@@ -75,7 +75,6 @@ describe("offer set + copy ordering (#306)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
   }
 
@@ -205,7 +204,6 @@ describe("offer set + copy ordering (#306)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const d = await detail(clone.id);
     assert.deepEqual(

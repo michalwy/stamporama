@@ -60,7 +60,6 @@ import { CLOSE_ELEMENT_ID } from "./assistant-close-handoff";
 import { assistantHint } from "./assistant-listing";
 import { useAssistantRuns } from "./use-assistant-runs";
 import { useLastUsedPlatform } from "./use-last-used-platform";
-import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -172,7 +171,6 @@ export function OffersListPanel({
   const { invalidateContacts } = useInvalidatePurchases();
   const { data: platforms = [] } = useOfferPlatforms(collectionId);
   const [lastPlatformId, rememberPlatform] = useLastUsedPlatform(collectionId);
-  const [, rememberOfferDefaults] = useLastOfferDefaults(collectionId);
 
   // Remembered filter selections (#325), per collection, mirroring the catalog-vendor and
   // "not offered on" filters (#115, #275): the URL param wins whenever the URL carries one, so a
@@ -1382,7 +1380,6 @@ export function OffersListPanel({
                 const result = await createOfferAction(collectionId, fd);
                 if (result.status === "success") {
                   if (submittedPlatformId) rememberPlatform(submittedPlatformId);
-                  rememberOfferDefaults(offerDefaultsFromForm(fd));
                   invalidateAll(collectionId);
                   invalidateContacts(collectionId);
                   // Straight to the compose screen — a fresh offer has no sets yet.

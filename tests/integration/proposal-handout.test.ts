@@ -62,7 +62,7 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     const offerId = await createOffer(
       userId,
       collectionId,
-      { platformId: directId, url: null, price, startingPrice: null, currency: "PLN", listingDate: null, state: "preparing" },
+      { platformId: directId, url: null, price, startingPrice: null, currency: "PLN", listingDate: null },
       { seedItemIds: [await copy()] }
     );
     await prisma.offer.update({ where: { id: offerId }, data: { name, nameEdited: true } });

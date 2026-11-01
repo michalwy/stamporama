@@ -104,7 +104,6 @@ describe("Delcampe learned categories (#609)", () => {
         price: "10.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       },
       { seedItemIds: [item.id] }
     );
@@ -216,7 +215,6 @@ describe("Delcampe learned categories (#609)", () => {
       price: "1.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal(await getDelcampeOfferListingConfig(userId, offerId), null);
   });

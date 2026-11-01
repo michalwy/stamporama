@@ -131,16 +131,16 @@ any of them is.
    The **title** is under the platform. An offer created empty has no generated title yet, so the
    field starts blank: type one if you already know it, or leave it and the title is generated the
    moment the offer first lists something (see [Listing title](#listing-title)).
-   The dialog also captures three optional fields: the **status** to create the offer in
-   (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
-   **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
-   status and listing date are **remembered per collection** and pre-filled the next time you create
-   an offer, so listing many items in a row is fast; the URL is never remembered — it's always
-   specific to the individual offer. Leaving everything at its default creates a **Preparing** offer
-   (still being composed, not yet live). Marking a fresh, set-less offer **Ready** or **Active** isn't
-   possible — it needs at least one set *and* an asking price first — so those statuses apply when you
-   list a copy at creation with its price (see *Sell a new item* and *Listing on another platform*).
-   Creating the offer opens its detail screen.
+   The dialog also takes an optional **listing URL**, never pre-filled — it is always specific to the
+   individual offer. There is **no status to choose**: **every new offer starts Preparing** (still
+   being composed, not yet live), however it is made — here, from **Sell a new item**, **List on
+   another platform**, quick offer mode, **Generate offers**, the Lot builder, a proposal's **New
+   lots…** or a post's **New lot…**. It then goes through the same life every time: **Mark ready**,
+   where its photos are made and everything that would stop it is checked, and then **Publish** /
+   **Activate**, which stamps the **listing date** with today. A listing that is **already up** on
+   another platform is recorded the same way — create it with its URL, mark it ready, publish it —
+   and the date can be corrected afterwards from **Edit offer**. Creating the offer opens its detail
+   screen.
 2. On the detail screen, use **Add set** to pick copies from your inventory. The picker's filter
    box matches a copy by stamp name, issue name, **catalog number**, or its **location ref** — so
    with a piece in hand you can type the shelf reference it is filed under (e.g. `A234`) and add
@@ -316,7 +316,8 @@ on separate screens first:
 2. **List it.** On save, the same offer picker as **Add to offer** opens, seeded with the copy you
    just created: start a **new offer** (its **platform** pre-filled from the current filter or the
    last platform you used, and its asking price pre-filled from the copy's Estimated value) or drop
-   the copy into an **existing** offer.
+   the copy into an **existing** offer. A new offer starts **Preparing**, as every new offer does:
+   **Mark ready** and **Publish** take it the rest of the way.
 
 If you stop after step 1, nothing is lost — the copy is a normal inventory item, and Stamporama says
 so and offers to list it now or later. Steps you don't need are effortless: if the stamp already
@@ -2565,8 +2566,8 @@ the new platform; the asking price **and currency** carry over from the original
 platform uses a different currency, the price is **re-converted** at the collection's current
 exchange rate — still editable, so you can round or adjust it for the new marketplace.
 
-Stamporama then creates a **new draft offer** with the same sets and copies, and opens it so you
-can review, price, and activate it. The copy is an independent snapshot: editing either offer
+Stamporama then creates a **new draft offer** with the same sets and copies — **Preparing**, like
+every new offer — and opens it so you can review, price, mark it ready and activate it. The copy is an independent snapshot: editing either offer
 afterwards — renaming a set, changing the price, adding a copy — leaves the other untouched. Any
 copy that has already **sold** elsewhere is left out of the clone, with a note telling you how many
 were skipped. The new offer's listing URL starts blank — paste it once the listing is live.
@@ -2851,8 +2852,7 @@ and, in amber, an offer still being prepared with a copy sold elsewhere.
   **listing date to today**, since that is the moment it goes live — from the quick-advance button or
   the **⋮** menu alike. It is a starting value, not a lock: correct it from **Edit offer** whenever
   you posted the listing on a different day. Nothing else touches the date — resuming a **Paused**
-  offer leaves it alone, and an offer *created* directly as **Active** keeps the date you typed in
-  the creation dialog.
+  offer leaves it alone, and a new offer has none until it is published.
 - **Pending** — posted, but **waiting for the platform or the group to approve it**. A post to a
   Facebook group often sits with the group's administrator before anyone can see it, and other
   marketplaces can hold a listing for review too. See [Waiting for approval](#waiting-for-approval).

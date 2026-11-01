@@ -90,7 +90,6 @@ describe("selling an offer from the phone (#2009)", () => {
       price: "5.00",
       currency: on === "fair" ? "EUR" : "PLN",
       listingDate: null,
-      state: "preparing",
       // A quick buy — the case #2009 names; an auction would want a starting price to go up.
       ...(on === "facebook" ? { facebookGroupId: groupId, listingType: "fixed" as const } : {}),
     });
@@ -211,7 +210,6 @@ describe("selling an offer from the phone (#2009)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await copy()]);
     assert.equal((await getPhoneOffer(userId, collectionId, offerId))?.setsLeft, 0);

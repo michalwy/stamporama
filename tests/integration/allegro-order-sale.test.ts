@@ -88,7 +88,7 @@ describe("recording an Allegro order as a sale (#463)", () => {
       },
     });
     const item = await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true });
-    // Seeded with its copy at creation, because an offer cannot start `active` with nothing in it.
+    // Every offer starts Preparing (#2322); a listing already up is the fixture, so it is put there.
     const offerId = await createOffer(
       userId,
       collectionId,
@@ -98,10 +98,10 @@ describe("recording an Allegro order as a sale (#463)", () => {
         price: "10.00",
         currency: "PLN",
         listingDate: null,
-        state: "active",
       },
       { seedItemIds: [item.id] }
     );
+    await prisma.offer.update({ where: { id: offerId }, data: { state: "active" } });
     const set = await prisma.offerSet.findFirstOrThrow({ where: { offerId }, select: { id: true } });
     return { offerId, setId: set.id, itemIds: [item.id] };
   }

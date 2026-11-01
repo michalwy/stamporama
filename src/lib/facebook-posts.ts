@@ -63,7 +63,7 @@ import {
   setOfferState,
   syncGeneratedTexts,
   takeFacebookOfferBackToReady,
-  type OfferInput,
+  type NewOfferInput,
   type OfferTextStatus,
   type PrepareOffer,
 } from "./offers";
@@ -72,7 +72,6 @@ import {
   CLOSED_OFFER_STATES,
   OFFER_STATES,
   isAuctionListing,
-  isLiveState,
   isOfferState,
   normalizeListingType,
   type OfferState,
@@ -353,14 +352,14 @@ export interface FacebookLotCreated {
  * creation (`createOffer`), on the Facebook platform and in the post's group whatever the input names,
  * seeded with the copies picked, and put into the post **in the creation's transaction**, so a lot the
  * post refuses is no offer at all and no post of one is made for it and thrown away. The post must not
- * be up, and the lot is made Preparing or Ready: it goes up with the post, not on its own. It is asked
+ * be up, and the lot is made Preparing, as every offer is (#2322): it goes up with the post. It is asked
  * what *Add lots…* asks (`facebookLotAddRefusal`): the post's type unless the group mixes them; an
  * auction takes the post's closing time, or gives it one.
  */
 export async function createFacebookLot(
   ownerId: string,
   postId: string,
-  input: OfferInput,
+  input: NewOfferInput,
   opts: { seedItemIds?: string[]; seedPerCopy?: boolean } = {}
 ): Promise<FacebookLotCreated> {
   const post = await prisma.facebookPost.findUnique({
@@ -369,12 +368,6 @@ export async function createFacebookLot(
   });
   if (!post) throw new Error("Post not found.");
   await assertCollectionOwner(ownerId, post.collectionId);
-  if (isLiveState(input.state)) {
-    throw new OfferActionBlockedError(
-      "facebook-group",
-      "A lot goes up with its post — make it Preparing or Ready, and publish the post."
-    );
-  }
   let lotNo = 0;
   const offerId = await createOffer(
     ownerId,

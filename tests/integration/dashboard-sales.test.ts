@@ -189,7 +189,6 @@ describe("the Dashboard's Sales section (#1809)", () => {
       price: "20.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [itemId]);
     await setOfferState(userId, offerId, "ready");

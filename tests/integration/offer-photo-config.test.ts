@@ -99,7 +99,6 @@ describe("offer photo configuration (#308)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
   }
 
@@ -165,7 +164,6 @@ describe("offer photo configuration (#308)", () => {
         price: "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
       });
       assert.equal((await getOfferDetail(userId, id))?.photoConfig.photoSides, "paired");
     } finally {
@@ -232,7 +230,6 @@ describe("offer photo configuration (#308)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     const detail = await getOfferDetail(userId, id);
     assert.equal(detail?.photoConfig.photoSides, "front");

@@ -36,6 +36,7 @@ import {
   type OfferTitlePreview,
   OfferActionBlockedError,
   type OfferInput,
+  type NewOfferInput,
   repostOffer,
   applyEstimatedPrices,
 } from "@/lib/offers";
@@ -103,7 +104,6 @@ import {
 } from "@/lib/lot-builder-presets";
 import {
   isOfferState,
-  isCreatableOfferState,
   parsePrice,
   parseStartingPrice,
   parseOfferDate,
@@ -198,11 +198,6 @@ async function readOfferInput(
   const ends = parseOfferEndsAt(str(formData, "endsAt"));
   if (!ends.ok) return { ok: false, message: ends.message };
 
-  // Initial status (#257): defaults to `preparing`; a live `ready` / `active` is honoured by the
-  // domain only when the offer lists something. `updateOffer` ignores it.
-  const rawState = str(formData, "state");
-  const state: OfferState = isCreatableOfferState(rawState) ? rawState : "preparing";
-
   const platformId = await resolvePlatform(collectionId, {
     id: str(formData, "platformId") || null,
     name: str(formData, "platformName") || null,
@@ -225,7 +220,6 @@ async function readOfferInput(
       endsAt: ends.value,
       currency,
       listingDate: listing.value,
-      state,
       facebookGroupId: str(formData, "facebookGroupId") || null,
       bidIncrement: increment.value,
       // The *New offer* form's title (#1794), sent only once the collector has edited it: absent,
@@ -233,6 +227,16 @@ async function readOfferInput(
       ...(formData.has("name") ? { name: str(formData, "name") } : {}),
     },
   };
+}
+
+/** {@link readOfferInput} for a new offer, which states no listing date (#2322): it is not up, and
+ *  **Publish** stamps the date. */
+async function readNewOfferInput(
+  collectionId: string,
+  formData: FormData
+): Promise<{ ok: true; input: NewOfferInput } | { ok: false; message: string }> {
+  const parsed = await readOfferInput(collectionId, formData);
+  return parsed.ok ? { ok: true, input: { ...parsed.input, listingDate: null } } : parsed;
 }
 
 export type CommitLotActionState =
@@ -480,7 +484,7 @@ export async function createOfferAction(
   seedPerCopy?: boolean
 ): Promise<CreateOfferActionState> {
   const session = await getSession();
-  const parsed = await readOfferInput(collectionId, formData);
+  const parsed = await readNewOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
     const id = await createOffer(session.user.id, collectionId, parsed.input, {
@@ -507,7 +511,7 @@ export async function createFacebookLotAction(
   seedPerCopy: boolean
 ): Promise<CreateFacebookLotActionState> {
   const session = await getSession();
-  const parsed = await readOfferInput(collectionId, formData);
+  const parsed = await readNewOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
     const created = await createFacebookLot(session.user.id, postId, parsed.input, { seedItemIds, seedPerCopy });
@@ -532,7 +536,7 @@ export async function createProposalLotAction(
   seedPerCopy: boolean
 ): Promise<CreateProposalLotActionState> {
   const session = await getSession();
-  const parsed = await readOfferInput(collectionId, formData);
+  const parsed = await readNewOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
     const created = await createProposalLot(session.user.id, collectionId, proposalId, parsed.input, {
@@ -554,7 +558,7 @@ export async function duplicateOfferAction(
   formData: FormData
 ): Promise<DuplicateOfferActionState> {
   const session = await getSession();
-  const parsed = await readOfferInput(collectionId, formData);
+  const parsed = await readNewOfferInput(collectionId, formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
     const result = await duplicateOffer(session.user.id, sourceOfferId, parsed.input);

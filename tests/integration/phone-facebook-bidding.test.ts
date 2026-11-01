@@ -88,7 +88,6 @@ describe("a Facebook group auction on the phone (#2010)", () => {
         price: listingType === "auction" ? "0.00" : "5.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
         listingType,
         ...(listingType === "auction" ? { startingPrice: "3.00" } : {}),

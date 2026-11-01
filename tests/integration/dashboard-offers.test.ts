@@ -83,7 +83,6 @@ describe("dashboard: offers to handle (#1811)", () => {
         price: opts.auction?.price ?? "5.00",
         currency: "EUR",
         listingDate: null,
-        state: "preparing",
         ...(opts.auction
           ? { listingType: "auction" as const, startingPrice: "1.00", endsAt: opts.auction.endsAt }
           : {}),

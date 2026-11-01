@@ -80,7 +80,6 @@ describe("offer search narrowed to the ticked fields (#2242)", () => {
           price: "5.00",
           currency: "EUR",
           listingDate: null,
-          state: "preparing",
         },
         { seedItemIds: [item.id] }
       );

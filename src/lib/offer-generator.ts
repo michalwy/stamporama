@@ -397,7 +397,6 @@ export async function previewOfferGeneration(
       ownerId,
       collectionId,
       input.platformId,
-      input.state,
       readFacebookCreateChoice(input.facebook).facebookGroupId
     ),
   ]);
@@ -593,10 +592,9 @@ export async function commitOfferGeneration(
     ownerId,
     collectionId,
     input.platformId,
-    input.state,
     readFacebookCreateChoice(input.facebook).facebookGroupId
   );
-  if (block) throw new OfferActionBlockedError("unpriced", block);
+  if (block) throw new OfferActionBlockedError("not-eligible", block);
 
   const additions = new Map<string, { offerId: string; state: OfferState; setCount: number; sets: string[][] }>();
   for (const line of lines) {
@@ -616,7 +614,6 @@ export async function commitOfferGeneration(
   const postTitle = input.postTitle;
   if (postTitle !== undefined) {
     const refusal = generatorPostRefusal({
-      state: input.state,
       facebookGroupId: (await isFacebookPlatform(collectionId, input.platformId))
         ? readFacebookCreateChoice(input.facebook).facebookGroupId
         : null,
@@ -647,8 +644,7 @@ export async function commitOfferGeneration(
       collectionId,
       {
         platformId: input.platformId,
-        state: input.state,
-        ...readFacebookCreateChoice(input.facebook),
+          ...readFacebookCreateChoice(input.facebook),
         newOffers,
         additions: [...additions.values()],
       },

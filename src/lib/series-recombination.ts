@@ -544,8 +544,6 @@ export async function composeSeriesOffer(
         // A draft states no figure yet, as the lot builder's commit does.
         price: "0.00",
         currency: "",
-        listingDate: null,
-        state: "preparing",
         ...readFacebookCreateChoice(input.facebook), // #1663, as the lot builder's commit does
       },
       {

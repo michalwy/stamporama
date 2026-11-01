@@ -224,7 +224,6 @@ describe("offer listing kit (#405)", () => {
       price: over.price ?? "12.50",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (const itemIds of sets) await addOfferSet(userId, offerId, itemIds);
     // Written directly rather than through `setOfferState`: several of these offers fail a listing
@@ -327,7 +326,6 @@ describe("offer listing kit (#405)", () => {
       price: "9.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await copy(await stamp("PL hand", null))]);
     await setOfferState(userId, offerId, "ready");

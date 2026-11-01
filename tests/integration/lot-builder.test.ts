@@ -110,7 +110,6 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [itemId]);
     if (opts.state && opts.state !== "preparing") {

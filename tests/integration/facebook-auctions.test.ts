@@ -10,6 +10,7 @@ import {
   setOfferState,
   updateOffer,
   type OfferInput,
+  type NewOfferInput,
 } from "../../src/lib/offers";
 import {
   createFacebookGroup,
@@ -122,14 +123,13 @@ describe("Facebook auction offers (#1544)", () => {
     return (await createItem(userId, collectionId, { stampId, conditionId, forSale: true })).id;
   }
 
-  function input(overrides: Partial<OfferInput> = {}): OfferInput {
+  function input(overrides: Partial<NewOfferInput> = {}): OfferInput & NewOfferInput {
     return {
       platformId: facebookId,
       url: null,
       price: "0.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: groupId,
       ...overrides,
     };
@@ -222,16 +222,6 @@ describe("Facebook auction offers (#1544)", () => {
     );
     assert.equal(asked.listingType, "auction");
     assert.equal(asked.bidIncrement?.toFixed(2), "1.00", "an auction takes the group's increment");
-
-    // A quick buy going live needs its asking price, as anywhere.
-    const unpricedCopy = await newItem();
-    await assert.rejects(
-      () =>
-        createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, state: "active" }), {
-          seedItemIds: [unpricedCopy],
-        }),
-      /no asking price/
-    );
 
     // An edit may switch the type; one naming none keeps it.
     const offerId = await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, price: "25.00" }));
@@ -374,9 +364,10 @@ describe("Facebook auction offers (#1544)", () => {
 
   it("holds a copy in a quick buy that is up against a Facebook auction too (#1671)", async () => {
     const copy = await newItem();
-    await createOffer(userId, collectionId, input({ listingType: "fixed", price: "20.00", state: "active" }), {
+    const up = await createOffer(userId, collectionId, input({ listingType: "fixed", price: "20.00" }), {
       seedItemIds: [copy],
     });
+    await prisma.offer.update({ where: { id: up }, data: { state: "active" } });
     await assert.rejects(
       () => createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId }), { seedItemIds: [copy] }),
       /already in an active Facebook offer/

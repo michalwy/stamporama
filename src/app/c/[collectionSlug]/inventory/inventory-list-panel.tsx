@@ -68,7 +68,6 @@ import {
   useStampConditionCollisions,
   useInvalidateOffers,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
-import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { QuickOfferBar } from "./quick-offer-bar";
 import { OfferGeneratorDialog, type OfferGeneratorInput } from "./offer-generator-dialog";
 import {
@@ -168,12 +167,11 @@ type DialogState =
   | { kind: "collage"; itemIds: string[] }
   // The ticked copies' photos with no scale given one (#2061).
   | { kind: "photoScale"; itemIds: string[] }
-  // Quick offer mode's platform and status over many copies at once (#1287).
+  // Quick offer mode's platform over many copies at once (#1287).
   | {
       kind: "generateOffers";
       platformId: string;
       platformName: string;
-      state: OfferState;
       /** The bar's Facebook group and closing time, read when the dialog opened (#1663). */
       facebook: FacebookCreateChoice;
       /** The platform is Direct, so the new offers may go into a proposal (#2287). */
@@ -963,14 +961,12 @@ export function InventoryListPanel({
     [collectionId, invalidateList, clearSelection]
   );
   /* ── Quick offer mode (#537) ───────────────────────────────────────────────────────────────────
-   * A listing pass over many near-identical copies: the platform and the starting status are set
-   * once in the bar, and every "Add to new offer" from then on creates the offer without the create
+   * A listing pass over many near-identical copies: the platform is set once in the bar, and every "Add to new offer" from then on creates the offer without the create
    * dialog. Not persisted, deliberately — see `QuickOfferBar`: a mode that skips a confirmation must
    * never be in force on a screen the collector has just opened.
    */
   const [quickOffer, setQuickOffer] = useState(false);
   const [quickPlatformId, setQuickPlatformId] = useState("");
-  const [quickState, setQuickState] = useState<OfferState>("preparing");
   const [quickCreated, setQuickCreated] = useState(0);
   const [quickError, setQuickError] = useState<string | undefined>();
   const { invalidateAll: invalidateOffers } = useInvalidateOffers();
@@ -991,7 +987,7 @@ export function InventoryListPanel({
     !quickFacebook.loading &&
     quickFacebook.missing === null;
 
-  /** Create one offer from `items`, seeded with them, using the bar's platform and status (#537).
+  /** Create one offer from `items`, seeded with them, on the bar's platform (#537), Preparing (#2322).
    * `perCopy` splits several copies into one single-copy set each — the same packaging choice the
    * dialog's footer carries, made here by which button was pressed (#497). No price and no URL: the
    * pass is about getting the listings *made*, and both land on the offer's own screen afterwards. */
@@ -1002,7 +998,6 @@ export function InventoryListPanel({
       startTransition(async () => {
         const formData = new FormData();
         formData.set("platformId", quickPlatform.id);
-        formData.set("state", quickState);
         // On Facebook, the bar's group and the closing time it gives (#1663).
         const facebook = quickFacebookChoice();
         if (facebook.facebookGroupId) formData.set("facebookGroupId", facebook.facebookGroupId);
@@ -1030,7 +1025,6 @@ export function InventoryListPanel({
     },
     [
       quickPlatform,
-      quickState,
       quickFacebookChoice,
       rememberQuickFacebook,
       collectionId,
@@ -1165,7 +1159,7 @@ export function InventoryListPanel({
           : null,
         quickOffer:
           quickOfferActive && quickPlatform
-            ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
+            ? { platformName: quickPlatform.name }
             : null,
         isPending,
         on: {
@@ -1202,7 +1196,6 @@ export function InventoryListPanel({
       selectionExcluded,
       quickOfferActive,
       quickPlatform,
-      quickState,
       isPending,
       applyPlatformExclusion,
       createQuickOffer,
@@ -1255,7 +1248,7 @@ export function InventoryListPanel({
       // thing on screen not admitting which one is in force.
       quickOffer:
         quickOfferActive && quickPlatform
-          ? { platformName: quickPlatform.name, stateLabel: OFFER_STATE_LABEL[quickState] }
+          ? { platformName: quickPlatform.name }
           : undefined,
       onViewOffers: (it) => setDialog({ kind: "viewOffers", item: it }),
       onShowIssueCopies: (issue) => updateParams(showIssueCopiesUpdate(issue.id)),
@@ -1276,7 +1269,6 @@ export function InventoryListPanel({
       applyPlatformExclusion,
       quickOfferActive,
       quickPlatform,
-      quickState,
       createQuickOffer,
     ]
   );
@@ -1493,8 +1485,6 @@ export function InventoryListPanel({
                     platformId={quickPlatformId}
                     onPlatformIdChange={setQuickPlatformId}
                     facebook={quickFacebook}
-                    state={quickState}
-                    onStateChange={setQuickState}
                     created={quickCreated}
                     error={quickError}
                     isPending={isPending}
@@ -1509,7 +1499,6 @@ export function InventoryListPanel({
                         kind: "generateOffers",
                         platformId: quickPlatform.id,
                         platformName: quickPlatform.name,
-                        state: quickState,
                         facebook: quickFacebook.choice(),
                         direct: quickPlatform.platformModule === DIRECT_PLATFORM_MODULE,
                         // What the collector can see (#1021): the ticked rows in view when there are
@@ -2319,7 +2308,6 @@ export function InventoryListPanel({
           baseCurrency={baseCurrency}
           platformId={dialog.platformId}
           platformName={dialog.platformName}
-          state={dialog.state}
           facebook={dialog.facebook}
           direct={dialog.direct}
           input={dialog.input}

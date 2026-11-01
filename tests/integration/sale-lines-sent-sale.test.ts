@@ -62,7 +62,6 @@ describe("adding sold sets to a sent sale (#1950)", () => {
       price: "5.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     for (let i = 0; i < 3; i++) {
       const item = await createItem(userId, collectionId, { stampId: stamp.id, conditionId: condition.id, forSale: true });

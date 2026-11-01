@@ -124,14 +124,14 @@ describe("every Facebook offer is in a post from the moment it is made (#1989, #
         startingPrice: "5.00",
         currency: "PLN",
         listingDate: null,
-        state: state === "active" ? "active" : "preparing",
         facebookGroupId: group,
         listingType: "auction",
         ...(name !== undefined ? { name } : {}),
       },
       { seedItemIds: [item.id] }
     );
-    if (state === "ready") await setOfferState(userId, offerId, "ready");
+    if (state !== "preparing") await setOfferState(userId, offerId, "ready");
+    if (state === "active") await setOfferState(userId, offerId, "active");
     return offerId;
   }
 
@@ -173,7 +173,6 @@ describe("every Facebook offer is in a post from the moment it is made (#1989, #
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
       facebookGroupId: groupId,
       listingType: "auction",
     });

@@ -35,7 +35,6 @@ describe("the offers list's Assistant facts (#1969)", () => {
       price: "10.00",
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
   /** Live on Colnect, with the listing's address and sale code an update and a close need. Written
    *  straight to the row: Colnect's ready gate (catalogue item-IDs, grades) is not what is tested. */

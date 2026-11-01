@@ -79,7 +79,6 @@ describe("a Facebook post not yet up goes back to Preparing (#2115)", () => {
         startingPrice: quickBuy ? null : "5.00",
         currency: "PLN",
         listingDate: null,
-        state: "preparing",
         facebookGroupId: groupId,
         listingType: quickBuy ? "fixed" : "auction",
         endsAt: quickBuy ? null : new Date("2026-11-01T19:00:00Z"),

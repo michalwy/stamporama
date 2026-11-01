@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { createOffer, patchOffer, updateOffer, type OfferInput } from "../../src/lib/offers";
+import { createOffer, patchOffer, updateOffer, type NewOfferInput, type OfferInput } from "../../src/lib/offers";
 import {
   addProposalLots,
   convertProposalToSale,
@@ -42,8 +42,8 @@ describe("A sent proposal is fixed (#2307); New offer makes a lot (#2304)", () =
     return (await createItem(userId, collectionId, { stampId, conditionId, forSale: true, deliveryState: "delivered" })).id;
   }
 
-  function input(platformId: string, price: string): OfferInput {
-    return { platformId, url: null, price, startingPrice: null, currency: "EUR", listingDate: null, state: "preparing" };
+  function input(platformId: string, price: string): OfferInput & NewOfferInput {
+    return { platformId, url: null, price, startingPrice: null, currency: "EUR", listingDate: null };
   }
 
   async function offer(platformId: string, price: string): Promise<string> {

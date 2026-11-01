@@ -43,7 +43,6 @@ describe("Colnect transaction import (#698)", () => {
       price,
       currency: "EUR",
       listingDate: null,
-      state: "preparing",
     });
     await addCopy(id, name);
     await prisma.offer.update({ where: { id }, data: { name, state: "active" } });

@@ -496,9 +496,9 @@ them share one closing time — the first auction's — from then on: changing i
 on all of them. A quick buy has no closing time.
 
 **A batch can start in its post.** On the Copies list, **Generate offers…** in the quick offer bar
-has **In a new post** on Facebook while the bar's status is *Preparing* or *Ready*: tick it and give
-the title, and the offers the pass creates become the lots of one new post in the bar's group, in
-the order the preview lists them. An existing offer that only receives sets is not put in the post.
+has **In a new post** on Facebook: tick it and give the title, and the offers the pass creates become
+the lots of one new post in the bar's group, in the order the preview lists them.
+An existing offer that only receives sets is not put in the post.
 The message after the pass opens the post's screen ([Generating offers in
 bulk](inventory.md#generating-offers-in-bulk)).
 
@@ -515,8 +515,8 @@ becomes the post's next lot. Pick its copies — **Add as one set** for a series
 each — then the ordinary new-offer form beside them asks the title, the price and the rest. It is on
 Facebook in the post's group, and neither can be changed there; it is of the post's type (auction or
 quick buy) unless the group's posts may mix them — the first lot of an empty post may be either — an
-auction closes when the post's auctions do, and its status is *Preparing* or *Ready*, since it goes up
-with the post. **New lot from a new item…** does the same for a stamp not yet in the app, as **Sell a
+auction closes when the post's auctions do, and it starts *Preparing*, as every new offer does — it
+goes up with the post. **New lot from a new item…** does the same for a stamp not yet in the app, as **Sell a
 new item** does: describe the copy first — it is saved *For sale* — then the lot is made from it. Once a
 lot is made, the next one is offered straight away: **Next lot** starts again, **Cancel** when you are
 done. A copy saved for a new item stays in your inventory even if you stop before its lot is made.

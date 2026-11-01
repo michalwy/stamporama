@@ -82,7 +82,6 @@ describe("offer listing type and its prices (#449)", () => {
       price: "12.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     const d = await detail(offerId);
@@ -102,7 +101,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     const d = await detail(offerId);
@@ -122,7 +120,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "3.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     assert.equal((await detail(offerId)).startingPrice, null);
@@ -137,7 +134,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     const first = (await detail(offerId)).priceCheckedAt;
     assert.ok(first);
@@ -161,7 +157,6 @@ describe("offer listing type and its prices (#449)", () => {
       price: "9.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     await assert.rejects(
@@ -183,7 +178,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     const d = await detail(offerId);
@@ -200,7 +194,6 @@ describe("offer listing type and its prices (#449)", () => {
       price: "0.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     await patchOffer(userId, offerId, { startingPrice: "6.00" });
@@ -222,7 +215,6 @@ describe("offer listing type and its prices (#449)", () => {
       price: "18.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await newItem()]);
 
@@ -246,7 +238,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     await addOfferSet(userId, offerId, [await newItem()]);
 
@@ -275,7 +266,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "3.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     const d = await detail(offerId);
@@ -290,7 +280,6 @@ describe("offer listing type and its prices (#449)", () => {
       price: "9.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
     assert.equal((await detail(stated)).listingType, "fixed");
   });
@@ -304,7 +293,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: "5.00",
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     await updateOffer(userId, offerId, {
@@ -315,7 +303,6 @@ describe("offer listing type and its prices (#449)", () => {
       startingPrice: null,
       currency: "PLN",
       listingDate: null,
-      state: "preparing",
     });
 
     const d = await detail(offerId);
