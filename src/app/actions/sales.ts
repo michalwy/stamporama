@@ -16,6 +16,8 @@ import {
   addSaleCopySet,
   updateSaleLinePrice,
   removeSaleLine,
+  removeSaleLines,
+  SaleLinesGoneError,
   swapSaleLineSet,
   deleteSale,
   setSaleStatus,
@@ -359,6 +361,29 @@ export async function removeSaleLineAction(lineId: string): Promise<SaleActionSt
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to remove the sold unit.");
+  }
+}
+
+/** Remove the ticked sold sets from a sale in one action (#2315). A refusal because some are no
+ *  longer on the sale carries their ids, so the dialog can name them. */
+export async function removeSaleLinesAction(
+  saleId: string,
+  lineIds: string[]
+): Promise<
+  | { status: "success"; removed: number }
+  | { status: "error"; message: string; goneLineIds?: string[] }
+> {
+  const session = await getSession();
+  try {
+    const { removed, photoRuns } = await removeSaleLines(session.user.id, saleId, lineIds);
+    // An offer back on sale may have had its cleaned-up images queued again (#2317), as for one set.
+    if (photoRuns > 0) kickOfferPhotoWorker();
+    return { status: "success", removed };
+  } catch (e) {
+    if (e instanceof SaleLinesGoneError) {
+      return { status: "error", message: e.message, goneLineIds: [...e.lineIds] };
+    }
+    return fail(e, "Failed to remove the sold units.");
   }
 }
 

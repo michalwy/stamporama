@@ -530,6 +530,8 @@ interface SoldUnitsViewProps {
   onChooseSet: (lineId: string) => void;
   /** *Move to another sale…* (#2204) for these lines — the ticked ones in view, or one card's. */
   onMove: (lineIds: string[]) => void;
+  /** *Remove* (#2315) for the ticked sold sets in view. */
+  onRemoveTicked: (lineIds: string[]) => void;
 }
 
 /** The sold-units list for the packing view (ADR-0012, #166): the same rich, sortable copy
@@ -550,6 +552,7 @@ export function SoldUnitsView({
   onEditPrice,
   onChooseSet,
   onMove,
+  onRemoveTicked,
 }: SoldUnitsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
@@ -577,9 +580,10 @@ export function SoldUnitsView({
     [lines, setFilter]
   );
 
-  // Ticked sold sets (#2204), for *Move to another sale…*. Only the Lot grouping draws the cards they
-  // are ticked on, and a filter never unticks: the bar acts on the ticked cards in view, and a tick
-  // on a line that has since left the sale simply stops counting.
+  // Ticked sold sets (#2204), for *Move to another sale…* and *Remove* (#2315). Only the Lot grouping
+  // draws the cards they are ticked on, and a filter never unticks: the bar acts on the ticked cards
+  // in view, and a tick on a line that has since left the sale simply stops counting — which is how
+  // the selection clears after a move or a removal.
   const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
   const tickedInView = useMemo(
     () => (primary === "lot" ? visibleLines.filter((l) => ticked.has(l.id)).map((l) => l.id) : []),
@@ -750,6 +754,15 @@ export function SoldUnitsView({
               style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600 }}
             >
               <Icon name="move" size="sm" /> Move to another sale…
+            </button>
+          </Tooltip>
+          <Tooltip content="Take these sets off the sale, each as its own ⋮ → Remove does — their copies become available again">
+            <button
+              type="button"
+              onClick={() => onRemoveTicked(tickedInView)}
+              style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600, color: "var(--color-error)" }}
+            >
+              <Icon name="remove" size="sm" /> Remove
             </button>
           </Tooltip>
         </div>

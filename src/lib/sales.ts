@@ -120,7 +120,10 @@ export type SaleBlockReason =
   | "cannot-merge"
   /** Sold sets that cannot move to another sale (#2204): a sale already sent, every set of it, or a
    *  target that is not another open sale of the same buyer, platform and currency. */
-  | "cannot-move";
+  | "cannot-move"
+  /** Ticked sold sets that cannot all be removed at once (#2315): one or more are no longer on the
+   *  sale. */
+  | "cannot-remove";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -130,6 +133,20 @@ export class SaleActionBlockedError extends Error {
     super(message);
     this.name = "SaleActionBlockedError";
     this.reason = reason;
+  }
+}
+
+/** Raised when sold sets ticked for removal (#2315) are not all on the sale any more — moved or
+ * removed since the screen was read. `lineIds` names them, so the screen can say which. */
+export class SaleLinesGoneError extends SaleActionBlockedError {
+  readonly lineIds: readonly string[];
+  constructor(lineIds: readonly string[]) {
+    super(
+      "cannot-remove",
+      "One or more of those sets are not on this sale any more. Reload the sale and tick them again."
+    );
+    this.name = "SaleLinesGoneError";
+    this.lineIds = lineIds;
   }
 }
 
@@ -1740,25 +1757,71 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<n
 
   await prisma.$transaction(async (tx) => {
     await tx.saleLine.delete({ where: { id: lineId } });
-    if (line.offerId) {
-      const offer = await tx.offer.findUnique({
-        where: { id: line.offerId },
-        select: { state: true },
-      });
-      if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, line.offerId))) {
-        await tx.offer.update({
-          where: { id: line.offerId },
-          // Open again, so no longer closed: as in `deleteSale`, clearing `closedAt` (#512) takes it
-          // back out of the generated-photo purge's reach.
-          data: { state: "active", stateChangedAt: new Date(), closedAt: null },
-        });
-      }
-      // The set is back in what this offer sells, which is the same composition change in reverse
-      // (#700/#542): a live listing now understates what is there.
-      await markListingContentChanged(line.offerId, tx);
-    }
+    if (line.offerId) await releaseOfferAfterRemoval(tx, line.offerId);
   });
   return line.offerId ? regenerateCleanedUpOfferPhotos(ownerId, [line.offerId]) : 0;
+}
+
+/**
+ * Remove ticked sold sets from a sale in one action (#2315): each exactly as {@link removeSaleLine}
+ * removes one — its copies available again, its offer back to active when no longer fully sold, a
+ * live listing marked changed, cleaned-up generated images queued again (#2317) — and the sale's
+ * amounts re-settle on read from the sets it has left. **All or nothing**: a set no longer on the
+ * sale refuses the whole removal with {@link SaleLinesGoneError}, naming which. The sale is locked
+ * first, so what is checked is what goes. `photoRuns` is how many image runs were queued, so the
+ * caller can nudge the worker.
+ */
+export async function removeSaleLines(
+  ownerId: string,
+  saleId: string,
+  lineIds: readonly string[]
+): Promise<{ removed: number; photoRuns: number }> {
+  const ids = [...new Set(lineIds)];
+  const offerIds = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${saleId} FOR UPDATE`;
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: { collection: { select: { ownerId: true } } },
+    });
+    if (!sale || sale.collection.ownerId !== ownerId) {
+      throw new Error("Sale not found or access denied.");
+    }
+    const lines = await tx.saleLine.findMany({
+      where: { id: { in: ids }, saleId },
+      select: { id: true, offerId: true },
+    });
+    if (lines.length !== ids.length) {
+      const found = new Set(lines.map((l) => l.id));
+      throw new SaleLinesGoneError(ids.filter((id) => !found.has(id)));
+    }
+    await tx.saleLine.deleteMany({ where: { id: { in: ids } } });
+    // Once per offer, after every set is gone: two sets of one offer settle it the same way.
+    const offerIds = new Set(lines.flatMap((l) => (l.offerId ? [l.offerId] : [])));
+    for (const offerId of offerIds) await releaseOfferAfterRemoval(tx, offerId);
+    return [...offerIds];
+  });
+  return { removed: ids.length, photoRuns: await regenerateCleanedUpOfferPhotos(ownerId, offerIds) };
+}
+
+/** What removing a sold set does to its offer (ADR-0013): back to active if it had been flipped to
+ * `sold` and is no longer fully sold, and a live listing marked changed. The images the sweep may
+ * have cleaned up are queued again by the caller once this commits (#2317). */
+async function releaseOfferAfterRemoval(tx: DbTransaction, offerId: string): Promise<void> {
+  const offer = await tx.offer.findUnique({
+    where: { id: offerId },
+    select: { state: true },
+  });
+  if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, offerId))) {
+    await tx.offer.update({
+      where: { id: offerId },
+      // Open again, so no longer closed: as in `deleteSale`, clearing `closedAt` (#512) takes it
+      // back out of the generated-photo purge's reach.
+      data: { state: "active", stateChangedAt: new Date(), closedAt: null },
+    });
+  }
+  // The set is back in what this offer sells, which is the same composition change in reverse
+  // (#700/#542): a live listing now understates what is there.
+  await markListingContentChanged(offerId, tx);
 }
 
 // ── List ──────────────────────────────────────────────────────────────────
