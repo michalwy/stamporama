@@ -230,7 +230,7 @@ import {
   setAreaOrderOperation,
   updateAreaOperation,
 } from "./operations/areas";
-import { setCopyStampOperation } from "./operations/copies";
+import { setCopyStampOperation, setCopyValuationOperation } from "./operations/copies";
 import {
   addCarrierServiceOperation,
   createCarrierOperation,
@@ -259,6 +259,7 @@ export const OPERATIONS: readonly Operation[] = [
   getIssueOperation,
   getCopyOperation,
   setCopyStampOperation,
+  setCopyValuationOperation,
   listHoldingsOperation,
   summarizeValuationOperation,
   findUnlistedCopiesOperation,

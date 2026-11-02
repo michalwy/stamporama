@@ -68,6 +68,7 @@ describe("effectiveVendorsForArea (#675)", () => {
       symbol: null,
       coverSymbols: null,
       stillValidForPostage: null,
+      valuationMethod: null,
       assignable: true,
       sortOrder: 0,
       stampCount: 0,

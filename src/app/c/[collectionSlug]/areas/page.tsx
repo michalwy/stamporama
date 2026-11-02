@@ -7,6 +7,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogNames, getCatalogTree } from "@/lib/catalog";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { AreasPanel } from "./areas-panel";
+import { DEFAULT_VALUATION_METHOD, isValuationMethod } from "@/lib/piece-valuation";
 import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Areas" };
@@ -74,6 +75,11 @@ export default async function AreasPage({ params }: AreasPageProps) {
         collectionId={collection.id}
         collectionSlug={collectionSlug}
         initialAreas={areas}
+        collectionValuationMethod={
+          isValuationMethod(collection.valuationMethod)
+            ? collection.valuationMethod
+            : DEFAULT_VALUATION_METHOD
+        }
         catalogNames={catalogNames}
         catalogVendors={catalogTree.map((v) => ({
           id: v.id,

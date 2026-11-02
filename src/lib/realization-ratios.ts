@@ -58,6 +58,9 @@ import { buildAnchoringMarketsMap, getCollectionHomeMarket } from "./market-anch
 // is its primary area's effective primary catalogue — the only book `valuateItemRows` ever reads a
 // copy's figure from — so callers keep asking with area, condition and year and never name a book.
 //
+// **Pieces are left out** (#2359): a lot or an observation in a format on cover or on piece is a
+// cover's price, and a cover's catalogue value is its method's result, not a stamp's.
+//
 // Ownership is **not** checked here — every entry point is called from a module that has already
 // resolved the collection for the owner.
 
@@ -289,15 +292,25 @@ export async function loadRealizationRatios(
         status: "closed",
         finalPrice: { not: null },
         auctionSale: { collectionId },
-        // …once every line's condition is settled (#1623): a share of the price cannot be stated as
-        // a fraction of a catalogue value the line has not committed to.
-        lines: { none: { conditionId: null } },
+        AND: [
+          // …once every line's condition is settled (#1623): a share of the price cannot be stated
+          // as a fraction of a catalogue value the line has not committed to.
+          { lines: { none: { conditionId: null } } },
+          // …and none of it is a piece on cover or on piece (#2359): a cover's value is not a
+          // stamp's, so what it fetched says nothing about how far a stamp's catalogue overstates.
+          { lines: { none: { format: { is: { pieceKind: { not: null } } } } } },
+        ],
       },
       select: RATIO_LOT_SELECT,
     }).then(onlySettledLots),
     // Only the ones that name a condition can be exact; the extraction judges the rest.
     prisma.priceObservation.findMany({
-      where: { collectionId, conditionId: { not: null } },
+      where: {
+        collectionId,
+        conditionId: { not: null },
+        // A piece is left out for the lots' reason (#2359).
+        NOT: { format: { is: { pieceKind: { not: null } } } },
+      },
       select: RATIO_OBSERVATION_SELECT,
     }),
   ]);
@@ -331,7 +344,7 @@ export async function loadRealizationRatios(
         certificateStatusId: line.certificateStatusId,
         formatId: line.formatId,
         unknownVariant: isUnknownVariantStamp(line.stamp),
-        carrier: null,
+        copy: null,
         faultReductionPercent: null,
         valueModifier: null,
         candidateStampIds: null,
@@ -345,7 +358,7 @@ export async function loadRealizationRatios(
       certificateStatusId: row.certificateStatusId,
       formatId: row.formatId,
       unknownVariant: isUnknownVariantStamp(row.stamp),
-      carrier: null,
+      copy: null,
       faultReductionPercent: null,
       valueModifier: null,
       candidateStampIds: null,

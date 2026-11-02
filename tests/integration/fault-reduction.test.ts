@@ -10,7 +10,6 @@ import {
 } from "../../src/lib/items";
 import { bulkUpdateLotItems } from "../../src/lib/lots";
 import { setItemStamps } from "../../src/lib/item-stamps";
-import { setCarrierValue } from "../../src/lib/carrier-values";
 import { createTrade } from "../../src/lib/trades";
 import { addTradeGiveLines } from "../../src/lib/trade-lines";
 import { readTradeBalance } from "../../src/lib/trade-valuation";
@@ -197,7 +196,7 @@ describe("a copy's value lowered for its faults (#1560)", () => {
     await assert.rejects(() => bulkUpdateLotItems(userId, [plainId], { faultReductionPercent: 0 }));
   });
 
-  it("lowers a multi-stamp copy's recorded value too (decided with the user)", async () => {
+  it("lowers a piece's computed value too (decided with the user; #2359)", async () => {
     const carrierId = (
       await createItem(userId, collectionId, {
         stampId: mi100,
@@ -206,12 +205,12 @@ describe("a copy's value lowered for its faults (#1560)", () => {
       })
     ).id;
     await setItemStamps(userId, carrierId, [{ stampId: mi100 }, { stampId: mi101 }]);
-    await setCarrierValue(userId, carrierId, { amount: "80.00", currency: "EUR" });
     try {
+      // No format kind, so the sum of used prices: 45 + 10, less 25 %.
       const row = await getItemListItem(userId, carrierId);
-      assert.equal(row.value.explicit, true);
-      assert.equal(row.value.amount, "60.00");
-      assert.equal(row.value.faultReduction?.fullAmount, "80.00");
+      assert.equal(row.value.piece?.rule, "sum_of_used");
+      assert.equal(row.value.amount, "41.25");
+      assert.equal(row.value.faultReduction?.fullAmount, "55.00");
     } finally {
       await prisma.item.delete({ where: { id: carrierId } });
     }

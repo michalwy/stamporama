@@ -4,7 +4,7 @@ import {
   applyFaultReduction,
   applyValueModifier,
   modifyValue,
-  valuateExplicitValue,
+  valuatePiece,
   type CopyValuation,
 } from "../../src/lib/valuation";
 import {
@@ -37,7 +37,7 @@ function catalogue(amount: number | null, currency = "EUR", rate: number | null 
     mark: null,
     sourceStampId: null,
     unpricedVariantIds: [],
-    explicit: false,
+    piece: null,
     faultReduction: null,
     valueModifier: null,
   };
@@ -118,11 +118,21 @@ describe("applyValueModifier", () => {
     assert.equal(v.valueModifier, null);
   });
 
-  it("adjusts a multi-stamp copy's recorded figure the same way", () => {
-    const recorded = valuateExplicitValue({ amount: "20.00", currency: "EUR" }, "EUR", NO_RATES);
-    const v = applyValueModifier(recorded, modifier(50, null), "EUR", NO_RATES);
+  it("adjusts a piece's computed figure the same way (#2359)", () => {
+    const computed = valuatePiece(
+      { amount: 20, rule: "sum_of_used", usage: null, partial: false, missing: [] },
+      {
+        method: "michel",
+        methodSource: { kind: "collection" },
+        franking: "rate_correct",
+        kind: "on_cover",
+      },
+      false,
+      "EUR"
+    );
+    const v = applyValueModifier(computed, modifier(50, null), "EUR", NO_RATES);
     assert.equal(v.amount, "30.00");
-    assert.equal(v.explicit, true);
+    assert.equal(v.piece?.method, "michel");
   });
 
   it("comes before the fault reduction, which lowers the modified figure", () => {

@@ -1,16 +1,15 @@
-import { normalizeDecimalInput, roundAmount } from "./decimal-input";
-import { isMultiStampCount } from "./multi-stamp";
-import type { CopyValuation, ExplicitValue } from "./valuation";
+import type { Franking, ValuationMethod } from "./piece-valuation";
+import { isFranking, isValuationMethod } from "./piece-valuation";
+import type { CopyValuation } from "./valuation";
 
-// The value of a **multi-stamp copy** (#747; ADR-0044 §6) — the pure half. The database half is
-// `carrier-values.ts`; the rule a carrier is valued by is `valuateExplicitValue` in `valuation.ts`.
+// The value of a **piece** — a copy carrying several stamps (ADR-0044), or one on a format of kind
+// *On cover* or *On piece* — the pure half of what a copy row hands the valuation (#2359; ADR-0076).
+// The rules a piece is valued by are `piece-valuation.ts`; `item-valuation.ts` reads the prices they
+// need. Before #2359 such a copy was valued at a figure the collector recorded on it (#747); those
+// figures are amount modifiers now (`piece-value-conversion.ts`).
 //
-// A carrier bearing more than one stamp is a copy of none of them (#745), so the catalogue grid has
-// nothing to resolve for it. Its value is **explicit** — an amount and a currency the collector
-// records — and the sum of its stamps is only ever a **suggestion**: offered as a prefill, stored
-// only once accepted. The worth of a cover is a question of usage and franking, not of arithmetic.
-//
-// The suggestion values each component:
+// The Valuation dialog also lists every stamp on the piece at its used price — the sum of used, which
+// was #747's suggestion and is now one of the methods. Each component is valued:
 //
 //   - at the **copy's** condition — the piece has one condition (per-component condition is ADR-0044's
 //     *Still open*);
@@ -18,45 +17,41 @@ import type { CopyValuation, ExplicitValue } from "./valuation";
 //   - with **no certificate** — a certificate is a statement about the piece, not about each franking;
 //   - times the entry's `quantity`, which counts described components (ADR-0044 §4).
 //
-// A component that resolves to nothing leaves the suggestion **partial and says so**. It never
-// contributes a silent zero, for the reason ADR-0020 §9 leaves a copy unpriced rather than borrowing
-// a different thing's price: a total that looks complete and is not is worse than no total.
+// A component that resolves to nothing leaves the sum **partial and says so**. It never contributes a
+// silent zero, for the reason ADR-0020 §9 leaves a copy unpriced rather than borrowing a different
+// thing's price: a total that looks complete and is not is worse than no total.
 
-/** What `ValuationRow.carrier` carries for a multi-stamp copy: the value recorded on it, or none. */
-export interface CarrierValuationInput {
-  explicitValue: ExplicitValue | null;
+/** What `ValuationRow.copy` carries for a copy: what decides whether it is a piece, and how one is
+ *  valued. Whether its format makes it a piece is read by `valuateItemRows`, which knows the kinds. */
+export interface PieceCopyInput {
+  itemId: string;
+  stampCount: number;
+  franking: Franking;
+  /** The copy's own method (#2359), or null to follow its area. */
+  method: ValuationMethod | null;
 }
 
-/** The columns {@link carrierValuationOf} reads — spread into a copy's `select`. */
-export const CARRIER_VALUATION_SELECT = {
+/** The columns {@link pieceCopyOf} reads beside the copy's `id`, which every caller selects anyway —
+ *  spread into a copy's `select`. Scalars only, so a caller's own `format` or `stamps` select is never
+ *  overridden. */
+export const PIECE_COPY_SELECT = {
   stampCount: true,
-  explicitValue: true,
-  explicitValueCurrency: true,
+  franking: true,
+  valuationMethod: true,
 } as const;
 
-/**
- * A copy's `ValuationRow.carrier`: null for an ordinary copy, the recorded value (or none) for a
- * multi-stamp one. Read off `stampCount` through `isMultiStampCount`, the same test the counts and the
- * list chip use, so a piece cannot be a carrier to one of them and a copy of its stamp to another.
- *
- * A figure left in the row of a copy edited back down to one stamp is **ignored** here, not erased:
- * that copy is a copy of its stamp again and is valued from the catalogue.
- */
-export function carrierValuationOf(row: {
+/** A copy's `ValuationRow.copy`. A value the database CHECKs keep valid is read back defensively. */
+export function pieceCopyOf(row: {
+  id: string;
   stampCount: number;
-  /** A Prisma `Decimal` as read, or anything else that prints as a number. */
-  explicitValue: { toString(): string } | null;
-  explicitValueCurrency: string | null;
-}): CarrierValuationInput | null {
-  if (!isMultiStampCount(row.stampCount)) return null;
+  franking: string;
+  valuationMethod: string | null;
+}): PieceCopyInput {
   return {
-    explicitValue:
-      row.explicitValue != null && row.explicitValueCurrency
-        ? {
-            amount: Number(row.explicitValue.toString()).toFixed(2),
-            currency: row.explicitValueCurrency,
-          }
-        : null,
+    itemId: row.id,
+    stampCount: row.stampCount,
+    franking: isFranking(row.franking) ? row.franking : "rate_correct",
+    method: isValuationMethod(row.valuationMethod) ? row.valuationMethod : null,
   };
 }
 
@@ -72,7 +67,7 @@ export interface CarrierEntry {
 /**
  * The valuation key each component is priced on — the three choices of the module header, stated in
  * one place: the **copy's** condition, the **entry's** format, **no** certificate. The shape is
- * `ValuationRow`'s, keyed by entry id; `carrier` is null because a component is a stamp, not a piece.
+ * `ValuationRow`'s, keyed by entry id; `copy` is null because a component is a stamp, not a piece.
  */
 export function carrierComponentRows(
   copy: { conditionId: string },
@@ -85,16 +80,16 @@ export function carrierComponentRows(
     certificateStatusId: null,
     formatId: entry.formatId,
     unknownVariant: entry.unknownVariant,
-    carrier: null,
-    // The suggestion is the full worth of the stamps: the piece's faults lower the figure recorded
-    // from it (#1560), so lowering the components too would take them off twice.
+    copy: null,
+    // The full worth of the stamps: the piece's faults lower the piece's value (#1560), so lowering
+    // the components too would take them off twice.
     faultReductionPercent: null,
     valueModifier: null,
     candidateStampIds: null,
   }));
 }
 
-/** One component of a carrier, valued as the suggestion values it. */
+/** One component of a piece, at its used price. */
 export interface CarrierComponentValue {
   /** Described components, not sheets of paper (ADR-0044 §4). */
   quantity: number;
@@ -126,7 +121,7 @@ export interface CarrierSuggestion {
   partial: boolean;
 }
 
-/** Sum a carrier's components into the suggested value. Pure; see the module header for the rule. */
+/** Sum a piece's components at their used prices. Pure; see the module header for the rule. */
 export function sumCarrierComponents(
   components: readonly CarrierComponentValue[],
   baseCurrency: string
@@ -164,28 +159,4 @@ export function sumCarrierComponents(
     unconvertibleCount,
     partial: unpricedCount + unconvertibleCount > 0,
   };
-}
-
-/** The largest amount `DECIMAL(10, 2)` holds. */
-const MAX_EXPLICIT_VALUE = 99_999_999.99;
-
-/**
- * Read a recorded value off the dialog's two fields. **A blank amount clears the value**, which
- * returns the carrier to unpriced — the one way to say "I no longer stand by that figure". Otherwise
- * the amount is a non-negative number (the shared decimal input's commas and arithmetic included,
- * #233/#580) and the currency a three-letter code.
- */
-export function parseExplicitValueInput(
-  amountRaw: string,
-  currencyRaw: string
-): { ok: true; value: ExplicitValue | null } | { ok: false; message: string } {
-  const trimmed = normalizeDecimalInput(amountRaw.trim());
-  if (!trimmed) return { ok: true, value: null };
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return { ok: false, message: "The value must be a number." };
-  if (n < 0) return { ok: false, message: "The value cannot be negative." };
-  if (n > MAX_EXPLICIT_VALUE) return { ok: false, message: "The value is too large." };
-  const currency = currencyRaw.trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, message: "Choose a currency." };
-  return { ok: true, value: { amount: roundAmount(n), currency } };
 }

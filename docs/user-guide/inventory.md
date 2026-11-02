@@ -378,8 +378,8 @@ A faulty stamp is worth less than the catalog says. Type by how much in the copy
 reduction** field, beside its [faults](faults.md) in the copy dialog — a whole percentage from 1 to
 100; leave it empty for none. It can be set on a copy with no listed faults too.
 
-The reduction lowers **every value of that copy**: its catalog value (or the value recorded on a
-piece carrying several stamps), its market value, and every total and suggestion built from them —
+The reduction lowers **every value of that copy**: its catalog value (or the value
+[computed for a cover or other piece](#what-a-piece-carrying-several-stamps-is-worth)), its market value, and every total and suggestion built from them —
 the holdings bar, the Overview, the offer's suggested price, a purchase's percentage of catalog, the
 lot builder and your own valuation of a trade line. The stamp's catalog price is not changed; only
 this copy's figure is.
@@ -406,7 +406,8 @@ Leave both figures empty for none. The copy is valued at **catalog value × (1 +
 amount**, never below zero, and only then lowered by its
 [value reduction for faults](#lowering-a-copys-value-for-its-faults). A copy with no catalog value
 gets no value from the modifier alone: an amount is nothing without the catalog figure it adjusts.
-On a piece carrying several stamps, the modifier adjusts the value recorded on it.
+On a cover or another piece, the modifier adjusts the value computed for it, and its amount is in your
+collection currency, which that value is computed in.
 
 Everything that reads the copy's value reads the modified one — the Copies list and its total, the
 Overview, an offer's suggested price, a purchase's percentage of catalog, the lot builder and your
@@ -1039,6 +1040,8 @@ You set each one where its scope lives, so you never pick the thing it applies t
 
 - **Collection-wide and per-area** — Settings → Formats → Multipliers.
 - **One area** — also from that area's **⋮** menu on the **Areas** screen, which is usually quicker.
+  The same menu's **Valuation method…** sets how the covers and fragments under that area are
+  valued (see [What a piece carrying several stamps is worth](#what-a-piece-carrying-several-stamps-is-worth)).
 - **One issue** — from that issue's **⋮** menu on the Issues list. Per-issue multipliers are not
   listed in Settings: you can have one for every issue and every format, so that list would be
   thousands of lines long. Each issue's own row shows just its own.
@@ -1102,10 +1105,11 @@ a price you type always wins over a derived one.
 
 The **as** switcher on the Stamps and Issues lists offers them too, under *On cover and on piece*.
 
-They are prices only, never what a copy is: a cover you own is a copy with several stamps on it (see
-below), and none of these four is offered in a copy's, a want's or a trade's **Format**. Nor are they
-listed under **Settings → Formats** — they are the catalogues' and the same in every collection.
-Nothing values a copy from them yet: a piece's worth is still the figure you record on it.
+They are prices only, never what a copy is: a cover you own is a copy in a format of your own, such
+as *Cover* (see below), and none of these four is offered in a copy's, a want's or a trade's
+**Format**. Nor are they listed under **Settings → Formats** — they are the catalogues' and the same in
+every collection. They are what a cover or a fragment you own is
+[valued from](#what-a-piece-carrying-several-stamps-is-worth).
 
 #### Stamps still valid for postage
 
@@ -1199,27 +1203,61 @@ Its own page shows the stamps it carries in your order, under **Stamps on this p
 
 ### What a piece carrying several stamps is worth
 
-No catalog prices a cover franked with three different stamps, so the piece has a value **you
-record** — an amount and a currency. Until you do, it is **unpriced**: its row shows **+ value**
-where other copies show a price, the Copies list total counts it as unpriced, and it never borrows the
-price of the first stamp on it.
+No catalog prints a price for your particular cover, but catalogs say how to value one from its
+stamps' prices — and the app does that for you. A cover's, a fragment's or any piece's catalog value is
+**computed by a valuation method** from the prices of the stamps on it: their used prices, and the
+[prices on cover and on piece](#prices-on-cover-and-on-piece) you record for them.
 
-Click **+ value** on its row (or **⋮ → Show valuation**) to open the piece's **Valuation** window. It
-has two sections:
+**What kind of piece it is** comes from its format. Under **Settings → Formats**, give each format
+you use for pieces a **Kind**: *On cover* for *Cover*, *On piece* for a fragment, or *Neither*. A
+format with a kind has no prices of its own — giving it a kind moves the prices typed on its tab to
+the stamps' **Cover EF** (or **On piece**) prices. A piece whose format has neither kind — an FDC, for
+now — is valued as the sum of its stamps' used prices. One stamp alone on a cover is valued the same
+way, as a cover (its **Cover EF** price under Michel), and still counts as a copy of that stamp.
 
-- **Value of this piece** — type the amount, pick the currency and **Save**. **Clear** takes the value
-  off again, and the piece is unpriced once more.
-- **Sum of its stamps** — a suggestion to start from: every stamp on the piece at the piece's
-  condition, **in its own format** (a block of four is priced as a block), with **no certificate**,
-  times how many of it there are — at the latest catalog edition, in your collection currency. A
-  stamp with no catalog price is marked and left out, and the sum says it is **partial**. **Use this
-  sum** copies the figure into the field above; nothing is saved until you press **Save**, because what
-  a cover is worth depends on its usage and franking, not only on the stamps.
+**How a cover was posted** is its **franking**, set in the copy's **Edit** dialog, or next to the stamps
+on the piece when you identify a card scan tile:
 
-The value you save is the figure the Copies list total adds up, the asking price that is pre-filled
-when you list the piece, and your own valuation of it in a trade (see
-[Trades](trades.md#every-line-needs-a-value)). Its row and its own page call it a **recorded value**,
-never a catalog value. Take the piece back down to one stamp and it is valued from the catalog again.
+- **Rate-correct** — genuinely posted and franked for the postal rate. Every piece starts here.
+- **Philatelic, posted** — overfranked, a set cover and the like, but genuinely posted.
+- **Not posted**.
+
+**The methods**:
+
+| Method | Fragment | Cover, rate-correct | Cover, philatelic | Cover, not posted |
+| --- | --- | --- | --- | --- |
+| **Michel** | sum of on-piece prices | EF: the stamp's EF price · MeF: its MeF price · MiF: the highest MiF price among the stamps | the most expensive used price + 15 % | sum of used prices |
+| **Fischer** | sum of on-piece prices | EF: the stamp's ⊠ (MiF) price · MeF: 150 % of ⊠ for two stamps, every further one at its used price · MiF: 50 % of the highest ⊠, every other stamp at its used price | as rate-correct | sum of used prices |
+| **Fischer FP/FW/FM** | sum of on-piece prices | EF: FP · MeF: FW · MiF: the highest FM — the EF, MeF and MiF prices as typed | as rate-correct | sum of used prices |
+| **Sum of used** | sum of used prices | sum of used prices | sum of used prices | sum of used prices |
+
+A sum of used prices takes every stamp in its own format — a block as a block — times how many of it
+there are.
+
+**EF, MeF or MiF** is read off what is on the cover, counting stamps rather than rows: one stamp once is
+EF; one stamp several times — a quantity above 1, or a block of it — is MeF; more than one stamp is MiF.
+Under Fischer a block counts as one stamp, since the app does not know how many stamps a format holds.
+Every price is read at the piece's condition, with no certificate, at the latest catalog edition, in
+your collection currency.
+
+**Which method** values a piece: the collection's default, **Michel** unless you change it under
+**Settings → Formats → Valuation method**; an area's own, set from its **⋮ → Valuation method…** on the
+Areas screen and inherited by the areas below it; or the copy's own, set in its **Edit** dialog, which
+wins over both. The area that decides is the area of the piece's **most expensive stamp** — the one
+with the highest used price.
+
+**A missing price** makes the value **partial**: the figure counts what is priced, and the piece's
+**Valuation** window (its row's **⋮ → Show valuation**, or click its value) says which stamp is missing
+which price. With nothing priced at all the piece is unpriced, and its row shows **+ prices**.
+
+The computed value is what the Copies list total adds up, the asking price pre-filled when you list the
+piece, your own valuation of it in a trade and the figure a trade partner's catalog gives it. Its own
+page calls it the **Computed value**. Your [value modifier](#adjusting-a-copys-catalog-value) and
+[value reduction](#lowering-a-copys-value-for-its-faults) adjust it as they adjust any copy.
+
+**A value you recorded on a piece before** is kept: it became the piece's modifier amount — the
+difference between what you recorded and what the method gives — so the piece is worth exactly what it
+was. Formats named *Cover*, *Piece* or *Fragment* were given their kind at the same time.
 
 ## Adding a catalog value
 

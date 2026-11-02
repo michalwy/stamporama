@@ -15,6 +15,7 @@ import type { CandidateStamp, CarriedStamp, ItemIssueRef, ItemListItem } from "@
 import { copyIssues } from "@/lib/copy-issue-filter";
 import { issueGroupLabel } from "@/lib/issue-groups";
 import type { CopyValuation } from "@/lib/valuation";
+import { pieceValueTitle } from "@/lib/piece-value-words";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import {
   COST_ESTIMATE_HINT,
@@ -343,8 +344,8 @@ export function CopyValue({
 }: {
   value: CopyValuation;
   baseCurrency: string;
-  /** The copy carries several stamps (#745), so its figure is the value recorded on it rather than a
-   *  catalogue price (#747) — and an unpriced one is asked for a value, not a catalog price. */
+  /** The copy is a piece (#2359), so its figure is computed by its valuation method rather than one
+   *  catalogue price — and an unpriced one points at the prices the method reads, not at one cell. */
   carrier?: boolean;
   /** When provided, the value area becomes an inline catalog-price editor (#121): a
    * "+ price" link when unpriced, and a click-to-edit affordance when priced. */
@@ -360,7 +361,7 @@ export function CopyValue({
         <Tooltip
           content={
             carrier
-              ? "Record what this piece is worth — it carries several stamps, so no catalog prices it"
+              ? "No price this piece's valuation method reads is recorded — open its valuation to see which"
               : "Set the catalog value for this condition on the primary catalog"
           }
         >
@@ -378,7 +379,7 @@ export function CopyValue({
               whiteSpace: "nowrap",
             }}
           >
-            {carrier ? "+ value" : "+ catalog value"}
+            {carrier ? "+ prices" : "+ catalog value"}
           </button>
         </Tooltip>
       );
@@ -387,7 +388,7 @@ export function CopyValue({
       <Tooltip
         content={
           carrier
-            ? "No value recorded for this piece."
+            ? "No price this piece's valuation method reads is recorded."
             : "No catalog price recorded for this condition."
         }
       >
@@ -408,10 +409,8 @@ export function CopyValue({
   const primaryText = moneyPrimaryText(money);
   const secondaryText = moneySecondaryText(money);
   const noRate = v.currency !== baseCurrency && v.baseAmountDisplay == null;
-  const valueTitle = v.explicit
-    ? noRate
-      ? `Value recorded on this piece (no ${baseCurrency} rate available)`
-      : "Value recorded on this piece — it carries several stamps, so no catalog prices it"
+  const valueTitle = v.piece
+    ? pieceValueTitle(v.piece)
     : v.uncertain
       ? "Estimated from the lowest child-variant price — the specific variant isn't identified yet."
       : noRate
@@ -746,11 +745,11 @@ export function InventoryItemRow({
   // questions now, and two of them — what the market paid (#457) and what this collector paid
   // (#560) — stand on their own, the second of them always having something to say about a row
   // that *is* a copy.
-  // …except on a **multi-stamp copy**, which is a copy of none of its stamps (#745) and so opens a
-  // window of its own: the value recorded on the piece and the sum of its stamps (#747). Opening the
-  // leading stamp's would price the cover as that stamp, which is the claim the rule removes.
+  // …except on a **piece**, valued by its method from several prices (#2359), which opens a window
+  // of its own: the computed value and its stamps. Opening the leading stamp's would price the cover
+  // as that stamp, which is the claim the rule removes.
   const prices = usePriceDetailsAction(
-    item.multiStamp
+    item.value.piece
       ? { kind: "copy", collectionId, itemId: item.id, areas }
       : { kind: "stamp", stampId: item.stampId }
   );
@@ -1093,13 +1092,13 @@ export function InventoryItemRow({
             style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.75rem" }}
           >
             {valueAside}
-            {/* A carrier's value is not a catalogue price, so clicking it records a value on the piece
-                in its Valuation window rather than opening the leading stamp's price editor (#747). */}
+            {/* A piece's value is not one catalogue price (#2359), so clicking it opens the piece's
+                Valuation window rather than the leading stamp's price editor. */}
             <CopyValue
               value={item.value}
               baseCurrency={baseCurrency}
-              carrier={item.multiStamp}
-              onSetPrice={item.multiStamp ? prices.action.onSelect : onSetCatalogPrice}
+              carrier={item.value.piece !== null}
+              onSetPrice={item.value.piece ? prices.action.onSelect : onSetCatalogPrice}
             />
           </span>
         </div>

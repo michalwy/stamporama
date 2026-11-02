@@ -1,4 +1,5 @@
 import "server-only";
+import type { Franking } from "./piece-valuation";
 import { prisma, type DbTransaction } from "./db";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { setCopyStamp } from "./item-candidates";
@@ -129,6 +130,9 @@ export interface TileIdentification {
   /** The lot the created copies belong to. Omitted when the purchase has exactly one, which is
    * then used silently. */
   lotId?: string | null;
+  /** How the piece was franked and posted (#2359), asked beside the stamps on it; absent leaves the
+   *  new copies rate-correct. */
+  franking?: Franking;
   stampId: string;
   /** Two or more stamps the pieces **might be** (#1651, ADR-0065) — *Several possible variants…*.
    *  `stampId` is then the first of them; each copy is given the set once it exists. */
@@ -295,6 +299,13 @@ export async function identifyTilesAsNewCopies(
   // The stamps the pieces might be (#1651), through the copy's own write, once each copy exists.
   if (input.candidateStampIds && input.candidateStampIds.length > 1) {
     for (const copy of copies) await setCopyStamp(ownerId, copy.itemId, input.candidateStampIds);
+  }
+  // The piece's franking (#2359), as the step answered it beside the stamps on it.
+  if (input.franking) {
+    await prisma.item.updateMany({
+      where: { id: { in: copies.map((c) => c.itemId) } },
+      data: { franking: input.franking },
+    });
   }
   // The faults (#1558): the step's for every copy, or the tile's own where it keeps its marked ones.
   await giveNewCopiesFaults(
@@ -698,6 +709,8 @@ export async function assignTileToCopy(
  */
 export interface TileReidentification {
   stampId: string;
+  /** How the piece was franked and posted (#2359); absent leaves it as it is. */
+  franking?: Franking;
   /** The stamps the piece might be (#1651), or none — a correction re-answers the set too. */
   candidateStampIds?: readonly string[] | null;
   conditionId: string;
@@ -805,6 +818,7 @@ export async function reidentifyTileCopy(
     ...(stamps ? { stamps } : {}),
     // The set the piece might be (#1651) — or none, which drops one the copy carried.
     candidateStampIds: input.candidateStampIds ?? [],
+    ...(input.franking ? { franking: input.franking } : {}),
   }, { source: "scan" });
   if (input.stampPhotoTileId === undefined) await seedStampImage(ownerId, item.id);
   if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);

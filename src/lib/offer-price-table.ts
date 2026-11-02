@@ -16,8 +16,8 @@
 // ratio over every held copy with a catalogue value — including a copy whose key has a measured
 // market median, unlike the Valuation dialog's grid (#602), which leaves such a cell empty because
 // it is printed beside the measurement. Here the market figure is a row of its own, and an estimate
-// that skipped the measured copies would price the set as though they were worth nothing. A copy
-// valued at a **recorded** figure (#747) has no catalogue value to correct, and is left out.
+// that skipped the measured copies would price the set as though they were worth nothing. A piece
+// valued by its method (#2359) is left out: the ratio is learned from stamps, not covers.
 //
 // **The table reads without its tooltips** (#1839): three headed columns — the row's name, *Price*,
 // *Profit over cost* — a short note in brackets after a name saying what the figure is and nothing

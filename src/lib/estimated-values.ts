@@ -239,7 +239,7 @@ async function estimateStamps(
         certificateStatusId: axes.certificateStatusId,
         formatId: axes.formatId,
         unknownVariant: unknownVariant.get(stamp.id) ?? false,
-        carrier: null,
+        copy: null,
         faultReductionPercent: null,
         valueModifier: null,
         candidateStampIds: null,

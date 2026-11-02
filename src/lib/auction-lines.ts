@@ -357,7 +357,7 @@ async function valueAcrossConditions(
             certificateStatusId: line.certificateStatusId,
             formatId: line.formatId,
             unknownVariant: line.unknownVariant,
-            carrier: null,
+            copy: null,
             faultReductionPercent: null,
             valueModifier: null,
             candidateStampIds: null,

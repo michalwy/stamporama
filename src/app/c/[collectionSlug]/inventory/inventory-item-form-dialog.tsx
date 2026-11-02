@@ -45,6 +45,14 @@ import {
   type AddCopyDefaults,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import { Icon } from "@/app/icons";
+import {
+  DEFAULT_FRANKING,
+  FRANKINGS,
+  FRANKING_LABELS,
+  VALUATION_METHODS,
+  VALUATION_METHOD_LABELS,
+  isPiece,
+} from "@/lib/piece-valuation";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { dispositionToggleColors } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 import { formControl, multiLineFormControl } from "@/app/control-style";
@@ -113,6 +121,9 @@ const FAULT_REDUCTION_HINT =
   "How much this copy's faults take off its value, in percent. Every value of the copy — catalog and market, and every total built from them — is lowered by it. Leave empty for none.";
 
 /** The value modifier's hover (#2357). */
+const FRANKING_HINT =
+  "How the piece was posted. Rate-correct: franked for the postal rate. Philatelic, posted: overfranked, a set cover and the like, genuinely posted. Read only for a piece on a cover.";
+
 const VALUE_MODIFIER_HINT =
   "A catalogue exception this copy carries — a cancellation surcharge, a rare usage. Its catalog value is multiplied by the percentage, then the amount is added (in the catalog's own currency), and only then do faults take their reduction. The note says why, and is shown wherever the modifier is. Leave both figures empty for none.";
 
@@ -204,6 +215,9 @@ export function InventoryItemFormDialog({
   // Formats are fetched here rather than threaded in: this dialog is opened from four screens,
   // and each would otherwise have to carry one more dictionary it makes no other use of.
   const { data: formats = [] } = useCollectionFormats(collectionId);
+  // The format chosen now (#2359): a format on cover or on piece makes the copy a piece, valued by
+  // its method — so its franking and method are asked for as soon as one is picked.
+  const [formatChoice, setFormatChoice] = useState(item?.formatId ?? "");
   // Last-used condition / location / disposition, remembered globally across every add-copy
   // entry point (#234). Add mode only; edit mode always reflects the item being edited. Computed
   // once at mount so the fields stay stable while the dialog is open.
@@ -640,6 +654,7 @@ export function InventoryItemFormDialog({
                     id="copy-format"
                     name="formatId"
                     defaultValue={item?.formatId ?? ""}
+                    onChange={(e) => setFormatChoice(e.target.value)}
                     disabled={isPending}
                     style={INPUT_STYLE}
                   >
@@ -654,6 +669,56 @@ export function InventoryItemFormDialog({
                   </select>
                 </div>
               </div>
+
+              {/* How a piece is valued (#2359): its franking and its own method, asked only while the
+                  copy is one — several stamps on it, or a format on cover or on piece. Absent
+                  otherwise, which leaves both as they are. */}
+              {isPiece(
+                stampRows
+                  ? stampRows.reduce((n, row) => n + row.quantity, 0)
+                  : item?.multiStamp
+                    ? 2
+                    : 1,
+                formats.find((f) => f.id === formatChoice)?.pieceKind ?? null
+              ) && (
+                <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr" }}>
+                  <div>
+                    <Tooltip content={FRANKING_HINT} style={{ display: "flex", width: "fit-content" }}>
+                      <GroupLabel htmlFor="copy-franking">Franking</GroupLabel>
+                    </Tooltip>
+                    <select
+                      id="copy-franking"
+                      name="franking"
+                      defaultValue={item?.franking ?? DEFAULT_FRANKING}
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    >
+                      {FRANKINGS.map((f) => (
+                        <option key={f} value={f}>
+                          {FRANKING_LABELS[f]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <GroupLabel htmlFor="copy-valuation-method">Valuation method</GroupLabel>
+                    <select
+                      id="copy-valuation-method"
+                      name="valuationMethod"
+                      defaultValue={item?.valuationMethod ?? ""}
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    >
+                      <option value="">Same as its area</option>
+                      {VALUATION_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {VALUATION_METHOD_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* What is wrong with this piece (#1557), right under the condition it qualifies — chosen
                   from the collection's fault list, saved with the rest of the copy — and beside it how

@@ -1523,8 +1523,10 @@ document. Assigning is done by picking a copy from the list itself. There are th
   add them all with one press — each as quantity 1, single, in catalogue order; one already listed
   goes up by one instead. The tile still becomes **one copy**, carrying all of them; the box then lists
   them under *Several stamps on this piece*, and **Change the stamps on this piece…** reopens the list.
-  Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual. A piece
-  carrying several stamps counts towards none of them — see
+  Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual, and say
+  how it was posted in **Franking**, which appears beside the stamps on the piece — *Rate-correct*,
+  *Philatelic, posted* or *Not posted*; it decides which catalog price the piece's value is read
+  from. A piece carrying several stamps counts towards none of them — see
   [Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Assign to a copy on this order** — the auction path. An order settled from an
   [auction sale](auctions.md#settling-a-parcel-into-a-purchase) already holds identified copies,
@@ -2998,10 +3000,10 @@ can price consistently — the target rows are marked with an arrow. Closing sti
 [A copy of unknown variant](inventory.md#a-copy-of-unknown-variant). (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
 **Prices** tab.) Then try the close again.
 
-A **piece carrying several stamps** is split by the value you **recorded** on it instead, since no
-catalog prices it — so until you record one it is among the unpriced and blocks the close like any
-other. Its **+ value** link opens the piece's Valuation window, where the sum of its stamps is offered
-as a starting point; see [What a piece carrying several stamps is
+A **cover, a fragment or another piece** is split by the value its valuation method computes from its
+stamps' prices — so while the method prices nothing on it, it is among the unpriced and blocks the
+close like any other. Its **+ prices** link opens the piece's Valuation window, which says which
+prices are missing; see [What a piece carrying several stamps is
 worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth).
 
 The way to meet this blocker least often is not to reach it: the intake step has its own

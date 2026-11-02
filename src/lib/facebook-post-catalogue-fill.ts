@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { COPY_VALUATION_SELECT, copyValuationOf, valuateItemRows } from "./item-valuation";
+import { isMultiStampCount } from "./multi-stamp";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
@@ -23,8 +24,8 @@ import type { CatalogueFillLine } from "./lot-catalogue-fill";
 //   `stampId` is only the set's pointer;
 // - and, alongside it, an **unknown-variant** copy (#238), whose value is its variants'.
 //
-// A **multi-stamp** piece (ADR-0044) is not a line at all: it is valued at the figure recorded on the
-// piece and never from the catalogue (#747), so there is no catalogue value to type for it.
+// A **piece** (ADR-0044, #2359) is not a line at all: it is valued by its method from several prices
+// of several stamps, never from one cell, so there is no one catalogue value to type for it.
 
 /** One copy's photo summary, as the stamp's pictures are — front, back, then the rest. */
 function toPhotoSummary(p: { id: string; role: string | null; title: string | null; sortOrder: number }): PhotoSummary {
@@ -116,7 +117,7 @@ export async function getFacebookPostCatalogueFill(
           )
         )
         .map((li: SetItem) => li.item)
-        .filter((item) => copyValuationOf(item).carrier === null)
+        .filter((item) => !isMultiStampCount(item.stampCount))
     ),
   }));
   const copies = [...new Map(lotItems.flatMap((lot) => lot.items).map((item) => [item.id, item])).values()];
@@ -188,5 +189,12 @@ export async function getFacebookPostCatalogueFill(
     };
   };
 
-  return Object.fromEntries(lotItems.map((lot) => [lot.offerId, lot.items.map((item) => lineOf(lot.offerId, item))]));
+  // A piece on one stamp — its format on cover or on piece — is valued by its method too (#2359).
+  const isLine = (item: (typeof copies)[number]) => !valuations.get(item.id)?.piece;
+  return Object.fromEntries(
+    lotItems.map((lot) => [
+      lot.offerId,
+      lot.items.filter(isLine).map((item) => lineOf(lot.offerId, item)),
+    ])
+  );
 }

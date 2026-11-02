@@ -272,6 +272,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       defaultLanguage: true,
       homeMarket: true,
       duplicateCatalogMode: true,
+      valuationMethod: true,
       bidFloorPercent: true,
       bidCeilingPercent: true,
       bidFallbackPercent: true,

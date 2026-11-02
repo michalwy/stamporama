@@ -862,7 +862,7 @@ of asking one question.
 The two figures are **never merged**. `catalogValue` is a book's opinion at this exact
 `condition × certificate × format`; `marketValue` is the median of what copies like it have actually
 fetched (#458), and it is **absent** where no auction result answers, which is *no evidence* and
-deliberately not a catalogue-derived stand-in (ADR-0022 §6). On a copy carrying several stamps the first figure is not a book's at all: no catalogue prices such a piece (#745), so `catalogValue` is the value the collector recorded on it and says so with `recorded: true` (#747) — a field added, never a meaning changed for any other copy.
+deliberately not a catalogue-derived stand-in (ADR-0022 §6). On a **piece** — several stamps, or a format on cover or on piece — the first figure is not one book cell: it is computed by the piece's valuation method from its stamps' prices (#2359; ADR-0076), and `catalogValue.piece` says how — the method, `methodFrom` (`copy`, `area` with `methodAreaId`, or `collection`), the franking, the format's kind, `usage` (EF/MeF/MiF), and `partial` with the `missing` prices. It replaced #747's `recorded` flag. `set_copy_valuation` (PATCH `/copies/{copy_id}/valuation`) sets the franking and the copy's own method — `area` drops it — and is the only write that reaches either; the collection's and an area's methods are the collector's, set in the app.
 
 ### `get_offer`'s `pricing` is five claims, not a recommendation
 

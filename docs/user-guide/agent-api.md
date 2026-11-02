@@ -273,6 +273,10 @@ to the stamp it turned out to be. Whenever it tells you about such a copy it nam
 does — *123aI or 123bI* — and never as one of them. It only ever changes a copy you already have; it
 does not create one.
 
+On **a cover or a fragment**, it reads how the piece's value was computed — the valuation method and
+where it came from, the franking, and any price that is missing — and it can set the piece's franking
+or give the copy a method of its own. The collection's and an area's methods stay yours to set.
+
 On **stamp sizes** — the figures your album pages cut hawid strips to — it can put a size it reads
 in a catalogue or a dealer's list onto your stamps, so you do not type it stamp by stamp. It can:
 

@@ -107,11 +107,11 @@ Two things count as a value:
   without leaving the trade. It is the same control the purchase-order intake screen has, and it
   works on both sides — the stamps coming in are usually the ones nothing prices yet.
 
-A **piece carrying several stamps** — a cover, a fragment — is valued on your side at the value you
-recorded on it (see [What a piece carrying several stamps is worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth)),
-and is unpriced there until you record one. No catalogue prices such a piece, so the agreed valuation
-has nothing for it: that is your own judgement, not something your partner can look up. Use **Set
-value** on the line when the trade needs a figure you both agreed.
+A **cover, a fragment or another piece** is valued by its valuation method from its stamps' prices
+(see [What a piece carrying several stamps is worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth))
+— on your side from your catalog, and in the agreed valuation by the same method from the catalog you
+agreed on. A piece the method prices nothing on is unpriced; use **Set value** on the line when the
+trade needs a figure you both agreed.
 
 The same dialog lets one line name a **different publisher** from the trade's: "this one we look up
 in Fischer instead." Only the agreed valuation changes; what the stamps are worth to you is always

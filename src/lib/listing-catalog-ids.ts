@@ -201,7 +201,7 @@ export async function resolveListingCatalogItemIds(
     certificateStatusId: c.certificateStatusId,
     formatId: c.formatId,
     unknownVariant: true,
-    carrier: null,
+    copy: null,
     faultReductionPercent: null,
     valueModifier: null,
     candidateStampIds: c.candidateStampIds,

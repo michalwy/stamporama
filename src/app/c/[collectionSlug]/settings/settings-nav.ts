@@ -146,6 +146,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     parts: [
       { key: "formats", label: "Formats" },
       { key: "multipliers", label: "Multipliers" },
+      { key: "valuation", label: "Valuation method" },
     ],
   },
   {

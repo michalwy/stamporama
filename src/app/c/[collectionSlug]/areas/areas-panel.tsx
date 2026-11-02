@@ -1,5 +1,7 @@
 "use client";
 
+import { AreaValuationMethodDialog } from "./area-valuation-method-dialog";
+import type { ValuationMethod } from "@/lib/piece-valuation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -52,6 +54,8 @@ interface AreasPanelProps {
   /** The language the plain `titleName` is written in (#293); labels the field once translations
    * are in play. */
   defaultLanguage: string;
+  /** What an area that sets no valuation method of its own inherits at the top (#2359). */
+  collectionValuationMethod: ValuationMethod;
 }
 
 type DialogState =
@@ -59,7 +63,8 @@ type DialogState =
   | { kind: "add-area"; defaultParentId?: string }
   | { kind: "edit-area"; area: CollectionAreaData }
   | { kind: "delete-area"; area: CollectionAreaData }
-  | { kind: "format-factors"; area: CollectionAreaData };
+  | { kind: "format-factors"; area: CollectionAreaData }
+  | { kind: "valuation-method"; area: CollectionAreaData };
 
 interface TreeNode {
   area: CollectionAreaData;
@@ -165,6 +170,7 @@ export function AreasPanel({
   catalogVendors,
   titleLanguages,
   defaultLanguage,
+  collectionValuationMethod,
 }: AreasPanelProps) {
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
@@ -667,6 +673,12 @@ export function AreasPanel({
                     },
                     stillValidAction(initialAreas, area, () => toggleStillValid(area)),
                     {
+                      key: "valuation-method",
+                      label: "Valuation method…",
+                      icon: "prices",
+                      onSelect: () => openDialog({ kind: "valuation-method", area }),
+                    },
+                    {
                       key: "delete",
                       label: "Delete",
                       icon: "delete",
@@ -692,6 +704,20 @@ export function AreasPanel({
           scope={{ kind: "area", id: dialog.area.id }}
           scopeLabel={dialog.area.name}
           onClose={closeDialog}
+        />
+      )}
+
+      {/* How the pieces under this area are valued (#2359), set beside its multipliers. */}
+      {dialog.kind === "valuation-method" && (
+        <AreaValuationMethodDialog
+          area={dialog.area}
+          areas={initialAreas}
+          collectionMethod={collectionValuationMethod}
+          onClose={closeDialog}
+          onSaved={() => {
+            closeDialog();
+            router.refresh();
+          }}
         />
       )}
 
