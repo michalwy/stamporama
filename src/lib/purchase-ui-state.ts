@@ -25,6 +25,9 @@
  * `app/c/[collectionSlug]/shared/purchase-ui-state.ts`.
  */
 
+import { isTileSide } from "./scan-strip-side";
+import type { TileSide } from "./scan-tile-view";
+
 /** Orders kept before the least-recently-used is dropped. */
 export const MAX_ENTRIES = 50;
 
@@ -46,12 +49,15 @@ export interface PurchaseUiState {
   /** Which lots the order shows by their state (#1394): `open` or `closed`; null for both. */
   lotState: string | null;
   /** The scans card (#566): whether it is open, its tile filter, whether set-aside batches show,
-   * and the per-batch expansion choices keyed by batch number. */
+   * the per-batch expansion choices keyed by batch number, and which side the tiles show (#2350) —
+   * the section's, and the cards switched on their own, keyed by batch number. */
   scans: {
     open: boolean;
     filter: string;
     showDone: boolean;
     batches: Record<string, boolean>;
+    side: TileSide;
+    cardSides: Record<string, TileSide>;
   };
 }
 
@@ -64,7 +70,14 @@ export const EMPTY_PURCHASE_UI_STATE: PurchaseUiState = Object.freeze({
   filter: null,
   disposition: null,
   lotState: null,
-  scans: Object.freeze({ open: false, filter: "all", showDone: false, batches: {} }),
+  scans: Object.freeze({
+    open: false,
+    filter: "all",
+    showDone: false,
+    batches: {},
+    side: "front",
+    cardSides: {},
+  }),
 }) as PurchaseUiState;
 
 /** An entry in the most-recently-used index: which order, when it was last written, how big it is.
@@ -177,6 +190,8 @@ export function parsePurchaseUiState(raw: string | null): PurchaseUiState {
       filter: typeof scans.filter === "string" ? scans.filter : "all",
       showDone: scans.showDone === true,
       batches: scalarMap(scans.batches, isBoolean),
+      side: isTileSide(scans.side) ? scans.side : "front",
+      cardSides: scalarMap(scans.cardSides, isTileSide),
     },
   };
 }
@@ -193,7 +208,9 @@ export function isEmptyPurchaseUiState(state: PurchaseUiState): boolean {
     !state.scans.open &&
     !state.scans.showDone &&
     state.scans.filter === "all" &&
-    Object.keys(state.scans.batches).length === 0
+    Object.keys(state.scans.batches).length === 0 &&
+    state.scans.side === "front" &&
+    Object.keys(state.scans.cardSides).length === 0
   );
 }
 

@@ -55,7 +55,14 @@ import type {
   ScanTileData,
   SheetKind,
 } from "@/lib/scan-sheets";
-import { tileSideViews } from "@/lib/scan-tile-view";
+import {
+  cardSide,
+  stripPicture,
+  withCardSide,
+  withSectionSide,
+  type StripSides,
+} from "@/lib/scan-strip-side";
+import { tileSideViews, type TileSide } from "@/lib/scan-tile-view";
 import { scrollIntoView } from "./motion";
 import { TILE_ARRIVAL_PARAM, tileArrival } from "./tile-arrival";
 import {
@@ -492,6 +499,9 @@ export function ScansCard({
   const doneCount = batches.filter((b) => b.doneAt != null).length;
   const showDone = scansUi.showDone;
   const setShowDone = (next: boolean) => patchScansUi({ showDone: next });
+  /** Which side the tiles show (#2350) — the section's, and the cards switched on their own. */
+  const stripSides: StripSides = { side: scansUi.side, cardSides: scansUi.cardSides };
+  const anyBack = batches.some((b) => b.back != null);
 
   /**
    * The tile a copy's scan marker asked for (#1924) — `?tile=<id>`, answered the way `?lot=` is
@@ -672,6 +682,8 @@ export function ScansCard({
     return {
       tile,
       sides: tileSideViews(tile, { front: batch?.front ?? null, back: batch?.back ?? null }),
+      // The dialog opens on the side the strip shows it on (#2350) — its front, when it has no back.
+      side: batch ? stripPicture(tile, cardSide(stripSides, batch.batchNo)).shown : undefined,
     };
   };
 
@@ -1333,6 +1345,21 @@ export function ScansCard({
             options={SCAN_TILE_SIZES.map((size) => ({ value: size, label: SCAN_TILE_SIZE_LABEL[size] }))}
           />
         )}
+        {/* **Fronts or backs** (#2350), for every card at once — to check the backs against their
+            fronts, a watermark or a thin spot without opening forty tiles. It sets every card, a
+            card's own switch included. Greyed out while no card has a back scan. */}
+        {open && scanSheetCount > 0 && (
+          <Tooltip content={anyBack ? null : "No card has a back scan yet"}>
+            <Segmented<TileSide>
+              inline
+              label="Show"
+              value={stripSides.side}
+              disabled={!anyBack}
+              onChange={(side) => patchScansUi(withSectionSide(side))}
+              options={TILE_SIDE_OPTIONS}
+            />
+          </Tooltip>
+        )}
         <span style={{ flex: 1 }} />
         {/* A name for the card being added (#587), optional and never in the way: leave it blank
             and the flow is the single click it was. It sits beside the button rather than behind a
@@ -1588,6 +1615,8 @@ export function ScansCard({
           pinnedOpen={reachesFinishedBatches(filter)}
           expanded={expansion.isExpanded(batch)}
           onToggleExpanded={() => expansion.toggle(batch)}
+          side={cardSide(stripSides, batch.batchNo)}
+          onSetSide={(side) => patchScansUi(withCardSide(stripSides, batch.batchNo, side))}
           onOpenTile={setTileId}
           arrivedTileId={arrivedTileId}
           selected={live}
@@ -2286,6 +2315,8 @@ function BatchSection({
   pinnedOpen,
   expanded,
   onToggleExpanded,
+  side,
+  onSetSide,
   onOpenTile,
   arrivedTileId,
   selected,
@@ -2325,6 +2356,10 @@ function BatchSection({
    * `batchDoneAt` by the section above, which owns the rule for the whole card. */
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** The side this card's tiles show (#2350) — the section's, unless switched here. */
+  side: TileSide;
+  /** This card's own switch: only its tiles turn. */
+  onSetSide: (side: TileSide) => void;
   onOpenTile: (tileId: string) => void;
   /** The tile a copy's scan marker opened the card on (#1924), flashing while this is set. */
   arrivedTileId: string | null;
@@ -2532,6 +2567,20 @@ function BatchSection({
         </span>
         <span style={{ flex: 1 }} />
 
+        {/* **This card's fronts or backs** (#2350) — the section's switch, for one card. Greyed out
+            on a card with no back scan, which has nothing to turn to. */}
+        {open && frontTiles.length > 0 && (
+          <Tooltip content={batch.back ? null : "This card has no back scan"}>
+            <Segmented<TileSide>
+              inline
+              label="Show"
+              value={side}
+              disabled={busy || !batch.back}
+              onChange={onSetSide}
+              options={TILE_SIDE_OPTIONS}
+            />
+          </Tooltip>
+        )}
         {/* The buttons belong to the batch's contents, so they fold away with them: a finished
             batch is one line, and Re-cut / Delete on a line that shows nothing would be a
             destructive click over a card the collector cannot currently see. */}
@@ -2748,6 +2797,7 @@ function BatchSection({
               key={tile.id}
               tile={tile}
               collectionId={collectionId}
+              side={side}
               chrome={tileChrome}
               // The strip is the pull list (#853): every square on it is a discard, so the tile
               // stops drawing the state it is in and draws what finds the stamp on the card.
@@ -3033,6 +3083,12 @@ const PRESSABLE_CHIP: React.CSSProperties = {
   gap: "0.25rem",
 };
 
+/** The fronts / backs switch (#2350), the same two answers for the section and for a card. */
+const TILE_SIDE_OPTIONS: { value: TileSide; label: string }[] = [
+  { value: "front", label: "Fronts" },
+  { value: "back", label: "Backs" },
+];
+
 const ADD_MODE_KEY = "stamporama:scans:addMode";
 const ADD_MODES = ["fronts", "alternating"] as const;
 type AddMode = (typeof ADD_MODES)[number];
@@ -3257,6 +3313,7 @@ const LABEL_INPUT_STYLE: React.CSSProperties = {
 function TileCell({
   tile,
   collectionId,
+  side,
   chrome,
   worklist,
   droppable,
@@ -3272,6 +3329,8 @@ function TileCell({
 }: {
   tile: ScanTileData;
   collectionId: string;
+  /** The side the square shows (#2350). Nothing else on it changes with the side. */
+  side: TileSide;
   /** The sizes of what sits on the frame, from the strip's tile size (#1971). */
   chrome: ScanTileChrome;
   /** Drawn as one line of the **pull list** (#853) — the strip narrowed to the discards, read with
@@ -3306,8 +3365,10 @@ function TileCell({
   const parked = tile.state === "parked";
   /** Whether this tile can be ticked at all — a settled one has already reached an end. */
   const selectable = isSelectableTile(tile);
-  // The picture follows the photo row to whoever owns it now.
-  const photoId = tile.frontPhotoId ?? tile.item?.frontPhotoId ?? null;
+  // The picture follows the photo row to whoever owns it now — on the side the strip shows, or the
+  // front of a tile with no back (#2350).
+  const picture = stripPicture(tile, side);
+  const photoId = picture.photoId;
 
   const style: React.CSSProperties = {
     display: "block",
@@ -3377,7 +3438,7 @@ function TileCell({
         <TileImage
           photoId={photoId}
           collectionId={collectionId}
-          alt={`Tile ${tile.position + 1}, front`}
+          alt={`Tile ${tile.position + 1}, ${picture.shown}`}
           // A tile that has been dealt with steps back without disappearing: it is still part of
           // the record of the card, and a discarded one is the only record there is. The *picture*
           // is what recedes, never the badge or the label over it — a mark that faded with the
@@ -3389,6 +3450,21 @@ function TileCell({
           emptyLabel={tile.state === "consumed" ? "copy deleted" : undefined}
         />
       </div>
+      {/* Backs asked for and this tile has none (#2350): its front stays, so the grid keeps its
+          shape, and the words say which side it is — under the picture, never over the stamp. */}
+      {picture.noBack && photoId && (
+        <div
+          style={{
+            padding: "0.15rem 0.3rem 0",
+            fontSize: `${chrome.labelFontRem}rem`,
+            lineHeight: 1.3,
+            color: "var(--color-text-muted)",
+            textAlign: "center",
+          }}
+        >
+          no back
+        </div>
+      )}
       {(settled || parked) && <TileStateBadge state={tile.state} chrome={chrome} />}
       {/* The label row is frame too, under the picture: its number and the handled tick are read
           across a strip at a glance, so they are set at the tile's own size (#1971), the number in
