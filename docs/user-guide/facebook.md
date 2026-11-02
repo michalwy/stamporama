@@ -512,7 +512,8 @@ from the **⋮** beside its title.
 
 **New lot…**, beside **Add lots…** on the post's screen until the post is up, makes a new offer that
 becomes the post's next lot. Pick its copies — **Add as one set** for a series sold together, or one set
-each — then the ordinary new-offer form beside them asks the title, the price and the rest. It is on
+each; **Not on any open offer** keeps the picker to the copies on no other open offer, the post's own
+lots not counting — then the ordinary new-offer form beside them asks the title, the price and the rest. It is on
 Facebook in the post's group, and neither can be changed there; it is of the post's type (auction or
 quick buy) unless the group's posts may mix them — the first lot of an empty post may be either — an
 auction closes when the post's auctions do, and it starts *Preparing*, as every new offer does — it

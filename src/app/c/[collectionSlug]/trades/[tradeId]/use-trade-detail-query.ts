@@ -73,8 +73,13 @@ export const tradeDetailKeys = {
     ["trades", collectionId, "detail", tradeId] as const,
   lines: (collectionId: string, tradeId: string, query: TradeLineQuery) =>
     ["trades", collectionId, "lines", tradeId, query] as const,
-  offerable: (collectionId: string, tradeId: string, areaIds: string[] | null, forTrade: boolean) =>
-    ["trades", collectionId, "offerable", tradeId, areaIds, forTrade] as const,
+  offerable: (
+    collectionId: string,
+    tradeId: string,
+    areaIds: string[] | null,
+    forTrade: boolean,
+    notOnOpenOffer = false
+  ) => ["trades", collectionId, "offerable", tradeId, areaIds, forTrade, notOnOpenOffer] as const,
   candidates: (collectionId: string, tradeId: string, lineId: string) =>
     ["trades", collectionId, "candidates", tradeId, lineId] as const,
   balance: (collectionId: string, tradeId: string) =>
@@ -161,18 +166,21 @@ export function useOfferableCopies(
   areaIds: string[] | null,
   /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
   areaSelection: AreaSelection,
-  forTradeOnly: boolean
+  forTradeOnly: boolean,
+  /** Only the copies on no open offer (#2338). */
+  notOnOpenOffer = false
 ) {
   return useQuery<ItemListItem[]>({
-    queryKey: tradeDetailKeys.offerable(collectionId, tradeId, areaIds, forTradeOnly),
+    queryKey: tradeDetailKeys.offerable(collectionId, tradeId, areaIds, forTradeOnly, notOnOpenOffer),
     ...keepRowsAcrossTreeChange<ItemListItem[]>(
       areaSelection,
-      tradeDetailKeys.offerable(collectionId, tradeId, null, forTradeOnly)
+      tradeDetailKeys.offerable(collectionId, tradeId, null, forTradeOnly, notOnOpenOffer)
     ),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
       if (!forTradeOnly) params.set("forTrade", "false");
+      if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
       const res = await fetch(
         `/api/collections/${collectionId}/trades/${tradeId}/offerable-copies?${params.toString()}`
       );

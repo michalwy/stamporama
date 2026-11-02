@@ -57,6 +57,8 @@ export const SPARE_FILTERS = [
   { key: "missingCatalogValue", label: "Missing catalog value", group: "Show only" },
   // The copies whose variant is still to settle (#1651): an umbrella copy, or one of several stamps.
   { key: "variantToSettle", label: "Variant to settle", group: "Show only" },
+  // The copies on no open offer on any platform (#2338) — the ones to prefer for a new offer.
+  { key: "notOnOpenOffer", label: "Not on any open offer", group: "Show only" },
   { key: "includeGone", label: "Include sold & traded", group: "Also include" },
   { key: "includeDisposed", label: "Include no longer held", group: "Also include" },
 ] as const;

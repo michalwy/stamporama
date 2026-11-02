@@ -77,6 +77,8 @@ export interface AttachPickerFilters {
   /** A location id, {@link NO_LOCATION} for the copies filed nowhere, or `""` for every location
    *  (#2209). */
   locationId: string;
+  /** Only the copies on no open offer, on any platform (#2338). */
+  notOnOpenOffer: boolean;
   sortBy: AttachSortKey;
   sortDir: AttachSortDir;
 }
@@ -91,6 +93,7 @@ export const DEFAULT_ATTACH_FILTERS: AttachPickerFilters = {
   purchase: [],
   states: ["held"],
   locationId: "",
+  notOnOpenOffer: false,
   sortBy: "catalogue",
   sortDir: "asc",
 };
@@ -128,6 +131,7 @@ export function parseAttachFilters(raw: string | null): AttachPickerFilters {
     // collector emptied themselves means that, and it is stored as `[]`.
     states: readStoredStates(o.states),
     locationId: typeof o.locationId === "string" ? o.locationId : "",
+    notOnOpenOffer: o.notOnOpenOffer === true,
     sortBy: isAttachSortKey(o.sortBy) ? o.sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
     sortDir: o.sortDir === "desc" ? "desc" : "asc",
   };
@@ -176,6 +180,8 @@ export interface AttachReadQuery {
   locationId: string | null;
   /** That location alone, without the locations nested inside it. */
   locationExact: boolean;
+  /** Only the copies on no open offer (#2338). */
+  notOnOpenOffer: boolean;
   sortBy: AttachSortKey;
   sortDir: AttachSortDir;
   year: AttachYear;
@@ -208,6 +214,7 @@ export function writeAttachQuery(
     // The unfiled bucket has nothing nested in it, so the switch is not sent with it.
     if (!includeSubLocations && filters.locationId !== NO_LOCATION) params.set("locationExact", "1");
   }
+  if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "1");
   params.set("sort", filters.sortBy);
   params.set("dir", filters.sortDir);
   const y = parseAttachYear(year);
@@ -228,6 +235,7 @@ export function readAttachQuery(sp: URLSearchParams, search: string | undefined)
     purchase: oneOf(sp.getAll("purchase"), ATTACH_PURCHASE_VALUES),
     locationId: location || null,
     locationExact: !!location && sp.get("locationExact") === "1",
+    notOnOpenOffer: sp.get("notOnOpenOffer") === "1",
     sortBy: isAttachSortKey(sortBy) ? sortBy : DEFAULT_ATTACH_FILTERS.sortBy,
     sortDir: sp.get("dir") === "desc" ? "desc" : "asc",
     year: parseAttachYear(sp.get("year")),

@@ -66,7 +66,7 @@ The inventory list filters the same way the [Stamps](collections.md) list does: 
 
 Your filters are **remembered per collection**: come back to the list tomorrow and it opens narrowed
 the way you left it — condition, format, certificate, delivery state, location, the disposition
-filter, the several-stamps filter, the **Complete** and **Held** filters and all four **More filters** switches, alongside the grouping mode and sort that were
+filter, the several-stamps filter, the **Complete** and **Held** filters and every **More filters** switch, alongside the grouping mode and sort that were
 already remembered. Switching a filter off is remembered too, so
 clearing one clears it for next time. A link that names a filter still wins over what is remembered,
 so a shared or bookmarked list keeps meaning what it meant. The **search box** is the exception: it
@@ -109,7 +109,7 @@ that is filtering the list.
 
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, subtype, certificate,
-location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box and the issue filter, though not the fields beside the box that it
+location, several stamps, every **More filters** switch, the *Not offered on…* worklist — and the search box and the issue filter, though not the fields beside the box that it
 searches. It clears what is remembered as well, so the
 list comes back unfiltered next time too. It is only there to click while something is actually
 filtering, but its place on the row is held either way, so the first filter you switch on does not
@@ -289,13 +289,19 @@ right, from *which copies* to *how they are shown*.
   without reopening it — the list behind it updates as you go. Press Escape or click outside to
   close it. Like the area one, the switch is remembered, and the holdings totals and year panel
   follow the filter. **Not filed**, just under *All locations*, shows the copies with no location.
-- **More filters** — four switches that used to be four buttons across the toolbar. They are in one
-  dropdown now, under two headings, because **two of them narrow the list and two widen it**:
+- **More filters** — the occasional switches, in one dropdown under two headings, because **some of
+  them narrow the list and two widen it**:
   - *Show only* — **No photos** shows only copies with no [photo](#photos) attached, so you can
     find the pieces still waiting to be photographed; **Missing catalog value** shows only copies
     with no catalog value recorded for their condition (those showing **—**), so you can fill
-    pricing gaps in bulk — it pairs with the **+ catalog value** price link below. Tick both and a
-    copy must satisfy both.
+    pricing gaps in bulk — it pairs with the **+ catalog value** price link below. **Not on any open
+    offer** shows only copies that are on no open offer on any platform — the ones to prefer when
+    you put an offer or a [proposal](offers.md) together, because one picked from them never has to
+    be closed somewhere else when it sells. Open means anything but sold or withdrawn, so a copy in
+    an offer you are still preparing counts as offered. Beside the **Not offered on…** worklist it
+    leaves that one nothing to add about offers, and the worklist's dropdown says so — drawn with a
+    dashed border instead of the accent — while still keeping to the copies for sale and not kept
+    off that platform. Tick several and a copy must satisfy every one.
   - *Also include* — **Include sold & traded** brings back copies that have [sold](sales.md) and
     copies you gave to a partner in a closed [trade](trades.md), both hidden by default so the list
     shows only what you still hold; each then carries a **Sold · #12 · 2026-10-03** or **Traded
@@ -304,7 +310,7 @@ right, from *which copies* to *how they are shown*.
     copies marked as [no longer held](#copies-you-no-longer-hold), hidden for the same reason.
   - So ticking one from each heading reads as one sentence: *No photos* + *Include sold & traded* is
     "copies with no photo, counting the ones that have sold". The holdings totals and year panel
-    follow all four; the totals always account for no-longer-held copies, on their own **Written
+    follow every one; the totals always account for no-longer-held copies, on their own **Written
     off** line.
 - **Grouping** — a dropdown that also holds duplicate grouping's three **Split by …** switches. See
   [Grouping the list](#grouping-the-list).

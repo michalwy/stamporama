@@ -36,6 +36,7 @@ export const REMEMBERED_FILTER_KEYS = [
   "noPhotos",
   "missingCatalogValue",
   "variantToSettle",
+  "notOnOpenOffer",
   "includeGone",
   "includeDisposed",
   "multiStamp",

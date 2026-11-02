@@ -100,7 +100,7 @@ import { faultFilterWhere } from "./fault-filter";
 import { NO_AREA } from "./list-area-year-filter";
 import type { StructureCopy } from "./collection-structure-rules";
 import { CLOSED_OFFER_STATES, OPEN_OFFER_STATES, isOfferState } from "./offer-rules";
-import type { ItemOpenOffer } from "./copy-open-offers";
+import type { ItemOpenOffer, OwnOffers } from "./copy-open-offers";
 import { getCollectionAreas, type CollectionAreaData } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
@@ -1284,6 +1284,16 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * exclusion and **nothing else**: no `forSale` implication, because a copy taken out of the
    * worklist and then taken off sale would otherwise vanish from both readings at once. */
   excludedPlatformId?: string;
+  /** Restrict to the copies on **no open offer** on any platform (#2338) — open as for
+   *  {@link notOfferedPlatformId}: any state but sold or withdrawn, so a Preparing offer counts. The
+   *  copies to prefer when putting an offer or a proposal together: one picked from them never has to
+   *  be closed elsewhere when it sells. No disposition implied — it says where a copy is listed, and
+   *  nothing about whether it may be. */
+  notOnOpenOffer?: boolean;
+  /** The offers that do not count against a copy under {@link notOnOpenOffer} (#2338): the screen's
+   *  own offer, or a proposal's or a post's lots, when a picker is opened from one — the same
+   *  `OwnOffers` the row's open-offer chip leaves out (#2337). Read by nothing else. */
+  openOfferExcept?: OwnOffers;
   /** Narrow to the copies carrying these tags (#1182), under `tagMode`'s reading — *any of them* by
    *  default, *all of them* on request. Empty or omitted is *every tag*, the absence of the filter.
    *
@@ -1504,6 +1514,32 @@ function buildItemWhere(
     // here says a copy *cannot* be listed yet; this one says the question has been answered.
     and.push({
       platformExclusions: { none: { platformId: filters.notOfferedPlatformId } },
+    });
+  }
+  // On no open offer anywhere (#2338), the screen's own offers excepted.
+  if (filters.notOnOpenOffer) {
+    // A proposal's or a post's own lots are spelled with the null branch: `not` alone would leave out
+    // every offer on no proposal, which is most of them.
+    const own = filters.openOfferExcept;
+    const except: Prisma.OfferWhereInput[] = [];
+    if (own?.offerId) except.push({ id: { not: own.offerId } });
+    if (own?.proposalId) {
+      except.push({ OR: [{ proposalId: null }, { proposalId: { not: own.proposalId } }] });
+    }
+    if (own?.facebookPostId) {
+      except.push({ OR: [{ facebookPostId: null }, { facebookPostId: { not: own.facebookPostId } }] });
+    }
+    and.push({
+      offerSetMemberships: {
+        none: {
+          offerSet: {
+            offer: {
+              state: { notIn: [...CLOSED_OFFER_STATES] },
+              ...(except.length > 0 ? { AND: except } : {}),
+            },
+          },
+        },
+      },
     });
   }
   // The review read (#506) — what was set aside on this platform, so it can be audited and undone.

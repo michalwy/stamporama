@@ -32,6 +32,7 @@ export async function GET(
       // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
       ...readYearFilter(sp.get("year")),
       forTradeOnly: sp.get("forTrade") !== "false",
+      notOnOpenOffer: sp.get("notOnOpenOffer") === "true",
     });
     return NextResponse.json({ items });
   } catch {

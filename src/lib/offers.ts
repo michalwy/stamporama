@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
 import { candidateIdsOf } from "./candidate-set-rules";
+import type { OwnOffers } from "./copy-open-offers";
 import {
   allocateEntityNumber,
   allocateOfferNumber,
@@ -6262,6 +6263,10 @@ export async function listComposableCopies(
     offerId?: string;
     /** Only the copies not yet offered on this platform (#2299) — what Generate offers would take there. */
     notOfferedPlatformId?: string;
+    /** Only the copies on no open offer, on any platform (#2338) — `offerId` and `ownOffers` (a
+     *  proposal's or a post's own lots) excepted. */
+    notOnOpenOffer?: boolean;
+    ownOffers?: OwnOffers;
     areaIds?: string[];
     search?: string;
     year?: number | "none";
@@ -6273,6 +6278,12 @@ export async function listComposableCopies(
     excludeGone: true,
     notInOfferId: opts.offerId,
     notOfferedPlatformId: opts.notOfferedPlatformId,
+    ...(opts.notOnOpenOffer
+      ? {
+          notOnOpenOffer: true,
+          openOfferExcept: { ...opts.ownOffers, ...(opts.offerId ? { offerId: opts.offerId } : {}) },
+        }
+      : {}),
     areaIds: opts.areaIds,
     search: opts.search,
     year: opts.year,

@@ -39,6 +39,11 @@ import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import type { OwnOffers } from "@/lib/copy-open-offers";
+import {
+  NotOnOpenOfferToggle,
+  ownOffersNote,
+  useNotOnOpenOffer,
+} from "@/app/c/[collectionSlug]/shared/not-on-open-offer";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -81,7 +86,8 @@ interface ComposeSetDialogProps {
   /** The dialog's title; *Add set* unless given. */
   title?: string;
   /** The offer, proposal or post the dialog is opened from (#2337): the copies' open-offer chips
-   *  leave out its offers, since being in them is what the screen is about. */
+   *  leave out its offers, since being in them is what the screen is about — and so does *Not on any
+   *  open offer* (#2338). */
   ownOffers?: OwnOffers;
   onClose: () => void;
   onDone: () => void;
@@ -138,13 +144,15 @@ export function ComposeSetDialog({
     [areas, areaId, includeSubAreas]
   );
 
+  const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
   const { data: copies = [], isLoading } = useComposableCopies(
     collectionId,
     offerId,
     areaIds,
     { areaId, includeSubAreas },
     true,
-    newOffers ? platformId : null
+    newOffers ? platformId : null,
+    { notOnOpenOffer, except: ownOffers }
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -348,6 +356,11 @@ export function ComposeSetDialog({
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />
+            <NotOnOpenOfferToggle
+              checked={notOnOpenOffer}
+              onChange={setNotOnOpenOffer}
+              ownOffers={ownOffersNote(ownOffers)}
+            />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -356,9 +369,11 @@ export function ComposeSetDialog({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? newOffers
+                  ? notOnOpenOffer
+                    ? "No copies available on no open offer. Untick “Not on any open offer” to see the copies listed elsewhere too."
+                    : newOffers
                     ? `No copies available. Copies must be For sale and delivered (in hand), unsold, and on no open ${newOffers.platformName} offer.`
-                    : `No copies available to add. Copies must be For sale and delivered (in hand), unsold${offerId ? ", and not already in this offer" : ""}.`
+                      : `No copies available to add. Copies must be For sale and delivered (in hand), unsold${offerId ? ", and not already in this offer" : ""}.`
                   : "No copies match your filter."}
               </p>
             ) : (

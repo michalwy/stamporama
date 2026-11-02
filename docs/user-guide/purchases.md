@@ -2696,6 +2696,8 @@ Above the list sits a row of filters, in any combination:
 - **Not on a purchase**, **On a purchase** — the copies on no purchase yet, or those already filed
   against one. With neither lit (or both), both kinds are listed. A copy on a purchase names it on
   its row.
+- **Not on any open offer** — only the copies on no open offer on any platform, as on the Copies
+  list.
 - **Disposition** — *In collection*, *For sale*, *For trade* — as on the Copies list. The three are
   marks a copy can carry at once, not three kinds of copy, so ticking two lists the copies carrying
   **both**. With none ticked, every copy is listed.

@@ -765,6 +765,8 @@ export interface OfferableCopyFilters {
    * whole reason it is a parameter rather than a fixed clause.
    */
   forTradeOnly?: boolean;
+  /** Only the copies on no open offer, on any platform (#2338) — the picker's *Not on any open offer*. */
+  notOnOpenOffer?: boolean;
 }
 
 /**
@@ -802,6 +804,7 @@ export async function listOfferableCopies(
     yearFrom: filters.yearFrom,
     yearTo: filters.yearTo,
     ...(filters.forTradeOnly ? { forTrade: true } : {}),
+    notOnOpenOffer: filters.notOnOpenOffer || undefined,
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
     excludeIds: committed,

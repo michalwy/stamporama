@@ -141,15 +141,19 @@ export function useStockCopiesForSale(
   collectionId: string,
   areaIds: string[] | null,
   /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
-  areaSelection: AreaSelection
+  areaSelection: AreaSelection,
+  /** Only the copies on no open offer (#2338). */
+  notOnOpenOffer = false
 ) {
-  const key = (ids: string[] | null) => ["sales", collectionId, "stock-copies", ids ?? []] as const;
+  const key = (ids: string[] | null) =>
+    ["sales", collectionId, "stock-copies", notOnOpenOffer, ids ?? []] as const;
   return useQuery<ItemListItem[]>({
     queryKey: key(areaIds),
     ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, key(null)),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
+      if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
       const res = await fetch(`/api/collections/${collectionId}/sales/stock-copies?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;

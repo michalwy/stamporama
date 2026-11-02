@@ -30,6 +30,7 @@ import type {
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { ListedElsewhereEntry } from "@/lib/listed-elsewhere";
+import type { OwnOffers } from "@/lib/copy-open-offers";
 import type { OfferListContext } from "./list-context";
 import type {
   FacebookLotCandidate,
@@ -695,21 +696,43 @@ export function useComposableCopies(
   areaSelection: AreaSelection,
   enabled: boolean,
   /** With no offer, only the copies not yet offered on this platform (#2299). */
-  notOfferedPlatformId: string | null = null
+  notOfferedPlatformId: string | null = null,
+  /** Only the copies on no open offer (#2338) — this offer, or the proposal's or post's own lots in
+   *  `except`, not counting. */
+  openOffer: { notOnOpenOffer: boolean; except?: OwnOffers } = { notOnOpenOffer: false }
 ) {
+  const notOnOpenOffer = openOffer.notOnOpenOffer;
+  const exceptProposal = (notOnOpenOffer && openOffer.except?.proposalId) || null;
+  const exceptPost = (notOnOpenOffer && openOffer.except?.facebookPostId) || null;
   return useQuery<ItemListItem[]>({
-    queryKey: ["offers", collectionId, "composable", offerId, notOfferedPlatformId, areaIds] as const,
+    queryKey: [
+      "offers",
+      collectionId,
+      "composable",
+      offerId,
+      notOfferedPlatformId,
+      notOnOpenOffer,
+      exceptProposal,
+      exceptPost,
+      areaIds,
+    ] as const,
     ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
       "offers",
       collectionId,
       "composable",
       offerId,
       notOfferedPlatformId,
+      notOnOpenOffer,
+      exceptProposal,
+      exceptPost,
     ]),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
       if (!offerId && notOfferedPlatformId) params.set("notOfferedOn", notOfferedPlatformId);
+      if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
+      if (exceptProposal) params.set("exceptProposal", exceptProposal);
+      if (exceptPost) params.set("exceptPost", exceptPost);
       const res = await fetch(
         offerId
           ? `/api/collections/${collectionId}/offers/${offerId}/composable-copies?${params.toString()}`
