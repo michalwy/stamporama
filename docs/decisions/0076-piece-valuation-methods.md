@@ -130,5 +130,9 @@ kind, moving their prices as §4 does. The collector can change any of them afte
 - The Valuation window of a piece shows the computed value, the method and where it came from, the
   franking and what is missing, beside its stamps at their used prices; *Value of this piece* and *Use
   this sum* are gone. How each figure was reached, price by price, is #2353's.
+- **Built in #2353**: the rule records the terms it adds (`PieceTerm`) and the valuation carries them
+  with every stamp's prices, so the Valuation window and the identification step print the arithmetic
+  from what the rule actually read; each stamp shows its used price and its price on the piece, the
+  franking is changeable in both, and identification previews the value before the copy is written.
 - A collection whose formats have other names starts with every piece on *Sum of used* until the
   collector gives the formats their kinds; values then follow the method, the moved modifiers unchanged.

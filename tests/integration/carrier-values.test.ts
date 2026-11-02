@@ -9,7 +9,11 @@ import {
   valuateItemsByIds,
 } from "../../src/lib/items";
 import { setItemStamps } from "../../src/lib/item-stamps";
-import { getCarrierValuation, setPieceValuation } from "../../src/lib/carrier-values";
+import {
+  getCarrierValuation,
+  previewPieceValue,
+  setPieceValuation,
+} from "../../src/lib/carrier-values";
 import { updateStampFormat } from "../../src/lib/stamp-formats";
 import { setAreaValuationMethod, setCollectionValuationMethod } from "../../src/lib/valuation-methods";
 import { convertRecordedPieceValues } from "../../src/lib/piece-value-conversion";
@@ -176,8 +180,22 @@ describe("a piece valued by its method (#2359)", () => {
 
     const read = await getCarrierValuation(userId, carrierId);
     assert.equal(read.multiStamp, true);
-    assert.equal(read.suggestion.totalBaseAmount, "79.00");
     assert.equal(read.value?.amount, "79.00");
+    // How it was reached (#2353): each stamp's used price as a term, the missing one with no unit,
+    // and every entry's prices carried beside it under the entry's own id.
+    assert.deepEqual(
+      read.value?.piece?.terms.map((t) => [t.stampId, t.price, t.unit, t.percent, t.times]),
+      [
+        [mi200, "used", 10, 100, 2],
+        [mi200, "used", 55, 100, 1],
+        [mi201, "used", null, 100, 1],
+        [mi205, "used", 4, 100, 1],
+      ]
+    );
+    assert.deepEqual(
+      read.value?.piece?.components.map((c) => c.id),
+      read.components.map((c) => c.id)
+    );
   });
 
   it("moves a format's own prices to Cover EF when it is given the kind On cover", async () => {
@@ -212,6 +230,52 @@ describe("a piece valued by its method (#2359)", () => {
     // The most expensive used price (Mi 200's 10) + 15 %.
     assert.equal((await valueOf(carrierId)).amount, "11.50");
     await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
+  });
+
+  it("previews the value of a piece not yet written, by the franking chosen (#2353)", async () => {
+    const stamps = [
+      { stampId: mi200, quantity: 1, formatId: null },
+      { stampId: mi205, quantity: 1, formatId: null },
+    ];
+    const input = { conditionId: mnhId, formatId: coverId, stamps, itemId: null };
+    const rateCorrect = await previewPieceValue(userId, collectionId, { ...input, franking: "rate_correct" });
+    // MiF: Mi 200's 30; Mi 205 has no MiF price, so it is partial.
+    assert.equal(rateCorrect?.amount, "30.00");
+    assert.equal(rateCorrect?.piece?.usage, "mif");
+    assert.equal(rateCorrect?.piece?.partial, true);
+    assert.deepEqual(
+      rateCorrect?.piece?.components.map((c) => [c.stampId, c.used, c.coverMif]),
+      [
+        [mi200, 10, 30],
+        [mi205, 4, null],
+      ]
+    );
+    const notPosted = await previewPieceValue(userId, collectionId, { ...input, franking: "not_posted" });
+    assert.equal(notPosted?.amount, "14.00");
+
+    // A correction reads the copy's own franking.
+    await setPieceValuation(userId, carrierId, { franking: "not_posted" });
+    const corrected = await previewPieceValue(userId, collectionId, {
+      ...input,
+      franking: null,
+      itemId: carrierId,
+    });
+    assert.equal(corrected?.piece?.franking, "not_posted");
+    await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
+
+    // One stamp once on no format is not a piece; nothing is previewed.
+    assert.equal(
+      await previewPieceValue(userId, collectionId, {
+        ...input,
+        formatId: null,
+        stamps: [stamps[0]],
+        franking: "rate_correct",
+      }),
+      null
+    );
+    await assert.rejects(() =>
+      previewPieceValue("someone-else", collectionId, { ...input, franking: "rate_correct" })
+    );
   });
 
   it("takes the method of the most expensive stamp's area, and a copy's own wins", async () => {

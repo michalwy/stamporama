@@ -8,26 +8,15 @@ import {
   type ValuationRow,
 } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
-import {
-  carrierComponentRows,
-  sumCarrierComponents,
-  type CarrierComponentShare,
-  type CarrierSuggestion,
-} from "./carrier-value";
-import type { Franking, ValuationMethod } from "./piece-valuation";
+import { pieceCopyOf, type DraftPieceEntry } from "./carrier-value";
+import { assertCollectionOwner } from "./platform-category";
+import { DEFAULT_FRANKING, type Franking, type ValuationMethod } from "./piece-valuation";
 import type { CopyValuation } from "./valuation";
 
-// The value of a **piece** (#2359; ADR-0076) for the Valuation dialog — the database half. The rule a
-// piece is valued by is `piece-valuation.ts`, applied inside `valuateItemRows` for every reader at
-// once; this module reads that value beside each stamp on the piece at its used price, which the
-// dialog lists. How the value was reached in full is #2353's.
-
-/** One stamp on the piece, at its used price. */
-export interface CarrierComponentRead extends ItemStampSummary {
-  /** At the copy's condition, the entry's format and no certificate. */
-  valuation: CopyValuation;
-  share: CarrierComponentShare;
-}
+// The value of a **piece** (#2359; ADR-0076) for the Valuation dialog and the identification step —
+// the database half. The rule a piece is valued by is `piece-valuation.ts`, applied inside
+// `valuateItemRows` for every reader at once; this module reads that value — its terms and each
+// stamp's prices carried on it (#2353) — beside each stamp on the piece, which the dialog lists.
 
 export interface CarrierValuationRead {
   itemId: string;
@@ -39,15 +28,15 @@ export interface CarrierValuationRead {
   multiStamp: boolean;
   conditionName: string;
   /** The piece's value as every list and total reads it — the method's result, modified and lowered
-   *  for faults. Null for a copy that is not a piece. */
+   *  for faults — with each stamp's prices and the arithmetic on `piece` (#2353). Null for a copy
+   *  that is not a piece. */
   value: CopyValuation | null;
-  components: CarrierComponentRead[];
-  /** The stamps at their used prices, summed. */
-  suggestion: CarrierSuggestion;
+  /** The stamps on the piece, named; `id` is the `PieceComponent` id their prices are under. */
+  components: ItemStampSummary[];
 }
 
 /**
- * A piece's value beside its stamps. Ownership asserted through `getItemStamps`, which is also where
+ * A piece's value beside its stamps (#2359, #2353). Ownership asserted through `getItemStamps`, which is also where
  * the components' labels come from — the same read model the copy dialog and the copy's own screen
  * draw the stamp list from.
  */
@@ -81,24 +70,12 @@ export async function getCarrierValuation(
     unknownVariant: false,
     ...copyValuationOf(item),
   };
-  // Keyed by entry id, which no copy id can equal — one batched valuation for the piece and its
-  // stamps together.
-  const componentRows: ValuationRow[] = carrierComponentRows(item, stamps.entries);
-
   const [valuations, baseCurrency] = await Promise.all([
-    valuateItemRows(item.collectionId, [ownRow, ...componentRows]),
+    valuateItemRows(item.collectionId, [ownRow]),
     getCollectionBaseCurrency(item.collectionId),
   ]);
 
   const value = valuations.get(item.id)!;
-  const componentValuations = stamps.entries.map((entry) => valuations.get(entry.id)!);
-  const suggestion = sumCarrierComponents(
-    stamps.entries.map((entry, index) => ({
-      quantity: entry.quantity,
-      valuation: componentValuations[index],
-    })),
-    baseCurrency
-  );
 
   return {
     itemId: item.id,
@@ -107,12 +84,7 @@ export async function getCarrierValuation(
     multiStamp: value.piece !== null,
     conditionName: item.condition.name,
     value: value.piece ? value : null,
-    components: stamps.entries.map((entry, index) => ({
-      ...entry,
-      valuation: componentValuations[index],
-      share: suggestion.shares[index],
-    })),
-    suggestion,
+    components: stamps.entries,
   };
 }
 
@@ -141,4 +113,63 @@ export async function setPieceValuation(
       ...(input.method !== undefined ? { valuationMethod: input.method } : {}),
     },
   });
+}
+
+/** What the identification step holds of a piece before it is written (#2353). */
+export interface PiecePreviewInput {
+  conditionId: string;
+  /** The piece's own format; null is none. */
+  formatId: string | null;
+  /** The stamps on it, in the collector's order. */
+  stamps: readonly DraftPieceEntry[];
+  /** The franking chosen, or null on a correction, which reads the copy's own. */
+  franking: Franking | null;
+  /** The copy a correction re-answers — its franking and own method are its own. */
+  itemId: string | null;
+}
+
+/**
+ * The value a piece **will** have, for the identification step (#2353): its stamps valued by the
+ * method exactly as the copy will be once written — at the condition chosen, no certificate, the
+ * method from the most expensive stamp's area (a correction's own method winning). Before the copy's
+ * modifier and faults, which identification does not set. Null when what is described is not a piece.
+ */
+export async function previewPieceValue(
+  ownerId: string,
+  collectionId: string,
+  input: PiecePreviewInput
+): Promise<CopyValuation | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [first] = input.stamps;
+  if (!first) return null;
+  const corrected = input.itemId
+    ? await prisma.item.findFirst({
+        where: { id: input.itemId, collectionId },
+        select: { id: true, stampCount: true, franking: true, valuationMethod: true },
+      })
+    : null;
+  const own = corrected ? pieceCopyOf(corrected) : null;
+  const key = input.itemId ?? "preview";
+  const valuations = await valuateItemRows(collectionId, [
+    {
+      id: key,
+      stampId: first.stampId,
+      conditionId: input.conditionId,
+      certificateStatusId: null,
+      formatId: input.formatId,
+      unknownVariant: false,
+      copy: {
+        itemId: key,
+        stampCount: input.stamps.reduce((sum, s) => sum + s.quantity, 0),
+        franking: input.franking ?? own?.franking ?? DEFAULT_FRANKING,
+        method: own?.method ?? null,
+        draftEntries: input.stamps,
+      },
+      faultReductionPercent: null,
+      valueModifier: null,
+      candidateStampIds: null,
+    },
+  ]);
+  const value = valuations.get(key);
+  return value?.piece ? value : null;
 }

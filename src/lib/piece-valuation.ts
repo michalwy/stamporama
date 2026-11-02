@@ -143,10 +143,31 @@ export interface MissingPiecePrice {
   price: PiecePrice;
 }
 
+/**
+ * One term of the sum the figure is (#2353) — a stamp's price as the rule read it, so the Valuation
+ * window can print the arithmetic and the collector can check it against the catalogue: *50 % × Mi
+ * 123 ⊠ 40.00*. A price the rule adds but is missing is a term too, with no unit, so the arithmetic
+ * shows the gap where it is; a missing price among several compared for the highest is not, since it
+ * would not have been added — it is in {@link PieceValueResult.missing} alone.
+ */
+export interface PieceTerm {
+  componentId: string;
+  stampId: string;
+  price: PiecePrice;
+  /** The price read, in the collection currency; null when it is missing. */
+  unit: number | null;
+  /** The share of `unit` counted: 100, or a rule's 50, 115 or 150. */
+  percent: number;
+  /** How many times it is counted — an entry's quantity under a summing rule, else 1. */
+  times: number;
+}
+
 export interface PieceValueResult {
   /** The value in the collection currency, 2-dp — null when nothing it reads is priced. */
   amount: number | null;
   rule: PieceRule;
+  /** The figure as a sum, in the order it was reached (#2353). */
+  terms: PieceTerm[];
   /** EF, MeF or MiF for a cover valued by its franking; null otherwise. */
   usage: CoverUsage | null;
   /** True when a price the rule reads is missing: the figure, if any, is a lower bound. */
@@ -210,7 +231,7 @@ export function valuePiece(input: PieceValueInput): PieceValueResult {
   const usage = coverUsage(components);
   if (method === "michel" && franking === "philatelic_posted") {
     const top = acc.highest(distinctStamps(components), "used", (c) => c.usedSingle);
-    if (top !== null) acc.addAmount(Math.round(top * 115) / 100);
+    if (top !== null) acc.add(top.component, "used", top.value, 1, 115);
     return acc.result("philatelic", usage);
   }
 
@@ -220,7 +241,7 @@ export function valuePiece(input: PieceValueInput): PieceValueResult {
   // names, the other stamps adding nothing.
   if (usage === "mif") {
     const top = acc.highest(distinctStamps(components), "cover_mif", (c) => c.coverMif);
-    if (top !== null) acc.addAmount(top);
+    if (top !== null) acc.add(top.component, "cover_mif", top.value, 1);
     return acc.result("highest_mif", usage);
   }
   const [first] = components;
@@ -247,7 +268,7 @@ function fischer(
 
   if (usage === "mef") {
     const [first] = units;
-    acc.add(first, "cover_mif", first.coverMif === null ? null : first.coverMif * 1.5, 1);
+    acc.add(first, "cover_mif", first.coverMif, 1, 150);
     for (const unit of units.slice(2)) acc.add(unit, "used", unit.used, 1);
     return acc.result("fischer_mef", usage);
   }
@@ -256,11 +277,8 @@ function fischer(
   // takes 50 % of its ⊠ for one of its units; every other unit is at its used price.
   const stamps = distinctStamps(components);
   const topMif = acc.highest(stamps, "cover_mif", (c) => c.coverMif);
-  const topStampId =
-    topMif !== null
-      ? stamps.find((c) => c.coverMif === topMif)!.stampId
-      : mostExpensiveStamp(components);
-  if (topMif !== null) acc.addAmount(Math.round(topMif * 50) / 100);
+  const topStampId = topMif !== null ? topMif.component.stampId : mostExpensiveStamp(components);
+  if (topMif !== null) acc.add(topMif.component, "cover_mif", topMif.value, 1, 50);
   // A loose copy of the top stamp is the one its ⊠ stands for, where there is one.
   let topIndex = units.findIndex((u) => u.stampId === topStampId && !u.multiple);
   if (topIndex === -1) topIndex = units.findIndex((u) => u.stampId === topStampId);
@@ -285,18 +303,16 @@ class Accumulator {
   private cents = 0;
   private priced = 0;
   readonly missing: MissingPiecePrice[] = [];
+  readonly terms: PieceTerm[] = [];
 
-  add(c: PieceComponent, price: PiecePrice, amount: number | null, times: number): void {
-    if (amount === null) {
+  /** `percent` of `unit`, rounded to the cent, `times` over — a missing unit is noted, not counted. */
+  add(c: PieceComponent, price: PiecePrice, unit: number | null, times: number, percent = 100): void {
+    this.terms.push({ componentId: c.id, stampId: c.stampId, price, unit, percent, times });
+    if (unit === null) {
       this.note(c, price);
       return;
     }
-    this.cents += Math.round(amount * 100) * times;
-    this.priced++;
-  }
-
-  addAmount(amount: number): void {
-    this.cents += Math.round(amount * 100);
+    this.cents += termCents(unit, percent) * times;
     this.priced++;
   }
 
@@ -305,12 +321,12 @@ class Accumulator {
     stamps: readonly PieceComponent[],
     price: PiecePrice,
     pick: (c: PieceComponent) => number | null
-  ): number | null {
-    let top: number | null = null;
+  ): { component: PieceComponent; value: number } | null {
+    let top: { component: PieceComponent; value: number } | null = null;
     for (const c of stamps) {
       const value = pick(c);
       if (value === null) this.note(c, price);
-      else if (top === null || value > top) top = value;
+      else if (top === null || value > top.value) top = { component: c, value };
     }
     return top;
   }
@@ -325,11 +341,17 @@ class Accumulator {
     return {
       amount: this.priced === 0 ? null : this.cents / 100,
       rule,
+      terms: this.terms,
       usage,
       partial: this.missing.length > 0,
       missing: this.missing,
     };
   }
+}
+
+/** One term in whole cents — `percent` of `unit`, rounded once — so the printed terms add up. */
+export function termCents(unit: number, percent: number): number {
+  return Math.round(unit * percent);
 }
 
 /**

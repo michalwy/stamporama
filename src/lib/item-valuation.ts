@@ -230,20 +230,48 @@ export async function valuateItemRows(
   );
   const pieceIds = new Set(pieceRows.map((r) => r.id));
   const catalogRows = rows.filter((r) => !pieceIds.has(r.id));
-  const entries = pieceRows.length
-    ? await prisma.itemStamp.findMany({
-        where: { itemId: { in: pieceRows.map((r) => r.copy!.itemId) } },
-        orderBy: [{ itemId: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
-        select: {
-          id: true,
-          itemId: true,
-          stampId: true,
-          quantity: true,
-          formatId: true,
-          stamp: { select: { variants: { select: VARIANT_FLAG_SELECT } } },
-        },
+  const storedPieces = pieceRows.filter((r) => !r.copy!.draftEntries);
+  const draftPieces = pieceRows.filter((r) => r.copy!.draftEntries);
+  const [storedEntries, draftStamps] = await Promise.all([
+    storedPieces.length
+      ? prisma.itemStamp.findMany({
+          where: { itemId: { in: storedPieces.map((r) => r.copy!.itemId) } },
+          orderBy: [{ itemId: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            itemId: true,
+            stampId: true,
+            quantity: true,
+            formatId: true,
+            stamp: { select: { variants: { select: VARIANT_FLAG_SELECT } } },
+          },
+        })
+      : [],
+    // A piece not yet written (#2353) brings its entries; only whether each stamp is an umbrella is
+    // read, so the preview values them exactly as the copy will be.
+    draftPieces.length
+      ? prisma.stamp.findMany({
+          where: {
+            collectionId,
+            id: { in: draftPieces.flatMap((r) => r.copy!.draftEntries!.map((e) => e.stampId)) },
+          },
+          select: { id: true, variants: { select: VARIANT_FLAG_SELECT } },
+        })
+      : [],
+  ]);
+  const draftStampById = new Map(draftStamps.map((s) => [s.id, s]));
+  const entries = [
+    ...storedEntries,
+    ...draftPieces.flatMap((r) =>
+      r.copy!.draftEntries!.flatMap((e, i) => {
+        const stamp = draftStampById.get(e.stampId);
+        // A stamp outside the collection is not valued — the preview's input is the client's.
+        return stamp
+          ? [{ id: `${r.copy!.itemId}:${i}`, itemId: r.copy!.itemId, ...e, stamp }]
+          : [];
       })
-    : [];
+    ),
+  ];
   const entriesByItem = new Map<string, typeof entries>();
   for (const e of entries) {
     const list = entriesByItem.get(e.itemId);
@@ -413,7 +441,13 @@ export async function valuateItemRows(
     );
     return valuatePiece(
       valuePiece({ kind, franking: copy.franking, method: resolved.method, components }),
-      { method: resolved.method, methodSource: resolved.source, franking: copy.franking, kind },
+      {
+        method: resolved.method,
+        methodSource: resolved.source,
+        franking: copy.franking,
+        kind,
+        components,
+      },
       uncertain,
       baseCurrency
     );
