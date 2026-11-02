@@ -17,8 +17,10 @@ import {
   proposalTotal,
   proposalConversionRefusal,
   proposalLotCurrency,
+  proposalSaleLotNote,
   proposalSaleLotRefusal,
   proposalSaleTargetRefusal,
+  proposalSaleTotals,
   type ProposalTotalLot,
 } from "../../src/lib/proposal-rules";
 
@@ -178,6 +180,62 @@ describe("a proposal becoming a sale (#2289)", () => {
     assert.equal(mixed.ok, false);
     assert.match(!mixed.ok ? mixed.message : "", /PLN and EUR/);
     assert.equal(proposalLotCurrency([]).ok, false);
+  });
+});
+
+describe("the convert window's lots and footer (#2336)", () => {
+  it("greys a lot sold already, withdrawn, or with nothing left to sell, saying why", () => {
+    assert.equal(proposalSaleLotNote("sold", 0), "Already sold");
+    assert.equal(proposalSaleLotNote("withdrawn", 1), "Withdrawn");
+    assert.match(proposalSaleLotNote("ready", 0)!, /Nothing left to sell/);
+    assert.equal(proposalSaleLotNote("preparing", 1), null);
+    assert.equal(proposalSaleLotNote("active", 2), null);
+  });
+
+  it("sums the ticked lots — every set at the lot's price — and weighs them against their cost", () => {
+    const totals = proposalSaleTotals([
+      { price: "4.00", setsToSell: 2, copiesToSell: 2, costPrice: "1.50" },
+      { price: "10", setsToSell: 1, copiesToSell: 3, costPrice: "12.00" },
+    ]);
+    assert.deepEqual(totals, {
+      lots: 2,
+      sets: 3,
+      copies: 5,
+      total: "18.00",
+      cost: "15.00",
+      costLots: 2,
+      profit: { amount: "3.00", percent: 20 },
+    });
+  });
+
+  it("weighs only the lots with a cost, and says a loss as a negative margin", () => {
+    const totals = proposalSaleTotals([
+      { price: "2.00", setsToSell: 1, copiesToSell: 1, costPrice: "5.00" },
+      { price: "3.00", setsToSell: 1, copiesToSell: 1, costPrice: null },
+    ]);
+    assert.equal(totals.total, "5.00");
+    assert.equal(totals.cost, "5.00");
+    assert.equal(totals.costLots, 1);
+    assert.deepEqual(totals.profit, { amount: "-3.00", percent: -60 });
+  });
+
+  it("has no total and no margin while a typed price is not one, and no cost when none is known", () => {
+    const totals = proposalSaleTotals([
+      { price: "", setsToSell: 1, copiesToSell: 1, costPrice: "1.00" },
+      { price: "2.00", setsToSell: 1, copiesToSell: 1, costPrice: null },
+    ]);
+    assert.equal(totals.total, null);
+    assert.equal(totals.profit, null);
+    assert.equal(totals.cost, "1.00");
+    assert.deepEqual(proposalSaleTotals([]), {
+      lots: 0,
+      sets: 0,
+      copies: 0,
+      total: "0.00",
+      cost: null,
+      costLots: 0,
+      profit: null,
+    });
   });
 });
 

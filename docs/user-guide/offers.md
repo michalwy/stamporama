@@ -3322,18 +3322,26 @@ it.
 
 ### Selling it
 
-When the buyer answers, **Convert to sale…** on the proposal's screen records what they took:
+When the buyer answers, **Convert to sale…** on the proposal's screen records what they took. The
+window takes the whole screen: the lots on the left, the sale they go into on the right. Each lot
+shows what its row on the proposal's screen does — its photo (its first copy's, dashed, while it has
+none of its own), its number, its offer (opens in a new tab), its title, its stamps, its state and
+its sets and copies — and, beside the price, its **catalogue value** and **cost** per set, so the
+price agreed with the buyer can be read against them. Hover a marked cost for what it counts.
 
-1. **Tick the lots the buyer took.** Each comes at its proposal price; change it there for a buyer
-   who haggled — the sale gets the new price, the lot keeps its own. A lot with several sets sells
-   all of them, each at that price. A lot whose copies have sold elsewhere meanwhile can't be ticked.
+1. **Tick the lots the buyer took.** The tick in the lots' heading ticks every lot, or clears them
+   all; with some ticked it shows partly ticked. Each comes at its proposal price; change it there
+   for a buyer who haggled — the sale gets the new price, the lot keeps its own. A lot with several
+   sets sells all of them, each at that price. A lot already sold, withdrawn, or whose copies have
+   sold elsewhere meanwhile is greyed with the reason and can't be ticked.
 2. **Choose the sale.** **A new sale** is on Direct, to the proposal's contact, dated today. Or pick
    one of the contact's **sales still open** — on **any** platform, typically the Facebook sale they
    have just bought from. That sale keeps its platform, buyer, currency and fees, and the lots join it
    at the prices you ticked them at, so everything goes in one parcel. A sale in another currency than
    the lots is shown but can't be picked.
-3. **Sell.** The ticked lots are sold, **the lots not ticked are withdrawn**, and the proposal closes
-   as **Sold**.
+3. **Sell.** The footer sums the ticked lots — lots, sets and copies, the price total, their cost and
+   the **profit or loss** against it — and says how many lots will be withdrawn (*6 lots withdrawn*).
+   The ticked lots are sold, **the lots not ticked are withdrawn**, and the proposal closes as **Sold**.
 
 Ticking nothing is not a sale: a buyer who takes nothing has declined, so use **Decline…**.
 

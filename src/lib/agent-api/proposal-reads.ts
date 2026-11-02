@@ -17,6 +17,7 @@
 //    an address — a private person's details, out of this surface's reach as a buyer's are (#1949).
 //    The projections name their fields; **do not replace a mapper here with a spread**.
 
+import { OPEN_OFFER_STATES } from "../offer-rules";
 import { PROPOSAL_LOT_PACKINGS, PROPOSAL_STATUSES } from "../proposal-rules";
 import { invalidRequest } from "./errors";
 
@@ -300,6 +301,8 @@ export interface ProposalSaleOptionsFacts {
   platformName: string;
 }
 
+const isOpenLot = (lot: { state: string }) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state);
+
 /** What a proposal can be sold as: its open lots and the contact's sales still open. */
 export interface AgentProposalSaleOptions {
   readonly lots: readonly {
@@ -326,7 +329,8 @@ export interface AgentProposalSaleOptions {
 
 export function proposalSaleOptions(options: ProposalSaleOptionsFacts): AgentProposalSaleOptions {
   return {
-    lots: options.lots.map((lot) => ({
+    // The open lots only: the convert window lists every lot, greying the ones it cannot sell (#2336).
+    lots: options.lots.filter(isOpenLot).map((lot) => ({
       lotNo: lot.lotNo,
       offerNo: lot.offerNo,
       title: lot.title,

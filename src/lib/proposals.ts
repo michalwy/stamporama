@@ -7,6 +7,7 @@ import { offerNumberLabel } from "./offer-set-rules";
 import { formatItemNo } from "./item-number";
 import { readOfferPickerContents } from "./offer-picker-contents";
 import type { OfferPickerContents } from "./offer-picker-contents-rules";
+import { describeCostGaps, describeCostMarks } from "./offer-cost";
 import {
   applyEstimatedPrices,
   createOffer,
@@ -40,6 +41,7 @@ import {
   proposalLotsRefusal,
   proposalMoveRefusal,
   proposalNewLotSets,
+  proposalSaleLotNote,
   proposalStatusAfter,
   proposalStatusOf,
   proposalTotal,
@@ -813,6 +815,24 @@ export interface ProposalSaleLot {
   price: string | null;
   currency: string;
   setsToSell: number;
+  /** Why it cannot be ticked — sold already, withdrawn, nothing left to sell — or null when it can
+   *  (#2336). The agent API lists only the open lots. */
+  unsellable: string | null;
+  /** Its first photo, or its first copy's while it has none (`copy`) — null when neither has one. */
+  photo: { photoId: string; copy: boolean } | null;
+  /** Its sets' stamps, as an offer picker shows them (#2309). */
+  contents: OfferPickerContents;
+  setCount: number;
+  /** The copies in the sets still to sell. */
+  copiesToSell: number;
+  /** Its price table's Catalogue and Cost, per set, in its currency — null when unknown, and on a lot
+   *  that cannot be sold. */
+  catalogPrice: string | null;
+  costPrice: string | null;
+  /** *estimate*, *incl. opening value* — what the cost is marked with (#2333), or null. */
+  costMarks: string | null;
+  /** Why some of its copies have no cost (#2333) — empty when every one has. */
+  costGaps: string[];
 }
 
 /** One of the contact's sales still open, on any platform, as the dialog offers it. */
@@ -828,7 +848,7 @@ export interface ProposalSaleCandidate {
 }
 
 export interface ProposalSaleOptions {
-  /** The lots still open, in lot order (#2288). */
+  /** Every lot, in lot order (#2288) — the ones that cannot be sold with {@link ProposalSaleLot.unsellable}. */
   lots: ProposalSaleLot[];
   /** The contact's sales not yet sent, newest first. */
   sales: ProposalSaleCandidate[];
@@ -863,13 +883,30 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
     select: {
       contactId: true,
       lots: {
-        where: { state: { in: [...OPEN_OFFER_STATES] } },
         orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
-        select: { id: true, offerNo: true, proposalLotNo: true, name: true, ...LOT_FIGURES_SELECT },
+        select: {
+          id: true,
+          offerNo: true,
+          proposalLotNo: true,
+          name: true,
+          ...LOT_FIGURES_SELECT,
+          _count: { select: { sets: true } },
+        },
       },
     },
   });
-  const sets = await setsToSell(proposal.lots.map((lot) => lot.id));
+  const ids = proposal.lots.map((lot) => lot.id);
+  const openIds = proposal.lots
+    .filter((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state))
+    .map((lot) => lot.id);
+  // What each row shows of its lot (#2336): its stamps and photo, and the open lots' price tables —
+  // the Catalogue and Cost the agreed price is read against.
+  const [sets, contents, prepared] = await Promise.all([
+    setsToSell(ids),
+    readOfferPickerContents(collectionId, ids),
+    readPrepareOffers(ownerId, collectionId, openIds, OPEN_OFFER_STATES),
+  ]);
+  const prepareById = new Map(prepared.map((row) => [row.id, row]));
   const figures = totalLots(proposal.lots);
   const sales = await prisma.sale.findMany({
     where: { collectionId, buyerId: proposal.contactId, status: { in: [...UNSENT_SALE_STATUSES] } },
@@ -889,6 +926,13 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
     lots: proposal.lots.map((lot, i) => {
       const f = figures[i]!;
       const stated = f.listingType === "auction" ? f.startingPrice : f.price;
+      const left = sets.get(lot.id) ?? [];
+      const own = contents.get(lot.id)!;
+      const unsellable = proposalSaleLotNote(f.state, left.length);
+      const prepare = prepareById.get(lot.id);
+      // Figures only for a lot that can be sold — the price agreed is read against them.
+      const row = unsellable ? undefined : prepare;
+      const picture = prepare?.picturesGenerated ? prepare.pictures[0] : undefined;
       return {
         offerId: lot.id,
         offerNo: lot.offerNo,
@@ -897,7 +941,18 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
         state: f.state,
         price: stated !== null && Number(stated) > 0 ? stated : null,
         currency: lot.currency,
-        setsToSell: sets.get(lot.id)?.length ?? 0,
+        setsToSell: left.length,
+        unsellable,
+        photo: picture ? { photoId: picture.photoId, copy: false } : own.photoId ? { photoId: own.photoId, copy: true } : null,
+        contents: own,
+        setCount: lot._count.sets,
+        copiesToSell: left.reduce((n, set) => n + set.itemIds.length, 0),
+        catalogPrice: row?.catalogPrice ?? null,
+        costPrice: row?.costPrice ?? null,
+        costMarks: row
+          ? describeCostMarks({ estimated: row.setsTotals.costEstimated, opening: row.setsTotals.costOpening })
+          : null,
+        costGaps: row ? describeCostGaps(row.setsTotals.costGaps) : [],
       };
     }),
     sales: sales.map((sale) => ({

@@ -502,6 +502,7 @@ export function ProposalPanel({
       {dialog === "convert" && (
         <ConvertProposalDialog
           collectionId={collectionId}
+          collectionSlug={collectionSlug}
           proposalId={proposalId}
           contactId={screen.contact.id}
           contactName={screen.contact.name}

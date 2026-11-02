@@ -5,6 +5,8 @@
 // declined. The lots are ordinary offers; what is a proposal's own is its status, here.
 
 import { CLOSED_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
+import { priceMargin, type PriceMargin } from "./offer-price-table";
+import { parsePrice as parseSalePrice } from "./sale-rules";
 
 /**
  * `preparing` while lots and prices change; `sent` once it has gone to the buyer, and fixed as it went
@@ -236,6 +238,76 @@ export function proposalLotCurrency(currencies: readonly string[]): { ok: true; 
   if (distinct.length === 1) return { ok: true, currency: distinct[0]! };
   if (distinct.length === 0) return { ok: false, message: "Tick the lots the buyer took." };
   return { ok: false, message: `The ticked lots are in ${distinct.join(" and ")} — a sale is in one currency.` };
+}
+
+/** Why a lot cannot be ticked in *Convert to sale…* (#2336), said on its greyed row, or null when it
+ *  can: sold already, withdrawn, or with every set's copies gone elsewhere. */
+export function proposalSaleLotNote(state: OfferState, setsToSell: number): string | null {
+  if (state === "sold") return "Already sold";
+  if (state === "withdrawn") return "Withdrawn";
+  if (setsToSell === 0) return "Nothing left to sell — its copies have gone elsewhere";
+  return null;
+}
+
+/** A ticked lot as the convert window's footer sums it. */
+export interface ProposalSaleTotalsLot {
+  /** The price typed for it — each of its sets sells at it. */
+  price: string;
+  setsToSell: number;
+  copiesToSell: number;
+  /** What one of its sets cost (its price table's Cost), or null when that is not known. */
+  costPrice: string | null;
+}
+
+export interface ProposalSaleTotals {
+  lots: number;
+  sets: number;
+  copies: number;
+  /** The typed prices, each times the lot's sets — null while one of them is not a price. */
+  total: string | null;
+  /** What the sets cost, over the lots whose cost is known; null when none's is. */
+  cost: string | null;
+  costLots: number;
+  /** The prices against the cost, over the lots with both — null when none has, or while a typed
+   *  price is not one. */
+  profit: PriceMargin | null;
+}
+
+const toCents = (amount: number) => Math.round(amount * 100);
+
+/** What the ticked lots come to (#2336): lots, sets and copies, the price total, and the profit or
+ *  loss against their cost, as a proposal's summary weighs it (#2326). */
+export function proposalSaleTotals(lots: readonly ProposalSaleTotalsLot[]): ProposalSaleTotals {
+  let total: number | null = 0;
+  let cost = 0;
+  let costLots = 0;
+  let bothPrice = 0;
+  let bothCost = 0;
+  let both = 0;
+  for (const lot of lots) {
+    const price = parseSalePrice(lot.price);
+    const lotTotal = price.ok ? toCents(Number(price.value)) * lot.setsToSell : null;
+    total = total === null || lotTotal === null ? null : total + lotTotal;
+    const perSet = lot.costPrice === null ? NaN : Number(lot.costPrice);
+    if (!Number.isFinite(perSet) || perSet < 0) continue;
+    const lotCost = toCents(perSet) * lot.setsToSell;
+    cost += lotCost;
+    costLots++;
+    if (lotTotal !== null) {
+      bothPrice += lotTotal;
+      bothCost += lotCost;
+      both++;
+    }
+  }
+  return {
+    lots: lots.length,
+    sets: lots.reduce((n, l) => n + l.setsToSell, 0),
+    copies: lots.reduce((n, l) => n + l.copiesToSell, 0),
+    total: total === null ? null : (total / 100).toFixed(2),
+    cost: costLots > 0 ? (cost / 100).toFixed(2) : null,
+    costLots,
+    profit: total !== null && both > 0 ? priceMargin(bothPrice / 100, bothCost / 100) : null,
+  };
 }
 
 // ── New lots from copies (#2299) ─────────────────────────────────────────────────────────────────

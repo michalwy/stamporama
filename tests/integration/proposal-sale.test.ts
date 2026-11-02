@@ -267,6 +267,32 @@ describe("A proposal becomes a sale (#2289)", () => {
     assert.equal(sale?.grossProceeds, "12.00");
   });
 
+  it("lists every lot for the convert window, each with its stamps, sets and copies, and greys the withdrawn (#2336)", async () => {
+    const contactId = (await prisma.contact.create({ data: { collectionId, name: "Zofia Lis" } })).id;
+    const { proposalId } = await createProposal(userId, collectionId, contactId);
+    const pair = await offer(directId, "3.00", { copies: 2 });
+    const gone = await offer(directId, "2.00");
+    await addProposalLots(userId, proposalId, [pair, gone]);
+    await setOfferState(userId, gone, "withdrawn");
+
+    const { lots } = await getProposalSaleOptions(userId, proposalId);
+    assert.deepEqual(
+      lots.map((l) => [l.offerId, l.state, l.unsellable]),
+      [
+        [pair, "preparing", null],
+        [gone, "withdrawn", "Withdrawn"],
+      ]
+    );
+    const [two, withdrawn] = lots;
+    assert.deepEqual([two!.setCount, two!.setsToSell, two!.copiesToSell], [2, 2, 2]);
+    assert.equal(two!.contents.sets.length, 2, "its stamps, a line a set");
+    assert.equal(two!.photo, null, "no copy has a photo");
+    // No purchase lot under the copies: the cost is unknown, and why is said.
+    assert.equal(two!.costPrice, null);
+    assert.deepEqual(two!.costGaps, ["2 copies with no cost recorded"]);
+    assert.deepEqual([withdrawn!.catalogPrice, withdrawn!.costPrice, withdrawn!.costGaps], [null, null, []]);
+  });
+
   it("refuses a sale in another currency, a sent sale and another contact's, selling nothing", async () => {
     const { contactId, proposalId, lots } = await proposalFor("Ewa Wójcik", ["5.00"]);
     const usdSale = await saleWithOneLine(usdShopId, contactId, "USD");
