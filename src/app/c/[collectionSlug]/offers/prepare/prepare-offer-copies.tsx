@@ -69,6 +69,7 @@ export function PrepareOfferCopies({
               isLast={i === copies.length - 1}
               readOnly
               opensPage
+              ownOffers={{ offerId }}
             />
           ))}
         </div>

@@ -1675,6 +1675,7 @@ export function OfferDetailPanel({
         <ComposeSetDialog
           collectionId={collectionId}
           offerId={offerId}
+          ownOffers={{ offerId }}
           platformId={offer.platformId}
           platformTitleLanguage={offer.platformTitleLanguage}
           areas={areas}

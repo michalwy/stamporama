@@ -141,6 +141,8 @@ const MUTED_BOX: React.CSSProperties = { padding: "1rem", fontSize: "0.8125rem",
 
 interface CopyCtx {
   collectionId: string;
+  /** The offer on screen — its copies' open-offer chips leave it out (#2337). */
+  offerId: string;
   areas: CollectionAreaData[];
   locations: LocationData[];
   baseCurrency: string;
@@ -328,6 +330,7 @@ function CopyRow({
       opensPage
       actionsOverride={actions}
       promote={COPY_ROW_PROMOTED}
+      ownOffers={{ offerId: ctx.offerId }}
       showCostBasis
       onSetCatalogPrice={ctx.onSetPrice ? () => ctx.onSetPrice!(item) : undefined}
     />
@@ -1075,6 +1078,7 @@ export function OfferSetsView({
 
   const ctx: CopyCtx = {
     collectionId,
+    offerId,
     areas,
     locations,
     baseCurrency,

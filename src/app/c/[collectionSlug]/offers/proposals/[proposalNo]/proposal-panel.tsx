@@ -483,6 +483,7 @@ export function ProposalPanel({
         <ComposeSetDialog
           collectionId={collectionId}
           offerId={null}
+          ownOffers={{ proposalId }}
           platformId={screen.platform.id}
           platformTitleLanguage={null}
           areas={areas}

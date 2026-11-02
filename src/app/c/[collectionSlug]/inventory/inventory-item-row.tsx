@@ -2,6 +2,7 @@
 
 import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -61,6 +62,10 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import { PhotoThumb } from "./photo-thumb";
+import { openOfferChip, openOfferHint, type OwnOffers } from "@/lib/copy-open-offers";
+import type { OfferState } from "@/lib/offer-rules";
+import { offerStateTint } from "@/app/c/[collectionSlug]/offers/offer-badges";
+import { OffersPopupDialog } from "@/app/c/[collectionSlug]/offers/offers-popup-dialog";
 import { Icon } from "@/app/icons";
 
 /** The neutral row chip, shared with every other list that draws one (see `chip-styles.ts`). */
@@ -248,6 +253,18 @@ function soldChipStyle(): React.CSSProperties {
     color: "var(--color-success)",
     borderColor: "var(--color-success-border)",
     background: "var(--color-success-soft)",
+  };
+}
+
+/** The open-offer chip (#2337), in the colours the offer's own state chip is drawn in. */
+function openOfferChipStyle(state: OfferState): React.CSSProperties {
+  const tint = offerStateTint(state);
+  return {
+    ...CHIP,
+    color: tint.color,
+    borderColor: tint.border,
+    background: tint.background,
+    cursor: "pointer",
   };
 }
 
@@ -580,6 +597,10 @@ interface InventoryItemRowProps {
    * referencing this copy (#276). Unconditional — a sold copy's past listings are as much the
    * question as a live one's, and the row carries no offer count to hide it by. */
   onViewOffers?: (item: ItemListItem) => void;
+  /** The offer, or the lots, of the screen the row is drawn on (#2337) — an offer's own sets and its
+   *  *Add set*, a proposal's or a post's pickers. The open-offer chip never names them: the copy being
+   *  in them is what that screen is editing. */
+  ownOffers?: OwnOffers;
   /** When provided, adds *Show this issue's copies* (#2308) — one entry per issue the copy carries,
    * also on the row as an icon — narrowing the Copies list to that issue in place of its search. */
   onShowIssueCopies?: (issue: ItemIssueRef) => void;
@@ -630,6 +651,7 @@ export function InventoryItemRow({
   onAddToNewOffer,
   quickOffer,
   onViewOffers,
+  ownOffers,
   onShowIssueCopies,
   purchaseHref,
   onDispose,
@@ -639,6 +661,11 @@ export function InventoryItemRow({
   onSetPlatformExclusion,
 }: InventoryItemRowProps) {
   const [hovered, setHovered] = useState(false);
+  // The open offers the copy is in, outside the screen's own (#2337), and the View offers popup its
+  // chip opens. The popup is the row's own rather than the screen's `onViewOffers`, because the chip
+  // is on every surface that draws a copy, and most of them — the pickers — have no popup of their own.
+  const offerChip = openOfferChip(item.openOffers, ownOffers);
+  const [offersOpen, setOffersOpen] = useState(false);
 
   const primaryCN = primaryVendorId
     ? (item.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
@@ -1222,6 +1249,24 @@ export function InventoryItemRow({
               </span>
             </Tooltip>
           )}
+          {/* In an open offer (#2337): which, or how many, coloured by the furthest along, so a live
+              listing stands out from one being prepared. On every surface that draws a copy — the
+              pickers above all, where a copy listed elsewhere is the one not to pick. A click opens
+              View offers; it never reaches the row, which in a picker would choose the copy. */}
+          {offerChip && (
+            <Tooltip content={openOfferHint(offerChip)}>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOffersOpen(true);
+                }}
+                style={openOfferChipStyle(offerChip.state)}
+              >
+                <Icon name="offers" size="sm" /> {offerChip.label}
+              </button>
+            </Tooltip>
+          )}
           {/* Never listed on these platforms (#506). One chip whatever the number of platforms —
               it is a single decision about where this copy is *not* sold, and a chip each would
               grow with a list nobody reads across. Muted, because it says what will not happen. */}
@@ -1275,6 +1320,20 @@ export function InventoryItemRow({
         )}
         </div>
       </div>
+      {/* Portaled out of the row, which may sit inside a picker's dialog — whose panel is transformed,
+          and would otherwise become the fixed popup's frame — and kept from the row's handlers:
+          React events climb through a portal, and a click in the popup must not choose the copy. */}
+      {offersOpen &&
+        createPortal(
+          <div onClick={(event) => event.stopPropagation()}>
+            <OffersPopupDialog
+              collectionId={collectionId}
+              target={{ kind: "item", itemId: item.id, label: stampName ?? formatItemNo(item.itemNo) }}
+              onClose={() => setOffersOpen(false)}
+            />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

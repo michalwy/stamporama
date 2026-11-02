@@ -99,7 +99,8 @@ import { orderFaultSummaries, FAULT_SUMMARY_SELECT, type FaultSummary } from "./
 import { faultFilterWhere } from "./fault-filter";
 import { NO_AREA } from "./list-area-year-filter";
 import type { StructureCopy } from "./collection-structure-rules";
-import { CLOSED_OFFER_STATES } from "./offer-rules";
+import { CLOSED_OFFER_STATES, OPEN_OFFER_STATES, isOfferState } from "./offer-rules";
+import type { ItemOpenOffer } from "./copy-open-offers";
 import { getCollectionAreas, type CollectionAreaData } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
@@ -1900,6 +1901,8 @@ export interface ItemListItem {
   sold: boolean;
   /** The sale it left on (#2281), or null — what `sold` says, with where. */
   soldIn: ItemSaleMark | null;
+  /** Every open offer the copy is in (#2337), whatever the platform — the row's chip. */
+  openOffers: ItemOpenOffer[];
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
@@ -2130,6 +2133,27 @@ const ITEM_LIST_SELECT = {
     },
   },
   photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+  // The open offers it is in (#2337) — the row's chip. Open is the complement of sold and withdrawn,
+  // so a Preparing offer counts.
+  offerSetMemberships: {
+    where: { offerSet: { offer: { state: { in: [...OPEN_OFFER_STATES] } } } },
+    select: {
+      offerSet: {
+        select: {
+          offer: {
+            select: {
+              id: true,
+              offerNo: true,
+              state: true,
+              proposalId: true,
+              facebookPostId: true,
+              platform: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+  },
   // The card scan this copy was identified from (#1188). At most one is read: a copy is made from
   // one tile, and the pathological case of two tiles pointing at it (a second tile handing an
   // existing copy its photographs) still came off *a* card, so the earliest is the answer rather
@@ -2265,6 +2289,25 @@ function saleMark(row: ItemListRow): ItemSaleMark | null {
   return { saleId: sale.id, saleNo: sale.saleNo, soldAt: sale.soldAt.toISOString().slice(0, 10) };
 }
 
+/** The open offers a copy is in (#2337), one entry per offer — a copy in two sets of one offer is in
+ *  that offer once. */
+function openOffersOf(row: ItemListRow): ItemOpenOffer[] {
+  const byId = new Map<string, ItemOpenOffer>();
+  for (const { offerSet } of row.offerSetMemberships) {
+    const offer = offerSet.offer;
+    if (byId.has(offer.id) || !isOfferState(offer.state)) continue;
+    byId.set(offer.id, {
+      offerId: offer.id,
+      offerNo: offer.offerNo,
+      platformName: offer.platform.name,
+      state: offer.state,
+      proposalId: offer.proposalId,
+      facebookPostId: offer.facebookPostId,
+    });
+  }
+  return [...byId.values()];
+}
+
 /** Map an enriched copy row plus its resolved catalog valuation into the list-item shape. */
 function toItemListItem(
   row: ItemListRow,
@@ -2286,6 +2329,7 @@ function toItemListItem(
     hasHistory: row._count.variantHistory > 0,
     sold: row._count.saleLineItems > 0,
     soldIn: saleMark(row),
+    openOffers: openOffersOf(row),
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,
     issuedYear: row.stamp.issuedYear,
