@@ -69,22 +69,38 @@ export function OfferPickerContentsView({
         {contents.ownTitle && (
           <span style={{ ...ELLIPSIS, fontWeight: 600, color: "var(--color-text-primary)" }}>{contents.ownTitle}</span>
         )}
-        {contents.sets.map((set, index) => (
-          <span key={index} style={LINE}>
-            <span style={{ fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
-              {set.catalog}
-            </span>
-            {set.conditions.map((c) => (
-              <ConditionChip key={c.id} collectionId={collectionId} conditionId={c.id} label={c.abbreviation} />
-            ))}
-            {set.issue && <span style={{ ...ELLIPSIS, color: "var(--color-text-muted)" }}>{set.issue}</span>}
-          </span>
-        ))}
-        {contents.sets.length === 0 && <span style={{ ...LINE, color: "var(--color-text-muted)" }}>No copies</span>}
-        {contents.moreSets > 0 && (
-          <span style={{ ...LINE, color: "var(--color-text-muted)" }}>+{contents.moreSets} more</span>
-        )}
+        <OfferPickerSetLines collectionId={collectionId} contents={contents} />
       </span>
     </span>
+  );
+}
+
+/** An offer's sets' stamps, one line each, up to three and then *+N more* — the picker row's (#2309),
+ *  and *Convert the proposal to a sale*'s (#2336), which draws its lot's own photo beside them. */
+export function OfferPickerSetLines({
+  collectionId,
+  contents,
+}: {
+  collectionId: string;
+  contents: OfferPickerContents;
+}) {
+  return (
+    <>
+      {contents.sets.map((set, index) => (
+        <span key={index} style={LINE}>
+          <span style={{ fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
+            {set.catalog}
+          </span>
+          {set.conditions.map((c) => (
+            <ConditionChip key={c.id} collectionId={collectionId} conditionId={c.id} label={c.abbreviation} />
+          ))}
+          {set.issue && <span style={{ ...ELLIPSIS, color: "var(--color-text-muted)" }}>{set.issue}</span>}
+        </span>
+      ))}
+      {contents.sets.length === 0 && <span style={{ ...LINE, color: "var(--color-text-muted)" }}>No copies</span>}
+      {contents.moreSets > 0 && (
+        <span style={{ ...LINE, color: "var(--color-text-muted)" }}>+{contents.moreSets} more</span>
+      )}
+    </>
   );
 }

@@ -8,6 +8,7 @@ import {
   parseProposalSaleLots,
   proposalRecord,
   proposalRow,
+  proposalSaleOptions,
 } from "../../src/lib/agent-api/proposal-reads";
 import { ApiError } from "../../src/lib/agent-api/errors";
 
@@ -142,5 +143,32 @@ describe("what a proposal is told as (#2303)", () => {
     assert.equal(record.message, "Lot 1 …");
     assert.equal(record.sale, null);
     assert.ok(!JSON.stringify(record).includes("example.com"));
+  });
+});
+
+describe("what a proposal can be sold as (#2303, #2336)", () => {
+  it("lists only the open lots, though the convert window lists every one", () => {
+    const lot = (lotNo: number, state: string) => ({
+      offerId: `o${lotNo}`,
+      offerNo: 100 + lotNo,
+      lotNo,
+      title: `Lot ${lotNo}`,
+      state,
+      price: "5.00",
+      currency: "PLN",
+      setsToSell: state === "sold" ? 0 : 1,
+    });
+    const options = proposalSaleOptions({
+      lots: [lot(1, "ready"), lot(2, "sold"), lot(3, "withdrawn"), lot(4, "preparing")],
+      sales: [],
+      platformName: "Direct",
+    });
+    assert.deepEqual(
+      options.lots.map((l) => [l.lotNo, l.state]),
+      [
+        [1, "ready"],
+        [4, "preparing"],
+      ]
+    );
   });
 });
