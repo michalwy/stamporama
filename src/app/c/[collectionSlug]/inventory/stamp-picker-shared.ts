@@ -26,6 +26,10 @@ export interface PickedStamp {
   secondary: string | null;
   /** Base stamp with variants → the specific variant is unknown (ADR-0007 §2). */
   unknownVariant: boolean;
+  /** Where the stamp sorts in the catalogue (`computeCatalogSortKey`, main catalogue first) — set by
+   *  the popup browser, so stamps ticked there can be added in the order it draws them (#2352).
+   *  Absent from a search result and a prefill, which nothing orders. */
+  catalogSortKey?: string | null;
 }
 
 export function issueLabel(name: string | null, year: number | null): string {

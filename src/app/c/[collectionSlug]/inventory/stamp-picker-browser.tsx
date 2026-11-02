@@ -13,6 +13,7 @@ import {
 import { singleYear } from "@/lib/list-area-year-filter";
 import type { CollectionAreaData } from "@/lib/areas";
 import { parseCatalogSearch } from "@/lib/catalog-number";
+import { computeCatalogSortKey } from "@/lib/catalog-sort-key";
 import {
   matchedStampsInIssue,
   needsInnerStampMatch,
@@ -827,11 +828,8 @@ function IssueBrowser({
     }
     pickerTree.setLastPickedIssue(issue.id);
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
-    const labels = pickedCatalogLabels(
-      node.catalogNumbers,
-      vm,
-      primaryVendorByArea.get(issue.collectionAreaId) ?? null
-    );
+    const primaryVendorId = primaryVendorByArea.get(issue.collectionAreaId) ?? null;
+    const labels = pickedCatalogLabels(node.catalogNumbers, vm, primaryVendorId);
     const areaName = areaById.get(issue.collectionAreaId)?.name ?? null;
     const context = [
       issue.name || issue.year ? issueLabel(issue.name, issue.year) : null,
@@ -845,6 +843,10 @@ function IssueBrowser({
       name: node.name,
       secondary: context || null,
       unknownVariant,
+      catalogSortKey: computeCatalogSortKey(
+        node.catalogNumbers.map((n) => ({ catalogVendorId: n.catalogVendorId, value: n.number })),
+        primaryVendorId
+      ),
     });
   }
 
