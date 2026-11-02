@@ -142,11 +142,16 @@ export interface Axes {
   readonly formats: VocabularyEntry[];
 }
 
-export async function loadAxes(context: OperationContext): Promise<Axes> {
+/** `withCoverPrices` names the prices on cover and on piece (#2356) as formats too — what a catalogue
+ *  price tool reads and writes, and nothing that describes a copy or a sale. */
+export async function loadAxes(
+  context: OperationContext,
+  { withCoverPrices = false }: { withCoverPrices?: boolean } = {}
+): Promise<Axes> {
   const [conditions, certificates, formats] = await Promise.all([
     getStampConditions(context.ownerId, context.collectionId),
     getCertificateStatuses(context.ownerId, context.collectionId),
-    getStampFormats(context.ownerId, context.collectionId),
+    getStampFormats(context.ownerId, context.collectionId, { withCoverPrices }),
   ]);
   const entries = (rows: { id: string; name: string; abbreviation: string }[]) =>
     rows.map((row) => ({ id: row.id, name: row.name, ...(row.abbreviation ? { abbreviation: row.abbreviation } : {}) }));
@@ -210,7 +215,7 @@ async function readPrices(context: OperationContext, params: ParsedParams) {
     grid = await getVariantPriceGrid(context.ownerId, { kind: "stamp", stampId });
   }
 
-  const [editions, axes] = await Promise.all([loadEditions(context), loadAxes(context)]);
+  const [editions, axes] = await Promise.all([loadEditions(context), loadAxes(context, { withCoverPrices: true })]);
   const editionById = new Map(editions.map((edition) => [edition.id, agentEdition(edition)]));
   const editionFilter = optionalString(params, "edition");
   const conditionFilter = optionalString(params, "condition");
@@ -312,7 +317,7 @@ const CELL_AXIS_PARAMETERS: readonly ParameterSpec[] = [
     in: "query",
     type: "string",
     required: false,
-    description: "Only prices for this format; `single` for a single stamp.",
+    description: "Only prices for this format; `single` for a single stamp, `Cover EF`, `Cover MeF`, `Cover MiF` or `On piece` for a price on cover or on piece.",
   },
 ];
 
@@ -405,7 +410,7 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
   const editions = await loadEditions(context);
   const editionSource = resolveEdition(requiredString(params, "edition"), editions, "edition");
   const edition = agentEdition(editionSource);
-  const axes = await loadAxes(context);
+  const axes = await loadAxes(context, { withCoverPrices: true });
 
   const parsed = entries.map((entry) => parseCellSpec(entry, mode));
   const specs = parsed.filter((p): p is { ok: true; cell: CellSpec } => p.ok).map((p) => p.cell);
@@ -547,7 +552,7 @@ export const setCatalogPricesOperation: Operation = {
       type: "string[]",
       required: true,
       description:
-        "One cell per entry, at most 100, as `name=value` pairs separated by `;`: `stamp=Mi 309AP; condition=MNH; price=12.50`. `stamp` is an id or a catalogue number naming only that stamp; `condition` a name, abbreviation or id; `certificate` (default `none`) and `format` (default `single`) likewise; `price` a figure of zero or more, a comma or a point as the decimal mark — or `-` (the catalogue prints —: the stamp does not exist there) or `?` (the catalogue prints ?: its price cannot be determined).",
+        "One cell per entry, at most 100, as `name=value` pairs separated by `;`: `stamp=Mi 309AP; condition=MNH; price=12.50`. `stamp` is an id or a catalogue number naming only that stamp; `condition` a name, abbreviation or id; `certificate` (default `none`) and `format` (default `single`) likewise — the prices on cover and on piece are formats too: `Cover EF`, `Cover MeF`, `Cover MiF` (a catalogue printing one ⊠ price, such as Fischer, has it here) and `On piece`; `price` a figure of zero or more, a comma or a point as the decimal mark — or `-` (the catalogue prints —: the stamp does not exist there) or `?` (the catalogue prints ?: its price cannot be determined).",
     },
   ],
   result: {

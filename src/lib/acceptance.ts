@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { COPY_FORMAT_WHERE } from "./stamp-formats";
 
 // The acceptance vocabulary shared by a want (#532) and by a named profile (#533; ADR-0032 §1/§9).
 //
@@ -50,7 +51,11 @@ export async function validateAcceptance(
       : [],
     formatIds.some((id) => id !== null)
       ? prisma.stampFormat.findMany({
-          where: { collectionId, id: { in: formatIds.filter((id): id is string => !!id) } },
+          where: {
+            collectionId,
+            id: { in: formatIds.filter((id): id is string => !!id) },
+            ...COPY_FORMAT_WHERE,
+          },
           select: { id: true },
         })
       : [],

@@ -1040,6 +1040,39 @@ showing — see [Adding a catalog value](#adding-a-catalog-value) below. What th
 what the dialog *tells* you: it works the block's value out from the single you are typing and shows
 it under the input.
 
+### Prices on cover and on piece
+
+Catalogues price a stamp on a cover differently from the same stamp used loose. Michel quotes a ⊠
+price per stamp for a genuinely posted, correctly franked cover, by how the cover is franked, and a
+price on piece (*Briefstück*). Every stamp has room for those four prices beside its loose ones:
+
+| Price | What the catalogue means |
+| --- | --- |
+| **Cover EF** | single franking — the stamp alone on the cover |
+| **Cover MeF** | multiple franking — the same stamp several times |
+| **Cover MiF** | mixed franking — the stamp with other stamps |
+| **On piece** | the stamp on a piece cut from a cover |
+
+There is one set per stamp, whatever the kind of cover. A catalogue that prints a single ⊠ price —
+Fischer, whose ⊠ column is the mixed-franking price — has it typed into **Cover MiF**, leaving EF and
+MeF empty. Where Fischer prints FP, FW and FM (single, multiple and mixed franking, as for the General
+Government), they go into EF, MeF and MiF.
+
+They sit on the same price grid as everything else, as four more tabs after your formats — **Single**,
+**Block of 4**…, then **Cover EF**, **Cover MeF**, **Cover MiF** and **On piece** — per condition,
+certificate and catalogue edition, exactly like a block's price. `-` and `?` work on them as on any
+price. And like a block's they can be **derived by a multiplier** instead of typed: set one for
+*Cover MiF* under **Settings → Formats → Multipliers**, or from an area's or an issue's **⋮** menu,
+and the price is the single's times that multiplier, shown with `~`. The narrowest multiplier wins, and
+a price you type always wins over a derived one.
+
+The **as** switcher on the Stamps and Issues lists offers them too, under *On cover and on piece*.
+
+They are prices only, never what a copy is: a cover you own is a copy with several stamps on it (see
+below), and none of these four is offered in a copy's, a want's or a trade's **Format**. Nor are they
+listed under **Settings → Formats** — they are the catalogues' and the same in every collection.
+Nothing values a copy from them yet: a piece's worth is still the figure you record on it.
+
 ## Covers, fragments and other pieces carrying several stamps
 
 A cover franked with three different stamps, a fragment cut from a parcel card, an FDC — one piece of

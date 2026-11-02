@@ -213,6 +213,27 @@ Resolving a factor per list row would be a query per row, so `format-pricing.ts`
 memory, with each area's ancestor path memoised. `makeFormatFactorResolver` is that bound to one
 (format, condition) pair, which is what a list with a single display format needs.
 
+### 10. Prices on cover and on piece are four reserved formats (#2356)
+
+Catalogues price a stamp on a genuinely posted cover by franking — **EF**, **MeF**, **MiF** — and
+**on piece**, and those prices behave exactly like a block's: per edition, condition and certificate,
+recorded where the catalogue prints them and otherwise derived from the single's price by a
+multiplier anchored to the collection, an area, an issue or a condition. A fourth axis on
+`StampCatalogPrice` and `StampFormatFactor` would have made every price path — both grids, the
+lists' switcher, the multipliers, the agent API's price tools — learn a second key beside
+`formatId` for the same arithmetic. So they are **rows of the format dictionary**, marked by
+`StampFormat.coverKind` (`cover_ef`, `cover_mef`, `cover_mif`, `on_piece`; one of each per
+collection, seeded with it), and §5–§8 apply to them unchanged.
+
+What that costs is a boundary, and it is drawn once: **they are prices, never what a copy is.** A
+cover the collector owns is a multi-stamp copy (ADR-0044), described by an ordinary format.
+`getStampFormats` leaves the four out unless a price surface asks for them (`withCoverPrices`), and
+every place that accepts a format for a copy, a component, a want, an acceptance profile, a trade
+line, an auction line, a lot or a price observation matches `COPY_FORMAT_WHERE`. They are not the
+collector's to rename, reorder or delete — they are what the catalogues print. Their abbreviation is
+their name, so `Piece` stays free for a fragment format and the agent API's name matching stays
+unambiguous. Nothing reads them for a copy's value yet; how a piece is valued from them is #2359.
+
 ## Still open
 
 - Completeness (#133) is unimplemented; when it is built, format is its third breakdown dimension

@@ -5,6 +5,7 @@ import {
   translationsByLanguage,
   type TranslationValueMap,
 } from "./translations";
+import { COVER_FORMATS, isCoverKind, sortPriceFormats, type CoverKind } from "./cover-kind";
 
 // The physical-format dictionary — pairs, blocks, strips. Same shape and lifecycle as
 // `conditions.ts`: seeded on collection creation, then fully the collector's to edit.
@@ -12,6 +13,25 @@ import {
 // There is no "single" row and none is seeded. A null `formatId` **means single**, exactly as a
 // null `certificateStatusId` means "no certificate" (ADR-0006 §2), so the list here holds only
 // the multiples.
+//
+// Four more rows are **not** the collector's (#2356): the prices on cover — EF, MeF, MiF — and on
+// piece, told apart by `coverKind` (`cover-kind.ts`). Every price path reads them as formats, which
+// is the point; nothing a copy, a want, a trade or a lot is described by may name one. So
+// {@link getStampFormats} leaves them out unless asked, a format accepted for anything but a price
+// is checked with {@link COPY_FORMAT_WHERE}, and the dictionary's editors cannot touch them.
+
+/** The `where` a format must match to describe a copy — or a want, a trade line, an auction line, a
+ *  lot: any of the four cover-price rows is refused (#2356). */
+export const COPY_FORMAT_WHERE = { coverKind: null } as const;
+
+/** A format a copy can be in: this collection's, and not one of the cover prices (#2356). */
+export async function assertCopyFormatInCollection(collectionId: string, formatId: string): Promise<void> {
+  const format = await prisma.stampFormat.findFirst({
+    where: { id: formatId, collectionId, ...COPY_FORMAT_WHERE },
+    select: { id: true },
+  });
+  if (!format) throw new Error("Format not found in this collection.");
+}
 
 /** The format's translatable fields (#344), in the order the form shows them. Two columns, like a
  * condition's — and they fall back independently, because a language commonly translates the name
@@ -31,12 +51,15 @@ async function assertCollectionOwner(
   }
 }
 
+/** The collection of a format the collector may edit — never one of the cover-price rows (#2356),
+ *  which are what the catalogues print and the same in every collection. */
 async function resolveFormatCollection(formatId: string): Promise<string> {
   const format = await prisma.stampFormat.findUnique({
     where: { id: formatId },
-    select: { collectionId: true },
+    select: { collectionId: true, coverKind: true },
   });
   if (!format) throw new Error("Stamp format not found.");
+  if (format.coverKind) throw new Error("The prices on cover and on piece cannot be edited here.");
   return format.collectionId;
 }
 
@@ -52,6 +75,8 @@ export interface StampFormatData {
   /** Per-language overrides of {@link abbreviation} (#344). Independent of {@link nameByLanguage}. */
   abbreviationByLanguage: Record<string, string>;
   sortOrder: number;
+  /** Set on the four reserved cover-price rows (#2356); null on a format a copy can be in. */
+  coverKind: CoverKind | null;
 }
 
 /**
@@ -87,32 +112,52 @@ export async function seedDefaultFormats(
       sortOrder: i,
     })),
   });
+  // The cover prices (#2356), which every collection has — kept in sync with the backfill in
+  // `20261102140000_stamp_format_cover_prices` and `20261102140100_stamp_format_cover_abbreviations`.
+  await tx.stampFormat.createMany({
+    data: COVER_FORMATS.map((f, i) => ({
+      collectionId,
+      name: f.name,
+      abbreviation: f.abbreviation,
+      sortOrder: i,
+      coverKind: f.coverKind,
+    })),
+  });
 }
 
+/**
+ * The collection's formats. A copy's only, unless `withCoverPrices` — then the four cover-price rows
+ * follow them (#2356): what a **price** surface asks for (the price grids, the lists' price switcher,
+ * the multipliers, the agent API's price tools), and nothing else.
+ */
 export async function getStampFormats(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  options: { withCoverPrices?: boolean } = {}
 ): Promise<StampFormatData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.stampFormat.findMany({
-    where: { collectionId },
+    where: { collectionId, ...(options.withCoverPrices ? {} : COPY_FORMAT_WHERE) },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,
       name: true,
       abbreviation: true,
       sortOrder: true,
+      coverKind: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
   });
-  return rows.map((f) => ({
+  const formats = rows.map((f) => ({
     id: f.id,
     name: f.name,
     abbreviation: f.abbreviation,
     nameByLanguage: translationsByLanguage(f.translations, (t) => t.name),
     abbreviationByLanguage: translationsByLanguage(f.translations, (t) => t.abbreviation),
     sortOrder: f.sortOrder,
+    coverKind: isCoverKind(f.coverKind) ? f.coverKind : null,
   }));
+  return sortPriceFormats(formats);
 }
 
 /** Per-language rows for a format (#344). Shared rules — blank clears the field, an all-blank
@@ -145,7 +190,7 @@ export async function createStampFormat(
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampFormat.findFirst({
-    where: { collectionId },
+    where: { collectionId, ...COPY_FORMAT_WHERE },
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
@@ -224,7 +269,7 @@ export async function reorderStampFormats(
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const existing = await prisma.stampFormat.findMany({
-    where: { collectionId },
+    where: { collectionId, ...COPY_FORMAT_WHERE },
     select: { id: true },
   });
   const existingIds = new Set(existing.map((f) => f.id));

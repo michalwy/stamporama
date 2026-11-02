@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
+import { assertCopyFormatInCollection } from "./stamp-formats";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY, TRADED_AWAY } from "./trade-exit";
 import {
@@ -658,6 +659,9 @@ export async function createItem(
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
+  if (data.formatId) {
+    await assertCopyFormatInCollection(collectionId, data.formatId);
+  }
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
@@ -807,6 +811,9 @@ export async function updateItem(
   }
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
+  }
+  if (data.formatId) {
+    await assertCopyFormatInCollection(collectionId, data.formatId);
   }
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
