@@ -122,7 +122,14 @@ describe("selling several offers into one sale (#2050)", () => {
     );
 
     const headline = await readSaleHeadline(userId, saleId);
-    const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, select: { saleNo: true } });
-    assert.deepEqual(headline, { saleNo: sale.saleNo, buyerName: "Jan Kowalski" });
+    const sale = await prisma.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      select: { saleNo: true, platform: { select: { name: true } } },
+    });
+    assert.deepEqual(headline, {
+      saleNo: sale.saleNo,
+      buyerName: "Jan Kowalski",
+      platformName: sale.platform.name,
+    });
   });
 });

@@ -6,6 +6,7 @@ import {
   parsePrice,
   parseAmount,
   parseSaleDate,
+  soldCopiesIntoSaleMessage,
 } from "../../src/lib/sale-rules";
 
 // Sellable offer states ------------------------------------------------------
@@ -76,5 +77,34 @@ describe("parseSaleDate", () => {
     assert.equal(parseSaleDate("2026-7-2"), null);
     assert.equal(parseSaleDate("22/07/2026"), null);
     assert.equal(parseSaleDate("2026-02-31"), null); // rolls over → rejected
+  });
+});
+
+// soldCopiesIntoSaleMessage ---------------------------------------------------
+
+describe("soldCopiesIntoSaleMessage", () => {
+  it("names the copies, the sale, its buyer and its platform", () => {
+    assert.equal(
+      soldCopiesIntoSaleMessage({
+        count: 3,
+        saleNo: 45,
+        buyerName: "Mieczyslaw Mum",
+        platformName: "Facebook",
+        newSale: false,
+      }),
+      "3 copies added to sale #45 — Mieczyslaw Mum, Facebook"
+    );
+  });
+  it("says a sale made from the dialog is new, and one copy in the singular", () => {
+    assert.equal(
+      soldCopiesIntoSaleMessage({ count: 1, saleNo: 46, buyerName: "Ola", platformName: "Direct", newSale: true }),
+      "1 copy added to new sale #46 — Ola, Direct"
+    );
+  });
+  it("leaves out an unknown buyer", () => {
+    assert.equal(
+      soldCopiesIntoSaleMessage({ count: 2, saleNo: 7, buyerName: null, platformName: "Allegro", newSale: false }),
+      "2 copies added to sale #7 — Allegro"
+    );
   });
 });

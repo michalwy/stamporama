@@ -260,7 +260,7 @@ export interface SaleLineRaw {
 /** Sold sets added, and the sale they went into named — *Sell* says so in a toast rather than opening
  *  the sale (#2049). */
 export type AddSaleLinesActionState =
-  | { status: "success"; saleNo: number; buyerName: string | null }
+  | { status: "success"; saleNo: number; buyerName: string | null; platformName: string }
   | { status: "error"; message: string };
 
 export async function addSaleLinesAction(
@@ -295,12 +295,13 @@ export async function addSaleLinesAction(
 }
 
 /** Copies on no offer sold as **one set** with one typed price (#2021) — from the sale's own screen,
- * or ticked on Copies and sold into an open sale or a new one. No offer is made for them. */
+ * or ticked on Copies and sold into an open sale or a new one. No offer is made for them. The sale is
+ * named back, since Copies stays on its list and says where the copies went in a toast (#2345). */
 export async function addSaleCopySetAction(
   saleId: string,
   raw: { itemIds: string[]; price: string },
   opts: { toSentSale?: boolean } = {}
-): Promise<SaleActionState> {
+): Promise<AddSaleLinesActionState> {
   const session = await getSession();
   if (raw.itemIds.length === 0) {
     return { status: "error", message: "Choose at least one copy to sell." };
@@ -314,7 +315,7 @@ export async function addSaleCopySetAction(
       { itemIds: raw.itemIds, price: priced.value },
       { toSentSale: opts.toSentSale === true }
     );
-    return { status: "success" };
+    return { status: "success", ...(await readSaleHeadline(session.user.id, saleId)) };
   } catch (e) {
     return fail(e, "Failed to add the copies to the sale.");
   }

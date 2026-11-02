@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   DialogShell,
@@ -14,9 +13,15 @@ import { useInvalidateOffers } from "@/app/c/[collectionSlug]/offers/use-offers-
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { UNSENT_SALE_STATUSES } from "@/lib/sale-status";
+import { soldCopiesIntoSaleMessage } from "@/lib/sale-rules";
+import { useToast } from "@/app/toast-provider";
 import { Icon } from "@/app/icons";
 import { useInvalidateInventory } from "./use-inventory-query";
+
+/** The sale *Sell…* last added copies to, per collection — the next *Sell…* starts on it (#2345). */
+const LAST_SALE_KEY = "copies-sell-last-sale";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -65,6 +70,11 @@ function todayIso(): string {
  * every platform's, because these copies were never listed anywhere; each row says its platform and
  * the currency the price will be in. Only sales **still open** are offered (#1950): a sent parcel has
  * gone. A new sale's platform decides its currency, as it always does.
+ *
+ * It does not open the sale (#2345): selling is one step in working down the list, so Copies keeps its
+ * search, filters and place, and a toast names the sale with *Open sale*. The sale just used heads the
+ * next *Sell…*, marked *Last used*, while it is still open — Enter in the price adds to it, so a run
+ * of copies to one buyer needs no picking.
  */
 export function SellCopiesDialog({
   collectionId,
@@ -79,11 +89,13 @@ export function SellCopiesDialog({
   baseCurrency: string;
   /** The copies to sell — the ticked copies in view that are in stock (`isInStockForSale`). */
   itemIds: string[];
-  /** The copies are on the sale — the list's ticks on them have nothing left to do. */
+  /** The copies are on the sale — the list's ticks on them have nothing left to do. The list stays
+   *  where it is (#2345). */
   onSold: () => void;
   onClose: () => void;
 }) {
-  const router = useRouter();
+  const { toast } = useToast();
+  const [lastSaleId, rememberSale] = usePersistedCollectionValue(LAST_SALE_KEY, collectionId);
   const [step, setStep] = useState<"pick" | "newSaleHeader">("pick");
   const [price, setPrice] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -100,32 +112,43 @@ export function SellCopiesDialog({
     isFetchingNextPage,
   } = useSalesInfinite(collectionId, { statuses: [...UNSENT_SALE_STATUSES] });
   const openSales = useMemo(() => salesPages?.pages.flatMap((p) => p.items) ?? [], [salesPages]);
+  // Only while it is still open — one since sent, or deleted, is simply not among them.
+  const lastSale = openSales.find((s) => s.id === lastSaleId);
+  const otherSales = lastSale ? openSales.filter((s) => s !== lastSale) : openSales;
 
   const priced = price.trim() !== "";
   const count = itemIds.length;
 
-  function addTo(saleId: string) {
-    return import("@/app/actions/sales").then(({ addSaleCopySetAction }) =>
-      addSaleCopySetAction(saleId, { itemIds, price })
-    );
-  }
-
-  function landOn(saleId: string) {
-    onSold();
+  async function addTo(saleId: string, setPrice: string, newSale: boolean): Promise<string | null> {
+    const { addSaleCopySetAction } = await import("@/app/actions/sales");
+    const result = await addSaleCopySetAction(saleId, { itemIds, price: setPrice });
     invalidateSales(collectionId);
+    if (result.status !== "success") return result.message;
+    onSold();
     // A copy also held by an offer flags that offer, and the copies leave the list's stock.
     invalidateOffers(collectionId);
     invalidateList(collectionId);
-    router.push(`/c/${collectionSlug}/sales/${saleId}`);
+    rememberSale(saleId);
+    toast({
+      message: soldCopiesIntoSaleMessage({
+        count,
+        saleNo: result.saleNo,
+        buyerName: result.buyerName,
+        platformName: result.platformName,
+        newSale,
+      }),
+      href: `/c/${collectionSlug}/sales/${saleId}`,
+      linkLabel: "Open sale",
+    });
     onClose();
+    return null;
   }
 
-  function sellToExisting(saleId: string) {
+  function sellToExisting(saleId: string, setPrice: string = price) {
     setError(undefined);
     startTransition(async () => {
-      const result = await addTo(saleId);
-      if (result.status === "success") landOn(saleId);
-      else setError(result.message);
+      const failed = await addTo(saleId, setPrice, false);
+      if (failed) setError(failed);
     });
   }
 
@@ -155,10 +178,18 @@ export function SellCopiesDialog({
               setError(created.message);
               return;
             }
-            // The sale exists even if the copies were refused in the meantime — land on it either
-            // way, where they can be added again from *Add copies*.
-            await addTo(created.id);
-            landOn(created.id);
+            const failed = await addTo(created.id, price, true);
+            if (!failed) return;
+            // The sale exists even though the copies were refused in the meantime — the dialog has
+            // no form left that could fix it, so say so with a link to the sale, where they can be
+            // added again from *Add copies*.
+            toast({
+              message: `The sale was started, but the copies could not be added: ${failed}`,
+              tone: "error",
+              href: `/c/${collectionSlug}/sales/${created.id}`,
+              linkLabel: "Open sale",
+            });
+            onClose();
           });
         }}
       />,
@@ -192,6 +223,13 @@ export function SellCopiesDialog({
             placeholder="0.00"
             disabled={isPending}
             onChange={(e) => setPrice(e.target.value)}
+            onKeyDown={(e) => {
+              // The amount is settled by now (`NumericInput`), so the field holds what is sent.
+              const typed = e.currentTarget.value;
+              if (e.key !== "Enter" || !lastSale || isPending || typed.trim() === "") return;
+              e.preventDefault();
+              sellToExisting(lastSale.id, typed);
+            }}
             style={PRICE_STYLE}
             aria-label="Price for the set"
           />
@@ -204,15 +242,20 @@ export function SellCopiesDialog({
           ) : openSales.length === 0 ? (
             <p style={{ fontSize: "0.8125rem", color: MUTED, margin: 0 }}>No open sale.</p>
           ) : (
-            openSales.map((s) => {
+            [...(lastSale ? [lastSale] : []), ...otherSales].map((s) => {
               const status = saleStatusMeta(s.status);
+              const isLast = s === lastSale;
               return (
                 <button
                   key={s.id}
                   type="button"
                   disabled={isPending || !priced}
                   onClick={() => sellToExisting(s.id)}
-                  style={{ ...ROW_STYLE, opacity: isPending || !priced ? 0.6 : 1 }}
+                  style={{
+                    ...ROW_STYLE,
+                    ...(isLast ? { borderColor: "var(--color-accent)" } : {}),
+                    opacity: isPending || !priced ? 0.6 : 1,
+                  }}
                 >
                   <span style={{ minWidth: 0 }}>
                     {s.buyerName ?? "Unknown buyer"}
@@ -222,6 +265,11 @@ export function SellCopiesDialog({
                     </span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    {isLast && (
+                      <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-accent)" }}>
+                        Last used
+                      </span>
+                    )}
                     <span style={{ fontSize: "0.75rem", color: MUTED, fontVariantNumeric: "tabular-nums" }}>
                       {new Date(s.soldAt).toLocaleDateString()}
                     </span>
