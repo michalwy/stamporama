@@ -16,6 +16,7 @@ import {
 } from "@/lib/conditions";
 import { parseTranslationValues } from "@/lib/translations";
 import { isTagColor, type TagColor } from "@/lib/tag-colors";
+import { isConditionPriceRole, type ConditionPriceRole } from "@/lib/still-valid-postage";
 
 export type ConditionActionState =
   | { status: "idle" }
@@ -40,6 +41,7 @@ function parseFields(formData: FormData): {
   abbreviation: string;
   symbol: string | null;
   color: TagColor | null;
+  priceRole: ConditionPriceRole | null | undefined;
 } {
   // An unset or unrecognised colour (#728) is *no colour* — the neutral chip — rather than an
   // error: the field is a row of swatches with a None among them, so there is nothing to correct.
@@ -50,6 +52,13 @@ function parseFields(formData: FormData): {
     // Optional (#1739): blank is no symbol, never the abbreviation in its place.
     symbol: ((formData.get("symbol") as string | null) ?? "").trim() || null,
     color: isTagColor(color) ? color : null,
+    // Michel's rule (#2358): a form without the field leaves the role alone; blank clears it.
+    priceRole: formData.has("priceRole")
+      ? (() => {
+          const role = formData.get("priceRole");
+          return isConditionPriceRole(role) ? role : null;
+        })()
+      : undefined,
   };
 }
 
@@ -58,7 +67,7 @@ export async function createStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, symbol, color } = parseFields(formData);
+  const { name, abbreviation, symbol, color, priceRole } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -67,6 +76,7 @@ export async function createStampConditionAction(
       abbreviation,
       symbol,
       color,
+      priceRole,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });
     return { status: "success" };
@@ -80,7 +90,7 @@ export async function updateStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, symbol, color } = parseFields(formData);
+  const { name, abbreviation, symbol, color, priceRole } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -89,6 +99,7 @@ export async function updateStampConditionAction(
       abbreviation,
       symbol,
       color,
+      priceRole,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });
     return { status: "success" };

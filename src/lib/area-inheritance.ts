@@ -50,6 +50,26 @@ export function coverSymbolAreaIds(areas: readonly CoverSymbolsArea[]): Set<stri
   return new Set(areas.filter((a) => resolveEffectiveCoverSymbols(areas, a.id)).map((a) => a.id));
 }
 
+/** The fields the still-valid walk reads (#2358). */
+export type StillValidArea = Pick<CollectionAreaData, "id" | "parentId" | "stillValidForPostage">;
+
+/** Whether an area's stamps are still valid for postage (#2358): the nearest ancestor-or-self that
+ * says either way, and not when none does — the server's `makeStillValidLookup` walk. */
+export function resolveEffectiveStillValid(
+  areas: readonly StillValidArea[],
+  areaId: string | null
+): boolean {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  let current: StillValidArea | undefined = areaId ? byId.get(areaId) : undefined;
+  let depth = 0;
+  while (current && depth < 50) {
+    if (current.stillValidForPostage !== null) return current.stillValidForPostage;
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return false;
+}
+
 /** The nearest ancestor-or-self area's anchoring markets (#1634) — the whole list, as the server's
  * `resolveAnchoringMarkets` inherits it. Empty when the chain names none. */
 export function resolveEffectiveAnchorMarkets(

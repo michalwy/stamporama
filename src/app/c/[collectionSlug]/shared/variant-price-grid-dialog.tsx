@@ -27,6 +27,7 @@ import {
   shownCellAmount,
   variantDescendantMap,
   variantPriceCellKey as cellKey,
+  type CellDerivation,
 } from "@/lib/variant-price-cells";
 import type {
   VariantPriceGridData,
@@ -271,7 +272,7 @@ function VariantPriceGrid({
   const [factorText, setFactorText] = useState("");
 
   const factorFor = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, CellDerivation>();
     for (const f of grid.formatFactors) {
       map.set(`${f.stampId}~${f.formatId}~${f.conditionId}`, f.factor);
     }
@@ -520,7 +521,9 @@ function VariantPriceGrid({
     if (!formatId || !editionId) return null;
     return derivedCellAmount(
       values.get(cellKey(stampId, editionId, conditionId, certId, null)) ?? "",
-      factorFor.get(`${stampId}~${formatId}~${conditionId}`)
+      factorFor.get(`${stampId}~${formatId}~${conditionId}`),
+      // Michel's rule for a still-valid stamp reads its never-hinged single too (#2358).
+      (other) => values.get(cellKey(stampId, editionId, other, certId, null)) ?? ""
     );
   }
 

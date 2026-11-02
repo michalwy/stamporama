@@ -185,6 +185,9 @@ export interface CollectionAreaData {
   /** Whether this area's stamps may carry forbidden symbols (#1891), as set **here** — null when it
    * says nothing and the question passes to its parent; a tree that says nothing is off. */
   coverSymbols: boolean | null;
+  /** Whether this area's stamps are still valid for postage (#2358), as set **here** — null when it
+   * says nothing and the question passes to its parent; a tree that says nothing is not. */
+  stillValidForPostage: boolean | null;
   /** Grouping-only areas (#263) organize children but can't receive Issues/stamps directly. */
   assignable: boolean;
   /** Custom sibling display order (#78); lower sorts first, ties break by name. */
@@ -230,6 +233,7 @@ export async function readCollectionAreas(
       titleName: true,
       symbol: true,
       coverSymbols: true,
+      stillValidForPostage: true,
       assignable: true,
       sortOrder: true,
       translations: { select: { language: true, titleName: true } },
@@ -273,6 +277,7 @@ export async function readCollectionAreas(
     titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
     symbol: a.symbol,
     coverSymbols: a.coverSymbols,
+    stillValidForPostage: a.stillValidForPostage,
     assignable: a.assignable,
     sortOrder: a.sortOrder,
     stampCount: a._count.stampAreaLinks,
@@ -544,6 +549,20 @@ export async function updateCollectionArea(
     const subtree = await areaSubtreeIds(collectionId, areaId);
     await recomputeSortKeysForAreas(collectionId, subtree);
   }
+}
+
+/**
+ * Mark an area's stamps still valid for postage, or not (#2358) — from the area's ⋮ menu, so apart
+ * from the area form. Null follows the parent area.
+ */
+export async function setAreaStillValidForPostage(
+  ownerId: string,
+  areaId: string,
+  value: boolean | null
+): Promise<void> {
+  const collectionId = await resolveAreaCollection(areaId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.collectionArea.update({ where: { id: areaId }, data: { stillValidForPostage: value } });
 }
 
 export async function deleteCollectionArea(

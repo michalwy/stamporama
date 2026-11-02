@@ -22,6 +22,7 @@ import {
 import {
   type MoneyDisplay,
   type RawCatalogPrice,
+  type FormatDerivation,
   buildEffectiveAreaCatalogMap,
   buildEffectivePrimaryCatalogMap,
   pickFormatCatalogPrice,
@@ -48,7 +49,7 @@ import {
 } from "./photos";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
-import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
+import { makeFormatFactorLookup, makeFormatDerivationResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
@@ -594,7 +595,7 @@ function toStampListItem(
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   displayFormatId: string | null,
-  factorFor: (areaId: string | null, issueId: string | null) => number | null,
+  factorFor: (areaId: string | null, issueId: string | null) => FormatDerivation,
   copyCounts: StampCopyCountMaps,
   wantsByStamp: Map<string, StampWantSummary>,
   /** Whether a membership lists its issue's specialised checklists too (#1617). */
@@ -706,7 +707,7 @@ async function buildStampListItems(
 ): Promise<StampListItem[]> {
   const [latestYearByName, factorFor, copyCounts, wantsByStamp] = await Promise.all([
     getLatestEditionYearByName(collectionId),
-    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
+    makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId),
     // Only the page's stamps (#348) — this funnel is reached with the rows already sliced.
     loadStampCopyCounts(collectionId, stamps.map((s) => s.id)),
     loadStampWantSummaries(collectionId, stamps.map((s) => s.id)),

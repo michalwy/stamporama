@@ -7,6 +7,7 @@
 
 import { formatAmountInput, normalizeDecimalInput } from "./decimal-input";
 import { deriveFormatPrice } from "./format-factor";
+import { stillValidCoverPrice, type StillValidRule } from "./still-valid-postage";
 import { rolledUpCatalogPriceMark } from "./catalog-price";
 import {
   catalogPriceMarkInput,
@@ -107,18 +108,33 @@ export function rolledUpCellMark(
   return mark ? catalogPriceMarkInput(mark) : null;
 }
 
+/** How an empty format cell derives from the single: a multiplier, or — a still-valid stamp's cover
+ *  price in the used condition — Michel's rule (#2358). */
+export type CellDerivation = number | StillValidRule;
+
 /**
  * What an empty cell on a format tab is worth: the single's figure times the stamp's multiplier, as
  * a 2-dp string. Null with no multiplier and with no single price — a derived figure is an inference
  * from two facts and says nothing without both. A marked single (#1615) gives its mark instead,
  * multiplier or not: a multiple of a stamp that does not exist does not exist either.
+ *
+ * Under Michel's rule `single` is the used single, and `singleIn` reads the same stamp's, edition's
+ * and certificate's single in another condition — the never-hinged price that caps the rule.
  */
-export function derivedCellAmount(single: string, factor: number | null | undefined): string | null {
+export function derivedCellAmount(
+  single: string,
+  factor: CellDerivation | null | undefined,
+  singleIn?: (conditionId: string) => string
+): string | null {
   const mark = cellMark(single);
   if (mark) return catalogPriceMarkInput(mark);
   if (!factor) return null;
   const amount = parseCellAmount(single);
   if (amount === null) return null;
+  if (typeof factor === "object") {
+    const mint = singleIn?.(factor.neverHingedConditionId) ?? "";
+    return stillValidCoverPrice(amount, parseCellAmount(mint)).toFixed(2);
+  }
   return deriveFormatPrice(amount, factor).toFixed(2);
 }
 

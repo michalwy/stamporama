@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
 import { isTagColor, type TagColor } from "./tag-colors";
+import { isConditionPriceRole, type ConditionPriceRole } from "./still-valid-postage";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -51,6 +52,9 @@ export interface StampConditionData {
   /** The chip colour (#728), or null for the neutral chip. A palette key from
    * {@link TAG_COLORS}; anything else stored reads as null rather than reaching a `var()`. */
   color: TagColor | null;
+  /** The part this condition plays in Michel's rule for stamps still valid for postage (#2358) —
+   *  `used` or `never_hinged`, at most one of each per collection; null on every other condition. */
+  priceRole: ConditionPriceRole | null;
 }
 
 /**
@@ -61,14 +65,16 @@ export const DEFAULT_CONDITIONS: ReadonlyArray<{
   name: string;
   abbreviation: string;
   color: TagColor;
+  priceRole?: ConditionPriceRole;
 }> = [
   // Colours (#728) so a fresh collection is already legible: the mint grades run warm through
   // green / teal / amber, the used ones cool through blue / violet, and FDC — a cover rather than
   // a stamp — sits apart in orange. The migration backfills existing collections to match.
-  { name: "Mint Never Hinged", abbreviation: "MNH", color: "green" },
+  // MNH and U are what Michel's rule for still-valid stamps reads (#2358), preselected.
+  { name: "Mint Never Hinged", abbreviation: "MNH", color: "green", priceRole: "never_hinged" },
   { name: "Mint Hinged", abbreviation: "MH", color: "teal" },
   { name: "Mint No Gum", abbreviation: "MNG", color: "amber" },
-  { name: "Used", abbreviation: "U", color: "blue" },
+  { name: "Used", abbreviation: "U", color: "blue", priceRole: "used" },
   { name: "Cancelled to Order", abbreviation: "CTO", color: "violet" },
   { name: "First Day Cover", abbreviation: "FDC", color: "orange" },
 ];
@@ -87,6 +93,7 @@ export async function seedDefaultConditions(
       name: c.name,
       abbreviation: c.abbreviation,
       color: c.color,
+      priceRole: c.priceRole ?? null,
       sortOrder: i,
     })),
   });
@@ -106,6 +113,7 @@ export async function getStampConditions(
       abbreviation: true,
       symbol: true,
       color: true,
+      priceRole: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
@@ -119,6 +127,7 @@ export async function getStampConditions(
     symbol: c.symbol,
     sortOrder: c.sortOrder,
     color: isTagColor(c.color) ? c.color : null,
+    priceRole: isConditionPriceRole(c.priceRole) ? c.priceRole : null,
   }));
 }
 
@@ -155,6 +164,8 @@ export async function createStampCondition(
     /** The catalogue symbol (#1739); blank is none. */
     symbol?: string | null;
     color?: TagColor | null;
+    /** Its part in Michel's rule (#2358); taken from whichever condition held it before. */
+    priceRole?: ConditionPriceRole | null;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
@@ -165,16 +176,20 @@ export async function createStampCondition(
     select: { sortOrder: true },
   });
   const sortOrder = last ? last.sortOrder + 1 : 0;
-  const created = await prisma.stampCondition.create({
-    data: {
-      collectionId,
-      name: data.name,
-      abbreviation: data.abbreviation,
-      symbol: data.symbol?.trim() || null,
-      color: data.color ?? null,
-      sortOrder,
-    },
-    select: { id: true },
+  const created = await prisma.$transaction(async (tx) => {
+    if (data.priceRole) await releasePriceRole(tx, collectionId, data.priceRole);
+    return tx.stampCondition.create({
+      data: {
+        collectionId,
+        name: data.name,
+        abbreviation: data.abbreviation,
+        symbol: data.symbol?.trim() || null,
+        color: data.color ?? null,
+        priceRole: data.priceRole ?? null,
+        sortOrder,
+      },
+      select: { id: true },
+    });
   });
   await syncConditionTranslations(created.id, data.translations);
 }
@@ -188,22 +203,43 @@ export async function updateStampCondition(
     /** The catalogue symbol (#1739); blank is none. */
     symbol?: string | null;
     color?: TagColor | null;
+    /** Its part in Michel's rule (#2358): absent leaves it, null clears it, a role is taken from
+     *  whichever condition held it before. */
+    priceRole?: ConditionPriceRole | null;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
   const collectionId = await resolveConditionCollection(conditionId);
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.stampCondition.update({
-    where: { id: conditionId },
-    data: {
-      name: data.name,
-      abbreviation: data.abbreviation,
-      // Absent leaves the symbol as it is; blank clears it (#1739).
-      ...(data.symbol !== undefined ? { symbol: data.symbol?.trim() || null } : {}),
-      color: data.color ?? null,
-    },
+  await prisma.$transaction(async (tx) => {
+    if (data.priceRole) await releasePriceRole(tx, collectionId, data.priceRole, conditionId);
+    await tx.stampCondition.update({
+      where: { id: conditionId },
+      data: {
+        name: data.name,
+        abbreviation: data.abbreviation,
+        // Absent leaves the symbol as it is; blank clears it (#1739).
+        ...(data.symbol !== undefined ? { symbol: data.symbol?.trim() || null } : {}),
+        color: data.color ?? null,
+        ...(data.priceRole !== undefined ? { priceRole: data.priceRole } : {}),
+      },
+    });
   });
   await syncConditionTranslations(conditionId, data.translations);
+}
+
+/** A role is one condition's at a time (a partial unique index): choosing it for one condition takes
+ *  it from the one that held it, rather than refusing. */
+async function releasePriceRole(
+  tx: DbTransaction,
+  collectionId: string,
+  role: ConditionPriceRole,
+  keepId?: string
+): Promise<void> {
+  await tx.stampCondition.updateMany({
+    where: { collectionId, priceRole: role, ...(keepId ? { id: { not: keepId } } : {}) },
+    data: { priceRole: null },
+  });
 }
 
 /**

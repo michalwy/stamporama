@@ -24,7 +24,7 @@
 import { catalogPriceMarkInput, type CatalogPriceMark } from "../catalog-price-mark";
 import { fillCertificateCell } from "../certificate-price-fill";
 import { compareCatalogSortKeys } from "../catalog-sort-key";
-import { cellMark, derivedCellAmount, variantPriceCellKey } from "../variant-price-cells";
+import { cellMark, derivedCellAmount, variantPriceCellKey, type CellDerivation } from "../variant-price-cells";
 
 // -- Which cells are missing ---------------------------------------------------------------
 
@@ -86,7 +86,7 @@ export function missingCatalogPriceCells(input: {
   readonly cells: readonly AskedCell[];
   readonly prices: readonly GapPrice[];
   /** The resolved format multiplier for a stamp at a format and condition, or null (ADR-0020 §5). */
-  readonly factor: (stampId: string, formatId: string, conditionId: string) => number | null;
+  readonly factor: (stampId: string, formatId: string, conditionId: string) => CellDerivation | null;
   /** A certificate status's fill percentage, or null when it has none (#1242). */
   readonly percent: (certificateStatusId: string) => number | null;
 }): Map<string, MissingCell[]> {
@@ -104,7 +104,13 @@ export function missingCatalogPriceCells(input: {
   const answered = (stampId: string, editionId: string, cell: AskedCell) => {
     if (own(stampId, editionId, cell).trim() !== "") return true;
     if (cell.formatId === null) return false;
-    return derivedCellAmount(own(stampId, editionId, cell, null), input.factor(stampId, cell.formatId, cell.conditionId)) !== null;
+    return (
+      derivedCellAmount(
+        own(stampId, editionId, cell, null),
+        input.factor(stampId, cell.formatId, cell.conditionId),
+        (conditionId) => own(stampId, editionId, { ...cell, conditionId }, null)
+      ) !== null
+    );
   };
 
   const out = new Map<string, MissingCell[]>();

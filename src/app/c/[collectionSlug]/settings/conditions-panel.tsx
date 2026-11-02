@@ -11,10 +11,12 @@ import {
   reorderStampConditionsAction,
 } from "@/app/actions/conditions";
 import type { StampConditionData } from "@/lib/conditions";
+import type { ConditionPriceRole } from "@/lib/still-valid-postage";
 import { languageLabel } from "@/lib/languages";
 import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import {
   AddRowAction,
   DetailForm,
@@ -92,6 +94,9 @@ export function ConditionsPanel({
                   drag={list.drag(condition.id)}
                 >
                   <RowName>{condition.name}</RowName>
+                  {condition.priceRole && (
+                    <span style={roleTagStyle}>{PRICE_ROLE_LABEL[condition.priceRole]}</span>
+                  )}
                   <span style={abbrBadgeStyle(condition.color)}>{condition.abbreviation}</span>
                 </ListRow>
               ))}
@@ -171,6 +176,7 @@ function ConditionFields({
   const [color, setColor] = useState<TagColor | null>(
     condition ? condition.color : newColor
   );
+  const [priceRole, setPriceRole] = useState<ConditionPriceRole | "">(condition?.priceRole ?? "");
   const suffix = translatable ? ` — ${languageLabel(defaultLanguage)}` : "";
 
   return (
@@ -264,9 +270,49 @@ function ConditionFields({
         </LabelWithError>
         <TagColorPicker value={color} onChange={setColor} />
       </div>
+
+      {/* Which condition Michel's rule for stamps still valid for postage reads as used and which as
+          never hinged (#2358) — one of each per collection, so choosing one here takes it from the
+          condition that had it. */}
+      <div>
+        <LabelWithError>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+            Michel&rsquo;s rule
+            <InfoHint>
+              A stamp still valid for postage takes its on-cover prices from its used price +20 %, at
+              least 0.40, at most its never-hinged price. Choose which condition is each; while either
+              is unchosen, no price is derived that way.
+            </InfoHint>
+          </span>
+        </LabelWithError>
+        <input type="hidden" name="priceRole" value={priceRole} />
+        <Segmented<ConditionPriceRole | "">
+          label="Reads it as"
+          inline
+          value={priceRole}
+          onChange={setPriceRole}
+          options={[
+            { value: "", label: "Neither" },
+            { value: "used", label: PRICE_ROLE_LABEL.used },
+            { value: "never_hinged", label: PRICE_ROLE_LABEL.never_hinged },
+          ]}
+        />
+      </div>
     </Fields>
   );
 }
+
+const PRICE_ROLE_LABEL: Record<ConditionPriceRole, string> = {
+  used: "Used",
+  never_hinged: "Never hinged",
+};
+
+/** The role a condition plays in Michel's rule, muted beside its name so the choice reads off the list. */
+const roleTagStyle: React.CSSProperties = {
+  flexShrink: 0,
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+};
 
 /** The row's own abbreviation badge, in the colour the entry carries (#728) — the settings list is
  * where a colour is chosen, so it is the one list that must show the choice back. */

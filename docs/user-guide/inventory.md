@@ -1107,6 +1107,27 @@ below), and none of these four is offered in a copy's, a want's or a trade's **F
 listed under **Settings → Formats** — they are the catalogues' and the same in every collection.
 Nothing values a copy from them yet: a piece's worth is still the figure you record on it.
 
+#### Stamps still valid for postage
+
+Michel prints no ⊠ price for a stamp that can still frank a letter, and says how to value one on a
+cover instead: **at least 0.40, or about 20 % above the used price — but no more than the
+never-hinged price when that is above 0.40**. Stamporama applies that rule for you.
+
+- **Mark what is still valid** from the **⋮** menu of an area on the Areas screen, or of an issue on
+  the Issues list: **Mark still valid for postage**. An area's mark reaches every area and issue
+  beneath it; **Unmark still valid for postage** on an issue under a marked area takes just that
+  issue out, and the menu says when a mark is inherited.
+- **Choose which conditions the rule reads**, once, under **Settings → Conditions**: open a condition
+  and set **Michel's rule** to *Used* or *Never hinged*. New collections start with *U* and *MNH*
+  chosen. While either is unchosen, nothing is derived by the rule.
+
+A still-valid stamp with no **Cover EF**, **Cover MeF** or **Cover MiF** price of its own then shows
+one in its **used** condition, worked out from that edition's used and never-hinged prices and shown
+greyed or with `~`, like any derived price. The 0.40 is in the catalogue's own currency. The rule
+takes the place of a multiplier for those three prices; **On piece** and the other conditions keep
+their multipliers, and a price you type always wins. Without a used price there is nothing to work
+from, and without a never-hinged price nothing caps it.
+
 ## Covers, fragments and other pieces carrying several stamps
 
 A cover franked with three different stamps, a fragment cut from a parcel card, an FDC — one piece of

@@ -42,7 +42,7 @@ import {
   type StampAttributeInput,
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
-import { makeFormatFactorResolver } from "./format-pricing";
+import { makeFormatDerivationResolver } from "./format-pricing";
 import {
   loadStampCopyCounts,
   NO_COPIES,
@@ -119,7 +119,7 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
-import { foldChecklistPrices, type ChecklistPricePick } from "./catalog-price";
+import { foldChecklistPrices, type ChecklistPricePick, type FormatDerivation } from "./catalog-price";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -376,7 +376,7 @@ function toStampNode(
     displayFormatId?: string | null;
     /** Multiplier applying to that format for this issue — one lookup per issue, because every
      *  member shares the issue's area and the issue itself. */
-    formatFactor?: number | null;
+    formatFactor?: FormatDerivation;
     rates: Map<string, number | null>;
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
     variantPricesByStamp: Map<string, UmbrellaVariantPrices>;
@@ -599,6 +599,9 @@ export interface IssueListItem {
   /** The collector's own labels on this issue (#152), alphabetically. Empty is the normal case,
    *  and the issue's tags say nothing about its stamps — nothing is inherited. */
   tags: TagSummary[];
+  /** Whether this issue's stamps are still valid for postage (#2358), as set **on the issue** — null
+   *  follows its area. */
+  stillValidForPostage: boolean | null;
 }
 
 /** One checklist on a list row: what it is called, how big it is, and what it is worth. */
@@ -625,6 +628,7 @@ const ISSUE_LIST_SELECT = {
   year: true,
   isAutoCreated: true,
   createdAt: true,
+  stillValidForPostage: true,
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
   // Per-vendor prefix overrides (#377) — at most one row per vendor the issue overrides, and none
   // at all for the ordinary issue that follows its area's prefix.
@@ -700,7 +704,7 @@ function computeChecklistPriceTotal(
   rates: Map<string, number | null>,
   variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null = null,
-  formatFactor: number | null | ((stampId: string) => number | null) = null
+  formatFactor: FormatDerivation | ((stampId: string) => FormatDerivation) = null
 ): IssuePriceTotal | null {
   const picks: ChecklistPricePick[] = [];
   let markedCount = 0;
@@ -872,6 +876,7 @@ function toIssueListItem(
     year: number | null;
     isAutoCreated: boolean;
     createdAt: Date;
+    stillValidForPostage: boolean | null;
     translations: { language: string; name: string | null }[];
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
     catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[];
@@ -901,7 +906,7 @@ function toIssueListItem(
   rates: Map<string, number | null>,
   variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null,
-  factorFor: (areaId: string | null, issueId: string | null) => number | null
+  factorFor: (areaId: string | null, issueId: string | null) => FormatDerivation
 ): IssueListItem {
   const memberByStamp = new Map(issue.members.map((m) => [m.stampId, m]));
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
@@ -981,6 +986,7 @@ function toIssueListItem(
     rangeSuggestions,
     photos,
     tags: orderTagSummaries(issue.tags),
+    stillValidForPostage: issue.stillValidForPostage,
   };
 }
 
@@ -1008,7 +1014,7 @@ async function buildIssueListItems(
       where: { collectionId },
       select: { id: true, abbreviation: true },
     }),
-    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
+    makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId),
   ]);
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
@@ -1053,6 +1059,19 @@ async function buildIssueListItems(
   );
 }
 
+
+/** Mark an issue's stamps still valid for postage, or not (#2358) — null follows its area, so an
+ *  issue can be unmarked under a marked area. */
+export async function setIssueStillValidForPostage(
+  ownerId: string,
+  issueId: string,
+  value: boolean | null
+): Promise<void> {
+  const issue = await prisma.issue.findUnique({ where: { id: issueId }, select: { collectionId: true } });
+  if (!issue) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, issue.collectionId);
+  await prisma.issue.update({ where: { id: issueId }, data: { stillValidForPostage: value } });
+}
 
 export interface IssueListFilterOpts {
   areaIds?: string[];
@@ -1451,7 +1470,7 @@ export async function listIssueMembers(
     resolveDisplayConditionId(collectionId, requestedDisplayConditionId),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
-  const factorFor = await makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId);
+  const factorFor = await makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId);
   const formatFactor = factorFor(collectionAreaId, issueId);
 
   // Umbrella members (unknown-variant base stamps) roll their headline price up from the

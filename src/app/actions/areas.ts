@@ -8,6 +8,7 @@ import {
   createCollectionArea,
   updateCollectionArea,
   deleteCollectionArea,
+  setAreaStillValidForPostage,
   syncAreaCatalogBooks,
   syncAreaVendors,
   type AreaVendorInput,
@@ -209,6 +210,20 @@ export async function deleteCollectionAreaAction(
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete area. Please try again.",
     };
+  }
+}
+
+/** Mark an area's stamps still valid for postage, or not (#2358); null follows the parent. */
+export async function setAreaStillValidForPostageAction(
+  areaId: string,
+  value: boolean | null
+): Promise<AreaActionState> {
+  const session = await getSession();
+  try {
+    await setAreaStillValidForPostage(session.user.id, areaId, value);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to update the area. Please try again." };
   }
 }
 
