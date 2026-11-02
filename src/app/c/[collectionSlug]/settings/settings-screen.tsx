@@ -43,6 +43,8 @@ import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
 import { TagsPanel } from "./tags-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
+import { ValuationMethodPanel } from "./valuation-method-panel";
+import type { ValuationMethod } from "@/lib/piece-valuation";
 import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
@@ -189,6 +191,8 @@ interface SettingsScreenProps {
   /** The collection's scanning profiles (#1443), each with what uses it. */
   initialScanningProfiles: ScanningProfileListRow[];
   duplicateCatalogMode: DuplicateCatalogMode;
+  /** How pieces are valued where no area and no copy says otherwise (#2359). */
+  valuationMethod: ValuationMethod;
   photoStorageBytes: number;
   /** The local cache of remote storage objects (#591), shown beside the storage figure but never
    * added to it: one is the collector's data, the other is reclaimable scratch. */
@@ -782,6 +786,7 @@ function SettingsEntryBody({
   instanceScanSheetTtlLabel,
   initialScanningProfiles,
   duplicateCatalogMode,
+  valuationMethod,
   photoStorageBytes,
   storageCache,
 }: SettingsScreenProps & { entryKey: string; part: string | null }) {
@@ -830,11 +835,17 @@ function SettingsEntryBody({
     case "formats":
       // Formats and their multipliers are one thing (#1469): a multiplier is a format's worth, set
       // per area and condition, so the two are tabs of one entry rather than two entries.
+      // The valuation method (#2359) is a third tab: what a piece in a format on cover or on piece is
+      // worth, set where its formats are.
+      if (part === "valuation") {
+        return <ValuationMethodPanel collectionId={collectionId} initialMethod={valuationMethod} />;
+      }
       return part === "multipliers" ? (
         <FormatFactorsPanel
           collectionId={collectionId}
           initialFactors={initialFormatFactors}
-          formats={initialFormats}
+          // A format on cover or on piece has no prices of its own, so no multiplier (#2359).
+          formats={initialFormats.filter((f) => !f.pieceKind)}
           conditions={initialConditions}
           areas={initialAreas}
         />

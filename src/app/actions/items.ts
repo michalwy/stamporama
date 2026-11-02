@@ -21,12 +21,15 @@ import type { ItemListItem, ItemStampsRead } from "@/lib/items";
 import type { ItemStampEntryInput } from "@/lib/item-stamps";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import {
-  CarrierValueError,
   getCarrierValuation,
-  setCarrierValue,
   type CarrierValuationRead,
 } from "@/lib/carrier-values";
-import { parseExplicitValueInput } from "@/lib/carrier-value";
+import {
+  isFranking,
+  isValuationMethod,
+  type Franking,
+  type ValuationMethod,
+} from "@/lib/piece-valuation";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -95,6 +98,11 @@ interface ItemFields {
   /** The copy's value modifier (#2357), when the form carried its fields; absent leaves it alone,
    *  blank figures clear it. */
   valueModifier?: ValueModifier | null;
+  /** How the piece was franked and posted (#2359), when the form carried the field. */
+  franking?: Franking;
+  /** The copy's own valuation method (#2359), when the form carried the field; blank follows the
+   *  area. */
+  valuationMethod?: ValuationMethod | null;
 }
 
 interface ParsedItemFields {
@@ -150,6 +158,19 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     data.valueModifier = modifier.value;
   }
 
+  // A piece's franking and own method (#2359): offered only while the copy is a piece, and absent
+  // otherwise, which leaves both alone.
+  if (formData.has("franking")) {
+    const franking = str(formData, "franking");
+    if (!isFranking(franking)) return { data, error: "Choose how the piece was franked." };
+    data.franking = franking;
+  }
+  if (formData.has("valuationMethod")) {
+    const method = str(formData, "valuationMethod");
+    if (method && !isValuationMethod(method)) return { data, error: "Choose a valuation method." };
+    data.valuationMethod = method ? (method as ValuationMethod) : null;
+  }
+
   if (!stampId) return { data, error: "A stamp must be selected." };
   if (!conditionId) return { data, error: "A condition must be selected." };
   return { data };
@@ -189,32 +210,10 @@ function parseCandidateStampIds(formData: FormData): string[] | undefined {
   }
 }
 
-/** A multi-stamp copy's recorded value beside the sum of its stamps, for the Valuation dialog (#747). */
+/** A piece's computed value beside its stamps' used prices, for the Valuation dialog (#2359). */
 export async function getCarrierValuationAction(itemId: string): Promise<CarrierValuationRead> {
   const session = await getSession();
   return getCarrierValuation(session.user.id, itemId);
-}
-
-/** Record a multi-stamp copy's value, or clear it with a blank amount (#747). Only what the collector
- *  saves is stored — the suggested sum reaches here only as a figure they chose to keep. */
-export async function setCarrierValueAction(
-  itemId: string,
-  amount: string,
-  currency: string
-): Promise<ItemActionState> {
-  const session = await getSession();
-  const parsed = parseExplicitValueInput(amount, currency);
-  if (!parsed.ok) return { status: "error", message: parsed.message };
-  try {
-    await setCarrierValue(session.user.id, itemId, parsed.value);
-    return { status: "success" };
-  } catch (e) {
-    return {
-      status: "error",
-      message:
-        e instanceof CarrierValueError ? e.message : "Failed to save the value. Please try again.",
-    };
-  }
 }
 
 /** The stamps a copy carries, for the dialog that edits them and the copy's own screen (#746). */

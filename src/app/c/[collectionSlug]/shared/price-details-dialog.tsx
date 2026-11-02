@@ -43,8 +43,8 @@ import {
 
 /** What the dialog describes: a single stamp, or one checklist's stamps (#531 — an issue may carry
  *  several goals, so "the set" is named by a checklist rather than by the publication), or a
- *  **multi-stamp copy** (#747), which is a copy of none of its stamps and so is not described by any
- *  one stamp's window. `areas` names the carried stamps' catalog numbers the way the row did. */
+ *  **piece** (#2359), valued by its method from several prices and so not described by any one
+ *  stamp's window. `areas` names the carried stamps' catalog numbers the way the row did. */
 export type PriceDetailsTarget =
   | { kind: "stamp"; stampId: string }
   | { kind: "checklist"; collectionId: string; checklistId: string }
@@ -126,10 +126,9 @@ export function PriceDetailsDialog({
         ? checklistQuery.isLoading
         : false;
 
-  // A multi-stamp copy's window is its own (#747): the value the collector recorded, and the sum of
-  // its stamps as a suggestion. Neither toggle means anything there — the recorded figure has no
-  // edition, and the sum is read at the latest one in collection currency — so no toolbar is drawn
-  // rather than two controls that do nothing.
+  // A piece's window is its own (#2359): the value its method computes, and its stamps at their used
+  // prices. Neither toggle means anything there — both are read at the latest edition in collection
+  // currency — so no toolbar is drawn rather than two controls that do nothing.
   if (target.kind === "copy") {
     return (
       <DialogShell title="Valuation" onClose={onClose} maxWidth="min(96vw, 60rem)" height="min(92vh, 48rem)">

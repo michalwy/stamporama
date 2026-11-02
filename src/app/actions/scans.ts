@@ -1,5 +1,6 @@
 "use server";
 
+import { isFranking, type Franking } from "@/lib/piece-valuation";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -391,6 +392,8 @@ export async function identifyTilesAction(
       // Every stamp on the piece, when the tile was identified as one carrying several (#750). The
       // copy dialog's own field and reading (#746): one list, one vocabulary.
       stamps: parseItemStampEntries(formData.get("stamps")),
+      // How the piece was franked (#2359), asked beside the stamps on it.
+      franking: frankingOf(formData),
       stampPhotoTileId: stampPhotoTileId(formData),
       // The tiles keeping their own marked condition, certificate or faults (#1550, #1558), as the
       // step said.
@@ -414,6 +417,12 @@ export async function identifyTilesAction(
             : "Failed to identify the tiles. Please try again.",
     };
   }
+}
+
+/** The `franking` field (#2359): present only while the step describes a piece. */
+function frankingOf(formData: FormData): Franking | undefined {
+  const raw = formData.get("franking");
+  return isFranking(raw) ? raw : undefined;
 }
 
 /** The `candidateStampIds` field (#1651): a JSON list of stamp ids, or null when absent or unreadable. */
@@ -516,6 +525,7 @@ export async function reidentifyTileAction(
       forSale: formData.get("forSale") === "true",
       forTrade: formData.get("forTrade") === "true",
       stamps: parseItemStampEntries(formData.get("stamps")),
+      franking: frankingOf(formData),
       stampPhotoTileId: stampPhotoTileId(formData),
     });
     return { status: "success" };

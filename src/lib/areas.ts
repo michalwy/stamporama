@@ -1,4 +1,5 @@
 import "server-only";
+import { isValuationMethod, type ValuationMethod } from "./piece-valuation";
 import { prisma } from "./db";
 import { recomputeSortKeysForAreas } from "./catalog-sort-key-recompute";
 import { normalizeMarketList } from "./market-anchoring";
@@ -188,6 +189,9 @@ export interface CollectionAreaData {
   /** Whether this area's stamps are still valid for postage (#2358), as set **here** — null when it
    * says nothing and the question passes to its parent; a tree that says nothing is not. */
   stillValidForPostage: boolean | null;
+  /** How the pieces whose most expensive stamp is in this area are valued (#2359), as set **here** —
+   * null when it says nothing and the question passes to its parent. */
+  valuationMethod: ValuationMethod | null;
   /** Grouping-only areas (#263) organize children but can't receive Issues/stamps directly. */
   assignable: boolean;
   /** Custom sibling display order (#78); lower sorts first, ties break by name. */
@@ -234,6 +238,7 @@ export async function readCollectionAreas(
       symbol: true,
       coverSymbols: true,
       stillValidForPostage: true,
+      valuationMethod: true,
       assignable: true,
       sortOrder: true,
       translations: { select: { language: true, titleName: true } },
@@ -278,6 +283,7 @@ export async function readCollectionAreas(
     symbol: a.symbol,
     coverSymbols: a.coverSymbols,
     stillValidForPostage: a.stillValidForPostage,
+    valuationMethod: isValuationMethod(a.valuationMethod) ? a.valuationMethod : null,
     assignable: a.assignable,
     sortOrder: a.sortOrder,
     stampCount: a._count.stampAreaLinks,

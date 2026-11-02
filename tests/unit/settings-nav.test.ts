@@ -82,7 +82,7 @@ describe("settings navigation (#1469)", () => {
       e.parts!.map((p) => p.label),
     ]);
     assert.deepEqual(withParts, [
-      ["formats", ["Formats", "Multipliers"]],
+      ["formats", ["Formats", "Multipliers", "Valuation method"]],
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
       ["allegro", ["Account", "Listing profiles", "Categories", "Platform"]],
       ["delcampe", ["Listing profiles", "Categories", "Platform"]],

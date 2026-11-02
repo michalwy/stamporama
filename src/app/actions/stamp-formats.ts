@@ -15,6 +15,7 @@ import {
   type StampFormatData,
 } from "@/lib/stamp-formats";
 import { parseTranslationValues, type TranslationValueMap } from "@/lib/translations";
+import { isPieceKind, type PieceKind } from "@/lib/piece-valuation";
 
 export type StampFormatActionState =
   | { status: "idle" }
@@ -40,9 +41,14 @@ export async function getStampFormatsAction(
 function parseFields(formData: FormData): {
   name: string;
   abbreviation: string;
+  pieceKind?: PieceKind | null;
   translations: TranslationValueMap;
 } {
+  // What a copy in the format is (#2359): blank is neither; absent leaves it alone.
+  const kindRaw = formData.get("pieceKind");
   return {
+    pieceKind:
+      typeof kindRaw === "string" ? (isPieceKind(kindRaw) ? kindRaw : null) : undefined,
     name: ((formData.get("name") as string | null) ?? "").trim(),
     abbreviation: ((formData.get("abbreviation") as string | null) ?? "").trim(),
     // The `<field>:<lang>` hidden inputs the form renders (#344), parsed against the same field
@@ -56,11 +62,16 @@ export async function createStampFormatAction(
   formData: FormData
 ): Promise<StampFormatActionState> {
   const session = await getSession();
-  const { name, abbreviation, translations } = parseFields(formData);
+  const { name, abbreviation, pieceKind, translations } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await createStampFormat(session.user.id, collectionId, { name, abbreviation, translations });
+    await createStampFormat(session.user.id, collectionId, {
+      name,
+      abbreviation,
+      pieceKind,
+      translations,
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create format. Please try again." };
@@ -72,11 +83,16 @@ export async function updateStampFormatAction(
   formData: FormData
 ): Promise<StampFormatActionState> {
   const session = await getSession();
-  const { name, abbreviation, translations } = parseFields(formData);
+  const { name, abbreviation, pieceKind, translations } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
-    await updateStampFormat(session.user.id, formatId, { name, abbreviation, translations });
+    await updateStampFormat(session.user.id, formatId, {
+      name,
+      abbreviation,
+      pieceKind,
+      translations,
+    });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update format. Please try again." };

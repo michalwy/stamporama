@@ -177,6 +177,7 @@ const LINE_SELECT = {
   stamp: { select: LABEL_STAMP_SELECT },
   item: {
     select: {
+      id: true,
       stampId: true,
       conditionId: true,
       certificateStatusId: true,
@@ -221,12 +222,11 @@ function valuationKeyOf(row: LineRow): ValuationRow | null {
     certificateStatusId: source.certificateStatusId,
     formatId: source.formatId,
     unknownVariant: stamp ? isUnknownVariantStamp(stamp) : false,
-    // A give line on a multi-stamp copy is valued at the figure the collector recorded (#747), and a
-    // give line on a faulty copy is lowered by its percentage (#1560); a receive line names a stamp,
-    // never a piece, so it has neither.
+    // A give line on a piece is valued by its method (#2359), and a give line on a faulty copy is
+    // lowered by its percentage (#1560); a receive line names a stamp, never a piece, so it has neither.
     ...(row.item
       ? copyValuationOf(row.item)
-      : { carrier: null, faultReductionPercent: null, valueModifier: null, candidateStampIds: null }),
+      : { copy: null, faultReductionPercent: null, valueModifier: null, candidateStampIds: null }),
   };
 }
 
@@ -340,18 +340,15 @@ async function computeCatalogFigures(
       const key = keys.get(row.id);
       if (!key) continue;
       const vendorId = row.catalogVendorId ?? agreedVendorId;
-      // A carrier's recorded value is the collector's own judgement, not a figure the partner can
-      // look up in the agreed book, so it stays out of the agreed valuation (#747): the carrier is
-      // still a carrier there — never priced as its leading stamp — and simply has no catalogue
-      // figure, which a line's manual value answers as it does for any other unpriced line.
-      // A copy's fault reduction (#1560) is the collector's judgement for the same reason and stays
+      // A piece (#2359) is valued by its method in the agreed book as in the collector's own: the
+      // method is the catalogue's rule, read from whichever book prices its stamps.
+      // A copy's fault reduction (#1560) is the collector's judgement and stays
       // out with it (decided with the user): the agreed figure is the partner's book, full, and a
       // faulty piece is lowered there by the line's manual value.
       // A copy's value modifier (#2357) stays out too: its amount is stated in the currency of the
       // collector's own catalogue, which the agreed book need not share.
       const agreedKey: ValuationRow = {
         ...key,
-        carrier: key.carrier ? { explicitValue: null } : null,
         faultReductionPercent: null,
         valueModifier: null,
       };

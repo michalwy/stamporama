@@ -10,6 +10,7 @@ import {
   reorderStampFormatsAction,
 } from "@/app/actions/stamp-formats";
 import type { StampFormatData } from "@/lib/stamp-formats";
+import { PIECE_KINDS, PIECE_KIND_LABELS } from "@/lib/piece-valuation";
 import { languageLabel } from "@/lib/languages";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import {
@@ -82,6 +83,9 @@ export function FormatsPanel({
                   drag={list.drag(format.id)}
                 >
                   <RowName>{format.name}</RowName>
+                  {format.pieceKind && (
+                    <span style={kindHintStyle}>{PIECE_KIND_LABELS[format.pieceKind]}</span>
+                  )}
                   <span style={abbrBadgeStyle}>{format.abbreviation}</span>
                 </ListRow>
               ))}
@@ -181,6 +185,30 @@ function FormatFields({
         </div>
       </div>
 
+      {/* What a copy in this format is (#2359): a cover or a fragment is valued by the piece's
+          valuation method, and its prices are the stamp's Cover EF and On piece. */}
+      <div style={{ maxWidth: "16rem" }}>
+        <LabelWithError htmlFor="f-fmt-kind">Kind</LabelWithError>
+        <select
+          id="f-fmt-kind"
+          name="pieceKind"
+          defaultValue={format?.pieceKind ?? ""}
+          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+        >
+          <option value="">Neither</option>
+          {PIECE_KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {PIECE_KIND_LABELS[kind]}
+            </option>
+          ))}
+        </select>
+        <div style={kindHintStyle}>
+          {format && !format.pieceKind
+            ? "Choosing a kind moves this format's prices to the stamps' Cover EF or On piece."
+            : "A copy in it is valued by its valuation method."}
+        </div>
+      </div>
+
       <TranslationRows
         languages={titleLanguages}
         hint={
@@ -204,6 +232,12 @@ function FormatFields({
     </Fields>
   );
 }
+
+const kindHintStyle: React.CSSProperties = {
+  marginTop: "0.25rem",
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+};
 
 const abbrBadgeStyle: React.CSSProperties = {
   flexShrink: 0,

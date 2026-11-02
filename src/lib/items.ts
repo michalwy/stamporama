@@ -1,3 +1,10 @@
+import {
+  DEFAULT_FRANKING,
+  isFranking,
+  isValuationMethod,
+  type Franking,
+  type ValuationMethod,
+} from "./piece-valuation";
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
@@ -549,6 +556,10 @@ export interface ItemCreateInput {
   faultReductionPercent?: number | null;
   /** The modifier on this copy's catalogue value (#2357), or null for none. Absent leaves it alone. */
   valueModifier?: ValueModifier | null;
+  /** How the piece was franked and posted (#2359). Absent leaves it alone (a new copy: rate-correct). */
+  franking?: Franking;
+  /** The copy's own valuation method (#2359), or null to follow its area. Absent leaves it alone. */
+  valuationMethod?: ValuationMethod | null;
   /** Two or more stamps the copy **might be** (#1651, ADR-0065), written in the create's own
    *  transaction; `stampId` is then only where the copy starts, re-pointed by the set. */
   candidateStampIds?: readonly string[];
@@ -602,6 +613,10 @@ export interface ItemUpdateInput {
   faultReductionPercent?: number | null;
   /** The modifier on this copy's catalogue value (#2357), or null for none. Absent leaves it alone. */
   valueModifier?: ValueModifier | null;
+  /** How the piece was franked and posted (#2359). Absent leaves it alone (a new copy: rate-correct). */
+  franking?: Franking;
+  /** The copy's own valuation method (#2359), or null to follow its area. Absent leaves it alone. */
+  valuationMethod?: ValuationMethod | null;
   /**
    * The stamps this copy carries, in the collector's order (#746) — **the whole list**, the leading
    * one included, or absent to leave the entries alone. Every other caller of this function has no
@@ -709,6 +724,8 @@ export async function createItem(
         deliveryState,
         faultReductionPercent: data.faultReductionPercent ?? null,
         ...valueModifierColumns(data.valueModifier ?? null),
+        ...(data.franking ? { franking: data.franking } : {}),
+        valuationMethod: data.valuationMethod ?? null,
       },
       select: ITEM_SELECT,
     });
@@ -866,6 +883,8 @@ export async function updateItem(
       ? { faultReductionPercent: fields.faultReductionPercent }
       : {}),
     ...(valueModifier !== undefined ? valueModifierColumns(valueModifier) : {}),
+    ...(fields.franking !== undefined ? { franking: fields.franking } : {}),
+    ...(fields.valuationMethod !== undefined ? { valuationMethod: fields.valuationMethod } : {}),
     ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
     // A ref only makes sense with a location; clear it whenever the location is
     // cleared, and only persist a ref update when a location is present.
@@ -2059,6 +2078,11 @@ export interface ItemListItem {
   /** The modifier on this copy's catalogue value (#2357), or null for none. Already applied to
    *  {@link value} (whose `valueModifier` says so); carried for the copy dialog that edits it. */
   valueModifier: ValueModifier | null;
+  /** How the piece was franked and posted (#2359) — read only once the copy is a piece; carried for
+   *  the copy dialog that edits it. */
+  franking: Franking;
+  /** The copy's own valuation method (#2359), or null to follow its area; for the copy dialog. */
+  valuationMethod: ValuationMethod | null;
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -2240,8 +2264,8 @@ const ITEM_LIST_SELECT = {
   // Whether the piece is a carrier, and what it carries (#748). Read for every row because a select
   // cannot be conditional on the row it selects; an ordinary copy has exactly one entry, so the cost
   // is one narrow row each, and the mapping below drops it again.
-  // …and the value a carrier is priced at instead of the catalogue (#747), `stampCount` included,
-  // and what the copy's faults take off its value (#1560).
+  // …and whether it is a piece valued by its method (#2359), `stampCount` included, and what the
+  // copy's faults take off its value (#1560).
   ...COPY_VALUATION_SELECT,
   // The candidate set (#1651), labelled, in catalogue order. Replaces the bare ids the valuation
   // select spreads above; an ordinary copy has none, so the cost is nothing.
@@ -2437,6 +2461,8 @@ function toItemListItem(
     faults: orderFaultSummaries(row.faults),
     faultReductionPercent: row.faultReductionPercent,
     valueModifier: valueModifierOf(row),
+    franking: isFranking(row.franking) ? row.franking : DEFAULT_FRANKING,
+    valuationMethod: isValuationMethod(row.valuationMethod) ? row.valuationMethod : null,
     photos: row.photos
       .map((p) => ({
         id: p.id,
@@ -4781,7 +4807,7 @@ const HOLDINGS_ROW_SELECT = {
   // The two axes `isHeld` reads (#396) — which side of the summary a copy lands on.
   disposedAt: true,
   deliveryState: true,
-  // A carrier contributes the value recorded on it, or counts as unpriced (#747).
+  // A piece contributes the value its method computes, or counts as unpriced (#2359).
   ...COPY_VALUATION_SELECT,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;

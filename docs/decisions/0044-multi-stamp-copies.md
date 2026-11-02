@@ -16,6 +16,11 @@ the user over a literal, uncollapsed `sortOrder` list, which would have given a 
 other listing uses. Each stamp resolves its **own** area prefix and primary vendor, and only
 `{catalog}` changed: `{name}`, `{year}` and the other stamp facts still read the leading stamp.
 
+**Valuation — superseded by [ADR-0076](0076-piece-valuation-methods.md)** (#2359): a piece's
+catalogue value is now computed by a valuation method from its stamps' prices on cover, on piece and
+used, set per area; the recorded value below was moved onto each piece's amount modifier and is read by
+nothing else. What follows is the record of #747.
+
 **Valuation** (#747): §6 as written, on `Item.explicitValue` + `Item.explicitValueCurrency` (both or
 neither, a CHECK), read **only while `stampCount` > 1** — a copy edited back to one stamp is valued
 from the catalogue again and the figure stays in its row unread, so a stamp struck off by mistake
@@ -167,6 +172,9 @@ describes the component** — a block of four *on* this cover — with null mean
 `formatId` already describes it.
 
 ### 6. The value is explicit; the sum is a suggestion
+
+*Superseded by [ADR-0076](0076-piece-valuation-methods.md) (#2359): the value is computed by a
+valuation method, and the sum of used prices is one of the methods.*
 
 The catalogue grid resolves nothing for a multi-stamp copy — by §3 it is not a copy of any of its
 stamps — so the piece would be unpriced for ever, and covers are usually the interesting material.

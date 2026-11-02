@@ -35,6 +35,10 @@ model Collection {
   // so a platform listing in it needs no translation: it is excluded from the per-language inputs
   // and resolves straight to the default value. Existing collections were backfilled to "en".
   defaultLanguage String @default("en")
+  // How a piece carrying stamps on cover or on piece is valued where no area and no copy says
+  // otherwise (#2359; ADR-0076): `sum_of_used`, `michel` (the default), `fischer`, `fischer_fp_fw_fm`
+  // (CHECK). See `piece-valuation.ts`.
+  valuationMethod String @default("michel")
   // Duplicate catalog-number policy (#85): "warn" (default) shows a non-blocking
   // warning; "block" prevents saving a stamp whose catalog identity (vendor +
   // effective area prefix + number) already exists in the collection.
@@ -311,6 +315,11 @@ model StampFormat {
   // are priced like any format and never a copy's, a want's or a trade's — see `stamp-formats.ts`.
   // One of each per collection (a partial unique index in the migration); a CHECK lists the values.
   coverKind    String?
+  // What a **copy** in this format is (#2359; ADR-0076): `on_cover`, `on_piece`, or null for neither
+  // (CHECK; never set on a reserved `coverKind` row). A copy whose format has a kind is valued by the
+  // piece's valuation method, and the format has no prices of its own — they are the stamp's
+  // *Cover EF* or *On piece* prices (`piece-format-kind.ts`).
+  pieceKind    String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
@@ -3413,6 +3422,10 @@ model CollectionArea {
   // parent area; true and false are set here and pass down, as `coverSymbols` does. A tree that says
   // nothing is not still valid.
   stillValidForPostage Boolean?
+  // How the pieces whose most expensive stamp is in this area are valued (#2359; ADR-0076) — one of
+  // `piece-valuation.ts`'s methods. Null follows the parent; a tree that says nothing follows
+  // `Collection.valuationMethod`.
+  valuationMethod      String?
   // Grouping-only areas (e.g. "Europe") have `assignable = false`: they organize child
   // areas but cannot themselves receive Issues/stamps directly. Leaf areas that hold
   // material have `assignable = true`. Defaults true. Mirrors `Location.assignable` (#56, #263).
@@ -3723,11 +3736,9 @@ model Item {
   // Base-currency cost-basis snapshot (ADR-0009 §2/§3). Null = pending (lot still open,
   // or the copy entered via a channel that has not written a cost yet).
   costBasis           Decimal? @db.Decimal(10, 2)
-  // The collector's own value for a **multi-stamp copy** (#747, ADR-0044 §6): an amount and the
-  // currency it was stated in, both or neither (CHECK `item_explicit_value_pair`). The catalogue grid
-  // resolves nothing for a carrier, so this is the only figure one has — and it is explicit: the sum
-  // of the components is a suggestion the Valuation dialog offers, never written here unaccepted.
-  // Read only while `stampCount` > 1; an ordinary copy is valued from the catalogue as before.
+  // The value the collector recorded on a multi-stamp copy before #2359 computed it (#747). **Read by
+  // nothing but the boot conversion** (`piece-value-conversion.ts`), which moves each onto an amount
+  // modifier and clears it; a later migration drops both columns.
   explicitValue         Decimal? @db.Decimal(10, 2)
   explicitValueCurrency String?
   // How much this copy's faults take off its value (#1560): a whole percentage, 1–100 (CHECK
@@ -3742,6 +3753,11 @@ model Item {
   valueModifierPercent  Int?
   valueModifierAmount   Decimal? @db.Decimal(10, 2)
   valueModifierNote     String?
+  // How this piece was franked and posted (#2359; ADR-0076): `rate_correct` (the default),
+  // `philatelic_posted` or `not_posted` (CHECK). Read only when the copy is a piece on a cover.
+  franking              String   @default("rate_correct")
+  // This copy's own valuation method (#2359), winning over its area's; null follows the area.
+  valuationMethod       String?
   // How many variant trees this copy's **candidate set** spans (#1651, ADR-0065): 0 for an ordinary
   // copy, 1 when every candidate climbs variant edges to one root, 2+ when they do not. A copy whose
   // candidates lie in several trees counts towards no completeness, and this column keeps that a flat

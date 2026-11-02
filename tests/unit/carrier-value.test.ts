@@ -4,25 +4,19 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import {
   carrierComponentRows,
-  carrierValuationOf,
-  parseExplicitValueInput,
+  pieceCopyOf,
   sumCarrierComponents,
   type CarrierEntry,
 } from "../../src/lib/carrier-value";
-import {
-  aggregateHoldings,
-  valuateCopy,
-  valuateExplicitValue,
-  type CopyValuation,
-} from "../../src/lib/valuation";
+import { valuateCopy } from "../../src/lib/valuation";
 
-// The value of a multi-stamp copy (#747; ADR-0044 §6).
+// A piece's stamps at their used prices (#747, #2359; ADR-0044 §6) — the list the Valuation window
+// shows, and what *Sum of used* adds up.
 //
-// What is pinned is the **suggestion's rule** end to end — each component keyed at the copy's
-// condition, the entry's format and no certificate, valued by the very `valuateCopy` every copy is
-// valued by, multiplied by the entry's quantity and summed — and the two things the suggestion must
-// never do: contribute a silent zero for a stamp with no price, or become the copy's value without
-// the collector recording it. The recorded value's own rule (`valuateExplicitValue`) sits beside it.
+// What is pinned is the rule end to end — each component keyed at the copy's condition, the entry's
+// format and no certificate, valued by the very `valuateCopy` every copy is valued by, multiplied by
+// the entry's quantity and summed — and the one thing it must never do: contribute a silent zero for
+// a stamp with no price. The methods themselves are `piece-valuation.test.ts`.
 
 const D = (n: number): Decimal => n as unknown as Decimal;
 
@@ -89,7 +83,7 @@ describe("carrierComponentRows — the key each component is priced on", () => {
       certificateStatusId: null,
       formatId: BLK4,
       unknownVariant: false,
-      carrier: null,
+      copy: null,
       faultReductionPercent: null,
       valueModifier: null,
       candidateStampIds: null,
@@ -171,79 +165,18 @@ describe("sumCarrierComponents — the suggested value", () => {
   });
 });
 
-describe("valuateExplicitValue — a carrier's recorded value", () => {
-  it("is unpriced, not zero, with nothing recorded", () => {
-    const v = valuateExplicitValue(null, "EUR", noRates);
-    assert.equal(v.unpriced, true);
-    assert.equal(v.baseAmount, null);
-    assert.equal(v.explicit, false);
-  });
-
-  it("is the recorded figure, marked explicit and never uncertain", () => {
-    const v = valuateExplicitValue({ amount: "120.00", currency: "EUR" }, "EUR", noRates);
-    assert.equal(v.unpriced, false);
-    assert.equal(v.amount, "120.00");
-    assert.equal(v.baseAmount, 120);
-    assert.equal(v.explicit, true);
-    assert.equal(v.uncertain, false);
-    assert.equal(v.catalogNameId, null);
-  });
-
-  it("converts to base like a catalogue price, and reports no base figure without a rate", () => {
-    const converted = valuateExplicitValue({ amount: "100.00", currency: "PLN" }, "EUR", new Map([["PLN", 0.25]]));
-    assert.equal(converted.baseAmountDisplay, "25.00");
-    const stuck = valuateExplicitValue({ amount: "100.00", currency: "PLN" }, "EUR", noRates);
-    assert.equal(stuck.unpriced, false);
-    assert.equal(stuck.baseAmount, null);
-  });
-
-  it("enters a holdings total as priced, and an unrecorded carrier as unpriced", () => {
-    const valuations: CopyValuation[] = [
-      valuateExplicitValue({ amount: "30.00", currency: "EUR" }, "EUR", noRates),
-      valuateExplicitValue(null, "EUR", noRates),
-    ];
-    const total = aggregateHoldings(valuations, "EUR");
-    assert.equal(total.totalBaseAmount, "30.00");
-    assert.equal(total.pricedCount, 1);
-    assert.equal(total.unpricedCount, 1);
-  });
-});
-
-describe("carrierValuationOf — which copies are valued at a recorded figure", () => {
-  it("is null for an ordinary copy, even with a figure left in its row", () => {
-    assert.equal(
-      carrierValuationOf({ stampCount: 1, explicitValue: "50.00", explicitValueCurrency: "EUR" }),
-      null
-    );
-  });
-
-  it("carries the recorded figure for a carrier, and none when nothing is recorded", () => {
+describe("pieceCopyOf — what a copy row hands the valuation", () => {
+  it("reads the franking and the copy's own method", () => {
     assert.deepEqual(
-      carrierValuationOf({ stampCount: 3, explicitValue: "50.5", explicitValueCurrency: "EUR" }),
-      { explicitValue: { amount: "50.50", currency: "EUR" } }
+      pieceCopyOf({ id: "i1", stampCount: 3, franking: "not_posted", valuationMethod: "fischer" }),
+      { itemId: "i1", stampCount: 3, franking: "not_posted", method: "fischer" }
     );
+  });
+
+  it("reads an unknown value back as the default, and no method as following the area", () => {
     assert.deepEqual(
-      carrierValuationOf({ stampCount: 2, explicitValue: null, explicitValueCurrency: null }),
-      { explicitValue: null }
+      pieceCopyOf({ id: "i2", stampCount: 1, franking: "bogus", valuationMethod: null }),
+      { itemId: "i2", stampCount: 1, franking: "rate_correct", method: null }
     );
-  });
-});
-
-describe("parseExplicitValueInput", () => {
-  it("reads a blank amount as clearing the value", () => {
-    assert.deepEqual(parseExplicitValueInput("  ", "EUR"), { ok: true, value: null });
-  });
-
-  it("normalises the amount and the currency", () => {
-    assert.deepEqual(parseExplicitValueInput("12,5", "pln"), {
-      ok: true,
-      value: { amount: "12.50", currency: "PLN" },
-    });
-  });
-
-  it("refuses a negative amount, a non-number and a missing currency", () => {
-    assert.equal(parseExplicitValueInput("-1", "EUR").ok, false);
-    assert.equal(parseExplicitValueInput("abc", "EUR").ok, false);
-    assert.equal(parseExplicitValueInput("10", "").ok, false);
   });
 });

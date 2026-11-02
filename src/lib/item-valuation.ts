@@ -7,18 +7,29 @@ import {
   safeRateMap,
 } from "./pricing";
 import type { RawCatalogPrice } from "./catalog-price";
-import { makeFormatFactorLookup } from "./format-pricing";
+import { makeFormatFactorLookup, makeStillValidLookup } from "./format-pricing";
+import { isStillValidCoverKind } from "./still-valid-postage";
+import { PIECE_COPY_SELECT, pieceCopyOf, type PieceCopyInput } from "./carrier-value";
+import { isCoverKind, type CoverKind } from "./cover-kind";
 import {
-  CARRIER_VALUATION_SELECT,
-  carrierValuationOf,
-  type CarrierValuationInput,
-} from "./carrier-value";
+  DEFAULT_VALUATION_METHOD,
+  isPiece,
+  isPieceKind,
+  isValuationMethod,
+  mostExpensiveStamp,
+  resolveMethod,
+  valuePiece,
+  type MethodArea,
+  type PieceComponent,
+  type PieceKind,
+  type ValuationMethod,
+} from "./piece-valuation";
 import {
   applyFaultReduction,
   applyValueModifier,
   valuateCandidateCopy,
   valuateCopy,
-  valuateExplicitValue,
+  valuatePiece,
   type CopyValuation,
   type ValueModifier,
 } from "./valuation";
@@ -49,19 +60,20 @@ export interface ValuationRow {
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
   /**
-   * Non-null exactly when the row is a **multi-stamp copy** (#747; ADR-0044 §6), carrying the value
-   * the collector recorded on it (null when none). Such a copy is a copy of none of its stamps (#745),
-   * so the catalogue is not consulted for it at all: it is valued at that figure, or it is unpriced.
+   * Non-null exactly when the row is a **copy**: what decides whether it is a **piece** (#2359;
+   * ADR-0076) — several stamps on it, or a format of kind *On cover* or *On piece* — and how one is
+   * valued, its franking and its own method. A piece is valued by its method from its stamps' prices,
+   * never from the leading stamp's cell of the grid.
    *
    * Required rather than optional, and that is the point: every caller has to say whether its row is
-   * a copy and, if so, whether it is a carrier — an omitted field would quietly value a cover at its
-   * leading stamp. A row that is not a copy (an auction lot line, a want key, a trade receive line, a
-   * carrier's own component) passes `null`. Build it from a copy with {@link carrierValuationOf}.
+   * a copy — an omitted field would quietly value a cover at its leading stamp. A row that is not a
+   * copy (an auction lot line, a want key, a trade receive line, a piece's own component) passes
+   * `null`. Build it from a copy with {@link copyValuationOf}.
    */
-  carrier: CarrierValuationInput | null;
+  copy: PieceCopyInput | null;
   /**
    * The percentage this **copy's** faults take off its value (#1560), or null for none — and null for
-   * every row that is not a copy. Required for `carrier`'s reason: a copy reader that forgot it would
+   * every row that is not a copy. Required for `copy`'s reason: a copy reader that forgot it would
    * quietly value a faulty piece at the full figure. Build both from a copy with
    * {@link copyValuationOf}.
    */
@@ -69,30 +81,27 @@ export interface ValuationRow {
   /**
    * The modifier on this **copy's** catalogue value (#2357) — a percentage, an amount and a note — or
    * null for none and for every row that is not a copy. Applied before `faultReductionPercent`.
-   * Required for `carrier`'s reason; built from a copy by {@link copyValuationOf}.
+   * Required for `copy`'s reason; built from a copy by {@link copyValuationOf}.
    */
   valueModifier: ValueModifier | null;
   /**
    * The copy's **candidate set** (#1651, ADR-0065) — two or more stamps it might be — or null for an
    * ordinary copy and for every row that is not a copy. With a set, the copy is valued over its
    * candidates (`valuateCandidateCopy`) and `stampId` — the set's pointer — is not priced at all.
-   * Required for `carrier`'s reason; built from a copy by {@link copyValuationOf}.
+   * Required for `copy`'s reason; built from a copy by {@link copyValuationOf}.
    */
   candidateStampIds: readonly string[] | null;
 }
 
 // Pure, and so living in `carrier-value.ts` where the unit suite can reach them; re-exported so every
 // copy reader takes the select and the builder from the module it takes `valuateItemRows` from.
-export {
-  CARRIER_VALUATION_SELECT,
-  carrierValuationOf,
-  type CarrierValuationInput,
-} from "./carrier-value";
+export { PIECE_COPY_SELECT, pieceCopyOf, type PieceCopyInput } from "./carrier-value";
 
-/** The columns {@link copyValuationOf} reads — spread into a copy's `select`: what a carrier is
- *  valued at (#747), what the copy's modifier adjusts (#2357) and what its faults take off (#1560). */
+/** The columns {@link copyValuationOf} reads — spread into a copy's `select`: whether it is a piece
+ *  and how one is valued (#2359), what the copy's modifier adjusts (#2357) and what its faults take
+ *  off (#1560). */
 export const COPY_VALUATION_SELECT = {
-  ...CARRIER_VALUATION_SELECT,
+  ...PIECE_COPY_SELECT,
   faultReductionPercent: true,
   valueModifierPercent: true,
   valueModifierAmount: true,
@@ -103,7 +112,7 @@ export const COPY_VALUATION_SELECT = {
 /** The two copy-only fields of a {@link ValuationRow}, read off a copy selected with
  *  {@link COPY_VALUATION_SELECT}. Spread into the row, so a copy reader states both in one place. */
 export function copyValuationOf(
-  row: Parameters<typeof carrierValuationOf>[0] & {
+  row: Parameters<typeof pieceCopyOf>[0] & {
     faultReductionPercent: number | null;
     valueModifierPercent: number | null;
     /** A Prisma `Decimal` as read, or anything else that prints as a number. */
@@ -113,10 +122,10 @@ export function copyValuationOf(
   }
 ): Pick<
   ValuationRow,
-  "carrier" | "faultReductionPercent" | "valueModifier" | "candidateStampIds"
+  "copy" | "faultReductionPercent" | "valueModifier" | "candidateStampIds"
 > {
   return {
-    carrier: carrierValuationOf(row),
+    copy: pieceCopyOf(row),
     faultReductionPercent: row.faultReductionPercent,
     valueModifier: valueModifierOf(row),
     candidateStampIds: row.candidates.length > 1 ? row.candidates.map((c) => c.stampId) : null,
@@ -188,31 +197,86 @@ export async function valuateItemRows(
     getCollectionBaseCurrency(collectionId),
   ]);
 
-  // A multi-stamp copy is valued at what the collector recorded and never from the catalogue (#747),
-  // so its stamps are not loaded at all: reading them would be the first step towards pricing the
-  // piece as its leading stamp, which is the claim #745 removes.
-  const catalogRows = rows.filter((r) => r.carrier === null);
+  // The format dictionary's kinds (#2359): which copy formats make a copy a piece, and the reserved
+  // rows (#2356) a piece's stamps — and anything priced in a piece format — are priced at.
+  const formats = await prisma.stampFormat.findMany({
+    where: { collectionId, OR: [{ pieceKind: { not: null } }, { coverKind: { not: null } }] },
+    select: { id: true, pieceKind: true, coverKind: true },
+  });
+  const pieceKindByFormat = new Map<string, PieceKind>();
+  const coverFormatId = new Map<CoverKind, string>();
+  const coverKindByFormat = new Map<string, CoverKind>();
+  for (const f of formats) {
+    if (isPieceKind(f.pieceKind)) pieceKindByFormat.set(f.id, f.pieceKind);
+    if (isCoverKind(f.coverKind)) {
+      coverFormatId.set(f.coverKind, f.id);
+      coverKindByFormat.set(f.id, f.coverKind);
+    }
+  }
+  const kindOf = (formatId: string | null) =>
+    formatId ? (pieceKindByFormat.get(formatId) ?? null) : null;
+  /** A format of a kind has no prices of its own (#2359): they are the stamp's *Cover EF* or *On
+   *  piece* prices, so a want, a lot line or a trade line in it is priced there. */
+  const priceFormat = (formatId: string | null) => {
+    const kind = kindOf(formatId);
+    if (kind === null) return formatId;
+    return coverFormatId.get(kind === "on_cover" ? "cover_ef" : "on_piece") ?? formatId;
+  };
+
+  // A piece is valued by its method from its stamps' prices (#2359), never as its leading stamp —
+  // so its own `stampId` is not priced, its entries are.
+  const pieceRows = rows.filter(
+    (r) => r.copy !== null && isPiece(r.copy.stampCount, kindOf(r.formatId))
+  );
+  const pieceIds = new Set(pieceRows.map((r) => r.id));
+  const catalogRows = rows.filter((r) => !pieceIds.has(r.id));
+  const entries = pieceRows.length
+    ? await prisma.itemStamp.findMany({
+        where: { itemId: { in: pieceRows.map((r) => r.copy!.itemId) } },
+        orderBy: [{ itemId: "asc" }, { sortOrder: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          itemId: true,
+          stampId: true,
+          quantity: true,
+          formatId: true,
+          stamp: { select: { variants: { select: VARIANT_FLAG_SELECT } } },
+        },
+      })
+    : [];
+  const entriesByItem = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const list = entriesByItem.get(e.itemId);
+    if (list) list.push(e);
+    else entriesByItem.set(e.itemId, [e]);
+  }
 
   // A copy with a candidate set (#1651) is valued over its candidates, any of which may be an umbrella
   // itself — so their descendants are read too, and which of them is an umbrella is told by the tree.
   const candidateIds = new Set(catalogRows.flatMap((r) => r.candidateStampIds ?? []));
-  const unknownStampIds = new Set(
-    catalogRows.filter((r) => r.unknownVariant && !r.candidateStampIds).map((r) => r.stampId)
-  );
+  const unknownStampIds = new Set([
+    ...catalogRows.filter((r) => r.unknownVariant && !r.candidateStampIds).map((r) => r.stampId),
+    ...entries.filter((e) => isUnknownVariantStamp(e.stamp)).map((e) => e.stampId),
+  ]);
   const descendantsByStamp = await buildDescendantMap(
     collectionId,
     new Set([...unknownStampIds, ...candidateIds])
   );
 
-  // Every stamp whose prices/area we must load: the copies' own stamps plus the
-  // descendant variants of any unknown-variant copy, and the candidates of any set.
+  // Every stamp whose prices/area we must load: the copies' own stamps, the stamps on every piece,
+  // the descendant variants of any unknown-variant one, and the candidates of any set.
   const stampIds = new Set<string>(candidateIds);
   for (const r of catalogRows) stampIds.add(r.stampId);
+  for (const e of entries) stampIds.add(e.stampId);
   for (const set of descendantsByStamp.values()) {
     for (const id of set) stampIds.add(id);
   }
 
-  const [stamps, factorLookup] = await Promise.all([
+  // A stamp still valid for postage takes its EF, MeF and MiF prices from Michel's rule (#2358),
+  // which replaces the multiplier there — read whenever something here is priced on cover.
+  const readsCoverPrices =
+    pieceRows.length > 0 || catalogRows.some((r) => kindOf(r.formatId) === "on_cover");
+  const [stamps, factorLookup, methods, stillValidFor] = await Promise.all([
     prisma.stamp.findMany({
       where: { id: { in: [...stampIds] } },
       select: {
@@ -233,6 +297,8 @@ export async function valuateItemRows(
       },
     }),
     makeFormatFactorLookup(collectionId),
+    pieceRows.length ? loadValuationMethods(collectionId) : null,
+    readsCoverPrices ? makeStillValidLookup(collectionId) : null,
   ]);
 
   const pricesByStamp = new Map<string, RawCatalogPrice[]>();
@@ -262,10 +328,6 @@ export async function valuateItemRows(
     sortKeyByStamp.set(s.id, s.primaryCatalogSortKey);
   }
 
-  // A recorded value is converted to base by the very rates a catalogue price is.
-  for (const r of rows) {
-    if (r.carrier?.explicitValue) currencies.push(r.carrier.explicitValue.currency);
-  }
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
 
   const result = new Map<string, CopyValuation>();
@@ -278,9 +340,7 @@ export async function valuateItemRows(
   return result;
 
   function valuateRow(r: ValuationRow): CopyValuation {
-    if (r.carrier !== null) {
-      return valuateExplicitValue(r.carrier.explicitValue, baseCurrency, rates);
-    }
+    if (pieceIds.has(r.id)) return valuateWholePiece(r);
     if (r.candidateStampIds && r.candidateStampIds.length > 1) {
       // Each candidate valued as a copy of it would be — its own area's catalogue, its own issue's
       // format factor, its own variants when it is an umbrella — then the lowest of them (#1651).
@@ -305,6 +365,60 @@ export async function valuateItemRows(
     return valuateAt(r, r.stampId, r.unknownVariant);
   }
 
+  /**
+   * A piece by its method (#2359; `piece-valuation.ts`): each stamp on it read at the copy's
+   * condition and no certificate — its used price at the entry's own format and as a single, and its
+   * four prices on cover and on piece — in the collection currency, then the rule.
+   */
+  function valuateWholePiece(r: ValuationRow): CopyValuation {
+    const copy = r.copy!;
+    const kind = kindOf(r.formatId);
+    let uncertain = false;
+    const at = (stampId: string, unknownVariant: boolean, formatId: string | null) => {
+      const v = valuateAt(
+        { ...r, certificateStatusId: null, formatId, unknownVariant },
+        stampId,
+        unknownVariant
+      );
+      if (v.uncertain && !v.unpriced) uncertain = true;
+      return v.baseAmount;
+    };
+    const cover = (k: CoverKind, stampId: string, unknownVariant: boolean) => {
+      const id = coverFormatId.get(k);
+      return id ? at(stampId, unknownVariant, id) : null;
+    };
+    const components: PieceComponent[] = (entriesByItem.get(copy.itemId) ?? []).map((e) => {
+      const unknown = isUnknownVariantStamp(e.stamp);
+      return {
+        id: e.id,
+        stampId: e.stampId,
+        quantity: e.quantity,
+        multiple: e.formatId !== null,
+        used: at(e.stampId, unknown, e.formatId),
+        usedSingle: e.formatId === null ? null : at(e.stampId, unknown, null),
+        coverEf: cover("cover_ef", e.stampId, unknown),
+        coverMef: cover("cover_mef", e.stampId, unknown),
+        coverMif: cover("cover_mif", e.stampId, unknown),
+        onPiece: cover("on_piece", e.stampId, unknown),
+      };
+    });
+    for (const c of components) if (!c.multiple) c.usedSingle = c.used;
+
+    const top = mostExpensiveStamp(components);
+    const resolved = resolveMethod(
+      copy.method,
+      methods!.areas,
+      top ? (areaByStamp.get(top) ?? null) : null,
+      methods!.collection
+    );
+    return valuatePiece(
+      valuePiece({ kind, franking: copy.franking, method: resolved.method, components }),
+      { method: resolved.method, methodSource: resolved.source, franking: copy.franking, kind },
+      uncertain,
+      baseCurrency
+    );
+  }
+
   /** `r`'s condition, certificate and format, valued as a copy of `stampId`. */
   function valuateAt(r: ValuationRow, stampId: string, unknownVariant: boolean): CopyValuation {
     const descendants = unknownVariant
@@ -312,18 +426,24 @@ export async function valuateItemRows(
           (id) => isVariantByStamp.get(id) ?? false
         )
       : null;
+    const formatId = priceFormat(r.formatId);
+    const areaId = areaByStamp.get(stampId) ?? null;
+    const issueId = issueByStamp.get(stampId) ?? null;
+    // Michel's rule for a still-valid stamp (#2358), on a cover price read in the used condition.
+    const stillValid =
+      stillValidFor && formatId && isStillValidCoverKind(coverKindByFormat.get(formatId))
+        ? stillValidFor(areaId, issueId)
+        : null;
     return valuateCopy({
       conditionId: r.conditionId,
       certificateStatusId: r.certificateStatusId,
-      formatId: r.formatId,
+      formatId,
       // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
       // one, is scaled by the same rule, since it shares the umbrella's issue and area.
-      formatFactor: factorLookup(
-        r.formatId,
-        areaByStamp.get(stampId) ?? null,
-        issueByStamp.get(stampId) ?? null,
-        r.conditionId
-      ),
+      formatFactor:
+        stillValid && stillValid.usedConditionId === r.conditionId
+          ? stillValid
+          : factorLookup(formatId, areaId, issueId, r.conditionId),
       unknownVariant,
       primaryCatalogNameId: primaryCatalogByStamp.get(stampId) ?? null,
       ownPrices: pricesByStamp.get(stampId) ?? [],
@@ -343,6 +463,28 @@ export async function valuateItemRows(
       rates,
     });
   }
+}
+
+/** The collection's valuation method and every area's own (#2359), for {@link resolveMethod}. */
+async function loadValuationMethods(
+  collectionId: string
+): Promise<{ collection: ValuationMethod; areas: Map<string, MethodArea> }> {
+  const [collection, areas] = await Promise.all([
+    prisma.collection.findUniqueOrThrow({
+      where: { id: collectionId },
+      select: { valuationMethod: true },
+    }),
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: { id: true, parentId: true, valuationMethod: true },
+    }),
+  ]);
+  return {
+    collection: isValuationMethod(collection.valuationMethod)
+      ? collection.valuationMethod
+      : DEFAULT_VALUATION_METHOD,
+    areas: new Map(areas.map((a) => [a.id, a])),
+  };
 }
 
 /** Value a set of copies by id, resolving each copy's condition, certificate, and

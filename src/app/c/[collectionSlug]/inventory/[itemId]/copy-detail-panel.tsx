@@ -377,9 +377,9 @@ export function CopyDetailPanel({
                     <MissingFigure label="Pending" reason={costPendingHint(null)} />
                   ) : null}
                 </Field>
-                {/* A piece carrying several stamps is priced by no catalog (#745); its figure is the
-                    one recorded on it (#747), and the label must not say otherwise. */}
-                <Field label={item.multiStamp ? "Recorded value" : "Catalog value"}>
+                {/* A piece's figure is computed by its valuation method (#2359), not read off one
+                    catalogue cell, and the label must not say otherwise. */}
+                <Field label={value.piece ? "Computed value" : "Catalog value"}>
                   {value.unpriced ? (
                     value.mark ? (
                       <CatalogPriceMarkText mark={value.mark} full rolledUp={value.uncertain} />

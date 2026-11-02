@@ -232,7 +232,8 @@ every place that accepts a format for a copy, a component, a want, an acceptance
 line, an auction line, a lot or a price observation matches `COPY_FORMAT_WHERE`. They are not the
 collector's to rename, reorder or delete — they are what the catalogues print. Their abbreviation is
 their name, so `Piece` stays free for a fragment format and the agent API's name matching stays
-unambiguous. Nothing reads them for a copy's value yet; how a piece is valued from them is #2359.
+unambiguous. How a piece is valued from them is [ADR-0076](0076-piece-valuation-methods.md) (#2359),
+which also gives a copy format a *kind* — on cover, on piece — whose own prices are these rows'.
 
 ### 11. A still-valid stamp's cover prices follow Michel's rule, not a multiplier (#2358)
 

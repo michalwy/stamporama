@@ -59,6 +59,9 @@
 //   - the Facebook post-of-one titles (#2068) — once, at boot: every untitled post holding one offer
 //     takes that offer's title, as a post of one now does when it goes up. The display title is
 //     built in TypeScript, so the same reasoning as the freeze; one query on every later boot.
+//   - the recorded piece values (#2359) — once, at boot: every value recorded on a piece (#747) moves
+//     onto its amount modifier, so the piece keeps its value now that a method computes it. The method
+//     reads the catalogue in TypeScript, so the same reasoning; one query on every later boot.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -85,6 +88,7 @@ import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
 import { startAuctionReminderSweep } from "@/lib/auction-reminder-sweep";
 import { freezeUnfrozenFacebookPosts } from "@/lib/facebook-auctions";
 import { syncFollowingPostTitles } from "@/lib/offers";
+import { convertRecordedPieceValues } from "@/lib/piece-value-conversion";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -121,6 +125,24 @@ export async function start(): Promise<void> {
     if (titled > 0) console.log(`[facebook] brought ${titled} post(s) of one offer in step with the offer's title`);
   } catch (err) {
     console.error("[facebook] titling posts of one offer failed", err);
+  }
+
+  // A piece's recorded value (#747) moves onto its amount modifier now that its method values it
+  // (#2359), so no piece is worth a different figure on the day.
+  try {
+    const conversion = await convertRecordedPieceValues();
+    if (conversion.moved + conversion.cleared > 0) {
+      console.log(
+        `[valuation] moved ${conversion.moved} recorded piece value(s) onto modifiers, cleared ${conversion.cleared} unread one(s)`
+      );
+    }
+    for (const { collectionId, itemNos } of conversion.kept) {
+      console.log(
+        `[valuation] kept the recorded value of ${itemNos.length} piece(s) in collection ${collectionId} (#${itemNos.join(", #")}): the method prices nothing on them, or their currency has no rate`
+      );
+    }
+  } catch (err) {
+    console.error("[valuation] moving recorded piece values onto modifiers failed", err);
   }
 
   // Abandoned staging, both kinds, in one pass on one TTL: a dropped-but-unsaved photo (#112) and a

@@ -6,6 +6,7 @@ import {
   type TranslationValueMap,
 } from "./translations";
 import { COVER_FORMATS, isCoverKind, sortPriceFormats, type CoverKind } from "./cover-kind";
+import { isPieceKind, type PieceKind } from "./piece-valuation";
 
 // The physical-format dictionary — pairs, blocks, strips. Same shape and lifecycle as
 // `conditions.ts`: seeded on collection creation, then fully the collector's to edit.
@@ -77,6 +78,9 @@ export interface StampFormatData {
   sortOrder: number;
   /** Set on the four reserved cover-price rows (#2356); null on a format a copy can be in. */
   coverKind: CoverKind | null;
+  /** What a copy in this format is (#2359): on cover, on piece, or neither. A format with a kind has
+   *  no prices of its own and is left off every price surface. */
+  pieceKind: PieceKind | null;
 }
 
 /**
@@ -128,16 +132,25 @@ export async function seedDefaultFormats(
 /**
  * The collection's formats. A copy's only, unless `withCoverPrices` — then the four cover-price rows
  * follow them (#2356): what a **price** surface asks for (the price grids, the lists' price switcher,
- * the multipliers, the agent API's price tools), and nothing else.
+ * the multipliers, the agent API's price tools), and nothing else. A price surface leaves out the
+ * formats of a kind (#2359): a cover's or a fragment's prices are the stamp's *Cover EF* and *On
+ * piece*, never a tab of their own — unless `withPieceFormats`, for Settings, which lists every row.
  */
 export async function getStampFormats(
   ownerId: string,
   collectionId: string,
-  options: { withCoverPrices?: boolean } = {}
+  options: { withCoverPrices?: boolean; withPieceFormats?: boolean } = {}
 ): Promise<StampFormatData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.stampFormat.findMany({
-    where: { collectionId, ...(options.withCoverPrices ? {} : COPY_FORMAT_WHERE) },
+    where: {
+      collectionId,
+      ...(!options.withCoverPrices
+        ? COPY_FORMAT_WHERE
+        : options.withPieceFormats
+          ? {}
+          : { pieceKind: null }),
+    },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,
@@ -145,6 +158,7 @@ export async function getStampFormats(
       abbreviation: true,
       sortOrder: true,
       coverKind: true,
+      pieceKind: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
   });
@@ -156,6 +170,7 @@ export async function getStampFormats(
     abbreviationByLanguage: translationsByLanguage(f.translations, (t) => t.abbreviation),
     sortOrder: f.sortOrder,
     coverKind: isCoverKind(f.coverKind) ? f.coverKind : null,
+    pieceKind: isPieceKind(f.pieceKind) ? f.pieceKind : null,
   }));
   return sortPriceFormats(formats);
 }
@@ -186,7 +201,12 @@ async function syncFormatTranslations(
 export async function createStampFormat(
   ownerId: string,
   collectionId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    pieceKind?: PieceKind | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampFormat.findFirst({
@@ -200,6 +220,7 @@ export async function createStampFormat(
       name: data.name,
       abbreviation: data.abbreviation,
       sortOrder: last ? last.sortOrder + 1 : 0,
+      pieceKind: data.pieceKind ?? null,
     },
     select: { id: true },
   });
@@ -209,15 +230,68 @@ export async function createStampFormat(
 export async function updateStampFormat(
   ownerId: string,
   formatId: string,
-  data: { name: string; abbreviation: string; translations?: TranslationValueMap }
+  data: {
+    name: string;
+    abbreviation: string;
+    /** Absent leaves the kind alone. */
+    pieceKind?: PieceKind | null;
+    translations?: TranslationValueMap;
+  }
 ): Promise<void> {
   const collectionId = await resolveFormatCollection(formatId);
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.stampFormat.update({
-    where: { id: formatId },
-    data: { name: data.name, abbreviation: data.abbreviation },
+  await prisma.$transaction(async (tx) => {
+    await tx.stampFormat.update({
+      where: { id: formatId },
+      data: {
+        name: data.name,
+        abbreviation: data.abbreviation,
+        ...(data.pieceKind !== undefined ? { pieceKind: data.pieceKind } : {}),
+      },
+    });
+    if (data.pieceKind) await movePieceFormatPricesTx(tx, collectionId, formatId, data.pieceKind);
   });
   await syncFormatTranslations(formatId, data.translations);
+}
+
+/**
+ * A format given a kind has no prices of its own (#2359): what was typed on its tab is the stamp's
+ * single-franking price, so it moves to *Cover EF* — an *On piece* format's to *On piece* — and its
+ * multipliers with it. A price or multiplier whose key the reserved row already fills keeps the
+ * reserved row's, and the format's is dropped. The same rule the migration applied to the formats it
+ * gave a kind (`20261103090000_piece_valuation_method`).
+ */
+async function movePieceFormatPricesTx(
+  tx: DbTransaction,
+  collectionId: string,
+  formatId: string,
+  kind: PieceKind
+): Promise<void> {
+  const target = await tx.stampFormat.findFirst({
+    where: { collectionId, coverKind: kind === "on_cover" ? "cover_ef" : "on_piece" },
+    select: { id: true },
+  });
+  if (!target) return;
+  await tx.$executeRaw`
+    UPDATE "stamp_catalog_price" p SET "formatId" = ${target.id}
+     WHERE p."formatId" = ${formatId}
+       AND NOT EXISTS (
+         SELECT 1 FROM "stamp_catalog_price" q
+          WHERE q."stampId" = p."stampId" AND q."catalogEditionId" = p."catalogEditionId"
+            AND q."conditionId" = p."conditionId"
+            AND q."certificateStatusId" IS NOT DISTINCT FROM p."certificateStatusId"
+            AND q."formatId" = ${target.id})`;
+  await tx.stampCatalogPrice.deleteMany({ where: { formatId } });
+  await tx.$executeRaw`
+    UPDATE "stamp_format_factor" x SET "formatId" = ${target.id}
+     WHERE x."formatId" = ${formatId}
+       AND NOT EXISTS (
+         SELECT 1 FROM "stamp_format_factor" y
+          WHERE y."collectionId" = x."collectionId" AND y."formatId" = ${target.id}
+            AND y."collectionAreaId" IS NOT DISTINCT FROM x."collectionAreaId"
+            AND y."issueId" IS NOT DISTINCT FROM x."issueId"
+            AND y."conditionId" IS NOT DISTINCT FROM x."conditionId")`;
+  await tx.stampFormatFactor.deleteMany({ where: { formatId } });
 }
 
 /**

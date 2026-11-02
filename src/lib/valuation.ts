@@ -3,11 +3,22 @@ import {
   pickLowestByBase,
   baseValueOf,
   rolledUpCatalogPriceMark,
+  type FormatDerivation,
   type PickedPrice,
   type RawCatalogPrice,
 } from "./catalog-price";
 import type { CatalogPriceMark } from "./catalog-price-mark";
 import type { CostBasisTotal } from "./cost-basis";
+import type {
+  CoverUsage,
+  Franking,
+  MethodSource,
+  MissingPiecePrice,
+  PieceKind,
+  PieceRule,
+  PieceValueResult,
+  ValuationMethod,
+} from "./piece-valuation";
 
 // Pure copy-valuation domain logic (ADR-0007 §7). No Prisma / server-only, so it is
 // unit-testable in isolation; the server assembles the inputs in `items.ts`.
@@ -59,7 +70,7 @@ export interface CopyValuationInput {
   /** Multiplier deriving that format's price from the single's, when no explicit price for the
    *  format exists. Null when none applies — the copy is then unpriced rather than valued as a
    *  single, which would be a different stamp's figure. */
-  formatFactor?: number | null;
+  formatFactor?: FormatDerivation;
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
   /** Primary catalog name id resolved from the copy's stamp area (may be null). */
@@ -132,15 +143,15 @@ export interface CopyValuation {
    */
   unpricedVariantIds: string[];
   /**
-   * True when the figure is the collector's own **recorded value** for a multi-stamp copy (#747;
-   * ADR-0044 §6) rather than a catalogue price. Such a copy is a copy of none of its stamps (#745), so
-   * the catalogue has nothing to resolve for it and this is the only figure it can have. False for
-   * every catalogue valuation, and for an unpriced carrier — there is no figure to attribute.
+   * Set when the copy is a **piece** — a cover, a fragment, several stamps on one piece of paper —
+   * valued by its method from its stamps' prices (#2359; ADR-0076) rather than read off one cell of
+   * the catalogue grid: which method, from where, the franking, the rule, and the prices it missed.
+   * Null for every catalogue valuation.
    *
-   * Carried so a surface can say which of the two it is showing: *Catalog value* over a figure the
-   * collector typed would be the app putting words in a catalogue's mouth.
+   * Carried so a surface can say how the figure was reached: a piece's value is the catalogue's rule
+   * applied to several prices, and calling it one stamp's catalogue value would misstate it.
    */
-  explicit: boolean;
+  piece: PieceValuation | null;
   /**
    * Set when the figure above has been **lowered for the copy's faults** (#1560): the percentage
    * typed on the copy, and the figure as it stood before. Null for every unreduced valuation — no
@@ -321,43 +332,50 @@ export function applyValueModifier(
   };
 }
 
-/** An amount and the currency it was stated in — a multi-stamp copy's recorded value (#747). */
-export interface ExplicitValue {
-  /** 2-dp string, as stored. */
-  amount: string;
-  currency: string;
+/** How a piece's figure was reached (#2359) — {@link CopyValuation.piece}. */
+export interface PieceValuation {
+  method: ValuationMethod;
+  methodSource: MethodSource;
+  franking: Franking;
+  /** The format's kind; null when it has none and the piece is valued by the sum of used prices. */
+  kind: PieceKind | null;
+  rule: PieceRule;
+  usage: CoverUsage | null;
+  /** True when a price the rule reads is missing: the figure, if any, is a lower bound. */
+  partial: boolean;
+  missing: MissingPiecePrice[];
 }
 
 /**
- * Value a **multi-stamp copy** (#747; ADR-0044 §6). Pure.
- *
- * The figure is the recorded one, converted to base exactly as a catalogue price is, and nothing
- * else: with none recorded the copy is **unpriced**, never zero and never the sum of its stamps. The
- * sum is a suggestion the Valuation dialog offers ({@link sumCarrierComponents} in `carrier-value.ts`)
- * and enters no total until the collector accepts it — a figure nobody judged would be a claim the
- * app invented. Nor is it ever flagged `uncertain`: that word means *the variant is not identified*
- * (#238), which says nothing about a value somebody stated.
+ * A piece's valuation from its method's result (#2359; ADR-0076). Pure. The figure is in the
+ * collection currency, where the prices were compared; `uncertain` when a stamp on it is of unknown
+ * variant. A result with nothing priced is unpriced — never zero.
  */
-export function valuateExplicitValue(
-  value: ExplicitValue | null,
-  baseCurrency: string,
-  rates: Map<string, number | null>
+export function valuatePiece(
+  result: PieceValueResult,
+  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing">,
+  uncertain: boolean,
+  baseCurrency: string
 ): CopyValuation {
-  if (!value) return toValuation(null, false, baseCurrency, rates);
-  const amount = Number(value.amount);
-  const baseAmount = baseValueOf(amount, value.currency, baseCurrency, rates);
+  const amount = result.amount;
   return {
-    amount: amount.toFixed(2),
-    currency: value.currency,
-    baseAmount,
-    baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    amount: amount === null ? null : amount.toFixed(2),
+    currency: amount === null ? null : baseCurrency,
+    baseAmount: amount,
+    baseAmountDisplay: amount === null ? null : amount.toFixed(2),
     catalogNameId: null,
     editionYear: null,
-    uncertain: false,
-    unpriced: false,
+    uncertain,
+    unpriced: amount === null,
     sourceStampId: null,
     unpricedVariantIds: [],
-    explicit: true,
+    piece: {
+      ...piece,
+      rule: result.rule,
+      usage: result.usage,
+      partial: result.partial,
+      missing: result.missing,
+    },
     faultReduction: null,
     valueModifier: null,
     mark: null,
@@ -496,7 +514,7 @@ function toValuation(
       unpriced: true,
       sourceStampId: null,
       unpricedVariantIds,
-      explicit: false,
+      piece: null,
       faultReduction: null,
       valueModifier: null,
       mark,
@@ -514,7 +532,7 @@ function toValuation(
     unpriced: false,
     sourceStampId,
     unpricedVariantIds,
-    explicit: false,
+    piece: null,
     faultReduction: null,
     valueModifier: null,
     mark: null,

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { DEFAULT_VALUATION_METHOD, isValuationMethod } from "@/lib/piece-valuation";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
@@ -115,7 +116,10 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getCatalogSettingsTree(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     // With the cover prices (#2356): the multipliers take them; the formats list leaves them out.
-    getStampFormats(session.user.id, collection.id, { withCoverPrices: true }),
+    getStampFormats(session.user.id, collection.id, {
+      withCoverPrices: true,
+      withPieceFormats: true,
+    }),
     getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
@@ -213,6 +217,11 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           mailSettings={mailSettings}
           auctionReminder={auctionReminder}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
+          valuationMethod={
+            isValuationMethod(collection.valuationMethod)
+              ? collection.valuationMethod
+              : DEFAULT_VALUATION_METHOD
+          }
           photoStorageBytes={photoStorageBytes}
           // Beside the figure above and never added to it (#591): the storage figure is how much of
           // the collector's data is held, this is how much disk the instance is using as scratch.

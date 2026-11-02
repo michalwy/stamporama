@@ -44,6 +44,7 @@ function area(id: string, parentId: string | null, sortOrder: number, extra: Par
     symbol: null,
     coverSymbols: null,
     stillValidForPostage: null,
+    valuationMethod: null,
     assignable: true,
     sortOrder,
     stampCount: 0,

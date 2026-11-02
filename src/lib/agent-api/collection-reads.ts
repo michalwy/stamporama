@@ -12,6 +12,14 @@
 // rather than invented, and that a figure never travels without the coverage counts that say how
 // much of the collection is behind it.
 
+import type {
+  CoverUsage,
+  Franking,
+  PiecePrice,
+  PieceKind,
+  ValuationMethod,
+} from "../piece-valuation";
+import type { PieceValuation } from "../valuation";
 import type { CatalogPriceMark } from "../catalog-price-mark";
 import { agentPhotoUrl } from "./photo-url";
 import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
@@ -568,10 +576,10 @@ export interface AgentCopyValue {
   /** The copy links to a base stamp with variants, so the figure is the **lowest** of its priced
    *  variants rather than a price for this piece (#238/#616) — an estimate, and marked as one. */
   readonly uncertain?: boolean;
-  /** The copy carries several stamps, so no catalogue prices it (#745): the figure is the value the
-   *  collector **recorded** on the piece (#747), not a catalogue's. Absent on every catalogue figure,
-   *  and on a carrier with nothing recorded, which is `unpriced`. */
-  readonly recorded?: boolean;
+  /** The copy is a **piece** — several stamps on it, or a format on cover or on piece — so the figure
+   *  is computed by its valuation method from its stamps' prices (#2359), not read off one catalogue
+   *  cell. Absent on every catalogue figure. */
+  readonly piece?: AgentPieceValue;
   /** The percentage the copy's faults take off it (#1560). Present only when the figures above are
    *  already lowered by it; `fullAmount` is the figure before, in `currency`. */
   readonly faultReductionPercent?: number;
@@ -585,6 +593,26 @@ export interface AgentCopyValue {
   readonly catalogueAmount?: string;
 }
 
+/** How a piece's figure was reached (#2359; ADR-0076). */
+export interface AgentPieceValue {
+  /** `sum_of_used`, `michel`, `fischer` or `fischer_fp_fw_fm`. */
+  readonly method: ValuationMethod;
+  /** Where the method came from: the copy's own (`set_copy_valuation`), its most expensive stamp's
+   *  area (or the nearest ancestor setting one), or the collection's default. */
+  readonly methodFrom: "copy" | "area" | "collection";
+  readonly methodAreaId?: string;
+  /** `rate_correct`, `philatelic_posted` or `not_posted` — read only on a cover. */
+  readonly franking: Franking;
+  /** `on_cover` or `on_piece`, from the copy's format; absent when the format is neither, and the
+   *  piece is then valued as the sum of its stamps' used prices. */
+  readonly pieceKind?: PieceKind;
+  /** `ef`, `mef` or `mif` — how the cover is franked, counted in stamps. */
+  readonly usage?: CoverUsage;
+  /** A price the method reads is missing: the figure, if any, is a lower bound. */
+  readonly partial?: boolean;
+  readonly missing?: readonly { readonly stampId: string; readonly price: PiecePrice }[];
+}
+
 export interface CopyValueRow {
   readonly amount: string | null;
   readonly currency: string | null;
@@ -594,8 +622,8 @@ export interface CopyValueRow {
    *  frozen trade figure's reason below. */
   readonly mark?: CatalogPriceMark | null;
   readonly uncertain: boolean;
-  /** Optional because a trade's frozen figure is shaped like this too and records no such flag. */
-  readonly explicit?: boolean;
+  /** Optional because a trade's frozen figure is shaped like this too and records no such answer. */
+  readonly piece?: PieceValuation | null;
   /** Optional for the same reason: a frozen trade figure records no reduction of its own. */
   readonly faultReduction?: { readonly percent: number; readonly fullAmount: string } | null;
   /** Optional for the same reason. */
@@ -673,6 +701,21 @@ export function candidateSet(
   });
 }
 
+function agentPieceValue(piece: PieceValuation): AgentPieceValue {
+  return compact({
+    method: piece.method,
+    methodFrom: piece.methodSource.kind,
+    methodAreaId: piece.methodSource.kind === "area" ? piece.methodSource.areaId : undefined,
+    franking: piece.franking,
+    pieceKind: piece.kind ?? undefined,
+    usage: piece.usage ?? undefined,
+    partial: piece.partial || undefined,
+    missing: piece.missing.length
+      ? piece.missing.map((m) => ({ stampId: m.stampId, price: m.price }))
+      : undefined,
+  });
+}
+
 export function copyValue(row: CopyValueRow): AgentCopyValue {
   return compact({
     amount: row.amount ?? undefined,
@@ -681,7 +724,7 @@ export function copyValue(row: CopyValueRow): AgentCopyValue {
     unpriced: row.unpriced || undefined,
     catalogueMark: row.mark ?? undefined,
     uncertain: row.uncertain || undefined,
-    recorded: row.explicit || undefined,
+    piece: row.piece ? agentPieceValue(row.piece) : undefined,
     faultReductionPercent: row.faultReduction?.percent,
     fullAmount: row.faultReduction?.fullAmount,
     valueModifierPercent: row.valueModifier?.percent ?? undefined,

@@ -31,6 +31,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { DEFAULT_FRANKING, FRANKINGS, FRANKING_LABELS } from "@/lib/piece-valuation";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
 import { ReplacesButton } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
@@ -899,6 +900,40 @@ function IntakeConditionDialog({
                       </ul>
                     </div>
                   )}
+                  {/* How the piece was franked (#2359), next to the stamps on it: a piece is valued
+                      by its method, and on a cover the franking decides which price it reads. The
+                      scan-tile chain only, where the piece is on screen; a correction leaves the
+                      copy's own answer alone, to its Edit dialog. */}
+                  {onEditStamps &&
+                    !correctedCopyId &&
+                    selection.kind === "stamp" &&
+                    ((carriedStamps && carriedStamps.length > 0) ||
+                      formats.some((f) => f.id === formatId && f.pieceKind !== null)) && (
+                      <div
+                        style={{
+                          marginTop: "0.375rem",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          color: "var(--color-text-primary)",
+                        }}
+                      >
+                        <label htmlFor="intake-franking">Franking</label>
+                        <select
+                          id="intake-franking"
+                          name="franking"
+                          defaultValue={DEFAULT_FRANKING}
+                          disabled={isPending}
+                          style={{ ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" }}
+                        >
+                          {FRANKINGS.map((f) => (
+                            <option key={f} value={f}>
+                              {FRANKING_LABELS[f]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   {onEditStamps && selection.kind === "stamp" && (
                     <div style={{ marginTop: "0.375rem" }}>
                       <button

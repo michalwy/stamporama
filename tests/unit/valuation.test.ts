@@ -5,7 +5,7 @@ import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import {
   valuateCandidateCopy,
   valuateCopy,
-  valuateExplicitValue,
+  valuatePiece,
   aggregateHoldings,
   aggregateMarketHoldings,
   applyFaultReduction,
@@ -347,7 +347,7 @@ describe("aggregateHoldings", () => {
     unpriced,
     sourceStampId: null,
     unpricedVariantIds: [],
-    explicit: false,
+    piece: null,
     faultReduction: null,
     valueModifier: null,
     mark: null,
@@ -614,11 +614,21 @@ describe("applyFaultReduction", () => {
     assert.equal(v.faultReduction, null);
   });
 
-  it("lowers a multi-stamp copy's recorded value by the same rule (decided with the user)", () => {
-    const recorded = valuateExplicitValue({ amount: "80.00", currency: "EUR" }, "EUR", new Map());
-    const v = applyFaultReduction(recorded, 25);
+  it("lowers a piece's computed value by the same rule (#2359)", () => {
+    const computed = valuatePiece(
+      { amount: 80, rule: "sum_of_used", usage: null, partial: false, missing: [] },
+      {
+        method: "michel",
+        methodSource: { kind: "collection" },
+        franking: "rate_correct",
+        kind: "on_cover",
+      },
+      false,
+      "EUR"
+    );
+    const v = applyFaultReduction(computed, 25);
     assert.equal(v.amount, "60.00");
-    assert.equal(v.explicit, true);
+    assert.equal(v.piece?.method, "michel");
     assert.equal(v.faultReduction?.fullAmount, "80.00");
   });
 

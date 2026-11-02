@@ -16,8 +16,9 @@ import type { CopyEstimateInput } from "./offer-price-table";
 // ratio's own denominator read, so the two halves of the multiplication are about the same number.
 // The ratio is asked about the copy's own stamp, which is what the ladder buckets on.
 //
-// Only **held** copies count (#396), the holdings summary's rule, so a sold set adds nothing. A copy
-// valued at a **recorded** figure (#747) is left out: it has no catalogue value to correct.
+// Only **held** copies count (#396), the holdings summary's rule, so a sold set adds nothing. A piece
+// valued by its method (#2359) is left out: the ratio is learned from stamps, and a cover's value is
+// not a stamp's (the reason #2359 keeps pieces out of the ratio itself).
 //
 // Ownership is not checked here; every caller has already resolved the collection for its owner.
 
@@ -74,7 +75,7 @@ export async function estimateCopiesByGroup(
   const byId = new Map<string, CopyEstimateInput>();
   for (const row of held) {
     const valuation = valuations.get(row.id);
-    if (!ratios || !valuation || valuation.explicit || valuation.baseAmount === null) continue;
+    if (!ratios || !valuation || valuation.piece !== null || valuation.baseAmount === null) continue;
     const ratio = ratios.resolve({
       areaId: primaryAreaIdOf(row.stamp.stampAreaLinks),
       conditionId: row.conditionId,
