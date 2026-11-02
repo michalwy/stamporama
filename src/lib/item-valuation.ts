@@ -15,10 +15,12 @@ import {
 } from "./carrier-value";
 import {
   applyFaultReduction,
+  applyValueModifier,
   valuateCandidateCopy,
   valuateCopy,
   valuateExplicitValue,
   type CopyValuation,
+  type ValueModifier,
 } from "./valuation";
 import { childIsVariant, isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 
@@ -65,6 +67,12 @@ export interface ValuationRow {
    */
   faultReductionPercent: number | null;
   /**
+   * The modifier on this **copy's** catalogue value (#2357) — a percentage, an amount and a note — or
+   * null for none and for every row that is not a copy. Applied before `faultReductionPercent`.
+   * Required for `carrier`'s reason; built from a copy by {@link copyValuationOf}.
+   */
+  valueModifier: ValueModifier | null;
+  /**
    * The copy's **candidate set** (#1651, ADR-0065) — two or more stamps it might be — or null for an
    * ordinary copy and for every row that is not a copy. With a set, the copy is valued over its
    * candidates (`valuateCandidateCopy`) and `stampId` — the set's pointer — is not priced at all.
@@ -82,10 +90,13 @@ export {
 } from "./carrier-value";
 
 /** The columns {@link copyValuationOf} reads — spread into a copy's `select`: what a carrier is
- *  valued at (#747) and what the copy's faults take off (#1560). */
+ *  valued at (#747), what the copy's modifier adjusts (#2357) and what its faults take off (#1560). */
 export const COPY_VALUATION_SELECT = {
   ...CARRIER_VALUATION_SELECT,
   faultReductionPercent: true,
+  valueModifierPercent: true,
+  valueModifierAmount: true,
+  valueModifierNote: true,
   candidates: { select: { stampId: true } },
 } as const;
 
@@ -94,13 +105,38 @@ export const COPY_VALUATION_SELECT = {
 export function copyValuationOf(
   row: Parameters<typeof carrierValuationOf>[0] & {
     faultReductionPercent: number | null;
+    valueModifierPercent: number | null;
+    /** A Prisma `Decimal` as read, or anything else that prints as a number. */
+    valueModifierAmount: { toString(): string } | null;
+    valueModifierNote: string | null;
     candidates: readonly { stampId: string }[];
   }
-): Pick<ValuationRow, "carrier" | "faultReductionPercent" | "candidateStampIds"> {
+): Pick<
+  ValuationRow,
+  "carrier" | "faultReductionPercent" | "valueModifier" | "candidateStampIds"
+> {
   return {
     carrier: carrierValuationOf(row),
     faultReductionPercent: row.faultReductionPercent,
+    valueModifier: valueModifierOf(row),
     candidateStampIds: row.candidates.length > 1 ? row.candidates.map((c) => c.stampId) : null,
+  };
+}
+
+/** A copy's {@link ValueModifier} read off its three columns (#2357), or null when it has none. */
+export function valueModifierOf(row: {
+  valueModifierPercent: number | null;
+  valueModifierAmount: { toString(): string } | null;
+  valueModifierNote: string | null;
+}): ValueModifier | null {
+  if (row.valueModifierPercent === null && row.valueModifierAmount === null) return null;
+  return {
+    percent: row.valueModifierPercent,
+    amount:
+      row.valueModifierAmount === null
+        ? null
+        : Number(row.valueModifierAmount.toString()).toFixed(2),
+    note: row.valueModifierNote,
   };
 }
 
@@ -234,9 +270,10 @@ export async function valuateItemRows(
 
   const result = new Map<string, CopyValuation>();
   for (const r of rows) {
-    // A copy's faults lower whichever figure it has — recorded or catalogue — by the same rule
-    // (#1560), applied here and nowhere else so that no reader can value a faulty piece at full.
-    result.set(r.id, applyFaultReduction(valuateRow(r), r.faultReductionPercent));
+    // A copy's modifier adjusts whichever figure it has (#2357), and then its faults lower it
+    // (#1560) — in that order, applied here and nowhere else so that no reader can skip either.
+    const modified = applyValueModifier(valuateRow(r), r.valueModifier, baseCurrency, rates);
+    result.set(r.id, applyFaultReduction(modified, r.faultReductionPercent));
   }
   return result;
 

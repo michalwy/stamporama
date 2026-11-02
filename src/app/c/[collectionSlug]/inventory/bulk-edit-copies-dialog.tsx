@@ -22,6 +22,8 @@ import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { describeFaultReductionState, parseFaultReductionInput } from "@/lib/fault-reduction";
+import { describeValueModifierState, parseValueModifierInput } from "@/lib/value-modifier";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { InfoHint } from "@/app/c/[collectionSlug]/shared/info-hint";
 import {
   LocationRefField,
@@ -221,6 +223,11 @@ export function BulkEditCopiesDialog({
   const [removeFaultIds, setRemoveFaultIds] = useState<string[]>([]);
   const [reductionMode, setReductionMode] = useState<ReductionMode>("keep");
   const [reductionInput, setReductionInput] = useState("");
+  // The value modifier (#2357): the reduction's three answers, with its three fields under *Set to…*.
+  const [modifierMode, setModifierMode] = useState<ReductionMode>("keep");
+  const [modifierPercent, setModifierPercent] = useState("");
+  const [modifierAmount, setModifierAmount] = useState("");
+  const [modifierNote, setModifierNote] = useState("");
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   // Only asked for while a location is actually being chosen: *Leave as is* and *Clear* write no
   // ref at all, so there is nothing to suggest and nothing to collide with.
@@ -302,15 +309,24 @@ export function BulkEditCopiesDialog({
     reductionMode === "clear" ||
     (reductionMode === "set" && parsedReduction.ok && parsedReduction.value !== null);
   const reducedNow = copies.filter((c) => c.faultReductionPercent !== null).length;
+  const parsedModifier = parseValueModifierInput(modifierPercent, modifierAmount, modifierNote);
+  const modifierError =
+    modifierMode === "set" && !parsedModifier.ok ? parsedModifier.message : null;
+  const modifierAnswered =
+    modifierMode === "clear" ||
+    (modifierMode === "set" && parsedModifier.ok && parsedModifier.value !== null);
+  const modifiedNow = copies.filter((c) => c.valueModifier !== null).length;
   const canApply =
     !isPending &&
     reductionError === null &&
+    modifierError === null &&
     (locationAnswered ||
       changedFlags.length > 0 ||
       changedIdentity.length > 0 ||
       changesTags ||
       changesFaults ||
-      reductionAnswered);
+      reductionAnswered ||
+      modifierAnswered);
 
   return (
     <DialogShell
@@ -352,6 +368,10 @@ export function BulkEditCopiesDialog({
           if (reductionMode === "clear") changes.faultReductionPercent = null;
           if (reductionMode === "set" && parsedReduction.ok && parsedReduction.value !== null) {
             changes.faultReductionPercent = parsedReduction.value;
+          }
+          if (modifierMode === "clear") changes.valueModifier = null;
+          if (modifierMode === "set" && parsedModifier.ok && parsedModifier.value !== null) {
+            changes.valueModifier = parsedModifier.value;
           }
           onSubmit(changes);
         }}
@@ -522,6 +542,69 @@ export function BulkEditCopiesDialog({
                 <p style={HINT_STYLE}>
                   {describeFaultReductionState(reducedNow, count)}
                 </p>
+              </div>
+
+              {/* A catalogue exception the copies share (#2357): their catalog value × (1 + %) +
+                  amount, before the reduction above, with a note saying why. */}
+              <div>
+                <LabelWithError
+                  htmlFor="bulk-edit-value-modifier-percent"
+                  error={modifierError ?? undefined}
+                >
+                  Value modifier
+                </LabelWithError>
+                <Segmented
+                  options={REDUCTION_MODES}
+                  value={modifierMode}
+                  onChange={setModifierMode}
+                  disabled={isPending}
+                  ariaLabel="Value modifier"
+                />
+                {modifierMode === "set" && (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "6.5rem 7.5rem 1fr",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      marginTop: "0.625rem",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      <NumericInput
+                        kind="number"
+                        inputMode="text"
+                        id="bulk-edit-value-modifier-percent"
+                        aria-label="Modifier percentage"
+                        value={modifierPercent}
+                        onChange={(e) => setModifierPercent(e.target.value)}
+                        disabled={isPending}
+                        placeholder="e.g. 200"
+                        style={{ ...SELECT_STYLE, width: "100%", textAlign: "right" }}
+                      />
+                      <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                    </div>
+                    <NumericInput
+                      kind="amount"
+                      inputMode="text"
+                      aria-label="Modifier amount"
+                      value={modifierAmount}
+                      onChange={(e) => setModifierAmount(e.target.value)}
+                      disabled={isPending}
+                      placeholder="Amount"
+                      style={{ ...SELECT_STYLE, width: "100%", textAlign: "right" }}
+                    />
+                    <TextInput
+                      aria-label="Modifier note"
+                      value={modifierNote}
+                      onChange={(e) => setModifierNote(e.target.value)}
+                      disabled={isPending}
+                      placeholder="Note"
+                      style={{ ...SELECT_STYLE, width: "100%" }}
+                    />
+                  </div>
+                )}
+                <p style={HINT_STYLE}>{describeValueModifierState(modifiedNow, count)}</p>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>

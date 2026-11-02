@@ -41,6 +41,8 @@ import { parseTagEntries } from "@/lib/tag-entry";
 import { setItemFaultEntries } from "@/lib/faults";
 import { parseFaultEntries } from "@/lib/fault-entry";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
+import { parseValueModifierInput } from "@/lib/value-modifier";
+import type { ValueModifier } from "@/lib/valuation";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -90,6 +92,9 @@ interface ItemFields {
   /** The copy's value reduction for its faults (#1560), when the form carried the field; absent
    *  leaves it alone, blank or 0 clears it. */
   faultReductionPercent?: number | null;
+  /** The copy's value modifier (#2357), when the form carried its fields; absent leaves it alone,
+   *  blank figures clear it. */
+  valueModifier?: ValueModifier | null;
 }
 
 interface ParsedItemFields {
@@ -132,6 +137,17 @@ function parseItemFields(formData: FormData): ParsedItemFields {
     const reduction = parseFaultReductionInput(str(formData, "faultReductionPercent"));
     if (!reduction.ok) return { data, error: reduction.message };
     data.faultReductionPercent = reduction.value;
+  }
+  // The value modifier (#2357): the percentage field stands for all three, present-but-empty in
+  // both figures clearing it.
+  if (formData.has("valueModifierPercent")) {
+    const modifier = parseValueModifierInput(
+      str(formData, "valueModifierPercent"),
+      str(formData, "valueModifierAmount"),
+      str(formData, "valueModifierNote")
+    );
+    if (!modifier.ok) return { data, error: modifier.message };
+    data.valueModifier = modifier.value;
   }
 
   if (!stampId) return { data, error: "A stamp must be selected." };

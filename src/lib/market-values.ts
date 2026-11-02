@@ -348,6 +348,7 @@ export async function readStampMarketEvidence(
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
         faultReductionPercent: null,
+        valueModifier: null,
         candidateStampIds: null,
       }))
     ),
@@ -360,6 +361,7 @@ export async function readStampMarketEvidence(
       unknownVariant: isUnknownVariantStamp(row.stamp),
       carrier: null,
       faultReductionPercent: null,
+      valueModifier: null,
       candidateStampIds: null,
     })),
   ]);

@@ -68,6 +68,13 @@ type on the copy, in the **Value reduction** field beside **Faults** — see
 [Lowering a copy's value for its faults](inventory.md#lowering-a-copys-value-for-its-faults). The
 copy's own page shows it under **Value reduction**.
 
+A copy can also carry a **value modifier** — a percentage and an amount for a catalog exception such
+as a cancellation surcharge, with a note (see
+[Adjusting a copy's catalog value](inventory.md#adjusting-a-copys-catalog-value)). The two are
+separate fields and are applied in order: the catalog value is first adjusted by the modifier, and
+the value reduction is then taken off the result. A copy at 10.00 with *+200 %* and a 40 % reduction
+is worth 10.00 × 3 = 30.00, less 40 %: 18.00.
+
 ## Finding copies by fault
 
 The Copies list's **Faults** filter shows the copies carrying **any** of the faults you tick.

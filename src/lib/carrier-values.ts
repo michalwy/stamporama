@@ -5,6 +5,7 @@ import {
   COPY_VALUATION_SELECT,
   carrierValuationOf,
   valuateItemRows,
+  valueModifierOf,
   type ValuationRow,
 } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
@@ -86,6 +87,8 @@ export async function getCarrierValuation(
     // The piece's faults lower the recorded figure in every total (#1560); valued the same here, so
     // the dialog can say what the piece counts at beside what was recorded.
     faultReductionPercent: item.faultReductionPercent,
+    // …and so does its value modifier (#2357), before the faults.
+    valueModifier: valueModifierOf(item),
     // A carrier has no candidate set (#1651): a set is offered on a single-stamp copy only.
     candidateStampIds: null,
   };

@@ -20,14 +20,17 @@ import {
   isMissingCatalogPrice,
   type CopyValuation,
   type HoldingsSummary,
+  type ValueModifier,
 } from "./valuation";
 import {
   COPY_VALUATION_SELECT,
   copyValuationOf,
   valuateItemRows,
   valuateItemsByIds,
+  valueModifierOf,
   type ValuationRow,
 } from "./item-valuation";
+import { assertValueModifier, valueModifierColumns } from "./value-modifier";
 import {
   isInMemoryCopySort,
   sortCopySortRows,
@@ -544,6 +547,8 @@ export interface ItemCreateInput {
   /** How much this copy's faults take off its value (#1560): a whole percentage, 1–100, or null for
    *  none. Absent leaves it alone. Allowed on a copy with no listed faults. */
   faultReductionPercent?: number | null;
+  /** The modifier on this copy's catalogue value (#2357), or null for none. Absent leaves it alone. */
+  valueModifier?: ValueModifier | null;
   /** Two or more stamps the copy **might be** (#1651, ADR-0065), written in the create's own
    *  transaction; `stampId` is then only where the copy starts, re-pointed by the set. */
   candidateStampIds?: readonly string[];
@@ -595,6 +600,8 @@ export interface ItemUpdateInput {
   /** How much this copy's faults take off its value (#1560): a whole percentage, 1–100, or null for
    *  none. Absent leaves it alone. Allowed on a copy with no listed faults. */
   faultReductionPercent?: number | null;
+  /** The modifier on this copy's catalogue value (#2357), or null for none. Absent leaves it alone. */
+  valueModifier?: ValueModifier | null;
   /**
    * The stamps this copy carries, in the collector's order (#746) — **the whole list**, the leading
    * one included, or absent to leave the entries alone. Every other caller of this function has no
@@ -669,6 +676,7 @@ export async function createItem(
     await assertLotOpenInCollection(collectionId, data.lotId);
   }
   assertFaultReduction(data.faultReductionPercent);
+  assertValueModifier(data.valueModifier);
   const deliveryState = isDeliveryState(data.deliveryState) ? data.deliveryState : "delivered";
   const excludedPlatformIds = data.excludedPlatformIds
     ? await resolvePlatformIds(collectionId, data.excludedPlatformIds)
@@ -700,6 +708,7 @@ export async function createItem(
         lotId: data.lotId ?? null,
         deliveryState,
         faultReductionPercent: data.faultReductionPercent ?? null,
+        ...valueModifierColumns(data.valueModifier ?? null),
       },
       select: ITEM_SELECT,
     });
@@ -819,6 +828,7 @@ export async function updateItem(
     await assertLocationAssignable(collectionId, data.locationId);
   }
   assertFaultReduction(data.faultReductionPercent);
+  assertValueModifier(data.valueModifier);
   if (data.stamps) {
     // Read-only checks, and so before the transaction: a stamp from another collection or a
     // duplicated `(stamp, format)` has to reach the collector as a sentence rather than as a
@@ -837,7 +847,7 @@ export async function updateItem(
       : await resolvePlatformIds(collectionId, data.excludedPlatformIds);
 
   // `fields` is read key by key below, so the exclusions riding along in it reach no `update`.
-  const { variantChangeNote, candidateStampIds, ...fields } = data;
+  const { variantChangeNote, candidateStampIds, valueModifier, ...fields } = data;
   const updateData = {
     ...(fields.stampId !== undefined ? { stampId: fields.stampId } : {}),
     ...(fields.conditionId !== undefined ? { conditionId: fields.conditionId } : {}),
@@ -855,6 +865,7 @@ export async function updateItem(
     ...(fields.faultReductionPercent !== undefined
       ? { faultReductionPercent: fields.faultReductionPercent }
       : {}),
+    ...(valueModifier !== undefined ? valueModifierColumns(valueModifier) : {}),
     ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
     // A ref only makes sense with a location; clear it whenever the location is
     // cleared, and only persist a ref update when a location is present.
@@ -2045,6 +2056,9 @@ export interface ItemListItem {
    *  Already applied to {@link value}; carried for the copy dialog that edits it and for the market
    *  total, which lowers a key's median by it. */
   faultReductionPercent: number | null;
+  /** The modifier on this copy's catalogue value (#2357), or null for none. Already applied to
+   *  {@link value} (whose `valueModifier` says so); carried for the copy dialog that edits it. */
+  valueModifier: ValueModifier | null;
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -2422,6 +2436,7 @@ function toItemListItem(
     tags: orderTagSummaries(row.tags),
     faults: orderFaultSummaries(row.faults),
     faultReductionPercent: row.faultReductionPercent,
+    valueModifier: valueModifierOf(row),
     photos: row.photos
       .map((p) => ({
         id: p.id,
@@ -3027,7 +3042,11 @@ function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
     a.baseAmountDisplay === b.baseAmountDisplay &&
     // The group's shared figure carries its fault reduction (#1560), so the members must agree on it
     // too, or the row would mark — or fail to mark — a figure some of them do not have.
-    (a.faultReduction?.percent ?? null) === (b.faultReduction?.percent ?? null)
+    (a.faultReduction?.percent ?? null) === (b.faultReduction?.percent ?? null) &&
+    // …and its value modifier (#2357), for the same reason, note included: the row names it.
+    (a.valueModifier?.percent ?? null) === (b.valueModifier?.percent ?? null) &&
+    (a.valueModifier?.amount ?? null) === (b.valueModifier?.amount ?? null) &&
+    (a.valueModifier?.note ?? null) === (b.valueModifier?.note ?? null)
   );
 }
 

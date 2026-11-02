@@ -57,6 +57,8 @@ import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { FaultChips } from "@/app/c/[collectionSlug]/shared/fault-chip";
 import { FaultReductionMark } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
 import { faultReductionHint } from "@/lib/fault-reduction";
+import { ValueModifierMark } from "@/app/c/[collectionSlug]/shared/value-modifier-mark";
+import { valueModifierHint, valueModifierLabel } from "@/lib/value-modifier";
 import type { CopyValuation } from "@/lib/valuation";
 import { Icon } from "@/app/icons";
 import { candidateSetLabel } from "@/lib/candidate-set-rules";
@@ -324,6 +326,24 @@ export function CopyDetailPanel({
                 <Field label="Value reduction">
                   {item.faultReductionPercent !== null ? `${item.faultReductionPercent} %` : null}
                 </Field>
+                {/* The catalogue exception on this piece (#2357): the modifier with its note, and the
+                    catalogue figure it adjusts — the result is the Catalog value below. */}
+                <Field label="Value modifier">
+                  {item.valueModifier
+                    ? [
+                        valueModifierLabel(
+                          item.valueModifier,
+                          value.valueModifier ? value.currency : null
+                        ),
+                        item.valueModifier.note,
+                        value.valueModifier
+                          ? `catalogue ${value.valueModifier.fullAmount} ${value.currency}`
+                          : "no catalogue value to adjust",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : null}
+                </Field>
                 <Field label="Certificate">
                   {item.certificateStatusName ? (
                     <CertificateStatusChip
@@ -364,19 +384,38 @@ export function CopyDetailPanel({
                     value.mark ? (
                       <CatalogPriceMarkText mark={value.mark} full rolledUp={value.uncertain} />
                     ) : null
-                  ) : value.faultReduction ? (
-                    // Lowered for the copy's faults (#1560): the Copies row's mark, and the full
-                    // figure in the hover, from the same valuation.
+                  ) : value.faultReduction || value.valueModifier ? (
+                    // Adjusted by the copy's value modifier (#2357) and lowered for its faults
+                    // (#1560): the Copies row's marks, and the figures before each in the hover, from
+                    // the same valuation.
                     <Tooltip
-                      content={`Full ${faultReductionHint(
-                        value.faultReduction.fullAmount,
-                        value.currency,
-                        value.faultReduction.percent
-                      )}`}
+                      content={[
+                        value.valueModifier
+                          ? valueModifierHint(
+                              value.valueModifier.fullAmount,
+                              value.currency,
+                              value.valueModifier
+                            )
+                          : null,
+                        value.faultReduction
+                          ? `Full ${faultReductionHint(
+                              value.faultReduction.fullAmount,
+                              value.currency,
+                              value.faultReduction.percent
+                            )}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" — ")}
                     >
                       <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
                         {copyValueText(value, baseCurrency)}
-                        <FaultReductionMark percent={value.faultReduction.percent} />
+                        {value.valueModifier && (
+                          <ValueModifierMark modifier={value.valueModifier} currency={value.currency} />
+                        )}
+                        {value.faultReduction && (
+                          <FaultReductionMark percent={value.faultReduction.percent} />
+                        )}
                       </span>
                     </Tooltip>
                   ) : (

@@ -1,3 +1,5 @@
+import type { ValueModifier } from "@/lib/valuation";
+
 /**
  * The bulk change a set of copies is written with, client-side (#121/#565/#682).
  *
@@ -44,6 +46,9 @@ export interface BulkCopyChanges {
   /** The value reduction written on every picked copy for its faults (#1560): a whole percentage,
    *  or present-but-`null` to clear it. Absent leaves each copy's own. */
   faultReductionPercent?: number | null;
+  /** The value modifier written on every picked copy (#2357), or present-but-`null` to clear it.
+   *  Absent leaves each copy's own. */
+  valueModifier?: ValueModifier | null;
 }
 
 /** Serialize {@link BulkCopyChanges} onto a form, for both the id-list and scoped bulk actions.
@@ -74,5 +79,11 @@ export function appendBulkChanges(fd: FormData, changes: BulkCopyChanges): void 
   // Present-but-empty is the clear, the location's rule.
   if (changes.faultReductionPercent !== undefined) {
     fd.set("faultReductionPercent", changes.faultReductionPercent?.toString() ?? "");
+  }
+  // The modifier's three fields travel together; both figures empty is the clear.
+  if (changes.valueModifier !== undefined) {
+    fd.set("valueModifierPercent", changes.valueModifier?.percent?.toString() ?? "");
+    fd.set("valueModifierAmount", changes.valueModifier?.amount ?? "");
+    fd.set("valueModifierNote", changes.valueModifier?.note ?? "");
   }
 }

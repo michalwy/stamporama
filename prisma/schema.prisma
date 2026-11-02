@@ -3725,6 +3725,13 @@ model Item {
   // fault, and allowed without listed faults. Lowers every value of the copy — catalogue or recorded
   // value and market value — through `applyFaultReduction`; the stamp's catalogue prices are untouched.
   faultReductionPercent Int?
+  // A modifier on this copy's catalogue value (#2357): value × (1 + percent / 100) + amount, never
+  // below zero, applied before the fault reduction through `applyValueModifier`. The percentage is a
+  // whole number ≥ −100 and ≠ 0, the amount ≠ 0 and in the currency of the figure it adjusts; the note
+  // says why and exists only beside one of them (CHECKs `item_value_modifier_*`). Null is none.
+  valueModifierPercent  Int?
+  valueModifierAmount   Decimal? @db.Decimal(10, 2)
+  valueModifierNote     String?
   // How many variant trees this copy's **candidate set** spans (#1651, ADR-0065): 0 for an ordinary
   // copy, 1 when every candidate climbs variant edges to one root, 2+ when they do not. A copy whose
   // candidates lie in several trees counts towards no completeness, and this column keeps that a flat

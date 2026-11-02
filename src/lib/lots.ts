@@ -17,7 +17,8 @@ import {
 } from "./items";
 import { applyItemTagChanges, hasItemTagChanges } from "./tags";
 import { applyItemFaultChanges, hasItemFaultChanges } from "./faults";
-import { isFaultReduction } from "./valuation";
+import { isFaultReduction, type ValueModifier } from "./valuation";
+import { assertValueModifier, valueModifierColumns } from "./value-modifier";
 import {
   createLeadingEntriesTx,
   setItemStampsTx,
@@ -1883,6 +1884,9 @@ export interface LotBulkChanges {
   /** The value reduction for faults written on every targeted copy (#1560): a whole percentage from
    *  1 to 100, or present-but-`null` to clear it — a value on this axis, like the certificate's. */
   faultReductionPercent?: number | null;
+  /** The value modifier written on every targeted copy (#2357), or present-but-`null` to clear it —
+   *  a value on this axis, like the fault reduction. */
+  valueModifier?: ValueModifier | null;
 }
 
 /** The three identity axes a bulk change can re-state (#723), as a group: they are validated
@@ -1949,7 +1953,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
     !hasVariantChange(changes) &&
     !hasItemTagChanges(changes) &&
     !hasItemFaultChanges(changes) &&
-    changes.faultReductionPercent === undefined
+    changes.faultReductionPercent === undefined &&
+    changes.valueModifier === undefined
   );
 }
 
@@ -2022,6 +2027,13 @@ async function applyLotBulkChanges(
       await tx.item.updateMany({
         where: baseWhere,
         data: { faultReductionPercent: changes.faultReductionPercent },
+      });
+    }
+    if (changes.valueModifier !== undefined) {
+      assertValueModifier(changes.valueModifier);
+      await tx.item.updateMany({
+        where: baseWhere,
+        data: valueModifierColumns(changes.valueModifier),
       });
     }
     if (hasItemTagChanges(changes) || hasItemFaultChanges(changes)) {

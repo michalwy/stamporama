@@ -389,6 +389,37 @@ A lowered figure says so: the value carries an amber **−40 %**, and its hover 
 hover gives the total without the reductions. The figure you agreed with a trade partner from their
 catalog is not lowered — adjust that line with its own value if the faults should count there.
 
+### Adjusting a copy's catalog value
+
+Catalogs carry exceptions a price grid cannot hold: a surcharge for a particular cancellation
+(*+200 %*), a premium for a rare usage, a fixed addition for a feature. Record one on the copy with
+the **Value modifier** row of the copy dialog, under the faults and their reduction:
+
+- **Value modifier** — a whole percentage, positive or negative, from −100 up;
+- **Amount** — added after the percentage, and may be negative. It is in the **currency of the
+  copy's catalog value** — the catalog the copy is valued from — and is converted with it, so
+  *+200 € in Michel* stays what the catalog said;
+- **Modifier note** — why, for example *Stempel Danzig +200 %*, shown wherever the modifier is so the
+  figure can be checked against the catalog.
+
+Leave both figures empty for none. The copy is valued at **catalog value × (1 + percentage) +
+amount**, never below zero, and only then lowered by its
+[value reduction for faults](#lowering-a-copys-value-for-its-faults). A copy with no catalog value
+gets no value from the modifier alone: an amount is nothing without the catalog figure it adjusts.
+On a piece carrying several stamps, the modifier adjusts the value recorded on it.
+
+Everything that reads the copy's value reads the modified one — the Copies list and its total, the
+Overview, an offer's suggested price, a purchase's percentage of catalog, the lot builder and your
+own valuation of a trade line. The stamp's catalog price is not changed, and neither is its market
+value: auction results describe the stamp, not this piece's exception. The figure you agreed with a
+trade partner from their catalog is not modified either, since the amount is stated in your
+catalog's currency.
+
+A modified figure says so: the value carries a blue **+200 %** (or the amount), and its hover names
+the catalog figure, the modifier and its note (*Catalogue 10.00 EUR, +200 % (Stempel Danzig)*). The
+copy's own page shows the modifier, its note and the catalog figure under **Value modifier**, and the
+result under **Catalog value**.
+
 Above the list, the holdings summary bar sums three figures over every copy that matches your
 current filters (change the filters and all of them follow).
 
@@ -787,7 +818,8 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
 ## Adding a copy
 
 The dialog has the **stamp** across the top and two columns under it: on the left what the copy
-*is* — condition, certificate and format, faults and value reduction, tags, notes — and on the right
+*is* — condition, certificate and format, faults and value reduction, value modifier, tags, notes —
+and on the right
 what is *done* with it — storage, delivery, disposition, **Never list on**, photos. **Edit copy** is
 laid out the same way.
 
@@ -857,7 +889,9 @@ laid out the same way.
    come from your collection's configurable sets.
    Under them, pick the copy's **faults** — a thin, a crease, a missing tooth — if it has any. See
    [Faults](faults.md). Beside them, **Value reduction** lowers the copy's value by a percentage —
-   see [Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults).
+   see [Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults). Under
+   them, **Value modifier** adjusts its catalog value by a percentage and an amount, with a note —
+   see [Adjusting a copy's catalog value](#adjusting-a-copys-catalog-value).
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
    one — after that, see the note below.
 5. Optionally file the copy into a **storage location** and add an in-location **ref**
@@ -1728,6 +1762,10 @@ The certificate and format rows appear only once your collection defines some.
 them (**Clear**), or leaves each copy's own (**Leave as is**). The line under it says how many of the
 picked copies already have one (*None has a reduction yet*, *2 of 5 have a reduction*). See
 [Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults).
+
+**Value modifier** works the same way: **Set to…** writes one percentage, amount and note on every
+picked copy, **Clear** takes the modifier off them, and **Leave as is** leaves each copy's own. See
+[Adjusting a copy's catalog value](#adjusting-a-copys-catalog-value).
 
 **Faults** works the same way as the tags: **Add** puts the [faults](faults.md) you name on
 every picked copy, **Remove** takes them off, and every fault you do not name stays where it is.

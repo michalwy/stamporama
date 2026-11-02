@@ -576,6 +576,13 @@ export interface AgentCopyValue {
    *  already lowered by it; `fullAmount` is the figure before, in `currency`. */
   readonly faultReductionPercent?: number;
   readonly fullAmount?: string;
+  /** The modifier on the copy's catalogue value (#2357), present only when the figures above are
+   *  already adjusted by it — before any fault reduction. `valueModifierAmount` is in `currency`;
+   *  `catalogueAmount` is the figure before the modifier, in `currency`. */
+  readonly valueModifierPercent?: number;
+  readonly valueModifierAmount?: string;
+  readonly valueModifierNote?: string;
+  readonly catalogueAmount?: string;
 }
 
 export interface CopyValueRow {
@@ -591,6 +598,13 @@ export interface CopyValueRow {
   readonly explicit?: boolean;
   /** Optional for the same reason: a frozen trade figure records no reduction of its own. */
   readonly faultReduction?: { readonly percent: number; readonly fullAmount: string } | null;
+  /** Optional for the same reason. */
+  readonly valueModifier?: {
+    readonly percent: number | null;
+    readonly amount: string | null;
+    readonly note: string | null;
+    readonly fullAmount: string;
+  } | null;
 }
 
 // ── Candidate sets (#1651, ADR-0065) ─────────────────────────────────────────
@@ -670,6 +684,10 @@ export function copyValue(row: CopyValueRow): AgentCopyValue {
     recorded: row.explicit || undefined,
     faultReductionPercent: row.faultReduction?.percent,
     fullAmount: row.faultReduction?.fullAmount,
+    valueModifierPercent: row.valueModifier?.percent ?? undefined,
+    valueModifierAmount: row.valueModifier?.amount ?? undefined,
+    valueModifierNote: row.valueModifier?.note ?? undefined,
+    catalogueAmount: row.valueModifier?.fullAmount,
   });
 }
 

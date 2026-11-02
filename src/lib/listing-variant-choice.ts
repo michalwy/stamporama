@@ -275,6 +275,7 @@ export async function getOfferListedVariantChoice(
         unknownVariant: false,
         carrier: null,
         faultReductionPercent: null,
+        valueModifier: null,
         candidateStampIds: null,
       }))
     ),

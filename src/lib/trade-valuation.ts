@@ -226,7 +226,7 @@ function valuationKeyOf(row: LineRow): ValuationRow | null {
     // never a piece, so it has neither.
     ...(row.item
       ? copyValuationOf(row.item)
-      : { carrier: null, faultReductionPercent: null, candidateStampIds: null }),
+      : { carrier: null, faultReductionPercent: null, valueModifier: null, candidateStampIds: null }),
   };
 }
 
@@ -347,10 +347,13 @@ async function computeCatalogFigures(
       // A copy's fault reduction (#1560) is the collector's judgement for the same reason and stays
       // out with it (decided with the user): the agreed figure is the partner's book, full, and a
       // faulty piece is lowered there by the line's manual value.
+      // A copy's value modifier (#2357) stays out too: its amount is stated in the currency of the
+      // collector's own catalogue, which the agreed book need not share.
       const agreedKey: ValuationRow = {
         ...key,
         carrier: key.carrier ? { explicitValue: null } : null,
         faultReductionPercent: null,
+        valueModifier: null,
       };
       const bucket = byVendor.get(vendorId);
       if (bucket) bucket.push(agreedKey);

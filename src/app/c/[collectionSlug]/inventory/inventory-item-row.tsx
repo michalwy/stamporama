@@ -44,6 +44,8 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FaultReductionMark } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
 import { faultReductionHint } from "@/lib/fault-reduction";
+import { ValueModifierMark } from "@/app/c/[collectionSlug]/shared/value-modifier-mark";
+import { valueModifierHint } from "@/lib/value-modifier";
 import {
   ColnectChip,
   colnectSearchQueryFor,
@@ -418,13 +420,22 @@ export function CopyValue({
   // Lowered for the copy's faults (#1560): the hover names the full figure, in the currency the
   // figure itself is printed in.
   const reduction = v.faultReduction;
-  const title = reduction
-    ? `${valueTitle} — full ${faultReductionHint(
-        reduction.fullBaseAmountDisplay ?? reduction.fullAmount,
-        reduction.fullBaseAmountDisplay ? baseCurrency : v.currency,
-        reduction.percent
-      )}`
-    : valueTitle;
+  // Adjusted by the copy's value modifier (#2357), before the faults: the hover names the catalogue
+  // figure in the catalogue's own currency, the modifier and its note.
+  const modifier = v.valueModifier;
+  const title = [
+    valueTitle,
+    modifier ? valueModifierHint(modifier.fullAmount, v.currency, modifier) : null,
+    reduction
+      ? `full ${faultReductionHint(
+          reduction.fullBaseAmountDisplay ?? reduction.fullAmount,
+          reduction.fullBaseAmountDisplay ? baseCurrency : v.currency,
+          reduction.percent
+        )}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" — ");
   const inner = (
     <span
       style={{
@@ -434,6 +445,7 @@ export function CopyValue({
         fontVariantNumeric: "tabular-nums",
       }}
     >
+      {modifier && <ValueModifierMark modifier={modifier} currency={v.currency} />}
       {reduction && <FaultReductionMark percent={reduction.percent} />}
       {v.uncertain && <span style={{ ...PRICE_MAIN, color: "var(--color-text-muted)" }}>~</span>}
       {secondaryText && <span style={PRICE_CONVERTED}>{secondaryText}</span>}
