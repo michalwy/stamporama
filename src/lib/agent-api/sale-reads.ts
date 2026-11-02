@@ -56,6 +56,9 @@ export interface AgentSaleLine {
   readonly id: string;
   readonly offerId: string | null;
   readonly offerNo: number | null;
+  /** The marketplace the offer is listed on, where it is not the sale's own (#2343) — a set from
+   *  another platform's listing — else null. */
+  readonly fromPlatform: string | null;
   /** The offer set that sold — null on a set of copies on no offer (#2021). */
   readonly setId: string | null;
   readonly set: string;
@@ -171,6 +174,7 @@ export function saleRecord(
       id: string;
       offerId: string | null;
       offerSetId: string | null;
+      fromPlatformName: string | null;
       setLabel: string;
       price: string;
       itemLabels: readonly string[];
@@ -206,6 +210,7 @@ export function saleRecord(
       id: line.id,
       offerId: line.offerId,
       offerNo: line.offerId !== null ? (offerNos.get(line.offerId) ?? null) : null,
+      fromPlatform: line.fromPlatformName,
       setId: line.offerSetId,
       set: line.setLabel,
       price: line.price,

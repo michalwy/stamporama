@@ -77,6 +77,14 @@ listings holds a copy that has just been sold on a connected platform. That stoc
 second listing is still up, and a marketplace taking an order for it is the double sale this is
 warning about.
 
+**Sold — listing still up** — red. An offer that sold here through a sale on **another** platform —
+a Colnect listing a Facebook buyer took, added from the sale's **Add sold sets** — whose listing is
+still up on its own platform, where nothing ended it. A buyer there can still take what has gone, so
+it is red. The row says which platform to close it on and ages from when it sold; oldest first. It
+leaves only when you end the listing there and press **Listing closed** on the offer's screen
+([Sold through a sale on another platform](offers.md#sold-through-a-sale-on-another-platform)).
+Clicking through lands on the offers list's **Needs action** filter.
+
 **Bidding started on Allegro** — blue. An auction of yours that Stamporama itself marked **in active
 bidding**, because Allegro reported a bidder ([how that works](allegro.md#bids-on-your-auctions)).
 Nothing here is wrong — somebody bidding is the listing working — so it is blue: this is the app
@@ -139,14 +147,15 @@ A card scan that has been prepared and is **ready to cut** does not appear here.
 a time, and the order's **Card scans** section already shows each one waiting with **Review the
 front cut** (or the back).
 
-The three red groups, *Preparing an offer with a copy sold elsewhere* and *Changed since listed* are
+The three red collision groups, *Sold — listing still up*, *Preparing an offer with a copy sold elsewhere* and *Changed since listed* are
 the same **needs action** flag the offers list shows, split by *why* it fired, because each asks for
 something different: a sold copy has to come out of the listing, a copy under the hammer is waiting
 on someone else's clock, one sold on a marketplace is waiting on you to record it before the listing
 beside it takes an order too, an offer being prepared has to lose the copy before it goes up, and a
-changed listing is waiting to be re-posted. The offers list's **Needs action** filter holds all five
-— it is one question, "which of my offers is wrong?", so it is one chip. Each group's own
-link narrows to just its own rows.
+changed listing is waiting to be re-posted, and a sold offer's listing still up is waiting to be
+ended. The offers list's **Needs action** filter holds all six — it is one question, "which of my
+offers is wrong?", so it is one chip. Each group's own link narrows to just its own rows, but for
+*Sold — listing still up*, which opens the whole **Needs action** list.
 
 ## Reading the panel
 

@@ -211,7 +211,8 @@ describe("dashboard: offers to handle (#1811)", () => {
         "offer-sold-elsewhere",
         "offer-bidding-conflict",
         "offer-platform-sale-conflict",
-        "offer-listing-changed"
+        "offer-listing-changed",
+        "offer-listing-to-close"
       )
     );
     assert.deepEqual(keys(byId["offers-ended-auction"]), bellKeys("offer-auction-ended"));

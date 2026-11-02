@@ -73,7 +73,7 @@ the field shows is what is saved. An empty field stays empty.
 ### Step 2 — add the sold sets
 
 On the detail screen, **Add sold sets** opens a browse-and-pick dialog listing every
-[set](offers.md) still sellable on the sale's platform, grouped by offer. Each offer is listed by
+[set](offers.md) still sellable, grouped by offer. Each offer is listed by
 its **title** — the one you typed, or the one the app generated — with the label derived from its
 sets underneath, so you recognise a listing either by what you called it or by what is in it. An
 offer with no title shows that derived label on its own. **Search** matches the **title**, the
@@ -85,13 +85,30 @@ a whole sellable piece:
   buyer took. A set is indivisible — a series never breaks apart, so selecting it retires all of
   its copies together.
 
-Your ticks survive the search box and the **Type** facet, so you can find one listing, tick it,
+**Sets from other platforms.** A buyer on one platform often takes something listed on another — a
+Facebook buyer who also wants a stamp that is up on Colnect. The **Platform** facet on the left
+starts on the sale's own platform; **All platforms** below it, then each other platform with its
+count, lists what is sellable there too, and a row from another platform names it. Such a set is
+sold into this sale exactly as one from the sale's own platform: the sale's commission and fees
+apply, and its price is typed in the sale's currency — pre-filled from the asking price only where
+the offer is in that currency. A listing **in active bidding** on its own platform is not offered:
+a bid there has already promised it to someone else.
+
+What it does to the offer is what any sale does: the set is sold, a single-set offer becomes
+**Sold**, and a quantity offer has one set fewer, flagged **Changed since listed**. But nothing on
+the other platform has ended its listing, so a single-set offer sold out this way is also flagged
+**Close on Colnect** (the offer's own platform) and listed under **Needs action** and in the
+notifications, until you end the listing there and press **Listing closed** on the offer's screen.
+The offer stays Sold. On the **Sold units** list the set reads *from Colnect #2961* — the platform
+and number of the offer it came from — and the offer's screen names this sale, as for any sale.
+
+Your ticks survive the search box and the **Platform** and **Type** facets, so you can find one listing, tick it,
 search for the next and add them together. When some of what you have ticked is off screen the
 button says so — **Add 7 sets (3 hidden by these filters)** — and with everything on screen it
 stays a plain **Add 7 sets**.
 
 Tick every set that sold and set each one's **sale price** in the sale currency (the offer's
-asking price pre-fills, since the offer and the sale share the platform's currency). The price is
+asking price pre-fills when it is in that currency — always so on the sale's own platform). The price is
 just a starting point — **override it** whenever the set actually sold for a different amount (say
 you gave the buyer a discount). The override belongs to **this sale only**; the offer's own asking
 price is never changed. **Add** records them all at once. You can come back and add more sets later,
@@ -110,9 +127,11 @@ it in place** — the existing figure is selected as the editor opens, so typing
 (Enter or click away saves, Escape reverts) — again, only the sale record changes, and
 the gross, net, and any total-based buyer handling recompute automatically.
 
-A sale is **single-currency**, so only offers in the sale's currency can be added. If you changed
-the platform's currency after listing, any offer still on the **old** currency is shown flagged
-**⚠ CUR — re-list** and can't be selected — re-list it in the platform's current currency first.
+A sale is **single-currency**, so on the sale's own platform only offers in the sale's currency can
+be added. If you changed the platform's currency after listing, any offer still on the **old**
+currency is shown flagged **⚠ CUR — re-list** and can't be selected — re-list it in the platform's
+current currency first. An offer from another platform is never flagged this way: its price is
+simply typed in the sale's currency.
 
 ### Selling copies that are on no offer
 

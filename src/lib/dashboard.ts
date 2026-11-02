@@ -213,6 +213,7 @@ const NEEDS_ACTION_REASON: Record<OfferNeedsActionReason, string> = {
   "bidding-conflict": "conflicts with a live auction",
   "platform-sale-conflict": "conflicts with a sale on Allegro",
   "listing-changed": "changed since listed",
+  "listing-to-close": "sold — listing still up",
 };
 
 /** The waiting groups that are filters of the offers list and no bell group: read through that

@@ -103,6 +103,22 @@ export function useSellableOffers(
   });
 }
 
+/** What a sale on `salePlatformId` can take (#2343): sellable offers on every platform, those on
+ * another platform left out while in active bidding there. For *Add sold sets*. */
+export function useSaleSellableOffers(collectionId: string, salePlatformId: string) {
+  return useQuery<SellableOffer[]>({
+    queryKey: ["sales", collectionId, "sellable-offers", "for-sale", salePlatformId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams({ salePlatformId });
+      const res = await fetch(
+        `/api/collections/${collectionId}/sales/sellable-offers?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to load sellable offers");
+      return (await res.json()).items;
+    },
+  });
+}
+
 /** Enriched copies across the platform's sellable offers, for the add-sold-sets picker's set
  * details. Loaded once when the dialog opens; grouped by set client-side. */
 export function useSellableCopies(collectionId: string, platformId: string | undefined, enabled: boolean) {
