@@ -2561,6 +2561,36 @@ such as an offer of an unidentified `523` beside one of `523I`, turns up on both
 goes away once you merge the two, and it is only shown while both are Preparing, Ready, Active or
 Paused.
 
+## A copy already listed elsewhere
+
+Putting the same copy on two platforms is sometimes what you want. Often it is not: another copy of the
+same stamp, in the same condition, sits listed nowhere and would have done — and the cost shows only
+when one of the two sells and the other has to be closed. So wherever an offer is made, Stamporama says
+which of its copies are **already in an open offer** (Preparing, Ready, Waiting for approval, Active or
+Paused, on any platform), and suggests one listed nowhere to take its place:
+
+> **2 copies are already in an open offer** · Swap all (2)
+> - #7375 is on Facebook #3012 — #7401 is listed nowhere · Swap
+> - #7380 is on Allegro #2950 — #7390 is listed nowhere (with Thin) · Swap
+
+It shows in **New offer** (the copies beside the form, a post's **New lot…** included), the copy picker
+of a proposal's **New lots…** and of a post's **New lot…**, **Generate offers** (for the copies of the
+offers left ticked) and a proposal's **Convert to sale…** (below). It is a note, never a block: the
+offer is made as it is unless you swap.
+
+**The copy suggested** is a copy of the **same stamp in the same condition and format**, **held and
+For sale**, in **no open offer**, not already among the copies you are making, and not set aside as
+never to be listed on the offer's platform. Among several, the one the Copies list puts first (the
+oldest added). Its **faults and certificate** follow the copy: a copy that differs on either is
+suggested only when no exact one is free, and the difference is named in brackets — *with Thin*,
+*without Crease*, *no certificate*. A copy with no such twin is only named. A piece of several stamps,
+or a copy whose stamp is one of several candidates, is only named too — *the same stamp* is not one
+stamp there.
+
+**Swap** puts the suggested copy in the listed one's place in what you are making; **Swap all** does
+every copy that has a suggestion. In New offer and the copy pickers, the twin replaces the copy in the
+list; in Generate offers the plan is made again with the twin in the copy's place.
+
 ## Copies promised in a trade
 
 A copy on the giving side of an **agreed** [trade](trades.md) is committed to your partner, and
@@ -3342,6 +3372,13 @@ price agreed with the buyer can be read against them. Hover a marked cost for wh
 3. **Sell.** The footer sums the ticked lots — lots, sets and copies, the price total, their cost and
    the **profit or loss** against it — and says how many lots will be withdrawn (*6 lots withdrawn*).
    The ticked lots are sold, **the lots not ticked are withdrawn**, and the proposal closes as **Sold**.
+
+**A ticked lot whose copies are also in another open offer** says so under the lots, before you sell —
+*Lot 3: a copy is already in an open offer · #7375 is on Facebook #3012 — #7401 is listed nowhere ·
+Swap*. Sold as it is, that other offer is then flagged as [holding a copy sold
+elsewhere](#keeping-platforms-in-sync--needs-action). **Swap** puts the copy listed nowhere in the
+lot's set straight away (the [rule](#a-copy-already-listed-elsewhere) is New offer's), so the sale
+sends it and the other offer keeps its copy.
 
 Ticking nothing is not a sale: a buyer who takes nothing has declined, so use **Decline…**.
 

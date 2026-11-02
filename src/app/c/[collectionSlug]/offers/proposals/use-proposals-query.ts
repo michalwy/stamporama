@@ -12,6 +12,7 @@ import type {
 } from "@/lib/proposals";
 import type { ProposalLotPhotos, ProposalMessage } from "@/lib/proposal-handout";
 import type { ProposalStatus } from "@/lib/proposal-rules";
+import type { ListedElsewhereCopy } from "@/lib/listed-elsewhere-rules";
 import { withPrepareRow } from "@/lib/facebook-post-lot-refresh";
 import { withProposalLot, withProposalLotPhotos } from "@/lib/proposal-lot-refresh";
 
@@ -30,6 +31,8 @@ export const proposalKeys = {
     ["offers", collectionId, "proposals", "candidates", proposalId] as const,
   saleOptions: (collectionId: string, proposalId: string) =>
     ["offers", collectionId, "proposals", "sale-options", proposalId] as const,
+  listedElsewhere: (collectionId: string, proposalId: string, offerIds: readonly string[]) =>
+    ["offers", collectionId, "proposals", "listed-elsewhere", proposalId, offerIds] as const,
   photos: (collectionId: string, proposalId: string) =>
     ["offers", collectionId, "proposals", "photos", proposalId] as const,
   message: (collectionId: string, proposalId: string) =>
@@ -113,6 +116,22 @@ export function useProposalSaleOptions(collectionId: string, proposalId: string)
       if (!res.ok) throw new Error("Failed to fetch the lots");
       return res.json();
     },
+  });
+}
+
+/** The ticked lots on *Convert to sale…* whose copies are in an open offer elsewhere (#2339). */
+export function useProposalLotsListedElsewhere(collectionId: string, proposalId: string, offerIds: readonly string[]) {
+  const sorted = [...offerIds].sort();
+  return useQuery<{ offerId: string; copies: ListedElsewhereCopy[] }[]>({
+    queryKey: proposalKeys.listedElsewhere(collectionId, proposalId, sorted),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      for (const id of sorted) params.append("offerId", id);
+      const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/listed-elsewhere?${params}`);
+      if (!res.ok) throw new Error("Failed to check the lots' copies");
+      return (await res.json()).lots;
+    },
+    enabled: sorted.length > 0,
   });
 }
 

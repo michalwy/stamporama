@@ -17,6 +17,7 @@ import { SALE_STATUS_META } from "../../../sales/sale-status";
 import { OfferStateChip } from "../../offer-badges";
 import { OfferPickerSetLines } from "../../offer-picker-contents";
 import { useProposalSaleOptions } from "../use-proposals-query";
+import { ProposalListedElsewhere } from "./proposal-listed-elsewhere";
 
 const SECTION_TITLE: React.CSSProperties = {
   margin: 0,
@@ -249,6 +250,13 @@ export function ConvertProposalDialog({
                     ))}
                   </ul>
                 )}
+                {/* A ticked lot's copies already in another open offer, with a twin to swap in (#2339). */}
+                <ProposalListedElsewhere
+                  collectionId={collectionId}
+                  proposalId={proposalId}
+                  lots={tickedLots}
+                  disabled={isPending}
+                />
               </section>
               <section>
                 <h3 style={{ ...SECTION_TITLE, marginBottom: "0.5rem" }}>Into</h3>

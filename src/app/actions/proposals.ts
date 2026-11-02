@@ -16,6 +16,7 @@ import {
   type ProposalSaleResult,
 } from "@/lib/proposals";
 import { createProposalShareToken, revokeProposalShareToken } from "@/lib/proposal-handout";
+import { swapProposalLotCopy } from "@/lib/listed-elsewhere";
 import { parseProposalLotPacking, type ProposalMove } from "@/lib/proposal-rules";
 
 // Proposals (#2287; ADR-0075). Every action reports a message rather than throwing: a refusal — a
@@ -101,6 +102,23 @@ export async function convertProposalToSaleAction(
     return { status: "success", ...(await convertProposalToSale(session.user.id, proposalId, input)) };
   } catch (err) {
     return failure(err, "Failed to turn the proposal into a sale.");
+  }
+}
+
+/** *Swap* on *Convert to sale…* (#2339): a lot's copy listed elsewhere gives its place to a twin listed
+ *  nowhere, before the sale is made. Several pairs (*Swap all*) are made one after another. */
+export async function swapProposalLotCopiesAction(
+  proposalId: string,
+  swaps: readonly { offerId: string; from: string; to: string }[]
+): Promise<ProposalActionState> {
+  const session = await getSession();
+  try {
+    for (const swap of swaps) {
+      await swapProposalLotCopy(session.user.id, proposalId, swap.offerId, swap.from, swap.to);
+    }
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to swap the copy.");
   }
 }
 

@@ -702,6 +702,9 @@ export interface GeneratorRequest {
   /** On Direct, the open proposal the offers the pass creates become the lots of (#2287); absent,
    *  they are in none. Like `postTitle`, only the commit carries it. */
   proposalId?: string;
+  /** Copies already in an open offer elsewhere swapped for a twin listed nowhere (#2339), copy → twin:
+   *  the copy leaves what was asked for and the twin joins it. Absent or empty, none. */
+  swaps?: Record<string, string>;
 }
 
 export function generatorRequestParams(request: GeneratorRequest): URLSearchParams {
@@ -727,6 +730,10 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
   if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
   if (request.postTitle !== undefined) params.set("postTitle", request.postTitle);
   if (request.proposalId) params.set("proposalId", request.proposalId);
+  const swaps = Object.entries(request.swaps ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([from, to]) => `${from}:${to}`);
+  if (swaps.length > 0) params.set("swaps", swaps.join(","));
   return params;
 }
 
@@ -744,6 +751,11 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
   for (const pair of (sp.get("targets") ?? "").split(",")) {
     const [lineId, offerId] = pair.split(":");
     if (lineId && offerId) targets[lineId] = offerId;
+  }
+  const swaps: Record<string, string> = {};
+  for (const pair of (sp.get("swaps") ?? "").split(",")) {
+    const [from, to] = pair.split(":");
+    if (from && to) swaps[from] = to;
   }
   return {
     platformId,
@@ -763,7 +775,25 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
     ...(sp.has("postTitle") ? { postTitle: sp.get("postTitle") ?? "" } : {}),
     ...(sp.get("proposalId") ? { proposalId: sp.get("proposalId")! } : {}),
+    ...(Object.keys(swaps).length > 0 ? { swaps } : {}),
   };
+}
+
+/** What a pass was asked for once the swaps are made (#2339): each swapped copy out, its twin in, and
+ *  nothing twice. */
+export function swappedAskedIds(askedIds: readonly string[], swaps: Readonly<Record<string, string>> | undefined): string[] {
+  if (!swaps || Object.keys(swaps).length === 0) return [...askedIds];
+  const out = new Set(Object.keys(swaps));
+  const ids = askedIds.filter((id) => !out.has(id));
+  const kept = new Set(ids);
+  for (const id of askedIds) {
+    const twin = swaps[id];
+    if (twin && !kept.has(twin)) {
+      ids.push(twin);
+      kept.add(twin);
+    }
+  }
+  return ids;
 }
 
 /**

@@ -1566,6 +1566,11 @@ is named once: `Adolf Hitler (I)`. A single stamp adds its own name where it has
 A stamp with neither an issue name nor a name of its own shows no name: its catalogue numbers say
 what it is.
 
+A copy of a ticked offer that is **already in an open offer on another platform** is named above the
+list, with a copy of the same stamp listed nowhere to **Swap** in — the plan is then made again with
+that copy in its place. See [A copy already listed
+elsewhere](offers.md#a-copy-already-listed-elsewhere).
+
 **Every proposed offer has a tick box, and all of them start ticked.** Untick an offer to leave it
 out of this pass; the box at the top of the list ticks or unticks them all at once. Only the ticked
 offers are created, and the button (*Create 12 offers*) and the count above the list follow the

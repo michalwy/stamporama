@@ -33,7 +33,8 @@ import {
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import type { OfferTitlePreview } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
-import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
+import { useComposableCopies, useListedElsewhere, useOfferCollisions } from "../use-offers-query";
+import { ListedElsewhereNote } from "../listed-elsewhere-note";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -204,6 +205,24 @@ export function ComposeSetDialog({
     offerId ?? undefined,
     selectedIds.length > 0
   );
+  // Making new offers (#2339): the picked copies already in an open offer elsewhere, each with a twin
+  // listed nowhere. A twin swapped in may sit outside the rail's area, so its row is kept here to be
+  // handed over with the rest.
+  const { data: listedElsewhere = [] } = useListedElsewhere(collectionId, selectedIds, platformId, offerId === null);
+  const [twinRows, setTwinRows] = useState<ReadonlyMap<string, ItemListItem>>(new Map());
+  function swapCopies(pairs: { from: string; to: string }[]) {
+    const next = new Set(selected);
+    const rows = new Map(twinRows);
+    for (const { from, to } of pairs) {
+      const row = listedElsewhere.find((entry) => entry.itemId === from)?.twinRow;
+      if (!row || !next.has(from)) continue;
+      next.delete(from);
+      next.add(to);
+      rows.set(to, row);
+    }
+    setSelected(next);
+    setTwinRows(rows);
+  }
 
   const multi = selectedIds.length > 1;
   // New offers (#2299): an offer each or one for all, starting at the caller's remembered answer.
@@ -270,8 +289,9 @@ export function ComposeSetDialog({
     }
     setError(undefined);
     if (onPick || !offerId) {
+      const listed = new Set(copies.map((c) => c.id));
       onPick?.(
-        copies.filter((c) => selected.has(c.id)),
+        [...copies, ...[...twinRows.values()].filter((row) => !listed.has(row.id))].filter((c) => selected.has(c.id)),
         multi ? perCopy : false
       );
       return;
@@ -380,6 +400,12 @@ export function ComposeSetDialog({
           </div>
         </div>
       </div>
+
+      {listedElsewhere.length > 0 && (
+        <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-border)" }}>
+          <ListedElsewhereNote copies={listedElsewhere} onSwap={swapCopies} disabled={busy} />
+        </div>
+      )}
 
       {collisions.length > 0 && (
         <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-warning-border, var(--color-border))", background: "var(--color-warning-soft)", color: "var(--color-warning)", fontSize: "0.8125rem" }}>

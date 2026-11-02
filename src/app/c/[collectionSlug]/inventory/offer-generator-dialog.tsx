@@ -31,6 +31,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
+import { ListedElsewhereNote } from "@/app/c/[collectionSlug]/offers/listed-elsewhere-note";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { useProposalChoice } from "@/app/c/[collectionSlug]/offers/proposals/use-proposal-choice";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -256,6 +257,8 @@ export function OfferGeneratorDialog({
   const { data: formats = [] } = useCollectionFormats(collectionId);
   const mixesAny = mixing.condition || mixing.certificate || mixing.format;
   const [targets, setTargets] = useState<Record<string, string>>({});
+  // Copies already in an open offer elsewhere swapped for a twin listed nowhere (#2339), copy → twin.
+  const [swaps, setSwaps] = useState<Record<string, string>>({});
   // The lines left out, by id — kept rather than the ticked ones, so every offer starts ticked and a
   // line the plan newly proposes after a change of mode or packaging is ticked too (#1887).
   const [skip, setSkip] = useState<ReadonlySet<string>>(() => new Set());
@@ -289,8 +292,9 @@ export function OfferGeneratorDialog({
       targets,
       skip: [] as string[],
       facebook,
+      swaps,
     }),
-    [platformId, mode, packaging, mixing, priority, oneStampSets, input, targets, facebook]
+    [platformId, mode, packaging, mixing, priority, oneStampSets, input, targets, facebook, swaps]
   );
   // The preview's query never carries the ticks: a tick changes what is written, not the plan.
   const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
@@ -329,6 +333,13 @@ export function OfferGeneratorDialog({
     return byLine;
   }, [lines, skip]);
   const allTicked = lines.length > 0 && selection.leftOffers === 0;
+  // The note speaks of the copies the ticked lines would list (#2339).
+  const listedElsewhere = useMemo(() => {
+    const ticked = new Set(
+      lines.flatMap((line) => (skip.has(line.id) ? [] : line.sets.flatMap((set) => set.map((copy) => copy.id))))
+    );
+    return (preview?.listedElsewhere ?? []).filter((copy) => ticked.has(copy.itemId));
+  }, [lines, skip, preview]);
 
   function toggleLine(lineId: string) {
     setSkip((prev) => {
@@ -529,6 +540,13 @@ export function OfferGeneratorDialog({
             <>
               <Summary preview={preview} selection={selection} mode={mode} />
               {preview.creationBlock && <Callout tone="warning">{preview.creationBlock}</Callout>}
+              <ListedElsewhereNote
+                copies={listedElsewhere}
+                disabled={isPending}
+                onSwap={(pairs) =>
+                  setSwaps((prev) => ({ ...prev, ...Object.fromEntries(pairs.map(({ from, to }) => [from, to])) }))
+                }
+              />
               {preview.lines.length === 0 ? (
                 <Empty>
                   {mode === "checklists"
