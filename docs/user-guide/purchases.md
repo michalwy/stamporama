@@ -659,6 +659,10 @@ condition mark, the tile number, the tick under the picture and the tick box —
 so a larger tile never covers more of the stamp. Even at **Small** the condition mark is as large as
 it is on a list row.
 
+**Which side the tiles show** is the **Show** switch beside it — **Fronts · Backs** — for every card
+at once, and each card has the same switch on its own line for its tiles only (see *Looking at the
+backs* under *Backs* below).
+
 #### Two kinds of card
 
 A scan is one of two things, and the app finds the stamps a different way on each:
@@ -1021,6 +1025,24 @@ some of the stamps.
 
 Drag each unpaired back onto its tile. A back that found no front on a card that *did* pair by
 position lands in the same strip and is placed the same way.
+
+##### Looking at the backs
+
+To check the backs — a watermark, a hinge, a thin spot, or that each back is on the right front —
+switch the tiles over rather than opening them one by one. The **Show** switch on the section's
+header line, **Fronts · Backs**, turns every tile on every card. Each card has the same switch on its
+own line, which turns only that card's tiles; it is greyed out on a card with no back scan.
+
+- **The section switch sets every card.** A card you switched on its own stays as you left it until
+  the section switch is used again.
+- **A tile with no back keeps showing its front**, marked **no back** under the picture, so the grid
+  keeps its shape and the missing back is easy to spot.
+- **Backs are the right way round** — turned as the card's back was scanned, the same as when you
+  open the tile.
+- **Nothing else changes.** Ticks, marks, filters and the order of the tiles stay as they are.
+  Opening a tile opens it on the side the grid shows.
+- The choice is remembered in this browser for the order, with the rest of the section's view
+  (whether it is open, its filter, which batches are folded), and starts on **Fronts**.
 
 #### Adding the back after identifying
 

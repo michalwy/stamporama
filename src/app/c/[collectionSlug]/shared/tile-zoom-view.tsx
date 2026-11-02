@@ -186,6 +186,9 @@ interface Props {
   collectionId: string;
   /** Front, back, or a lone back — from `tileSideViews`, never assembled here — or one photo. */
   sides: ZoomSide[];
+  /** The side to open on (#2350) — the one the Card scans strip was showing. The first side when
+   * absent, or when the piece has no such side. */
+  initialSide?: TileSideView["side"];
   /** What the picture is, for the words the viewer uses about it. A tile is the default. */
   subject?: "tile" | "photo";
   /**
@@ -297,6 +300,9 @@ export interface IdentifiedPiece {
    * identification step opens on. Null for an unmarked tile, and for one already identified, whose
    * mark has nothing left to seed. */
   mark?: TileMark | null;
+  /** The side the Card scans strip showed it on (#2350), which the viewer opens on — the front
+   * when absent. */
+  side?: TileSideView["side"];
 }
 
 /**
@@ -405,6 +411,7 @@ export function IdentifiedPieceAside({
       <TileZoomView
         collectionId={collectionId}
         sides={shown[0].sides}
+        initialSide={shown[0].side}
         position={shown[0].position}
         scanning={scanning}
         onGauge={onGauge}
@@ -477,6 +484,7 @@ export function IdentifiedPieceAside({
           key={opened.tileId}
           collectionId={collectionId}
           sides={opened.sides}
+          initialSide={opened.side}
           position={opened.position}
           scanning={scanning}
           onGauge={onGauge}
@@ -549,12 +557,13 @@ function IdentifiedPieceGrid({
         }}
       >
         {pieces.map((piece, turn) => {
-          const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
+          const shownSide =
+            piece.sides.find((s) => s.side === (piece.side ?? "front")) ?? piece.sides[0];
           return (
             <ThumbPreview
               key={piece.tileId}
-              src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
-              thumbSrc={`/api/collections/${collectionId}/photos/${front.photoId}/thumb`}
+              src={`/api/collections/${collectionId}/photos/${shownSide.photoId}/full`}
+              thumbSrc={`/api/collections/${collectionId}/photos/${shownSide.photoId}/thumb`}
               label={`Tile ${piece.position + 1} — click to look at it closely`}
               style={{ display: "block" }}
             >
@@ -579,8 +588,8 @@ function IdentifiedPieceGrid({
                   full-resolution viewer. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`/api/collections/${collectionId}/photos/${front.photoId}/thumb`}
-                alt={`Tile ${piece.position + 1}, ${front.label.toLowerCase()}`}
+                src={`/api/collections/${collectionId}/photos/${shownSide.photoId}/thumb`}
+                alt={`Tile ${piece.position + 1}, ${shownSide.label.toLowerCase()}`}
                 draggable={false}
                 style={{
                   display: "block",
@@ -822,6 +831,7 @@ export interface ViewerState {
 export function TileZoomView({
   collectionId,
   sides,
+  initialSide,
   position,
   scanning,
   onGauge,
@@ -837,7 +847,13 @@ export function TileZoomView({
   pairing,
 }: Props) {
   const noun = subject === "photo" ? "photo" : "tile";
-  const [sideKey, setSideKey] = useState(() => carried?.side ?? sides[0]?.side ?? "front");
+  const [sideKey, setSideKey] = useState(
+    () =>
+      carried?.side ??
+      (sides.some((s) => s.side === initialSide) ? initialSide : undefined) ??
+      sides[0]?.side ??
+      "front"
+  );
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
 

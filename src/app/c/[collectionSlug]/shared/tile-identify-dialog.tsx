@@ -199,6 +199,8 @@ export interface TileStampPick {
 export interface SelectedTile {
   tile: ScanTileData;
   sides: TileSideView[];
+  /** The side the strip shows it on (#2350) — the viewer opens on it. */
+  side?: TileSideView["side"];
 }
 
 interface Props {
@@ -383,6 +385,7 @@ export function TileIdentifyDialog({
   const pieces: IdentifiedPiece[] = tiles.map((t) => ({
     tileId: t.tile.id,
     sides: t.sides,
+    side: t.side,
     position: t.tile.position,
     // The mark seeds the identification (#1550) only while the tile is still to be identified —
     // identifying a consumed one again opens on what its copy is.
