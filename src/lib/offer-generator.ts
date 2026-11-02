@@ -27,6 +27,8 @@ import { readFacebookCreateChoice } from "./facebook-post-rules";
 import { writeFacebookPost } from "./facebook-posts";
 import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import { writeProposalLots } from "./proposals";
+import { readListedElsewhere, withoutTwinRow } from "./listed-elsewhere";
+import type { ListedElsewhereCopy } from "./listed-elsewhere-rules";
 import {
   findPlanDrift,
   fingerprintPlan,
@@ -38,6 +40,7 @@ import {
   SKIP_REASON_LABEL,
   SKIP_REASONS,
   generatorPostRefusal,
+  swappedAskedIds,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -117,7 +120,11 @@ async function readGeneratorState(
     input.itemIds !== null
       ? await prisma.item.findMany({ where: { collectionId, id: { in: input.itemIds } }, select: { id: true } })
       : await prisma.item.findMany({ where: await buildItemFilterWhere(collectionId, input.filters), select: { id: true } });
-  const askedIds = asked.map((row) => row.id);
+  // A copy swapped for its twin (#2339) leaves what was asked for, and the twin joins it.
+  const askedIds = swappedAskedIds(
+    asked.map((row) => row.id),
+    input.swaps
+  );
 
   const rows =
     askedIds.length === 0
@@ -381,6 +388,9 @@ export interface OfferGeneratorPreview {
   totals: { newOffers: number; changedOffers: number; sets: number; copies: number };
   /** What confirming sends back, to be compared with a fresh plan (#717). */
   fingerprint: PlanFingerprint;
+  /** The plan's copies already in an open offer on another platform, each with a twin listed nowhere
+   *  where there is one (#2339). */
+  listedElsewhere: ListedElsewhereCopy[];
 }
 
 export async function previewOfferGeneration(
@@ -391,7 +401,8 @@ export async function previewOfferGeneration(
   includeSpecialised = false
 ): Promise<OfferGeneratorPreview> {
   const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
-  const [lines, creationBlock] = await Promise.all([
+  const planned = state.plan.lines.flatMap((line) => line.sets.flatMap((set) => set.copies.map((copy) => copy.itemId)));
+  const [lines, creationBlock, listedElsewhere] = await Promise.all([
     nameLines(ownerId, collectionId, state),
     quickOfferCreationBlock(
       ownerId,
@@ -399,6 +410,7 @@ export async function previewOfferGeneration(
       input.platformId,
       readFacebookCreateChoice(input.facebook).facebookGroupId
     ),
+    readListedElsewhere(ownerId, collectionId, planned, { platformId: input.platformId }),
   ]);
   const { plan } = state;
   return {
@@ -412,6 +424,7 @@ export async function previewOfferGeneration(
       generatorSelection(lines, new Set())
     ),
     fingerprint: fingerprintPlan(plan, state.offers),
+    listedElsewhere: listedElsewhere.map(withoutTwinRow),
   };
 }
 

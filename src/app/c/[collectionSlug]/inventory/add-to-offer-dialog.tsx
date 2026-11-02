@@ -30,6 +30,7 @@ import {
 } from "@/lib/new-offer-price";
 import { InventoryItemRow } from "./inventory-item-row";
 import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
+import { ListedElsewhereNote } from "../offers/listed-elsewhere-note";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import {
@@ -48,6 +49,7 @@ import {
   useComposeTargetSetCopies,
   useInvalidateOffers,
   useStampConditionCollisions,
+  useListedElsewhere,
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import type { StampConditionCollision } from "@/lib/offers";
 import { useInvalidateInventory } from "./use-inventory-query";
@@ -213,7 +215,12 @@ export function AddToOfferDialog({
   // The copies the create form lists can be taken out of the offer before it is made (#1793). Only
   // this offer loses them: the picker, and the Copies list's selection, keep every copy.
   const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(new Set());
-  const offerItems = useMemo(() => items.filter((i) => !removedIds.has(i.id)), [items, removedIds]);
+  // A copy already in an open offer swapped for a twin listed nowhere (#2339), keyed by the copy it
+  // stands in for. Like a removal, only this offer sees it.
+  const [swapped, setSwapped] = useState<ReadonlyMap<string, ItemListItem>>(new Map());
+  const createItems = useMemo(() => items.map((i) => swapped.get(i.id) ?? i), [items, swapped]);
+  const createItemIds = useMemo(() => createItems.map((i) => i.id), [createItems]);
+  const offerItems = useMemo(() => createItems.filter((i) => !removedIds.has(i.id)), [createItems, removedIds]);
   const offerItemIds = useMemo(() => offerItems.map((i) => i.id), [offerItems]);
   // A filter menu over the create form's copies owns its Escape (#1795): while one is open the form
   // stops taking the key, or one press would close the menu and the form under it.
@@ -228,6 +235,26 @@ export function AddToOfferDialog({
     creating ? createPlatformId || null : null,
     creating
   );
+  // The copies already in an open offer elsewhere, each with a twin listed nowhere (#2339).
+  const { data: listedElsewhere = [] } = useListedElsewhere(
+    collectionId,
+    offerItemIds,
+    createPlatformId || null,
+    creating
+  );
+  function swapCopies(pairs: { from: string; to: string }[]) {
+    setSwapped((prev) => {
+      const next = new Map(prev);
+      for (const { from } of pairs) {
+        const row = listedElsewhere.find((entry) => entry.itemId === from)?.twinRow;
+        if (!row) continue;
+        // The copy the twin stands in for: the picked one, or the one an earlier swap put there.
+        const key = items.some((i) => i.id === from) ? from : [...next].find(([, i]) => i.id === from)?.[0];
+        if (key) next.set(key, row);
+      }
+      return next;
+    });
+  }
 
   // The figures a new offer's form suggests from its copies (#2302): one set's, so the packaging
   // decides — the sum of the copies' figures for one set holding all, one piece's for one set each
@@ -252,12 +279,12 @@ export function AddToOfferDialog({
   // still open, so it is usually there by the time the form is; until then there is no suggestion
   // and nothing to say about one.
   const { data: copyEstimates } = useQuery({
-    queryKey: ["copy-estimates", collectionId, itemIds],
+    queryKey: ["copy-estimates", collectionId, createItemIds],
     queryFn: async () => {
       const { previewCopyEstimatesAction } = await import("@/app/actions/offers");
-      return previewCopyEstimatesAction(collectionId, itemIds);
+      return previewCopyEstimatesAction(collectionId, createItemIds);
     },
-    enabled: itemIds.length > 0,
+    enabled: createItemIds.length > 0,
     staleTime: 30_000,
   });
   const estimate = useMemo(
@@ -736,9 +763,13 @@ export function AddToOfferDialog({
         // never as a platform rule (#524) — the dialog lists on whatever platform was picked, and
         // only some marketplaces refuse the second listing. Advisory only: the submit is never
         // blocked.
+        // The copies already in an open offer elsewhere (#2339), with a twin to swap in — advisory too.
         notice={
-          createCollisions.length > 0 ? (
-            <CollisionNotice collisions={createCollisions} />
+          createCollisions.length > 0 || listedElsewhere.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {createCollisions.length > 0 && <CollisionNotice collisions={createCollisions} />}
+              <ListedElsewhereNote copies={listedElsewhere} onSwap={swapCopies} disabled={isPending} />
+            </div>
           ) : undefined
         }
         // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
@@ -766,6 +797,7 @@ export function AddToOfferDialog({
             setCreating(false);
             // Back in the picker every copy is there again; the next create starts from all of them.
             setRemovedIds(new Set());
+            setSwapped(new Map());
           }
         }}
         onSubmit={createOffer}

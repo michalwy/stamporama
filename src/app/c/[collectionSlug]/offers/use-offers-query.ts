@@ -29,6 +29,7 @@ import type {
 } from "@/lib/offers";
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import type { CatalogueFillLine } from "@/lib/lot-catalogue-fill";
+import type { ListedElsewhereEntry } from "@/lib/listed-elsewhere";
 import type { OfferListContext } from "./list-context";
 import type {
   FacebookLotCandidate,
@@ -597,6 +598,31 @@ export function useOfferCollisions(
       return (await res.json()).collisions;
     },
     enabled: enabled && !!platformId && itemIds.length > 0,
+  });
+}
+
+/** The copies an offer is being made from that are already in an open offer elsewhere (#2339), each
+ * with a twin listed nowhere where there is one. `platformId`, when known, leaves out a twin set aside
+ * as never to be listed there. */
+export function useListedElsewhere(
+  collectionId: string,
+  itemIds: readonly string[],
+  platformId: string | null,
+  enabled = true
+) {
+  const sorted = [...itemIds].sort();
+  return useQuery<ListedElsewhereEntry[]>({
+    queryKey: ["offers", collectionId, "listed-elsewhere", sorted, platformId] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      for (const id of sorted) params.append("itemId", id);
+      if (platformId) params.set("platformId", platformId);
+      const res = await fetch(`/api/collections/${collectionId}/offers/listed-elsewhere?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to check where the copies are listed");
+      return (await res.json()).copies;
+    },
+    enabled: enabled && sorted.length > 0,
+    placeholderData: (previous) => previous,
   });
 }
 
