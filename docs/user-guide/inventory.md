@@ -1054,6 +1054,15 @@ sit on the piece, and give each one a **quantity** and a **format of its own** w
 a block of four *on* the cover is one entry with the format *Block of 4*, never four entries. The
 same stamp twice loose is one entry of quantity **2**.
 
+A cover franked with eight stamps is **one trip through the picker**, not eight. **Browse…** stays
+open while you tick every stamp on the piece — pressing a stamp ticks it, pressing it again takes it
+off, and searching for another issue keeps what you have ticked, so the stamps may come from several
+issues. The list beside the tree shows what is ticked, and **Add 8 stamps** puts them all on the
+piece at once: each as quantity **1**, single, after the rows already there and in catalogue order,
+ready to be given quantities and formats and dragged as usual. A stamp **already on the piece** can
+be ticked again: it raises that entry's quantity by one rather than adding a second entry, and the
+same goes for a stamp typed into the search box beside **Browse…**, which still adds just the one.
+
 A copy added by hand starts as one stamp, and becomes a carrier when you say so here. A tile cut from
 a card scan can be identified as a carrier straight away — **Another stamp on this piece…** in the
 identification's condition step, see [Card scans](purchases.md#working-through-the-tiles). Take the

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
+import { addStampsToRows, inAdditionOrder } from "@/lib/item-stamp-additions";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
@@ -14,6 +15,7 @@ import {
   dragStyle,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { Icon } from "@/app/icons";
+import { baseBtn } from "@/app/button-style";
 import { StampPickerAutocomplete } from "./stamp-picker-autocomplete";
 import { StampPickerBrowser } from "./stamp-picker-browser";
 import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
@@ -34,6 +36,12 @@ import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
 //
 // Taking the list back down to one row makes the copy an ordinary copy of that stamp again, with no
 // confirmation of its own. The counts follow the facts.
+//
+// **Adding is several stamps at a time** (#2352): Browse… stays open, each stamp pressed is ticked,
+// and one button adds them all — a cover franked with eight stamps is one trip through the picker,
+// not eight. Each lands as quantity 1, single, in catalogue order after the rows already listed; a
+// stamp already on the piece raises its row's quantity instead (`item-stamp-additions.ts`). The
+// autocomplete and a row's own Change stamp still pick one.
 
 const INPUT_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.5rem",
@@ -121,7 +129,8 @@ export function ItemStampsField({
    *  otherwise one Esc closes the picker *and* the copy form. The same contract `StampSelect` has. */
   onPickerOpenChange?: (open: boolean) => void;
 }) {
-  /** Which row the picker is choosing for — `"new"` appends, a key replaces that row's stamp. */
+  /** Which row the picker is choosing for — `"new"` adds the ticked stamps, a key replaces that row's
+   *  stamp. */
   const [pickingFor, setPickingFor] = useState<string | "new" | null>(null);
   const [browsing, setBrowsing] = useState(false);
   /** Why the last pick did nothing. Cleared by the next one. */
@@ -147,26 +156,7 @@ export function ItemStampsField({
     if (target === null) return;
 
     if (target === "new") {
-      // Adding a stamp already on the piece, as a single, would be the pair the unique index
-      // refuses — and it is also not what the collector means. Two loose copies of one stamp on one
-      // cover are *one* entry of quantity 2 (ADR-0044 §4), so the sentence says so rather than the
-      // save failing on a constraint name.
-      if (taken(rows, picked.stampId, "")) {
-        setNote(
-          "That stamp is already on this copy. Raise its quantity, or give one of them a format of its own."
-        );
-        return;
-      }
-      onRowsChange([
-        ...rows,
-        {
-          key: `new-${picked.stampId}-${Date.now()}`,
-          stampId: picked.stampId,
-          quantity: 1,
-          formatId: "",
-          picked,
-        },
-      ]);
+      add([picked]);
       return;
     }
 
@@ -180,6 +170,26 @@ export function ItemStampsField({
       rows.map((row) =>
         row.key === target ? { ...row, stampId: picked.stampId, picked } : row
       )
+    );
+  }
+
+  /** Puts `picked` on the piece — a stamp already listed as a single raises that row's quantity, the
+   *  rest are appended in catalogue order. Two loose copies of one stamp on one cover are *one* entry
+   *  of quantity 2 (ADR-0044 §4), never the pair the unique index refuses. */
+  function add(picked: readonly PickedStamp[]) {
+    closeBrowser();
+    setPickingFor(null);
+    setNote(null);
+    if (picked.length === 0) return;
+    const now = Date.now();
+    onRowsChange(
+      addStampsToRows(rows, picked, (p) => ({
+        key: `new-${p.stampId}-${now}`,
+        stampId: p.stampId,
+        quantity: 1,
+        formatId: "",
+        picked: p,
+      }))
     );
   }
 
@@ -391,7 +401,19 @@ export function ItemStampsField({
         </p>
       )}
 
-      {browsing && (
+      {browsing && pickingFor === "new" && (
+        <PieceStampsPicker
+          collectionId={collectionId}
+          areas={areas}
+          listedStampIds={new Set(rows.filter((row) => row.formatId === "").map((row) => row.stampId))}
+          onAdd={add}
+          onClose={() => {
+            closeBrowser();
+            setPickingFor(null);
+          }}
+        />
+      )}
+      {browsing && pickingFor !== "new" && (
         <StampPickerBrowser
           collectionId={collectionId}
           areas={areas}
@@ -403,5 +425,139 @@ export function ItemStampsField({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Browse… for the stamps on a piece (#2352): the collection's one stamp picker, kept open while the
+ * collector ticks every stamp the piece carries — across issues, since searching for another one
+ * keeps the ticks — and closed by the one button that adds them. Pressing a ticked stamp again takes
+ * it off; the list beside the tree is the whole state, in the order the rows will be added. The same
+ * shape as *Several possible variants…* (`candidate-stamps-picker.tsx`), which is where it comes from.
+ */
+function PieceStampsPicker({
+  collectionId,
+  areas,
+  listedStampIds,
+  onAdd,
+  onClose,
+}: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  /** Stamps already on the piece as a single — ticking one raises its quantity, and the list says so. */
+  listedStampIds: ReadonlySet<string>;
+  onAdd: (picked: PickedStamp[]) => void;
+  onClose: () => void;
+}) {
+  const [ticked, setTicked] = useState<PickedStamp[]>([]);
+
+  function toggle(picked: PickedStamp) {
+    setTicked((current) =>
+      current.some((s) => s.stampId === picked.stampId)
+        ? current.filter((s) => s.stampId !== picked.stampId)
+        : [...current, picked]
+    );
+  }
+
+  const ordered = inAdditionOrder(ticked);
+  const none = ticked.length === 0;
+
+  return (
+    <StampPickerBrowser
+      collectionId={collectionId}
+      areas={areas}
+      title="Stamps on this piece"
+      marked={{
+        stampIds: new Set(ticked.map((s) => s.stampId)),
+        label: "ticked",
+        hint: "Ticked to be added — pressing it again takes it off",
+      }}
+      onPick={toggle}
+      asideWidth="22rem"
+      aside={
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            gap: "0.625rem",
+          }}
+        >
+          <div
+            style={{
+              flex: "0 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              padding: "0.5rem 0.625rem",
+              borderRadius: "0.375rem",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-page)",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            {none ? (
+              "Tick every stamp the piece carries, from any issue."
+            ) : (
+              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                {ordered.map((s) => (
+                  <li
+                    key={s.stampId}
+                    style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}
+                  >
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      {[s.catalogLabels[0], s.name].filter(Boolean).join(" · ") ||
+                        "(unnamed stamp)"}
+                      {listedStampIds.has(s.stampId) && (
+                        <span style={{ color: "var(--color-text-muted)" }}>
+                          {" "}
+                          — already on the piece, its quantity goes up by 1
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Untick"
+                      tabIndex={-1}
+                      onClick={() => toggle(s)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        color: "var(--color-text-muted)",
+                      }}
+                    >
+                      <Icon name="clear" size="sm" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div style={{ marginTop: "auto", display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              disabled={none}
+              onClick={() => onAdd(ticked)}
+              style={{
+                ...baseBtn,
+                background: "var(--color-action-primary)",
+                color: "#fff",
+                opacity: none ? 0.5 : 1,
+                cursor: none ? "default" : "pointer",
+              }}
+            >
+              {none
+                ? "Tick the stamps to add"
+                : `Add ${ticked.length} ${ticked.length === 1 ? "stamp" : "stamps"}`}
+            </button>
+          </div>
+        </div>
+      }
+      onClose={onClose}
+    />
   );
 }
