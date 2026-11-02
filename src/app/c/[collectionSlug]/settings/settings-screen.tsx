@@ -841,7 +841,8 @@ function SettingsEntryBody({
       ) : (
         <FormatsPanel
           collectionId={collectionId}
-          initialFormats={initialFormats}
+          // The cover prices (#2356) are the catalogues', not the collector's to edit or reorder.
+          initialFormats={initialFormats.filter((f) => !f.coverKind)}
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
         />

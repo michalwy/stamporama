@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_FORMAT_WHERE } from "./stamp-formats";
 
 // The stamps a copy carries (ADR-0044, #744) — and the **only** module that writes them, or
 // `Item.stampId` and `Item.stampCount`.
@@ -128,7 +129,7 @@ export async function validateItemStampEntries(
   ];
   if (formatIds.length > 0) {
     const formats = await prisma.stampFormat.count({
-      where: { id: { in: formatIds }, collectionId },
+      where: { id: { in: formatIds }, collectionId, ...COPY_FORMAT_WHERE },
     });
     if (formats !== formatIds.length) throw new Error("Format not found in this collection.");
   }

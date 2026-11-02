@@ -376,7 +376,8 @@ export async function getVariantPriceGrid(
       makeOfferLabeller(collectionId),
       getStampConditions(ownerId, collectionId),
       getCertificateStatuses(ownerId, collectionId),
-      getStampFormats(ownerId, collectionId),
+      // The prices on cover and on piece (#2356) are tabs of the grid like a block's.
+      getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
       readAreaEditions(collectionId, areaId),
       stamps.length === 0
         ? Promise.resolve([])

@@ -19,7 +19,7 @@ import {
 import type { FormatFactorData, FormatFactorScope } from "@/lib/format-factors";
 import type { RowAction } from "./row-actions-menu";
 import { RowActionsMenu } from "./row-actions-menu";
-import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { usePriceFormats } from "./use-display-format";
 import { useCollectionConditions } from "./use-display-condition";
 import { TextInput } from "./text-input";
 import { formControl } from "@/app/control-style";
@@ -109,7 +109,8 @@ export function FormatFactorsDialog({
   const [deleting, setDeleting] = useState<FormatFactorData | null>(null);
   const [error, setError] = useState<string | undefined>();
 
-  const { data: formats = [] } = useCollectionFormats(collectionId);
+  // A multiplier is a price rule, so the cover prices (#2356) take one too.
+  const { data: formats = [] } = usePriceFormats(collectionId);
   const { data: conditions = [] } = useCollectionConditions(collectionId);
 
   const queryKey = ["formatFactors", collectionId, scope.kind, scope.id] as const;

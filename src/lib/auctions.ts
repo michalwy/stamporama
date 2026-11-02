@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import {
   allIn,
   bidStanding,
@@ -3521,7 +3522,7 @@ async function assertLineTargets(collectionId: string, input: AuctionLotLineInpu
       : Promise.resolve(null),
     input.formatId
       ? prisma.stampFormat.findFirst({
-          where: { id: input.formatId, collectionId },
+          where: { id: input.formatId, collectionId, ...COPY_FORMAT_WHERE },
           select: { id: true },
         })
       : Promise.resolve(null),

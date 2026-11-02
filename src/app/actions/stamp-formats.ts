@@ -27,11 +27,14 @@ async function getSession() {
   return session;
 }
 
+/** A copy's formats; with `withCoverPrices`, the cover-price rows too (#2356) — for a price
+ *  surface only. */
 export async function getStampFormatsAction(
-  collectionId: string
+  collectionId: string,
+  withCoverPrices = false
 ): Promise<StampFormatData[]> {
   const session = await getSession();
-  return getStampFormats(session.user.id, collectionId);
+  return getStampFormats(session.user.id, collectionId, { withCoverPrices });
 }
 
 function parseFields(formData: FormData): {

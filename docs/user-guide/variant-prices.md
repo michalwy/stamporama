@@ -20,7 +20,7 @@ Above the grid you choose three things once, for the whole grid:
 | --- | --- |
 | **Catalog edition** | which catalogue and which year — and with it the currency |
 | **Certificate** | *None* by default, which is what a printed catalogue quotes |
-| **Format tabs** | *Single*, or one of your formats (pair, block of four…) |
+| **Format tabs** | *Single*, one of your formats (pair, block of four…), or a price on cover — *Cover EF*, *Cover MeF*, *Cover MiF* — or *On piece* |
 
 Typing:
 
@@ -75,6 +75,11 @@ stamp's own **Prices** tab.
 On a format tab, a greyed, dashed cell shows what that format would be worth from the
 single's price and this issue's multiplier. Nothing is stored until you type over it;
 clearing it again goes back to the derived figure.
+
+The four cover tabs — **Cover EF**, **Cover MeF**, **Cover MiF** and **On piece** — are format tabs
+like any other: type the catalogue's ⊠ prices there, a single ⊠ price (Fischer's) into *Cover MiF*, or
+let a multiplier derive them. What each one means is in
+[Prices on cover and on piece](inventory.md#prices-on-cover-and-on-piece).
 
 ### Filling a certificate from None
 

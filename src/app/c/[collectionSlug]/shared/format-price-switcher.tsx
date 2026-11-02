@@ -22,6 +22,8 @@ interface FormatPriceSwitcherProps {
  */
 export function FormatPriceSwitcher({ formats, value, onChange }: FormatPriceSwitcherProps) {
   if (formats.length === 0) return null;
+  const copyFormats = formats.filter((f) => !f.coverKind);
+  const coverFormats = formats.filter((f) => f.coverKind);
 
   return (
     <label
@@ -34,11 +36,21 @@ export function FormatPriceSwitcher({ formats, value, onChange }: FormatPriceSwi
         style={TOOLBAR_SELECT_STYLE}
       >
         <option value="">Single</option>
-        {formats.map((f) => (
+        {copyFormats.map((f) => (
           <option key={f.id} value={f.id}>
             {f.abbreviation} — {f.name}
           </option>
         ))}
+        {/* The prices on cover and on piece (#2356), whose abbreviation is their name already. */}
+        {coverFormats.length > 0 && (
+          <optgroup label="On cover and on piece">
+            {coverFormats.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
     </label>
   );

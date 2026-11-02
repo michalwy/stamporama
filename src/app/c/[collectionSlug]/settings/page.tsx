@@ -114,7 +114,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getCollectionAreas(session.user.id, collection.id),
     getCatalogSettingsTree(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
-    getStampFormats(session.user.id, collection.id),
+    // With the cover prices (#2356): the multipliers take them; the formats list leaves them out.
+    getStampFormats(session.user.id, collection.id, { withCoverPrices: true }),
     getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),

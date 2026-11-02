@@ -73,7 +73,8 @@ export async function getStampFormatPricing(
 ): Promise<StampFormatPricing> {
   const collectionId = await resolveStampCollection(stampId);
   const [formats, rows, areaPath, stamp] = await Promise.all([
-    getStampFormats(ownerId, collectionId),
+    // A tab for each of a copy's formats, then the prices on cover and on piece (#2356).
+    getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
     getFormatFactorRows(collectionId),
     areaPathIds(collectionId, stampId),
     prisma.stamp.findUnique({
@@ -185,5 +186,8 @@ export async function getCollectionFormatsForPricing(
   ownerId: string,
   collectionId: string
 ): Promise<StampFormatPricing> {
-  return { formats: await getStampFormats(ownerId, collectionId), factors: {} };
+  return {
+    formats: await getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
+    factors: {},
+  };
 }

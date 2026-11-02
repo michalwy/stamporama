@@ -301,6 +301,11 @@ model StampFormat {
   name         String
   abbreviation String
   sortOrder    Int
+  // Set on the four reserved rows that carry a stamp's prices **on cover** and **on piece** (#2356):
+  // `cover_ef`, `cover_mef`, `cover_mif`, `on_piece`. Null on every format a copy can be in. They
+  // are priced like any format and never a copy's, a want's or a trade's — see `stamp-formats.ts`.
+  // One of each per collection (a partial unique index in the migration); a CHECK lists the values.
+  coverKind    String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]

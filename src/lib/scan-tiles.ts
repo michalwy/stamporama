@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { setCopyStamp } from "./item-candidates";
 import { getRunChecklist } from "./checklists";
 import { formatItemNo } from "./item-number";
@@ -591,7 +592,7 @@ async function assertRunAnswersExist(
   const [conditions, certs, formats, locations] = await Promise.all([
     prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
-    prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds } } }),
+    prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds }, ...COPY_FORMAT_WHERE } }),
     prisma.location.findMany({
       where: { collectionId, id: { in: locationIds } },
       select: { assignable: true },

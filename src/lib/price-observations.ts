@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { getCollectionBaseCurrency } from "./pricing";
 import { fetchEcbRateOn } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
@@ -624,7 +625,10 @@ async function parseObservation(
         })
       : null,
     formatId
-      ? prisma.stampFormat.findFirst({ where: { id: formatId, collectionId }, select: { id: true } })
+      ? prisma.stampFormat.findFirst({
+          where: { id: formatId, collectionId, ...COPY_FORMAT_WHERE },
+          select: { id: true },
+        })
       : null,
   ]);
   if (conditionId && !condition) throw new PriceObservationError("That condition no longer exists.");
