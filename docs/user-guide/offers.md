@@ -158,8 +158,10 @@ the same way when any of them is.
    exactly that copy. **Your ticks survive the filter box, the area tree and the year facets** —
    search *Poland*, tick four, search *1950*, tick three, and all seven go in. The button says so
    when some of them are off screen: **Add as 7 sets (3 hidden by these filters)**. With everything
-   ticked on screen it stays a plain **Add as 7 sets**. When you pick more than one copy you choose
-   how they go in:
+   ticked on screen it stays a plain **Add as 7 sets**. Tick **Not on any open offer** beside the
+   filter box to see only the copies on no other open offer on any platform (this offer does not
+   count) — the ones that never have to be closed somewhere else when they sell. It is remembered,
+   and shared by every copy picker. When you pick more than one copy you choose how they go in:
    - **Each copy as its own set** — a quantity of interchangeable singles, and
    - **One set holding all of them** — a series sold together.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
@@ -3195,6 +3197,8 @@ Four ways, all while the proposal is **Preparing** — a sent one takes no lots 
 
 - **New lots…** on the proposal's screen. Pick the copies in the copy picker — with its area tree,
   years and search — which shows the copies for sale and in hand that are on no open Direct offer.
+  **Not on any open offer** narrows it to the copies on no open offer on any platform; the
+  proposal's own lots do not count.
   With several picked, choose **An offer each** or **One offer for all**: each copy becomes a lot of
   its own, or all of them one lot, sold together. Your last choice is already chosen next time. The
   new lots are Direct offers being prepared, titled as Generate offers titles them, priced at their

@@ -166,7 +166,8 @@ list both of you are reading must never do.
 **Add copies** opens the copy picker — the same area tree, year facets and search the Copies screen
 uses, with a checkbox on every row. It opens on the copies you have marked **for trade**, because
 that is where you file what you are willing to part with; tick **Any held copy** to widen it to
-everything you hold, for the piece a partner asks for by name.
+everything you hold, for the piece a partner asks for by name. **Not on any open offer** narrows it
+to the copies listed nowhere, so nothing you give has an offer to close.
 
 **Your ticks survive the search, the area tree, the year facets and the Any held copy switch** —
 gather copies from several searches and add them in one go. When some of what you have ticked is

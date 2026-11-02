@@ -443,6 +443,8 @@ export function InventoryListPanel({
   const noPhotos = readFilterParam("noPhotos") === "true";
   const missingCatalogValue = readFilterParam("missingCatalogValue") === "true";
   const variantToSettle = readFilterParam("variantToSettle") === "true";
+  // On no open offer, on any platform (#2338) — the copies to prefer for a new offer or proposal.
+  const notOnOpenOffer = readFilterParam("notOnOpenOffer") === "true";
   // "For sale, not yet offered on platform X" (#259), remembered per collection (#275): the URL
   // param wins when present (shareable), else fall back to the stored selection on a fresh visit.
   // A stale value (platform since removed) is ignored so the filter can't silently narrow to nothing.
@@ -632,6 +634,7 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       variantToSettle: variantToSettle || undefined,
+      notOnOpenOffer: notOnOpenOffer || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
@@ -644,7 +647,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
+    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -670,6 +673,7 @@ export function InventoryListPanel({
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       variantToSettle: variantToSettle || undefined,
+      notOnOpenOffer: notOnOpenOffer || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
@@ -680,7 +684,7 @@ export function InventoryListPanel({
       held,
       heldAxes,
     }),
-    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
+    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1289,6 +1293,7 @@ export function InventoryListPanel({
     noPhotos ||
     missingCatalogValue ||
     variantToSettle ||
+    notOnOpenOffer ||
     !!notOfferedPlatformId ||
     !!excludedPlatformId ||
     deliveryStates.length > 0 ||
@@ -1663,8 +1668,17 @@ export function InventoryListPanel({
                   (not just ones with existing offers), since the point is to catch platforms
                   that haven't been used yet. Only shown once at least one platform
                   exists. */}
+              {/* Beside *Not on any open offer* (#2338) the worklist has nothing to add about offers —
+                  a copy on no open offer anywhere is on none on this platform — so it says so and
+                  is drawn without the accent a narrowing filter wears. */}
               {offerPlatforms.length > 0 && (
-                <Tooltip content="Show for-sale copies with no active offer on the chosen platform — or the copies deliberately kept off it">
+                <Tooltip
+                  content={
+                    notOnOpenOffer && notOfferedPlatformId
+                      ? "Nothing to add while Not on any open offer is on — those copies are on no open offer here either. It still keeps to the copies for sale and not kept off this platform."
+                      : "Show for-sale copies with no active offer on the chosen platform — or the copies deliberately kept off it"
+                  }
+                >
                   <select
                     value={
                       excludedPlatformId
@@ -1695,7 +1709,9 @@ export function InventoryListPanel({
                        click re-lays the row out under the cursor. */
                     style={{
                       ...FILTER_CONTROL_STYLE,
-                      ...(notOfferedPlatformId || excludedPlatformId
+                      ...(notOnOpenOffer && notOfferedPlatformId
+                        ? { color: "var(--color-text-muted)", border: "1px dashed var(--color-border-strong)" }
+                        : notOfferedPlatformId || excludedPlatformId
                         ? {
                             color: "var(--color-accent)",
                             border: "1px solid var(--color-accent)",

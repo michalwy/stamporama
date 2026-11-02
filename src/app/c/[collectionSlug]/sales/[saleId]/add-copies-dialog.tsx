@@ -27,6 +27,10 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useStockCopiesForSale } from "../use-sales-query";
+import {
+  NotOnOpenOfferToggle,
+  useNotOnOpenOffer,
+} from "@/app/c/[collectionSlug]/shared/not-on-open-offer";
 
 // Copies on no offer, added to the sale as **one set** with one price (#2021).
 //
@@ -120,10 +124,13 @@ export function AddCopiesDialog({
     [areas, areaId, includeSubAreas]
   );
 
-  const { data: copies = [], isLoading } = useStockCopiesForSale(collectionId, areaIds, {
-    areaId,
-    includeSubAreas,
-  });
+  const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
+  const { data: copies = [], isLoading } = useStockCopiesForSale(
+    collectionId,
+    areaIds,
+    { areaId, includeSubAreas },
+    notOnOpenOffer
+  );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const yearFacets = useMemo(() => {
@@ -234,6 +241,7 @@ export function AddCopiesDialog({
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />
+            <NotOnOpenOfferToggle checked={notOnOpenOffer} onChange={setNotOnOpenOffer} />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -242,7 +250,9 @@ export function AddCopiesDialog({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? "No copies in stock here. A copy that is sold, gone, or not yet in hand is not offered."
+                  ? notOnOpenOffer
+                    ? "No copies in stock here on no open offer. Untick “Not on any open offer” to see the copies listed somewhere too."
+                    : "No copies in stock here. A copy that is sold, gone, or not yet in hand is not offered."
                   : "No copies match your filter."}
               </p>
             ) : (

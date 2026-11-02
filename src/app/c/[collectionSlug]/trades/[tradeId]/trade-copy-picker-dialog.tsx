@@ -27,6 +27,10 @@ import { addTradeGiveLinesAction } from "@/app/actions/trades";
 import { useOfferableCopies, useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import {
+  NotOnOpenOfferToggle,
+  useNotOnOpenOffer,
+} from "@/app/c/[collectionSlug]/shared/not-on-open-offer";
 
 // The **give side's** picker (#637): which copies leave.
 //
@@ -118,12 +122,14 @@ export function TradeCopyPickerDialog({
     [areas, areaId, includeSubAreas]
   );
 
+  const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
   const { data: copies = [], isLoading } = useOfferableCopies(
     collectionId,
     tradeId,
     areaIds,
     { areaId, includeSubAreas },
-    forTradeOnly
+    forTradeOnly,
+    notOnOpenOffer
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -275,6 +281,7 @@ export function TradeCopyPickerDialog({
               />
               Any held copy
             </label>
+            <NotOnOpenOfferToggle checked={notOnOpenOffer} onChange={setNotOnOpenOffer} />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -283,9 +290,11 @@ export function TradeCopyPickerDialog({
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
                 {copies.length === 0
-                  ? forTradeOnly
-                    ? "No copies marked for trade here. Tick “Any held copy” to offer everything you hold — a copy that is sold, gone, not yet arrived, or already promised to another trade is never offered."
-                    : "No copies available. A copy that is sold, gone, not yet arrived, or already promised to another trade is not offered."
+                  ? notOnOpenOffer
+                    ? "No copies here on no open offer. Untick “Not on any open offer” to see the copies listed somewhere too."
+                    : forTradeOnly
+                      ? "No copies marked for trade here. Tick “Any held copy” to offer everything you hold — a copy that is sold, gone, not yet arrived, or already promised to another trade is never offered."
+                      : "No copies available. A copy that is sold, gone, not yet arrived, or already promised to another trade is not offered."
                   : "No copies match your filter."}
               </p>
             ) : (

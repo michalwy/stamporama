@@ -1404,11 +1404,13 @@ export interface SaleCopySetDraft {
 export async function listStockCopiesForSale(
   ownerId: string,
   collectionId: string,
-  filters: { areaIds?: string[] | null } = {}
+  /** `notOnOpenOffer`: only the copies on no open offer, on any platform (#2338). */
+  filters: { areaIds?: string[] | null; notOnOpenOffer?: boolean } = {}
 ): Promise<ItemListItem[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     areaIds: filters.areaIds ?? undefined,
+    notOnOpenOffer: filters.notOnOpenOffer || undefined,
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
     sortDir: "asc",

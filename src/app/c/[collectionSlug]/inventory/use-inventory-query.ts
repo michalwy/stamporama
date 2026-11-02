@@ -114,6 +114,8 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   missingCatalogValue?: boolean;
   /** Restrict to copies whose variant is still to settle (#1651). */
   variantToSettle?: boolean;
+  /** Restrict to copies on no open offer, on any platform (#2338). */
+  notOnOpenOffer?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259) — no non-terminal offer
    * on it, and not set aside from it (#506). Implies "for sale". */
   notOfferedPlatformId?: string;
@@ -177,6 +179,8 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   missingCatalogValue?: boolean;
   /** Restrict to copies whose variant is still to settle (#1651). */
   variantToSettle?: boolean;
+  /** Restrict to copies on no open offer, on any platform (#2338). */
+  notOnOpenOffer?: boolean;
   /** Restrict to for-sale copies not yet offered on this platform (#259). */
   notOfferedPlatformId?: string;
   /** Restrict to the copies deliberately kept off this platform (#506). */
@@ -270,6 +274,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.noPhotos) params.set("noPhotos", "true");
   if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
+  if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
   if (filters.notOfferedPlatformId)
     params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
   if (filters.excludedPlatformId)
@@ -537,6 +542,7 @@ export function useHoldingsValuation(
       noPhotos: filters.noPhotos,
       missingCatalogValue: filters.missingCatalogValue,
       variantToSettle: filters.variantToSettle,
+      notOnOpenOffer: filters.notOnOpenOffer,
       notOfferedPlatformId: filters.notOfferedPlatformId,
       excludedPlatformId: filters.excludedPlatformId,
       deliveryStates: filters.deliveryStates,
@@ -575,6 +581,7 @@ export function useHoldingsValuation(
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
+  if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
       if (filters.excludedPlatformId)
@@ -631,6 +638,7 @@ export function useItemYears(
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
+  if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
       if (filters.excludedPlatformId)

@@ -58,6 +58,7 @@ import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { NOT_ON_OPEN_OFFER_LABEL } from "@/app/c/[collectionSlug]/shared/not-on-open-offer";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -542,6 +543,14 @@ export function AttachCopiesDialog({
                 onClick={() => setFilters({ purchase: toggleValue(filters.purchase, value) })}
               />
             ))}
+            <span aria-hidden style={DIVIDER_STYLE} />
+            {/* The copies on no open offer on any platform (#2338), remembered with the rest. */}
+            <FilterChip
+              label={NOT_ON_OPEN_OFFER_LABEL}
+              active={filters.notOnOpenOffer}
+              toggle
+              onClick={() => setFilters({ notOnOpenOffer: !filters.notOnOpenOffer })}
+            />
             <span aria-hidden style={DIVIDER_STYLE} />
             {/* Disposition (#2180), the Copies list's control and its reading (#846): three marks a
                 copy carries at once, so two ticked asks for the copies carrying both. */}

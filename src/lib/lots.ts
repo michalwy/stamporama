@@ -842,6 +842,7 @@ async function planAttachableCopies(
     ...(query.locationId
       ? { locationId: query.locationId, locationExact: query.locationExact || undefined }
       : {}),
+    notOnOpenOffer: query.notOnOpenOffer || undefined,
     ...(onlyIds ? { ids: [...onlyIds] } : {}),
   });
   // A lot always belongs to a purchase, so *on a purchase* is *on a lot*.

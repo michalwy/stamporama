@@ -96,6 +96,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     possibleStampId: sp.get("possibleStampId") || undefined,
     possibleIssueId: sp.get("possibleIssueId") || undefined,
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
+    // On no open offer, on any platform (#2338).
+    notOnOpenOffer: boolParam(sp.get("notOnOpenOffer")),
     // The review read (#506): the copies set aside on this platform.
     excludedPlatformId: sp.get("excludedPlatformId") || undefined,
     // Copies that have **left** are hidden from the inventory list by default — sold (#207), and

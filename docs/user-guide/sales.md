@@ -120,7 +120,9 @@ Not every stamp that leaves was listed first — one sold to someone who asked f
 friend. **Add copies**, beside **Add sold units**, sells such copies without making an offer for
 them. It opens a picker of every copy **in stock** — in hand, not sold, not traded away, not
 disposed of — whatever it is kept for, with the area tree and year facets on the left and a filter
-box over the list (stamp, issue, catalog number or location ref). Tick the copies, type the **price
+box over the list (stamp, issue, catalog number or location ref) — and **Not on any open offer**
+beside it, for the copies listed nowhere: a copy that is on an offer can be sold here too, and its
+offer is then flagged as sold elsewhere. Tick the copies, type the **price
 for the set** in the sale's currency and press **Add**: the copies become **one set on the sale,
 with that one price**, as an offer's set is sold at one price rather than stamp by stamp. The price
 starts empty and has to be typed — there is no offer to take an asking price from.

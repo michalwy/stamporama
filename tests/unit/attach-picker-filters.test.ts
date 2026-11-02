@@ -36,6 +36,7 @@ describe("the picker's query string (#2179)", () => {
         formatIds: ["single", "pair"],
         purchase: ["on"],
         locationId: "loc-stockbook",
+        notOnOpenOffer: true,
         sortBy: "value",
         sortDir: "desc",
       }),
@@ -51,6 +52,7 @@ describe("the picker's query string (#2179)", () => {
       purchase: ["on"],
       locationId: "loc-stockbook",
       locationExact: true,
+      notOnOpenOffer: true,
       sortBy: "value",
       sortDir: "desc",
       year: "1950",
@@ -187,5 +189,18 @@ describe("remembered filters (#2121)", () => {
 describe("a stored state list with nothing recognisable (#2121)", () => {
   it("is the default, not every state", () => {
     assert.deepEqual(parseAttachFilters(JSON.stringify({ states: ["lost"] })).states, ["held"]);
+  });
+});
+
+describe("Not on any open offer (#2338)", () => {
+  it("is off by default, sends nothing while off, and is remembered when on", () => {
+    assert.equal(DEFAULT_ATTACH_FILTERS.notOnOpenOffer, false);
+    const params = new URLSearchParams();
+    writeAttachQuery(params, DEFAULT_ATTACH_FILTERS, null, "");
+    assert.equal(params.get("notOnOpenOffer"), null);
+    assert.equal(readAttachQuery(params, undefined).notOnOpenOffer, false);
+    const stored = serializeAttachFilters(withFilters({ notOnOpenOffer: true }));
+    assert.equal(parseAttachFilters(stored).notOnOpenOffer, true);
+    assert.equal(parseAttachFilters(JSON.stringify({ notOnOpenOffer: "yes" })).notOnOpenOffer, false);
   });
 });

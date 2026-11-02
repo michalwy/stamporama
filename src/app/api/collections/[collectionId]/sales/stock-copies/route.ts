@@ -21,6 +21,7 @@ export async function GET(
   try {
     const items = await listStockCopiesForSale(session.user.id, collectionId, {
       areaIds: areaIds.length > 0 ? areaIds : null,
+      notOnOpenOffer: request.nextUrl.searchParams.get("notOnOpenOffer") === "true",
     });
     return NextResponse.json({ items });
   } catch {
