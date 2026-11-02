@@ -132,6 +132,7 @@ export function prefixAreasAsClientData(): CollectionAreaData[] {
     titleNameByLanguage: {},
     symbol: null,
     coverSymbols: null,
+    stillValidForPostage: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,

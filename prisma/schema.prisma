@@ -250,6 +250,11 @@ model StampCondition {
   /** Chip colour (#728): one of `TAG_COLORS`, or null for the neutral chip. A palette key rather
    *  than a hex — the theme decides what the hue is worth on each background. */
   color        String?
+  /** The part this condition plays in a rule that reads a stamp's prices by meaning rather than by
+   *  name (#2358): `used` or `never_hinged`, at most one of each per collection (a partial unique
+   *  index in the migration). Michel's rule for stamps still valid for postage reads both; null on
+   *  every other condition. Chosen under Settings → Conditions. */
+  priceRole    String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]
@@ -3403,6 +3408,11 @@ model CollectionArea {
   // follows the parent area; true and false are set here and pass down. A tree that says nothing is
   // off. It decides what is asked, never what is drawn: a cover on a photo is applied regardless.
   coverSymbols         Boolean?
+  // Whether this area's stamps are still valid for postage (#2358) — Michel then prints no ⊠ price
+  // and the stamp's EF, MeF and MiF prices come from his rule where none is typed. Null follows the
+  // parent area; true and false are set here and pass down, as `coverSymbols` does. A tree that says
+  // nothing is not still valid.
+  stillValidForPostage Boolean?
   // Grouping-only areas (e.g. "Europe") have `assignable = false`: they organize child
   // areas but cannot themselves receive Issues/stamps directly. Leaf areas that hold
   // material have `assignable = true`. Defaults true. Mirrors `Location.assignable` (#56, #263).
@@ -7651,6 +7661,9 @@ model Issue {
   // the issue's numbers or area, and bulk-recomputed when an area's effective primary catalog
   // changes. See ADR-0014.
   primaryCatalogSortKey String?
+  // Whether this issue's stamps are still valid for postage (#2358): null follows its area, true and
+  // false override it — so an issue can be unmarked under a marked area.
+  stillValidForPostage Boolean?
 
   collection     Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionArea CollectionArea       @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)

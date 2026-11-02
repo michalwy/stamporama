@@ -2,7 +2,8 @@ import "server-only";
 import { prisma } from "../../db";
 import { areaSubtreeIds } from "../../areas";
 import { buildDescendantMap, buildEffectivePrimaryCatalogMap } from "../../pricing";
-import { makeFormatFactorLookup } from "../../format-pricing";
+import { makeFormatFactorLookup, makeStillValidLookup } from "../../format-pricing";
+import { STILL_VALID_COVER_KINDS } from "../../still-valid-postage";
 import { getCertificateStatuses } from "../../certificate-statuses";
 import { catalogPriceMarkOf } from "../../catalog-price-mark";
 import { childIsVariant, isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "../../variant-classification";
@@ -266,14 +267,20 @@ async function findMissing(context: OperationContext, params: ParsedParams) {
   const pricedIds = [...new Set([...gapStamps.map((s) => s.stampId), ...gapStamps.flatMap((s) => s.variantIds ?? [])])];
   const editionIds = [...new Set(editionOf.values())];
   const needsFactors = cells.some((cell) => cell.formatId !== null);
-  const [prices, factorLookup, certificates] = await Promise.all([
+  const [prices, factorLookup, certificates, stillValidFor, ruledFormats] = await Promise.all([
     prisma.stampCatalogPrice.findMany({
       where: { stampId: { in: pricedIds }, catalogEditionId: { in: editionIds } },
       select: { stampId: true, catalogEditionId: true, conditionId: true, certificateStatusId: true, formatId: true, price: true, mark: true },
     }),
     needsFactors ? makeFormatFactorLookup(context.collectionId) : Promise.resolve(null),
     getCertificateStatuses(context.ownerId, context.collectionId),
+    needsFactors ? makeStillValidLookup(context.collectionId) : Promise.resolve(null),
+    prisma.stampFormat.findMany({
+      where: { collectionId: context.collectionId, coverKind: { in: [...STILL_VALID_COVER_KINDS] } },
+      select: { id: true },
+    }),
   ]);
+  const ruledFormatIds = new Set(ruledFormats.map((f) => f.id));
   const percentById = new Map(certificates.map((status) => [status.id, status.pricePercent]));
   const missing = missingCatalogPriceCells({
     stamps: gapStamps,
@@ -290,6 +297,11 @@ async function findMissing(context: OperationContext, params: ParsedParams) {
     // The grid's resolution: the stamp's own area link, its first issue, the condition.
     factor: (stampId, formatId, conditionId) => {
       const place = placeOf.get(stampId);
+      // A still-valid stamp's cover price in the used condition is Michel's rule's (#2358).
+      const rule = ruledFormatIds.has(formatId)
+        ? stillValidFor?.(place?.areaId ?? null, place?.issueId ?? null)
+        : null;
+      if (rule && rule.usedConditionId === conditionId) return rule;
       return factorLookup?.(formatId, place?.areaId ?? null, place?.issueId ?? null, conditionId) ?? null;
     },
     percent: (id) => percentById.get(id) ?? null,

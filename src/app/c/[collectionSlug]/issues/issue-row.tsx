@@ -60,6 +60,10 @@ import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlu
 import type { AddVariantRangeParent } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
+import { useToast } from "@/app/toast-provider";
+import { setIssueStillValidForPostageAction } from "@/app/actions/issues";
+import { resolveEffectiveStillValid } from "@/lib/area-inheritance";
+import { stillValidMarkToStore } from "@/lib/still-valid-postage";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { useCatalogNumberGrid } from "@/app/c/[collectionSlug]/shared/use-catalog-number-grid";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
@@ -677,6 +681,7 @@ export function IssueRow({
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
   const { invalidateMembers } = useInvalidateIssues();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
+  const { toast } = useToast();
 
   // Manual ordering (#549). The hook owns the optimistic order, so the tree below is built from
   // *its* members rather than the query's — a drag has to show before the round trip.
@@ -845,6 +850,28 @@ export function IssueRow({
     },
   });
 
+  // Still valid for postage (#2358): the issue's own mark, else its area's. Marking stores only what the
+  // area does not already say, so an issue can be unmarked under a marked area and a change to the area
+  // still reaches the issues that agreed with it. Every price derived by Michel's rule moves with it.
+  const areaStillValid = resolveEffectiveStillValid(areas, issue.collectionAreaId);
+  const stillValid = issue.stillValidForPostage ?? areaStillValid;
+  const stillValidAction: RowAction = {
+    key: "still-valid",
+    label: stillValid ? "Unmark still valid for postage" : "Mark still valid for postage",
+    icon: "stamp",
+    hint: issue.stillValidForPostage === null && areaStillValid ? "Inherited from its area" : undefined,
+    onSelect: () => {
+      void (async () => {
+        const result = await setIssueStillValidForPostageAction(
+          issue.id,
+          stillValidMarkToStore(areaStillValid, !stillValid)
+        );
+        if (result.status === "error") toast({ message: result.message, tone: "error" });
+        else await invalidateStampsAndIssues(collectionId);
+      })();
+    },
+  };
+
   const rangeSuggestions = issue.rangeSuggestions;
   // Recomputing the declared range (#333) is an explicit, always-available action that confirms
   // before writing — the list row's warning chip is a hint, not the only way in.
@@ -866,6 +893,7 @@ export function IssueRow({
     checklists.action,
     sizePreset.action,
     formatFactors.action,
+    stillValidAction,
     {
       key: "recompute-range",
       label: "Recompute declared range…",

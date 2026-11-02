@@ -5,7 +5,9 @@ import {
   buildEffectiveAreaCatalogMap,
   buildEffectivePrimaryCatalogMap,
 } from "./pricing";
-import { makeFormatFactorLookup } from "./format-pricing";
+import { makeFormatFactorLookup, makeStillValidLookup } from "./format-pricing";
+import { isStillValidCoverKind } from "./still-valid-postage";
+import type { CellDerivation } from "./variant-price-cells";
 import { makeOfferLabeller, STAMP_LABEL_SELECT, type StampLabelRow } from "./offer-labels";
 import { getStampConditions, type StampConditionData } from "./conditions";
 import { getCertificateStatuses, type CertificateStatusData } from "./certificate-statuses";
@@ -144,12 +146,13 @@ export interface VariantPriceRecord {
 }
 
 /** One resolved format multiplier (ADR-0020 §5). Only non-null ones are reported — an absent entry
- *  means nothing derives for that stamp × format × condition, which is the common case. */
+ *  means nothing derives for that stamp × format × condition, which is the common case. A
+ *  still-valid stamp's EF, MeF and MiF in the used condition carry Michel's rule instead (#2358). */
 export interface VariantPriceFactor {
   stampId: string;
   formatId: string;
   conditionId: string;
-  factor: number;
+  factor: CellDerivation;
 }
 
 export interface VariantPriceGridData {
@@ -371,7 +374,7 @@ export async function getVariantPriceGrid(
     select: GRID_STAMP_SELECT,
   })) as GridStamp[];
 
-  const [labeller, conditions, certificateStatuses, formats, editions, priceRows, factorLookup] =
+  const [labeller, conditions, certificateStatuses, formats, editions, priceRows, factorLookup, stillValidFor] =
     await Promise.all([
       makeOfferLabeller(collectionId),
       getStampConditions(ownerId, collectionId),
@@ -394,6 +397,7 @@ export async function getVariantPriceGrid(
             },
           }),
       makeFormatFactorLookup(collectionId),
+      makeStillValidLookup(collectionId),
     ]);
 
   const labelOf = (stamp: GridStamp) =>
@@ -410,9 +414,14 @@ export async function getVariantPriceGrid(
     if (!stamp) continue;
     const stampAreaId = areaOfStamp(stamp) ?? areaId;
     const issueId = stamp.issueMemberships[0]?.issueId ?? null;
+    const stillValid = stillValidFor(stampAreaId, issueId);
     for (const format of formats) {
+      const ruled = stillValid && isStillValidCoverKind(format.coverKind) ? stillValid : null;
       for (const condition of conditions) {
-        const factor = factorLookup(format.id, stampAreaId, issueId, condition.id);
+        const factor =
+          ruled && condition.id === ruled.usedConditionId
+            ? ruled
+            : factorLookup(format.id, stampAreaId, issueId, condition.id);
         if (factor != null) {
           formatFactors.push({
             stampId: row.stampId,

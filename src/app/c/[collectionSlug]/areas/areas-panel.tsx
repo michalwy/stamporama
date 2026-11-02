@@ -13,19 +13,21 @@ import {
   updateCollectionAreaAction,
   deleteCollectionAreaAction,
   reorderCollectionAreasAction,
+  setAreaStillValidForPostageAction,
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "@/lib/area-vendor";
-import { resolveEffectiveCatalogPrefix } from "@/lib/area-inheritance";
+import { resolveEffectiveCatalogPrefix, resolveEffectiveStillValid } from "@/lib/area-inheritance";
+import { stillValidMarkToStore } from "@/lib/still-valid-postage";
 import {
   AddAreaDialog,
   AREA_FORM_STYLE,
   CollectionAreaForm,
   type AreaFormVendor,
 } from "@/app/c/[collectionSlug]/shared/area-form-dialog";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
@@ -307,6 +309,21 @@ export function AreasPanel({
       const result = await action();
       setActionState(result);
       if (result.status === "success") handleSuccess();
+    });
+  }
+
+  /** Mark or unmark an area's stamps still valid for postage (#2358). What is stored is only what
+   *  the parent does not already say, so a change higher up still reaches an area that agreed. */
+  function toggleStillValid(area: CollectionAreaData) {
+    const inherited = resolveEffectiveStillValid(initialAreas, area.parentId);
+    const wanted = !resolveEffectiveStillValid(initialAreas, area.id);
+    startTransition(async () => {
+      const result = await setAreaStillValidForPostageAction(
+        area.id,
+        stillValidMarkToStore(inherited, wanted)
+      );
+      setActionState(result);
+      if (result.status === "success") router.refresh();
     });
   }
 
@@ -648,6 +665,7 @@ export function AreasPanel({
                       icon: "factors",
                       onSelect: () => openDialog({ kind: "format-factors", area }),
                     },
+                    stillValidAction(initialAreas, area, () => toggleStillValid(area)),
                     {
                       key: "delete",
                       label: "Delete",
@@ -779,4 +797,29 @@ export function AreasPanel({
       })()}
     </>
   );
+}
+
+/** The ⋮ entry marking an area's stamps still valid for postage (#2358) — its label says what a
+ *  press does, its hint where an inherited mark comes from. */
+function stillValidAction(
+  areas: readonly CollectionAreaData[],
+  area: CollectionAreaData,
+  onSelect: () => void
+): RowAction {
+  const valid = resolveEffectiveStillValid(areas, area.id);
+  let from: CollectionAreaData | undefined;
+  if (valid && area.stillValidForPostage === null) {
+    from = areas.find((a) => a.id === area.parentId);
+    for (let depth = 0; from && from.stillValidForPostage === null && depth < 50; depth++) {
+      const parentId: string | null = from.parentId;
+      from = areas.find((a) => a.id === parentId);
+    }
+  }
+  return {
+    key: "still-valid",
+    label: valid ? "Unmark still valid for postage" : "Mark still valid for postage",
+    icon: "stamp",
+    hint: from ? `Inherited from ${from.name}` : undefined,
+    onSelect,
+  };
 }

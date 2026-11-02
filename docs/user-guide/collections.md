@@ -986,6 +986,9 @@ Each collection keeps its own list of **conditions** — the grades used when va
   the default conditions, and it is the same in every language. It feeds the `{conditionSymbol}`
   token in [templates](platforms.md#listing-templates); a condition without one prints nothing there.
 - Give each condition a **colour**, so its chip stands out wherever copies are listed — see [Condition and certificate colours](#condition-and-certificate-colours) below.
+- Tell **Michel's rule** which condition is *Used* and which is *Never hinged* — one of each, *U* and
+  *MNH* to start with. The rule prices a stamp still valid for postage on a cover from those two; see
+  [Stamps still valid for postage](inventory.md#stamps-still-valid-for-postage).
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
 

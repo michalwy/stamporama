@@ -43,6 +43,7 @@ function area(id: string, parentId: string | null, sortOrder: number, extra: Par
     titleNameByLanguage: {},
     symbol: null,
     coverSymbols: null,
+    stillValidForPostage: null,
     assignable: true,
     sortOrder,
     stampCount: 0,

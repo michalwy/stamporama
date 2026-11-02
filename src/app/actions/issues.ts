@@ -27,6 +27,7 @@ import {
   getIssueAreaId,
   getIssueRangeSuggestions,
   setIssueCatalogRange,
+  setIssueStillValidForPostage,
   ISSUE_TRANSLATION_FIELDS,
 } from "@/lib/issues";
 import type {
@@ -888,5 +889,19 @@ export async function mergeIssuesAction(
     return { status: "success", issueId: targetIssueId };
   } catch {
     return { status: "error", message: "Failed to merge issues. Please try again." };
+  }
+}
+
+/** Mark an issue's stamps still valid for postage, or not (#2358); null follows its area. */
+export async function setIssueStillValidForPostageAction(
+  issueId: string,
+  value: boolean | null
+): Promise<IssueActionState> {
+  const session = await getSession();
+  try {
+    await setIssueStillValidForPostage(session.user.id, issueId, value);
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Failed to update the issue. Please try again." };
   }
 }

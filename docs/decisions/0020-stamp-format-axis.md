@@ -234,6 +234,23 @@ collector's to rename, reorder or delete — they are what the catalogues print.
 their name, so `Piece` stays free for a fragment format and the agent API's name matching stays
 unambiguous. Nothing reads them for a copy's value yet; how a piece is valued from them is #2359.
 
+### 11. A still-valid stamp's cover prices follow Michel's rule, not a multiplier (#2358)
+
+Michel prints no ⊠ price for a stamp still valid for postage and states a rule instead: at least
+0.40, or about 20 % above the used price, but no more than the never-hinged price when that is above
+0.40. A multiplier cannot say that — it has a floor and a cap — so for such a stamp **the rule takes
+the multiplier's place** in §5's *explicit or derived*: a typed EF, MeF or MiF price still wins, and
+in its absence the price is the rule's, shown as derived. It fills the **used** condition's cell
+only, from the used and never-hinged singles of the same edition, and the 0.40 is that edition's
+currency; on piece and the other conditions keep their multipliers.
+
+Which stamps are still valid is a mark on an area or an issue, inherited downwards (an issue may be
+unmarked under a marked area). Which conditions are *used* and *never hinged* is a role on the
+condition (`StampCondition.priceRole`), chosen once for the collection; while either is unchosen the
+rule gives nothing. A derivation is therefore a multiplier **or** the rule
+(`FormatDerivation`), and only the price surfaces — the grids, the lists' `as` column, the agent
+API's price reads — learn the second case; a copy is never in a cover format (§10).
+
 ## Still open
 
 - Completeness (#133) is unimplemented; when it is built, format is its third breakdown dimension
