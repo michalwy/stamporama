@@ -1680,15 +1680,6 @@ export function ScansCard({
         </div>
       )}
 
-      {pairingFiles && (
-        <AlternatingPairsDialog
-          files={pairingFiles}
-          lastBackTurnover={lastBackTurnover}
-          onAdd={uploadPairs}
-          onClose={() => setPairingFiles(null)}
-        />
-      )}
-
       {dialogTiles.length > 0 && (
         <TileIdentifyDialog
           collectionId={collectionId}
@@ -1894,6 +1885,18 @@ export function ScansCard({
         />
       )}
         </>
+      )}
+
+      {/* The pairs to check (#2163), outside the open section on purpose (#2348): the header's *Add
+          card scans* is in view while the section is collapsed, and the files chosen there must
+          still show their pairs — the section is left folded as it was. */}
+      {pairingFiles && (
+        <AlternatingPairsDialog
+          files={pairingFiles}
+          lastBackTurnover={lastBackTurnover}
+          onAdd={uploadPairs}
+          onClose={() => setPairingFiles(null)}
+        />
       )}
     </section>
   );
