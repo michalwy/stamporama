@@ -84,6 +84,7 @@ export function NewLotFlow({
       <ComposeSetDialog
         collectionId={collectionId}
         offerId={null}
+        ownOffers={{ facebookPostId: post.postId }}
         platformId={post.platform.id}
         platformTitleLanguage={null}
         areas={areas}

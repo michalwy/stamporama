@@ -1990,6 +1990,18 @@ Every copy row's **⋮** menu has a **View offers** action. It opens a read-only
 (**Active**, **Paused**), then the ones you're still preparing, then the closed ones (**Sold**,
 **Withdrawn**). A copy you have never listed says so.
 
+You rarely need to open it to know whether a copy is listed: **a copy in an open offer carries a
+chip on its row** — on the Copies list and in every copy picker (*New lots…*, an offer's **Add
+set**, **Attach existing copies**, the sale's and trade's pickers, and the rest). With one open
+offer the chip names it by platform and number (*Facebook #3012*); with several it says how many
+(*On 2 offers*). Open means anything but **Sold** or **Withdrawn**, so a copy in a **Preparing**
+offer is chipped too; the chip takes the colour of the furthest-along offer, so a live listing
+stands out from one still being prepared. Hover it to see every offer with its state, and click it
+to open **View offers**. A copy in no open offer shows nothing. In a picker opened from an offer, a
+proposal or a post, that screen's own offer or lots are left out of the chip — a copy already in
+them is what you are editing, not a listing elsewhere. Pick a copy without the chip where you can:
+when one listed elsewhere sells, the other offer has to be closed by hand.
+
 A row of **state chips** sits over the offers — one per state they are in, with its count — and
 the popup lists the offers in the states switched on. **Sold** and **Withdrawn** start off, so
 what you see first is what is still open; click a chip to switch it on or off, any number at once.

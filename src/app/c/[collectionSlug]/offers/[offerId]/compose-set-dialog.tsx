@@ -37,6 +37,7 @@ import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import type { OwnOffers } from "@/lib/copy-open-offers";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -78,6 +79,9 @@ interface ComposeSetDialogProps {
   newOffers?: { platformName: string; perCopy: boolean; isPending: boolean; error?: string };
   /** The dialog's title; *Add set* unless given. */
   title?: string;
+  /** The offer, proposal or post the dialog is opened from (#2337): the copies' open-offer chips
+   *  leave out its offers, since being in them is what the screen is about. */
+  ownOffers?: OwnOffers;
   onClose: () => void;
   onDone: () => void;
 }
@@ -106,6 +110,7 @@ export function ComposeSetDialog({
   onPick,
   newOffers,
   title = "Add set",
+  ownOffers,
   onClose,
   onDone,
 }: ComposeSetDialogProps) {
@@ -371,6 +376,7 @@ export function ComposeSetDialog({
                         isLast={i === visibleCopies.length - 1}
                         readOnly
                         showCostBasis
+                        ownOffers={ownOffers}
                       />
                     </div>
                   </div>
