@@ -241,6 +241,7 @@ async function estimateStamps(
         unknownVariant: unknownVariant.get(stamp.id) ?? false,
         carrier: null,
         faultReductionPercent: null,
+        valueModifier: null,
         candidateStampIds: null,
       }))
     )

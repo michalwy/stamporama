@@ -51,6 +51,7 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import { addPurchasePhotos, parsePhotoChangeSet, removePurchasePhoto } from "@/lib/photos";
 import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
+import { parseValueModifierInput } from "@/lib/value-modifier";
 
 export type PurchaseActionState =
   | { status: "idle" }
@@ -790,6 +791,16 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
     const reduction = parseFaultReductionInput(str(formData, "faultReductionPercent"));
     if (!reduction.ok) throw new Error(reduction.message);
     changes.faultReductionPercent = reduction.value;
+  }
+  // The value modifier (#2357), the reduction's rule: present with both figures empty clears it.
+  if (formData.has("valueModifierPercent")) {
+    const modifier = parseValueModifierInput(
+      str(formData, "valueModifierPercent"),
+      str(formData, "valueModifierAmount"),
+      str(formData, "valueModifierNote")
+    );
+    if (!modifier.ok) throw new Error(modifier.message);
+    changes.valueModifier = modifier.value;
   }
   return changes;
 }

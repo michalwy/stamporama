@@ -150,6 +150,33 @@ export interface CopyValuation {
    * name the full one (*45.00, −40 % for faults*), and so a total can count what it took off.
    */
   faultReduction: FaultReduction | null;
+  /**
+   * Set when the figure above has been **adjusted by the copy's value modifier** (#2357): the
+   * percentage, amount and note typed on the copy, and the figure as the catalogue gave it. Null for
+   * every unmodified valuation — no modifier, a row that is not a copy, or an unpriced copy, which
+   * has no figure to adjust. Applied before the fault reduction, so when both are set
+   * `faultReduction`'s full figure is the modified one.
+   */
+  valueModifier: AppliedValueModifier | null;
+}
+
+/** A copy's value modifier as typed on it (#2357) — see {@link applyValueModifier}. */
+export interface ValueModifier {
+  /** Whole percent, ≥ −100 and not 0; null for none. */
+  percent: number | null;
+  /** 2-dp string in the currency of the figure it adjusts, not 0; null for none. */
+  amount: string | null;
+  note: string | null;
+}
+
+/** How a copy's figure was adjusted by its modifier — see {@link CopyValuation.valueModifier}. */
+export interface AppliedValueModifier extends ValueModifier {
+  /** The figure before the modifier, in its own currency, 2-dp string. */
+  fullAmount: string;
+  /** The figure before the modifier in base currency, or null when it had no rate. */
+  fullBaseAmount: number | null;
+  /** The unmodified base figure as a 2-dp string, or null. */
+  fullBaseAmountDisplay: string | null;
 }
 
 /** How a copy's figure was lowered for its faults (#1560) — see {@link CopyValuation.faultReduction}. */
@@ -226,6 +253,74 @@ export function applyFaultReduction(
   };
 }
 
+/** True when a modifier changes anything: a percentage or an amount (#2357). */
+export function isValueModifier(
+  modifier: ValueModifier | null | undefined
+): modifier is ValueModifier {
+  return (
+    !!modifier &&
+    ((typeof modifier.percent === "number" && modifier.percent !== 0) ||
+      (modifier.amount !== null && Number(modifier.amount) !== 0))
+  );
+}
+
+/**
+ * Adjust an amount by a copy's value modifier (#2357): `amount × (1 + percent / 100) + modifier
+ * amount`, never below zero. Pure; the one place the arithmetic lives. The modifier's amount is in
+ * the currency of `amount` — the catalogue figure it adjusts.
+ */
+export function modifyValue(amount: number, modifier: ValueModifier | null): number {
+  if (!isValueModifier(modifier)) return amount;
+  const scaled = amount * (1 + (modifier.percent ?? 0) / 100);
+  const added = scaled + (modifier.amount === null ? 0 : Number(modifier.amount));
+  return Math.max(0, Math.round(added * 100) / 100);
+}
+
+/**
+ * Apply a copy's value modifier to its valuation (#2357). Pure.
+ *
+ * The figure is adjusted **in its own currency** — the modifier's amount is stated in it — and then
+ * converted to base by the same rates the figure was, so *+200 € in Michel* stays what the catalogue
+ * said. The unmodified figure is kept in {@link CopyValuation.valueModifier}; everything else
+ * describes where the figure was read and is left as it is. An unpriced valuation comes back
+ * unchanged: an amount is not a value without the catalogue figure it adjusts. The fault reduction
+ * (#1560) is applied **after** this, by {@link applyFaultReduction}.
+ */
+export function applyValueModifier(
+  valuation: CopyValuation,
+  modifier: ValueModifier | null,
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): CopyValuation {
+  if (
+    !isValueModifier(modifier) ||
+    valuation.unpriced ||
+    valuation.amount === null ||
+    valuation.currency === null
+  ) {
+    return valuation;
+  }
+  const amount = modifyValue(Number(valuation.amount), modifier);
+  const baseAmount =
+    valuation.baseAmount === null
+      ? null
+      : baseValueOf(amount, valuation.currency, baseCurrency, rates);
+  return {
+    ...valuation,
+    amount: amount.toFixed(2),
+    baseAmount,
+    baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    valueModifier: {
+      percent: modifier.percent,
+      amount: modifier.amount,
+      note: modifier.note,
+      fullAmount: valuation.amount,
+      fullBaseAmount: valuation.baseAmount,
+      fullBaseAmountDisplay: valuation.baseAmountDisplay,
+    },
+  };
+}
+
 /** An amount and the currency it was stated in — a multi-stamp copy's recorded value (#747). */
 export interface ExplicitValue {
   /** 2-dp string, as stored. */
@@ -264,6 +359,7 @@ export function valuateExplicitValue(
     unpricedVariantIds: [],
     explicit: true,
     faultReduction: null,
+    valueModifier: null,
     mark: null,
   };
 }
@@ -402,6 +498,7 @@ function toValuation(
       unpricedVariantIds,
       explicit: false,
       faultReduction: null,
+      valueModifier: null,
       mark,
     };
   }
@@ -419,6 +516,7 @@ function toValuation(
     unpricedVariantIds,
     explicit: false,
     faultReduction: null,
+    valueModifier: null,
     mark: null,
   };
 }

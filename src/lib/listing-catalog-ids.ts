@@ -203,6 +203,7 @@ export async function resolveListingCatalogItemIds(
     unknownVariant: true,
     carrier: null,
     faultReductionPercent: null,
+    valueModifier: null,
     candidateStampIds: c.candidateStampIds,
   }));
   // `rows` is empty when every open copy was chosen by hand, and `valuateItemRows` answers an empty

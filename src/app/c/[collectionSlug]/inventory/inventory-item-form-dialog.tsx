@@ -112,6 +112,10 @@ const FORM_COLUMN: React.CSSProperties = {
 const FAULT_REDUCTION_HINT =
   "How much this copy's faults take off its value, in percent. Every value of the copy — catalog and market, and every total built from them — is lowered by it. Leave empty for none.";
 
+/** The value modifier's hover (#2357). */
+const VALUE_MODIFIER_HINT =
+  "A catalogue exception this copy carries — a cancellation surcharge, a rare usage. Its catalog value is multiplied by the percentage, then the amount is added (in the catalog's own currency), and only then do faults take their reduction. The note says why, and is shown wherever the modifier is. Leave both figures empty for none.";
+
 function GroupLabel({
   htmlFor,
   children,
@@ -684,6 +688,56 @@ export function InventoryItemFormDialog({
                     />
                     <span style={{ color: "var(--color-text-muted)" }}>%</span>
                   </div>
+                </div>
+              </div>
+
+              {/* A catalogue exception on this piece (#2357): its catalog value × (1 + %) + amount,
+                  before the faults' reduction above, with a note saying why. */}
+              <div style={{ ...ROW, gridTemplateColumns: "6.5rem 7.5rem 1fr" }}>
+                <div>
+                  <Tooltip content={VALUE_MODIFIER_HINT} style={{ display: "flex", width: "fit-content" }}>
+                    <GroupLabel htmlFor="copy-value-modifier-percent">Value modifier</GroupLabel>
+                  </Tooltip>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <NumericInput
+                      kind="number"
+                      inputMode="text"
+                      id="copy-value-modifier-percent"
+                      name="valueModifierPercent"
+                      placeholder="None"
+                      defaultValue={item?.valueModifier?.percent ?? ""}
+                      disabled={isPending}
+                      {...NO_AUTOFILL}
+                      style={{ ...INPUT_STYLE, textAlign: "right" }}
+                    />
+                    <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <GroupLabel htmlFor="copy-value-modifier-amount">Amount</GroupLabel>
+                  <NumericInput
+                    kind="amount"
+                    inputMode="text"
+                    id="copy-value-modifier-amount"
+                    name="valueModifierAmount"
+                    placeholder="None"
+                    defaultValue={item?.valueModifier?.amount ?? ""}
+                    disabled={isPending}
+                    {...NO_AUTOFILL}
+                    style={{ ...INPUT_STYLE, textAlign: "right" }}
+                  />
+                </div>
+                <div>
+                  <GroupLabel htmlFor="copy-value-modifier-note">Modifier note</GroupLabel>
+                  <TextInput
+                    id="copy-value-modifier-note"
+                    name="valueModifierNote"
+                    placeholder="e.g. Stempel Danzig +200 %"
+                    defaultValue={item?.valueModifier?.note ?? ""}
+                    disabled={isPending}
+                    {...NO_AUTOFILL}
+                    style={INPUT_STYLE}
+                  />
                 </div>
               </div>
 

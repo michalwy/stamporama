@@ -333,6 +333,7 @@ export async function loadRealizationRatios(
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
         faultReductionPercent: null,
+        valueModifier: null,
         candidateStampIds: null,
       }))
     ),
@@ -346,6 +347,7 @@ export async function loadRealizationRatios(
       unknownVariant: isUnknownVariantStamp(row.stamp),
       carrier: null,
       faultReductionPercent: null,
+      valueModifier: null,
       candidateStampIds: null,
     })),
   ]);

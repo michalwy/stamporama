@@ -338,6 +338,7 @@ const UNPRICED: CopyValuation = {
   unpricedVariantIds: [],
   explicit: false,
   faultReduction: null,
+  valueModifier: null,
 };
 
 /** Photo roles a stamp uses (#137): the single `main` slot, plus the two a copy scan carries.
@@ -385,6 +386,7 @@ async function enrichReceiveLines(
                 unknownVariant: row.stamp ? isUnknownVariantStamp(row.stamp) : false,
                 carrier: null,
                 faultReductionPercent: null,
+                valueModifier: null,
                 candidateStampIds: null,
               },
             ]
@@ -684,6 +686,7 @@ async function receiveAxisRows(
         unknownVariant: row.unknownVariant,
         carrier: null,
         faultReductionPercent: null,
+        valueModifier: null,
         candidateStampIds: null,
       }))
     );
