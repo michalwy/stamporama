@@ -550,6 +550,11 @@ export function TileIdentifyChainDialogs({
               ]
                 .filter(Boolean)
                 .join(" ") || null,
+            entry: {
+              stampId: draft.stampId,
+              quantity: draft.quantity,
+              formatId: draft.formatId || null,
+            },
           };
         })
       : undefined;

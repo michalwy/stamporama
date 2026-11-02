@@ -22,7 +22,10 @@ import type { ItemStampEntryInput } from "@/lib/item-stamps";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import {
   getCarrierValuation,
+  previewPieceValue,
+  setPieceValuation,
   type CarrierValuationRead,
+  type PiecePreviewInput,
 } from "@/lib/carrier-values";
 import {
   isFranking,
@@ -45,7 +48,7 @@ import { setItemFaultEntries } from "@/lib/faults";
 import { parseFaultEntries } from "@/lib/fault-entry";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
 import { parseValueModifierInput } from "@/lib/value-modifier";
-import type { ValueModifier } from "@/lib/valuation";
+import type { CopyValuation, ValueModifier } from "@/lib/valuation";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -214,6 +217,33 @@ function parseCandidateStampIds(formData: FormData): string[] | undefined {
 export async function getCarrierValuationAction(itemId: string): Promise<CarrierValuationRead> {
   const session = await getSession();
   return getCarrierValuation(session.user.id, itemId);
+}
+
+/** The value a piece will have, for the identification step before it is written (#2353). */
+export async function previewPieceValueAction(
+  collectionId: string,
+  input: PiecePreviewInput
+): Promise<CopyValuation | null> {
+  const session = await getSession();
+  return previewPieceValue(session.user.id, collectionId, {
+    ...input,
+    franking: isFranking(input.franking) ? input.franking : null,
+  });
+}
+
+/** A piece's franking changed in its Valuation window (#2353); the value follows on the re-read. */
+export async function setCopyFrankingAction(
+  itemId: string,
+  franking: Franking
+): Promise<{ error?: string }> {
+  if (!isFranking(franking)) return { error: "Choose how the piece was franked." };
+  const session = await getSession();
+  try {
+    await setPieceValuation(session.user.id, itemId, { franking });
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "The franking could not be saved." };
+  }
 }
 
 /** The stamps a copy carries, for the dialog that edits them and the copy's own screen (#746). */

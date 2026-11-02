@@ -616,12 +616,13 @@ describe("applyFaultReduction", () => {
 
   it("lowers a piece's computed value by the same rule (#2359)", () => {
     const computed = valuatePiece(
-      { amount: 80, rule: "sum_of_used", usage: null, partial: false, missing: [] },
+      { amount: 80, rule: "sum_of_used", usage: null, partial: false, missing: [], terms: [] },
       {
         method: "michel",
         methodSource: { kind: "collection" },
         franking: "rate_correct",
         kind: "on_cover",
+        components: [],
       },
       false,
       "EUR"

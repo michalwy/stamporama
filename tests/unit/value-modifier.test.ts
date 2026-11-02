@@ -120,12 +120,13 @@ describe("applyValueModifier", () => {
 
   it("adjusts a piece's computed figure the same way (#2359)", () => {
     const computed = valuatePiece(
-      { amount: 20, rule: "sum_of_used", usage: null, partial: false, missing: [] },
+      { amount: 20, rule: "sum_of_used", usage: null, partial: false, missing: [], terms: [] },
       {
         method: "michel",
         methodSource: { kind: "collection" },
         franking: "rate_correct",
         kind: "on_cover",
+        components: [],
       },
       false,
       "EUR"

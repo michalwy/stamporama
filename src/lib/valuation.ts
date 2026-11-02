@@ -14,8 +14,10 @@ import type {
   Franking,
   MethodSource,
   MissingPiecePrice,
+  PieceComponent,
   PieceKind,
   PieceRule,
+  PieceTerm,
   PieceValueResult,
   ValuationMethod,
 } from "./piece-valuation";
@@ -344,6 +346,11 @@ export interface PieceValuation {
   /** True when a price the rule reads is missing: the figure, if any, is a lower bound. */
   partial: boolean;
   missing: MissingPiecePrice[];
+  /** The figure as a sum (#2353): what the Valuation window prints as the arithmetic. */
+  terms: PieceTerm[];
+  /** Each entry on the piece with every price the rule may read, in the collection currency (#2353):
+   *  its used price and its price on the piece, side by side. In the collector's order. */
+  components: PieceComponent[];
 }
 
 /**
@@ -353,7 +360,7 @@ export interface PieceValuation {
  */
 export function valuatePiece(
   result: PieceValueResult,
-  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing">,
+  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing" | "terms">,
   uncertain: boolean,
   baseCurrency: string
 ): CopyValuation {
@@ -375,6 +382,7 @@ export function valuatePiece(
       usage: result.usage,
       partial: result.partial,
       missing: result.missing,
+      terms: result.terms,
     },
     faultReduction: null,
     valueModifier: null,

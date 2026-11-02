@@ -1246,9 +1246,31 @@ Areas screen and inherited by the areas below it; or the copy's own, set in its 
 wins over both. The area that decides is the area of the piece's **most expensive stamp** — the one
 with the highest used price.
 
-**A missing price** makes the value **partial**: the figure counts what is priced, and the piece's
-**Valuation** window (its row's **⋮ → Show valuation**, or click its value) says which stamp is missing
-which price. With nothing priced at all the piece is unpriced, and its row shows **+ prices**.
+**A missing price** makes the value **partial**: the figure counts what is priced, and the missing
+price is marked on its stamp. With nothing priced at all the piece is unpriced, and its row shows
+**+ prices**.
+
+**How the value was reached** is the piece's **Valuation** window (its row's **⋮ → Show valuation**, or
+click its value), read top to bottom:
+
+- **Each stamp on the piece** with two prices: its **used** price, in its own format, and its price
+  **on the piece** — the one the method reads for this piece: its *Cover EF*, *MeF* or *MiF* price on a
+  cover, by what is on it (under Fischer its ⊠ price, which is its MiF price), its *On piece* price on
+  a fragment. A missing price says *no price* in amber where the value needed it; a dash is a price the
+  value does not read.
+- **The computed value**, then the arithmetic it is — *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*
+  — so you can check it against the catalog: ⊙ is a used price, ⊠ Fischer's cover price, *EF*, *MeF*
+  and *MiF* (*FP*, *FW*, *FM* under Fischer FP/FW/FM) Michel's. A price the sum needed but is missing
+  is printed as a dash where it would have been added, and the value says it is partial.
+- **The method**, the franking and EF/MeF/MiF in one line, and where the method came from — an area,
+  *set on this copy*, or the collection's default.
+- **Franking**, on a cover, which you can change right there: the value follows at once, here and on
+  the Copies list.
+- Your **modifier** with its note, and the **reduction for faults**, each with the figure it gives,
+  ending in **Value of this copy** — the figure every list and total reads.
+
+The same prices and arithmetic show when you identify a card scan tile as a piece carrying several
+stamps — see [Working through the tiles](purchases.md#working-through-the-tiles).
 
 The computed value is what the Copies list total adds up, the asking price pre-filled when you list the
 piece, your own valuation of it in a trade and the figure a trade partner's catalog gives it. Its own

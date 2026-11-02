@@ -31,13 +31,26 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/photo-editor";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
-import { DEFAULT_FRANKING, FRANKINGS, FRANKING_LABELS } from "@/lib/piece-valuation";
+import {
+  DEFAULT_FRANKING,
+  FRANKINGS,
+  FRANKING_LABELS,
+  isFranking,
+  type Franking,
+} from "@/lib/piece-valuation";
+import type { DraftPieceEntry } from "@/lib/carrier-value";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
 import { ReplacesButton } from "@/app/c/[collectionSlug]/inventory/replacements/replaces-field";
 import { REPLACING_DISPOSITION } from "@/lib/replacement-rules";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
+import {
+  IdentifiedPieceFigure,
+  IdentifiedStampPrices,
+  usePiecePreview,
+  type PiecePreviewSubject,
+} from "./identified-piece-value";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
 import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
 import {
@@ -170,6 +183,8 @@ export interface CarriedStampLine {
   chips: CatalogChipLabel[];
   name: string | null;
   detail: string | null;
+  /** The entry itself, which the piece's value is previewed from (#2353). */
+  entry: DraftPieceEntry;
 }
 
 /** A stamp named the way the summary box names one (#1525): its catalogue-number chips, then its
@@ -677,8 +692,34 @@ function IntakeConditionDialog({
   // onto the FormData on submit; Save waits while any staged upload is still in flight.
   const singleStamp = selection.kind === "stamp";
   // *Replaces…* (#1937): one stamp on the piece, so there is one stamp whose copies it can replace.
-  const replacing =
-    offerReplaces === true && singleStamp && !(carriedStamps && carriedStamps.length > 0);
+  const listsStamps = carriedStamps !== undefined && carriedStamps.length > 0;
+  const replacing = offerReplaces === true && singleStamp && !listsStamps;
+  // Several stamps, counted as `Item.stampCount` counts them — one stamp as a block is still one.
+  const severalStamps =
+    listsStamps && carriedStamps.reduce((sum, line) => sum + line.entry.quantity, 0) > 1;
+
+  // The franking (#2359) and what the piece will be worth by it (#2353): each stamp's used price and
+  // its price on the piece, and the computed value under them, re-read as the answers change. Only
+  // where the stamps on the piece are listed — one stamp on its own shows its own price, below.
+  const askFranking =
+    onEditStamps !== undefined &&
+    !correctedCopyId &&
+    singleStamp &&
+    (listsStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null));
+  const [franking, setFranking] = useState<Franking>(DEFAULT_FRANKING);
+  // Rebuilt every render; the query keys on its contents, not on the object.
+  const previewSubject: PiecePreviewSubject | null =
+    severalStamps && singleStamp
+      ? {
+          collectionId,
+          conditionId,
+          formatId,
+          stamps: carriedStamps.map((line) => line.entry),
+          franking: correctedCopyId ? null : franking,
+          itemId: correctedCopyId ?? null,
+        }
+      : null;
+  const piecePreview = usePiecePreview(previewSubject);
   // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
   const photos = singleStamp && !hidePhotos;
   const photoValueRef = useRef<PhotoEditorValue>({
@@ -791,7 +832,7 @@ function IntakeConditionDialog({
     // Before, and blocking on failure, because a figure the collector read off the paper catalogue
     // must not be dropped in silence; and safely retried, because the field prefills from what is
     // now recorded, so a second attempt at a failed intake writes nothing a second time.
-    if (selection.kind === "stamp") {
+    if (selection.kind === "stamp" && !severalStamps) {
       const entry = catalogValueEntry(catalogValueRef.current);
       if (entry) {
         setSavingPrice(true);
@@ -895,6 +936,13 @@ function IntakeConditionDialog({
                         {carriedStamps.map((line, i) => (
                           <li key={i} style={{ marginTop: "0.125rem" }}>
                             <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
+                            {piecePreview && previewSubject && (
+                              <IdentifiedStampPrices
+                                value={piecePreview}
+                                subject={previewSubject}
+                                index={i}
+                              />
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -904,11 +952,7 @@ function IntakeConditionDialog({
                       by its method, and on a cover the franking decides which price it reads. The
                       scan-tile chain only, where the piece is on screen; a correction leaves the
                       copy's own answer alone, to its Edit dialog. */}
-                  {onEditStamps &&
-                    !correctedCopyId &&
-                    selection.kind === "stamp" &&
-                    ((carriedStamps && carriedStamps.length > 0) ||
-                      formats.some((f) => f.id === formatId && f.pieceKind !== null)) && (
+                  {askFranking && (
                       <div
                         style={{
                           marginTop: "0.375rem",
@@ -922,7 +966,10 @@ function IntakeConditionDialog({
                         <select
                           id="intake-franking"
                           name="franking"
-                          defaultValue={DEFAULT_FRANKING}
+                          value={franking}
+                          onChange={(e) => {
+                            if (isFranking(e.target.value)) setFranking(e.target.value);
+                          }}
                           disabled={isPending}
                           style={{ ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" }}
                         >
@@ -934,6 +981,17 @@ function IntakeConditionDialog({
                         </select>
                       </div>
                     )}
+                  {piecePreview && previewSubject && carriedStamps && (
+                    <IdentifiedPieceFigure
+                      value={piecePreview}
+                      labels={carriedStamps.map(
+                        (line) =>
+                          (line.chips.find((c) => c.primary) ?? line.chips[0])?.label ??
+                          line.name ??
+                          "(unnamed stamp)"
+                      )}
+                    />
+                  )}
                   {onEditStamps && selection.kind === "stamp" && (
                     <div style={{ marginTop: "0.375rem" }}>
                       <button
@@ -1199,8 +1257,9 @@ function IntakeConditionDialog({
                     One field, the primary catalogue only: the full quick-price dialog stays for the
                     multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
                     intake only, the rule photos and the format field follow — one figure cannot be the
-                    catalogue value of a whole set's stamps. */}
-                {selection.kind === "stamp" && (
+                    catalogue value of a whole set's stamps — nor of a piece carrying several (#2353),
+                    whose stamps' prices and computed value are listed beside them above. */}
+                {selection.kind === "stamp" && !severalStamps && (
                   <IntakeCatalogValueField
                     stampId={selection.stampId}
                     conditionId={conditionId}

@@ -1,0 +1,121 @@
+"use client";
+
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { DraftPieceEntry } from "@/lib/carrier-value";
+import type { Franking } from "@/lib/piece-valuation";
+import { onPiecePrice } from "@/lib/piece-value-words";
+import type { CopyValuation, PieceValuation } from "@/lib/valuation";
+import { PieceArithmetic, PiecePriceFigure, PriceSymbol } from "./piece-value-breakdown";
+
+// What a piece carrying several stamps will be worth, in the identification step (#2353) — read
+// before the copy exists, by the method, exactly as the copy will be valued once written. Each stamp
+// on the piece shows its used price and its price on the piece; under them, the computed value and how
+// it was reached. Re-read as the condition, the format, the stamps or the franking change.
+
+export interface PiecePreviewSubject {
+  collectionId: string;
+  conditionId: string;
+  /** The piece's own format, `""` for none. */
+  formatId: string;
+  stamps: readonly DraftPieceEntry[];
+  /** The franking chosen; null on a correction, which reads the copy's own. */
+  franking: Franking | null;
+  /** The copy a correction re-answers. */
+  itemId: string | null;
+}
+
+/** The preview's value, or null while there is none — no condition yet, or not a piece. */
+export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuation | null {
+  const query = useQuery<CopyValuation | null>({
+    queryKey: ["piecePreview", subject] as const,
+    enabled: subject !== null && subject.conditionId !== "" && subject.stamps.length > 0,
+    queryFn: async () => {
+      const { previewPieceValueAction } = await import("@/app/actions/items");
+      return previewPieceValueAction(subject!.collectionId, {
+        conditionId: subject!.conditionId,
+        formatId: subject!.formatId || null,
+        stamps: subject!.stamps,
+        franking: subject!.franking,
+        itemId: subject!.itemId,
+      });
+    },
+    // A change of franking re-reads; the old figure stays on screen until the new one is in, rather
+    // than the lines blinking out under the collector's hand.
+    placeholderData: keepPreviousData,
+  });
+  return subject && query.data?.piece ? query.data : null;
+}
+
+/** The id the preview files the entry at `index` under — `previewPieceValue`'s key, then its index. */
+function componentIdAt(subject: PiecePreviewSubject, index: number): string {
+  return `${subject.itemId ?? "preview"}:${index}`;
+}
+
+/** One stamp's used price and its price on the piece, beside it in the list. */
+export function IdentifiedStampPrices({
+  value,
+  subject,
+  index,
+}: {
+  value: CopyValuation;
+  subject: PiecePreviewSubject;
+  index: number;
+}) {
+  const piece = value.piece!;
+  const componentId = componentIdAt(subject, index);
+  const onPiece = onPiecePrice(piece);
+  return (
+    <span style={{ display: "inline-flex", gap: "0.4rem", marginLeft: "0.5rem", fontSize: "0.8125rem" }}>
+      <span>
+        <PriceSymbol piece={piece} price="used" />{" "}
+        <PiecePriceFigure piece={piece} componentId={componentId} price="used" />
+      </span>
+      {onPiece && (
+        <span>
+          · <PriceSymbol piece={piece} price={onPiece} />{" "}
+          <PiecePriceFigure piece={piece} componentId={componentId} price={onPiece} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The computed value under the stamps, and how it was reached. */
+export function IdentifiedPieceFigure({
+  value,
+  labels,
+}: {
+  value: CopyValuation;
+  /** Each stamp named as the list names it, in its order. */
+  labels: readonly string[];
+}) {
+  const piece: PieceValuation = value.piece!;
+  const label = (componentId: string) => {
+    const index = Number(componentId.slice(componentId.lastIndexOf(":") + 1));
+    return labels[index] ?? `stamp ${index + 1}`;
+  };
+  const source =
+    piece.methodSource.kind === "copy"
+      ? "set on this copy"
+      : piece.methodSource.kind === "area"
+        ? "from the most expensive stamp's area"
+        : "the collection's default";
+  return (
+    <div style={{ marginTop: "0.375rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+      <div style={{ color: "var(--color-text-primary)" }}>
+        Computed value:{" "}
+        {value.unpriced ? (
+          <span style={{ color: "var(--color-text-muted)" }}>none — no price this method reads is recorded</span>
+        ) : (
+          <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+            {value.amount} {value.currency}
+          </strong>
+        )}
+        {piece.partial && !value.unpriced && (
+          <span style={{ color: "var(--color-warning)" }}> partial</span>
+        )}
+      </div>
+      <PieceArithmetic piece={piece} label={label} methodSource={source} />
+    </div>
+  );
+}
