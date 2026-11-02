@@ -4,6 +4,7 @@ import { auctionLotName } from "./auction-rules";
 import {
   offersNeedingAction,
   offersWithChangedListing,
+  offersWithListingToClose,
   offersWithEndedAuction,
   offersWithObservedBidding,
   offersWithPlatformSale,
@@ -84,6 +85,7 @@ export type ActionItemGroupId =
   | "offer-platform-sale"
   | "offer-platform-sale-conflict"
   | "offer-listing-changed"
+  | "offer-listing-to-close"
   | "mail-undelivered"
   | "scan-preparation-failed"
   | "sale-api-review";
@@ -550,6 +552,34 @@ const listingChangedProvider: ActionItemProvider = {
 };
 
 /**
+ * Offers sold here through a sale on another platform whose listing is still up on their own (#2343).
+ * `critical`, as a copy sold elsewhere is: the listing still offers what has gone, and a buyer there
+ * can take it. Nothing ends it but the collector, on the platform, and **Listing closed** here. A
+ * backlog, oldest first.
+ */
+const listingToCloseProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const toClose = await offersWithListingToClose(ownerId, collectionId, limit);
+    return [
+      {
+        id: "offer-listing-to-close" as const,
+        title: "Sold — listing still up",
+        severity: "critical" as const,
+        count: toClose.total,
+        items: toClose.offers.map((offer) => ({
+          key: offer.offerId,
+          label: offer.label,
+          detail: `close on ${offer.platformName}`,
+          at: offer.soldAt.toISOString(),
+          href: `offers/${offer.offerId}`,
+        })),
+        href: "offers?needsAction=1",
+      },
+    ];
+  },
+};
+
+/**
  * Mail given up on after its last retry (#1372). `warning`: nothing is broken in the collection, but
  * whatever the message was about — a lot closing today — will be missed if nobody looks. Read on
  * Settings → Email, whose opening is what takes it off this list (the bidding notice's rule, #481).
@@ -649,6 +679,7 @@ const PROVIDERS: ActionItemProvider[] = [
   endedAuctionProvider,
   platformSaleProvider,
   listingChangedProvider,
+  listingToCloseProvider,
   mailProvider,
   scanProvider,
   saleReviewProvider,

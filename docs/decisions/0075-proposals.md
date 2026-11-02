@@ -71,8 +71,9 @@ no lots and changes no more. Marking it sent needs a lot. The rules are `proposa
 
 A sale is on one platform, and selling several offers together (#2050) asks them to share it. A
 proposal's buyer usually first bought on Facebook, and the accepted lots belong in that sale. So
-**#2289 allows Direct lots to join a sale on another platform**; nothing else does. This ADR records
-the exception; #2289 built it, on 2026-11-01, as written in its issue:
+**#2289 allows Direct lots to join a sale on another platform**; nothing else did, until #2343 made
+it the rule for every offer (ADR-0013 §9). This ADR records the exception; #2289 built it, on
+2026-11-01, as written in its issue:
 
 - *Convert to sale…* on the proposal ticks the lots the buyer took, each at its proposal price, which
   can be changed there, and sells **every set each still has** at that price — an offer's own *Sell*
@@ -87,7 +88,9 @@ the exception; #2289 built it, on 2026-11-01, as written in its issue:
   into it.
 
 The exception lives in one guard, `checkSaleLineDrafts`' `proposalLots`, which only the conversion
-passes and which still refuses an offer that is not a lot of a proposal.
+passes and which still refuses an offer that is not a lot of a proposal. Since #2343 the platform is
+no longer what it lifts — every offer may join a sale on another platform — so what is left of it is
+the rest: only a proposal's lots, in the sale's currency, sold from any open state.
 
 ### 7. Out of scope
 

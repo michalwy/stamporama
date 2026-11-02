@@ -14,6 +14,7 @@ import {
   NeedsActionChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
+  ListingToCloseChip,
   RefreshDueChip,
   ListingTypeChip,
   PlatformSaleChip,
@@ -568,6 +569,23 @@ export function OfferDetailPanel({
       if (result.status === "success") {
         invalidateAll(collectionId);
         toast({ message: "Marked as up to date — the live listing matches this offer again" });
+      } else setActionError(result.message);
+    });
+  }
+
+  /**
+   * **Listing closed** (#2343): the collector has ended, on its own platform, the listing of an offer
+   * sold here through a sale on another platform. As with *Mark as up to date*, nothing this app can
+   * see proves it, so the collector says so.
+   */
+  function markListingClosed() {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { markOfferListingClosedAction } = await import("@/app/actions/offers");
+      const result = await markOfferListingClosedAction(offerId);
+      if (result.status === "success") {
+        invalidateAll(collectionId);
+        toast({ message: "Marked closed — the listing has ended on its platform" });
       } else setActionError(result.message);
     });
   }
@@ -1168,6 +1186,17 @@ export function OfferDetailPanel({
             />
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
+            )}
+            {/* Sold through a sale on another platform, its own listing still up (#2343): the flag,
+                and the one press that clears it once the collector has ended the listing there. */}
+            {offer.listingToClose && (
+              <>
+                <ListingToCloseChip platformName={offer.platformName} />
+                <button type="button" disabled={isPending} style={ASSISTANT_BTN} onClick={markListingClosed}>
+                  <Icon name="check" size="sm" />
+                  Listing closed
+                </button>
+              </>
             )}
             {/* The errand the chip asks for, in one press (#1805): every set sold elsewhere off the
                 offer, after a confirmation naming them. Only while there is one to remove, and only

@@ -1053,6 +1053,7 @@ export function SaleDetailPanel({
         <AddSaleLineDialog
           collectionId={collectionId}
           platformId={sale.platformId}
+          platformName={sale.platformName}
           currency={sale.currency}
           baseCurrency={sale.baseCurrency}
           areas={areas}

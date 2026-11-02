@@ -1144,6 +1144,8 @@ function SoldUnitCard({
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}
               {/* Sold without being listed (#2021): the set belongs to this sale alone. */}
               {line.offerSetId === null && " · on no offer"}
+              {/* Sold through an offer listed on another platform (#2343). */}
+              {line.fromPlatformName && line.offerNo !== null && ` · from ${line.fromPlatformName} #${line.offerNo}`}
             </span>
             {/* A set an automatic pick took rather than a person chose (#697). Drawn where the set is
                 named, and on the sales list from the same column — a flag shown on a list is shown

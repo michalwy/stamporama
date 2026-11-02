@@ -303,7 +303,7 @@ export const getSaleOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `toReview` is present while what this API recorded waits for the collector's confirmation.",
+      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `fromPlatform` the marketplace that offer is listed on where it is not the sale's own, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `toReview` is present while what this API recorded waits for the collector's confirmation.",
   },
   handler: async (context, params) => readSale(context, params),
 };
@@ -422,7 +422,7 @@ const SELL_PARAMETERS: readonly ParameterSpec[] = [
     type: "string",
     required: true,
     description:
-      "What **one set** sold for, in the offer's own currency, with at most two decimal places — on an auction the winning bid, on a quick buy the price paid. Every set sold by this call is recorded at it.",
+      "What **one set** sold for, with at most two decimal places — on an auction the winning bid, on a quick buy the price paid — in the sale's currency: the offer's own, unless `sale` is on another marketplace. Every set sold by this call is recorded at it.",
   },
   {
     name: "sale",
@@ -430,7 +430,7 @@ const SELL_PARAMETERS: readonly ParameterSpec[] = [
     type: "string",
     required: false,
     description:
-      "The id of a sale already recorded to add to, from `list_sales` — the buyer's open sale on the same marketplace and in the same currency. Left out, a new sale is started. A sale already sent is refused: adding to one is a correction the collector makes.",
+      "The id of a sale already recorded to add to, from `list_sales` — the buyer's open sale, on this listing's marketplace (and then in its currency) or on any other: a buyer on one marketplace may take a listing from another. A listing in active bidding joins only a sale on its own marketplace. Left out, a new sale is started on the listing's marketplace. A sale already sent is refused: adding to one is a correction the collector makes.",
   },
   {
     name: "buyer",

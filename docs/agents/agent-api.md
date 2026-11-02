@@ -987,6 +987,11 @@ the total, both over `saleListWhere`; the span of days and the sale number were 
   such check, but a collector typing sees the list and an agent does not.
 - **`sale` and `sold_at` exclude each other.** A new sale needs the day it sold; an existing sale
   keeps its own, and a `buyer` sent with `sale` must be that sale's.
+- **`sale` may be on another marketplace** (#2343, ADR-0013 §9): a buyer on one platform takes a
+  listing from another, by `addSaleLines`' own guard — refused while the listing is in active bidding,
+  priced in the sale's currency. A new sale is still started on the listing's own platform. The
+  offer sold out that way is flagged to close on its platform as on the screen, and `get_sale` marks
+  the line with `fromPlatform`.
 
 **The boundary is the import map in `tests/unit/agent-api-operation-boundary.test.ts`**:
 `recordSaleLinesThroughApi` and `findOrCreateBuyer` are reached from `operations/sales.ts` alone, the

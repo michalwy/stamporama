@@ -38,6 +38,7 @@ import {
   PlatformSaleChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
+  ListingToCloseChip,
   RefreshDueChip,
   ListingTypeChip,
   FacebookPostChip,
@@ -457,6 +458,8 @@ export function OfferRow({
               chips and before the plain descriptive ones: it is a problem, but the mildest of them —
               a listing that is wrong rather than stock promised twice. */}
           {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
+          {/* Sold through a sale on another platform, its own listing still up (#2343). */}
+          {offer.listingToClose && <ListingToCloseChip platformName={offer.platformName} />}
           {/* …and one that is right but has sunk out of sight on its platform (#1718). */}
           {offer.refreshDueDays !== null && <RefreshDueChip days={offer.refreshDueDays} />}
           {/* …and why that listing cannot simply be updated: nothing is left in it (#1277). Also on a

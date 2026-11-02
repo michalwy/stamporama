@@ -46,6 +46,9 @@ operational dashboard*; read the ADR before changing what the screen is.
     `offersNeedingActionForDashboard` reads `needsActionRows` and `LISTING_DRIFT_WHERE`, the bell's
     two derivations. One row per offer under its worst reason, **collisions (the bell's red) first**,
     worst first, then drift oldest first. A collision has no age — nothing records when the copy went.
+    Since #2343 a third read, `LISTING_TO_CLOSE_WHERE` (a sold offer whose listing is still up on its
+    own platform, the bell's red `offer-listing-to-close`), follows the collisions oldest first, aged
+    from `listingToCloseAt`; it never overlaps the others, which read live or listed offers only.
   - *Auctions ended, no result* is the bell's `offer-auction-ended`, read through
     `offersWithEndedAuction` itself.
   - Ages: Ready and Pending from **`Offer.stateChangedAt`** (added for this — the collector chose a

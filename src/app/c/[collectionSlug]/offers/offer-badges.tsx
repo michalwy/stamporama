@@ -194,6 +194,18 @@ export function ListingOutOfDateChip({ since }: { since: Date | string | null })
 }
 
 /**
+ * Sold here through a sale on another platform, its listing on its own still up (#2343). `error`, as
+ * a copy sold elsewhere is: a listing still offering what has gone is a double sale waiting to happen.
+ */
+export function ListingToCloseChip({ platformName }: { platformName: string }) {
+  return tinted(
+    "error",
+    `Close on ${platformName}`,
+    `Sold through a sale on another platform, but its listing on ${platformName} is still up — end it there, then mark the listing closed`
+  );
+}
+
+/**
  * *Mark ready* is waiting for this offer's photos (#1893): they are being generated, and the offer
  * turns Ready by itself once they are done if nothing else stands in the way. `info`, like the
  * Preparing state it qualifies — nothing is wrong, it is only not finished.

@@ -2884,10 +2884,22 @@ has sold through it (a partial sale keeps it **Active** for its remaining sets).
 other platforms automatically — you stay in control of each marketplace. The flag is derived live
 from what has sold, so it clears the moment the offer no longer holds a sold copy.
 
+#### Sold through a sale on another platform
+
+An offer can also sell into a sale on **another** platform — a Facebook buyer taking a stamp you
+listed on Colnect, added from the sale's **Add sold sets** (see
+[Sales](sales.md#step-2--add-the-sold-sets)). It becomes **Sold** as above, but its listing is still
+up on its own platform, where nothing ended it. So the offer is flagged **Close on Colnect** — on its
+row, on its screen, under **Needs action** and in the bell. End the listing on that platform, then
+press **Listing closed** on the offer's screen; the offer stays Sold and the flag goes. A quantity
+offer that sold one of its sets this way is flagged **Changed since listed** instead, as after any
+partial sale: update its quantity there. An offer on Direct is listed nowhere and is never flagged.
+
 You do not have to come to this screen to find out that something is flagged: the same offers are
 listed in [Action items](action-items.md), the bell at the top of the sidebar, split by the reason it
 was flagged — a copy sold elsewhere, a copy under a live auction, a sale on Allegro not recorded yet,
-and, in amber, an offer still being prepared with a copy sold elsewhere.
+a sold offer whose listing is still up on its own platform, and, in amber, an offer still being
+prepared with a copy sold elsewhere.
 
 ## Offer lifecycle
 
@@ -3383,8 +3395,9 @@ sends it and the other offer keeps its copy.
 Ticking nothing is not a sale: a buyer who takes nothing has declined, so use **Decline…**.
 
 The proposal's screen then links to its sale (*sold in sale #12 on Facebook*), and the sale's screen
-says *from proposal #4*. Only a proposal's lots can join a sale on another platform this way — any
-other offer still sells only into a sale on its own platform.
+says *from proposal #4*. A proposal's lots can join a sale on another platform — and so can any offer:
+**Add sold sets** on a sale's screen lists sets from offers on every platform (see
+[Sales](sales.md#step-2--add-the-sold-sets)).
 
 Your assistant can put a proposal together, price it and convert it for you through the
 [Assistant API](agent-api.md#what-it-can-do-and-what-it-will-not); a sale it records waits for your

@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { listSellableOffers } from "@/lib/sales";
 
 // Sellable-offer picker for the record-sale dialog (ADR-0012, #166): active/paused offers with
-// their still-available units, optionally scoped to one platform.
+// their still-available units, optionally scoped to one platform — or, with `salePlatformId`, what a
+// sale on that platform can take from every platform (#2343).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -16,9 +17,10 @@ export async function GET(
 
   const { collectionId } = await params;
   const platformId = request.nextUrl.searchParams.get("platformId") || undefined;
+  const salePlatformId = request.nextUrl.searchParams.get("salePlatformId") || undefined;
 
   try {
-    const items = await listSellableOffers(session.user.id, collectionId, { platformId });
+    const items = await listSellableOffers(session.user.id, collectionId, { platformId, salePlatformId });
     return NextResponse.json({ items });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

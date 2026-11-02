@@ -38,6 +38,8 @@ import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { resolveShippingOptionForPlatform } from "./shipping-options";
 import { markListingContentChanged } from "./offer-listing-sync";
+import { LISTED_OFFER_STATES } from "./offer-listing-drift";
+import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { regenerateCleanedUpOfferPhotos } from "./offer-photo-generation";
 import { assertCarrierInCollection, assertCarrierServiceInCollection } from "./carriers";
 import { deleteConversationAttachmentBytes } from "./conversation-attachments";
@@ -330,11 +332,15 @@ const SELLABLE_OFFER_SELECT = {
  * optionally on one `platformId` — or just the one `offerId`, the phone's *Sell* (#2009) — each
  * expanded into its still-available sets. A set whose copies have already left on an earlier sale is
  * dropped, and an offer with no available set is omitted entirely. Newest offer first.
+ *
+ * `salePlatformId` asks what a sale on that platform can take (#2343): offers on **every** platform,
+ * those on any other but the sale's left out while in active bidding there — the guard
+ * `checkSaleLineDrafts` holds them to.
  */
 export async function listSellableOffers(
   ownerId: string,
   collectionId: string,
-  opts: { platformId?: string; offerId?: string } = {}
+  opts: { platformId?: string; offerId?: string; salePlatformId?: string } = {}
 ): Promise<SellableOffer[]> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -344,6 +350,9 @@ export async function listSellableOffers(
       state: { in: [...SELLABLE_OFFER_STATES] },
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
       ...(opts.offerId ? { id: opts.offerId } : {}),
+      ...(opts.salePlatformId
+        ? { OR: [{ platformId: opts.salePlatformId }, { inActiveBidding: false }] }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
     select: SELLABLE_OFFER_SELECT,
@@ -1029,9 +1038,10 @@ export function resolveBuyerHandling(
 
 /**
  * Add one or more sold sets to a sale (ADR-0013). Each draft is a whole `OfferSet`, priced in the
- * sale currency, carrying the set's full copy set. Every offer must be on the sale's platform (a
- * sale is single-platform) and still sellable. After writing the lines, each offer whose every set
- * is now sold flips to `sold`; a partial sale leaves the offer live for its remaining sets.
+ * sale currency, carrying the set's full copy set. Every offer must still be sellable; it may be on
+ * another platform than the sale's (#2343, `checkSaleLineDrafts`). After writing the lines, each
+ * offer whose every set is now sold flips to `sold`; a partial sale leaves the offer live for its
+ * remaining sets.
  *
  * Whole-set integrity: a draft's `itemIds` must be exactly the full current copy set of its set
  * (`offerSetId`), which must belong to the draft's offer. The DB-level unique on
@@ -1090,14 +1100,19 @@ function assertSaleTakesLines(
 }
 
 /**
- * Every guard a sold set passes before it is written (ADR-0013): its offer is in the collection, on
- * the sale's platform, in the sale's currency and still sellable; the set is the offer's; the copies
- * are exactly the set's; none has left already. Returns the offers the drafts touch. Reads only, so
- * a sale not yet inserted can be checked against the platform and currency it will have.
+ * Every guard a sold set passes before it is written (ADR-0013): its offer is in the collection and
+ * still sellable; the set is the offer's; the copies are exactly the set's; none has left already.
+ * Returns the offers the drafts touch. Reads only, so a sale not yet inserted can be checked against
+ * the platform and currency it will have.
  *
- * `proposalLots` is the one exception to *a sale is on one platform* (#2289, ADR-0075 §6): a
- * proposal's accepted lots — Direct offers, every one a lot of a proposal — may join a sale on any
- * platform, and are sold from any open state, since a proposal's lots are never put up anywhere.
+ * **An offer on any platform may join a sale** (#2343, ADR-0013 §9): a Facebook buyer who also takes
+ * a stamp listed on Colnect buys it in their Facebook sale, through its offer. On the sale's own
+ * platform the offer must be in the sale's currency, as before (#196/#197); from another platform it
+ * need not be — the price is typed in the sale's currency whatever the listing asked — but it must
+ * not be in active bidding there, since a bid has already committed it to someone on that platform.
+ *
+ * `proposalLots` is the conversion of a proposal (#2289, ADR-0075 §6): only a proposal's lots, in the
+ * sale's currency, sold from any open state, since a proposal's lots are never put up anywhere.
  */
 async function checkSaleLineDrafts(
   ref: Pick<SaleRef, "collectionId" | "platformId" | "currency">,
@@ -1112,6 +1127,7 @@ async function checkSaleLineDrafts(
       platformId: true,
       currency: true,
       state: true,
+      inActiveBidding: true,
       proposalId: true,
       sets: { select: { id: true } },
     },
@@ -1126,13 +1142,18 @@ async function checkSaleLineDrafts(
     if (opts.proposalLots && offer.proposalId === null) {
       throw new SaleActionBlockedError("bad-offer", "Only a proposal's lots join a sale this way.");
     }
-    if (!opts.proposalLots && offer.platformId !== ref.platformId) {
-      throw new SaleActionBlockedError("bad-offer", "That offer is on a different platform than this sale.");
+    const otherPlatform = offer.platformId !== ref.platformId;
+    if (otherPlatform && !opts.proposalLots && offer.inActiveBidding) {
+      throw new SaleActionBlockedError(
+        "bad-offer",
+        "That offer is in active bidding on its own platform, so it cannot join a sale on another one."
+      );
     }
-    // A sale is single-currency (#196/#197): every offer it pulls in must match the sale's currency.
-    // An offer left on an old currency after the platform's currency changed is excluded — re-list
-    // it in the platform's current currency first.
-    if (offer.currency !== ref.currency) {
+    // A sale is single-currency (#196/#197): an offer on its own platform must match the sale's
+    // currency. One left on an old currency after the platform's currency changed is excluded —
+    // re-list it in the platform's current currency first. An offer from another platform (#2343)
+    // asked its price in that platform's currency, so the line's price is simply typed in the sale's.
+    if ((!otherPlatform || opts.proposalLots) && offer.currency !== ref.currency) {
       throw new SaleActionBlockedError(
         "currency-mismatch",
         `This offer is in ${offer.currency}, but the sale is in ${ref.currency}. Re-list it in the platform's current currency first.`
@@ -1218,13 +1239,36 @@ async function writeSaleLines(
   // placed and the collector is committed *before the sale is recorded*, so recording it is
   // exactly what ends that state. Left standing, a sold listing would keep an "In bidding" chip
   // that reads as an auction still running.
+  //
+  // An offer from **another platform** (#2343) sold out this way is still up where it was listed —
+  // nothing on that platform ended it — so it is stamped `listingToCloseAt`, the Needs action flag
+  // that asks the collector to close it there. Only a listing that was up (`LISTED_OFFER_STATES`),
+  // and never one on Direct, which is offered to a person and listed nowhere. Every other flip
+  // writes null, so a stamp left from an earlier sale taken back cannot outlive it.
+  const sale = await tx.sale.findUniqueOrThrow({ where: { id: saleId }, select: { platformId: true } });
   for (const offerId of offerIds) {
     if (await isOfferFullySold(tx, offerId)) {
+      const offer = await tx.offer.findUniqueOrThrow({
+        where: { id: offerId },
+        select: { platformId: true, state: true, platform: { select: { platformModule: true } } },
+      });
+      const listingLeftUp =
+        offer.platformId !== sale.platformId &&
+        offer.platform.platformModule !== DIRECT_PLATFORM_MODULE &&
+        isOfferState(offer.state) &&
+        LISTED_OFFER_STATES.includes(offer.state);
+      const now = new Date();
       await tx.offer.update({
         where: { id: offerId },
         // `closedAt` (#512) is stamped with the state, as it is on a withdrawal: it is what the
         // generated-photo purge measures the grace period from.
-        data: { state: "sold", stateChangedAt: new Date(), inActiveBidding: false, closedAt: new Date() },
+        data: {
+          state: "sold",
+          stateChangedAt: now,
+          inActiveBidding: false,
+          closedAt: now,
+          listingToCloseAt: listingLeftUp ? now : null,
+        },
       });
     }
   }
@@ -1816,7 +1860,7 @@ async function releaseOfferAfterRemoval(tx: DbTransaction, offerId: string): Pro
       where: { id: offerId },
       // Open again, so no longer closed: as in `deleteSale`, clearing `closedAt` (#512) takes it
       // back out of the generated-photo purge's reach.
-      data: { state: "active", stateChangedAt: new Date(), closedAt: null },
+      data: { state: "active", stateChangedAt: new Date(), closedAt: null, listingToCloseAt: null },
     });
   }
   // The set is back in what this offer sells, which is the same composition change in reverse
@@ -2391,6 +2435,10 @@ export interface SaleDetailLine {
   /** The number (#416) of {@link offerId}, or null with it — what the packing list divided by set
    *  names the set's offer by (#2187). */
   offerNo: number | null;
+  /** The platform {@link offerId} is listed on, where that is not the sale's own (#2343) — a set
+   *  from another platform's offer, which the line marks *from Colnect #2961*. Null on the sale's
+   *  platform and on a set that names no offer. */
+  fromPlatformName: string | null;
   /** What the line is called (#2189): its offer's number and title, with the set's catalogue numbers
    *  as a second line — or the set's own label on a set that names no offer. */
   name: SaleLineName;
@@ -2671,6 +2719,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           offer: {
             select: {
               offerNo: true,
+              platformId: true,
+              platform: { select: { name: true } },
               // The title as it reads now (#2189), and the sets it is derived from when there is
               // none — which also say which of them a line is.
               name: true,
@@ -2758,6 +2808,8 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       setLabel: setLbl,
       offerId: l.offerId,
       offerNo: l.offer?.offerNo ?? null,
+      fromPlatformName:
+        l.offer && l.offer.platformId !== sale.platformId ? l.offer.platform.name : null,
       name: saleLineName({
         setLabel: setLbl,
         setNumbers: labeller.set({ ...labelSet, title: null }),
@@ -3003,7 +3055,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<numbe
         where: { id: { in: offerIds }, state: "sold" },
         // The listing is open again, so it is no longer closed: clearing `closedAt` (#512) takes it
         // back out of the generated-photo purge's reach.
-        data: { state: "active", stateChangedAt: new Date(), closedAt: null },
+        data: { state: "active", stateChangedAt: new Date(), closedAt: null, listingToCloseAt: null },
       });
       // As in `removeSaleLine`: every set the sale held is sellable again, so a listing still up is
       // out of step with it (#700/#542). After the reopen above, so an offer this call just took

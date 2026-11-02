@@ -21,7 +21,7 @@ import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-i
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { useSellableOffers, useSellableCopies } from "./use-sales-query";
+import { useSaleSellableOffers, useSellableCopies } from "./use-sales-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -139,6 +139,9 @@ interface SetRow {
 /** A picker group = one offer, holding its sellable sets. */
 interface Group {
   offerId: string;
+  platformId: string;
+  /** The offer's platform where it is not the sale's (#2343) — the row names it — else null. */
+  otherPlatformName: string | null;
   /** The listing's stored title (#209), or null while it has none — the row's **primary** label,
    * spelled `name ?? label` as every other offer surface spells it (#1026). */
   name: string | null;
@@ -148,10 +151,14 @@ interface Group {
   offerPrice: string;
   offerCurrency: string;
   type: OfferType;
-  /** The offer's currency differs from the sale's (#197). Left on an old currency after the
-   * platform's currency changed — surfaced but flagged and not selectable, since a sale is
-   * single-currency. */
+  /** The offer's currency differs from the sale's (#197), on the sale's own platform. Left on an old
+   * currency after the platform's currency changed — surfaced but flagged and not selectable, since
+   * a sale is single-currency. An offer from another platform (#2343) is never stale: its price is
+   * simply typed in the sale's currency. */
   stale: boolean;
+  /** What a tick pre-fills the price with: the asking price where it is in the sale's currency, else
+   * nothing — the price is typed (#2343). */
+  prefill: string;
   sets: SetRow[];
 }
 
@@ -162,16 +169,19 @@ interface Picked {
   price: string;
 }
 
-function buildGroups(offers: SellableOffer[], saleCurrency: string): Group[] {
+function buildGroups(offers: SellableOffer[], salePlatformId: string, saleCurrency: string): Group[] {
   return offers
     .map((offer) => ({
       offerId: offer.offerId,
+      platformId: offer.platformId,
+      otherPlatformName: offer.platformId === salePlatformId ? null : offer.platformName,
       name: offer.offerName,
       label: offer.offerLabel,
       offerPrice: offer.price,
       offerCurrency: offer.currency,
       type: (offer.sets.length === 1 ? "single" : "quantity") as OfferType,
-      stale: offer.currency !== saleCurrency,
+      stale: offer.platformId === salePlatformId && offer.currency !== saleCurrency,
+      prefill: offer.currency === saleCurrency ? offer.price : "",
       sets: offer.sets.map((s) => ({
         offerId: offer.offerId,
         offerSetId: s.offerSetId,
@@ -209,8 +219,11 @@ function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
 
 export interface AddSaleLineDialogProps {
   collectionId: string;
-  /** The sale's platform — the picker only shows offers on it (a sale is single-platform). */
+  /** The sale's platform — the picker's default, first in its Platform facet. Offers on the other
+   * platforms are behind the facet (#2343). */
   platformId: string;
+  /** The sale's platform's name, for the facet row while it has no offer to read it from. */
+  platformName: string;
   /** The sale's currency; the line price is in it, and the offer's asking price pre-fills it. */
   currency: string;
   baseCurrency: string;
@@ -224,7 +237,8 @@ export interface AddSaleLineDialogProps {
 
 /**
  * Rich browse-and-pick dialog for adding sold sets to a sale (ADR-0013). A wide portal with a left
- * **facet panel** (offer type — single vs quantity, with live counts) and a right column holding a
+ * **facet panel** (platform — the sale's own first and chosen, then all, then each other one, #2343;
+ * offer type — single vs quantity; each with live counts) and a right column holding a
  * search box over a scrollable list. A single-set offer is one selectable row; a quantity offer is
  * a **collapsible row** that expands to its member sets. Multi-select — tick every set that sold,
  * set each one's sale price (pre-filled from the offer's asking price), and confirm to add them all
@@ -233,6 +247,7 @@ export interface AddSaleLineDialogProps {
 export function AddSaleLineDialog({
   collectionId,
   platformId,
+  platformName,
   currency,
   baseCurrency,
   areas,
@@ -244,14 +259,19 @@ export function AddSaleLineDialog({
 }: AddSaleLineDialogProps) {
   const [search, setSearch] = useState("");
   const [type, setType] = useState<OfferType | null>(null);
+  /** The Platform facet (#2343): one platform's id, or null for all of them. The sale's own first. */
+  const [platformFacet, setPlatformFacet] = useState<string | null>(platformId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [detailsOpen, setDetailsOpen] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Record<string, Picked>>({});
   /** The *without a price* narrowing (#1080). Read through `showOnlyMissing` below, never directly:
    *  the flag is what the collector asked for and that derivation is what is actually in force. */
   const [onlyMissingPrice, setOnlyMissingPrice] = useState(false);
-  const { data: offers = [], isLoading } = useSellableOffers(collectionId, platformId, true);
-  const { data: copies = [] } = useSellableCopies(collectionId, platformId, true);
+  // Every platform's offers, and the copies in them, read once (#2343): the Platform facet narrows
+  // what is loaded rather than loading again, so its counts and the rows under it agree, the search
+  // included.
+  const { data: offers = [], isLoading } = useSaleSellableOffers(collectionId, platformId);
+  const { data: copies = [] } = useSellableCopies(collectionId, undefined, true);
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const ctx: RowCtx = useMemo(
@@ -276,7 +296,7 @@ export function AddSaleLineDialog({
     });
   }
 
-  const groups = useMemo(() => buildGroups(offers, currency), [offers, currency]);
+  const groups = useMemo(() => buildGroups(offers, platformId, currency), [offers, platformId, currency]);
 
   const raw = search.trim();
   const q = raw.toLowerCase();
@@ -334,17 +354,41 @@ export function AddSaleLineDialog({
     return out;
   }, [byText, showOnlyMissing, missingIds]);
 
+  // Each facet counts under the other's choice, as the rows beneath them are both.
+  const byPlatform = useMemo(
+    () => byMissing.filter((g) => platformFacet === null || g.group.platformId === platformFacet),
+    [byMissing, platformFacet]
+  );
+  const byType = useMemo(
+    () => byMissing.filter((g) => !type || g.group.type === type),
+    [byMissing, type]
+  );
+
   const typeCounts = useMemo(
     () => ({
-      single: byMissing.filter((g) => g.group.type === "single").length,
-      quantity: byMissing.filter((g) => g.group.type === "quantity").length,
+      single: byPlatform.filter((g) => g.group.type === "single").length,
+      quantity: byPlatform.filter((g) => g.group.type === "quantity").length,
     }),
-    [byMissing]
+    [byPlatform]
+  );
+
+  /** The other platforms with sellable offers, by name, each with its count (#2343). Built from the
+   *  whole list so a platform the search empties keeps its row, at 0. */
+  const otherPlatforms = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const g of groups) if (g.otherPlatformName) names.set(g.platformId, g.otherPlatformName);
+    return [...names]
+      .map(([id, name]) => ({ id, name, count: byType.filter((g) => g.group.platformId === id).length }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [groups, byType]);
+  const ownPlatformCount = useMemo(
+    () => byType.filter((g) => g.group.platformId === platformId).length,
+    [byType, platformId]
   );
 
   const visible = useMemo(
-    () => byMissing.filter((g) => !type || g.group.type === type),
-    [byMissing, type]
+    () => byPlatform.filter((g) => !type || g.group.type === type),
+    [byPlatform, type]
   );
 
   /**
@@ -362,14 +406,15 @@ export function AddSaleLineDialog({
   function revealMissingPrices() {
     setSearch("");
     setType(null);
+    setPlatformFacet(null);
     setOnlyMissingPrice(true);
   }
 
-  function toggleSet(s: SetRow, offerPrice: string) {
+  function toggleSet(s: SetRow, prefill: string) {
     setPicked((prev) => {
       const next = { ...prev };
       if (next[s.offerSetId]) delete next[s.offerSetId];
-      else next[s.offerSetId] = { offerId: s.offerId, offerSetId: s.offerSetId, itemIds: s.itemIds, price: offerPrice };
+      else next[s.offerSetId] = { offerId: s.offerId, offerSetId: s.offerSetId, itemIds: s.itemIds, price: prefill };
       return next;
     });
   }
@@ -426,8 +471,15 @@ export function AddSaleLineDialog({
             gap: "0.125rem",
           }}
         >
-          <p style={{ ...FACET_LABEL, marginTop: 0 }}>Type</p>
-          <FacetRow label="All offers" active={type === null} onClick={() => setType(null)} count={byMissing.length} />
+          <p style={{ ...FACET_LABEL, marginTop: 0 }}>Platform</p>
+          <FacetRow label={platformName} active={platformFacet === platformId} onClick={() => setPlatformFacet(platformId)} count={ownPlatformCount} />
+          <FacetRow label="All platforms" active={platformFacet === null} onClick={() => setPlatformFacet(null)} count={byType.length} />
+          {otherPlatforms.map((p) => (
+            <FacetRow key={p.id} label={p.name} active={platformFacet === p.id} onClick={() => setPlatformFacet(p.id)} count={p.count} />
+          ))}
+
+          <p style={FACET_LABEL}>Type</p>
+          <FacetRow label="All offers" active={type === null} onClick={() => setType(null)} count={byPlatform.length} />
           <FacetRow label="Single" active={type === "single"} onClick={() => setType(type === "single" ? null : "single")} count={typeCounts.single} />
           <FacetRow label="Quantity" active={type === "quantity"} onClick={() => setType(type === "quantity" ? null : "quantity")} count={typeCounts.quantity} />
 
@@ -481,8 +533,10 @@ export function AddSaleLineDialog({
             ) : visible.length === 0 ? (
               <p style={HINT_STYLE}>
                 {groups.length === 0
-                  ? "No offers left to sell on this platform. Create and compose an offer on it first."
-                  : "No sets match these filters."}
+                  ? "No offers left to sell on any platform. Create and compose an offer first."
+                  : byMissing.length > 0 && byPlatform.length === 0 && platformFacet === platformId
+                    ? `No offers left to sell on ${platformName}. Choose another platform, or All platforms.`
+                    : "No sets match these filters."}
               </p>
             ) : (
               visible.map(({ group, sets }, i) => {
@@ -503,7 +557,8 @@ export function AddSaleLineDialog({
                       ctx={ctx}
                       detailsShown={detailsOpen.has(s.offerSetId)}
                       onToggleDetails={() => toggleDetails(s.offerSetId)}
-                      onToggle={() => toggleSet(s, group.offerPrice)}
+                      platformLabel={group.otherPlatformName}
+                      onToggle={() => toggleSet(s, group.prefill)}
                       onPrice={(p) => setPrice(s.offerSetId, p)}
                     />
                   );
@@ -532,7 +587,7 @@ export function AddSaleLineDialog({
                     onToggleExpand={() =>
                       setExpanded((prev) => ({ ...prev, [group.offerId]: !(prev[group.offerId] ?? false) }))
                     }
-                    onToggleSet={(s) => toggleSet(s, group.offerPrice)}
+                    onToggleSet={(s) => toggleSet(s, group.prefill)}
                     onPrice={setPrice}
                   />
                 );
@@ -570,6 +625,27 @@ export function AddSaleLineDialog({
       </DialogFooter>
     </DialogShell>,
     document.body
+  );
+}
+
+/** Names the platform an offer from outside the sale's own is listed on (#2343). */
+function PlatformChip({ name }: { name: string }) {
+  return (
+    <span
+      style={{
+        fontSize: "0.6875rem",
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        padding: "0.0625rem 0.375rem",
+        marginRight: "0.375rem",
+        borderRadius: "0.375rem",
+        color: "var(--color-text-secondary)",
+        background: "var(--color-bg-muted)",
+        border: "1px solid var(--color-border)",
+      }}
+    >
+      {name}
+    </span>
   );
 }
 
@@ -670,6 +746,7 @@ function QuantityGroup({
             </div>
           )}
           <div style={{ fontSize: "0.75rem", color: MUTED, marginTop: "0.3rem" }}>
+            {group.otherPlatformName && <PlatformChip name={group.otherPlatformName} />}
             {group.sets.length} set{group.sets.length === 1 ? "" : "s"}
             {!stale && selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
           </div>
@@ -727,6 +804,7 @@ function SetPickRow({
   indent,
   ctx,
   detailsShown,
+  platformLabel,
   onToggleDetails,
   onToggle,
   onPrice,
@@ -743,6 +821,8 @@ function SetPickRow({
   indent?: boolean;
   ctx: RowCtx;
   detailsShown: boolean;
+  /** The offer's platform, on a single-set offer from another platform than the sale's (#2343). */
+  platformLabel?: string | null;
   onToggleDetails: () => void;
   onToggle: () => void;
   onPrice: (price: string) => void;
@@ -776,6 +856,7 @@ function SetPickRow({
             {set.label}
           </div>
           <div style={{ marginTop: "0.2rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {platformLabel && <PlatformChip name={platformLabel} />}
             <span style={{ fontSize: "0.75rem", color: MUTED }}>
               {set.itemLabels.length} cop{set.itemLabels.length === 1 ? "y" : "ies"}
             </span>

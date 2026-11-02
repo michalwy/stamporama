@@ -206,6 +206,38 @@ elsewhere for every set.
 **Only copies in stock can be picked**: in hand, not disposed of, not sold, not traded away. Not
 `forSale`: a stamp sold to someone who asked for it was rarely marked for sale.
 
+### 9. A sale may take sets from offers on any platform (#2343)
+
+A sale was on one platform, and so was every offer it took sets from. But a buyer on one platform
+often takes something listed on another — a Facebook buyer who also wants a stamp up on Colnect — and
+the only way to record it was §8: sell the copies on no offer, and leave the Colnect offer flagged
+for a copy sold elsewhere, to be withdrawn by hand, never shown as sold. ADR-0075 §6 made the first
+exception for a proposal's lots; #2343, decided with the collector on 2026-11-02, makes it the rule.
+
+- **Any offer's set may join a sale on any platform**, by every other guard a sold set passes
+  (`checkSaleLineDrafts`). The **sale's** platform decides its commission and fees, and the line's
+  price is typed in the **sale's** currency: on the sale's own platform the offer must still be in
+  that currency (#196/#197), from another it need not be.
+- **A listing in active bidding on another platform is refused** — and left out of *Add sold sets* —
+  since a bid there has already committed it (§4's bidding extension). On the sale's own platform the
+  sale is what resolves the bidding, as before.
+- **The offer is handled as when it sells on its own platform**: the set is sold, a single-set
+  offer becomes `sold`, a quantity offer has one set fewer and its listing is marked changed (#700).
+- **But its listing is still up** on its own platform, where no sale ended it. So an offer sold out
+  through a sale on another platform is stamped **`Offer.listingToCloseAt`** — only a listing that was
+  up, never one on Direct, which is listed nowhere — and read only with `state = sold`. It is the one
+  stored flag beside §4's derived ones, because nothing derivable says the listing has come down: a
+  sold offer has no resolving edit left to make. It joins *Needs action* (as #542's drift does), a
+  red group of its own in the notifications and a reason on the Dashboard, and leaves when the
+  collector presses **Listing closed** — or when the offer leaves `sold`, which clears it.
+- The line is marked with the offer's platform (*from Colnect #2961*) — `SaleDetailLine.fromPlatformName`,
+  and `fromPlatform` in the agent API's `get_sale` — and the agent API's `sell_offer` takes a `sale`
+  on any platform by the same guard.
+
+A sale's own platform still cannot change while it holds lines, and merging or moving sets between
+sales still asks for the same platform: those are about the sale, not about where its sets were
+listed.
+
 ## Consequences
 
 - **Removed:** `Lot` / `LotItem` / `LotSubLot` tables and the standalone **Lots** screen,

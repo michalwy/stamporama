@@ -5428,6 +5428,12 @@ model Offer {
   // generated photos have their own out-of-date signal (#311), which says the same thing about the
   // images and says it where the images are.
   listingContentChangedAt DateTime?
+  // The listing is **still up on its own platform** although the offer has sold here (#2343): its
+  // last set went into a sale on another platform (a Colnect listing bought by a Facebook buyer), so
+  // nothing on its platform ended it. Stamped when that sale sells the offer out; null for every
+  // other sale. Read only with `state = sold` — an offer the sale is taken back from is open again
+  // and its listing nothing to close. Cleared when the collector says the listing is closed.
+  listingToCloseAt DateTime?
   // When this listing was **closed** (#512) — stamped the moment the offer entered `sold` or
   // `withdrawn`, cleared if it ever leaves one (deleting the sale that sold it reverts it to
   // `active`). Null on every offer that is still open.

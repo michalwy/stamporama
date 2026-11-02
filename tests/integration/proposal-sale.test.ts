@@ -417,16 +417,18 @@ describe("A proposal becomes a sale (#2289)", () => {
     assert.equal((await getProposalScreen(userId, proposalId))?.sale?.saleId, remaining);
   });
 
-  it("an ordinary offer on Direct still cannot join a sale on another platform", async () => {
+  // Since #2343 any offer may join a sale on another platform — and a Direct one, listed nowhere,
+  // leaves no listing to close behind.
+  it("an ordinary offer on Direct joins a sale on another platform, with no listing to close", async () => {
     const contactId = (await prisma.contact.create({ data: { collectionId, name: "Plain buyer", buyer: true } })).id;
     const facebookSale = await saleWithOneLine(facebookId, contactId);
     const plain = await offer(directId, "1.00", { state: "active" });
     const [sellable] = await listSellableOffers(userId, collectionId, { offerId: plain });
-    await assert.rejects(
-      addSaleLines(userId, facebookSale, [
-        { offerId: plain, offerSetId: sellable!.sets[0]!.offerSetId, price: "1.00", itemIds: sellable!.sets[0]!.itemIds },
-      ]),
-      /different platform than this sale/
-    );
+    await addSaleLines(userId, facebookSale, [
+      { offerId: plain, offerSetId: sellable!.sets[0]!.offerSetId, price: "1.00", itemIds: sellable!.sets[0]!.itemIds },
+    ]);
+    const after = await prisma.offer.findUniqueOrThrow({ where: { id: plain }, select: { state: true, listingToCloseAt: true } });
+    assert.equal(after.state, "sold");
+    assert.equal(after.listingToCloseAt, null);
   });
 });

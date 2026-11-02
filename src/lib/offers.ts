@@ -1498,6 +1498,16 @@ const LISTING_DRIFT_WHERE: Prisma.OfferWhereInput = {
   state: { in: [...LISTED_OFFER_STATES] },
 };
 
+/**
+ * The `where` for an offer **sold here whose listing is still up on its own platform** (#2343): its
+ * last set went into a sale on another platform. Both halves, as above — the stamp and `sold` — so an
+ * offer taken back out of `sold` stops counting without anything clearing it.
+ */
+export const LISTING_TO_CLOSE_WHERE: Prisma.OfferWhereInput = {
+  listingToCloseAt: { not: null },
+  state: "sold",
+};
+
 /** One live listing that no longer matches its offer (#542), as the notification centre lists it. */
 export interface ChangedListingOffer {
   offerId: string;
@@ -1558,9 +1568,64 @@ export async function offersWithChangedListing(
   };
 }
 
+/** One sold offer whose listing is still up on its own platform (#2343), as the notification centre
+ * lists it. */
+export interface ListingToCloseOffer {
+  offerId: string;
+  label: string;
+  platformName: string;
+  /** When it sold through the sale on another platform. */
+  soldAt: Date;
+}
+
+/**
+ * Sold offers whose listing is still up on their own platform (#2343), oldest first — a backlog, as
+ * the changed listings above are, which nothing in the app can see being put right: it leaves only
+ * when the collector says the listing is closed.
+ */
+export async function offersWithListingToClose(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: ListingToCloseOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+
+  const where: Prisma.OfferWhereInput = { collectionId, ...LISTING_TO_CLOSE_WHERE };
+  const [total, rows] = await Promise.all([
+    prisma.offer.count({ where }),
+    prisma.offer.findMany({
+      where,
+      orderBy: [{ listingToCloseAt: "asc" }, { offerNo: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        listingToCloseAt: true,
+        platform: { select: { name: true } },
+        sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+      },
+    }),
+  ]);
+
+  const labeller = rows.some((row) => !row.name) ? await makeOfferLabeller(collectionId) : null;
+
+  return {
+    total,
+    offers: rows.map((row) => ({
+      offerId: row.id,
+      label: offerDisplayLabel(row.name, row.sets, labeller),
+      platformName: row.platform.name,
+      // Non-null by the `where`.
+      soldAt: row.listingToCloseAt!,
+    })),
+  };
+}
+
 /** The flagged offers as the overlays want them: one row per offer, with the platform the facet
  * counts group by. Deliberately the same shape `needsActionRows` hands back for its own flagged set,
- * since #542 folded the two into one selection. */
+ * since #542 folded the two into one selection. A sold offer whose listing is still up on its own
+ * platform (#2343) is the same kind of work — a listing on a marketplace that only the collector can
+ * put right — so *Needs action* selects it here too. */
 async function listingDriftRows(
   collectionId: string,
   /** The search's own resolved ids, where one is active (#465) — narrowing the *reported* offers,
@@ -1571,7 +1636,7 @@ async function listingDriftRows(
   const rows = await prisma.offer.findMany({
     where: {
       collectionId,
-      ...LISTING_DRIFT_WHERE,
+      OR: [LISTING_DRIFT_WHERE, LISTING_TO_CLOSE_WHERE],
       ...(offerIds ? { id: { in: offerIds } } : {}),
     },
     select: { id: true, platformId: true },
@@ -1993,9 +2058,10 @@ async function labelWaitingOffers<T extends { id: string; since: Date | null }>(
   });
 }
 
-/** Why an offer needs action (#1811): one of the bell's collisions (#367, #1876), or its listing
- *  having changed since it went up (#542). */
-export type OfferNeedsActionReason = OfferActionReason | "listing-changed";
+/** Why an offer needs action (#1811): one of the bell's collisions (#367, #1876), its listing
+ *  having changed since it went up (#542), or a sold offer's listing still up on its own platform
+ *  (#2343). */
+export type OfferNeedsActionReason = OfferActionReason | "listing-changed" | "listing-to-close";
 
 /** One offer of the *Needs action* set, with the reason it is listed under. */
 export interface NeedsActionOffer extends WaitingOffer {
@@ -2024,12 +2090,17 @@ export async function offersNeedingActionForDashboard(
   limit: number
 ): Promise<{ total: number; offers: NeedsActionOffer[] }> {
   await assertCollectionOwner(ownerId, collectionId);
-  const [collisions, drifted] = await Promise.all([
+  const [collisions, drifted, toClose] = await Promise.all([
     needsActionRows(collectionId),
     prisma.offer.findMany({
       where: { collectionId, ...LISTING_DRIFT_WHERE },
       orderBy: [{ listingContentChangedAt: "asc" }, { offerNo: "desc" }],
       select: { id: true, listingContentChangedAt: true },
+    }),
+    prisma.offer.findMany({
+      where: { collectionId, ...LISTING_TO_CLOSE_WHERE },
+      orderBy: [{ listingToCloseAt: "asc" }, { offerNo: "desc" }],
+      select: { id: true, listingToCloseAt: true },
     }),
   ]);
 
@@ -2064,8 +2135,18 @@ export async function offersNeedingActionForDashboard(
       since: null as Date | null,
     }));
   const collided = new Set([...flagged, ...prepared].map((row) => row.id));
+  // A sold offer is never a collision (those read live offers only) nor a changed listing (listed
+  // states only), so the listings to close (#2343) need no de-duplication. They follow the red
+  // collisions — the bell grades them red too, a listing still offering what has gone — and lead the
+  // amber.
+  const closing = toClose.map((row) => ({
+    id: row.id,
+    reason: "listing-to-close" as OfferNeedsActionReason,
+    since: row.listingToCloseAt,
+  }));
   const ordered = [
     ...flagged,
+    ...closing,
     ...prepared,
     ...drifted
       .filter((row) => !collided.has(row.id))
@@ -2546,6 +2627,10 @@ export interface OfferListItem {
    * pushed back to the marketplace. The instant is when it started diverging, so the row can say how
    * long the live listing has been wrong; null is a listing this record believes is in step. */
   listingOutOfDate: Date | null;
+  /** Derived (#2343): the offer is **sold** here through a sale on another platform, and its listing
+   * on its own platform is still up for the collector to close there. The instant it sold that way;
+   * null on every other offer. */
+  listingToClose: Date | null;
   /** How many days this **active quick buy** has been up since it was last posted, where that is
    * past its platform's (on Facebook, its group's) refresh threshold (#1718); null where nothing is
    * due. The row shows *Up N days · refresh*. */
@@ -2596,6 +2681,7 @@ const OFFER_SELECT = {
   listingDate: true,
   lastPostedAt: true,
   listingContentChangedAt: true,
+  listingToCloseAt: true,
   facebookGroupId: true,
   bidIncrement: true,
   facebookPostId: true,
@@ -2629,6 +2715,7 @@ type OfferRow = {
   listingDate: Date | null;
   lastPostedAt: Date | null;
   listingContentChangedAt: Date | null;
+  listingToCloseAt: Date | null;
   facebookGroupId: string | null;
   bidIncrement: Decimal | null;
   facebookPostId: string | null;
@@ -2715,6 +2802,8 @@ function toListItem(
     // flagged simply stops reporting it — what a closed listing said is history, and it is one rule
     // in one place instead of a clean-up on every terminal transition.
     listingOutOfDate: isListedState(state) ? row.listingContentChangedAt : null,
+    // Read with the state, as above (#2343): an offer taken back out of `sold` has nothing to close.
+    listingToClose: state === "sold" ? row.listingToCloseAt : null,
     refreshDueDays: quickBuyRefreshDue(
       { state, listingType, listingDate: row.listingDate, lastPostedAt: row.lastPostedAt },
       refreshThresholdDays,
@@ -5305,6 +5394,9 @@ export interface OfferDetail {
    * since it went there, with nothing pushed back. The instant is when it started diverging; null is
    * a listing this record believes is in step. What the header's **Mark as up to date** clears. */
   listingOutOfDate: Date | null;
+  /** The list row's own flag (#2343): sold here through a sale on another platform, its listing still
+   * up on its own. What the header's **Listing closed** clears. */
+  listingToClose: Date | null;
   /** This listing's own photo configuration (#308) — sides, tile label template and the collage
    * numbers copied from a template. Seeded at creation, edited from the photo-settings dialog. */
   photoConfig: OfferPhotoConfigInput;
@@ -5522,6 +5614,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         orderBy: [{ endedAt: "desc" }, { id: "desc" }],
       },
       listingContentChangedAt: true,
+      listingToCloseAt: true,
       readyAfterPhotosAt: true,
       readyAfterPhotosRefusal: true,
       createdAt: true,
@@ -5945,6 +6038,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // The same derivation the list row makes (#542): the stored instant, but only while the offer is
     // still up. One rule, read in both places, so the row and the screen it opens cannot disagree.
     listingOutOfDate: isListedState(state) ? offer.listingContentChangedAt : null,
+    listingToClose: state === "sold" ? offer.listingToCloseAt : null,
     photoConfig: offerPhotoConfigFromRow(offer),
     // The platform's cover rule (#1665), read live: what an offer following it gets.
     platformCoverSymbols: offer.platform.coverSymbols,
@@ -7668,6 +7762,19 @@ export async function markOfferListingSynced(ownerId: string, offerId: string): 
     );
   }
   await clearListingContentChanged(offerId);
+}
+
+/**
+ * **Listing closed** (#2343): the collector has ended, on its own platform, the listing of an offer
+ * that sold here through a sale on another platform. Clears `listingToCloseAt` and nothing else — the
+ * offer stays `sold`. A no-op on an offer carrying no such flag.
+ */
+export async function markOfferListingClosed(ownerId: string, offerId: string): Promise<void> {
+  await assertOfferOwner(ownerId, offerId);
+  await prisma.offer.updateMany({
+    where: { id: offerId, listingToCloseAt: { not: null } },
+    data: { listingToCloseAt: null },
+  });
 }
 
 /**

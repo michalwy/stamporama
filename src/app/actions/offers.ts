@@ -13,6 +13,7 @@ import {
   readOwnOfferState,
   acknowledgeOfferBiddingNotice,
   markOfferListingSynced,
+  markOfferListingClosed,
   setOfferInActiveBidding,
   deleteOffer,
   patchOffer,
@@ -1301,6 +1302,18 @@ export async function markOfferListingSyncedAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to mark the listing as up to date.");
+  }
+}
+
+/** **Listing closed** (#2343): the listing of an offer sold through a sale on another platform has
+ *  been ended on its own platform. Idempotent, as the action above is. */
+export async function markOfferListingClosedAction(offerId: string): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await markOfferListingClosed(session.user.id, offerId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to mark the listing as closed.");
   }
 }
 
