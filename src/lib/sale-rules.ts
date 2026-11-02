@@ -99,3 +99,21 @@ export function isInStockForSale(copy: {
     (IN_HAND_DELIVERY_STATES as readonly string[]).includes(copy.deliveryState)
   );
 }
+
+/**
+ * The toast after *Sell…* on Copies (#2345): how many copies went into which sale, to whom and on
+ * which platform — *3 copies added to sale #45 — Mieczyslaw Mum, Facebook*. Copies stays on its list,
+ * so this is how the sale is reached; a sale made from the dialog reads *new sale #46*.
+ */
+export function soldCopiesIntoSaleMessage(input: {
+  count: number;
+  saleNo: number;
+  buyerName: string | null;
+  platformName: string;
+  newSale: boolean;
+}): string {
+  const { count, saleNo, buyerName, platformName, newSale } = input;
+  const copies = count === 1 ? "1 copy" : `${count} copies`;
+  const who = [buyerName, platformName].filter(Boolean).join(", ");
+  return `${copies} added to ${newSale ? "new sale" : "sale"} #${saleNo}${who ? ` — ${who}` : ""}`;
+}

@@ -1057,18 +1057,18 @@ export async function addSaleLines(
   );
 }
 
-/** What names a sale in a sentence — its number and its buyer — for the toast *Sell* leaves behind
- *  once it no longer opens the sale (#2049). */
+/** What names a sale in a sentence — its number, its buyer and its platform — for the toast *Sell*
+ *  leaves behind once it no longer opens the sale (#2049, #2345). */
 export async function readSaleHeadline(
   ownerId: string,
   saleId: string
-): Promise<{ saleNo: number; buyerName: string | null }> {
+): Promise<{ saleNo: number; buyerName: string | null; platformName: string }> {
   await assertSaleOwner(ownerId, saleId);
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { id: saleId },
-    select: { saleNo: true, buyer: { select: { name: true } } },
+    select: { saleNo: true, buyer: { select: { name: true } }, platform: { select: { name: true } } },
   });
-  return { saleNo: sale.saleNo, buyerName: sale.buyer?.name ?? null };
+  return { saleNo: sale.saleNo, buyerName: sale.buyer?.name ?? null, platformName: sale.platform.name };
 }
 
 /** The two refusals about the sale itself rather than its lines: nothing to add, and a sale already

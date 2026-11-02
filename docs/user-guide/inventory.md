@@ -1716,7 +1716,14 @@ The dialog asks for the **price for the set** first: the copies become **one set
 that one price**, and no offer is made for them. Then pick one of the **open sales** — ordered, paid
 or packed, newest first, each with its buyer, platform and currency, the price being in that sale's
 currency — or **Create new sale**, whose platform decides the currency as usual. Sales already sent
-are not offered. You land on the sale, where the set reads *on no offer* on the **Sold units** list.
+are not offered. On the sale the set reads *on no offer* on the **Sold units** list.
+
+**The list stays where it is.** Its search, filters, sort and place are kept; the sold copies leave
+it or change their state as the filters say, and their ticks go — any other ticked copies stay
+ticked. A message says where they went, *3 copies added to sale #45 — Mieczyslaw Mum, Facebook*
+(*new sale #46* for one made in the dialog), with **Open sale**. The next **Sell…** starts with
+that sale at the top, marked **Last used**, while it is still open: type the price and press
+**Enter** to add the copies to it, so a run of copies to one buyer needs no picking.
 
 A ticked copy that is also in an offer can be sold this way; that offer is then flagged **Needs
 action**, as when a copy sells under another listing. Removing the set from the sale puts its copies

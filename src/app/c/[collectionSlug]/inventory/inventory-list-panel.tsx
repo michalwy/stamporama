@@ -2274,7 +2274,8 @@ export function InventoryListPanel({
           collectionSlug={collectionSlug}
           baseCurrency={baseCurrency}
           itemIds={dialog.items.map((c) => c.id)}
-          onSold={clearSelection}
+          // The list stays put (#2345): only the sold copies' ticks go, any others stay.
+          onSold={() => setManySelected(dialog.items, false)}
           onClose={closeDialog}
         />
       )}
