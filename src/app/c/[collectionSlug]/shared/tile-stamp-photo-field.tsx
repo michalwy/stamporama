@@ -48,7 +48,7 @@ export function TileStampPhotoField({
   pieces: IdentifiedPiece[];
   /** The stamp's photos, main first — undefined while loading. */
   stampPhotos: EditablePhotoSummary[] | undefined;
-  /** False for a piece in a format other than the single (#346). */
+  /** False for a piece in a format other than the single (#346); a cover is never drawn (#2370). */
   offered: boolean;
   on: boolean | undefined;
   tileId: string;

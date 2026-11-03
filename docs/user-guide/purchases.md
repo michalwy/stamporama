@@ -1972,6 +1972,10 @@ one, so a photo is only ever replaced when you tick the box.
 - With several tiles ticked as one stamp, every tile's front is shown. Click the one you want.
 - A piece given a **format** (a pair, a block) is not offered, because its picture is not a picture
   of the single stamp.
+- A piece carrying **several stamps**, or filed as a **cover** or a **fragment**, has no Stamp photo
+  section at all: its picture is of none of its stamps, so it never becomes any stamp's photo — not
+  even the automatic first picture of a stamp that has none. Adding a second stamp, or choosing a
+  cover format, takes the section away; going back to one stamp in no format brings it back.
 - **Identify again** offers the same choice for the stamp you correct the piece to.
 
 #### Comparing a piece with a reference

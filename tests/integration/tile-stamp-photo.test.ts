@@ -117,6 +117,16 @@ describe("the tile's photo as the stamp's photo (#1340)", () => {
     return photo.id;
   }
 
+  /** A consumed tile's front, now its copy's. */
+  async function frontOfCopy(tileId: string): Promise<string> {
+    const { itemId } = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileId } });
+    const photo = await prisma.photo.findFirstOrThrow({
+      where: { itemId: itemId as string, role: "front" },
+      select: { id: true },
+    });
+    return photo.id;
+  }
+
   async function thumbBytes(photoId: string): Promise<Buffer> {
     const p = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
     const obj = await getStorage(p.storageBackend).get(
@@ -299,6 +309,47 @@ describe("the tile's photo as the stamp's photo (#1340)", () => {
       (await prisma.scanTile.findUniqueOrThrow({ where: { id: first } })).state,
       "unidentified"
     );
+  });
+
+  it("never gives a cover's picture to any of its stamps, not even a stamp with no photo (#2370)", async () => {
+    const bare = (await prisma.stamp.create({ data: { collectionId, name: "Bare on cover" } })).id;
+    const other = (await prisma.stamp.create({ data: { collectionId, name: "Beside it" } })).id;
+    const stamps = [{ stampId: bare }, { stampId: other }];
+
+    // Absent — the auto-seed — finds a stamp with no photo, and still gives it nothing.
+    const [seeded, chosen] = await tiles();
+    await identifyTileAsNewCopy(userId, seeded, { stampId: bare, conditionId, stamps });
+    assert.equal(await prisma.photo.count({ where: { stampId: bare } }), 0);
+    assert.equal(await prisma.photo.count({ where: { stampId: other } }), 0);
+
+    // Asked for anyway, it is refused before anything is created.
+    await assert.rejects(
+      () => identifyTileAsNewCopy(userId, chosen, { stampId: bare, conditionId, stamps, stampPhotoTileId: chosen }),
+      (e) => e instanceof ScanValidationError && /several stamps/.test(e.message)
+    );
+    assert.equal(
+      (await prisma.scanTile.findUniqueOrThrow({ where: { id: chosen } })).state,
+      "unidentified"
+    );
+
+    // The same stamp twice on one piece is several stamps too.
+    await identifyTileAsNewCopy(userId, chosen, {
+      stampId: bare,
+      conditionId,
+      stamps: [{ stampId: bare, quantity: 2 }],
+    });
+    assert.equal(await prisma.photo.count({ where: { stampId: bare } }), 0);
+
+    // Identify again follows the rule for the piece it corrects to: the copy's own two stamps…
+    await assert.rejects(
+      () => reidentifyTileCopy(userId, seeded, { stampId: bare, conditionId, stampPhotoTileId: seeded }),
+      (e) => e instanceof ScanValidationError && /several stamps/.test(e.message)
+    );
+    await reidentifyTileCopy(userId, seeded, { stampId: bare, conditionId });
+    assert.equal(await prisma.photo.count({ where: { stampId: bare } }), 0);
+    // …and taken back down to one stamp, it is a single again.
+    await reidentifyTileCopy(userId, seeded, { stampId: bare, conditionId, stamps: [{ stampId: bare }] });
+    assert.ok(await mainShows(bare, await frontOfCopy(seeded)));
   });
 
   it("offers the same choice when an identification is corrected", async () => {

@@ -56,6 +56,7 @@ import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query
 import {
   effectiveStampPhotoChoice,
   stampPhotoFormValue,
+  pieceIsItsStamp,
   type StampPhotoChoice,
 } from "@/lib/tile-stamp-photo";
 import { NO_AUTOFILL } from "./no-autofill";
@@ -683,9 +684,6 @@ function IntakeConditionDialog({
           defaultTileId: firstFrontTileId,
         })
       : null;
-  // A single only (#346): a pair's picture misrepresents the stamp.
-  const stampPhotoOffered = formatId === "";
-
   // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
   // into several distinct copies, so shared photos would be meaningless. The pending change-set
   // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
@@ -695,8 +693,18 @@ function IntakeConditionDialog({
   const listsStamps = carriedStamps !== undefined && carriedStamps.length > 0;
   const replacing = offerReplaces === true && singleStamp && !listsStamps;
   // Several stamps, counted as `Item.stampCount` counts them — one stamp as a block is still one.
-  const severalStamps =
-    listsStamps && carriedStamps.reduce((sum, line) => sum + line.entry.quantity, 0) > 1;
+  const carriedStampCount = listsStamps
+    ? carriedStamps.reduce((sum, line) => sum + line.entry.quantity, 0)
+    : 1;
+  const severalStamps = listsStamps && carriedStampCount > 1;
+  // A single only (#346): a pair's picture misrepresents the stamp. A cover or a fragment — several
+  // stamps, or a format of a piece kind — is not offered the section at all (#2370): its picture is
+  // of none of its stamps, so there is nothing to compare.
+  const coverPiece = severalStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null);
+  const stampPhotoOffered = pieceIsItsStamp({ formatId, stampCount: carriedStampCount });
+  // The section comes back unticked unless the stamp has no photo: an answer given before it was
+  // taken away is not carried over.
+  if (!stampPhotoOffered && stampPhotoChoice !== null) setStampPhotoChoice(null);
 
   // The franking (#2359) and what the piece will be worth by it (#2353): each stamp's used price and
   // its price on the piece, and the computed value under them, re-read as the answers change. Only
@@ -1368,7 +1376,7 @@ function IntakeConditionDialog({
                 {/* The stamp's photo (#1340): beside the disposition because it is one more thing this
                     identification does, and after the copy's own answers because it is about the stamp
                     rather than the copy. */}
-                {photoStampId && stampPhoto && pieces && (
+                {photoStampId && stampPhoto && pieces && !coverPiece && (
                   <TileStampPhotoField
                     collectionId={collectionId}
                     pieces={pieces}

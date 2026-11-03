@@ -5,8 +5,18 @@
  * The rule the collector confirmed on 2026-09-18: **the default is today's behaviour.** The option
  * is on when the stamp has no photo, which is #149's automatic seed, and off when it has one, so
  * nothing is replaced without the collector turning it on. It is offered only for a piece in the
- * **default format** (#346) — a pair's or a block's picture misrepresents the single stamp.
+ * **default format** (#346) — a pair's or a block's picture misrepresents the single stamp — and
+ * carrying **one stamp** (#2370): a cover's picture is not a picture of any of its stamps.
  */
+
+/**
+ * Whether a piece's picture is a picture of its stamp (#346, #2370): a single, in no format, and the
+ * only stamp on the piece. The one rule behind the dialog's offer, the server's refusal and #149's
+ * automatic first picture alike — a cover never becomes any stamp's photo, not even a bare stamp's.
+ */
+export function pieceIsItsStamp(input: { formatId: string | null | undefined; stampCount: number }): boolean {
+  return !input.formatId && input.stampCount <= 1;
+}
 
 /** What the collector did with the option, for one stamp. Null while untouched. */
 export interface StampPhotoChoice {
