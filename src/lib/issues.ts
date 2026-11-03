@@ -1061,7 +1061,7 @@ async function buildIssueListItems(
 
 
 /** Mark an issue's stamps still valid for postage, or not (#2358) — null follows its area, so an
- *  issue can be unmarked under a marked area. */
+ *  issue can be unmarked under a marked area. Set by the issue's Edit dialog (#2385). */
 export async function setIssueStillValidForPostage(
   ownerId: string,
   issueId: string,

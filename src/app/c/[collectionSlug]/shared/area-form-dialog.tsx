@@ -14,7 +14,21 @@ import {
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry, AreaVendorEntry } from "@/lib/areas";
-import { resolveInheritedAreaValues } from "@/lib/area-inheritance";
+import { inheritedStillValid, resolveInheritedAreaValues } from "@/lib/area-inheritance";
+import {
+  inheritedMethod,
+  methodToStore,
+  VALUATION_METHODS,
+  VALUATION_METHOD_LABELS,
+  type ValuationMethod,
+} from "@/lib/piece-valuation";
+import { methodInheritedLabel } from "@/lib/piece-value-words";
+import {
+  stillValidChoiceOf,
+  stillValidChoiceToStore,
+  stillValidInheritedLabel,
+  type StillValidChoice,
+} from "@/lib/still-valid-postage";
 import { languageLabel } from "@/lib/languages";
 import {
   fillTranslationValues,
@@ -166,6 +180,10 @@ interface CollectionAreaFormProps {
   defaultCatalogEntries?: AreaCatalogEntry[];
   defaultVendorEntries?: AreaVendorEntry[];
   defaultAssignable?: boolean;
+  /** How the area's pieces are valued (#2385) — its own valuation method and still-valid mark, and
+   *  the collection's method an area with none inherits at the top. Edit only: absent, the form has
+   *  no such fields and the save leaves both as they are. */
+  pieceValuation?: AreaPieceValuationDefaults;
   /** Every area in the collection — the parent picker's tree, and the chain the inherited
    *  placeholders are resolved off. */
   areas: CollectionAreaData[];
@@ -183,6 +201,13 @@ interface CollectionAreaFormProps {
   isPending: boolean;
 }
 
+/** What the area's Edit dialog opens its piece-valuation fields on (#2385). */
+export interface AreaPieceValuationDefaults {
+  stillValidForPostage: boolean | null;
+  valuationMethod: ValuationMethod | null;
+  collectionMethod: ValuationMethod;
+}
+
 export function CollectionAreaForm({
   defaultName,
   defaultParentId,
@@ -198,6 +223,7 @@ export function CollectionAreaForm({
   defaultCatalogEntries,
   defaultVendorEntries,
   defaultAssignable = true,
+  pieceValuation,
   areas,
   currentAreaId,
   catalogNames,
@@ -533,6 +559,17 @@ export function CollectionAreaForm({
             </span>
           </label>
         </div>
+
+        {/* How the area's covers and fragments are valued (#2385) — edit only. The left column is the
+            short one. */}
+        {pieceValuation && (
+          <AreaPieceValuationFields
+            areas={areas}
+            parentId={parentId}
+            defaults={pieceValuation}
+            isPending={isPending}
+          />
+        )}
       </div>
 
       <div>
@@ -848,6 +885,97 @@ export function CollectionAreaForm({
       <input type="hidden" name="catalogNameIds" value={JSON.stringify(bookIds)} />
       <input type="hidden" name="areaVendors" value={JSON.stringify(submittedVendors)} />
     </DialogFormColumns>
+  );
+}
+
+/**
+ * How the area's covers and fragments are valued (#2385; once its own ⋮ actions, #2358/#2359): its
+ * valuation method and whether its stamps are still valid for postage, each three-state with *same as
+ * parent* naming what it resolves to — off the parent chosen in the picker, as every placeholder here
+ * (#954). What is stored is only what differs from that, so a later change above still reaches an
+ * area that agreed with it; the hidden fields carry it to the save.
+ */
+function AreaPieceValuationFields({
+  areas,
+  parentId,
+  defaults,
+  isPending,
+}: {
+  areas: CollectionAreaData[];
+  parentId: string;
+  defaults: AreaPieceValuationDefaults;
+  isPending: boolean;
+}) {
+  const [method, setMethod] = useState<string>(defaults.valuationMethod ?? "");
+  const [stillValid, setStillValid] = useState<StillValidChoice>(
+    stillValidChoiceOf(defaults.stillValidForPostage)
+  );
+  const byId = useMemo(() => new Map(areas.map((a) => [a.id, a])), [areas]);
+  const inheritedFromParent = inheritedMethod(byId, parentId || null, defaults.collectionMethod);
+  const stillValidFromParent = inheritedStillValid(areas, parentId || null);
+  const lead = parentId ? "Same as parent" : "Not set";
+
+  return (
+    <div style={{ marginTop: "1.25rem" }}>
+      <SectionHeading
+        title="Covers and fragments"
+        hint="How the pieces whose most expensive stamp is here are valued."
+      />
+      <LabelWithError htmlFor="f-area-valuation-method">Valuation method</LabelWithError>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <select
+          id="f-area-valuation-method"
+          value={method}
+          onChange={(e) => setMethod(e.target.value)}
+          disabled={isPending}
+          style={{ ...INPUT_STYLE, width: "20rem", cursor: "pointer" }}
+        >
+          <option value="">{methodInheritedLabel(lead, inheritedFromParent)}</option>
+          {VALUATION_METHODS.map((m) => (
+            <option key={m} value={m}>
+              {VALUATION_METHOD_LABELS[m]}
+            </option>
+          ))}
+        </select>
+        <InfoHint>
+          Values the covers and fragments whose most expensive stamp is in this area or below it,
+          unless an area below or the copy sets its own.
+        </InfoHint>
+      </div>
+
+      <div style={{ marginTop: "0.75rem" }}>
+        <LabelWithError htmlFor="f-area-still-valid">Still valid for postage</LabelWithError>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <select
+            id="f-area-still-valid"
+            value={stillValid}
+            onChange={(e) => setStillValid(e.target.value as StillValidChoice)}
+            disabled={isPending}
+            style={{ ...INPUT_STYLE, width: "20rem", cursor: "pointer" }}
+          >
+            <option value="">{stillValidInheritedLabel(lead, stillValidFromParent)}</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+          <InfoHint>
+            A stamp that can still frank a letter has no on-cover price in Michel; the Michel method
+            works one out from its used and never-hinged prices. Every area and issue beneath follows
+            this unless it says otherwise.
+          </InfoHint>
+        </div>
+      </div>
+
+      <input
+        type="hidden"
+        name="valuationMethod"
+        value={methodToStore(method, inheritedFromParent.method) ?? ""}
+      />
+      <input
+        type="hidden"
+        name="stillValidForPostage"
+        value={String(stillValidChoiceToStore(stillValid, stillValidFromParent.valid) ?? "")}
+      />
+    </div>
   );
 }
 

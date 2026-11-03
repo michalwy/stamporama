@@ -18,6 +18,8 @@ import {
 import { parseTranslationValues } from "@/lib/translations";
 import { getCatalogNames, getCatalogTree, type CatalogNameFlat } from "@/lib/catalog";
 import { getCollectionTranslationContext } from "@/lib/contacts";
+import { setAreaValuationMethod } from "@/lib/valuation-methods";
+import { isValuationMethod } from "@/lib/piece-valuation";
 
 export type AreaActionState =
   | { status: "idle" }
@@ -124,6 +126,14 @@ function parseCoverSymbols(formData: FormData): boolean | null {
   return raw === "on" ? true : raw === "off" ? false : null;
 }
 
+/** The area's still-valid mark as the Edit dialog posts it (#2385): `true`, `false`, or blank for
+ * *same as parent*; absent — a form without the field — leaves it as it is. */
+function parseStillValid(formData: FormData): boolean | null | undefined {
+  if (!formData.has("stillValidForPostage")) return undefined;
+  const raw = str(formData, "stillValidForPostage");
+  return raw === "true" ? true : raw === "false" ? false : null;
+}
+
 /** The anchoring markets as typed (#1634): codes separated by commas or spaces. Always present, so
  * clearing the field clears them and the area inherits again. */
 function parseMarketList(formData: FormData): string[] {
@@ -172,6 +182,13 @@ export async function updateCollectionAreaAction(
   const session = await getSession();
   const name = str(formData, "name");
   if (!name) return { status: "error", message: "Name is required." };
+  // The area's own valuation method and still-valid mark (#2385), already reduced by the dialog to
+  // what differs from the parent. Absent leaves each as it is.
+  const method = formData.has("valuationMethod") ? str(formData, "valuationMethod") : undefined;
+  if (method && !isValuationMethod(method)) {
+    return { status: "error", message: "Choose a valuation method." };
+  }
+  const stillValid = parseStillValid(formData);
   try {
     await updateCollectionArea(session.user.id, areaId, {
       name,
@@ -189,6 +206,12 @@ export async function updateCollectionAreaAction(
     });
     await syncAreaCatalogBooks(session.user.id, areaId, parseCatalogNameIds(formData));
     await syncAreaVendors(session.user.id, areaId, parseAreaVendors(formData));
+    if (method !== undefined) {
+      await setAreaValuationMethod(session.user.id, areaId, isValuationMethod(method) ? method : null);
+    }
+    if (stillValid !== undefined) {
+      await setAreaStillValidForPostage(session.user.id, areaId, stillValid);
+    }
     return { status: "success" };
   } catch (e) {
     return {
@@ -210,20 +233,6 @@ export async function deleteCollectionAreaAction(
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete area. Please try again.",
     };
-  }
-}
-
-/** Mark an area's stamps still valid for postage, or not (#2358); null follows the parent. */
-export async function setAreaStillValidForPostageAction(
-  areaId: string,
-  value: boolean | null
-): Promise<AreaActionState> {
-  const session = await getSession();
-  try {
-    await setAreaStillValidForPostage(session.user.id, areaId, value);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to update the area. Please try again." };
   }
 }
 

@@ -374,6 +374,16 @@ export async function updateIssueAction(
     // The whole set of tags, when the dialog submitted one (#1192) — absent leaves them alone.
     const tagEntries = parseTagEntries(formData.get("issueTags"));
     if (tagEntries) await setIssueTagEntries(session.user.id, issueId, tagEntries);
+    // Still valid for postage (#2385): `true`, `false`, or blank to follow its area, already reduced
+    // by the dialog to what the area does not say. Absent leaves it alone.
+    if (formData.has("stillValidForPostage")) {
+      const raw = formData.get("stillValidForPostage");
+      await setIssueStillValidForPostage(
+        session.user.id,
+        issueId,
+        raw === "true" ? true : raw === "false" ? false : null
+      );
+    }
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update issue. Please try again." };
@@ -889,19 +899,5 @@ export async function mergeIssuesAction(
     return { status: "success", issueId: targetIssueId };
   } catch {
     return { status: "error", message: "Failed to merge issues. Please try again." };
-  }
-}
-
-/** Mark an issue's stamps still valid for postage, or not (#2358); null follows its area. */
-export async function setIssueStillValidForPostageAction(
-  issueId: string,
-  value: boolean | null
-): Promise<IssueActionState> {
-  const session = await getSession();
-  try {
-    await setIssueStillValidForPostage(session.user.id, issueId, value);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to update the issue. Please try again." };
   }
 }

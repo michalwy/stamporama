@@ -1,6 +1,5 @@
 "use client";
 
-import { AreaValuationMethodDialog } from "./area-valuation-method-dialog";
 import type { ValuationMethod } from "@/lib/piece-valuation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -15,21 +14,19 @@ import {
   updateCollectionAreaAction,
   deleteCollectionAreaAction,
   reorderCollectionAreasAction,
-  setAreaStillValidForPostageAction,
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "@/lib/area-vendor";
-import { resolveEffectiveCatalogPrefix, resolveEffectiveStillValid } from "@/lib/area-inheritance";
-import { stillValidMarkToStore } from "@/lib/still-valid-postage";
+import { resolveEffectiveCatalogPrefix } from "@/lib/area-inheritance";
 import {
   AddAreaDialog,
   AREA_FORM_STYLE,
   CollectionAreaForm,
   type AreaFormVendor,
 } from "@/app/c/[collectionSlug]/shared/area-form-dialog";
-import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
@@ -54,7 +51,8 @@ interface AreasPanelProps {
   /** The language the plain `titleName` is written in (#293); labels the field once translations
    * are in play. */
   defaultLanguage: string;
-  /** What an area that sets no valuation method of its own inherits at the top (#2359). */
+  /** What an area that sets no valuation method of its own inherits at the top (#2359) — named by
+   *  the Edit dialog's *Same as parent* (#2385). */
   collectionValuationMethod: ValuationMethod;
 }
 
@@ -63,8 +61,7 @@ type DialogState =
   | { kind: "add-area"; defaultParentId?: string }
   | { kind: "edit-area"; area: CollectionAreaData }
   | { kind: "delete-area"; area: CollectionAreaData }
-  | { kind: "format-factors"; area: CollectionAreaData }
-  | { kind: "valuation-method"; area: CollectionAreaData };
+  | { kind: "format-factors"; area: CollectionAreaData };
 
 interface TreeNode {
   area: CollectionAreaData;
@@ -315,21 +312,6 @@ export function AreasPanel({
       const result = await action();
       setActionState(result);
       if (result.status === "success") handleSuccess();
-    });
-  }
-
-  /** Mark or unmark an area's stamps still valid for postage (#2358). What is stored is only what
-   *  the parent does not already say, so a change higher up still reaches an area that agreed. */
-  function toggleStillValid(area: CollectionAreaData) {
-    const inherited = resolveEffectiveStillValid(initialAreas, area.parentId);
-    const wanted = !resolveEffectiveStillValid(initialAreas, area.id);
-    startTransition(async () => {
-      const result = await setAreaStillValidForPostageAction(
-        area.id,
-        stillValidMarkToStore(inherited, wanted)
-      );
-      setActionState(result);
-      if (result.status === "success") router.refresh();
     });
   }
 
@@ -671,13 +653,6 @@ export function AreasPanel({
                       icon: "factors",
                       onSelect: () => openDialog({ kind: "format-factors", area }),
                     },
-                    stillValidAction(initialAreas, area, () => toggleStillValid(area)),
-                    {
-                      key: "valuation-method",
-                      label: "Valuation method…",
-                      icon: "prices",
-                      onSelect: () => openDialog({ kind: "valuation-method", area }),
-                    },
                     {
                       key: "delete",
                       label: "Delete",
@@ -704,20 +679,6 @@ export function AreasPanel({
           scope={{ kind: "area", id: dialog.area.id }}
           scopeLabel={dialog.area.name}
           onClose={closeDialog}
-        />
-      )}
-
-      {/* How the pieces under this area are valued (#2359), set beside its multipliers. */}
-      {dialog.kind === "valuation-method" && (
-        <AreaValuationMethodDialog
-          area={dialog.area}
-          areas={initialAreas}
-          collectionMethod={collectionValuationMethod}
-          onClose={closeDialog}
-          onSaved={() => {
-            closeDialog();
-            router.refresh();
-          }}
         />
       )}
 
@@ -764,6 +725,11 @@ export function AreasPanel({
                 defaultCatalogEntries={dialog.area.catalogEntries}
                 defaultVendorEntries={dialog.area.vendorEntries}
                 defaultAssignable={dialog.area.assignable}
+                pieceValuation={{
+                  stillValidForPostage: dialog.area.stillValidForPostage,
+                  valuationMethod: dialog.area.valuationMethod,
+                  collectionMethod: collectionValuationMethod,
+                }}
                 areas={initialAreas}
                 currentAreaId={dialog.area.id}
                 catalogNames={catalogNames}
@@ -823,29 +789,4 @@ export function AreasPanel({
       })()}
     </>
   );
-}
-
-/** The ⋮ entry marking an area's stamps still valid for postage (#2358) — its label says what a
- *  press does, its hint where an inherited mark comes from. */
-function stillValidAction(
-  areas: readonly CollectionAreaData[],
-  area: CollectionAreaData,
-  onSelect: () => void
-): RowAction {
-  const valid = resolveEffectiveStillValid(areas, area.id);
-  let from: CollectionAreaData | undefined;
-  if (valid && area.stillValidForPostage === null) {
-    from = areas.find((a) => a.id === area.parentId);
-    for (let depth = 0; from && from.stillValidForPostage === null && depth < 50; depth++) {
-      const parentId: string | null = from.parentId;
-      from = areas.find((a) => a.id === parentId);
-    }
-  }
-  return {
-    key: "still-valid",
-    label: valid ? "Unmark still valid for postage" : "Mark still valid for postage",
-    icon: "stamp",
-    hint: from ? `Inherited from ${from.name}` : undefined,
-    onSelect,
-  };
 }

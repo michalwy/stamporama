@@ -64,6 +64,10 @@ as parent* resolves to and from where), Settings → Formats → *Valuation meth
 the copy's Edit dialog — and, since #2369, beside the franking in the piece's Valuation window and the
 identification step, whose *As inherited* names the method and where it comes from.
 
+*Amended by #2385:* an area's method is a field of its **Edit** dialog on the Areas screen, not an
+action of its ⋮ menu; *Same as parent* still names what it resolves to and from where, and choosing the
+method the area would inherit anyway stores *same as parent*.
+
 ### 3. A piece has a franking
 
 `Item.franking` — `rate_correct` (every row, new and old), `philatelic_posted`, `not_posted` — read only

@@ -481,6 +481,12 @@ export function areaMethod(
   return null;
 }
 
+/** What an area's Edit dialog stores for its method (#2385): the method chosen, unless it is the one
+ *  the area inherits anyway — then nothing, so a later change above still reaches it. */
+export function methodToStore(choice: string, inherited: ValuationMethod): ValuationMethod | null {
+  return isValuationMethod(choice) && choice !== inherited ? choice : null;
+}
+
 /** {@link resolveMethod} with no method of the copy's own — what it inherits. */
 export function inheritedMethod(
   areas: ReadonlyMap<string, MethodArea>,

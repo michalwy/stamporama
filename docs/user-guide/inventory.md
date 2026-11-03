@@ -1040,8 +1040,8 @@ You set each one where its scope lives, so you never pick the thing it applies t
 
 - **Collection-wide and per-area** — Settings → Formats → Multipliers.
 - **One area** — also from that area's **⋮** menu on the **Areas** screen, which is usually quicker.
-  The same menu's **Valuation method…** sets how the covers and fragments under that area are
-  valued (see [What a piece carrying several stamps is worth](#what-a-piece-carrying-several-stamps-is-worth)).
+  How the covers and fragments under that area are valued is set in the area's **Edit** dialog (see
+  [What a piece carrying several stamps is worth](#what-a-piece-carrying-several-stamps-is-worth)).
 - **One issue** — from that issue's **⋮** menu on the Issues list. Per-issue multipliers are not
   listed in Settings: you can have one for every issue and every format, so that list would be
   thousands of lines long. Each issue's own row shows just its own.
@@ -1116,10 +1116,12 @@ Michel prints no ⊠ price for a stamp that can still frank a letter, and says h
 cover instead: **at least 0.40, or about 20 % above the used price — but no more than the
 never-hinged price when that is above 0.40**. The *Michel* method applies that rule for you.
 
-- **Mark what is still valid** from the **⋮** menu of an area on the Areas screen, or of an issue on
-  the Issues list: **Mark still valid for postage**. An area's mark reaches every area and issue
-  beneath it; **Unmark still valid for postage** on an issue under a marked area takes just that
-  issue out, and the menu says when a mark is inherited.
+- **Mark what is still valid** in the **Edit** dialog of an area on the Areas screen, or of an issue
+  on the Issues list: **Still valid for postage** — *Yes*, *No*, or *Same as parent* (*Same as its
+  area* on an issue), which names what it resolves to and the area it comes from. An area's mark
+  reaches every area and issue beneath it; *No* on an issue under a marked area takes just that issue
+  out. Choosing what the parent already says is saved as *Same as parent*, so a later change above
+  still reaches it.
 - **Map Michel's used and never-hinged prices** under **Settings → Valuation methods**. While either is
   not set up, the rule gives nothing, and the piece's value names the one missing.
 
@@ -1251,8 +1253,9 @@ of its prices are **not set up**, with a link to the page, and no price is ever 
 place.
 
 **Which method** values a piece: the collection's default, **Michel** unless you change it under
-**Settings → Valuation methods**; an area's own, set from its **⋮ → Valuation method…** on the
-Areas screen and inherited by the areas below it; or the copy's own, which wins over both — set in its
+**Settings → Valuation methods**; an area's own, set as **Valuation method** in its **Edit** dialog on
+the Areas screen — *Same as parent* names the method it inherits and from where — and inherited by the
+areas below it; or the copy's own, which wins over both — set in its
 **Edit** dialog, in its **Valuation** window, or when you identify a card scan tile as the piece. The area that decides is the area of the piece's **most expensive stamp** — the one
 with the highest used price, read in the condition the collection's default method takes its used
 prices from.
