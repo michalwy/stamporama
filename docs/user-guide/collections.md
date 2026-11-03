@@ -1021,9 +1021,9 @@ under **Settings → Valuation methods** (below).
 
 How a cover, a fragment or any piece carrying stamps is valued from its stamps' prices — see
 [What a piece carrying several stamps is worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth).
-The page has a card for the **Default method** — the one a piece is valued by where no area and no copy
-sets its own, *Michel* to start with — and a card for each method, listing the prices it reads with a
-condition picker beside each:
+The **Default method** — the one a piece is valued by where no area and no copy sets its own, *Michel*
+to start with — is a row across the top of the page. Under it is a card for each method, listing the
+prices it reads with a condition picker beside each; each card is as tall as its list:
 
 | Method | Prices it reads |
 | --- | --- |
