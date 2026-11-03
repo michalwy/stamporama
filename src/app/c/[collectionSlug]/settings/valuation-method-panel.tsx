@@ -17,6 +17,8 @@ import {
   type ValuationMethodRoles,
 } from "@/lib/valuation-method-roles";
 import type { StampConditionData } from "@/lib/conditions";
+import { Icon } from "@/app/icons";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { INPUT_STYLE } from "./list-detail";
 import { SettingsFieldCard, SettingsFieldGrid } from "./settings-field-grid";
 
@@ -24,7 +26,7 @@ import { SettingsFieldCard, SettingsFieldGrid } from "./settings-field-grid";
 // — what a cover, a fragment or any piece carrying stamps is valued by wherever no area and no copy
 // sets one of its own — and, one card per method, which of the collection's conditions plays each
 // role the method reads. A role left unchosen is not set up: a piece valued by that method is partial
-// and says so.
+// and says so. The default is a row above the cards and each card is as tall as its fields (#2386).
 
 const METHOD_TOOLTIPS: Record<ValuationMethod, string> = {
   michel:
@@ -80,72 +82,105 @@ export function ValuationMethodPanel({
   }
 
   return (
-    <SettingsFieldGrid>
-      <SettingsFieldCard
-        label="Default method"
-        hint="How a cover or a fragment is valued from its stamps' prices."
-        tooltip={
-          <>
-            Used wherever no area and no copy sets a method of its own. An area sets its own from its ⋮
-            menu on the Areas screen, and a copy its own beside its franking.
-          </>
-        }
-        error={error}
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* The default is a setting of the page, not a method: one row above the method cards
+          rather than a card among them (#2386). */}
+      <section
+        aria-label="Default method"
+        style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}
       >
-        <select
-          aria-label="Default valuation method"
-          value={method}
-          onChange={(e) => change(e.target.value as ValuationMethod)}
-          style={{ ...INPUT_STYLE, cursor: "pointer" }}
+        <div
+          style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem 0.75rem" }}
         >
-          {VALUATION_METHODS.map((m) => (
-            <option key={m} value={m}>
-              {VALUATION_METHOD_LABELS[m]}
-            </option>
-          ))}
-        </select>
-      </SettingsFieldCard>
-      {VALUATION_METHODS.map((m) => {
-        const unset = ROLES_OF_METHOD[m].filter((role) => !roles[m][role]).length;
-        return (
-          <SettingsFieldCard
-            key={m}
-            label={VALUATION_METHOD_LABELS[m]}
-            hint="Which condition each price it reads is typed in."
-            tooltip={METHOD_TOOLTIPS[m]}
-            status={
-              unset > 0
-                ? `${unset} not set up — a piece valued by ${VALUATION_METHOD_LABELS[m]} goes without ${unset === 1 ? "it" : "them"}.`
-                : null
-            }
-            error={roleError?.method === m ? roleError.message : null}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "auto minmax(0, 1fr)",
-                alignItems: "center",
-                gap: "0.5rem 0.75rem",
-              }}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <label
+              htmlFor="vm-default"
+              style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--color-text-primary)" }}
             >
-              {ROLES_OF_METHOD[m].map((role) => {
-                const id = `vm-${m}-${role}`;
-                return (
-                  <RoleRow
-                    key={role}
-                    id={id}
-                    label={METHOD_ROLE_LABELS[role]}
-                    value={roles[m][role] ?? ""}
-                    conditions={conditions}
-                    onChange={(conditionId) => map(m, role, conditionId)}
-                  />
-                );
-              })}
-            </div>
-          </SettingsFieldCard>
-        );
-      })}
-    </SettingsFieldGrid>
+              Default method
+            </label>
+            <Tooltip
+              content={
+                <>
+                  Used wherever no area and no copy sets a method of its own. An area sets its own from
+                  its ⋮ menu on the Areas screen, and a copy its own beside its franking.
+                </>
+              }
+              maxWidth="24rem"
+            >
+              <span
+                role="img"
+                aria-label="About Default method"
+                style={{ display: "inline-flex", color: "var(--color-text-muted)", cursor: "help" }}
+              >
+                <Icon name="info" />
+              </span>
+            </Tooltip>
+          </div>
+          <select
+            id="vm-default"
+            aria-label="Default valuation method"
+            value={method}
+            onChange={(e) => change(e.target.value as ValuationMethod)}
+            style={{ ...INPUT_STYLE, width: "auto", cursor: "pointer" }}
+          >
+            {VALUATION_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {VALUATION_METHOD_LABELS[m]}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            How a cover or a fragment is valued from its stamps&rsquo; prices.
+          </span>
+        </div>
+        {error && (
+          <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-error)" }}>{error}</p>
+        )}
+      </section>
+      <SettingsFieldGrid contentHeight>
+        {VALUATION_METHODS.map((m) => {
+          const unset = ROLES_OF_METHOD[m].filter((role) => !roles[m][role]).length;
+          return (
+            <SettingsFieldCard
+              key={m}
+              label={VALUATION_METHOD_LABELS[m]}
+              hint="Which condition each price it reads is typed in."
+              tooltip={METHOD_TOOLTIPS[m]}
+              status={
+                unset > 0
+                  ? `${unset} not set up — a piece valued by ${VALUATION_METHOD_LABELS[m]} goes without ${unset === 1 ? "it" : "them"}.`
+                  : null
+              }
+              error={roleError?.method === m ? roleError.message : null}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: "0.5rem 0.75rem",
+                }}
+              >
+                {ROLES_OF_METHOD[m].map((role) => {
+                  const id = `vm-${m}-${role}`;
+                  return (
+                    <RoleRow
+                      key={role}
+                      id={id}
+                      label={METHOD_ROLE_LABELS[role]}
+                      value={roles[m][role] ?? ""}
+                      conditions={conditions}
+                      onChange={(conditionId) => map(m, role, conditionId)}
+                    />
+                  );
+                })}
+              </div>
+            </SettingsFieldCard>
+          );
+        })}
+      </SettingsFieldGrid>
+    </div>
   );
 }
 

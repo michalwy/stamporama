@@ -19,15 +19,27 @@ const GRID_GAP = "1.25rem";
  * and never a fourth, and a narrower one falls back to two. What #691 still asks for — a single
  * field never stretched across the window — holds because every control sits inside a card, and a
  * card is at most a third or a half of the row.
+ *
+ * A row's cards are stretched to its tallest, each control at its card's foot, so a row of one-field
+ * cards lines its controls up whatever their hints' length. Where the cards hold different numbers
+ * of fields — Valuation methods, one to six — that leaves the short ones as near-empty boxes with a
+ * lone control at the bottom (#2386), so `contentHeight` makes each card as tall as its content
+ * instead, its fields straight under its description.
  */
-export function SettingsFieldGrid({ children }: { children: ReactNode }) {
+export function SettingsFieldGrid({
+  children,
+  contentHeight = false,
+}: {
+  children: ReactNode;
+  contentHeight?: boolean;
+}) {
   return (
     <div
       style={{
         display: "grid",
         gridTemplateColumns: `repeat(auto-fill, minmax(max(${CARD_MIN_WIDTH}, (100% - 2 * ${GRID_GAP}) / 3), 1fr))`,
         gap: GRID_GAP,
-        alignItems: "stretch",
+        alignItems: contentHeight ? "start" : "stretch",
       }}
     >
       {children}
@@ -113,7 +125,8 @@ export function SettingsFieldCard({
       </div>
 
       {/* The control sits at the card's foot, so a row of cards lines its controls up whatever
-          their hints' length. */}
+          their hints' length — unless the grid is `contentHeight`, where the card has no room to
+          spare and the control follows the hint. */}
       <div style={{ marginTop: "auto" }}>{children}</div>
 
       {status && (
