@@ -197,6 +197,7 @@ Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.m
 shows its **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, a
 *Trade* mark when the order came from closing a trade, the delivery **status**, the mark
 *Started on the phone — to complete* on a purchase [started on the phone](#purchases-started-on-the-phone), a
+note icon when it has a [note](#a-documents-note) — hover it to read the note — a
 short summary of its lines (how many **lots** and **expenses**), how many **copies** are filed on it,
 and the **total** — the sum
 of every lot, every expense, every packing-supply line, and the shipping cost, shown in the
@@ -210,7 +211,7 @@ counted, so a document you are still working through shows the copies made so fa
 shows *0 copies*.
 
 An opening balance shows its **title**, the **date**, an *Opening balance* mark (and a *Completed*
-one once it is marked completed), how many **lots** and **copies** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
+one once it is marked completed), the note icon when it has a note, how many **lots** and **copies** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
 opening value* rather than `0.00`, and when only some do, a chip says how many lots have none.
 
 - **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
@@ -295,6 +296,24 @@ click it to open it full size and step through the others. **Add photos** on the
 **⋮ → Add photos** while it has none — picks pictures from your computer (JPEG, PNG or WebP), as
 many as you like. To remove one, open it and click **Remove photo**; the photo is deleted, and nothing
 else about the purchase changes.
+
+## A document's note
+
+Every intake document — a purchase, a trade's order and an opening balance — can carry **one note**:
+whatever you want to remember about it, such as what was agreed with the seller, what is still missing
+from the parcel or where the lot came from. It is plain text: line breaks are kept and nothing else is
+formatted, so a link stays text.
+
+**⋮ → Add note** on the document's header opens it while there is none. Write it and click **Save**
+(or press ⌘/Ctrl + Enter); **Cancel** or Escape leaves it as it was. Once it has one, a **Note** card
+under the document's figures shows it, with a pencil to **edit** it and a bin to **remove** it.
+Emptying the text and saving removes it too.
+
+On the [intake documents list](#the-intake-documents-list) a document with a note has a note icon on its
+row; hover it to read the note.
+
+The note is **yours alone**: it is not shown on anything that leaves the app. A trade's order keeps its
+own note, apart from the trade's notes, and neither is copied into the other.
 
 ## Editing and deleting
 

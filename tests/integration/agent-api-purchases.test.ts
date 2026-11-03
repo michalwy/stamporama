@@ -155,6 +155,7 @@ describe("the purchase operations (#1390)", () => {
     await prisma.assistantToken.deleteMany({ where: { collectionId } });
     await prisma.item.deleteMany({ where: { collectionId } });
     await prisma.purchase.deleteMany({ where: { collectionId } });
+    await prisma.trade.deleteMany({ where: { collectionId } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
     await prisma.stampCondition.deleteMany({ where: { collectionId } });
     await prisma.contact.deleteMany({ where: { collectionId } });
@@ -325,6 +326,29 @@ describe("the purchase operations (#1390)", () => {
       assert.deepEqual(reseller.seller, { id: bronekId, name: "bronek_1980" });
     });
 
+    it("writes, rewrites and clears the note, and leaves the header alone doing it (#2378)", async () => {
+      const noted = await ok<AgentPurchase>(token, "PATCH", `/purchases/${purchaseId}`, {
+        note: "Seller owes the 1961 set.\nAsk at the fair.",
+      });
+      assert.equal(noted.note, "Seller owes the 1961 set.\nAsk at the fair.", "line breaks kept");
+      assert.equal(noted.purchasedAt, "2026-09-21", "the header is left as it was");
+      assert.deepEqual(noted.seller, { id: bronekId, name: "bronek_1980" });
+
+      const read = await ok<AgentPurchase>(token, "GET", `/purchases/${purchaseId}`);
+      assert.equal(read.note, "Seller owes the 1961 set.\nAsk at the fair.");
+      const list = await ok<ListResponse<AgentPurchaseRow>>(token, "GET", "/purchases?limit=100");
+      assert.equal(list.items.find((row) => row.purchaseId === purchaseId)?.note, read.note);
+
+      const both = await refused(token, "PATCH", `/purchases/${purchaseId}`, { note: "x", clear: ["note"] });
+      assert.match(both.error.message, /"note" is both sent and named in "clear"/);
+
+      const cleared = await ok<AgentPurchase>(token, "PATCH", `/purchases/${purchaseId}`, { clear: ["note"] });
+      assert.equal(cleared.note, undefined);
+      const blank = await ok<AgentPurchase>(token, "PATCH", `/purchases/${purchaseId}`, { note: "Kept." });
+      assert.equal(blank.note, "Kept.");
+      assert.equal((await getPurchaseDetail(userId, purchaseId))?.note, "Kept.", "where the screen reads it");
+    });
+
     it("leaves every change where the purchase screen reads it", async () => {
       const detail = await getPurchaseDetail(userId, purchaseId);
       assert.ok(detail);
@@ -476,6 +500,41 @@ describe("the purchase operations (#1390)", () => {
         const { status } = await refused(token, "POST", "/purchases", body);
         assert.equal(status, 400, JSON.stringify(body));
       }
+    });
+
+    it("writes only the note on a trade's incoming half (#2378)", async () => {
+      const trade = await prisma.trade.create({
+        data: { collectionId, tradeNo: 1, partnerId: philkamId, currency: "EUR" },
+      });
+      const incoming = await prisma.purchase.create({
+        data: {
+          collectionId,
+          purchaseNo: 9010,
+          tradeId: trade.id,
+          purchasedAt: new Date("2026-10-02T00:00:00.000Z"),
+          currency: "EUR",
+        },
+      });
+      const noted = await ok<AgentPurchase>(token, "PATCH", `/purchases/${incoming.id}`, {
+        note: "Two stamps thinned.",
+      });
+      assert.equal(noted.note, "Two stamps thinned.");
+      assert.equal(noted.editable, false);
+
+      for (const body of [
+        { note: "And the date", purchased_at: "2026-10-03" },
+        { clear: ["note", "shipping_cost"] },
+        {},
+      ]) {
+        const { error } = await refused(token, "PATCH", `/purchases/${incoming.id}`, body);
+        assert.match(error.message, /incoming half of a trade/);
+      }
+      const row = await prisma.purchase.findUniqueOrThrow({
+        where: { id: incoming.id },
+        select: { note: true, purchasedAt: true },
+      });
+      assert.equal(row.note, "Two stamps thinned.", "a refused call writes nothing, the note included");
+      assert.equal(row.purchasedAt.toISOString().slice(0, 10), "2026-10-02");
     });
 
     it("does not reach an opening balance", async () => {

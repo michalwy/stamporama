@@ -10,6 +10,7 @@ import {
   setPurchaseStatus,
   markPurchaseCompleted,
   markPurchaseDoneAtDesk,
+  setPurchaseNote,
   reopenCompletedPurchase,
   deletePurchase,
   startPurchaseOnPhone,
@@ -687,6 +688,23 @@ export async function markPurchaseDoneAtDeskAction(purchaseId: string): Promise<
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to take the mark off. Please try again.",
+    };
+  }
+}
+
+/** Write, rewrite or clear an intake document's note (#2378); a blank one clears it. */
+export async function setPurchaseNoteAction(
+  purchaseId: string,
+  note: string
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await setPurchaseNote(session.user.id, purchaseId, note);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the note. Please try again.",
     };
   }
 }

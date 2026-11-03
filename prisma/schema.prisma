@@ -4287,6 +4287,10 @@ model Purchase {
   // Dashboard's *Incoming purchases* lists it. Nothing clears it but that one action; a purchase
   // only (CHECK `purchase_to_complete_kind`).
   toCompleteSince DateTime?
+  // The collector's own remark on the document (#2378): plain, multi-line text, on every kind — a
+  // trade's intake keeps its own, apart from the trade's notes. Private: no share link, printout or
+  // generated text reads it. Null when there is none, never an empty string.
+  note         String?
   createdAt    DateTime @default(now())
 
   collection Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)

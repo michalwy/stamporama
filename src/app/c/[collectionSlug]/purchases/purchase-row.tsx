@@ -181,6 +181,18 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
               )}
             </>
           )}
+          {/* The document has a note (#2378), on any kind: the icon, and the note itself to read on
+              hover — the text keeps its line breaks. */}
+          {p.note && (
+            <Tooltip content={<span style={{ whiteSpace: "pre-wrap" }}>{p.note}</span>} maxWidth="24rem">
+              <span
+                aria-label="Has a note"
+                style={{ display: "inline-flex", alignItems: "center", color: "var(--color-text-muted)" }}
+              >
+                <Icon name="notes" size="sm" />
+              </span>
+            </Tooltip>
+          )}
         </div>
 
         {/* Line 3: line-count / shipping chips + total */}

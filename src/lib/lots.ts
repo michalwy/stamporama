@@ -215,6 +215,8 @@ export interface PurchaseDetail {
   /** Started on the phone and not yet *Done at the desk* (#2006): when the phone started it, ISO,
    *  else null. */
   toCompleteSince: string | null;
+  /** The collector's own remark on the document (#2378), plain multi-line text; null when none. */
+  note: string | null;
   lots: LotSummary[];
   expenseCount: number;
   /** The order's non-inventory lines, oldest first (#1390) — the card they are added, restated and
@@ -307,6 +309,7 @@ export async function getPurchaseDetail(
       shippingCost: true,
       status: true,
       toCompleteSince: true,
+      note: true,
       collection: { select: { ownerId: true, baseCurrency: true, commitDetectedCuts: true } },
       contact: { select: { id: true, name: true } },
       platform: { select: { id: true, name: true } },
@@ -443,6 +446,7 @@ export async function getPurchaseDetail(
     shippingCost: row.shippingCost?.toFixed(2) ?? null,
     status: row.status,
     toCompleteSince: row.toCompleteSince?.toISOString() ?? null,
+    note: row.note,
     lots,
     expenseCount: row.expenses.length,
     expenses: row.expenses.map((e) => ({ id: e.id, label: e.label, price: e.price.toFixed(2) })),
