@@ -393,7 +393,9 @@ describe("auction reads (#1036)", () => {
     // **Nor is a sale's own file** (#2198). `add_sale_attachments` keeps a shipment photo with one of
     // the collector's own sales, which the agent is allowed to write; `sale` alone cannot tell that
     // sale from an auction house's, so a name about attachments is judged by its other words —
-    // `add_auction_sale_attachments` would still be caught.
+    // `add_auction_sale_attachments` would still be caught. **Nor is a sale's note** (#2379), the same
+    // way: `set_sale_note` writes the collector's remark on one of their own sales, and
+    // `set_auction_sale_note` would still be caught.
     //
     // **Nor is a proposal's lot** (#2303). A proposal's lots are Direct offers put together for one
     // buyer (ADR-0075), which the agent is allowed to add, price and take out — judged, like a
@@ -402,7 +404,7 @@ describe("auction reads (#1036)", () => {
       const words = name.split("_");
       const auctionWords = words.includes("purchase") || words.includes("proposal")
         ? words.filter((word) => word !== "lot" && word !== "lots")
-        : words.includes("attachments")
+        : words.includes("attachments") || words.includes("note")
           ? words.filter((word) => word !== "sale" && word !== "sales")
           : words;
       return WRITE_VERBS.has(words[0]) && auctionWords.some((word) => AUCTION_WORDS.has(word));

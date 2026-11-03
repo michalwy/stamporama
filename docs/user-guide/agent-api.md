@@ -187,12 +187,15 @@ finding which went and to whom. It can:
   [**Move to another sale…**](sales.md#moving-sold-sets-to-another-sale) does on the sale's screen:
   the sets keep their prices, the sale's own amounts stay where they were, and a sale already sent,
   or a move of every set, is refused. Both sales are marked for your review;
+- **read and write a sale's [note](sales.md#note)** — your private remark about it, such as what was
+  agreed with the buyer: write it, replace it whole or clear it. Nothing else on the sale changes, and
+  the sale is marked for your review, saying the note was set or cleared rather than repeating it;
 - **list a sale's [attachments](sales.md#attachments)** — your photos of the parcel, the posting
   receipt — and fetch them, which a **read only** token can do too, and **add** pictures and PDFs to
   a sale. Adding a file changes nothing else on the sale and does not mark it for review; removing
   one stays on the sale's own screen.
 
-Every sale it records, adds to or moves sets between is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+Every sale it records, adds to, moves sets between or writes a note on is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
 until you confirm it. **It cannot delete a sale or move one along** — no *Paid*, *Packed* or *Sent*,
 no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
 does not record a running auction's current bid either: the price it sells at is the one it read.

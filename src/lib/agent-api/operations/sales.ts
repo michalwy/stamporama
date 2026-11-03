@@ -9,6 +9,7 @@ import {
   listSellableOffers,
   moveSaleLinesThroughApi,
   recordSaleLinesThroughApi,
+  setSaleNoteThroughApi,
   type ApiSaleTarget,
   type SaleStatus,
 } from "../../sales";
@@ -68,6 +69,10 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // **A third write, since #2204**: `move_sale_sets` moves sold sets to another sale of the same buyer —
 // a new one or an open one — through `moveSaleLinesThroughApi`, the sale screen's own move under its
 // rules, marking both sales *to review* in the move's transaction.
+//
+// **A fourth, since #2379**: `set_sale_note` sets or clears the sale's note — the collector's private
+// remark, plain text — through `setSaleNoteThroughApi`, which marks the sale *to review* in the same
+// transaction. It is the one part of a sale's own record the agent may write.
 //
 // **No deleting, and no moving a sale.** No operation removes a sale or a line, changes a sale's
 // status, its header, a line's price or set, or its packing, shipping or share link — those stay in
@@ -303,7 +308,7 @@ export const getSaleOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `fromPlatform` the marketplace that offer is listed on where it is not the sale's own, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `toReview` is present while what this API recorded waits for the collector's confirmation.",
+      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `fromPlatform` the marketplace that offer is listed on where it is not the sale's own, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `note` is the collector's own private remark, or null. `toReview` is present while what this API recorded waits for the collector's confirmation.",
   },
   handler: async (context, params) => readSale(context, params),
 };
@@ -667,4 +672,52 @@ export const moveSaleSetsOperation: Operation = {
       "Both sales as they now stand, in `get_sale`'s shape: `from`, the sale the sets left, and `to`, the sale they joined or started — each marked `toReview` with what moved.",
   },
   handler: async (context, params) => moveSaleSets(context, params),
+};
+
+// ── set_sale_note (#2379) ────────────────────────────────────────────────────
+
+export async function setSaleNote(context: OperationContext, params: ParsedParams): Promise<AgentSale> {
+  const saleId = requiredString(params, "saleId");
+  await assertSale(context, saleId);
+  const note = optionalString(params, "note");
+  const clear = optionalBoolean(params, "clear") === true;
+  if (note !== null && clear) {
+    throw invalidRequest('Send "note" to write the note or "clear" to take it off, not both. Nothing was changed.');
+  }
+  if (!clear && (note === null || note.trim() === "")) {
+    throw invalidRequest('Send the note\'s text as "note", or "clear": true to take the note off. Nothing was changed.');
+  }
+  await setSaleNoteThroughApi(context.ownerId, context.collectionId, saleId, clear ? null : note);
+  return readSaleById(context, saleId);
+}
+
+export const setSaleNoteOperation: Operation = {
+  name: "set_sale_note",
+  method: "PATCH",
+  path: "/sales/{saleId}/note",
+  description:
+    "Write, replace or clear a sale's note — the collector's own private remark about it: what was agreed with the buyer, a promised extra, why the parcel waits. Plain text; line breaks are kept and nothing else is formatted. Send `note` to write it (it replaces the whole note — read `get_sale` first to keep what is there), or `clear` to take it off. The note never reaches the buyer. Nothing else about the sale changes; the sale waits for the collector's review.",
+  writes: true,
+  parameters: [
+    SALE_ID_PARAMETER,
+    {
+      name: "note",
+      in: "body",
+      type: "string",
+      required: false,
+      description: "The whole note as it should read, line breaks included. Replaces the note the sale has.",
+    },
+    {
+      name: "clear",
+      in: "body",
+      type: "boolean",
+      required: false,
+      description: "True to take the note off. Send it instead of `note`.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description: "The sale as it now stands, in `get_sale`'s shape, marked `toReview` with whether the note was set or cleared.",
+  },
+  handler: async (context, params) => setSaleNote(context, params),
 };
