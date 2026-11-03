@@ -113,7 +113,9 @@ export async function listHeldCopyPictures(
     },
     orderBy: { itemNo: "asc" },
   });
-  return rows.map((row) => {
+  return rows.flatMap((row) => {
+    // A piece has no condition and is no copy of the stamp (#2383); `heldCopiesWhere` left it out.
+    if (row.conditionId === null) return [];
     const sides = row.scanTiles.flatMap(consumedTileSides);
     return {
       id: row.id,

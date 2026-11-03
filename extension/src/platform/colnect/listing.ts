@@ -310,6 +310,10 @@ function fillConditions(doc: Document, task: ListingTask, report: FillReport): v
     }
     declared.add(id);
 
+    if (!item.condition) {
+      report.skip(label, `A cover or a piece has no condition, so there is no Colnect grade to give it.`);
+      continue;
+    }
     const { platformValue, platformLabel, name } = item.condition;
     if (!platformValue) {
       report.skip(label, `"${name}" has no Colnect grade mapped — set one in Settings → Colnect.`);

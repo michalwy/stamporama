@@ -19,11 +19,11 @@ const MUTED: React.CSSProperties = {
 };
 
 /**
- * The multi-stamp bucket of a grouped Copies list (#748; ADR-0044 §7).
+ * The pieces bucket of a grouped Copies list (#748, #2383; ADR-0044 §7, ADR-0079).
  *
  * Duplicate groups are keyed on a stamp and issue groups on a stamp's series, so either would file a
- * carrier **under its leading stamp** — the one claim ADR-0044 §3 removes. The carriers are collected
- * here instead, as the last row, the way `No issue` closes the issue grouping: a bucket is the absence
+ * piece **under its leading stamp** — the one claim ADR-0044 §3 and ADR-0079 remove, for a cover
+ * carrying one stamp as for one carrying several. The pieces are collected here instead, as the last row, the way `No issue` closes the issue grouping: a bucket is the absence
  * of the subject the other rows are about, not a thin edge of it.
  *
  * As plain as the issue-less row, and for its reason: the bucket is no stamp, no series and no
@@ -89,12 +89,12 @@ export function MultiStampGroupRow({
         checked: allSelected,
         partial: partiallySelected,
         onChange: setAllSelected,
-        label: "Select every piece carrying several stamps that you still hold",
+        label: "Select every cover and piece that you still hold",
       }}
       header={
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           <Tooltip
-            content={`${group.count} piece${group.count === 1 ? "" : "s"} carrying several stamps, of the ones this list is showing`}
+            content={`${group.count} ${group.count === 1 ? "cover or piece" : "covers and pieces"}, of the ones this list is showing`}
           >
             <span style={GROUP_COUNT_CHIP}>×{group.count}</span>
           </Tooltip>
@@ -107,10 +107,10 @@ export function MultiStampGroupRow({
               whiteSpace: "nowrap",
             }}
           >
-            Several stamps
+            Covers and pieces
           </span>
           <span style={MUTED}>
-            — covers and pieces carrying more than one stamp, filed under none of them
+            — carrying one stamp or several, filed under none of them
           </span>
         </div>
       }
@@ -137,11 +137,10 @@ export function MultiStampGroupRow({
   );
 }
 
-/** The filters addressing the bucket's members: the panel's own plus `only`. Replacing the panel's
- *  own multi-stamp choice rather than intersecting with it is safe, because the bucket exists only
- *  when that choice lets carriers through at all. */
+/** The filters addressing the bucket's members: the panel's own plus the pieces only — the same
+ *  `PIECE` fragment the bucket's count is taken with, so the two cannot disagree. */
 export function multiStampGroupMemberFilters(
   baseFilters: InventoryItemFilters
 ): InventoryItemFilters {
-  return { ...baseFilters, multiStamp: "only" };
+  return { ...baseFilters, piece: "only" };
 }

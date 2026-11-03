@@ -1,4 +1,5 @@
 import type { ItemListItem } from "@/lib/items";
+import { conditioned } from "@/lib/piece-condition";
 import type { TradeReceiveLineData } from "@/lib/trade-lines";
 import type { QuickPriceSubject } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 
@@ -24,9 +25,10 @@ export interface QuickPriceTarget {
 
 /** A give line: the copy it names already **is** a subject structurally — it carries its own
  *  condition, certificate and format — which is why the Copies list and the intake screen hand the
- *  dialog one unchanged. */
-export function giveQuickPriceTarget(copy: ItemListItem): QuickPriceTarget {
-  return { subject: copy, areaId: copy.areaId, issueId: copy.issueId };
+ *  dialog one unchanged. Null for a piece, which has no condition to price (#2383). */
+export function giveQuickPriceTarget(copy: ItemListItem): QuickPriceTarget | null {
+  const subject = conditioned(copy);
+  return subject ? { subject, areaId: copy.areaId, issueId: copy.issueId } : null;
 }
 
 /** A receive line: the want key, spelled out. Every field the dialog shows is already on the row —

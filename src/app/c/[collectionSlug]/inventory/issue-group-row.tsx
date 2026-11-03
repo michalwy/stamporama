@@ -363,7 +363,7 @@ export function IssueGroupRow({
       {group.possibleCount > 0 && (
         <PossibleCopiesList
           collectionId={collectionId}
-          filters={{ ...baseFilters, possibleIssueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" }}
+          filters={{ ...baseFilters, possibleIssueId: group.issueId ?? NO_ISSUE, piece: "exclude" }}
           enabled={open}
           heading="Possibly of this issue"
           areas={areas}
@@ -389,7 +389,7 @@ export function issueGroupMemberFilters(
   // bucket of their own, and a cover whose leading stamp is in this series is not one of its rows.
   // …and without the *Complete* filter (#1884): the group is on screen because its issue answered
   // it, and judging it again over this one issue's copies would judge it over a different set.
-  const members: InventoryItemFilters = { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" };
+  const members: InventoryItemFilters = { ...baseFilters, issueId: group.issueId ?? NO_ISSUE, piece: "exclude" };
   delete members.complete;
   // *Held* (#1932) counts a stamp's stack over the list's copies, not this issue's alone.
   return withHeldScope(members, baseFilters);

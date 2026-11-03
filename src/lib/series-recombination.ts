@@ -285,7 +285,9 @@ async function readRecombinationPool(
   const rows = [
     ...availableRows.map((row) => ({ ...row, offerIds: [] as readonly string[] })),
     ...singleRows.map((row) => ({ ...row, offerIds: singles.get(row.id) ?? [] })),
-  ];
+  ]
+    // A piece — several stamps, or one on a cover — fills no stamp's slot in a series (#2383).
+    .flatMap((row) => (row.conditionId !== null ? [{ ...row, conditionId: row.conditionId }] : []));
   const sets = platformSets.map((set) => ({
     setId: set.id,
     offerId: set.offerId,
@@ -690,7 +692,8 @@ async function nameSeries(
     const labels: string[] = [];
     const rank: number[] = [];
     if (combination.conditionId !== undefined) {
-      const row = conditionById.get(combination.conditionId);
+      // Never null here: the screen's copies are loose stamps (#2383).
+      const row = combination.conditionId ? conditionById.get(combination.conditionId) : undefined;
       labels.push(row?.name ?? "Unknown condition");
       rank.push(row?.sortOrder ?? 0);
     }
@@ -840,7 +843,7 @@ async function nameSeries(
           return {
             itemId: copy.itemId,
             itemNo: item?.itemNo ?? 0,
-            condition: item?.condition.abbreviation || item?.condition.name || "",
+            condition: item?.condition?.abbreviation || item?.condition?.name || "",
             variant: copy.stampId === slot.stampId ? null : stampName(copy.stampId),
             offers: copy.offerIds.flatMap((offerId) => {
               const offer = offerById.get(offerId);

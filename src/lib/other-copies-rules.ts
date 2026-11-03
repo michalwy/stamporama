@@ -16,7 +16,8 @@ export const HELD_DELIVERY_STATES: readonly string[] = DELIVERY_STATES.filter(
  * The Copies list filters that name **the other copies of a stamp's family** — the umbrella and
  * every variant of it (#2282), in the holding states the card's chips have on (#2281). With Held
  * alone they are `heldCopiesWhere` in `copy-counts.ts`, spelled as list filters and widened from one
- * stamp to its family: no carrier of several stamps, none lost or arrived damaged. Copies whose
+ * stamp to its family: no piece — several stamps, or one on a cover (#2383) — none lost or arrived
+ * damaged. Copies whose
  * candidates span variant trees are dropped by `stampIds` itself — only copies identified as the
  * stamp are listed, never those that only might be it — and the copy whose page it is is left out
  * here, so the chips' counts and the rows never count it.
@@ -29,7 +30,7 @@ export function otherCopiesFilters(
   return {
     stampIds: [...familyStampIds],
     excludeIds: [itemId],
-    multiStamp: "exclude" as const,
+    piece: "exclude" as const,
     deliveryStates: [...HELD_DELIVERY_STATES],
     ...(holdingStates ? { holdingStates: [...holdingStates] } : {}),
   };

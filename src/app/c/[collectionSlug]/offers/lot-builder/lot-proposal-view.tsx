@@ -1,5 +1,6 @@
 "use client";
 
+import { conditioned } from "@/lib/piece-condition";
 import { useMemo, useState, useTransition } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
@@ -186,6 +187,8 @@ export function LotProposalView({
   // which row opened it: a hook cannot be called in a loop (#531), and a hundred rows would
   // otherwise carry a hundred dialogs' worth of state.
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  // A piece has no condition to price (#2383); its row prices its stamps instead.
+  const quickPriceSubject = quickPriceItem ? conditioned(quickPriceItem) : null;
   const [savingPrice, startSavingPrice] = useTransition();
   const [priceError, setPriceError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateOffers();
@@ -292,19 +295,19 @@ export function LotProposalView({
           every dialog-opening row action follows. A saved price changes what the copies are worth,
           which is a criterion of the pick itself, so the whole builder is invalidated and the pool
           readout and the proposal are re-asked together rather than drifting apart. */}
-      {quickPriceItem && (
+      {quickPriceSubject && (
         <QuickPriceDialog
-          subject={quickPriceItem}
+          subject={quickPriceSubject}
           collectionId={collectionId}
           areaName={
-            quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null
+            quickPriceSubject.areaId ? (areaNameById.get(quickPriceSubject.areaId) ?? null) : null
           }
           primaryVendorId={
-            quickPriceItem.areaId
-              ? (vendorMaps.primaryVendorByArea.get(quickPriceItem.areaId) ?? null)
+            quickPriceSubject.areaId
+              ? (vendorMaps.primaryVendorByArea.get(quickPriceSubject.areaId) ?? null)
               : null
           }
-          vendorMap={vendorMaps.vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
+          vendorMap={vendorMaps.vendorMapFor(quickPriceSubject.areaId, quickPriceSubject.issueId)}
           isPending={savingPrice}
           error={priceError}
           onClose={() => {
@@ -318,7 +321,7 @@ export function LotProposalView({
             void invalidateAll(collectionId);
           }}
           onSubmit={(entries) => {
-            const item = quickPriceItem;
+            const item = quickPriceSubject;
             setPriceError(undefined);
             startSavingPrice(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");

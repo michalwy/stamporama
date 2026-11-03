@@ -12,11 +12,12 @@ describe("the other copies of a copy's stamp (#2090, #2282)", () => {
     assert.deepEqual([...HELD_DELIVERY_STATES], ["ordered", "in_transit", "to_sort", "delivered"]);
   });
 
-  it("filters to the family's one-stamp copies in those states, less the copy itself", () => {
+  it("filters to the family's loose copies in those states, less the copy itself", () => {
     assert.deepEqual(otherCopiesFilters(["s1", "s1a"], "c1"), {
       stampIds: ["s1", "s1a"],
       excludeIds: ["c1"],
-      multiStamp: "exclude",
+      // No piece — several stamps, or one on a cover — is a copy of the stamp (#2383).
+      piece: "exclude",
       deliveryStates: ["ordered", "in_transit", "to_sort", "delivered"],
     });
   });

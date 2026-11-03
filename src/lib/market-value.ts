@@ -56,18 +56,24 @@ export function marketKeyOf(key: MarketValueKey): string {
  * of several candidate stamps (#1651, ADR-0065) — the **lowest** of its candidates' at the copy's
  * condition, certificate and format, and only when **every** candidate has evidence. A candidate
  * with none could be the cheaper one, and a figure that might be too high is not stated (decided with
- * the collector, 2026-10-05). Null is *no evidence*, never a zero (ADR-0022 §6).
+ * the collector, 2026-10-05). Null is *no evidence*, never a zero (ADR-0022 §6) — and always for a
+ * piece, which has no condition (#2383) and so no stamp × condition the market priced.
  */
 export function copyMarketMedian(
-  copy: MarketValueKey & { candidateStampIds: readonly string[] | null },
+  copy: Omit<MarketValueKey, "conditionId"> & {
+    conditionId: string | null;
+    candidateStampIds: readonly string[] | null;
+  },
   medians: ReadonlyMap<string, number>
 ): number | null {
+  const { conditionId } = copy;
+  if (conditionId === null) return null;
   if (!copy.candidateStampIds || copy.candidateStampIds.length < 2) {
-    return medians.get(marketKeyOf(copy)) ?? null;
+    return medians.get(marketKeyOf({ ...copy, conditionId })) ?? null;
   }
   let lowest: number | null = null;
   for (const stampId of copy.candidateStampIds) {
-    const median = medians.get(marketKeyOf({ ...copy, stampId }));
+    const median = medians.get(marketKeyOf({ ...copy, conditionId, stampId }));
     if (median === undefined) return null;
     if (lowest === null || median < lowest) lowest = median;
   }

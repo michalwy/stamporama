@@ -6,6 +6,7 @@ import {
   type TranslationValueMap,
 } from "./translations";
 import { isPieceKind, type PieceKind } from "./piece-valuation";
+import { ConditionRequiredError, settleCopyConditionsTx } from "./item-condition";
 
 // The physical-format dictionary — pairs, blocks, strips. Same shape and lifecycle as
 // `conditions.ts`: seeded on collection creation, then fully the collector's to edit.
@@ -206,13 +207,32 @@ export async function updateStampFormat(
 ): Promise<void> {
   const collectionId = await resolveFormatCollection(formatId);
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.stampFormat.update({
-    where: { id: formatId },
-    data: {
-      name: data.name,
-      abbreviation: data.abbreviation,
-      ...(data.pieceKind !== undefined ? { pieceKind: data.pieceKind } : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.stampFormat.update({
+      where: { id: formatId },
+      data: {
+        name: data.name,
+        abbreviation: data.abbreviation,
+        ...(data.pieceKind !== undefined ? { pieceKind: data.pieceKind } : {}),
+      },
+    });
+    if (data.pieceKind === undefined) return;
+    // A kind makes every copy in the format a piece, whose condition goes; taking it away would leave
+    // its one-stamp copies loose stamps with none, which is refused — they are moved to another
+    // format first, where the copy's Edit dialog asks for one (#2383).
+    const copies = await tx.item.findMany({ where: { formatId }, select: { id: true } });
+    try {
+      await settleCopyConditionsTx(
+        tx,
+        copies.map((copy) => copy.id)
+      );
+    } catch (error) {
+      if (!(error instanceof ConditionRequiredError)) throw error;
+      throw new Error(
+        "Copies in this format carry one stamp and have no condition. Move them to another format first, " +
+          "giving each a condition, then take the kind away."
+      );
+    }
   });
   await syncFormatTranslations(formatId, data.translations);
 }

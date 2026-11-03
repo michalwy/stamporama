@@ -140,7 +140,8 @@ export interface ListingTaskItem {
    *  identically either way, so the task carries no marker of it that a module would read; the
    *  instance's own payload has one, and it is the instance that reports which variant it was. */
   catalogItemId: string | null;
-  condition: ListingTaskCondition;
+  /** Null for a piece — a cover, a fragment — which has no condition (#2383). */
+  condition: ListingTaskCondition | null;
 }
 
 /** A copy's condition, ours and the platform's side by side: the local pair names it in a message,

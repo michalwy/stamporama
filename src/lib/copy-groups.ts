@@ -60,7 +60,8 @@ export interface CopyGroupKey {
 /** The minimum a copy must carry to be grouped. Satisfied structurally by `ItemListItem`. */
 export interface GroupableCopy {
   stampId: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383) — grouped under "no value" on the axis. */
+  conditionId: string | null;
   formatId: string | null;
   certificateStatusId: string | null;
 }

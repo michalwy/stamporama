@@ -1,5 +1,6 @@
 "use client";
 
+import { NO_CONDITION } from "@/lib/piece-condition";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -153,8 +154,14 @@ export function NewOfferCopiesPanel({
   // condition no copy is in narrows to nothing, so it is not offered.
   const { data: conditionDict = [] } = useCollectionConditions(collectionId);
   const conditionOptions = useMemo(() => {
-    const present = new Map(copies.map((c) => [c.conditionId, c.conditionName]));
-    const inOrder = conditionDict.filter((c) => present.has(c.id)).map((c) => ({ id: c.id, label: c.name }));
+    // A piece has no condition (#2383), offered as *No condition* so the filter never hides it.
+    const present = new Map(
+      copies.map((c) => [c.conditionId ?? NO_CONDITION, c.conditionName ?? "No condition"] as const)
+    );
+    const inOrder = [
+      ...(present.has(NO_CONDITION) ? [{ id: NO_CONDITION, label: "No condition" }] : []),
+      ...conditionDict.filter((c) => present.has(c.id)).map((c) => ({ id: c.id, label: c.name })),
+    ];
     return inOrder.length === present.size ? inOrder : [...present].map(([id, label]) => ({ id, label }));
   }, [copies, conditionDict]);
 

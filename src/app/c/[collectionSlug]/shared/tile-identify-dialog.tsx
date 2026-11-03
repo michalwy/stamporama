@@ -1205,10 +1205,12 @@ function CopyRow({
         {numbers && <strong>{numbers}</strong>}
         {numbers && copy.stampName ? " — " : ""}
         {copy.stampName ?? (numbers ? "" : "Unnamed stamp")}
-        <span style={{ color: "var(--color-text-muted)" }}>
-          {" "}
-          · {copy.conditionAbbreviation}
-        </span>
+        {copy.conditionAbbreviation && (
+          <span style={{ color: "var(--color-text-muted)" }}>
+            {" "}
+            · {copy.conditionAbbreviation}
+          </span>
+        )}
       </span>
       {/* What the copy already holds — the reason this path exists at all. From the shared helper,
           so the row and the filter above it describe slots the same way. */}
@@ -1975,7 +1977,9 @@ function ConsumedIdentity({
       {numbers && <strong>{numbers}</strong>}
       {numbers && item.stampName ? " — " : ""}
       {item.stampName ?? (numbers ? "" : "Unnamed stamp")}
-      <span style={{ color: "var(--color-text-muted)" }}> · {item.conditionAbbreviation}</span>
+      {item.conditionAbbreviation && (
+        <span style={{ color: "var(--color-text-muted)" }}> · {item.conditionAbbreviation}</span>
+      )}
     </p>
   );
 }

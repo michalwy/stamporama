@@ -598,7 +598,7 @@ describe("a piece valued by its method (#2359)", () => {
     assert.equal(v.piece?.franking, "rate_correct");
   });
 
-  it("values one stamp once on a cover at its EF price, and still counts it", async () => {
+  it("values one stamp once on a cover at its EF price, and gives it no condition", async () => {
     const single = await createItem(userId, collectionId, { stampId: mi210, conditionId: mnhId });
     await updateItem(userId, single.id, { formatId: coverId });
     const v = await valueOf(single.id);
@@ -634,6 +634,8 @@ describe("a piece valued by its method (#2359)", () => {
       stampIds: [mi210],
     });
     assert.equal(fields.recorded[piecePriceKey(mi210, "cover_ef")], "25.00");
+    // A piece has no condition, and counts towards none of its stamp's holdings (#2383).
+    assert.equal(row.conditionId, null);
     await prisma.item.delete({ where: { id: single.id } });
   });
 

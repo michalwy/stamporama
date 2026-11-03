@@ -128,6 +128,10 @@ and §4 makes it resolve. The rule is about **unambiguity**. While a carrier hol
 position it *is* that position, in the shape "on cover". Holding several, it is none of them in
 particular.
 
+*Amended by [ADR-0079](0079-piece-has-no-condition.md) (#2383)*: a cover — one stamp on a format of kind
+on cover or on piece — is counted towards none of its stamps either, and a piece has no condition. The
+counts read `NOT_PIECE`, the condition being null exactly for a piece.
+
 Consequently the copy drops out of copy counts, checklists, completeness, wants, duplicate-catalogue
 detection (#85) and auction duplicates, and out of the Colnect list-sync source predicates. It stays
 fully a copy for everything that is about the object rather than the catalogue position: offers,

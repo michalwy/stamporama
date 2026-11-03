@@ -37,7 +37,8 @@ export interface OfferPickerContents {
 
 /** One copy of a set, as the server hands it over. */
 export interface OfferPickerCopy {
-  condition: { id: string; abbreviation: string };
+  /** Null for a piece, which has no condition (#2383) and adds none to the set's list. */
+  condition: { id: string; abbreviation: string } | null;
   issue: { name: string | null; year: number | null } | null;
   stampName: string | null;
   /** Every number the stamp carries, printed with its vendor and area prefix. */
@@ -72,7 +73,7 @@ export function offerPickerSetLine(catalog: string, copies: readonly OfferPicker
   return {
     catalog,
     conditions: distinctBy(
-      copies.map((c) => c.condition),
+      copies.flatMap((c) => (c.condition ? [c.condition] : [])),
       (c) => c.id
     ),
     issue: issues.length > 0 ? issues.join(", ") : null,

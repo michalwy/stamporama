@@ -1,5 +1,6 @@
 "use server";
 
+import { ConditionRequiredError } from "@/lib/item-condition";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -89,7 +90,9 @@ function bool(formData: FormData, key: string): boolean {
 
 interface ItemFields {
   stampId: string;
-  conditionId: string;
+  /** Null when the form shows no Condition control — a piece has none (#2383); the domain refuses a
+   *  loose stamp without one. */
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
   inCollection: boolean;
@@ -133,7 +136,7 @@ function parseItemFields(formData: FormData): ParsedItemFields {
 
   const data: ItemFields = {
     stampId,
-    conditionId,
+    conditionId: conditionId || null,
     certificateStatusId: certRaw || null,
     formatId: formatRaw || null,
     inCollection: bool(formData, "inCollection"),
@@ -183,7 +186,8 @@ function parseItemFields(formData: FormData): ParsedItemFields {
   }
 
   if (!stampId) return { data, error: "A stamp must be selected." };
-  if (!conditionId) return { data, error: "A condition must be selected." };
+  // No condition is a piece's answer (#2383); whether the copy is one is the domain's to say, from
+  // its stamps and its format's kind, and a loose stamp without one is refused there in a sentence.
   return { data };
 }
 
@@ -361,7 +365,8 @@ export async function createItemAction(
     // A copy added by hand defaults to `delivered` and is in the collector's hands, so the review
     // belongs here; one entered as ordered or in transit waits for the state that says it arrived.
     return { status: "success", copy: isDelivered(item.deliveryState) ? toArriving(item) : undefined };
-  } catch {
+  } catch (e) {
+    if (e instanceof ConditionRequiredError) return { status: "error", message: e.message };
     return { status: "error", message: "Failed to add copy. Please try again." };
   }
 }
@@ -404,7 +409,7 @@ function toArriving(item: {
   id: string;
   itemNo: number;
   stampId: string;
-  conditionId: string;
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
 }): ArrivingCopy {
@@ -438,7 +443,8 @@ export async function createItemForOfferAction(
     await applyChosenFaults(session.user.id, created.id, formData, "add");
     const item = await getItemListItem(session.user.id, created.id);
     return { status: "success", item };
-  } catch {
+  } catch (e) {
+    if (e instanceof ConditionRequiredError) return { status: "error", message: e.message };
     return { status: "error", message: "Failed to add copy. Please try again." };
   }
 }
@@ -486,7 +492,8 @@ export async function updateItemAction(
     // it took to get here — bought at auction, settled into a purchase, sorted out of a box. That
     // is the arrival the want review belongs to, and this is the edit that performs it.
     return { status: "success", copy: becameDelivered ? toArriving(item) : undefined };
-  } catch {
+  } catch (e) {
+    if (e instanceof ConditionRequiredError) return { status: "error", message: e.message };
     return { status: "error", message: "Failed to update copy. Please try again." };
   }
 }

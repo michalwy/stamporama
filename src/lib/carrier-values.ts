@@ -27,10 +27,10 @@ export interface CarrierValuationRead {
    *  applies. Reported rather than refused, so a dialog opened on a row a moment before it was edited
    *  down to one stamp can say so instead of failing. */
   multiStamp: boolean;
-  /** The copy's own condition. Its stamps' prices are read and typed in the conditions the method
-   *  maps (#2375), never in this one. */
-  conditionId: string;
-  conditionName: string;
+  /** The copy's own condition — null for a piece, which has none (#2383). Its stamps' prices are read
+   *  and typed in the conditions the method maps (#2375). */
+  conditionId: string | null;
+  conditionName: string | null;
   /** The piece's value as every list and total reads it — the method's result, modified and lowered
    *  for faults — with each stamp's prices and the arithmetic on `piece` (#2353). Null for a copy
    *  that is not a piece. */
@@ -93,7 +93,7 @@ export async function getCarrierValuation(
     baseCurrency,
     multiStamp: value.piece !== null,
     conditionId: item.conditionId,
-    conditionName: item.condition.name,
+    conditionName: item.condition?.name ?? null,
     value: value.piece ? value : null,
     components: stamps.entries,
   };
@@ -128,7 +128,8 @@ export async function setPieceValuation(
 
 /** What the identification step holds of a piece before it is written (#2353). */
 export interface PiecePreviewInput {
-  conditionId: string;
+  /** Never read for a piece, which has no condition (#2383); null when the form shows none. */
+  conditionId: string | null;
   /** The piece's own format; null is none. */
   formatId: string | null;
   /** The stamps on it, in the collector's order. */

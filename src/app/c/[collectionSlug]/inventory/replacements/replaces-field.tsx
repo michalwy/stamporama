@@ -305,11 +305,13 @@ function ReplacesPicker({
                 <span
                   style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", justifyContent: "center" }}
                 >
-                  <ConditionChip
-                    collectionId={collectionId}
-                    conditionId={copy.conditionId}
-                    label={condition ? condition.abbreviation || condition.name : "?"}
-                  />
+                  {copy.conditionId && (
+                    <ConditionChip
+                      collectionId={collectionId}
+                      conditionId={copy.conditionId}
+                      label={condition ? condition.abbreviation || condition.name : "?"}
+                    />
+                  )}
                   {certificate && (
                     <CertificateStatusChip
                       collectionId={collectionId}

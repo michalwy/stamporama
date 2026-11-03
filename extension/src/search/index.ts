@@ -323,9 +323,10 @@ function factChips(chips: { label: string; title: string; kind: string }[]): HTM
  *  certificate* (ADR-0006 §2) and a null format is a *single* (ADR-0020), neither of which the app's
  *  own copy row draws. */
 function axisChipsFor(copy: SearchCopy): { label: string; title: string; kind: string }[] {
-  const chips = [
-    { label: copy.condition.abbr, title: copy.condition.name, kind: "condition" },
-  ];
+  const chips: { label: string; title: string; kind: string }[] = [];
+  if (copy.condition) {
+    chips.push({ label: copy.condition.abbr, title: copy.condition.name, kind: "condition" });
+  }
   if (copy.certificate) {
     chips.push({ label: copy.certificate.abbr, title: copy.certificate.name, kind: "certificate" });
   }

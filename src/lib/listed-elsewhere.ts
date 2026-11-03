@@ -54,8 +54,9 @@ function twinCopy(row: TwinRow): TwinCopy {
     formatId: row.formatId,
     certificateStatusId: row.certificateStatusId,
     faultIds: row.faults.map((fault) => fault.faultId),
-    // A piece of several stamps, or a copy that might be one of several stamps, is not one stamp.
-    twinnable: row.stampCount <= 1 && row._count.candidates === 0,
+    // A piece — several stamps, or one on a cover, the copy with no condition (#2383) — or a copy
+    // that might be one of several stamps, is not one stamp.
+    twinnable: row.stampCount <= 1 && row.conditionId !== null && row._count.candidates === 0,
   };
 }
 
@@ -146,7 +147,8 @@ export async function readListedElsewhere(
             ...twinPoolWhere(collectionId, opts.platformId ?? null),
             id: { notIn: asked },
             stampId: { in: [...new Set(wanted.map((copy) => copy.stampId))] },
-            conditionId: { in: [...new Set(wanted.map((copy) => copy.conditionId))] },
+            // A twinnable copy is never a piece, so it has a condition (#2383).
+            conditionId: { in: [...new Set(wanted.flatMap((copy) => (copy.conditionId ? [copy.conditionId] : [])))] },
           },
           orderBy: COPY_LIST_ORDER,
           select: TWIN_SELECT,

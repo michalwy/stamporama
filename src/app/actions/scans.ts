@@ -377,8 +377,8 @@ export async function identifyTilesAction(
           : "Select a stamp to identify these tiles as.",
     };
   }
+  // No condition is a piece's answer (#2383); the domain refuses a loose stamp without one.
   const conditionId = str("conditionId");
-  if (!conditionId) return { status: "error", message: "A condition must be selected." };
   // The value modifier (#2398) — the copy dialog's three fields and reading; blank is none.
   const modifier = parseValueModifierInput(
     str("valueModifierPercent") ?? "",
@@ -532,8 +532,8 @@ export async function reidentifyTileAction(
   };
   const stampId = str("stampId");
   if (!stampId) return { status: "error", message: "Select the stamp this piece actually is." };
+  // No condition is a piece's answer (#2383); the domain refuses a loose stamp without one.
   const conditionId = str("conditionId");
-  if (!conditionId) return { status: "error", message: "A condition must be selected." };
   try {
     await reidentifyTileCopy(session.user.id, tileId, {
       stampId,

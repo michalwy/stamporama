@@ -646,7 +646,12 @@ export function TradeSideRows({
                   opensPage
                   showCostBasis
                   onSetCatalogPrice={
-                    editable ? () => onQuickPrice(giveQuickPriceTarget(item.copy)) : undefined
+                    editable
+                      ? () => {
+                          const target = giveQuickPriceTarget(item.copy);
+                          if (target) onQuickPrice(target);
+                        }
+                      : undefined
                   }
                   actionsOverride={withTradeLineSignalActions(
                     editable

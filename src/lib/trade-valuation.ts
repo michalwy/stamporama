@@ -213,7 +213,9 @@ type LineRow = Prisma.TradeLineGetPayload<{ select: typeof LINE_SELECT }>;
  *  `TradeLine.itemId` makes impossible but which a read must not crash on. */
 function valuationKeyOf(row: LineRow): ValuationRow | null {
   const source = row.item ?? row;
-  if (!source.stampId || !source.conditionId) return null;
+  // A give line's copy may be a piece, which has no condition (#2383) and is valued by its method; a
+  // receive line always names one.
+  if (!source.stampId || (!row.item && !source.conditionId)) return null;
   const stamp = row.item?.stamp ?? row.stamp;
   return {
     id: row.id,

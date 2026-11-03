@@ -442,7 +442,7 @@ export function groupMemberFilters(
     stampId: group.stampId,
     // A duplicate group never holds a carrier (#748): the count left the multi-stamp copies out, so
     // the members must too, or a cover whose leading stamp is this one would be listed among them.
-    multiStamp: "exclude",
+    piece: "exclude",
     // The one condition the group was keyed on, through the same list the panel's multi-select uses
     // (#425) — it replaces the panel's own selection rather than intersecting with it, since the
     // group's members are by definition all in this condition. Pinned only while *Split by

@@ -402,6 +402,13 @@ export function InventoryItemFormDialog({
   );
   const [setTouched, setSetTouched] = useState(false);
   const [pickingSet, setPickingSet] = useState(false);
+  // Whether the copy, as the form now describes it, is a piece (#2359): several stamps on it, or a
+  // format on cover or on piece. A piece has no condition (#2383), so the control goes, and comes
+  // back the moment the copy is a loose stamp again — the save refusing it empty.
+  const piece = isPiece(
+    stampRows ? stampRows.reduce((n, row) => n + row.quantity, 0) : item?.multiStamp ? 2 : 1,
+    formats.find((f) => f.id === formatChoice)?.pieceKind ?? null
+  );
   /** A carrier of several stamps takes no set (decided with the collector, 2026-10-05). */
   const offersSet = !(stampRows && stampRows.length > 1);
   // Where a photo promoted from this dialog goes (#1878): the stamp chosen **here**, never the one the
@@ -450,7 +457,7 @@ export function InventoryItemFormDialog({
     // Remember the choices for the next add-copy, shared across every entry point (#234).
     if (mode === "add" && persistDefaults) {
       writeAddCopyDefaults(collectionId, {
-        conditionId: (formData.get("conditionId") as string) ?? "",
+        conditionId: piece ? null : ((formData.get("conditionId") as string) ?? ""),
         locationId,
         disposition,
       });
@@ -611,23 +618,26 @@ export function InventoryItemFormDialog({
                   and the same three a catalog price is recorded against. Three across while the column
                   holds them at 9rem each; on a narrower window they wrap rather than squeeze. */}
               <div style={{ ...ROW, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 9rem), 1fr))" }}>
-                <div>
-                  <GroupLabel htmlFor="copy-condition">Condition</GroupLabel>
-                  <select
-                    id="copy-condition"
-                    name="conditionId"
-                    defaultValue={item?.conditionId ?? addDefaults?.conditionId ?? ""}
-                    disabled={isPending}
-                    style={INPUT_STYLE}
-                  >
-                    <option value="">— Select —</option>
-                    {conditions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.abbreviation})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* A piece has no condition (#2383): its state is its franking and its faults. */}
+                {!piece && (
+                  <div>
+                    <GroupLabel htmlFor="copy-condition">Condition</GroupLabel>
+                    <select
+                      id="copy-condition"
+                      name="conditionId"
+                      defaultValue={item?.conditionId ?? addDefaults?.conditionId ?? ""}
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    >
+                      <option value="">— Select —</option>
+                      {conditions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.abbreviation})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <GroupLabel htmlFor="copy-cert">Certificate</GroupLabel>
                   <select
@@ -670,14 +680,7 @@ export function InventoryItemFormDialog({
               {/* How a piece is valued (#2359): its franking and its own method, asked only while the
                   copy is one — several stamps on it, or a format on cover or on piece. Absent
                   otherwise, which leaves both as they are. */}
-              {isPiece(
-                stampRows
-                  ? stampRows.reduce((n, row) => n + row.quantity, 0)
-                  : item?.multiStamp
-                    ? 2
-                    : 1,
-                formats.find((f) => f.id === formatChoice)?.pieceKind ?? null
-              ) && (
+              {piece && (
                 <div style={{ ...ROW, gridTemplateColumns: "1fr 1fr" }}>
                   <div>
                     <Tooltip content={FRANKING_HINT} style={{ display: "flex", width: "fit-content" }}>

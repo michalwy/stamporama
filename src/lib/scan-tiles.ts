@@ -143,7 +143,8 @@ export interface TileIdentification {
   /** Two or more stamps the pieces **might be** (#1651, ADR-0065) — *Several possible variants…*.
    *  `stampId` is then the first of them; each copy is given the set once it exists. */
   candidateStampIds?: readonly string[] | null;
-  conditionId: string;
+  /** Null for a piece, which has none (#2383); a loose stamp without one is refused on write. */
+  conditionId: string | null;
   certificateStatusId?: string | null;
   locationId?: string | null;
   locationRef?: string | null;
@@ -735,7 +736,8 @@ export interface TileReidentification {
   franking?: Franking;
   /** The stamps the piece might be (#1651), or none — a correction re-answers the set too. */
   candidateStampIds?: readonly string[] | null;
-  conditionId: string;
+  /** Null for a piece, which has none (#2383); a loose stamp without one is refused on write. */
+  conditionId: string | null;
   certificateStatusId?: string | null;
   locationId?: string | null;
   locationRef?: string | null;
@@ -790,7 +792,7 @@ export async function reidentifyTileCopy(
   input: TileReidentification
 ): Promise<TileOutcome> {
   if (!input.stampId) throw new ScanValidationError("Pick the stamp this piece actually is.");
-  if (!input.conditionId) throw new ScanValidationError("A condition must be selected.");
+  // No condition is a piece's answer (#2383); `updateItem` refuses a loose stamp without one.
   const stamps = input.stamps && input.stamps.length > 0 ? input.stamps : undefined;
   // The pointer is the first entry (ADR-0044 §2), and refinement history is written against the
   // stamp this correction names — so a list leading with a different stamp would record one
@@ -832,7 +834,7 @@ export async function reidentifyTileCopy(
   // from the one surface that shows it.
   const { item } = await updateItem(ownerId, tile.itemId, {
     stampId: input.stampId,
-    conditionId: input.conditionId,
+    conditionId: input.conditionId || null,
     certificateStatusId: input.certificateStatusId ?? null,
     formatId: input.formatId ?? null,
     locationId: input.locationId ?? null,

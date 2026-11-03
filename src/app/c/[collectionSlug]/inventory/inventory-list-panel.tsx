@@ -1,5 +1,6 @@
 "use client";
 
+import { conditioned } from "@/lib/piece-condition";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
@@ -1323,6 +1324,8 @@ export function InventoryListPanel({
     });
   }, [updateParams, rememberNotOfferedPlatform]);
 
+  // A piece has no condition to price (#2383); its row prices its stamps instead.
+  const quickPriceSubject = dialog.kind === "quickPrice" ? conditioned(dialog.item) : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Header: the holdings summary, alone. The screen's actions used to sit beside it and
@@ -2411,21 +2414,21 @@ export function InventoryListPanel({
 
       {/* Quick-add catalog value (#228): the shared price dialog (#147/#170), opened from the
           row action on copies with no catalog value for their condition. */}
-      {dialog.kind === "quickPrice" && (
+      {quickPriceSubject && (
         <QuickPriceDialog
-          subject={dialog.item}
+          subject={quickPriceSubject}
           collectionId={collectionId}
-          areaName={dialog.item.areaId ? (areaNameById.get(dialog.item.areaId) ?? null) : null}
+          areaName={quickPriceSubject.areaId ? (areaNameById.get(quickPriceSubject.areaId) ?? null) : null}
           primaryVendorId={
-            dialog.item.areaId ? (primaryVendorByArea.get(dialog.item.areaId) ?? null) : null
+            quickPriceSubject.areaId ? (primaryVendorByArea.get(quickPriceSubject.areaId) ?? null) : null
           }
-          vendorMap={vendorMapFor(dialog.item.areaId, dialog.item.issueId)}
+          vendorMap={vendorMapFor(quickPriceSubject.areaId, quickPriceSubject.issueId)}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
           onVariantsSaved={handleSuccess}
           onSubmit={(entries) => {
-            const it = dialog.item;
+            const it = quickPriceSubject;
             setActionError(undefined);
             startTransition(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");

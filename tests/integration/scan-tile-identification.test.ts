@@ -1,4 +1,5 @@
 import { describe, it, before, after } from "node:test";
+import { ConditionRequiredError } from "../../src/lib/item-condition";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -649,11 +650,12 @@ describe("identifying scan tiles into copies (#567)", () => {
     );
 
     const outcome = await identifyTileAsNewCopy(userId, tileIds[1], { stampId, conditionId });
-    // The condition step's own requirement, restated at the door: a copy always has a condition, so
-    // a correction that dropped it would be a blank where an answer is.
+    // The condition step's own requirement, restated at the door: a loose stamp always has a
+    // condition (only a piece has none, #2383), so a correction that dropped it would be a blank
+    // where an answer is.
     await assert.rejects(
       () => reidentifyTileCopy(userId, tileIds[1], { stampId: variantAId, conditionId: "" }),
-      ScanValidationError
+      ConditionRequiredError
     );
     // A stamp from another collection is refused by the copy write itself, so the tile path cannot
     // be a way around collection scoping.

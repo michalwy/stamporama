@@ -84,9 +84,10 @@ export interface TradeGroupSubject {
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
-  conditionId: string;
-  conditionAbbreviation: string;
-  conditionName: string;
+  /** Null for a piece given away — a cover, a fragment — which has no condition (#2383). */
+  conditionId: string | null;
+  conditionAbbreviation: string | null;
+  conditionName: string | null;
   certificateStatusId: string | null;
   certificateStatusAbbreviation: string | null;
   certificateStatusName: string | null;
@@ -175,17 +176,18 @@ function bucketFor(
       };
     }
     case "condition": {
-      const rank = ctx.conditionOrder.indexOf(subject.conditionId);
+      // A piece has no condition (#2383): it sorts with the unknown, under *No condition*.
+      const rank = subject.conditionId === null ? -1 : ctx.conditionOrder.indexOf(subject.conditionId);
+      const conditionLabel = subject.conditionAbbreviation ?? "No condition";
+      const conditionName = subject.conditionName ?? "No condition";
       // The certificate rides **with** the condition rather than forming a level of its own: what
       // state a stamp is in *is* the pair, and splitting them would put "Used" and "Used + Attest"
       // under headings a level apart while they are one answer to one question.
       const cert = subject.certificateStatusAbbreviation;
       return {
         id: `${subject.conditionId}:${subject.certificateStatusId ?? "__none__"}`,
-        label: cert ? `${subject.conditionAbbreviation} + ${cert}` : subject.conditionAbbreviation,
-        detail: cert
-          ? `${subject.conditionName} · ${subject.certificateStatusName}`
-          : subject.conditionName,
+        label: cert ? `${conditionLabel} + ${cert}` : conditionLabel,
+        detail: cert ? `${conditionName} · ${subject.certificateStatusName}` : conditionName,
         // Dictionary order, unknown condition last; **no certificate first** within a condition,
         // because that is what most material is and it reads as the plain case.
         sort: [

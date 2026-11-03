@@ -80,11 +80,14 @@ export function ReplacementCopy({
           </span>
         </div>
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
-          <ConditionChip
-            collectionId={collectionId}
-            conditionId={copy.conditionId}
-            label={condition?.abbreviation || condition?.name || "—"}
-          />
+          {/* A piece has no condition (#2383), so it draws none. */}
+          {copy.conditionId && (
+            <ConditionChip
+              collectionId={collectionId}
+              conditionId={copy.conditionId}
+              label={condition?.abbreviation || condition?.name || "—"}
+            />
+          )}
           {DISPOSITIONS.filter((d) => copy[d.key]).map((d) => (
             <span key={d.key} style={{ ...CHIP, ...dispositionChipColors(d.key) }}>
               {d.label}

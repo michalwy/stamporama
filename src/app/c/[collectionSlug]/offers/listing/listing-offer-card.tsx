@@ -744,7 +744,10 @@ function ListingBlockers({
                             stampId: stamp.treeStampId ?? stamp.stampId,
                             subtree: true,
                           },
-                          stamp.axes
+                          // A piece's axes name no condition (#2383); the grid then opens unnarrowed.
+                          stamp.axes?.conditionId
+                            ? { ...stamp.axes, conditionId: stamp.axes.conditionId }
+                            : undefined
                         )
                       }
                       style={{

@@ -1,5 +1,6 @@
 "use client";
 
+import { conditioned } from "@/lib/piece-condition";
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { intakeDocumentRef } from "@/lib/purchase-kind";
 import {
@@ -2303,6 +2304,8 @@ function useCopyEditing(ctx: {
   const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
   const [identifyItem, setIdentifyItem] = useState<ItemListItem | null>(null);
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  // A piece has no condition to price (#2383); its row prices its stamps instead.
+  const quickPriceSubject = quickPriceItem ? conditioned(quickPriceItem) : null;
   const [copyError, setCopyError] = useState<string | undefined>();
   const [bulkMove, setBulkMove] = useState<BulkTarget | null>(null);
   const [bulkStore, setBulkStore] = useState<BulkTarget | null>(null);
@@ -2452,19 +2455,19 @@ function useCopyEditing(ctx: {
 
   const dialogs = (
     <>
-      {quickPriceItem && (
+      {quickPriceSubject && (
         <QuickPriceDialog
-          subject={quickPriceItem}
+          subject={quickPriceSubject}
           collectionId={collectionId}
           areaName={
-            quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null
+            quickPriceSubject.areaId ? (areaNameById.get(quickPriceSubject.areaId) ?? null) : null
           }
           primaryVendorId={
-            quickPriceItem.areaId
-              ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null)
+            quickPriceSubject.areaId
+              ? (primaryVendorByArea.get(quickPriceSubject.areaId) ?? null)
               : null
           }
-          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
+          vendorMap={vendorMapFor(quickPriceSubject.areaId, quickPriceSubject.issueId)}
           isPending={isPending}
           error={copyError}
           onClose={() => {
@@ -2474,7 +2477,7 @@ function useCopyEditing(ctx: {
             }
           }}
           onVariantsSaved={() => {
-            const it = quickPriceItem;
+            const it = quickPriceSubject;
             setCopyError(undefined);
             // The variants' prices are already in; this is the re-read. The umbrella's lineage
             // reaches its variants, so every lot holding a copy of the tree is re-read (#1409).
@@ -2484,7 +2487,7 @@ function useCopyEditing(ctx: {
             );
           }}
           onSubmit={(entries) => {
-            const it = quickPriceItem;
+            const it = quickPriceSubject;
             setCopyError(undefined);
             run(
               async () => {

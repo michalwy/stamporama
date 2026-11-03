@@ -1116,12 +1116,15 @@ export function InventoryItemRow({
           <Tooltip content="Internal copy number — assigned automatically, not editable">
             <span style={ITEM_NO_CHIP}>{formatItemNo(item.itemNo)}</span>
           </Tooltip>
-          <ConditionChip
-            collectionId={collectionId}
-            conditionId={item.conditionId}
-            label={item.conditionAbbreviation}
-            tooltip={item.conditionName}
-          />
+          {/* A piece has no condition (#2383), so it draws none. */}
+          {item.conditionId && (
+            <ConditionChip
+              collectionId={collectionId}
+              conditionId={item.conditionId}
+              label={item.conditionAbbreviation}
+              tooltip={item.conditionName}
+            />
+          )}
           {item.certificateStatusName && (
             <CertificateStatusChip
               collectionId={collectionId}

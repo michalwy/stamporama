@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS } from "./colnect-conditions";
-import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_PIECE } from "./multi-stamp";
 import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import {
   colnectListBucketLabel,
@@ -186,7 +186,7 @@ async function copiesToTouch(
       // …and the report's exclusion of a multi-stamp carrier with it (#745, ADR-0044 §3). A fix must
       // touch exactly the copies the figure beside it was counted from, or it acts on rows the
       // screen never showed.
-      ...NOT_MULTI_STAMP,
+      ...NOT_PIECE,
       // …and of a copy whose candidates span several variant trees (#1651), for the same reason.
       ...NOT_ACROSS_TREES,
     },
@@ -203,8 +203,9 @@ async function copiesToTouch(
   return rows.map((row) => ({
     id: row.id,
     itemNo: row.itemNo,
-    conditionName: row.condition.name,
-    conditionAbbreviation: row.condition.abbreviation,
+    // Never null: the fix's copies are its report's, which leave pieces out (`NOT_PIECE`, #2383).
+    conditionName: row.condition?.name ?? "",
+    conditionAbbreviation: row.condition?.abbreviation ?? "",
     formatName: row.format?.name ?? null,
     locationName: row.location?.name ?? null,
     locationRef: row.locationRef,

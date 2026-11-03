@@ -31,7 +31,8 @@ import { copyGroupKey, encodeCopyGroupKey, COLNECT_GROUP_AXES, type GroupableCop
 export interface CollisionCopy {
   itemId: string;
   stampId: string;
-  conditionId: string;
+  /** Null for a piece (#2383), keyed as no condition. */
+  conditionId: string | null;
   /** The stamp this copy is **listed under** on a platform that lists an umbrella as its resolved
    *  variant (#1347) — `stampId` itself wherever nothing resolves, and absent meaning the same. Read
    *  only against a set whose offer is on such a platform. A candidate's is the derivation a new

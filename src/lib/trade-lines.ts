@@ -177,7 +177,7 @@ interface AxisRow {
   /** Everything the search box matches, lowercased once. */
   haystack: string;
   subject: TradeGroupSubject;
-  conditionId: string;
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
 }
@@ -188,7 +188,8 @@ function axisSubject(
     stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
     issueMemberships: { issueId: string; issue: { name: string | null; year: number | null } }[];
   },
-  condition: { id: string; name: string; abbreviation: string },
+  // Null for a piece, which has no condition (#2383).
+  condition: { id: string; name: string; abbreviation: string } | null,
   certificate: { id: string; name: string; abbreviation: string | null } | null
 ): TradeGroupSubject {
   const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
@@ -199,9 +200,9 @@ function axisSubject(
     issueId: membership?.issueId ?? null,
     issueName: membership?.issue.name ?? null,
     issueYear: membership?.issue.year ?? null,
-    conditionId: condition.id,
-    conditionAbbreviation: condition.abbreviation,
-    conditionName: condition.name,
+    conditionId: condition?.id ?? null,
+    conditionAbbreviation: condition?.abbreviation ?? null,
+    conditionName: condition?.name ?? null,
     certificateStatusId: certificate?.id ?? null,
     certificateStatusAbbreviation: certificate?.abbreviation ?? null,
     certificateStatusName: certificate?.name ?? null,

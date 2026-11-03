@@ -67,13 +67,14 @@ import type { CatalogRollupGap } from "./listing-preconditions";
 // Which is also why {@link ResolvedCatalogItemId.sourceChosen} exists: a surface that marks a derived
 // variant `~` for *inferred* must not mark a recorded decision the same way.
 
-/** The key one hand-picked variant is recorded under — the Items card's own row. */
+/** The key one hand-picked variant is recorded under — the Items card's own row. A piece has no
+ *  condition (#2383) and no row of its own to pick a variant on, so its key matches no choice. */
 export function listedVariantKey(
   offerId: string,
   stampId: string,
-  conditionId: string
+  conditionId: string | null
 ): string {
-  return `${offerId}|${stampId}|${conditionId}`;
+  return `${offerId}|${stampId}|${conditionId ?? ""}`;
 }
 
 /**
@@ -104,7 +105,8 @@ export interface ListingCatalogCopy {
   /** The key the answer comes back under — the caller's own `OfferSetItem.itemId`. */
   itemId: string;
   stampId: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383). */
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
   /** True when the copy links to a base stamp that has variants (ADR-0010 §3). Only such a copy can

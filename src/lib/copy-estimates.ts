@@ -76,6 +76,8 @@ export async function estimateCopiesByGroup(
   for (const row of held) {
     const valuation = valuations.get(row.id);
     if (!ratios || !valuation || valuation.piece !== null || valuation.baseAmount === null) continue;
+    // A piece has no condition (#2383); it was left out just above, by its valuation.
+    if (row.conditionId === null) continue;
     const ratio = ratios.resolve({
       areaId: primaryAreaIdOf(row.stamp.stampAreaLinks),
       conditionId: row.conditionId,

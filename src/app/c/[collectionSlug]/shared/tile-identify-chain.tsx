@@ -357,7 +357,8 @@ export function useTileIdentifyChain(input: {
         itemId: copy.id,
         stampId: copy.stampId,
         prefill: {
-          conditionId: copy.conditionId,
+          // A piece has none (#2383): the step reads "not chosen" as the empty string.
+          conditionId: copy.conditionId ?? "",
           certificateStatusId: copy.certificateStatusId ?? "",
           formatId: copy.formatId ?? "",
           locationId: copy.locationId ?? "",

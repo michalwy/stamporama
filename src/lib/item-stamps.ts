@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
+import { settleCopyConditionsTx } from "./item-condition";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 
 // The stamps a copy carries (ADR-0044, #744) — and the **only** module that writes them, or
 // `Item.stampId` and `Item.stampCount`.
@@ -185,6 +187,9 @@ async function syncItemFromEntriesTx(
       ...(losesCandidates ? { candidateTrees: 0 } : {}),
     },
   });
+  // A second stamp makes the copy a piece, which has no condition; going back down to one stamp in a
+  // format without a kind makes it a loose stamp again, which must have one (#2383).
+  await settleCopyConditionsTx(tx, [itemId]);
 
   return entries;
 }
@@ -221,6 +226,12 @@ export async function createLeadingEntriesTx(
       sortOrder: 0,
     })),
   });
+  // Born in a format with a kind, the copy is a piece and keeps no condition it was given; born a
+  // loose stamp without one, it is refused (#2383).
+  await settleCopyConditionsTx(
+    tx,
+    copies.map((copy) => copy.id)
+  );
 }
 
 /**
@@ -254,6 +265,7 @@ export async function repointLeadingStampTx(
       data: { itemId, stampId: toStampId, quantity: 1, formatId: null, sortOrder: 0 },
     });
     await tx.item.update({ where: { id: itemId }, data: { stampId: toStampId, stampCount: 1 } });
+    await settleCopyConditionsTx(tx, [itemId]);
     return;
   }
   if (leading.stampId === toStampId) return;
@@ -393,13 +405,23 @@ export async function addItemStamp(
 }
 
 /** Take one stamp off a copy. The last one cannot go: a copy is a copy *of* something, and a piece
- *  the collector no longer wants described is deleted rather than emptied. */
+ *  the collector no longer wants described is deleted rather than emptied. A piece left a loose stamp
+ *  by it needs a condition (#2383) — `conditionId`, written in the same transaction; without one
+ *  the removal is refused. */
 export async function removeItemStamp(
   ownerId: string,
   itemId: string,
-  entryId: string
+  entryId: string,
+  conditionId?: string
 ): Promise<ItemStampEntry[]> {
-  await assertItemOwner(ownerId, itemId);
+  const collectionId = await assertItemOwner(ownerId, itemId);
+  if (conditionId) {
+    const condition = await prisma.stampCondition.findFirst({
+      where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
+      select: { id: true },
+    });
+    if (!condition) throw new Error("Condition not found in this collection.");
+  }
   const entries = await prisma.itemStamp.findMany({
     where: { itemId },
     orderBy: ENTRY_ORDER,
@@ -412,6 +434,7 @@ export async function removeItemStamp(
 
   return prisma.$transaction(async (tx) => {
     await tx.itemStamp.delete({ where: { id: entryId } });
+    if (conditionId) await tx.item.update({ where: { id: itemId }, data: { conditionId } });
     return syncItemFromEntriesTx(tx, itemId);
   });
 }

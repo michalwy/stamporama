@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
 import { COPY_VALUATION_SELECT, copyValuationOf, valuateItemRows } from "./item-valuation";
-import { isMultiStampCount } from "./multi-stamp";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
@@ -117,7 +116,13 @@ export async function getFacebookPostCatalogueFill(
           )
         )
         .map((li: SetItem) => li.item)
-        .filter((item) => !isMultiStampCount(item.stampCount))
+        // A piece — several stamps, or one on a cover — has no condition and fills no stamp's line
+        // (#2383); only loose stamps are filled.
+        .flatMap((item) =>
+          item.condition && item.conditionId !== null
+            ? [{ ...item, condition: item.condition, conditionId: item.conditionId }]
+            : []
+        )
     ),
   }));
   const copies = [...new Map(lotItems.flatMap((lot) => lot.items).map((item) => [item.id, item])).values()];

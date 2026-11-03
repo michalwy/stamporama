@@ -165,8 +165,9 @@ export const PACKING_COLUMN = {
     header: "Cond.",
     defaultOn: true,
     nowrap: true,
-    title: (row) => row.conditionName,
-    render: (row) => row.condition,
+    // A piece has no condition (#2383): its cell is the dash a missing value prints.
+    title: (row) => row.conditionName ?? undefined,
+    render: (row) => row.condition ?? MUTED_DASH,
   },
   certificate: {
     key: "certificate",

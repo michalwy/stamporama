@@ -152,7 +152,8 @@ export interface CollectionSearchCopy {
    *  none. The window is opened to recognise a stamp rather than to audit which copies have been
    *  photographed, and a thumbnail column empty on most rows is worse than the catalogue picture. */
   photoId: string | null;
-  condition: CollectionSearchAxisValue;
+  /** Null for a piece, which has no condition (#2383) and draws no chip for one. */
+  condition: CollectionSearchAxisValue | null;
   /** Null is "no certificate" (ADR-0006 §2), which the row leaves unsaid rather than chipping. */
   certificate: CollectionSearchAxisValue | null;
   /** Null is *single* (ADR-0020) — no such dictionary row exists, so there is nothing to draw. */
@@ -305,10 +306,9 @@ export async function searchCollection(
       issueYear: item.issueYear,
       catalogNumbers: catalog.labelFor(item.areaId, item.issueId, item.catalogNumbers),
       photoId: item.photos[0]?.id ?? stampPhotos.get(item.stampId) ?? null,
-      condition: {
-        abbr: item.conditionAbbreviation || item.conditionName,
-        name: item.conditionName,
-      },
+      condition: item.conditionName
+        ? { abbr: item.conditionAbbreviation || item.conditionName, name: item.conditionName }
+        : null,
       certificate: item.certificateStatusId
         ? (axes.certificate.get(item.certificateStatusId) ?? null)
         : null,

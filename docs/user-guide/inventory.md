@@ -217,7 +217,9 @@ right, from *which copies* to *how they are shown*.
   separate buttons; it is one dropdown now, and it filters exactly as it did.)
 - **Condition** — show only copies in the conditions you tick. It takes **several at once**: click
   it and tick as many grades as you like, and the list shows copies in *any* of them — "the mint
-  grades" is as ordinary a question as one grade is. The control reads the grade's name when one is
+  grades" is as ordinary a question as one grade is. **No condition**, at the top, finds the
+  [covers and other pieces](#a-piece-has-no-condition), which have none, so filtering by condition
+  never hides them for good. The control reads the grade's name when one is
   ticked and counts them when more are (`3 conditions`); **All conditions** at the top of the list
   clears it. Everything that follows the list follows this filter too — the year panel, the holdings
   totals, and the grouped views.
@@ -1168,6 +1170,23 @@ a card scan can be identified as a carrier straight away — **Another stamp on 
 identification's condition step, see [Card scans](purchases.md#working-through-the-tiles). Take the
 list back down to one row and it is an ordinary copy of that stamp again.
 
+### A piece has no condition
+
+A cover, a fragment, any piece carrying several stamps — and a piece carrying **one** stamp whose
+format is of kind *On cover* or *On piece* — has **no condition**. "MNH" on a posted cover describes
+nothing, and the piece's value never read it: its state is told by its **franking** and its
+[faults](faults.md). So the **Condition** field is not shown for it, in the copy's **Edit** dialog or in
+a scan's identification, and nothing shows a condition for it. Its certificate stays — a cover can be
+certified as a whole.
+
+- Picking a format of kind *On cover* or *On piece*, or adding a second stamp, **drops** the condition.
+- Turning a piece back into a loose stamp — one stamp, a format without a kind — **asks for one**: the
+  **Condition** field comes back, and the copy cannot be saved without it.
+- Giving a format a kind under **Settings → Formats** drops the condition of every copy in it. Taking
+  the kind away is refused while one-stamp copies are in that format: move them to another format
+  first, giving each a condition.
+- The condition remembered for the next copy you add is neither used for a piece nor changed by one.
+
 ### What a piece carrying several stamps counts as
 
 **Nothing — for any of its stamps.** This is the one thing worth reading twice:
@@ -1178,11 +1197,11 @@ list back down to one row and it is an ordinary copy of that stamp again.
 - a **want** for one of them does not close, and the arrival review does not offer to close it;
 - a **Colnect list** comparison leaves it out entirely, on both the collection and swap/sell lists.
 
-The reason is not that the piece is indivisible — a cover bearing **one** stamp is just as
-indivisible, and that one *is* counted, as a copy of its stamp "on cover", which is exactly what
-catalogs price. It is that a piece carrying three numbers is not a copy of any one of them: you
-cannot supply Mi 200 off it, because it will be sold whole. Its stamps are a **description** of the
-piece — searchable, listed, printed in listing texts — never a claim that you hold them.
+The same holds for a cover carrying **one** stamp, on a format of kind *On cover* or *On piece*: it is
+counted towards none of that stamp's holdings either — not in the badges, *You hold*, the
+completeness card or the wants. A piece is not a copy of its stamps: you cannot supply Mi 200 off it,
+because it will be sold whole. Its stamps are a **description** of the piece — searchable, listed,
+printed in listing texts — never a claim that you hold them.
 
 Everything else about a copy is untouched. It keeps its internal number, its storage location, its
 cost basis and its photos; it can be offered, sold, traded and disposed of exactly like any other
@@ -1203,8 +1222,9 @@ same checkboxes, **⋮** menu and endless scrolling as every other copy. What se
 
 The **search box** finds a piece by any stamp it carries, not only the first: type the third number
 on a cover and the cover comes up. The **Several stamps** filter on the toolbar narrows the list to
-these pieces or leaves them out, and grouping by duplicates or by issue collects them into one
-**Several stamps** row at the end ([Grouping the list](#grouping-the-list)).
+these pieces or leaves them out, and grouping by duplicates or by issue collects them — with every
+cover carrying one stamp — into one **Covers and pieces** row at the end
+([Grouping the list](#grouping-the-list)).
 
 Its own page shows the stamps it carries in your order, under **Stamps on this piece**, and a
 **Several stamps** chip beside the state chips says why the counts leave it out.
@@ -2029,9 +2049,11 @@ The copies inside an expanded group are **ordinary copy rows**, and they carry t
 menu — Edit, Add to offer, No longer held and the rest, exactly as they do with no grouping on. A
 grouping decides what a copy is listed *under*; it never changes what you can do to it.
 
-**Pieces carrying several stamps** are listed under none of their stamps. Grouped by duplicates or
-by issue, they are collected into one **Several stamps** row at the very end of the list — a cover
-franked with three stamps is not a duplicate of the first one, nor a copy of the first one's series.
+**Covers and other pieces** — several stamps, or one on a format of kind *On cover* or *On piece* —
+are listed under none of their stamps. Grouped by duplicates or by issue, they are collected into one
+**Covers and pieces** row at the very end of the list — a cover franked with three stamps is not a
+duplicate of the first one, nor a copy of the first one's series, and a cover franked with one is no
+copy of that stamp either.
 It opens, ticks and expands like every other group row. Grouped by location or ref they are filed
 exactly like any other copy, since where a piece is kept is a fact about the piece.
 
@@ -2049,9 +2071,9 @@ stamp, exactly as an ungrouped copy row does. A last line appears only when the 
 extra to say — that it is mixed, or that some of its copies are already listed — so a plain stack is
 one line shorter than one that needs a warning.
 
-Two copies count as duplicates when they are the **same stamp**, whatever their condition. A piece
-carrying several stamps is never a duplicate of anything: it goes in the **Several stamps** row at
-the end.
+Two copies count as duplicates when they are the **same stamp**, whatever their condition. A piece —
+several stamps, or one on a cover — is never a duplicate of anything: it goes in the **Covers and
+pieces** row at the end.
 
 Three switches, inside the grouping dropdown, each add an axis to that rule:
 
@@ -2169,8 +2191,8 @@ never split in half by scrolling.
 
 A stamp can belong to more than one issue. A copy is counted under **one** of them — the first issue
 its stamp was added to — so the counts add up to the list exactly rather than reporting one copy
-under two series. A piece carrying **several stamps** is counted under none of them, in the
-**Several stamps** row after *no issue*; with it, the counts still add up to the list.
+under two series. A **piece** — several stamps, or one on a cover — is counted under none of them, in
+the **Covers and pieces** row after *no issue*; with it, the counts still add up to the list.
 
 ### How complete each set is
 

@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { NOT_TRADED_AWAY } from "./trade-exit";
-import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_PIECE } from "./multi-stamp";
 import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import {
@@ -36,7 +36,7 @@ import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./chec
 export const COUNTED_COPY_WHERE = {
   saleLineItems: { none: {} },
   ...NOT_TRADED_AWAY,
-  ...NOT_MULTI_STAMP,
+  ...NOT_PIECE,
   ...NOT_ACROSS_TREES,
   disposedAt: null,
   deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },

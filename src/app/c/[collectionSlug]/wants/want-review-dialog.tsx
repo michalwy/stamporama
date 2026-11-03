@@ -152,7 +152,9 @@ export function WantReviewDialog({
   );
 
   const copyByItemId = useMemo(() => new Map(copies.map((c) => [c.itemId, c])), [copies]);
-  const conditionName = (id: string) => {
+  // A piece answers no want (#2383), so a matched copy always has a condition; null reads as none.
+  const conditionName = (id: string | null) => {
+    if (id === null) return "no condition";
     const c = (conditions ?? []).find((x) => x.id === id);
     return c ? c.abbreviation || c.name : "?";
   };
@@ -234,7 +236,9 @@ export function WantReviewDialog({
               const copy = copyByItemId.get(id);
               return copy ? [copy] : [];
             });
-            const arrivedConditionIds = [...new Set(rowCopies.map((c) => c.conditionId))];
+            const arrivedConditionIds = [
+              ...new Set(rowCopies.flatMap((c) => (c.conditionId ? [c.conditionId] : []))),
+            ];
             const state = states[want.id] ?? "pending";
             const seed = narrowing[want.id];
             const copyRows = rowCopies
