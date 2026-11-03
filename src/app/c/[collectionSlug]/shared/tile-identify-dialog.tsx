@@ -240,6 +240,12 @@ interface Props {
    */
   onIdentifyNew: (pieces: IdentifiedPiece[]) => void;
   /**
+   * *Identify as a piece* (#2401) — the same handover, for a cover or a fragment: the picker ticks
+   * every stamp on it and the condition step opens as a piece's. One tile only, a piece being one
+   * piece of paper; with several ticked the button is there, disabled, saying why.
+   */
+  onIdentifyAsPiece: (pieces: IdentifiedPiece[]) => void;
+  /**
    * *As the stamps of a checklist* (#1220, #1225) — a ticked run handed on to be given one checklist's stamps in
    * turn, rather than one stamp for all of it (#596). Offered only for a run: one tile is one stamp,
    * which is the picker's own question.
@@ -358,6 +364,7 @@ export function TileIdentifyDialog({
   copyHref,
   onIdentifyNew,
   onIdentifyIssueRun,
+  onIdentifyAsPiece,
   history,
   onRepeat,
   onIdentifyAs,
@@ -939,15 +946,33 @@ export function TileIdentifyDialog({
           // (#1225) in the order they were ticked. **Right beside the one-stamp primary** (#2216):
           // the two are the two answers to *what are these tiles*, and on the left it stood among
           // setting the pieces aside and throwing them away. A single tile has no run to give.
+          // *Identify as a piece* (#2401) beside them for the same reason: a cover or a fragment is a
+          // third answer to the same question, and it is known before the picker opens.
           beforeAction={
-            count > 1 ? (
-              <DialogSecondaryButton
-                onClick={() => onIdentifyIssueRun(pieces)}
-                disabled={pending || !canIdentify}
-              >
-                <Icon name="list" size="sm" /> As the stamps of a checklist…
-              </DialogSecondaryButton>
-            ) : undefined
+            <>
+              {count > 1 ? (
+                <DialogSecondaryButton
+                  onClick={() => onIdentifyIssueRun(pieces)}
+                  disabled={pending || !canIdentify}
+                >
+                  <Icon name="list" size="sm" /> As the stamps of a checklist…
+                </DialogSecondaryButton>
+              ) : null}
+              {count > 1 ? (
+                <Tooltip content="A piece is one piece of paper — tick one tile to identify it as a piece">
+                  <DialogSecondaryButton disabled>
+                    <Icon name="piece" size="sm" /> Identify as a piece…
+                  </DialogSecondaryButton>
+                </Tooltip>
+              ) : (
+                <DialogSecondaryButton
+                  onClick={() => onIdentifyAsPiece(pieces)}
+                  disabled={pending || !canIdentify}
+                >
+                  <Icon name="piece" size="sm" /> Identify as a piece…
+                </DialogSecondaryButton>
+              )}
+            </>
           }
           leading={
             <>

@@ -236,6 +236,8 @@ interface Props {
    * chain at the condition step instead of the picker, the picker's question having been answered.
    * Everything after that is identical, confirm included. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
+  /** *Identify as a piece* (#2401): the same handover, into the chain's piece mode. */
+  onIdentifyAsPiece: (pieces: IdentifiedPiece[]) => void;
   /** *As the stamps of a checklist* (#1220, #1225): the ticked run handed up **in the order it was
    * ticked**, which is the order the pieces take the checklist's stamps in. */
   onIdentifyIssueRun: (pieces: IdentifiedPiece[]) => void;
@@ -296,6 +298,7 @@ export function ScansCard({
   documentName,
   canIdentify,
   onIdentifyTiles,
+  onIdentifyAsPiece,
   onIdentifyIssueRun,
   onReidentifyTile,
   onRepeatIdentification,
@@ -1738,6 +1741,11 @@ export function ScansCard({
             // (#592) — this dialog is where they were worked out, and the only place they are free.
             closeDialog();
             onIdentifyTiles(pieces);
+          }}
+          // A cover or a fragment (#2401) — the same handover, into the chain's piece mode.
+          onIdentifyAsPiece={(pieces) => {
+            closeDialog();
+            onIdentifyAsPiece(pieces);
           }}
           // A candidate off the shortlist, or the parent offered in its place (#607) — the same
           // handover with the picker's answer already given, so the chain resumes at the condition

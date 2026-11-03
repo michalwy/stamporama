@@ -1500,6 +1500,7 @@ export function PurchaseDetailPanel({
         documentName={intakeDocumentRef(purchase)}
         canIdentify={purchase.lots.some((l) => l.status === "open")}
         onIdentifyTiles={tileChain.onIdentifyTiles}
+        onIdentifyAsPiece={tileChain.onIdentifyAsPiece}
         onReidentifyTile={tileChain.onReidentifyTile}
         onIdentifyIssueRun={tileChain.onIdentifyIssueRun}
         onRepeatIdentification={tileChain.onRepeatIdentification}

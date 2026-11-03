@@ -55,3 +55,28 @@ export function addStampsToRows<R extends StampRowLike, P extends StampToAdd>(
   }
   return next;
 }
+
+/**
+ * The stamps on a piece as *Identify as a piece* ticks them (#2401): the rows **in the order
+ * ticked**, the first ticked leading the piece — never catalogue order, since which stamp leads is
+ * the collector's answer here. A stamp already on the list keeps every row it has, quantities and
+ * formats included, so going back to the picker to tick one more does not undo what the list was
+ * given; a stamp ticked for the first time is a new single of quantity 1, made by `newRow`; a stamp
+ * no longer ticked comes off. Never mutates.
+ */
+export function rowsInTickOrder<R extends StampRowLike, P extends { stampId: string }>(
+  rows: readonly R[],
+  ticked: readonly P[],
+  newRow: (picked: P) => R
+): R[] {
+  const next: R[] = [];
+  const seen = new Set<string>();
+  for (const p of ticked) {
+    if (seen.has(p.stampId)) continue;
+    seen.add(p.stampId);
+    const listed = rows.filter((row) => row.stampId === p.stampId);
+    if (listed.length > 0) next.push(...listed);
+    else next.push(newRow(p));
+  }
+  return next;
+}

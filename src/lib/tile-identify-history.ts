@@ -67,6 +67,14 @@ export function carriedStampAnswers(
   item: Pick<NonNullable<ScanTileData["item"]>, "stamps">
 ): CarriedStampAnswer[] {
   if (!describesMoreThanTheStamp(item.stamps)) return [];
+  return stampAnswers(item);
+}
+
+/** Every stamp the copy carries, as answers — a piece's whole list, one stamp alone on a cover
+ *  included, which is what *Identify again* on a piece opens on (#2401). */
+export function stampAnswers(
+  item: Pick<NonNullable<ScanTileData["item"]>, "stamps">
+): CarriedStampAnswer[] {
   return item.stamps.map((entry) => ({
     stampId: entry.stampId,
     quantity: entry.quantity,
@@ -95,6 +103,10 @@ export interface IdentifyHistoryEntry {
   /** The condition's abbreviation, as the copy states it — what the row's chip says. Null for a
    *  piece, which has none (#2383). */
   conditionAbbreviation: string | null;
+  /** Whether the copy is a **piece** (#2401) — a cover or a fragment, which is listed but not offered
+   *  for a one-press repeat: a piece is identified through *Identify as a piece*, and the row is
+   *  there to be recognised. Read off the condition, which a piece alone has none of (#2383). */
+  piece: boolean;
   /** When the copy was created — the identification's own time, and what this list is ordered by. */
   at: string;
   /** Where the stamp sits and what it is numbered and called, for the prefix-formatted label the
@@ -118,6 +130,7 @@ function entryOf(tile: ScanTileData): IdentifyHistoryEntry | null {
     photoId: item.frontPhotoId ?? item.backPhotoId ?? null,
     itemNo: item.itemNo,
     conditionAbbreviation: item.conditionAbbreviation,
+    piece: item.conditionId === null,
     at: item.createdAt,
     subject: {
       areaId: item.collectionAreaId,

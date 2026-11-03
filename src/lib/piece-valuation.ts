@@ -97,6 +97,24 @@ export function isPiece(stampCount: number, formatKind: PieceKind | null): boole
   return stampCount > 1 || formatKind !== null;
 }
 
+/** How a scan tile is being identified (#2401): as a **loose** stamp — the ordinary identification —
+ *  or as a **piece**, through *Identify as a piece*. */
+export type IdentifyAs = "loose" | "piece";
+
+/**
+ * The formats the identification step offers (#2401): a loose stamp none of kind *On cover* or *On
+ * piece*, since a piece is identified as one from the start; a piece only those, since its format is
+ * what makes it one. Absent `as` — an intake with no tile behind it — offers every format.
+ */
+export function formatsToIdentifyAs<F extends { pieceKind: PieceKind | null }>(
+  formats: readonly F[],
+  as: IdentifyAs | undefined
+): F[] {
+  if (as === "loose") return formats.filter((f) => f.pieceKind === null);
+  if (as === "piece") return formats.filter((f) => f.pieceKind !== null);
+  return [...formats];
+}
+
 /** The prices a method's rules read, by name — each from the condition of its role (#2375). */
 export const PIECE_PRICES = ["used", "cover_ef", "cover_mef", "cover_mif", "on_piece"] as const;
 export type PiecePrice = (typeof PIECE_PRICES)[number];

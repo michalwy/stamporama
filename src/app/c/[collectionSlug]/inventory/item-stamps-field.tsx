@@ -450,22 +450,42 @@ export function ItemStampsField({
  * keeps the ticks — and closed by the one button that adds them. Pressing a ticked stamp again takes
  * it off; the list beside the tree is the whole state, in the order the rows will be added. The same
  * shape as *Several possible variants…* (`candidate-stamps-picker.tsx`), which is where it comes from.
+ * It is also the first step of *Identify as a piece* on a scan tile (#2401), in tick order there.
  */
-function PieceStampsPicker({
+export function PieceStampsPicker({
   collectionId,
   areas,
   listedStampIds,
+  initial,
+  inTickOrder = false,
+  leading,
+  title = "Stamps on this piece",
+  emptyHint = "Tick every stamp the piece carries, from any issue.",
+  actionLabel = (n) => `Add ${n} ${n === 1 ? "stamp" : "stamps"}`,
+  asideWidth = "22rem",
   onAdd,
   onClose,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
   /** Stamps already on the piece as a single — ticking one raises its quantity, and the list says so. */
-  listedStampIds: ReadonlySet<string>;
+  listedStampIds?: ReadonlySet<string>;
+  /** Ticked as the picker opens — *Identify as a piece* coming back to it with the list it made (#2401). */
+  initial?: PickedStamp[];
+  /** List the ticks in the order ticked rather than catalogue order — *Identify as a piece*, where the
+   *  first ticked leads the piece (#2401). */
+  inTickOrder?: boolean;
+  /** Drawn above the ticks — the piece itself, when there is a picture of it (#592). */
+  leading?: React.ReactNode;
+  title?: string;
+  emptyHint?: string;
+  /** The button's words for `n` ticked. */
+  actionLabel?: (n: number) => string;
+  asideWidth?: string;
   onAdd: (picked: PickedStamp[]) => void;
   onClose: () => void;
 }) {
-  const [ticked, setTicked] = useState<PickedStamp[]>([]);
+  const [ticked, setTicked] = useState<PickedStamp[]>(initial ?? []);
 
   function toggle(picked: PickedStamp) {
     setTicked((current) =>
@@ -475,21 +495,21 @@ function PieceStampsPicker({
     );
   }
 
-  const ordered = inAdditionOrder(ticked);
+  const ordered = inTickOrder ? ticked : inAdditionOrder(ticked);
   const none = ticked.length === 0;
 
   return (
     <StampPickerBrowser
       collectionId={collectionId}
       areas={areas}
-      title="Stamps on this piece"
+      title={title}
       marked={{
         stampIds: new Set(ticked.map((s) => s.stampId)),
         label: "ticked",
         hint: "Ticked to be added — pressing it again takes it off",
       }}
       onPick={toggle}
-      asideWidth="22rem"
+      asideWidth={asideWidth}
       aside={
         <div
           style={{
@@ -501,6 +521,7 @@ function PieceStampsPicker({
             gap: "0.625rem",
           }}
         >
+          {leading}
           <div
             style={{
               flex: "0 1 auto",
@@ -515,7 +536,7 @@ function PieceStampsPicker({
             }}
           >
             {none ? (
-              "Tick every stamp the piece carries, from any issue."
+              emptyHint
             ) : (
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                 {ordered.map((s) => (
@@ -526,7 +547,7 @@ function PieceStampsPicker({
                     <span style={{ flex: 1, minWidth: 0 }}>
                       {[s.catalogLabels[0], s.name].filter(Boolean).join(" · ") ||
                         "(unnamed stamp)"}
-                      {listedStampIds.has(s.stampId) && (
+                      {listedStampIds?.has(s.stampId) && (
                         <span style={{ color: "var(--color-text-muted)" }}>
                           {" "}
                           — already on the piece, its quantity goes up by 1
@@ -566,9 +587,7 @@ function PieceStampsPicker({
                 cursor: none ? "default" : "pointer",
               }}
             >
-              {none
-                ? "Tick the stamps to add"
-                : `Add ${ticked.length} ${ticked.length === 1 ? "stamp" : "stamps"}`}
+              {none ? "Tick the stamps to add" : actionLabel(ticked.length)}
             </button>
           </div>
         </div>

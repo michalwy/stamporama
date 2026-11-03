@@ -1329,6 +1329,42 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(carriedStampAnswers(tile.item!), row.answers.stamps);
   });
 
+  it("identifies a tile as a piece of one stamp, with no condition, and lists it as a piece (#2401)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    const coverId = (
+      await prisma.stampFormat.create({
+        data: { collectionId, name: "Cover", abbreviation: "cov", sortOrder: 9, pieceKind: "on_cover" },
+      })
+    ).id;
+    // *Identify as a piece* with one stamp ticked: the list of one, the piece's format of a kind, and
+    // no condition — the step asks none.
+    const [piece] = await identifyTilesAsNewCopies(userId, [tileIds[0]], {
+      stampId,
+      conditionId: "",
+      formatId: coverId,
+      stamps: [{ stampId, quantity: 1, formatId: null }],
+    });
+    await identifyTilesAsNewCopies(userId, [tileIds[1]], { stampId, conditionId });
+
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: piece.itemId },
+      select: { conditionId: true, formatId: true, stampCount: true },
+    });
+    assert.deepEqual(item, { conditionId: null, formatId: coverId, stampCount: 1 });
+    assert.deepEqual(await entriesOf(piece.itemId), [[stampId, 1, null]]);
+
+    // The history lists both, and marks the piece as one — not offered for a one-press repeat.
+    const { batches } = await listScans(userId, { purchaseId });
+    const history = identifyHistory(batches);
+    assert.deepEqual(
+      history.map((e) => [e.tileId, e.piece]).sort(),
+      [
+        [tileIds[0], true],
+        [tileIds[1], false],
+      ].sort()
+    );
+  });
+
   it("repeats a cover onto the next tile exactly, and a run ticked as one cover is a cover each (#750)", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     const stamps = [

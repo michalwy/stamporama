@@ -94,6 +94,7 @@ import {
   ListChecks,
   ListTree,
   Lock,
+  Mail,
   LockOpen,
   Pin,
   PinOff,
@@ -391,6 +392,8 @@ const GLYPHS = {
   random: Dices,
   /** A stamp's own subject, where a *stamp* is one thing among others. */
   stamp: Stamp,
+  /** A cover or a fragment — a piece of paper carrying stamps (#2401). */
+  piece: Mail,
   /** A variant to be identified (#338–#342). */
   variant: Diamond,
 

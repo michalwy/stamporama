@@ -20,11 +20,20 @@ import {
   pickedChipLabels,
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
-import type { ItemStampRow } from "@/app/c/[collectionSlug]/inventory/item-stamps-field";
+import {
+  PieceStampsPicker,
+  type ItemStampRow,
+} from "@/app/c/[collectionSlug]/inventory/item-stamps-field";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import type { CatalogLabelSubject } from "@/lib/area-vendor";
 import { describesMoreThanTheStamp } from "@/lib/item-stamp-entries";
-import { carriedStampAnswers, type CarriedStampAnswer } from "@/lib/tile-identify-history";
+import {
+  carriedStampAnswers,
+  stampAnswers,
+  type CarriedStampAnswer,
+} from "@/lib/tile-identify-history";
+import { rowsInTickOrder } from "@/lib/item-stamp-additions";
+import type { IdentifyAs } from "@/lib/piece-valuation";
 import { useAreaVendorMaps, type AreaVendorMaps } from "./use-area-vendor-maps";
 import { TileStampsDialog } from "./tile-stamps-dialog";
 import {
@@ -156,9 +165,10 @@ function pickedFromSelection(
 }
 
 /** Which dialog of the chain is up. The first three are one piece's — or one stamp's for a run
- * (#596); the last two are a run identified as the stamps of a checklist (#1220, #1225): the picker
- * browsed for a checklist, then the run itself. */
-export type TileStep = "none" | "picker" | "condition" | "issue-picker" | "issue-run";
+ * (#596); `piece-picker` is *Identify as a piece*'s picker, ticking every stamp on it (#2401); the
+ * last two are a run identified as the stamps of a checklist (#1220, #1225): the picker browsed for a
+ * checklist, then the run itself. */
+export type TileStep = "none" | "picker" | "piece-picker" | "condition" | "issue-picker" | "issue-run";
 
 /** The checklist a run is built on (#1225), and the issue row it was picked from. */
 export interface TileRunChecklist {
@@ -178,6 +188,8 @@ export interface TileIdentifyChainState {
   setTileSelection: (selection: PendingSelection | null) => void;
   tileRepeat: IdentifyHistoryAnswers | null;
   setTileRepeat: (answers: IdentifyHistoryAnswers | null) => void;
+  /** Whether the tile is being identified as a loose stamp or as a piece (#2401). */
+  tileIdentifyAs: IdentifyAs;
   tileCorrection: TileCorrection | null;
   setTileCorrection: (correction: TileCorrection | null) => void;
   /** Every stamp on the piece (#750), or null for a piece that is simply the stamp picked. */
@@ -194,6 +206,8 @@ export interface TileIdentifyChainState {
   resetTileIntake: () => void;
   /** What `ScansCard.onIdentifyTiles` is given. */
   onIdentifyTiles: (pieces: IdentifiedPiece[], pick?: TileStampPick) => void;
+  /** What `ScansCard.onIdentifyAsPiece` is given (#2401) — one tile, identified as a piece. */
+  onIdentifyAsPiece: (pieces: IdentifiedPiece[]) => void;
   /** What `ScansCard.onIdentifyIssueRun` is given (#1220) — the run, in the order it was ticked. */
   onIdentifyIssueRun: (pieces: IdentifiedPiece[]) => void;
   /** What `ScansCard.onReidentifyTile` is given. */
@@ -242,6 +256,13 @@ export function useTileIdentifyChain(input: {
    */
   const [tileRepeat, setTileRepeat] = useState<IdentifyHistoryAnswers | null>(null);
   /**
+   * **Loose stamp or piece** (#2401), decided before the chain starts and held through it. The
+   * ordinary identification is a loose stamp's only — no further stamps, no format of a kind — and a
+   * cover or a fragment is identified through *Identify as a piece*, whose picker ticks every stamp
+   * on it and whose condition step opens as a piece's. A correction follows what the copy is.
+   */
+  const [tileIdentifyAs, setTileIdentifyAs] = useState<IdentifyAs>("loose");
+  /**
    * The tile whose identification is being **corrected** — *Identify again* on a tile that already
    * became a copy. Null on every ordinary intake, and what it changes is only the chain's two ends:
    * the condition step opens on the copy's own answers instead of the remembered defaults, and the
@@ -278,6 +299,7 @@ export function useTileIdentifyChain(input: {
     setTileIntake([]);
     setTileSelection(null);
     setTileRepeat(null);
+    setTileIdentifyAs("loose");
     setTileCorrection(null);
     setTileStamps(null);
     setTileLeadPick(null);
@@ -293,6 +315,7 @@ export function useTileIdentifyChain(input: {
     setTileSelection,
     tileRepeat,
     setTileRepeat,
+    tileIdentifyAs,
     tileCorrection,
     setTileCorrection,
     tileStamps,
@@ -309,6 +332,7 @@ export function useTileIdentifyChain(input: {
       setTileIntake(pieces);
       setTileSelection(null);
       setTileRepeat(null);
+      setTileIdentifyAs("loose");
       setTileCorrection(null);
       setTileStamps(null);
       setTileLeadPick(null);
@@ -316,9 +340,23 @@ export function useTileIdentifyChain(input: {
       setError(undefined);
       setTileStep("issue-picker");
     },
+    // *Identify as a piece* (#2401): the picker ticks every stamp on it, the first ticked leading,
+    // and the condition step opens as a piece's. One tile only — a piece is one piece of paper.
+    onIdentifyAsPiece: (pieces) => {
+      setTileIntake(pieces);
+      setTileSelection(null);
+      setTileRepeat(null);
+      setTileIdentifyAs("piece");
+      setTileCorrection(null);
+      setTileStamps(null);
+      setTileLeadPick(null);
+      setError(undefined);
+      setTileStep("piece-picker");
+    },
     onIdentifyTiles: (pieces, pick) => {
       setTileIntake(pieces);
       setTileRepeat(null);
+      setTileIdentifyAs("loose");
       setTileStamps(null);
       setTileLeadPick(null);
       setError(undefined);
@@ -347,9 +385,14 @@ export function useTileIdentifyChain(input: {
     onReidentifyTile: (piece, copy) => {
       setTileIntake([piece]);
       setTileRepeat(null);
+      // A piece is corrected as a piece (#2401) — read off its condition, which a piece alone has
+      // none of (#2383) — opening on its whole list in the piece picker; a loose stamp in the
+      // ordinary flow.
+      const isPieceCopy = copy.conditionId === null;
+      setTileIdentifyAs(isPieceCopy ? "piece" : "loose");
       // A cover is corrected as a cover (#750): the editor opens on the stamps the copy carries, and
       // the save sends the whole list back, so a stamp struck off here comes off the copy.
-      setTileStamps(draftsFromAnswers(carriedStampAnswers(copy)));
+      setTileStamps(draftsFromAnswers(isPieceCopy ? stampAnswers(copy) : carriedStampAnswers(copy)));
       setTileLeadPick(null);
       setError(undefined);
       setTileCorrection({
@@ -374,7 +417,8 @@ export function useTileIdentifyChain(input: {
           lotId: "",
         },
       });
-      setTileStep("picker");
+      setTileSelection(null);
+      setTileStep(isPieceCopy ? "piece-picker" : "picker");
     },
     // A row of the history, pressed (#757, #595 before it): the picker is skipped, because its
     // answer is the record being repeated, and the chain resumes at the step that would have
@@ -390,6 +434,8 @@ export function useTileIdentifyChain(input: {
         name: answers.name,
       });
       setTileRepeat(answers);
+      // A piece is never repeated (#2401): its row in the history is listed, not offered.
+      setTileIdentifyAs("loose");
       setTileCorrection(null);
       // The stamps on the piece are part of what is repeated (#750): the next cover franked the same
       // way is identified the way this one was, rather than as its first stamp alone.
@@ -476,6 +522,7 @@ export function TileIdentifyChainDialogs({
     setTileSelection,
     tileRepeat,
     setTileRepeat,
+    tileIdentifyAs,
     tileCorrection,
     tileStamps,
     setTileStamps,
@@ -535,9 +582,12 @@ export function TileIdentifyChainDialogs({
           },
         ]
       : []);
-  /** The summary the condition step draws — only when the list says more than the stamp. */
+  /** The summary the condition step draws — only when the list says more than the stamp, or always
+   * for a piece (#2401), whose list is the piece's even when it is one stamp. */
   const carriedSummary: CarriedStampLine[] | undefined =
-    tileStamps && describesMoreThanTheStamp(tileStamps)
+    tileStamps &&
+    tileStamps.length > 0 &&
+    (tileIdentifyAs === "piece" || describesMoreThanTheStamp(tileStamps))
       ? tileStamps.map((draft) => {
           const picked = pickedOf(draft, maps);
           const format = formats.find((f) => f.id === draft.formatId);
@@ -679,6 +729,47 @@ export function TileIdentifyChainDialogs({
         />
       )}
 
+      {/* Identifying a tile as a piece (#2401): tick every stamp on it, the first ticked leading.
+          Opened on the list the piece already has — coming back from the condition step, or
+          correcting a piece — so ticking one more keeps what the list was given. */}
+      {tileStep === "piece-picker" && tileIntake.length > 0 && (
+        <PieceStampsPicker
+          collectionId={collectionId}
+          areas={areas}
+          title="Stamps on this piece — the first ticked leads"
+          emptyHint="Tick every stamp on the piece, from any issue — the first one ticked leads the piece."
+          actionLabel={(n) => `Continue with ${n} ${n === 1 ? "stamp" : "stamps"}`}
+          inTickOrder
+          initial={[
+            ...new Map(
+              (tileStamps ?? []).map((draft) => [draft.stampId, pickedOf(draft, maps)] as const)
+            ).values(),
+          ]}
+          // The piece, for the whole of the identification (#592).
+          leading={
+            <IdentifiedPieceAside collectionId={collectionId} pieces={tileIntake} scanning={scanning} />
+          }
+          asideWidth="26rem"
+          onAdd={(ticked) => {
+            // Each new tick a single of quantity 1; a stamp already listed keeps its rows.
+            const drafts = rowsInTickOrder(tileStamps ?? [], ticked, (picked) => ({
+              key: `ticked-${picked.stampId}`,
+              stampId: picked.stampId,
+              quantity: 1,
+              formatId: "",
+              picked,
+            }));
+            const lead = pickedOf(drafts[0], maps);
+            setTileStamps(drafts);
+            setTileSelection(pickedSelection(lead));
+            setTileLeadPick(lead);
+            setError(undefined);
+            setTileStep("condition");
+          }}
+          onClose={resetTileIntake}
+        />
+      )}
+
       {/* …then its condition, its lot, and everything else intake asks */}
       {tileStep === "condition" && tileIntake.length > 0 && tileSelection && (
         <IntakeConditionDialog
@@ -727,7 +818,9 @@ export function TileIdentifyChainDialogs({
           // held copies are compared. One tile as one stamp only — a copy is replaced by one copy, and
           // a piece that is one of several variants is not yet a copy of any one of them. Not on a
           // correction, which re-answers what a copy is rather than identifying one.
-          offerReplaces={!tileCorrection && tileIntake.length === 1 && !candidates}
+          offerReplaces={
+            !tileCorrection && tileIdentifyAs === "loose" && tileIntake.length === 1 && !candidates
+          }
           // The tiles' marks (#1550) — given with the card in hand before identifying — seed the
           // condition and certificate, each labelled with where it came from. Not on a correction,
           // which opens on what the copy already is.
@@ -753,7 +846,10 @@ export function TileIdentifyChainDialogs({
           // The stamps on the piece (#750): listed in the summary once there is more than the stamp
           // itself, and one press from the editor that lists them.
           carriedStamps={carriedSummary}
-          onEditStamps={() => setEditingStamps(true)}
+          // A loose stamp or a piece (#2401): the list of stamps is a piece's only, so the ordinary
+          // identification offers no *Another stamp on this piece…*.
+          identifyAs={tileIdentifyAs}
+          onEditStamps={tileIdentifyAs === "piece" ? () => setEditingStamps(true) : undefined}
           onBack={() => {
             if (!isPending) {
               setError(undefined);
@@ -764,7 +860,8 @@ export function TileIdentifyChainDialogs({
               // with it for the same reason (#750).
               if (tileRepeat) setTileStamps(null);
               setTileRepeat(null);
-              setTileStep("picker");
+              // A piece goes back to its own picker, with its stamps still ticked (#2401).
+              setTileStep(tileIdentifyAs === "piece" ? "piece-picker" : "picker");
             }
           }}
           onClose={resetTileIntake}
