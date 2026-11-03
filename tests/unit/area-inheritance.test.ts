@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { CollectionAreaData } from "../../src/lib/areas";
 import {
   coverSymbolAreaIds,
+  inheritedStillValid,
   resolveEffectiveCatalogPrefix,
   resolveEffectiveCoverSymbols,
   resolveEffectivePrimaryCatalogNameId,
@@ -170,5 +171,24 @@ describe("resolveEffectiveCoverSymbols", () => {
   it("is what Same as parent shows in the area dialog", () => {
     assert.equal(resolveInheritedAreaValues(reich, "gg").inheritedCoverSymbols, true);
     assert.equal(resolveInheritedAreaValues(reich, "gg-locals").inheritedCoverSymbols, false);
+  });
+});
+
+describe("inheritedStillValid (#2385)", () => {
+  const tree = [
+    area("europe", null, { stillValidForPostage: true }),
+    area("germany", "europe"),
+    area("berlin", "germany", { stillValidForPostage: false }),
+    area("asia", null),
+  ];
+
+  it("names the nearest area that says either way", () => {
+    assert.deepEqual(inheritedStillValid(tree, "germany"), { valid: true, areaName: "europe" });
+    assert.deepEqual(inheritedStillValid(tree, "berlin"), { valid: false, areaName: "berlin" });
+  });
+
+  it("is not valid, from nowhere, when no area says", () => {
+    assert.deepEqual(inheritedStillValid(tree, "asia"), { valid: false, areaName: null });
+    assert.deepEqual(inheritedStillValid(tree, null), { valid: false, areaName: null });
   });
 });

@@ -1,5 +1,6 @@
 import type { CollectionAreaData, AreaCatalogEntry } from "./areas";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "./area-vendor";
+import type { InheritedStillValid } from "./still-valid-postage";
 
 /**
  * Everything a new or edited area resolves off its ancestors, so the area dialog can show each
@@ -68,6 +69,23 @@ export function resolveEffectiveStillValid(
     depth++;
   }
   return false;
+}
+
+/** {@link resolveEffectiveStillValid} with the area that answers named (#2385) — what an Edit
+ * dialog's *same as parent* resolves to, starting at the parent (or, for an issue, its area). */
+export function inheritedStillValid(
+  areas: readonly (StillValidArea & Pick<CollectionAreaData, "name">)[],
+  areaId: string | null
+): InheritedStillValid {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  let current = areaId ? byId.get(areaId) : undefined;
+  for (let depth = 0; current && depth < 50; depth++) {
+    if (current.stillValidForPostage !== null) {
+      return { valid: current.stillValidForPostage, areaName: current.name };
+    }
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+  return { valid: false, areaName: null };
 }
 
 /** The nearest ancestor-or-self area's anchoring markets (#1634) — the whole list, as the server's

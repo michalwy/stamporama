@@ -558,8 +558,8 @@ export async function updateCollectionArea(
 }
 
 /**
- * Mark an area's stamps still valid for postage, or not (#2358) — from the area's ⋮ menu, so apart
- * from the area form. Null follows the parent area.
+ * Mark an area's stamps still valid for postage, or not (#2358). Null follows the parent area. Set by
+ * the area's Edit dialog after `updateCollectionArea` (#2385), which restates the other fields.
  */
 export async function setAreaStillValidForPostage(
   ownerId: string,

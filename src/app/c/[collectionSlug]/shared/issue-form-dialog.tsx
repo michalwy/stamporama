@@ -47,6 +47,14 @@ import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/cat
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { Icon } from "@/app/icons";
+import { inheritedStillValid } from "@/lib/area-inheritance";
+import {
+  stillValidChoiceOf,
+  stillValidChoiceToStore,
+  stillValidInheritedLabel,
+  type StillValidChoice,
+} from "@/lib/still-valid-postage";
+import { InfoHint } from "./info-hint";
 import { TextInput } from "./text-input";
 import { formControl } from "@/app/control-style";
 
@@ -966,6 +974,44 @@ export function IssueDialog(props: IssueDialogProps) {
     />
   );
 
+  // Still valid for postage (#2385; once the row's own ⋮ action, #2358): the issue's own mark, else
+  // its area's — named, with where it comes from. What is stored is only what the area does not
+  // already say, so a change to the area still reaches the issues that agreed with it.
+  const [stillValid, setStillValid] = useState<StillValidChoice>(() =>
+    isCreate ? "" : stillValidChoiceOf(props.issue.stillValidForPostage)
+  );
+  const areaStillValid = useMemo(
+    () => inheritedStillValid(areas, selectedAreaId || null),
+    [areas, selectedAreaId]
+  );
+  const stillValidField = !isCreate && (
+    <div style={{ marginTop: "1.25rem" }}>
+      <LabelWithError htmlFor="f-issue-still-valid">Still valid for postage</LabelWithError>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <select
+          id="f-issue-still-valid"
+          value={stillValid}
+          onChange={(e) => setStillValid(e.target.value as StillValidChoice)}
+          disabled={isPending}
+          style={{ ...INPUT_STYLE, width: "20rem", cursor: "pointer" }}
+        >
+          <option value="">{stillValidInheritedLabel("Same as its area", areaStillValid)}</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+        <InfoHint>
+          A stamp that can still frank a letter has no on-cover price in Michel; the Michel method works
+          one out from its used and never-hinged prices.
+        </InfoHint>
+      </div>
+      <input
+        type="hidden"
+        name="stillValidForPostage"
+        value={String(stillValidChoiceToStore(stillValid, areaStillValid.valid) ?? "")}
+      />
+    </div>
+  );
+
   // The collector's own labels on the issue (#1192), saved with the rest of it. The issue's own:
   // they say nothing about its stamps.
   const tagsField = (
@@ -1044,7 +1090,12 @@ export function IssueDialog(props: IssueDialogProps) {
                 : undefined
             }
             catalogAfter={rangeWarning}
-            after={tagsField}
+            after={
+              <>
+                {stillValidField}
+                {tagsField}
+              </>
+            }
           />
         </DialogBody>
         <DialogActions

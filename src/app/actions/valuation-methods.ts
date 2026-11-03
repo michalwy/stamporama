@@ -5,11 +5,7 @@ import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { isValuationMethod } from "@/lib/piece-valuation";
-import {
-  setAreaValuationMethod,
-  setCollectionValuationMethod,
-  setValuationMethodRole,
-} from "@/lib/valuation-methods";
+import { setCollectionValuationMethod, setValuationMethodRole } from "@/lib/valuation-methods";
 import { isMethodRole, methodReadsRole } from "@/lib/valuation-method-roles";
 
 export type ValuationMethodActionState = { status: "success" } | { status: "error"; message: string };
@@ -29,23 +25,6 @@ export async function setCollectionValuationMethodAction(
   if (!isValuationMethod(method)) return { status: "error", message: "Choose a valuation method." };
   try {
     await setCollectionValuationMethod(session.user.id, collectionId, method);
-    return { status: "success" };
-  } catch {
-    return { status: "error", message: "Failed to save the valuation method. Please try again." };
-  }
-}
-
-/** An area's own valuation method (#2359); blank follows the parent. */
-export async function setAreaValuationMethodAction(
-  areaId: string,
-  method: string
-): Promise<ValuationMethodActionState> {
-  const session = await getSession();
-  if (method && !isValuationMethod(method)) {
-    return { status: "error", message: "Choose a valuation method." };
-  }
-  try {
-    await setAreaValuationMethod(session.user.id, areaId, isValuationMethod(method) ? method : null);
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to save the valuation method. Please try again." };

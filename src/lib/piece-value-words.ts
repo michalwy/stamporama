@@ -50,7 +50,13 @@ export function methodSourceText(piece: Pick<PieceValuation, "methodSource" | "i
 /** The first choice beside a piece's method (#2369), naming what it inherits and from where:
  *  *As inherited (Michel, from Germany)*. */
 export function inheritedMethodLabel(inherited: InheritedMethod): string {
-  return `As inherited (${VALUATION_METHOD_LABELS[inherited.method]}, ${inheritedFrom(inherited)})`;
+  return methodInheritedLabel("As inherited", inherited);
+}
+
+/** An inheriting choice led by `lead`, naming the method and where it comes from — an area's
+ *  *Same as parent (Michel, from Europe)* in its Edit dialog (#2385). */
+export function methodInheritedLabel(lead: string, inherited: InheritedMethod): string {
+  return `${lead} (${VALUATION_METHOD_LABELS[inherited.method]}, ${inheritedFrom(inherited)})`;
 }
 
 function inheritedFrom(inherited: InheritedMethod): string {

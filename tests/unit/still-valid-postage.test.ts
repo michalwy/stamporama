@@ -3,9 +3,14 @@ import assert from "node:assert/strict";
 import type { Decimal } from "@prisma/client/runtime/client";
 import {
   resolveStillValid,
+  stillValidChoiceOf,
+  stillValidChoiceToStore,
   stillValidCoverPrice,
+  stillValidInheritedLabel,
   stillValidMarkToStore,
 } from "../../src/lib/still-valid-postage";
+import { methodToStore } from "../../src/lib/piece-valuation";
+import { methodInheritedLabel } from "../../src/lib/piece-value-words";
 import { pickStillValidPrice, type RawCatalogPrice } from "../../src/lib/catalog-price";
 
 // Michel's rule for the on-cover prices of stamps still valid for postage (#2358): the used price
@@ -101,5 +106,47 @@ describe("a still-valid stamp's cover price by Michel's rule (#2358, #2375)", ()
   it("gives nothing without a used price, and carries a marked one's mark", () => {
     assert.equal(pick([price("mnh", 5)]).picked, null);
     assert.equal(pick([price("u", null, { mark: "nonexistent" })]).mark, "nonexistent");
+  });
+});
+
+describe("the Edit dialogs' still-valid and method fields (#2385)", () => {
+  it("opens on the stored mark, blank following the parent", () => {
+    assert.equal(stillValidChoiceOf(null), "");
+    assert.equal(stillValidChoiceOf(true), "yes");
+    assert.equal(stillValidChoiceOf(false), "no");
+  });
+
+  it("stores only what differs from what the parent says", () => {
+    assert.equal(stillValidChoiceToStore("", true), null);
+    assert.equal(stillValidChoiceToStore("yes", true), null);
+    assert.equal(stillValidChoiceToStore("no", true), false);
+    assert.equal(stillValidChoiceToStore("yes", false), true);
+    assert.equal(stillValidChoiceToStore("no", false), null);
+  });
+
+  it("stores a method only when it is not the inherited one", () => {
+    assert.equal(methodToStore("", "michel"), null);
+    assert.equal(methodToStore("michel", "michel"), null);
+    assert.equal(methodToStore("fischer", "michel"), "fischer");
+    assert.equal(methodToStore("nonsense", "michel"), null);
+  });
+
+  it("names what same as parent resolves to and from where", () => {
+    assert.equal(
+      stillValidInheritedLabel("Same as parent", { valid: true, areaName: "Germany" }),
+      "Same as parent (yes, from Germany)"
+    );
+    assert.equal(
+      stillValidInheritedLabel("Same as its area", { valid: false, areaName: null }),
+      "Same as its area (no)"
+    );
+    assert.equal(
+      methodInheritedLabel("Same as parent", { method: "fischer", areaId: "de", areaName: "Germany" }),
+      "Same as parent (Fischer, from Germany)"
+    );
+    assert.equal(
+      methodInheritedLabel("Not set", { method: "michel", areaId: null, areaName: null }),
+      "Not set (Michel, the collection's default)"
+    );
   });
 });

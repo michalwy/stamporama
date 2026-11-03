@@ -54,10 +54,39 @@ export function resolveStillValid(
 }
 
 /**
- * What to store when the collector marks or unmarks an issue or an area from its ⋮ menu: nothing of
- * its own when what it inherits already says so — so a later change above still reaches it — and
- * the explicit value otherwise. Unmarking an issue under a marked area stores `false`.
+ * What to store when the collector marks or unmarks an issue or an area: nothing of its own when what
+ * it inherits already says so — so a later change above still reaches it — and the explicit value
+ * otherwise. Unmarking an issue under a marked area stores `false`.
  */
 export function stillValidMarkToStore(inherited: boolean, wanted: boolean): boolean | null {
   return wanted === inherited ? null : wanted;
+}
+
+/** The *Still valid for postage* field of an area's or an issue's Edit dialog (#2385): blank follows
+ *  the parent, else yes or no. */
+export type StillValidChoice = "" | "yes" | "no";
+
+/** The field's choice for a stored mark — null is *same as parent*. */
+export function stillValidChoiceOf(mark: boolean | null): StillValidChoice {
+  return mark === null ? "" : mark ? "yes" : "no";
+}
+
+/** What the Edit dialog stores for a choice (#2385): yes or no only where it differs from what the
+ *  parent says — {@link stillValidMarkToStore} — and nothing for *same as parent*. */
+export function stillValidChoiceToStore(choice: StillValidChoice, inherited: boolean): boolean | null {
+  return choice === "" ? null : stillValidMarkToStore(inherited, choice === "yes");
+}
+
+/** What *same as parent* resolves to, and the nearest area that says so — null when none does and
+ *  the stamps are not still valid. */
+export interface InheritedStillValid {
+  valid: boolean;
+  areaName: string | null;
+}
+
+/** The *same as parent* choice, naming what it resolves to and from where (#2385): *Same as parent
+ *  (yes, from Germany)*. */
+export function stillValidInheritedLabel(lead: string, inherited: InheritedStillValid): string {
+  const answer = inherited.valid ? "yes" : "no";
+  return `${lead} (${inherited.areaName ? `${answer}, from ${inherited.areaName}` : answer})`;
 }
