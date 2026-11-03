@@ -70,6 +70,7 @@ import {
 import { onPiecePriceHeading } from "./piece-value-breakdown";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
 import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import { PieceStampThumb } from "./piece-stamp-thumb";
 import {
   effectiveStampPhotoChoice,
   stampPhotoFormValue,
@@ -1068,7 +1069,10 @@ function IntakeConditionDialog({
                           return (
                             <li key={i} style={{ marginTop: "0.125rem" }}>
                               <div style={PIECE_PRICE_ROW}>
-                                <span style={{ flex: 1, minWidth: 0 }}>
+                                {/* The stamp's own picture (#2390), so a set's rows that read alike can
+                                    be checked against the piece beside them. */}
+                                <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                  <PieceStampThumb collectionId={collectionId} stampId={line.entry.stampId} size="2.5rem" />
                                   <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
                                 </span>
                                 {row &&

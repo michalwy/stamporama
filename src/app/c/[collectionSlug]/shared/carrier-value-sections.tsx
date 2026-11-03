@@ -35,6 +35,7 @@ import {
   type PiecePriceEntry,
 } from "./piece-stamp-prices";
 import { Empty, Muted, numStyle } from "./price-matrix";
+import { PieceStampThumb } from "./piece-stamp-thumb";
 import { StampIdentity } from "./stamp-identity";
 import { useAreaVendorMaps } from "./use-area-vendor-maps";
 
@@ -447,19 +448,28 @@ function StampPriceTable({
                   ) : null
                 }
                 stamp={
-                  <StampIdentity
-                    stamp={{
-                      name: entryRow.stampName,
-                      catalogNumbers: entryRow.catalogNumbers,
-                      colnectId: entryRow.colnectId,
-                      subtype: entryRow.subtype,
-                    }}
-                    vendorMap={vendorMapFor(entryRow.areaId, entryRow.issueId)}
-                    primaryVendorId={primaryVendorByArea.get(entryRow.areaId ?? "") ?? null}
-                    size="small"
-                  />
+                  <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    {/* The stamp's own picture (#2390). */}
+                    <PieceStampThumb collectionId={collectionId} stampId={component.stampId} size="2.5rem" />
+                    <StampIdentity
+                      stamp={{
+                        name: entryRow.stampName,
+                        catalogNumbers: entryRow.catalogNumbers,
+                        colnectId: entryRow.colnectId,
+                        subtype: entryRow.subtype,
+                      }}
+                      vendorMap={vendorMapFor(entryRow.areaId, entryRow.issueId)}
+                      primaryVendorId={primaryVendorByArea.get(entryRow.areaId ?? "") ?? null}
+                      size="small"
+                    />
+                  </span>
                 }
-                format={entryRow.formatName}
+                // Named in full (#2390): the entry's price is read at this format.
+                format={
+                  entryRow.formatName && entryRow.formatAbbreviation
+                    ? `${entryRow.formatName} (${entryRow.formatAbbreviation})`
+                    : entryRow.formatName
+                }
                 quantity={entryRow.quantity}
                 prices={entry.columns.map((price) =>
                   !row ? (
