@@ -1142,7 +1142,9 @@ What is new is the list of stamps on it. Open the copy's **Edit** dialog and the
 that list: add a stamp with the same picker you always used, drag the rows into the order the stamps
 sit on the piece, and give each one a **quantity** and a **format of its own** where it needs them —
 a block of four *on* the cover is one entry with the format *Block of 4*, never four entries. The
-same stamp twice loose is one entry of quantity **2**.
+same stamp twice loose is one entry of quantity **2**. A row's format list names the formats as the
+copy's own **Format** does — full name with the abbreviation, *Single* first — and where the row is
+too narrow for the whole name, hovering the control names the chosen format in full.
 
 A cover franked with eight stamps is **one trip through the picker**, not eight. **Browse…** stays
 open while you tick every stamp on the piece — pressing a stamp ticks it, pressing it again takes it
