@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
 import type { Franking, ValuationMethod } from "@/lib/piece-valuation";
-import type { CopyValuation, PieceValuation } from "@/lib/valuation";
+import type { CopyValuation, PieceValuation, ValueModifier } from "@/lib/valuation";
 import type { TypedPiecePrice } from "@/lib/piece-price-entry";
 import { PieceArithmetic } from "./piece-value-breakdown";
 
@@ -28,6 +28,8 @@ export interface PiecePreviewSubject {
   itemId: string | null;
   /** Stamp prices typed and not yet saved (#2368), read as if they were. */
   typed: readonly TypedPiecePrice[];
+  /** The value modifier typed in the step (#2398); null for none. */
+  valueModifier?: ValueModifier | null;
 }
 
 /** The preview's value, or null while there is none — no condition yet, or not a piece. */
@@ -45,6 +47,7 @@ export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuat
         method: subject!.method,
         itemId: subject!.itemId,
         typed: subject!.typed,
+        valueModifier: subject!.valueModifier ?? null,
       });
     },
     // A change of franking re-reads; the old figure stays on screen until the new one is in, rather
@@ -59,7 +62,8 @@ export function componentIdAt(subject: PiecePreviewSubject, index: number): stri
   return `${subject.itemId ?? "preview"}:${index}`;
 }
 
-/** The computed value under the stamps, and how it was reached. */
+/** The computed value under the stamps, and how it was reached — the method's figure, before the
+ *  value modifier (#2398), whose result is stated under its own fields. */
 export function IdentifiedPieceFigure({
   value,
   labels,
@@ -81,7 +85,7 @@ export function IdentifiedPieceFigure({
           <span style={{ color: "var(--color-text-muted)" }}>none — no price this method reads is recorded</span>
         ) : (
           <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-            {value.amount} {value.currency}
+            {value.valueModifier?.fullAmount ?? value.amount} {value.currency}
           </strong>
         )}
         {piece.partial && !value.unpriced && (

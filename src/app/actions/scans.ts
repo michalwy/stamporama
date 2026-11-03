@@ -34,6 +34,7 @@ import {
 } from "@/lib/scan-sheets";
 import { parseTileOwnAnswers, type MarkPatch } from "@/lib/tile-marks";
 import { faultEntriesFrom, parseFaultEntries } from "@/lib/fault-entry";
+import { parseValueModifierInput } from "@/lib/value-modifier";
 import { parseTagEntries, tagEntriesFrom } from "@/lib/tag-entry";
 import type { Box } from "@/lib/scan-boxes";
 import {
@@ -378,6 +379,13 @@ export async function identifyTilesAction(
   }
   const conditionId = str("conditionId");
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
+  // The value modifier (#2398) — the copy dialog's three fields and reading; blank is none.
+  const modifier = parseValueModifierInput(
+    str("valueModifierPercent") ?? "",
+    str("valueModifierAmount") ?? "",
+    str("valueModifierNote") ?? ""
+  );
+  if (!modifier.ok) return { status: "error", message: modifier.message };
   try {
     const copies = await identifyTilesAsNewCopies(session.user.id, tileIds, {
       // Which lot the created copies belong to (#586). Absent is a complete answer on a purchase
@@ -408,6 +416,7 @@ export async function identifyTilesAction(
       faults: parseFaultEntries(formData.get("copyFaults")) ?? [],
       // The copies' tags (#1599) — the copy dialog's own field and reading. Absent is none.
       tags: parseTagEntries(formData.get("copyTags")) ?? [],
+      valueModifier: modifier.value,
       // The copy held that the new one replaces (#1937) — a replacement pair, recorded with it.
       replacesItemId: str("replacesItemId"),
     });

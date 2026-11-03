@@ -37,6 +37,7 @@ import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { VALUE_MODIFIER_HINT } from "@/app/c/[collectionSlug]/shared/value-modifier-fields";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import {
@@ -120,12 +121,8 @@ const FORM_COLUMN: React.CSSProperties = {
 const FAULT_REDUCTION_HINT =
   "How much this copy's faults take off its value, in percent. Every value of the copy — catalog and market, and every total built from them — is lowered by it. Leave empty for none.";
 
-/** The value modifier's hover (#2357). */
 const FRANKING_HINT =
   "How the piece was posted. Rate-correct: franked for the postal rate. Philatelic, posted: overfranked, a set cover and the like, genuinely posted. Read only for a piece on a cover.";
-
-const VALUE_MODIFIER_HINT =
-  "A catalogue exception this copy carries — a cancellation surcharge, a rare usage. Its catalog value is multiplied by the percentage, then the amount is added (in the catalog's own currency), and only then do faults take their reduction. The note says why, and is shown wherever the modifier is. Leave both figures empty for none.";
 
 function GroupLabel({
   htmlFor,

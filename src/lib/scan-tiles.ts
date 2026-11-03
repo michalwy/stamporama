@@ -23,6 +23,8 @@ import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 import type { ArrivingCopy } from "./want-rules";
 import type { TileOwnAnswer } from "./tile-marks";
 import type { FaultEntry } from "./fault-entry";
+import type { ValueModifier } from "./valuation";
+import { assertValueModifier, valueModifierColumns } from "./value-modifier";
 import { giveNewCopiesFaults } from "./faults";
 import type { TagEntry } from "./tag-entry";
 import { giveNewCopiesTags } from "./tags";
@@ -186,6 +188,12 @@ export interface TileIdentification {
    */
   tags?: readonly TagEntry[] | null;
   /**
+   * The value modifier the step gave the copies (#2398) — the copy dialog's three fields and reading.
+   * **Every** copy takes it, as every copy takes the step's condition. Absent or null is none: a
+   * modifier belongs to one piece and is never carried over from anywhere.
+   */
+  valueModifier?: ValueModifier | null;
+  /**
    * A copy already held that the new copy **replaces** (#1937) — *Replaces #1234*, a replacement pair
    * (ADR-0070) recorded as the copy is created. One tile only: a copy is replaced by one copy, so a
    * pass over several tiles has no single answer. Absent is no pair.
@@ -252,6 +260,8 @@ export async function identifyTilesAsNewCopies(
   // tile named twice would otherwise create two copies and give the second one no images, the images
   // having moved to the first.
   const tiles = await loadSelectedTiles(ownerId, tileIds);
+  // Refused as a sentence before a copy exists, not as a failed write after (#2398).
+  assertValueModifier(input.valueModifier);
   const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, {
     formatId: input.formatId,
     stampCount: input.stamps?.length ? stampTotal(input.stamps) : 1,
@@ -308,13 +318,14 @@ export async function identifyTilesAsNewCopies(
     for (const copy of copies) await setCopyStamp(ownerId, copy.itemId, input.candidateStampIds);
   }
   // The piece's franking (#2359) and own method (#2369), as the step answered them beside the
-  // stamps on it.
-  if (input.franking || input.valuationMethod) {
+  // stamps on it, and the value modifier (#2398) — on every copy of the pass.
+  if (input.franking || input.valuationMethod || input.valueModifier) {
     await prisma.item.updateMany({
       where: { id: { in: copies.map((c) => c.itemId) } },
       data: {
         ...(input.franking ? { franking: input.franking } : {}),
         ...(input.valuationMethod ? { valuationMethod: input.valuationMethod } : {}),
+        ...(input.valueModifier ? valueModifierColumns(input.valueModifier) : {}),
       },
     });
   }

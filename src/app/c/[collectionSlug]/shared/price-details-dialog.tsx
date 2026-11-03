@@ -94,7 +94,8 @@ export function PriceDetailsDialog({
   /** A price observation's row menu is open (#1633): the menu has its own Escape listener and is not
    * an escape layer, so the window stops being dismissable until it closes (#361). */
   const [menuOpen, setMenuOpen] = useState(false);
-  /** A piece's stamp prices are typed and not saved (#2368): closing asks first, as it keeps nothing. */
+  /** A piece's stamp prices or value modifier are typed and not saved (#2368, #2398): closing asks
+   *  first, as it keeps nothing. */
   const [unsavedPrices, setUnsavedPrices] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
 
@@ -152,7 +153,7 @@ export function PriceDetailsDialog({
         {confirmingClose && (
           <ConfirmDialog
             title="Close without saving?"
-            message="The stamp prices typed here are not saved. Close the window and they are lost."
+            message="The stamp prices or the value modifier typed here are not saved. Close the window and they are lost."
             actionLabel="Close without saving"
             zIndexBase={120}
             onClose={() => setConfirmingClose(false)}

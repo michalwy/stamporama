@@ -200,6 +200,7 @@ export function IntakeCatalogValueField({
   useEffect(() => {
     onChange({
       catalogNameId: target?.catalogNameId ?? null,
+      currency: target?.currency ?? null,
       // Blank while the variant section stands in for the input (#1317, #1337): the umbrella's own figure is still
       // prefilled into `amount` underneath, and the step must not write it back.
       amount: gridMode ? "" : amount,

@@ -128,3 +128,53 @@ export function describeValueModifierState(modified: number, count: number): str
   if (modified === count) return `All ${count} have a modifier.`;
   return `${modified} of ${count} ${modified === 1 ? "has" : "have"} a modifier.`;
 }
+
+/** The modifier's three fields as typed (#2398) — identification and the Valuation window hold them
+ *  as text, read through {@link parseValueModifierInput}. */
+export interface ValueModifierDraft {
+  percent: string;
+  amount: string;
+  note: string;
+}
+
+/** No modifier typed — what identification opens on, never the last tile's (#2398). */
+export const EMPTY_VALUE_MODIFIER_DRAFT: ValueModifierDraft = { percent: "", amount: "", note: "" };
+
+/** The fields a modifier on file fills in — the Edit dialog's own spelling of it. */
+export function valueModifierDraftOf(modifier: ValueModifier | null): ValueModifierDraft {
+  return {
+    percent: modifier?.percent != null ? String(modifier.percent) : "",
+    amount: modifier?.amount ?? "",
+    note: modifier?.note ?? "",
+  };
+}
+
+/** Whether two modifiers say the same — figures and note alike; null is none. */
+export function sameValueModifier(a: ValueModifier | null, b: ValueModifier | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.percent === b.percent &&
+    (a.amount === null ? null : Number(a.amount)) === (b.amount === null ? null : Number(b.amount)) &&
+    (a.note ?? null) === (b.note ?? null)
+  );
+}
+
+/**
+ * A modifier sent by the client to be valued before it is saved (#2398) — read as the columns would
+ * hold it, or null where it is not one: a preview is never refused, it is valued without.
+ */
+export function readValueModifier(raw: unknown): ValueModifier | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { percent, amount, note } = raw as Record<string, unknown>;
+  const modifier: ValueModifier = {
+    percent: typeof percent === "number" ? percent : null,
+    amount: typeof amount === "string" && Number.isFinite(Number(amount)) ? roundAmount(Number(amount)) : null,
+    note: typeof note === "string" && note.trim() !== "" ? note.trim() : null,
+  };
+  try {
+    assertValueModifier(modifier);
+  } catch {
+    return null;
+  }
+  return modifier;
+}

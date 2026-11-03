@@ -16,8 +16,14 @@ import {
 } from "@/lib/piece-valuation";
 import { inheritedMethodLabel } from "@/lib/piece-value-words";
 import type { TypedPiecePrice } from "@/lib/piece-price-entry";
-import type { CopyValuation, PieceValuation } from "@/lib/valuation";
-import { valueModifierLabel } from "@/lib/value-modifier";
+import type { CopyValuation, PieceValuation, ValueModifier } from "@/lib/valuation";
+import {
+  parseValueModifierInput,
+  sameValueModifier,
+  valueModifierDraftOf,
+  valueModifierLabel,
+  type ValueModifierDraft,
+} from "@/lib/value-modifier";
 import { formControl } from "@/app/control-style";
 import { DialogError, DialogPrimaryButton } from "@/app/dialog-shell";
 import { useInvalidateInventory } from "../inventory/use-inventory-query";
@@ -38,6 +44,8 @@ import { Empty, Muted, numStyle } from "./price-matrix";
 import { PieceStampThumb } from "./piece-stamp-thumb";
 import { StampIdentity } from "./stamp-identity";
 import { useAreaVendorMaps } from "./use-area-vendor-maps";
+import { useDebouncedValue } from "./autocomplete";
+import { ValueModifierFields } from "./value-modifier-fields";
 
 /**
  * The Valuation window's answer for a **piece** (#2359; ADR-0076) — a cover, a fragment, several
@@ -52,8 +60,9 @@ import { useAreaVendorMaps } from "./use-area-vendor-maps";
  * - the **computed value** with its arithmetic, following the typing before anything is saved, the
  *   method and where it came from, then the franking and the piece's own method (#2369), each
  *   changed here and the value following;
- * - the copy's **modifier** (#2357) with its note and its **fault reduction** (#1560), ending in the
- *   copy's value — the figure every total, the offer price prefill and the trade's own valuation read.
+ * - the copy's **modifier** (#2357) with its note, changed here and the figures following the typing
+ *   before it is saved (#2398), and its **fault reduction** (#1560), ending in the copy's value — the
+ *   figure every total, the offer price prefill and the trade's own valuation read.
  */
 export function CarrierValueSections({
   collectionId,
@@ -64,7 +73,8 @@ export function CarrierValueSections({
   collectionId: string;
   itemId: string;
   areas: CollectionAreaData[];
-  /** Whether prices are typed and not saved — the window asks before it closes on them (#2368). */
+  /** Whether prices or a modifier are typed and not saved — the window asks before it closes on them
+   *  (#2368, #2398). */
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const query = useCarrierValuation(collectionId, itemId, NO_TYPED);
@@ -91,16 +101,29 @@ export function CarrierValueSections({
 
 const NO_TYPED: TypedPiecePrice[] = [];
 
-/** The piece's value, read with the stamp prices typed and not saved (#2368). */
-function useCarrierValuation(collectionId: string, itemId: string, typed: readonly TypedPiecePrice[]) {
+/** The piece's value, read with the stamp prices typed and not saved (#2368) and the value modifier
+ *  typed and not saved (#2398) — absent reads the copy's own. */
+function useCarrierValuation(
+  collectionId: string,
+  itemId: string,
+  typed: readonly TypedPiecePrice[],
+  modifier?: ValueModifier | null
+) {
   return useQuery<CarrierValuationRead>({
     // Under the inventory prefix, so an edit's `invalidateList` re-reads this with the list and its
     // totals — the window and the row it was opened from cannot show two figures. With nothing typed
     // the key is the window's first read, so the live read starts from it.
-    queryKey: ["inventory", collectionId, "carrierValuation", itemId, typed] as const,
+    queryKey: [
+      "inventory",
+      collectionId,
+      "carrierValuation",
+      itemId,
+      typed,
+      modifier === undefined ? "own" : modifier,
+    ] as const,
     queryFn: async () => {
       const { getCarrierValuationAction } = await import("@/app/actions/items");
-      return getCarrierValuationAction(itemId, [...typed]);
+      return getCarrierValuationAction(itemId, [...typed], modifier);
     },
     // The figure stays on screen while the typing is read, rather than blinking out under the hand.
     placeholderData: keepPreviousData,
@@ -125,17 +148,45 @@ function PieceValue({
     stampIds: base.components.map((c) => c.stampId),
     onSaved: () => void invalidateList(collectionId),
   });
-  const live = useCarrierValuation(collectionId, base.itemId, typing.previewTyped);
+  // The value modifier (#2398), opened on the copy's own and valued as it is typed — what parses and
+  // differs from the copy's, debounced as the prices are — then saved with *Save modifier*.
+  const savedModifier = modifierOf(base.value?.valueModifier ?? null);
+  const [modifierDraft, setModifierDraft] = useState<ValueModifierDraft>(() =>
+    valueModifierDraftOf(savedModifier)
+  );
+  const parsedModifier = parseValueModifierInput(
+    modifierDraft.percent,
+    modifierDraft.amount,
+    modifierDraft.note
+  );
+  const modifierChanged = parsedModifier.ok && !sameValueModifier(parsedModifier.value, savedModifier);
+  const typedModifier = useDebouncedValue(
+    modifierChanged && parsedModifier.ok ? parsedModifier.value : undefined
+  );
+  const live = useCarrierValuation(collectionId, base.itemId, typing.previewTyped, typedModifier);
   const data = live.data?.value?.piece ? live.data : base;
   const value = data.value!;
   const piece = value.piece!;
   const entry = usePiecePriceEntry(typing, piece);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingModifier, setSavingModifier] = useState(false);
+  const [modifierError, setModifierError] = useState<string | undefined>();
   const dirty = entry.changes.length > 0 || entry.invalid;
+  const modifierDirty = modifierChanged || !parsedModifier.ok;
   useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+    onDirtyChange?.(dirty || modifierDirty);
+  }, [dirty, modifierDirty, onDirtyChange]);
+
+  async function saveModifier() {
+    setSavingModifier(true);
+    setModifierError(undefined);
+    const { setCopyValueModifierAction } = await import("@/app/actions/items");
+    const r = await setCopyValueModifierAction(base.itemId, modifierDraft);
+    if (r.error) setModifierError(r.error);
+    else await invalidateList(collectionId);
+    setSavingModifier(false);
+  }
 
   async function save() {
     if (entry.invalid) {
@@ -183,6 +234,28 @@ function PieceValue({
           piece={piece}
           collectionId={collectionId}
           areas={areas}
+          modifierEditor={
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", maxWidth: "36rem" }}>
+              <ValueModifierFields
+                idPrefix="valuation-value-modifier"
+                value={modifierDraft}
+                onChange={(next) => {
+                  setModifierDraft(next);
+                  setModifierError(undefined);
+                }}
+                disabled={savingModifier}
+                inputStyle={MODIFIER_INPUT}
+                error={modifierError ?? (parsedModifier.ok ? undefined : parsedModifier.message)}
+              />
+              {modifierChanged && (
+                <div>
+                  <DialogPrimaryButton type="button" onClick={saveModifier} disabled={savingModifier}>
+                    {savingModifier ? "Saving…" : "Save modifier"}
+                  </DialogPrimaryButton>
+                </div>
+              )}
+            </div>
+          }
         />
       </div>
       {/* An umbrella's *Full grid…* — the grid portals itself out of the window. */}
@@ -191,20 +264,34 @@ function PieceValue({
   );
 }
 
-/** The computed value, how it was reached, the franking, then the modifier and faults down to the
- *  copy's value. */
+/** A modifier as the window compares it — the applied one's figures and note, without its sums. */
+function modifierOf(applied: ValueModifier | null): ValueModifier | null {
+  return applied ? { percent: applied.percent, amount: applied.amount, note: applied.note } : null;
+}
+
+const MODIFIER_INPUT: React.CSSProperties = {
+  ...formControl,
+  width: "100%",
+  padding: "0.15rem 0.4rem",
+  fontSize: "0.8125rem",
+};
+
+/** The computed value, how it was reached, the franking, then the modifier's fields (#2398) and the
+ *  modifier and faults down to the copy's value. */
 function PieceFigure({
   data,
   value,
   piece,
   collectionId,
   areas,
+  modifierEditor,
 }: {
   data: CarrierValuationRead;
   value: CopyValuation;
   piece: PieceValuation;
   collectionId: string;
   areas: CollectionAreaData[];
+  modifierEditor: React.ReactNode;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   // The value modifier (#2357) and the fault reduction (#1560) adjust the computed figure, in that
@@ -247,6 +334,7 @@ function PieceFigure({
       </div>
       <PieceArithmetic piece={piece} label={label} />
       <PieceValuationFields collectionId={collectionId} itemId={data.itemId} piece={piece} />
+      {modifierEditor}
       {!value.unpriced && (modifier || reduction) && (
         <div
           style={{

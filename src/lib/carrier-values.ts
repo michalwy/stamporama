@@ -11,7 +11,7 @@ import { getCollectionBaseCurrency } from "./pricing";
 import { pieceCopyOf, type DraftPieceEntry } from "./carrier-value";
 import { assertCollectionOwner } from "./platform-category";
 import { DEFAULT_FRANKING, type Franking, type ValuationMethod } from "./piece-valuation";
-import type { CopyValuation } from "./valuation";
+import type { CopyValuation, ValueModifier } from "./valuation";
 import type { TypedPiecePrice } from "./piece-price-entry";
 
 // The value of a **piece** (#2359; ADR-0076) for the Valuation dialog and the identification step —
@@ -48,7 +48,10 @@ export async function getCarrierValuation(
   ownerId: string,
   itemId: string,
   /** Stamp prices typed in the window and not yet saved (#2368), valued as if they were. */
-  typed: readonly TypedPiecePrice[] = []
+  typed: readonly TypedPiecePrice[] = [],
+  /** The value modifier typed in the window and not yet saved (#2398), valued in place of the copy's
+   *  own — null for none; absent reads the copy's. */
+  modifier?: ValueModifier | null
 ): Promise<CarrierValuationRead> {
   const stamps = await getItemStamps(ownerId, itemId);
   const item = await prisma.item.findUniqueOrThrow({
@@ -75,6 +78,7 @@ export async function getCarrierValuation(
     formatId: item.formatId,
     unknownVariant: false,
     ...copyValuationOf(item),
+    ...(modifier !== undefined ? { valueModifier: modifier } : {}),
   };
   const [valuations, baseCurrency] = await Promise.all([
     valuateItemRows(item.collectionId, [ownRow], undefined, typed),
@@ -138,13 +142,16 @@ export interface PiecePreviewInput {
   itemId: string | null;
   /** Stamp prices typed on the piece and not yet saved (#2368), valued as if they were. */
   typed?: readonly TypedPiecePrice[];
+  /** The value modifier typed in the step (#2398), applied as it will be on the copy; absent is none. */
+  valueModifier?: ValueModifier | null;
 }
 
 /**
  * The value a piece **will** have, for the identification step (#2353): its stamps valued by the
  * method exactly as the copy will be once written — at the condition chosen, no certificate, the
- * method from the most expensive stamp's area (a correction's own method winning). Before the copy's
- * modifier and faults, which identification does not set. Null when what is described is not a piece.
+ * method from the most expensive stamp's area (a correction's own method winning). With the value
+ * modifier typed in the step (#2398), before the faults' reduction, which identification does not
+ * set. Null when what is described is not a piece.
  */
 export async function previewPieceValue(
   ownerId: string,
@@ -178,7 +185,7 @@ export async function previewPieceValue(
         draftEntries: input.stamps,
       },
       faultReductionPercent: null,
-      valueModifier: null,
+      valueModifier: input.valueModifier ?? null,
       candidateStampIds: null,
     },
   ], undefined, input.typed ?? []);

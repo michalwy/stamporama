@@ -43,6 +43,13 @@ import {
   type ValuationMethod,
 } from "@/lib/piece-valuation";
 import { inheritedMethodLabel, pieceHeading } from "@/lib/piece-value-words";
+import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { modifyValue } from "@/lib/valuation";
+import {
+  EMPTY_VALUE_MODIFIER_DRAFT,
+  parseValueModifierInput,
+  type ValueModifierDraft,
+} from "@/lib/value-modifier";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
@@ -56,6 +63,7 @@ import {
   usePiecePreview,
   type PiecePreviewSubject,
 } from "./identified-piece-value";
+import { ValueModifierFields, ValueModifierResult } from "./value-modifier-fields";
 import {
   PieceMissingNote,
   PiecePriceCell,
@@ -591,6 +599,16 @@ function IntakeConditionDialog({
     return fault ? [{ id: fault.id, name: fault.name }] : [];
   });
   const [tagsOrigin, setTagsOrigin] = useState(seeds.tags.origin);
+  // The value modifier (#2398), asked where the faults are: empty as the step opens, never the last
+  // tile's — a modifier belongs to one piece, as a fault does. What parses is valued as it is typed.
+  const [modifierDraft, setModifierDraft] = useState<ValueModifierDraft>(EMPTY_VALUE_MODIFIER_DRAFT);
+  const [modifierError, setModifierError] = useState<string | undefined>();
+  const parsedModifier = parseValueModifierInput(
+    modifierDraft.percent,
+    modifierDraft.amount,
+    modifierDraft.note
+  );
+  const typedModifier = askFaults && parsedModifier.ok ? parsedModifier.value : null;
   // The tags the field opens on (#1599), named and coloured from the dictionary once it is here.
   const { data: tagDictionary } = useCollectionTags(collectionId);
   const seededTags: TagEntry[] = seeds.tags.tagIds.flatMap((id) => {
@@ -783,6 +801,7 @@ function IntakeConditionDialog({
           ...(correctedCopyId ? {} : { method }),
           itemId: correctedCopyId ?? null,
           typed: priceTyping.previewTyped,
+          valueModifier: typedModifier,
         }
       : null;
   const piecePreview = usePiecePreview(previewSubject);
@@ -822,8 +841,15 @@ function IntakeConditionDialog({
   // intake only — a whole-checklist intake fans out across many stamps, and one figure could not be
   // the catalogue value of all of them, which is the rule photos and the format field follow.
   const catalogValueRef = useRef<IntakeCatalogValue>(EMPTY_INTAKE_CATALOG_VALUE);
+  // …and in state as well, for the one thing that does read it: what the value modifier comes to
+  // on a loose stamp (#2398).
+  const [catalogFigure, setCatalogFigure] = useState<{ amount: string; currency: string | null }>({
+    amount: "",
+    currency: null,
+  });
   const handleCatalogValueChange = useCallback((value: IntakeCatalogValue) => {
     catalogValueRef.current = value;
+    setCatalogFigure({ amount: value.loading ? "" : value.amount, currency: value.currency ?? null });
   }, []);
   /** A failed price write, reported in the dialog's own footer beside the caller's errors. */
   const [priceError, setPriceError] = useState<string | undefined>();
@@ -866,6 +892,10 @@ function IntakeConditionDialog({
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (askFaults && !parsedModifier.ok) {
+      setModifierError(parsedModifier.message);
+      return;
+    }
     writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
     writeLast(LS_LAST_LOCATION, collectionId, locationId);
@@ -945,6 +975,34 @@ function IntakeConditionDialog({
     }
     onSubmit(fd);
   }
+  // What the value modifier comes to (#2398), under its fields: the figure it adjusts, the modifier,
+  // the value — before the faults' reduction, as the Valuation window states it. A piece's figure is
+  // its computed value, read with the modifier; a loose stamp's the catalogue value in its field, at
+  // the single only, since a multiple's value is that figure times the format's factor.
+  const modifierResult = ((): React.ComponentProps<typeof ValueModifierResult> | null => {
+    if (!typedModifier) return null;
+    if (pieceStamps) {
+      const applied = piecePreview?.valueModifier;
+      if (!piecePreview || piecePreview.unpriced || !applied || piecePreview.amount === null) return null;
+      return {
+        from: "Computed value",
+        fullAmount: applied.fullAmount,
+        amount: piecePreview.amount,
+        currency: piecePreview.currency,
+        modifier: typedModifier,
+      };
+    }
+    if (selection.kind !== "stamp" || formatId !== "") return null;
+    const figure = Number(normalizeDecimalInput(catalogFigure.amount.trim()));
+    if (catalogFigure.amount.trim() === "" || !Number.isFinite(figure)) return null;
+    return {
+      from: "Catalog value",
+      fullAmount: figure.toFixed(2),
+      amount: modifyValue(figure, typedModifier).toFixed(2),
+      currency: catalogFigure.currency,
+      modifier: typedModifier,
+    };
+  })();
   const count = selection.kind === "checklist" ? selection.requiredCount : 1;
   const summary =
     selection.kind === "checklist" ? (
@@ -1434,6 +1492,26 @@ function IntakeConditionDialog({
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* The value modifier (#2398), beside the faults as on the copy's Edit dialog: a
+                    catalogue exception read off the piece in hand — a cancellation, a rare usage — with
+                    what it comes to under it. Empty as the step opens; every copy made takes it. */}
+                {askFaults && (
+                  <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                    <ValueModifierFields
+                      idPrefix="intake-value-modifier"
+                      value={modifierDraft}
+                      onChange={(next) => {
+                        setModifierDraft(next);
+                        setModifierError(undefined);
+                      }}
+                      disabled={isPending}
+                      inputStyle={INPUT_STYLE}
+                      error={modifierError}
+                    />
+                    {modifierResult && <ValueModifierResult {...modifierResult} />}
                   </div>
                 )}
 

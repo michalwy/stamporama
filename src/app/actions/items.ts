@@ -51,7 +51,11 @@ import { parseTagEntries } from "@/lib/tag-entry";
 import { setItemFaultEntries } from "@/lib/faults";
 import { parseFaultEntries } from "@/lib/fault-entry";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
-import { parseValueModifierInput } from "@/lib/value-modifier";
+import {
+  parseValueModifierInput,
+  readValueModifier,
+  type ValueModifierDraft,
+} from "@/lib/value-modifier";
 import type { CopyValuation, ValueModifier } from "@/lib/valuation";
 
 export type ItemActionState =
@@ -220,10 +224,17 @@ function parseCandidateStampIds(formData: FormData): string[] | undefined {
 /** A piece's computed value beside its stamps' used prices, for the Valuation dialog (#2359). */
 export async function getCarrierValuationAction(
   itemId: string,
-  typed: TypedPiecePrice[] = []
+  typed: TypedPiecePrice[] = [],
+  /** The modifier typed in the window and not yet saved (#2398); absent reads the copy's own. */
+  modifier?: ValueModifier | null
 ): Promise<CarrierValuationRead> {
   const session = await getSession();
-  return getCarrierValuation(session.user.id, itemId, parseTypedPiecePrices(typed));
+  return getCarrierValuation(
+    session.user.id,
+    itemId,
+    parseTypedPiecePrices(typed),
+    modifier === undefined ? undefined : readValueModifier(modifier)
+  );
 }
 
 /** What a piece's stamp price fields open on (#2368), read in each column's condition (#2375). */
@@ -267,6 +278,7 @@ export async function previewPieceValueAction(
     method:
       input.method === undefined ? undefined : isValuationMethod(input.method) ? input.method : null,
     typed: parseTypedPiecePrices(input.typed),
+    valueModifier: readValueModifier(input.valueModifier),
   });
 }
 
@@ -298,6 +310,27 @@ export async function setCopyValuationMethodAction(
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : "The valuation method could not be saved." };
+  }
+}
+
+/** A copy's value modifier changed in its Valuation window (#2398) — the Edit dialog's fields and
+ *  reading; blank figures clear it. The value follows on the re-read. */
+export async function setCopyValueModifierAction(
+  itemId: string,
+  draft: ValueModifierDraft
+): Promise<{ error?: string }> {
+  const modifier = parseValueModifierInput(
+    String(draft.percent ?? ""),
+    String(draft.amount ?? ""),
+    String(draft.note ?? "")
+  );
+  if (!modifier.ok) return { error: modifier.message };
+  const session = await getSession();
+  try {
+    await updateItem(session.user.id, itemId, { valueModifier: modifier.value });
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "The value modifier could not be saved." };
   }
 }
 
