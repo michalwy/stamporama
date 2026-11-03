@@ -58,7 +58,8 @@ a **copy can set its own**, which wins. `Collection.valuationMethod` (NOT NULL, 
 `CollectionArea.valuationMethod` and `Item.valuationMethod` (null follows) hold them, each with a CHECK.
 They are set where format multipliers are: an area's ⋮ menu on the Areas screen (which names what *Same
 as parent* resolves to and from where), Settings → Formats → *Valuation method* for the collection, and
-the copy's Edit dialog.
+the copy's Edit dialog — and, since #2369, beside the franking in the piece's Valuation window and the
+identification step, whose *As inherited* names the method and where it comes from.
 
 ### 3. A piece has a franking
 

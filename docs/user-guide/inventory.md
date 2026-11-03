@@ -1212,7 +1212,9 @@ stamps' prices — and the app does that for you. A cover's, a fragment's or any
 you use for pieces a **Kind**: *On cover* for *Cover*, *On piece* for a fragment, or *Neither*. A
 format with a kind has no prices of its own — giving it a kind moves the prices typed on its tab to
 the stamps' **Cover EF** (or **On piece**) prices. A piece whose format has neither kind — an FDC, for
-now — is valued as the sum of its stamps' used prices. One stamp alone on a cover is valued the same
+now — is valued as the sum of its stamps' used prices, whatever its method: no method reads a cover
+price off a format that does not say the piece is a cover, so to value it by one, give it a format of
+kind *On cover* or *On piece*. One stamp alone on a cover is valued the same
 way, as a cover (its **Cover EF** price under Michel), and still counts as a copy of that stamp.
 
 **How a cover was posted** is its **franking**, set in the copy's **Edit** dialog, or next to the stamps
@@ -1242,8 +1244,8 @@ your collection currency.
 
 **Which method** values a piece: the collection's default, **Michel** unless you change it under
 **Settings → Formats → Valuation method**; an area's own, set from its **⋮ → Valuation method…** on the
-Areas screen and inherited by the areas below it; or the copy's own, set in its **Edit** dialog, which
-wins over both. The area that decides is the area of the piece's **most expensive stamp** — the one
+Areas screen and inherited by the areas below it; or the copy's own, which wins over both — set in its
+**Edit** dialog, in its **Valuation** window, or when you identify a card scan tile as the piece. The area that decides is the area of the piece's **most expensive stamp** — the one
 with the highest used price.
 
 **A missing price** makes the value **partial**: the figure counts what is priced, and the missing
@@ -1264,8 +1266,12 @@ click its value), read top to bottom:
   is printed as a dash where it would have been added, and the value says it is partial.
 - **The method**, the franking and EF/MeF/MiF in one line, and where the method came from — an area,
   *set on this copy*, or the collection's default.
-- **Franking**, on a cover, which you can change right there: the value follows at once, here and on
-  the Copies list.
+- **Franking**, on a cover, and beside it **Method**, both of which you can change right there: the
+  value follows at once, here and on the Copies list. **Method** starts with *As inherited* — naming the
+  method and where it comes from, *As inherited (Michel, from Germany)* — then each method; choosing a
+  method gives the piece its own, and choosing *As inherited* takes it off again.
+- On a piece whose format has neither kind, the line says so and that the fix is a format of kind *On
+  cover* or *On piece* — the method is not what is missing.
 - Your **modifier** with its note, and the **reduction for faults**, each with the figure it gives,
   ending in **Value of this copy** — the figure every list and total reads.
 

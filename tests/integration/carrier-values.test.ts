@@ -286,15 +286,53 @@ describe("a piece valued by its method (#2359)", () => {
     const fischer = await valueOf(carrierId);
     assert.equal(fischer.amount, "84.00");
     assert.deepEqual(fischer.piece?.methodSource, { kind: "area", areaId });
+    const inherited = { method: "fischer", areaId, areaName: "Poland" };
+    assert.deepEqual(fischer.piece?.inherited, inherited);
 
     await setPieceValuation(userId, carrierId, { method: "fischer_fp_fw_fm" });
     const own = await valueOf(carrierId);
     assert.equal(own.amount, "30.00");
     assert.deepEqual(own.piece?.methodSource, { kind: "copy" });
+    // What *As inherited* names stays the area's while the copy has its own (#2369).
+    assert.deepEqual(own.piece?.inherited, inherited);
 
     await setPieceValuation(userId, carrierId, { method: null });
     await setAreaValuationMethod(userId, areaId, null);
+    const fromCollection = await valueOf(carrierId);
+    assert.deepEqual(fromCollection.piece?.inherited, {
+      method: "sum_of_used",
+      areaId: null,
+      areaName: null,
+    });
     await setCollectionValuationMethod(userId, collectionId, "michel");
+  });
+
+  it("previews by the method chosen in identification, and a correction reads the copy's own (#2369)", async () => {
+    const stamps = [
+      { stampId: mi200, quantity: 1, formatId: null },
+      { stampId: mi205, quantity: 1, formatId: null },
+    ];
+    const input = { conditionId: mnhId, formatId: coverId, stamps, franking: "rate_correct" as const };
+    const chosen = await previewPieceValue(userId, collectionId, {
+      ...input,
+      itemId: null,
+      method: "sum_of_used",
+    });
+    assert.equal(chosen?.amount, "14.00");
+    assert.deepEqual(chosen?.piece?.methodSource, { kind: "copy" });
+    assert.equal(chosen?.piece?.inherited.method, "michel");
+    const asInherited = await previewPieceValue(userId, collectionId, {
+      ...input,
+      itemId: null,
+      method: null,
+    });
+    assert.equal(asInherited?.amount, "30.00");
+    assert.deepEqual(asInherited?.piece?.methodSource, { kind: "collection" });
+
+    await setPieceValuation(userId, carrierId, { method: "sum_of_used" });
+    const corrected = await previewPieceValue(userId, collectionId, { ...input, itemId: carrierId });
+    assert.equal(corrected?.piece?.method, "sum_of_used");
+    await setPieceValuation(userId, carrierId, { method: null });
   });
 
   it("values one stamp once on a cover at its EF price, and still counts it", async () => {

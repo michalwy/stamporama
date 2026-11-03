@@ -1526,12 +1526,14 @@ document. Assigning is done by picking a copy from the list itself. There are th
   Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual, and say
   how it was posted in **Franking**, which appears beside the stamps on the piece — *Rate-correct*,
   *Philatelic, posted* or *Not posted*; it decides which catalog price the piece's value is read
-  from. Once a condition is chosen, **each stamp in the list shows two prices** — ⊙ its used price
+  from. Beside it, **Method** is the piece's own valuation method: *As inherited* — named with the
+  method and where it comes from, *As inherited (Michel, from Germany)* — leaves the piece following
+  its area, and any other choice gives it its own, saved with the copy. Once a condition is chosen, **each stamp in the list shows two prices** — ⊙ its used price
   and its price on the piece (*EF*, *MeF* or *MiF* on a cover, by what is on it; ⊠ under Fischer; *on
   piece* on a fragment) — and under them the piece's **Computed value** with the arithmetic it is,
   *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*, and the method that gives it. A missing price
-  says *no price* on its stamp and the value says it is partial. Change the franking, the condition or
-  the stamps and the value follows at once. The single catalog value field the step has for one stamp
+  says *no price* on its stamp and the value says it is partial. Change the franking, the method, the
+  condition or the stamps and the value follows at once. The single catalog value field the step has for one stamp
   is not shown for a piece carrying several, since no one stamp's price is the piece's. A piece
   carrying several stamps counts towards none of them — see
   [Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).

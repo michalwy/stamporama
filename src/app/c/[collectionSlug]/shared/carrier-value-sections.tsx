@@ -6,8 +6,15 @@ import { catalogLabel } from "@/lib/area-vendor";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CarrierValuationRead } from "@/lib/carrier-values";
 import { faultReductionNote } from "@/lib/fault-reduction";
-import { FRANKINGS, FRANKING_LABELS, isFranking, type Franking } from "@/lib/piece-valuation";
-import { onPiecePrice } from "@/lib/piece-value-words";
+import {
+  FRANKINGS,
+  FRANKING_LABELS,
+  VALUATION_METHODS,
+  VALUATION_METHOD_LABELS,
+  isFranking,
+  isValuationMethod,
+} from "@/lib/piece-valuation";
+import { inheritedMethodLabel, onPiecePrice } from "@/lib/piece-value-words";
 import type { CopyValuation, PieceValuation } from "@/lib/valuation";
 import { valueModifierLabel } from "@/lib/value-modifier";
 import { formControl } from "@/app/control-style";
@@ -27,8 +34,8 @@ import { useAreaVendorMaps } from "./use-area-vendor-maps";
  * - each stamp on the piece with its **used** price and its price **on the piece** — the one the
  *   method reads here (EF, MeF or MiF on a cover, by what is on it; on piece for a fragment), a missing
  *   one marked on its stamp;
- * - the **computed value** with its arithmetic, the method and where it came from, and the franking,
- *   which can be changed here and the value follows;
+ * - the **computed value** with its arithmetic, the method and where it came from, then the franking
+ *   and the piece's own method (#2369), each changed here and the value following;
  * - the copy's **modifier** (#2357) with its note and its **fault reduction** (#1560), ending in the
  *   copy's value — the figure every total, the offer price prefill and the trade's own valuation read.
  */
@@ -98,12 +105,6 @@ function PieceFigure({
   areas: CollectionAreaData[];
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
-  const source =
-    piece.methodSource.kind === "copy"
-      ? "set on this copy"
-      : piece.methodSource.kind === "area"
-        ? `from ${areaName(areas, piece.methodSource.areaId)}`
-        : "the collection's default";
   // The value modifier (#2357) and the fault reduction (#1560) adjust the computed figure, in that
   // order; each is a line of its own under it.
   const modifier = value.valueModifier;
@@ -142,10 +143,8 @@ function PieceFigure({
           </span>
         )}
       </div>
-      <PieceArithmetic piece={piece} label={label} methodSource={source} />
-      {piece.kind === "on_cover" && (
-        <FrankingField collectionId={collectionId} itemId={data.itemId} franking={piece.franking} />
-      )}
+      <PieceArithmetic piece={piece} label={label} />
+      <PieceValuationFields collectionId={collectionId} itemId={data.itemId} piece={piece} />
       {!value.unpriced && (modifier || reduction) && (
         <div
           style={{
@@ -189,53 +188,97 @@ function PieceFigure({
   );
 }
 
-/** How the cover was franked (#2359), changed here (#2353): the value is re-read with the list. */
-function FrankingField({
+/**
+ * How the cover was franked (#2359) and the piece's own method (#2369), side by side, each saved the
+ * moment it is changed and the value re-read with the list (#2353). *As inherited* takes the copy's
+ * own method off, naming what it then follows. The franking only on a cover, the one kind it decides.
+ */
+function PieceValuationFields({
   collectionId,
   itemId,
-  franking,
+  piece,
 }: {
   collectionId: string;
   itemId: string;
-  franking: Franking;
+  piece: PieceValuation;
 }) {
   const { invalidateList } = useInvalidateInventory();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const save = async (write: () => Promise<{ error?: string }>) => {
+    setSaving(true);
+    setError(null);
+    const r = await write();
+    if (r.error) setError(r.error);
+    else await invalidateList(collectionId);
+    setSaving(false);
+  };
+  const ownMethod = piece.methodSource.kind === "copy" ? piece.method : "";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem" }}>
-      <label htmlFor="valuation-franking">Franking</label>
-      <select
-        id="valuation-franking"
-        value={franking}
-        disabled={saving}
-        onChange={async (e) => {
-          const next = e.target.value;
-          if (!isFranking(next)) return;
-          setSaving(true);
-          setError(null);
-          const { setCopyFrankingAction } = await import("@/app/actions/items");
-          const r = await setCopyFrankingAction(itemId, next);
-          if (r.error) setError(r.error);
-          else await invalidateList(collectionId);
-          setSaving(false);
-        }}
-        style={{ ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" }}
-      >
-        {FRANKINGS.map((f) => (
-          <option key={f} value={f}>
-            {FRANKING_LABELS[f]}
-          </option>
-        ))}
-      </select>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem 1rem",
+        flexWrap: "wrap",
+        fontSize: "0.8125rem",
+      }}
+    >
+      {piece.kind === "on_cover" && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          <label htmlFor="valuation-franking">Franking</label>
+          <select
+            id="valuation-franking"
+            value={piece.franking}
+            disabled={saving}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!isFranking(next)) return;
+              void save(async () => {
+                const { setCopyFrankingAction } = await import("@/app/actions/items");
+                return setCopyFrankingAction(itemId, next);
+              });
+            }}
+            style={SELECT}
+          >
+            {FRANKINGS.map((f) => (
+              <option key={f} value={f}>
+                {FRANKING_LABELS[f]}
+              </option>
+            ))}
+          </select>
+        </span>
+      )}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+        <label htmlFor="valuation-method">Method</label>
+        <select
+          id="valuation-method"
+          value={ownMethod}
+          disabled={saving}
+          onChange={(e) => {
+            const next = e.target.value;
+            const method = isValuationMethod(next) ? next : null;
+            void save(async () => {
+              const { setCopyValuationMethodAction } = await import("@/app/actions/items");
+              return setCopyValuationMethodAction(itemId, method);
+            });
+          }}
+          style={SELECT}
+        >
+          <option value="">{inheritedMethodLabel(piece.inherited)}</option>
+          {VALUATION_METHODS.map((m) => (
+            <option key={m} value={m}>
+              {VALUATION_METHOD_LABELS[m]}
+            </option>
+          ))}
+        </select>
+      </span>
       {error && <span style={{ color: "var(--color-danger)" }}>{error}</span>}
     </div>
   );
 }
 
-function areaName(areas: CollectionAreaData[], areaId: string): string {
-  return areas.find((a) => a.id === areaId)?.name ?? "its area";
-}
+const SELECT: React.CSSProperties = { ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" };
 
 function StampPriceTable({
   data,

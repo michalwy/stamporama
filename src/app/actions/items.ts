@@ -228,6 +228,8 @@ export async function previewPieceValueAction(
   return previewPieceValue(session.user.id, collectionId, {
     ...input,
     franking: isFranking(input.franking) ? input.franking : null,
+    method:
+      input.method === undefined ? undefined : isValuationMethod(input.method) ? input.method : null,
   });
 }
 
@@ -243,6 +245,22 @@ export async function setCopyFrankingAction(
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : "The franking could not be saved." };
+  }
+}
+
+/** A piece's own method set, or taken off with null, in its Valuation window (#2369); the value
+ *  follows on the re-read. */
+export async function setCopyValuationMethodAction(
+  itemId: string,
+  method: ValuationMethod | null
+): Promise<{ error?: string }> {
+  if (method !== null && !isValuationMethod(method)) return { error: "Choose a valuation method." };
+  const session = await getSession();
+  try {
+    await setPieceValuation(session.user.id, itemId, { method });
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "The valuation method could not be saved." };
   }
 }
 

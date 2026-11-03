@@ -620,6 +620,7 @@ describe("applyFaultReduction", () => {
       {
         method: "michel",
         methodSource: { kind: "collection" },
+        inherited: { method: "michel", areaId: null, areaName: null },
         franking: "rate_correct",
         kind: "on_cover",
         components: [],

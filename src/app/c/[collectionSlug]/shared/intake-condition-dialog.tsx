@@ -35,9 +35,14 @@ import {
   DEFAULT_FRANKING,
   FRANKINGS,
   FRANKING_LABELS,
+  VALUATION_METHODS,
+  VALUATION_METHOD_LABELS,
   isFranking,
+  isValuationMethod,
   type Franking,
+  type ValuationMethod,
 } from "@/lib/piece-valuation";
+import { inheritedMethodLabel } from "@/lib/piece-value-words";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
@@ -707,6 +712,8 @@ function IntakeConditionDialog({
     singleStamp &&
     (listsStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null));
   const [franking, setFranking] = useState<Franking>(DEFAULT_FRANKING);
+  // The piece's own method (#2369), beside the franking and asked with it; null is *As inherited*.
+  const [method, setMethod] = useState<ValuationMethod | null>(null);
   // Rebuilt every render; the query keys on its contents, not on the object.
   const previewSubject: PiecePreviewSubject | null =
     severalStamps && singleStamp
@@ -716,10 +723,26 @@ function IntakeConditionDialog({
           formatId,
           stamps: carriedStamps.map((line) => line.entry),
           franking: correctedCopyId ? null : franking,
+          ...(correctedCopyId ? {} : { method }),
           itemId: correctedCopyId ?? null,
         }
       : null;
   const piecePreview = usePiecePreview(previewSubject);
+  // What *As inherited* names (#2369) is the preview's; one stamp on a cover format has no figure
+  // drawn here, so it is read for the name alone — the stamp as a single on that format.
+  const methodPreview = usePiecePreview(
+    askFranking && selection.kind === "stamp"
+      ? (previewSubject ?? {
+          collectionId,
+          conditionId,
+          formatId,
+          stamps: [{ stampId: selection.stampId, quantity: 1, formatId: null }],
+          franking,
+          method,
+          itemId: null,
+        })
+      : null
+  );
   // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
   const photos = singleStamp && !hidePhotos;
   const photoValueRef = useRef<PhotoEditorValue>({
@@ -948,8 +971,9 @@ function IntakeConditionDialog({
                       </ul>
                     </div>
                   )}
-                  {/* How the piece was franked (#2359), next to the stamps on it: a piece is valued
-                      by its method, and on a cover the franking decides which price it reads. The
+                  {/* How the piece was franked (#2359) and its own method (#2369), next to the
+                      stamps on it: a piece is valued by its method, and on a cover the franking
+                      decides which price it reads. The
                       scan-tile chain only, where the piece is on screen; a correction leaves the
                       copy's own answer alone, to its Edit dialog. */}
                   {askFranking && (
@@ -958,6 +982,7 @@ function IntakeConditionDialog({
                           marginTop: "0.375rem",
                           display: "flex",
                           alignItems: "center",
+                          flexWrap: "wrap",
                           gap: "0.5rem",
                           color: "var(--color-text-primary)",
                         }}
@@ -976,6 +1001,32 @@ function IntakeConditionDialog({
                           {FRANKINGS.map((f) => (
                             <option key={f} value={f}>
                               {FRANKING_LABELS[f]}
+                            </option>
+                          ))}
+                        </select>
+                        {/* The piece's own method (#2369), saved with the copy; *As inherited*
+                            leaves it without one, following its area. */}
+                        <label htmlFor="intake-valuation-method" style={{ marginLeft: "0.5rem" }}>
+                          Method
+                        </label>
+                        <select
+                          id="intake-valuation-method"
+                          name="valuationMethod"
+                          value={method ?? ""}
+                          onChange={(e) =>
+                            setMethod(isValuationMethod(e.target.value) ? e.target.value : null)
+                          }
+                          disabled={isPending}
+                          style={{ ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" }}
+                        >
+                          <option value="">
+                            {methodPreview?.piece
+                              ? inheritedMethodLabel(methodPreview.piece.inherited)
+                              : "As inherited"}
+                          </option>
+                          {VALUATION_METHODS.map((m) => (
+                            <option key={m} value={m}>
+                              {VALUATION_METHOD_LABELS[m]}
                             </option>
                           ))}
                         </select>

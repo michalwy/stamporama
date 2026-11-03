@@ -454,6 +454,36 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(moved.tileId, null);
   });
 
+  it("saves the franking and the piece's own method with the copy it creates (#2359, #2369)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const own = await identifyTileAsNewCopy(userId, tileIds[0], {
+      stampId,
+      conditionId,
+      franking: "not_posted",
+      valuationMethod: "fischer",
+    });
+    const asInherited = await identifyTileAsNewCopy(userId, tileIds[1], {
+      stampId,
+      conditionId,
+      valuationMethod: null,
+    });
+    const rows = await prisma.item.findMany({
+      where: { id: { in: [own.itemId, asInherited.itemId] } },
+      select: { id: true, franking: true, valuationMethod: true },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    assert.deepEqual(byId.get(own.itemId), {
+      id: own.itemId,
+      franking: "not_posted",
+      valuationMethod: "fischer",
+    });
+    assert.deepEqual(byId.get(asInherited.itemId), {
+      id: asInherited.itemId,
+      franking: "rate_correct",
+      valuationMethod: null,
+    });
+  });
+
   it("has nothing to show only when the copy itself was deleted", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     const outcome = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });

@@ -4,6 +4,7 @@ import {
   VALUATION_METHOD_LABELS,
   coverUsage,
   termCents,
+  type InheritedMethod,
   type MissingPiecePrice,
   type PieceComponent,
   type PiecePrice,
@@ -28,13 +29,33 @@ const RULE_WORDS: Record<PieceRule, string> = {
 /** How the figure was reached, in one line: *Michel · Rate-correct · MiF — the highest MiF price*. */
 export function pieceValueRule(piece: PieceValuation): string {
   if (piece.kind === null) {
-    return "Sum of used — the piece's format is neither on cover nor on piece";
+    // The method is not what is missing (#2369): no method reads a cover price off a format that
+    // does not say the piece is a cover.
+    return "Sum of used — the piece's format is neither on cover nor on piece; give it a format of kind On cover or On piece to value it by a method";
   }
   const parts = [VALUATION_METHOD_LABELS[piece.method]];
   if (piece.kind === "on_cover") parts.push(FRANKING_LABELS[piece.franking]);
   else parts.push("On piece");
   if (piece.usage) parts.push(piece.usage === "ef" ? "EF" : piece.usage === "mef" ? "MeF" : "MiF");
   return `${parts.join(" · ")} — ${RULE_WORDS[piece.rule]}`;
+}
+
+/** Where a piece's method came from: *set on this copy*, *from Germany*, *the collection's default*. */
+export function methodSourceText(piece: Pick<PieceValuation, "methodSource" | "inherited">): string {
+  if (piece.methodSource.kind === "copy") return "set on this copy";
+  return inheritedFrom(piece.inherited);
+}
+
+/** The first choice beside a piece's method (#2369), naming what it inherits and from where:
+ *  *As inherited (Michel, from Germany)*. */
+export function inheritedMethodLabel(inherited: InheritedMethod): string {
+  return `As inherited (${VALUATION_METHOD_LABELS[inherited.method]}, ${inheritedFrom(inherited)})`;
+}
+
+function inheritedFrom(inherited: InheritedMethod): string {
+  return inherited.areaId === null
+    ? "the collection's default"
+    : `from ${inherited.areaName ?? "its area"}`;
 }
 
 /** *Cover MiF price missing for 2 stamps*, or null when nothing is. */
