@@ -9,6 +9,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { assertCopyFormatInCollection } from "./stamp-formats";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY, TRADED_AWAY } from "./trade-exit";
@@ -213,8 +214,9 @@ async function assertConditionInCollection(
   collectionId: string,
   conditionId: string
 ): Promise<void> {
+  // Never a price column only (#2374): no copy is in one.
   const condition = await prisma.stampCondition.findFirst({
-    where: { id: conditionId, collectionId },
+    where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
     select: { id: true },
   });
   if (!condition) throw new Error("Condition not found in this collection.");
@@ -3734,7 +3736,7 @@ async function readIssueGroupCompleteness(
           _count: { _all: true },
         }),
     prisma.stampCondition.findMany({
-      where: { collectionId },
+      where: { collectionId, ...COPY_CONDITION_WHERE },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, abbreviation: true },
     }),

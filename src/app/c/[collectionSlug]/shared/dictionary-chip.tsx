@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { tagColorTokens } from "@/lib/tag-colors";
 import { ROW_CHIP } from "./chip-styles";
-import { useCollectionConditions } from "./use-display-condition";
+import { usePriceConditions } from "./use-display-condition";
 import { useCollectionCertificateStatuses } from "./use-certificate-statuses";
 import { Tooltip } from "./tooltip";
 
@@ -49,7 +49,7 @@ export function ConditionChip({
    * than its entry would be a second answer to the question this component exists to settle. */
   style?: React.CSSProperties;
 }) {
-  const { data: conditions } = useCollectionConditions(collectionId);
+  const { data: conditions } = usePriceConditions(collectionId);
   const condition = useMemo(
     () => conditions?.find((c) => c.id === conditionId),
     [conditions, conditionId]

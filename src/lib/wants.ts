@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
@@ -581,7 +582,7 @@ async function loadCatalogRanges(
       buildEffectivePrimaryCatalogMap(collectionId),
       getCollectionBaseCurrency(collectionId),
       makeFormatFactorLookup(collectionId),
-      prisma.stampCondition.findMany({ where: { collectionId }, select: { id: true } }),
+      prisma.stampCondition.findMany({ where: { collectionId, ...COPY_CONDITION_WHERE }, select: { id: true } }),
       prisma.certificateStatus.findMany({ where: { collectionId }, select: { id: true } }),
       prisma.stampFormat.findMany({ where: { collectionId, ...COPY_FORMAT_WHERE }, select: { id: true } }),
       prisma.stamp.findMany({

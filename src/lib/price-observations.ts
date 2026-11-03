@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { getCollectionBaseCurrency } from "./pricing";
 import { fetchEcbRateOn } from "./exchange-rates";
@@ -616,7 +617,10 @@ async function parseObservation(
   const formatId = raw.formatId?.trim() || null;
   const [condition, certificate, format] = await Promise.all([
     conditionId
-      ? prisma.stampCondition.findFirst({ where: { id: conditionId, collectionId }, select: { id: true } })
+      ? prisma.stampCondition.findFirst({
+          where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
+          select: { id: true },
+        })
       : null,
     certificateStatusId
       ? prisma.certificateStatus.findFirst({

@@ -313,7 +313,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
     ]);
     const [tree, conditions, certificateStatuses, prices, formatPricing] = await Promise.all([
       getCatalogTreeAction(collectionId),
-      getStampConditionsAction(collectionId),
+      // The price columns only (#2374) too: this is the stamp's price grid.
+      getStampConditionsAction(collectionId, true),
       getCertificateStatusesAction(collectionId),
       stampId ? getStampCatalogPricesAction(stampId) : Promise.resolve([]),
       getStampFormatPricingAction(collectionId, stampId ?? null),

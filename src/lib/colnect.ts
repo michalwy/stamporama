@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import {
   catalogDigitRuns,
   catalogIdentityKey,
@@ -272,7 +273,8 @@ export async function getColnectConditionMappings(
 ): Promise<ColnectConditionMappingData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.stampCondition.findMany({
-    where: { collectionId },
+    // A price column only (#2374) is no copy's condition, so nothing to tell Colnect about.
+    where: { collectionId, ...COPY_CONDITION_WHERE },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,
@@ -306,9 +308,9 @@ export async function setColnectConditionMapping(
 ): Promise<void> {
   const condition = await prisma.stampCondition.findUnique({
     where: { id: stampConditionId },
-    select: { collectionId: true },
+    select: { collectionId: true, priceOnly: true },
   });
-  if (!condition) throw new Error("Stamp condition not found.");
+  if (!condition || condition.priceOnly) throw new Error("Stamp condition not found.");
   await assertCollectionOwner(ownerId, condition.collectionId);
 
   const value = colnectValue?.trim() || null;

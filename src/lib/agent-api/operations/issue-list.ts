@@ -106,7 +106,8 @@ async function listIssues(
     }),
     countIssues(context.ownerId, context.collectionId, filter),
     loadIssueLabelling(context.collectionId),
-    getStampConditions(context.ownerId, context.collectionId),
+    // Prices, so the price columns only too (#2374).
+    getStampConditions(context.ownerId, context.collectionId, { withPriceOnly: true }),
   ]);
 
   const members = await prisma.issueMember.findMany({

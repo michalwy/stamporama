@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { assertSectionOwner, assertTradeOwner, assertContentEditable } from "./trades";
 // The per-line guard lives a level down (`trade-access.ts`) since #642: the realisation half asks the
@@ -1024,7 +1025,7 @@ async function receiveLineData(collectionId: string, input: TradeReceiveLineInpu
   if (!stamp) throw new Error("Pick a stamp for this line.");
 
   const condition = await prisma.stampCondition.findFirst({
-    where: { id: input.conditionId, collectionId },
+    where: { id: input.conditionId, collectionId, ...COPY_CONDITION_WHERE },
     select: { id: true },
   });
   if (!condition) throw new Error("A condition is required.");
@@ -1136,7 +1137,7 @@ export async function addTradeReceiveLinesBulk(
   const conditionIds = [...new Set(rows.map((row) => row.conditionId))];
   const [stamps, conditions] = await Promise.all([
     prisma.stamp.count({ where: { collectionId, id: { in: stampIds } } }),
-    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } }),
   ]);
   if (stamps !== stampIds.length) throw new Error("Pick a stamp for this line.");
   if (conditions !== conditionIds.length) throw new Error("A condition is required.");

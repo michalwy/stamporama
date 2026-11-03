@@ -377,7 +377,8 @@ export async function getVariantPriceGrid(
   const [labeller, conditions, certificateStatuses, formats, editions, priceRows, factorLookup, stillValidFor] =
     await Promise.all([
       makeOfferLabeller(collectionId),
-      getStampConditions(ownerId, collectionId),
+      // A price column only (#2374) is a column of the grid like any other condition.
+      getStampConditions(ownerId, collectionId, { withPriceOnly: true }),
       getCertificateStatuses(ownerId, collectionId),
       // The prices on cover and on piece (#2356) are tabs of the grid like a block's.
       getStampFormats(ownerId, collectionId, { withCoverPrices: true }),

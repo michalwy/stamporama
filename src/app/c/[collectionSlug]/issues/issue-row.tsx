@@ -67,7 +67,7 @@ import { stillValidMarkToStore } from "@/lib/still-valid-postage";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
 import { useCatalogNumberGrid } from "@/app/c/[collectionSlug]/shared/use-catalog-number-grid";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
-import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { usePriceConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import {
   useInventoryPopupAction,
@@ -659,7 +659,7 @@ export function IssueRow({
   // The condition the price column is filled from — the switcher's choice, or (when the list
   // left it to the server) the first condition, which is the server's own fallback. A quick-add
   // records its value there, so what's entered is what the row then shows (#341).
-  const { data: conditions } = useCollectionConditions(collectionId);
+  const { data: conditions } = usePriceConditions(collectionId);
   const displayCondition = useMemo(() => {
     const list = conditions ?? [];
     const chosen = displayConditionId

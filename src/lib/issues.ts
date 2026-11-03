@@ -1635,7 +1635,8 @@ export async function getChecklistPriceDetails(
           },
         },
       }),
-      getStampConditions(ownerId, collectionId),
+      // Price cells, so the price columns only too (#2374).
+      getStampConditions(ownerId, collectionId, { withPriceOnly: true }),
       getCertificateStatuses(ownerId, collectionId),
       getCollectionBaseCurrency(collectionId),
       getLatestEditionYearByName(collectionId),

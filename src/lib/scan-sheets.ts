@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { asScanUploadStatus, queueAhead, type ScanUploadCard } from "./scan-upload-status-rules";
 import { resolveScanProfileId, ScanningProfileError } from "./scanning-profiles";
 import {
@@ -640,7 +641,7 @@ async function assertMarksInCollection(
   const tagIds = [...new Set(marks.flatMap((m) => markTagIds(m)))];
   const [conditions, certs, faults, tags] = await Promise.all([
     conditionIds.length > 0
-      ? prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } })
+      ? prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } })
       : 0,
     certIds.length > 0
       ? prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } })

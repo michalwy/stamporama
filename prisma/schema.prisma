@@ -259,6 +259,10 @@ model StampCondition {
    *  index in the migration). Michel's rule for stamps still valid for postage reads both; null on
    *  every other condition. Chosen under Settings → Conditions. */
   priceRole    String?
+  /** A price column only (#2374): a condition the catalogues price — a cover's FP / FW / FM, Michel's
+   *  ⊠ EF / MeF / MiF — that no copy is ever in. On every price surface; in no picker that sets a
+   *  copy's, a want's, a line's or any other record's condition. Refused while anything uses it. */
+  priceOnly    Boolean @default(false)
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   catalogPrices StampCatalogPrice[]

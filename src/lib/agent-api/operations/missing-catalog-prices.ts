@@ -182,7 +182,7 @@ interface AgentMissingGroup {
 
 async function findMissing(context: OperationContext, params: ParsedParams) {
   const window = parseListWindow(params);
-  const axes = await loadAxes(context, { withCoverPrices: true });
+  const axes = await loadAxes(context, { withCoverPrices: true, withPriceOnly: true });
   const cells = askedCells(axes, params);
   const editions = await loadEditions(context);
   const editionParam = optionalString(params, "edition");

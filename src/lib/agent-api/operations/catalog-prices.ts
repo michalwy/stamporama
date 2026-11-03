@@ -146,10 +146,17 @@ export interface Axes {
  *  price tool reads and writes, and nothing that describes a copy or a sale. */
 export async function loadAxes(
   context: OperationContext,
-  { withCoverPrices = false }: { withCoverPrices?: boolean } = {}
+  {
+    withCoverPrices = false,
+    withPriceOnly = false,
+  }: {
+    withCoverPrices?: boolean;
+    /** The conditions that are a price column only (#2374) too — a catalogue price tool's axes. */
+    withPriceOnly?: boolean;
+  } = {}
 ): Promise<Axes> {
   const [conditions, certificates, formats] = await Promise.all([
-    getStampConditions(context.ownerId, context.collectionId),
+    getStampConditions(context.ownerId, context.collectionId, { withPriceOnly }),
     getCertificateStatuses(context.ownerId, context.collectionId),
     getStampFormats(context.ownerId, context.collectionId, { withCoverPrices }),
   ]);
@@ -215,7 +222,7 @@ async function readPrices(context: OperationContext, params: ParsedParams) {
     grid = await getVariantPriceGrid(context.ownerId, { kind: "stamp", stampId });
   }
 
-  const [editions, axes] = await Promise.all([loadEditions(context), loadAxes(context, { withCoverPrices: true })]);
+  const [editions, axes] = await Promise.all([loadEditions(context), loadAxes(context, { withCoverPrices: true, withPriceOnly: true })]);
   const editionById = new Map(editions.map((edition) => [edition.id, agentEdition(edition)]));
   const editionFilter = optionalString(params, "edition");
   const conditionFilter = optionalString(params, "condition");
@@ -410,7 +417,7 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
   const editions = await loadEditions(context);
   const editionSource = resolveEdition(requiredString(params, "edition"), editions, "edition");
   const edition = agentEdition(editionSource);
-  const axes = await loadAxes(context, { withCoverPrices: true });
+  const axes = await loadAxes(context, { withCoverPrices: true, withPriceOnly: true });
 
   const parsed = entries.map((entry) => parseCellSpec(entry, mode));
   const specs = parsed.filter((p): p is { ok: true; cell: CellSpec } => p.ok).map((p) => p.cell);
