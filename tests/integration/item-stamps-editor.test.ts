@@ -157,7 +157,8 @@ describe("editing the stamps a copy carries (#746)", () => {
     });
 
     assert.equal(item.formatId, coverId);
-    assert.equal(item.conditionId, mnhId);
+    // A piece keeps no condition it is given (#2383).
+    assert.equal(item.conditionId, null);
     assert.equal(item.stampId, mi200, "the copy comes back pointing where the entries put it");
     // 1 + 1 + 2: the block of four is **one** described component (ADR-0044 §4).
     const copy = await readCopy(itemId);
@@ -214,7 +215,8 @@ describe("editing the stamps a copy carries (#746)", () => {
     });
     assert.equal((await getItemStamps(userId, itemId)).multiStamp, true);
 
-    await updateItem(userId, itemId, { stampId: mi201, stamps: [{ stampId: mi201 }] });
+    // A loose stamp again, so it is given the condition a piece has none of (#2383).
+    await updateItem(userId, itemId, { stampId: mi201, stamps: [{ stampId: mi201 }], conditionId: usedId });
     const read = await getItemStamps(userId, itemId);
     assert.equal(read.multiStamp, false);
     assert.equal(read.stampCount, 1);
@@ -315,7 +317,7 @@ describe("editing the stamps a copy carries (#746)", () => {
       stamps: [{ stampId: mi200 }, { stampId: mi205 }],
     });
 
-    await updateItem(userId, itemId, { stampId: mi205, stamps: [{ stampId: mi205 }] });
+    await updateItem(userId, itemId, { stampId: mi205, stamps: [{ stampId: mi205 }], conditionId: usedId });
     const copy = await readCopy(itemId);
     assert.equal(copy.stampId, mi205);
     assert.equal(copy.stampCount, 1);

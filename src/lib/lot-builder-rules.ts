@@ -31,7 +31,8 @@ export interface LotCandidate {
    *  It answers both questions this module asks of a copy: which checklist slot it covers
    *  ({@link satisfiedMember}), and which pile it is a duplicate of ({@link duplicateKey}). */
   variantChain: VariantChain;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383). */
+  conditionId: string | null;
   /** ADR-0020: null **is** a value — it means single. */
   formatId: string | null;
   /** Base-currency catalog value, or null when the copy is unpriced. */

@@ -551,6 +551,15 @@ another on the screen beside it. The holdings pair is `listItemsPaginated` + `co
 yourself writing domain logic in an operation, stop** — it exists somewhere, or it is a decision
 that needs an issue.
 
+**A piece states no condition** (#2383; [ADR-0079](../decisions/0079-piece-has-no-condition.md)). A
+copy carrying several stamps, or one on a format of kind on cover or on piece, has none: `condition` is
+**absent** on its holdings row, its `get_copy` record, its `search_collection` hit, its unlisted-copy
+row and its give line (the compact convention — absent, never an invented value), and `byCondition`
+counts no piece, so its figures need not add up to the match when the scope holds covers. Nor does a
+piece count towards any stamp's `copies`. There is no write that sets a copy's condition on this
+surface; the domain's refusal (`ConditionRequiredError`, a loose stamp left without one) is what any
+future write meets, and one given to a piece is dropped, never stored.
+
 ### The five verbs became six, and the fifth moved
 
 #710 named its five verbs *a starting set to refine during implementation*. What changed is one

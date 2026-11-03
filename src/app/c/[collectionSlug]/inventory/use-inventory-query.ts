@@ -26,7 +26,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 import { appendFaultFilterParams, type FaultFilterOpts } from "@/lib/fault-filter";
-import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
+import type { MultiStampFilter, MultiStampGroupRow, PieceFilter } from "@/lib/multi-stamp";
 import type { CompletenessFilter } from "@/lib/completeness-filter";
 import { heldSplitParam, type HeldFilter } from "@/lib/held-filter";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
@@ -135,10 +135,11 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
    *  replaces {@link includeGone} and {@link includeDisposed}: the Copies card's chips may want the
    *  copies that have left without the held ones. */
   holdingStates?: HoldingState[];
-  /** For or against the multi-stamp copies (#748): `only` the carriers, `exclude` them, absent both.
-   *  A grouped list's multi-stamp bucket addresses its own members with `only`, and every other
-   *  group of a grouping that sets carriers apart with `exclude`. */
+  /** For or against the multi-stamp copies (#748): `only` the carriers, `exclude` them, absent both. */
   multiStamp?: MultiStampFilter;
+  /** For or against the pieces (#2383): a grouped list's members — `exclude` under a stamp's group,
+   *  `only` in the pieces bucket. Never on the bar. */
+  piece?: PieceFilter;
   /** The issue's completeness (#1884): `any`, `one` or `incomplete`; absent is *All*. */
   complete?: CompletenessFilter;
   /** How many times a stamp is held (#1932): `once` or `several`; absent is *Any*. */
@@ -286,6 +287,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.holdingStates && filters.holdingStates.length > 0)
     params.set("holdingStates", filters.holdingStates.join(","));
   if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
+  if (filters.piece) params.set("piece", filters.piece);
   if (filters.complete) params.set("complete", filters.complete);
   appendHeldFilterParams(params, filters);
   appendTagFilterParams(params, filters);

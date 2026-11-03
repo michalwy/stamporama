@@ -12,7 +12,9 @@ cover and on piece, #2356, which nothing read for a copy until now). Part of the
 it maps to each of its roles, the reserved cover formats are gone, and Michel's rule is the Michel
 method's — §4 and §7 say where. **Amended by [ADR-0078](0078-piece-used-price-floor.md) (#2397)**: no
 piece is valued below the sum of its stamps' used prices, whatever the method (§1), and a missing used
-price makes every piece's value partial (§5).
+price makes every piece's value partial (§5). **Amended by [ADR-0079](0079-piece-has-no-condition.md) (#2383)**: a
+piece has no condition, and one stamp on a format with a kind counts towards none of its stamps — §4
+says where.
 
 ## Context
 
@@ -95,6 +97,9 @@ a piece of its one stamp, rate-correct, from the conditions its method maps.
 
 One stamp once on a format of kind *On cover* is still a copy of that stamp and still counted (ADR-0044
 §3 is unchanged); only its value is the method's — its EF price under Michel.
+
+*Since ADR-0079 (#2383)*: it is not. A piece has no condition, and one stamp on a format with a kind is
+counted towards none of its stamps, exactly as a piece carrying several.
 
 ### 5. A missing price makes the value partial
 

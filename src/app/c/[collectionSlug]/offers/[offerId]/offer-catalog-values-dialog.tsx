@@ -21,6 +21,7 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatAmountInput } from "@/lib/decimal-input";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { ItemListItem } from "@/lib/items";
+import type { Conditioned } from "@/lib/piece-condition";
 import type { BulkQuickPriceCatalog, BulkQuickPriceRow } from "@/lib/stamps";
 
 /**
@@ -80,9 +81,10 @@ export interface OfferCatalogValueRow {
   /**
    * The copy the row is drawn from *and* priced at: its stamp, condition and certificate are the
    * key, and its photos, numbers and issue are what the row prints. The offer's own copies, which
-   * the card already holds — the same subject the per-row `+ CV` is opened with.
+   * the card already holds — the same subject the per-row `+ CV` is opened with. Never a piece,
+   * which has no condition to price (#2383).
    */
-  copy: ItemListItem;
+  copy: Conditioned<ItemListItem>;
   /** How many of the offer's copies this row stands for, as the card counts them. */
   copyCount: number;
   /** Set where the copy's figure is **not** its own stamp's: the lowest of its variants (#238/#616),

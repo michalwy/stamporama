@@ -1,5 +1,6 @@
 "use client";
 
+import { conditioned } from "@/lib/piece-condition";
 import { isMissingCatalogPrice } from "@/lib/valuation";
 import type { OfferPlatformItem } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
@@ -250,11 +251,11 @@ const HEADER_CHIP: React.CSSProperties = {
  *  alone. */
 function valuationKey(r: {
   stampId: string;
-  conditionId: string;
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
 }): string {
-  return `${r.stampId}|${r.conditionId}|${r.certificateStatusId ?? ""}|${r.formatId ?? ""}`;
+  return `${r.stampId}|${r.conditionId ?? ""}|${r.certificateStatusId ?? ""}|${r.formatId ?? ""}`;
 }
 
 export function OfferPlatformItemsCard({
@@ -392,9 +393,10 @@ export function OfferPlatformItemsCard({
     () =>
       items.flatMap((item) => {
         const key = `${item.stampId}|${item.conditionId}`;
-        const copy = unpricedBy.get(key) ?? copyByStampCondition.get(key) ?? null;
+        const found = unpricedBy.get(key) ?? copyByStampCondition.get(key) ?? null;
         // No copy of that stamp on this offer is nothing to price: the value is recorded against a
-        // stamp × condition, and the copy is what carries both here.
+        // stamp × condition, and the copy is what carries both here — never a piece (#2383).
+        const copy = found ? conditioned(found) : null;
         if (!copy) return [];
         // Where the operative figure is the **tree's** and not this stamp's, the row is locked
         // (#627): the rollup's own value (#238/#616), or nothing at all where a variant carries no
@@ -441,6 +443,8 @@ export function OfferPlatformItemsCard({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  // A piece has no condition to price (#2383); its row prices its stamps instead.
+  const quickPriceSubject = quickPriceItem ? conditioned(quickPriceItem) : null;
   // One grid for the whole card, opened over whichever row was pressed — a hook cannot be called in
   // a `.map`, which is why the scope is supplied at the click rather than per row.
   const variantPrices = useVariantPriceGrid({
@@ -977,12 +981,14 @@ export function OfferPlatformItemsCard({
                       the stamp name and the links, and the long form widened it on every row.
                       A condition with no abbreviation says its name instead: an empty frame is
                       never the right rendering (#1200). */}
-                  <ConditionChip
-                    collectionId={collectionId}
-                    conditionId={item.conditionId}
-                    label={item.conditionAbbreviation || item.conditionName}
-                    tooltip={item.conditionName}
-                  />
+                  {item.conditionId && (
+                    <ConditionChip
+                      collectionId={collectionId}
+                      conditionId={item.conditionId}
+                      label={item.conditionAbbreviation || item.conditionName}
+                      tooltip={item.conditionName}
+                    />
+                  )}
                   {item.copyCount > 1 && (
                     <Tooltip content={`${item.copyCount} copies of this stamp in this condition are in the offer.`}>
                       <span style={MUTED}>×{item.copyCount}</span>
@@ -1035,6 +1041,8 @@ export function OfferPlatformItemsCard({
                         // Narrowed in rows too (#679) — the umbrella on this row is the tree the
                         // question is about, not whatever it happens to hang under.
                         onClick={() =>
+                          // Never a piece's row: `unpricedVariantStampId` is not set on one (#2383).
+                          item.conditionId &&
                           variantPrices.open(
                             { kind: "stamp", stampId: item.stampId, subtree: true },
                             {
@@ -1056,7 +1064,7 @@ export function OfferPlatformItemsCard({
                       if (!unpriced) return null;
                       return (
                         <Tooltip
-                          content={`No catalog value recorded for this stamp ${item.conditionName.toLowerCase()}. Set it here, without going down to the copies.`}
+                          content={`No catalog value recorded for this stamp ${(item.conditionName ?? "").toLowerCase()}. Set it here, without going down to the copies.`}
                         >
                           <button
                             type="button"
@@ -1131,8 +1139,8 @@ export function OfferPlatformItemsCard({
                           chosen
                             ? `You told this offer to sell it as ${variant}. Nothing is recorded on the stamp, and the copy's catalog value still follows the cheapest variant. Press to change it or go back to automatic.`
                             : item.catalogUrl
-                              ? `This stamp's variant isn't identified, so it carries no item-ID of its own. The listing goes under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}, which is also what the copy is valued at. Press to say which variant it should be instead.`
-                              : `This stamp's variant isn't identified, so the listing would go under ${variant} — the cheapest variant ${item.conditionName.toLowerCase()}. That variant has no item-ID yet, which is what stops this offer being posted: match it here, or press to list under another variant.`
+                              ? `This stamp's variant isn't identified, so it carries no item-ID of its own. The listing goes under ${variant} — the cheapest variant ${(item.conditionName ?? "").toLowerCase()}, which is also what the copy is valued at. Press to say which variant it should be instead.`
+                              : `This stamp's variant isn't identified, so the listing would go under ${variant} — the cheapest variant ${(item.conditionName ?? "").toLowerCase()}. That variant has no item-ID yet, which is what stops this offer being posted: match it here, or press to list under another variant.`
                         }
                       >
                         {/* The name is the picker's own trigger (extends #616). It belongs on the
@@ -1242,7 +1250,7 @@ export function OfferPlatformItemsCard({
       {/* Saying by hand which variant this offer sells an umbrella as (extends #616). It re-reads the
           whole offer on save rather than patching the row: the choice moves the row's links, its
           blockers and the generated texts at once, which is exactly what one invalidation covers. */}
-      {choosingFor && (
+      {choosingFor && choosingFor.conditionId && (
         <ListedVariantDialog
           offerId={offerId}
           stampId={choosingFor.stampId}
@@ -1254,15 +1262,15 @@ export function OfferPlatformItemsCard({
 
       {/* The same dialog and the same save the copies below use (#147/#170/#341) — a value set from
           here is set the one way it is ever set. */}
-      {quickPriceItem && (
+      {quickPriceSubject && (
         <QuickPriceDialog
-          subject={quickPriceItem}
+          subject={quickPriceSubject}
           collectionId={collectionId}
-          areaName={quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null}
+          areaName={quickPriceSubject.areaId ? (areaNameById.get(quickPriceSubject.areaId) ?? null) : null}
           primaryVendorId={
-            quickPriceItem.areaId ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null) : null
+            quickPriceSubject.areaId ? (primaryVendorByArea.get(quickPriceSubject.areaId) ?? null) : null
           }
-          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
+          vendorMap={vendorMapFor(quickPriceSubject.areaId, quickPriceSubject.issueId)}
           isPending={isPricing}
           error={priceError}
           onClose={() => {
@@ -1277,7 +1285,7 @@ export function OfferPlatformItemsCard({
             void invalidateStampsAndIssues(collectionId);
           }}
           onSubmit={(entries) => {
-            const copy = quickPriceItem;
+            const copy = quickPriceSubject;
             setPriceError(undefined);
             startPricing(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");

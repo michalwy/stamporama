@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { createItem } from "../../src/lib/items";
+import { createItem, updateItem } from "../../src/lib/items";
 import { setItemStamps } from "../../src/lib/item-stamps";
 import {
   countCopiesByStamp,
@@ -360,8 +360,10 @@ describe("a multi-stamp copy is a copy of none of its stamps (#745)", () => {
 
   it("puts the piece back into every count when it is taken down to one stamp", async () => {
     // The counts follow the facts, with no conversion of its own (ADR-0044 §7): this is the same
-    // ordinary edit that made it a carrier, run the other way.
-    await setItemStamps(userId, carrierId, [{ stampId: mi3 }]);
+    // ordinary edit that made it a carrier, run the other way — with the condition a loose stamp
+    // must be given, which the piece did not have (#2383).
+    await assert.rejects(setItemStamps(userId, carrierId, [{ stampId: mi3 }]), /condition/);
+    await updateItem(userId, carrierId, { stamps: [{ stampId: mi3 }], conditionId });
 
     assert.equal((await countCopiesByStamp(collectionId, [mi3])).get(mi3)?.total, 1);
     assert.equal(

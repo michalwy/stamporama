@@ -131,12 +131,15 @@ export const NO_MIXING: SeriesMixing = { condition: false, certificate: false, f
  * *no certificate* / *single*, so the two must not be confused.
  */
 export interface SeriesCombination {
-  conditionId?: string;
+  /** Null only from the offer generator, for a piece, which has no condition (#2383). */
+  conditionId?: string | null;
   certificateStatusId?: string | null;
   formatId?: string | null;
 }
 
-type CombinationCopy = Pick<RecombinationCopy, "conditionId" | "certificateStatusId" | "formatId">;
+type CombinationCopy = Pick<RecombinationCopy, "certificateStatusId" | "formatId"> & {
+  conditionId: string | null;
+};
 
 /** The combination a copy belongs to under the given mixing. */
 export function combinationOf(copy: CombinationCopy, mixing: SeriesMixing): SeriesCombination {

@@ -17,7 +17,8 @@ import { isMissingCatalogPrice } from "./valuation";
 /** The part of an `OfferPlatformItem` the gap rule reads. */
 export interface GapItem {
   stampId: string;
-  conditionId: string;
+  /** Null for a piece's row (#2383): its value is its stamps' prices, never a `stamp × condition`. */
+  conditionId: string | null;
   /** The platform's catalogue page for whatever this row stands under — null when unmatched. */
   catalogUrl: string | null;
   /** Set where the row's operative figure belongs to a variant tree that carries no price (#617). */
@@ -27,7 +28,7 @@ export interface GapItem {
 /** The part of a copy row the gap rule reads. */
 export interface GapCopy {
   stampId: string;
-  conditionId: string;
+  conditionId: string | null;
   value: { unpriced: boolean; mark: CatalogPriceMark | null };
 }
 
@@ -51,6 +52,8 @@ export interface ListingItemGaps {
 export function listingItemGaps(items: GapItem[], copies: GapCopy[]): ListingItemGaps {
   const unpricedKeys = new Set<string>();
   for (const copy of copies) {
+    // A piece has no condition (#2383) and no catalog value of its own to record: never a `+ CV`.
+    if (copy.conditionId === null) continue;
     if (isMissingCatalogPrice(copy.value)) unpricedKeys.add(`${copy.stampId}|${copy.conditionId}`);
   }
   let unlinked = 0;

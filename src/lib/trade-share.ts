@@ -343,7 +343,8 @@ export interface TradeShareLineView {
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
-  condition: string;
+  /** Null for a piece, which has no condition (#2383); the line names none. */
+  condition: string | null;
   certificate: string | null;
   format: string | null;
   quantity: number;

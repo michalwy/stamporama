@@ -50,7 +50,8 @@ export interface AgentUnlistedCopy {
   readonly candidates?: AgentCandidateSet;
   readonly issue?: string;
   readonly issueYear?: number;
-  readonly condition: string;
+  /** Absent for a piece — a cover or a fragment — which has no condition (#2383). */
+  readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
   readonly location?: string;
@@ -81,7 +82,7 @@ export interface UnlistedCopyRow extends CandidateSetRow {
   readonly issueId: string | null;
   readonly issueName: string | null;
   readonly issueYear: number | null;
-  readonly conditionName: string;
+  readonly conditionName: string | null;
   readonly certificateStatusName: string | null;
   readonly formatName: string | null;
   readonly locationId: string | null;
@@ -113,7 +114,7 @@ export function unlistedCopy(
     candidates: candidateSet(row, context.candidateLabels),
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
-    condition: row.conditionName,
+    condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
     location: context.location ?? undefined,

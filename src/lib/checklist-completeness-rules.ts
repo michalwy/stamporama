@@ -53,7 +53,8 @@ export const COMPLETENESS_DISPOSITION_LABEL: Record<CompletenessDisposition, str
 /** One copy's worth of counted facts — what the `groupBy` behind this module hands over. */
 export interface CompletenessCount {
   stampId: string;
-  conditionId: string;
+  /** Never null in practice: the counted copies leave pieces out (`NOT_PIECE`, #2383). */
+  conditionId: string | null;
   /** ADR-0020: `null` **is** a value here — it means single, and no dictionary row exists for it. */
   formatId: string | null;
   inCollection: boolean;
@@ -163,7 +164,8 @@ export interface ForSaleSetCompleteness {
  *  rather than by this reading. */
 export interface ConditionCompletenessCount {
   stampId: string;
-  conditionId: string;
+  /** Never null in practice: the counted copies leave pieces out (`NOT_PIECE`, #2383). */
+  conditionId: string | null;
   count: number;
 }
 

@@ -69,7 +69,8 @@ export interface GeneratorCopy extends CoverageCopy {
   itemId: string;
   itemNo: number;
   stampId: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383) — a value on the axis here, like the two below. */
+  conditionId: string | null;
   /** Null: no certificate — a value on the axis (ADR-0006 §2). */
   certificateStatusId: string | null;
   /** Null: a single (ADR-0020) — a value on the axis too. */

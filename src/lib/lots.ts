@@ -1,4 +1,5 @@
 import "server-only";
+import { settleCopyConditionsTx } from "./item-condition";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
@@ -1393,7 +1394,9 @@ export async function intakeStamps(
      * pieces of paper rather than N records of one.
      */
     copies?: number;
-    conditionId: string;
+    /** Required of a loose stamp; absent or null for a **piece** — several stamps, or one on a format
+     *  with a kind — which has none (#2383). One given to a piece is dropped. */
+    conditionId?: string | null;
     certificateStatusId?: string | null;
     locationId?: string | null;
     locationRef?: string | null;
@@ -1438,13 +1441,16 @@ export async function intakeStamps(
   });
   const deliveryState = hasPurchaseArrived(purchase.status) ? "to_sort" : "ordered";
 
-  const conditionId = input.conditionId?.trim();
-  if (!conditionId) throw new Error("A condition is required.");
-  const condition = await prisma.stampCondition.findFirst({
-    where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
-    select: { id: true },
-  });
-  if (!condition) throw new Error("Condition not found in this collection.");
+  // Whether the copies take a condition is settled once their stamps are written (#2383): a piece
+  // has none, and a loose stamp without one is refused there.
+  const conditionId = input.conditionId?.trim() || null;
+  if (conditionId) {
+    const condition = await prisma.stampCondition.findFirst({
+      where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
+      select: { id: true },
+    });
+    if (!condition) throw new Error("Condition not found in this collection.");
+  }
 
   const certificateStatusId = input.certificateStatusId?.trim() || null;
   if (certificateStatusId) {
@@ -1577,8 +1583,10 @@ export async function intakeStamps(
         data: copyData(stampIds[0], itemNos[0]),
         select: { id: true, itemNo: true, stampId: true },
       });
-      await createLeadingEntriesTx(tx, [row]);
+      // The whole list where the piece carries several (#750), else the one leading entry — either
+      // way through `item-stamps.ts`, which settles the condition once the stamps are known (#2383).
       if (stamps) await setItemStampsTx(tx, row.id, stamps);
+      else await createLeadingEntriesTx(tx, [row]);
       return row;
     });
     await applyPhotoChangeSet(ownerId, item.id, input.photoChangeSet);
@@ -1590,12 +1598,13 @@ export async function intakeStamps(
         data: stampIds.map((stampId, i) => copyData(stampId, itemNos[i])),
         select: { id: true, itemNo: true, stampId: true },
       });
-      await createLeadingEntriesTx(tx, made);
       // A piece identified as carrying several stamps (#750) is written as one in the same
       // transaction as the copy, through the one module allowed to write the entries — so no copy
       // is ever visible as a loose stamp on its way to becoming a cover, where a want could close
-      // or a count could include it.
+      // or a count could include it. Its whole list replaces the leading entry, and the condition is
+      // settled once the stamps are known: a piece keeps none, a loose stamp must have one (#2383).
       if (stamps) for (const row of made) await setItemStampsTx(tx, row.id, stamps);
+      else await createLeadingEntriesTx(tx, made);
       return made;
     });
     created.push(...rows);
@@ -1603,11 +1612,20 @@ export async function intakeStamps(
   // The format the copies were written with, carried out rather than assumed: the want's format
   // axis reads it as a value, where null *is* "single" (`StampFormat`) and never "unknown", so a
   // block reported as null would be judged as satisfying a want for singles.
+  // The condition as written — a piece's was dropped (#2383) — so the want review reads the copy.
+  const pieceIds = new Set(
+    (
+      await prisma.item.findMany({
+        where: { id: { in: created.map((row) => row.id) }, conditionId: null },
+        select: { id: true },
+      })
+    ).map((row) => row.id)
+  );
   return created.map((row) => ({
     itemId: row.id,
     itemNo: row.itemNo,
     stampId: row.stampId,
-    conditionId,
+    conditionId: pieceIds.has(row.id) ? null : conditionId,
     certificateStatusId,
     formatId: copyFormatId,
   }));
@@ -2023,6 +2041,13 @@ async function applyLotBulkChanges(
           ...(changes.formatId !== undefined ? { formatId: changes.formatId } : {}),
         },
       });
+      // A piece keeps no condition the batch was given, and a batch moved off a format with a kind
+      // must have been given one in the same change (#2383).
+      const touched = await tx.item.findMany({ where: baseWhere, select: { id: true } });
+      await settleCopyConditionsTx(
+        tx,
+        touched.map((row) => row.id)
+      );
     }
     if (changes.faultReductionPercent !== undefined) {
       if (changes.faultReductionPercent !== null && !isFaultReduction(changes.faultReductionPercent)) {

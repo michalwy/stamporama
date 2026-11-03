@@ -92,8 +92,9 @@ export interface IdentifyHistoryEntry {
   photoId: string | null;
   /** The copy's internal number, for the collector who wants to be sure which one this was. */
   itemNo: number;
-  /** The condition's abbreviation, as the copy states it — what the row's chip says. */
-  conditionAbbreviation: string;
+  /** The condition's abbreviation, as the copy states it — what the row's chip says. Null for a
+   *  piece, which has none (#2383). */
+  conditionAbbreviation: string | null;
   /** When the copy was created — the identification's own time, and what this list is ordered by. */
   at: string;
   /** Where the stamp sits and what it is numbered and called, for the prefix-formatted label the
@@ -126,7 +127,8 @@ function entryOf(tile: ScanTileData): IdentifyHistoryEntry | null {
     },
     answers: {
       stampId: item.stampId,
-      conditionId: item.conditionId,
+      // A piece answered none (#2383): repeating it repeats no condition.
+      conditionId: item.conditionId ?? "",
       // The condition step reads "not chosen" as the empty string, which is where every one of
       // these lands when the copy answers a field with null.
       certificateStatusId: item.certificateStatusId ?? "",

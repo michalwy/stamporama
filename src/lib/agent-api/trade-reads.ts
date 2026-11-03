@@ -265,7 +265,8 @@ export interface AgentTradeLine {
   readonly catalogNumbers: string[];
   readonly issue?: string;
   readonly issueYear?: number;
-  readonly condition: string;
+  /** Absent on a give line for a piece — a cover or a fragment — which has no condition (#2383). */
+  readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
   /** Pieces this line is about. **Always 1 on the give side** — a multiple is one copy in one
@@ -299,7 +300,7 @@ export interface GiveLineRow extends CandidateSetRow {
   readonly stampName: string | null;
   readonly issueName: string | null;
   readonly issueYear: number | null;
-  readonly conditionName: string;
+  readonly conditionName: string | null;
   readonly certificateStatusName: string | null;
   readonly formatName: string | null;
   readonly locationRef: string | null;
@@ -341,7 +342,7 @@ export function giveLine(row: GiveLineRow, context: TradeLineContext): AgentTrad
     catalogNumbers: catalogLabels(context.catalogNumbers),
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
-    condition: row.conditionName,
+    condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
     quantity: 1,

@@ -78,7 +78,7 @@ export function wantPriorityFromRank(rank: number): WantPriority {
 /** A want's acceptance, as the three sets. Ids only — nothing here needs a dictionary row. */
 export interface WantAcceptance {
   stampId: string;
-  /** Acceptable conditions. Empty = any. Never contains null: `Item.conditionId` is required. */
+  /** Acceptable conditions. Empty = any. Never contains null: only a piece has no condition, and a piece answers no want (#2383). */
   conditionIds: string[];
   /** Acceptable certificate statuses. Empty = any; `null` is the "no certificate" member. */
   certificateStatusIds: (string | null)[];
@@ -117,7 +117,9 @@ export function acceptanceSetsEqual(a: AcceptanceSets, b: AcceptanceSets): boole
 /** The four facts about a copy that a want is answered against. */
 export interface WantCandidateCopy {
   stampId: string;
-  conditionId: string;
+  /** Null for a piece (#2383), which the counts leave out before this is asked; it would match a
+   *  want accepting any condition and no other. */
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
 }

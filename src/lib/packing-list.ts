@@ -144,9 +144,10 @@ export interface PackingCopy {
   issueId: string | null;
   catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   issueName: string | null;
-  conditionId: string;
-  conditionName: string;
-  conditionAbbreviation: string;
+  /** Null for a piece, which has no condition (#2383); its row prints none. */
+  conditionId: string | null;
+  conditionName: string | null;
+  conditionAbbreviation: string | null;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
   locationId: string | null;
@@ -177,10 +178,10 @@ export interface PackingListRow {
   /** Full path of the collection area the stamp sits in (`Polska › II RP`), or null. Like the
    * issue, it is a property of the stamp, so it is constant across a merged row. */
   areaPath: string | null;
-  /** Condition abbreviation (e.g. `**`), falling back to the full name. */
-  condition: string;
+  /** Condition abbreviation (e.g. `**`), falling back to the full name. Null for a piece (#2383). */
+  condition: string | null;
   /** Full condition name, for the printed legend / tooltip. */
-  conditionName: string;
+  conditionName: string | null;
   /** Certificate status of the copy, or null when it has none. Printed beside the condition,
    * and part of the merge key — a certified copy is not interchangeable with an uncertified one. */
   certificateStatusName: string | null;
@@ -494,5 +495,5 @@ function compareByShelf(a: PackingListRow, b: PackingListRow): number {
 function compareByCatalog(a: PackingListRow, b: PackingListRow): number {
   const byCatalog = COLLATOR.compare(a.catalog, b.catalog);
   if (byCatalog !== 0) return byCatalog;
-  return COLLATOR.compare(a.condition, b.condition);
+  return COLLATOR.compare(a.condition ?? "", b.condition ?? "");
 }

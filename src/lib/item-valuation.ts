@@ -68,7 +68,9 @@ import type { StillValidRule } from "./still-valid-postage";
 export interface ValuationRow {
   id: string;
   stampId: string;
-  conditionId: string;
+  /** Null for a **piece** copy, which has no condition (#2383) and is valued by its method from the
+   *  conditions it maps, never from this. A row that is not a piece and has none is unpriced. */
+  conditionId: string | null;
   certificateStatusId: string | null;
   /** The copy's physical format (#343); null is the single. */
   formatId: string | null;
@@ -636,13 +638,15 @@ export async function valuateItemRows(
     const formatId = r.formatId;
     const areaId = areaByStamp.get(stampId) ?? null;
     const issueId = issueByStamp.get(stampId) ?? null;
+    // No condition names no price (#2383): only a piece has none, and a piece is not valued here.
+    const conditionId = r.conditionId ?? "";
     return valuateCopy({
-      conditionId: r.conditionId,
+      conditionId,
       certificateStatusId: r.certificateStatusId,
       formatId,
       // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
       // one, is scaled by the same rule, since it shares the umbrella's issue and area.
-      formatFactor: factorLookup(formatId, areaId, issueId, r.conditionId),
+      formatFactor: factorLookup(formatId, areaId, issueId, conditionId),
       stillValid,
       unknownVariant,
       primaryCatalogNameId: primaryCatalogByStamp.get(stampId) ?? null,

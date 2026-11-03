@@ -20,6 +20,7 @@ import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
 import { NO_FAULTS } from "@/lib/fault-filter";
+import { NO_CONDITION } from "@/lib/piece-condition";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DISPOSITION_FILTERS } from "./copies-list-filters";
 import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-colors";
@@ -234,11 +235,16 @@ export function CopiesFilterControls({
       </Tooltip>
 
       {/* Several conditions at once (#425): a copy is in exactly one condition, but the
-          question asked of the list is routinely a group of them ("the mint grades"). */}
+          question asked of the list is routinely a group of them ("the mint grades"). A piece has
+          none (#2383), and *No condition* is the value that finds the pieces, so a filter by
+          condition never hides them for good. */}
       <FilterSlot width={FILTER_WIDTH.conditions}>
         <MultiSelectFilter
           fullWidth
-          options={conditions.map((c) => ({ id: c.id, label: c.name }))}
+          options={[
+            { id: NO_CONDITION, label: "No condition" },
+            ...conditions.map((c) => ({ id: c.id, label: c.name })),
+          ]}
           selected={conditionIds}
           onChange={(ids) => updateParams({ conditionIds: ids.join(",") })}
           allLabel="All conditions"

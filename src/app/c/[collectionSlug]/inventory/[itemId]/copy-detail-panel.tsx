@@ -302,17 +302,20 @@ export function CopyDetailPanel({
                 {/* Coloured exactly as the copies list colours it (#728) — a chip a collector
                     learned to recognise on the list has to be the same chip on the copy's own
                     screen, or the colour is a list convention rather than the entry's own. */}
-                <Field label="Condition">
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                    <ConditionChip
-                      collectionId={collectionId}
-                      conditionId={item.conditionId}
-                      label={item.conditionAbbreviation}
-                      tooltip={item.conditionName}
-                    />
-                    {item.conditionName}
-                  </span>
-                </Field>
+                {/* A piece has no condition (#2383): its state is its franking and its faults. */}
+                {item.conditionId && (
+                  <Field label="Condition">
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                      <ConditionChip
+                        collectionId={collectionId}
+                        conditionId={item.conditionId}
+                        label={item.conditionAbbreviation}
+                        tooltip={item.conditionName}
+                      />
+                      {item.conditionName}
+                    </span>
+                  </Field>
+                )}
                 {/* What is wrong with the piece (#1557), beside the condition it qualifies — the
                     chips the Copies row draws, from the same source. Edited in the copy dialog. */}
                 <Field label="Faults">

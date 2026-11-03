@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
-import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_PIECE } from "./multi-stamp";
 import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
@@ -96,7 +96,7 @@ function forSaleStockWhere(collectionId: string, stampIds: string[]) {
     // …nor a multi-stamp carrier (#745, ADR-0044 §3). The claim the figure makes is that a series
     // can go out as one offer set, and a cover bearing three of its stamps cannot supply a single
     // position of it — it is one piece that is sold whole.
-    ...NOT_MULTI_STAMP,
+    ...NOT_PIECE,
     // …nor a copy whose candidates span several variant trees (#1651, ADR-0065): it is *possibly*
     // each of them and certainly none, until it is settled.
     ...NOT_ACROSS_TREES,

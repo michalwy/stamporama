@@ -69,7 +69,8 @@ export interface ListingKitItem {
    *  A form is filled identically either way — this is what lets the surfaces say the listing went
    *  under a variant rather than under the umbrella the collector picked. */
   catalogItemSource: { stampId: string; label: string } | null;
-  condition: ListingKitCondition;
+  /** Null for a piece — a cover, a fragment — which has no condition (#2383). */
+  condition: ListingKitCondition | null;
 }
 
 /** A copy's condition, ours and the platform's side by side: the local pair is what a message names
@@ -317,7 +318,7 @@ export async function getOfferListingKit(
       setId: set.id,
       label: labeller.set({ title: set.title, items }),
       copies: items.map(({ itemId, item }): ListingKitItem => {
-        const platformValue = conditionMap.get(item.conditionId) ?? null;
+        const platformValue = item.conditionId ? (conditionMap.get(item.conditionId) ?? null) : null;
         const resolved = catalogIds.get(itemId);
         return {
           itemId,
@@ -329,13 +330,16 @@ export async function getOfferListingKit(
             catalogued && resolved?.sourceStampId
               ? { stampId: resolved.sourceStampId, label: resolved.sourceLabel ?? "" }
               : null,
-          condition: {
-            id: item.conditionId,
-            name: item.condition.name,
-            abbreviation: item.condition.abbreviation,
-            platformValue,
-            platformLabel: platformValue ? (colnectGradeFor(platformValue)?.label ?? null) : null,
-          },
+          condition:
+            item.condition && item.conditionId
+            ? {
+                id: item.conditionId,
+                name: item.condition.name,
+                abbreviation: item.condition.abbreviation,
+                platformValue,
+                platformLabel: platformValue ? (colnectGradeFor(platformValue)?.label ?? null) : null,
+              }
+            : null,
         };
       }),
     };
@@ -358,11 +362,11 @@ export async function getOfferListingKit(
         // Why a null id came back null (#617) — read off the one derivation above, never re-derived,
         // so the refusal names the same stamp the resolution was about.
         catalogRollup: catalogIds.get(c.itemId)?.gap ?? null,
-        conditionId: c.condition.id,
-        conditionName: c.condition.name,
+        conditionId: c.condition?.id ?? null,
+        conditionName: c.condition?.name ?? null,
         certificateStatusId: priceAxes.get(c.itemId)?.certificateStatusId ?? null,
         formatId: priceAxes.get(c.itemId)?.formatId ?? null,
-        platformCondition: c.condition.platformValue,
+        platformCondition: c.condition?.platformValue ?? null,
       })),
     })),
   });

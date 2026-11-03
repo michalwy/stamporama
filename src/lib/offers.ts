@@ -4789,12 +4789,12 @@ function listingBlockersFor(
         // Which of the two catalogue gaps left it null (#617), from the same resolution.
         catalogRollup: catalogIds.get(itemId)?.gap ?? null,
         conditionId: item.conditionId,
-        conditionName: item.condition.name,
+        conditionName: item.condition?.name ?? null,
         // The rest of the valuation key (#616), carried so a blocker raised on this copy can open
         // the price grid at the very axes it was raised on (#633).
         certificateStatusId: item.certificateStatusId,
         formatId: item.formatId,
-        platformCondition: conditionMap.get(item.conditionId) ?? null,
+        platformCondition: item.conditionId ? (conditionMap.get(item.conditionId) ?? null) : null,
       })),
     })),
   });
@@ -5489,7 +5489,8 @@ export interface OfferDetail {
  */
 export interface OfferPlatformItem {
   stampId: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383); its row names none. */
+  conditionId: string | null;
   /** The rest of the key a catalog price is recorded against, for the surface that opens the variant
    * price grid narrowed to this row (#633) — the first copy's answer, exactly like the derivation
    * below, since a row is `stamp × condition` and its copies may differ in neither often nor much.
@@ -5506,10 +5507,10 @@ export interface OfferPlatformItem {
   catalogNumbers: string[];
   /** The stamp's name, where it has one; the label already carries the number. */
   stampName: string | null;
-  conditionName: string;
+  conditionName: string | null;
   /** The short form of the same condition, for the row's condition chip — the abbreviation is what
    * a chip says on every other list in the app, with the full name in its hover. */
-  conditionAbbreviation: string;
+  conditionAbbreviation: string | null;
   /** The page in the platform's catalogue (#290) of whatever this row **stands under** — the stamp
    * itself, or the variant of {@link catalogItemVariant} — null when that entry was never matched. */
   catalogUrl: string | null;
@@ -6170,7 +6171,7 @@ function platformItemsFor(
       const variantLabel =
         resolved?.sourceLabel ??
         (resolved?.gap?.kind === "unmatched-variant" ? resolved.gap.label : null);
-      const grade = colnectGradeFor(conditionMap.get(item.conditionId) ?? "");
+      const grade = colnectGradeFor((item.conditionId && conditionMap.get(item.conditionId)) || "");
       const catalogNumbers = labeller.catalogNumbers(item.stamp);
       // A search is run on the number an item-ID would be **recorded against** — the variant's where
       // there is one. Searching the umbrella's number would take the collector to a page they must
@@ -6184,8 +6185,8 @@ function platformItemsFor(
         label: labeller.copy(item.stamp),
         catalogNumbers,
         stampName: item.stamp.name?.trim() || null,
-        conditionName: item.condition.name,
-        conditionAbbreviation: item.condition.abbreviation,
+        conditionName: item.condition?.name ?? null,
+        conditionAbbreviation: item.condition?.abbreviation ?? null,
         catalogUrl: colnectStampUrl(colnectId),
         // Only for a stamp with no page of its own: searching for one already matched would offer
         // the long way round to a link that is right there.
@@ -6197,12 +6198,13 @@ function platformItemsFor(
         catalogItemVariantChosen: resolved?.sourceChosen ?? false,
         // Offered wherever there is a variant to stand under at all — which is decided by the stamp
         // being an unmatched umbrella, not by whether the rollup managed to pick one.
+        // Never on a piece's row (#2383): it is no stamp in a condition, and its value is its stamps'.
         variantChoiceStampId:
-          isUnknownVariantStamp(item.stamp) && !item.stamp.colnectId?.trim()
+          item.conditionId !== null && isUnknownVariantStamp(item.stamp) && !item.stamp.colnectId?.trim()
             ? item.stampId
             : null,
         unpricedVariantStampId:
-          resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
+          item.conditionId !== null && resolved?.gap?.kind === "unpriced-variants" ? item.stampId : null,
         // Where a typed item-ID would go (#741): the same entry the search above looks for. An
         // unmatched variant is that entry and the umbrella is not; an unpriced tree names none, so
         // it offers no manual entry either — exactly as it offers no search.

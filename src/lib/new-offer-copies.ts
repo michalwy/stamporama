@@ -21,6 +21,7 @@
 //    two copies of a stamp does not make the other stop being a duplicate.
 //  - **The groups** (#1795) are by issue or by stamp, each summed like the whole set.
 
+import { NO_CONDITION } from "./piece-condition";
 import { copiesCost, copyCostFigure, type CopyCostInput, type OfferSetCost } from "./offer-cost";
 import { formatItemNo } from "./item-number";
 import { compareCatalogSortKeys, computeCatalogSortKey } from "./catalog-sort-key";
@@ -32,7 +33,8 @@ export interface NewOfferCopy extends Omit<CopyCostInput, "label"> {
   itemNo: number;
   stampName: string | null;
   stampId: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383) — `NO_CONDITION` to the filter. */
+  conditionId: string | null;
   issueId: string | null;
   issueName: string | null;
   areaId: string | null;
@@ -284,7 +286,7 @@ export function filterNewOfferCopies<T extends NewOfferCopy>(copies: readonly T[
   const floor = floorCents(filters.minValue);
   return copies.filter((copy) => {
     if (doubled && !doubled.has(copy.id)) return false;
-    if (conditions && !conditions.has(copy.conditionId)) return false;
+    if (conditions && !conditions.has(copy.conditionId ?? NO_CONDITION)) return false;
     if (floor !== null) {
       if (copy.value.baseAmountDisplay == null) return false;
       if (cents(copy.value.baseAmountDisplay) < floor) return false;

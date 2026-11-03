@@ -12,6 +12,7 @@
 // rather than invented, and that a figure never travels without the coverage counts that say how
 // much of the collection is behind it.
 
+import { NO_CONDITION } from "../piece-condition";
 import type {
   CoverUsage,
   Franking,
@@ -122,7 +123,8 @@ export interface AgentSearchCopy {
   readonly issue?: string;
   readonly issueYear?: number;
   readonly catalogNumbers: string[];
-  readonly condition: string;
+  /** Absent for a piece — a cover or a fragment — which has no condition (#2383). */
+  readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
   readonly locationRef?: string;
@@ -233,7 +235,7 @@ export interface SearchCopyRow {
   readonly issueYear: number | null;
   readonly catalogNumbers: readonly CatalogLabelRow[];
   readonly photoId: string | null;
-  readonly condition: AxisValueRow;
+  readonly condition: AxisValueRow | null;
   readonly certificate: AxisValueRow | null;
   readonly format: AxisValueRow | null;
   readonly locationRef: string | null;
@@ -252,7 +254,7 @@ export function searchCopy(collectionId: string, row: SearchCopyRow): AgentSearc
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
     catalogNumbers: catalogLabels(row.catalogNumbers),
-    condition: row.condition.name,
+    condition: row.condition?.name,
     // **Absent rather than invented**, both of them. A null certificate *is* "no certificate"
     // (ADR-0006 §2) and a null format *is* the single (ADR-0020) — neither has a dictionary row, so
     // spelling one here would hand the agent a vocabulary value it could not find in
@@ -769,7 +771,8 @@ export interface AgentCopyDetail {
   readonly area?: string;
   readonly issue?: string;
   readonly issueYear?: number;
-  readonly condition: string;
+  /** Absent for a piece — a cover or a fragment — which has no condition (#2383). */
+  readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
   readonly inCollection: boolean;
@@ -805,7 +808,7 @@ export interface CopyRow extends CandidateSetRow {
   readonly issueId: string | null;
   readonly issueName: string | null;
   readonly issueYear: number | null;
-  readonly conditionName: string;
+  readonly conditionName: string | null;
   readonly certificateStatusName: string | null;
   readonly formatName: string | null;
   readonly inCollection: boolean;
@@ -857,7 +860,7 @@ export function copyDetail(
     area: context.area ?? undefined,
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
-    condition: row.conditionName,
+    condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
     inCollection: row.inCollection,
@@ -900,7 +903,8 @@ export interface AgentHolding {
   readonly variantToSettle?: boolean;
   readonly issue?: string;
   readonly issueYear?: number;
-  readonly condition: string;
+  /** Absent for a piece — a cover or a fragment — which has no condition (#2383). */
+  readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
   readonly location?: string;
@@ -925,7 +929,7 @@ export function holding(row: CopyRow, context: HoldingContext): AgentHolding {
     variantToSettle: row.unknownVariant || (row.candidates?.length ?? 0) > 1 || undefined,
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
-    condition: row.conditionName,
+    condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
     location: context.location ?? undefined,
@@ -959,6 +963,8 @@ export function conditionCounts(
   names: ReadonlyMap<string, string>
 ): AgentConditionCount[] {
   return [...counts.entries()]
+    // A piece has no condition (#2383), so it is in no grade's count; its rows say so by omission.
+    .filter(([conditionId]) => conditionId !== NO_CONDITION)
     .map(([conditionId, copies]) => ({ condition: names.get(conditionId) ?? conditionId, copies }))
     .sort((a, b) => b.copies - a.copies || a.condition.localeCompare(b.condition));
 }

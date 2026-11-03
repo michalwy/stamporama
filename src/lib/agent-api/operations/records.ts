@@ -213,7 +213,7 @@ export const getCopyOperation: Operation = {
   method: "GET",
   path: "/copies/{copy_id}",
   description:
-    "One physical copy in full: which stamp it is, its condition, certificate and format, where it is filed, what it cost, what the catalogue says it is worth, and what it is being held for. Call this when a holdings row or a search result is not enough.",
+    "One physical copy in full: which stamp it is, its condition, certificate and format, where it is filed, what it cost, what the catalogue says it is worth, and what it is being held for. A cover or other piece has no condition, and the record carries none. Call this when a holdings row or a search result is not enough.",
   writes: false,
   parameters: [
     {

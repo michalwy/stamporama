@@ -94,7 +94,8 @@ async function giveCandidatePool(
     where: { id: { in: eligible } },
     select: CANDIDATE_SELECT,
   });
-  return rows.map((row) => ({
+  // Narrowed to the requirements' conditions above, so never a piece, which has none (#2383).
+  return rows.flatMap((row) => (row.conditionId === null ? [] : [{
     id: row.id,
     itemNo: row.itemNo,
     stampId: row.stampId,
@@ -103,7 +104,7 @@ async function giveCandidatePool(
     formatId: row.formatId,
     forTrade: row.forTrade,
     hasPhoto: row.photos.length > 0,
-  }));
+  }]));
 }
 
 /**

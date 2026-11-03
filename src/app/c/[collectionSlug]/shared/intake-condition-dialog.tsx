@@ -896,7 +896,8 @@ function IntakeConditionDialog({
       setModifierError(parsedModifier.message);
       return;
     }
-    writeLast(LS_LAST_CONDITION, collectionId, conditionId);
+    // A piece has none (#2383), and leaves the condition the next loose stamp is seeded with alone.
+    if (!coverPiece) writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
     writeLast(LS_LAST_LOCATION, collectionId, locationId);
     writeLast(
@@ -954,7 +955,8 @@ function IntakeConditionDialog({
       }
       await priceTyping.saved();
     }
-    if (selection.kind === "stamp" && !pieceStamps) {
+    // Priced in the copy's condition, so never for a piece, which has none (#2383).
+    if (selection.kind === "stamp" && !pieceStamps && conditionId) {
       const entry = catalogValueEntry(catalogValueRef.current);
       if (entry) {
         setSavingPrice(true);
@@ -1355,30 +1357,33 @@ function IntakeConditionDialog({
                 )}
 
                 <div style={{ display: "flex", gap: "0.75rem" }}>
-                  <div style={{ flex: 1 }}>
-                    <LabelWithError htmlFor="intake-condition">
-                      Condition
-                      <SeedOriginNote origin={conditionOrigin} />
-                    </LabelWithError>
-                    <select
-                      id="intake-condition"
-                      name="conditionId"
-                      value={conditionId}
-                      onChange={(e) => {
-                        setConditionId(e.target.value);
-                        setConditionOrigin(null);
-                      }}
-                      disabled={isPending}
-                      style={INPUT_STYLE}
-                    >
-                      <option value="">— Select —</option>
-                      {conditions.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.abbreviation})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* A piece has no condition (#2383): its state is its franking and its faults. */}
+                  {!coverPiece && (
+                    <div style={{ flex: 1 }}>
+                      <LabelWithError htmlFor="intake-condition">
+                        Condition
+                        <SeedOriginNote origin={conditionOrigin} />
+                      </LabelWithError>
+                      <select
+                        id="intake-condition"
+                        name="conditionId"
+                        value={conditionId}
+                        onChange={(e) => {
+                          setConditionId(e.target.value);
+                          setConditionOrigin(null);
+                        }}
+                        disabled={isPending}
+                        style={INPUT_STYLE}
+                      >
+                        <option value="">— Select —</option>
+                        {conditions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.abbreviation})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div style={{ flex: 1 }}>
                     <LabelWithError htmlFor="intake-cert">
                       Certificate
@@ -1679,7 +1684,9 @@ function IntakeConditionDialog({
           actionLabel={actionLabel}
           cancelLabel="Back"
           onCancel={onBack}
-          disabled={isPending || !conditionId || photosUploading || photoScaleInvalid || savingPrice}
+          disabled={
+            isPending || (!coverPiece && !conditionId) || photosUploading || photoScaleInvalid || savingPrice
+          }
           // The caller's error and this dialog's own read the same way, and only one can be
           // standing: a failed catalogue write returns before the intake is attempted at all.
           error={priceError ?? error}

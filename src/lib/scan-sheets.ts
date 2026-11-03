@@ -2777,7 +2777,8 @@ export interface ScanTileData {
      * other prefilled id the condition step is handed.
      */
     stampId: string;
-    conditionId: string;
+    /** Null for a piece, which has no condition (#2383). */
+    conditionId: string | null;
     certificateStatusId: string | null;
     formatId: string | null;
     locationId: string | null;
@@ -2807,7 +2808,7 @@ export interface ScanTileData {
      * without them a number can only be printed bare. Null for a stamp on no issue. */
     issueId: string | null;
     collectionAreaId: string | null;
-    conditionAbbreviation: string;
+    conditionAbbreviation: string | null;
     /**
      * **Every** stamp the piece carries, in the collector's order (#750, ADR-0044) — the leading one
      * included, and exactly one entry for an ordinary copy.
@@ -3291,7 +3292,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
             })),
             issueId: t.item.stamp.issueMemberships[0]?.issue.id ?? null,
             collectionAreaId: t.item.stamp.issueMemberships[0]?.issue.collectionAreaId ?? null,
-            conditionAbbreviation: t.item.condition.abbreviation,
+            conditionAbbreviation: t.item.condition?.abbreviation ?? null,
             stamps: t.item.stamps.map((entry) => ({
               stampId: entry.stampId,
               quantity: entry.quantity,

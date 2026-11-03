@@ -12,8 +12,9 @@ export interface OfferConditionCount {
 
 /** A copy as far as its condition goes: the dictionary row it points at. */
 export interface ConditionedCopy {
-  conditionId: string;
-  condition: { abbreviation: string; name: string; sortOrder: number };
+  /** Null for a piece, which has no condition (#2383) and is counted under none. */
+  conditionId: string | null;
+  condition: { abbreviation: string; name: string; sortOrder: number } | null;
 }
 
 /**
@@ -25,6 +26,7 @@ export interface ConditionedCopy {
 export function offerConditionCounts(copies: readonly ConditionedCopy[]): OfferConditionCount[] {
   const byId = new Map<string, OfferConditionCount & { sortOrder: number }>();
   for (const copy of copies) {
+    if (copy.conditionId === null || copy.condition === null) continue;
     const seen = byId.get(copy.conditionId);
     if (seen) seen.count += 1;
     else

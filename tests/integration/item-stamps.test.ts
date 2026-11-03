@@ -232,7 +232,9 @@ describe("the stamps a copy carries (#744)", () => {
 
     const entries = await listItemStamps(userId, itemId);
     const added = entries.find((e) => e.stampId === mi201)!;
-    const remaining = await removeItemStamp(userId, itemId, added.id);
+    // Back to a loose stamp, which needs the condition the piece had none of (#2383).
+    await assert.rejects(() => removeItemStamp(userId, itemId, added.id), /condition/);
+    const remaining = await removeItemStamp(userId, itemId, added.id, conditionId);
 
     assert.deepEqual(remaining.map((e) => e.stampId), [mi200]);
     copy = await readCopy(itemId);
@@ -259,7 +261,7 @@ describe("the stamps a copy carries (#744)", () => {
     await setItemStamps(userId, itemId, [{ stampId: mi200 }, { stampId: mi201 }]);
     const leading = (await listItemStamps(userId, itemId))[0];
 
-    await removeItemStamp(userId, itemId, leading.id);
+    await removeItemStamp(userId, itemId, leading.id, conditionId);
     const copy = await readCopy(itemId);
     assert.equal(copy.stampId, mi201);
     assert.equal(copy.stampCount, 1);

@@ -89,8 +89,9 @@ export function isPieceKind(value: unknown): value is PieceKind {
 
 /**
  * Whether a copy is a **piece** valued by a method: it carries several stamps (`stampCount` > 1,
- * ADR-0044), or its format has a kind. One stamp once on a cover is still a copy of that stamp and
- * still counted (#2359) — only its value is now the method's.
+ * ADR-0044), or its format has a kind. A piece has **no condition** and is a copy of none of its
+ * stamps — one stamp once on a cover exactly as several (#2383; ADR-0079, amending #2359's "still
+ * counted"): `item-condition.ts` keeps `Item.conditionId` null exactly for a piece.
  */
 export function isPiece(stampCount: number, formatKind: PieceKind | null): boolean {
   return stampCount > 1 || formatKind !== null;

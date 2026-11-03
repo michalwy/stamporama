@@ -3727,7 +3727,9 @@ model Item {
   // components, not sheets of paper**: a block of four on a cover is one component of quantity 1
   // with the entry's `formatId` set, never four. Derived: written only by `src/lib/item-stamps.ts`.
   stampCount          Int      @default(1)
-  conditionId         String
+  // Null exactly when the copy is a **piece** (#2383, ADR-0079): it carries several stamps, or one on
+  // a format with a kind. A loose stamp always has one. Kept in step by `item-condition.ts`.
+  conditionId         String?
   certificateStatusId String?
   // Physical format of this copy; null = single. A multiple is one copy in one format — it is
   // never stored as, or counted as, N single copies (see `StampFormat`).
@@ -3793,7 +3795,7 @@ model Item {
 
   collection        Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)
-  condition         StampCondition       @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  condition         StampCondition?      @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus?   @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   format            StampFormat?         @relation(fields: [formatId], references: [id], onDelete: Restrict)
   lot               PurchaseLot?         @relation(fields: [lotId], references: [id], onDelete: Restrict)

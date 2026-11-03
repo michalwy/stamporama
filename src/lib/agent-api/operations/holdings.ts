@@ -286,7 +286,7 @@ export const listHoldingsOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "The copies held in the scope asked for, in the order they were added to the collection. `byCondition` counts the **whole** match by grade, not just this page, so the question `in what condition` is answered even when the rows were trimmed. A copy with no `certificate` carries none and one with no `format` is a single. `deliveryState` separates what is in hand (`delivered`, `to_sort`) from what is still on its way (`ordered`, `in_transit`) — both are held. `location` is the full filing path and `locationRef` the mark written on the shelf; a ref only means anything inside its own location. With no scope given this is the whole collection.",
+      "The copies held in the scope asked for, in the order they were added to the collection. `byCondition` counts the **whole** match by grade, not just this page, so the question `in what condition` is answered even when the rows were trimmed. A cover or other piece — several stamps, or one on a format of kind on cover or on piece — has no condition: its row carries no `condition` and `byCondition` does not count it. A copy with no `certificate` carries none and one with no `format` is a single. `deliveryState` separates what is in hand (`delivered`, `to_sort`) from what is still on its way (`ordered`, `in_transit`) — both are held. `location` is the full filing path and `locationRef` the mark written on the shelf; a ref only means anything inside its own location. With no scope given this is the whole collection.",
   },
   handler: async (context, params) => readHoldings(context, params),
 };

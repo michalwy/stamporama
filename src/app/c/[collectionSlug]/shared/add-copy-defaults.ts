@@ -106,9 +106,11 @@ export function readAddCopyDefaults(
 /** Remember the condition, location, and disposition just used, shared across every entry point. */
 export function writeAddCopyDefaults(
   collectionId: string,
-  values: { conditionId: string; locationId: string; disposition: AddCopyDisposition }
+  /** `conditionId` null leaves the remembered one alone: a piece has none (#2383), and a cover
+   *  added between two loose stamps must not clear the condition the next one takes. */
+  values: { conditionId: string | null; locationId: string; disposition: AddCopyDisposition }
 ): void {
-  writeLast(LS_LAST_CONDITION, collectionId, values.conditionId);
+  if (values.conditionId !== null) writeLast(LS_LAST_CONDITION, collectionId, values.conditionId);
   writeLast(LS_LAST_LOCATION, collectionId, values.locationId);
   writeLast(
     LS_LAST_DISPOSITION,

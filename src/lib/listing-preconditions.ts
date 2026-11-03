@@ -38,6 +38,8 @@ export type ListingBlockerCode =
   // pointing at the wrong screen.
   | "no-variant-price"
   | "unmapped-condition"
+  // #2383: a piece has no condition, so a platform that grades every listing cannot take it.
+  | "piece-without-condition"
   | "mixed-sets"
   // #462, the update mode's own three. Each stands alone, exactly as `not-ready` does: an offer that
   // is not live has no listing to correct, and there is nothing else worth saying about it.
@@ -105,7 +107,8 @@ export interface ListingBlocker {
  *  states (#616). Carried onward by the one blocker that is about prices, so the grid it links to
  *  opens at the cell the listing is blocked on (#633). Null is *no certificate* and *single*. */
 export interface PriceAxes {
-  conditionId: string;
+  /** Null for a piece (#2383), whose prices are its stamps' in the conditions its method maps. */
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
 }
@@ -126,9 +129,10 @@ export interface PreconditionCopy {
    *  rollup. Null on every copy that resolved one and on every copy whose own stamp is the thing at
    *  fault — see {@link CatalogRollupGap}. */
   catalogRollup?: CatalogRollupGap | null;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383) and so none to map to a platform's grade. */
+  conditionId: string | null;
   /** Our own condition's name, which is what an unmapped condition is reported under. */
-  conditionName: string;
+  conditionName: string | null;
   /** The rest of the price key this copy is valued on (#616) — reported onward by the unpriced-tree
    *  blocker alone (#633). Null is *no certificate* and *single*. */
   certificateStatusId: string | null;
@@ -172,7 +176,7 @@ export function setIdentity(set: PreconditionSet): string {
   return set.copies
     .map((c) => {
       const item = c.catalogItemId ?? `stamp:${c.stampId}`;
-      const cond = c.platformCondition ?? `cond:${c.conditionId}`;
+      const cond = c.platformCondition ?? `cond:${c.conditionId ?? ""}`;
       return `${item}@${cond}`;
     })
     .sort()
@@ -397,11 +401,23 @@ export function evaluateListingPreconditions(input: PreconditionInput): ListingB
     });
   }
 
+  // A piece has no condition to map (#2383): it has a blocker of its own below, not this one.
   const unmapped = rules.requiresPlatformCondition
-    ? copies.filter((c) => c.platformCondition === null)
+    ? copies.filter((c) => c.platformCondition === null && c.conditionName !== null)
     : [];
+  const pieces = rules.requiresPlatformCondition ? copies.filter((c) => c.conditionName === null) : [];
+  if (pieces.length > 0) {
+    const subjects = distinct(pieces.map((c) => c.label));
+    blockers.push({
+      code: "piece-without-condition",
+      title: `${subjects.length === 1 ? "A piece has" : `${subjects.length} pieces have`} no condition to grade`,
+      message: `A cover or a piece has no condition, and this platform asks for a grade on every item: ${subjects.join(", ")}. List ${subjects.length === 1 ? "it" : "them"} on another platform.`,
+      subjects,
+      stampIds: [],
+    });
+  }
   if (unmapped.length > 0) {
-    const subjects = distinct(unmapped.map((c) => c.conditionName));
+    const subjects = distinct(unmapped.map((c) => c.conditionName ?? ""));
     blockers.push({
       code: "unmapped-condition",
       title: `${subjects.length === 1 ? "A condition has" : `${subjects.length} conditions have`} no grade mapped for this platform`,

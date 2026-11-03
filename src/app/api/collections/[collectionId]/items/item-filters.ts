@@ -2,7 +2,7 @@ import type { ItemListFiltersPaginated } from "@/lib/items";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { faultFilterFromParams } from "@/lib/fault-filter";
-import { asMultiStampFilter } from "@/lib/multi-stamp";
+import { asMultiStampFilter, asPieceFilter } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { asHeldFilter, readHeldSplit } from "@/lib/held-filter";
 import { readSearchParam } from "@/lib/text-input";
@@ -112,6 +112,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // For or against the multi-stamp copies (#748). An unrecognised value is no filter, so a stale
     // link shows the list rather than an empty screen.
     multiStamp: asMultiStampFilter(sp.get("multiStamp")),
+    // For or against the pieces (#2383) — a grouped list's member reads, never the bar.
+    piece: asPieceFilter(sp.get("piece")),
     // The issue's completeness (#1884). It needs the specialised-checklist switch beside it, which is
     // a cookie and so is the route's to read — `withCompletenessSwitch` — not this parser's.
     complete: asCompletenessFilter(sp.get("complete")),

@@ -11,10 +11,12 @@ import { PieceArithmetic } from "./piece-value-breakdown";
 // before the copy exists, by the method, exactly as the copy will be valued once written. Each stamp
 // on the piece has its used price and its price on the piece typed in place (#2368,
 // `piece-stamp-prices.tsx`); under them, the computed value and how it was reached. Re-read as the
-// condition, the format, the stamps, the franking, the method or the typed prices change.
+// format, the stamps, the franking, the method or the typed prices change. A piece has no condition
+// (#2383), so none is waited for.
 
 export interface PiecePreviewSubject {
   collectionId: string;
+  /** Never read for a piece, which has none (#2383); `""` when the step shows no Condition field. */
   conditionId: string;
   /** The piece's own format, `""` for none. */
   formatId: string;
@@ -32,15 +34,15 @@ export interface PiecePreviewSubject {
   valueModifier?: ValueModifier | null;
 }
 
-/** The preview's value, or null while there is none — no condition yet, or not a piece. */
+/** The preview's value, or null while there is none — no stamps yet, or not a piece. */
 export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuation | null {
   const query = useQuery<CopyValuation | null>({
     queryKey: ["piecePreview", subject] as const,
-    enabled: subject !== null && subject.conditionId !== "" && subject.stamps.length > 0,
+    enabled: subject !== null && subject.stamps.length > 0,
     queryFn: async () => {
       const { previewPieceValueAction } = await import("@/app/actions/items");
       return previewPieceValueAction(subject!.collectionId, {
-        conditionId: subject!.conditionId,
+        conditionId: subject!.conditionId || null,
         formatId: subject!.formatId || null,
         stamps: subject!.stamps,
         franking: subject!.franking,

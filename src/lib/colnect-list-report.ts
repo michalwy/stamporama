@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS, isColnectConditionValue } from "./colnect-conditions";
-import { NOT_MULTI_STAMP_SQL } from "./multi-stamp";
+import { NOT_PIECE_SQL } from "./multi-stamp";
 import { NOT_ACROSS_TREES_SQL } from "./candidate-set-predicates";
 import { AREA_PATH_SEPARATOR } from "./area-path";
 import { sortPhotos, type PhotoSummary } from "./photos";
@@ -323,7 +323,7 @@ export async function readColnectLocalCondQty(
             AND i.${Prisma.raw(`"${shape.flag}"`)} = TRUE
             AND i."deliveryState" = 'delivered'
             AND i."disposedAt" IS NULL
-            AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+            AND i.${Prisma.raw(NOT_PIECE_SQL)}
             AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
             AND NULLIF(TRIM(s."colnectId"), '') = ANY(${ids})
           GROUP BY 1, 2`
@@ -401,7 +401,7 @@ function localSide(collectionId: string, source: ColnectListSource): Prisma.Sql 
         AND i.${flag} = TRUE
         AND i."deliveryState" = 'delivered'
         AND i."disposedAt" IS NULL
-        AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+        AND i.${Prisma.raw(NOT_PIECE_SQL)}
         AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
       GROUP BY i."stampId"`;
   }
@@ -449,7 +449,7 @@ function differences(input: {
             AND i.${Prisma.raw(`"${shape.flag}"`)} = FALSE
             AND i."deliveryState" = 'delivered'
             AND i."disposedAt" IS NULL
-            AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+            AND i.${Prisma.raw(NOT_PIECE_SQL)}
             AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
           GROUP BY i."stampId"`
       : Prisma.sql`SELECT NULL::text AS stamp_id, NULL::int AS spare WHERE FALSE`;

@@ -257,7 +257,7 @@ describe("offer listing kit (#405)", () => {
       ["1001", "1002"]
     );
     assert.deepEqual(
-      kit.items.map((i) => [i.condition.platformValue, i.condition.platformLabel]),
+      kit.items.map((i) => [i.condition?.platformValue, i.condition?.platformLabel]),
       [
         ["1", "MNH - Mint Never Hinged"],
         ["1", "MNH - Mint Never Hinged"],
@@ -363,14 +363,14 @@ describe("offer listing kit (#405)", () => {
     const before = await getOfferListingKit(userId, collectionId, offerId);
     assert.deepEqual(before?.blockers.map((b) => b.code), ["unmapped-condition"]);
     assert.deepEqual(before?.blockers[0].subjects, ["Used"]);
-    assert.equal(before?.items[0].condition.platformValue, null);
+    assert.equal(before?.items[0].condition?.platformValue, null);
 
     await setColnectConditionMapping(userId, usedId, "4");
     try {
       const after = await getOfferListingKit(userId, collectionId, offerId);
       assert.deepEqual(after?.blockers, []);
-      assert.equal(after?.items[0].condition.platformValue, "4");
-      assert.equal(after?.items[0].condition.platformLabel, "U - Used");
+      assert.equal(after?.items[0].condition?.platformValue, "4");
+      assert.equal(after?.items[0].condition?.platformLabel, "U - Used");
     } finally {
       await setColnectConditionMapping(userId, usedId, null);
     }

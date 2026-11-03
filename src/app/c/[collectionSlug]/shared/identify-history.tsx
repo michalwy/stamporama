@@ -201,11 +201,14 @@ function IdentifyHistoryRow({
             {/* The condition in the colour the collector recognises it by on every list (#728),
                 rather than as a word in a sentence — this row is read at a glance, beside a piece,
                 and the colour is half of how it is read. */}
-            <ConditionChip
-              collectionId={collectionId}
-              conditionId={entry.answers.conditionId}
-              label={entry.conditionAbbreviation}
-            />
+            {/* A piece answered none (#2383). */}
+            {entry.conditionAbbreviation && (
+              <ConditionChip
+                collectionId={collectionId}
+                conditionId={entry.answers.conditionId}
+                label={entry.conditionAbbreviation}
+              />
+            )}
             {formatAbbreviation && (
               <span style={{ color: "var(--color-text-muted)" }}>{formatAbbreviation}</span>
             )}

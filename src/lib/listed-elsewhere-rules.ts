@@ -42,12 +42,14 @@ export interface ListedElsewhereCopy {
 export interface TwinCopy {
   itemId: string;
   stampId: string;
-  conditionId: string;
+  /** Null for a piece (#2383), which is never twinnable. */
+  conditionId: string | null;
   formatId: string | null;
   certificateStatusId: string | null;
   faultIds: readonly string[];
-  /** False for a piece of several stamps or a copy whose stamp is not known for sure (ADR-0044,
-   *  ADR-0065): *the same stamp* is not one stamp there, so such a copy neither has nor is a twin. */
+  /** False for a piece — several stamps, or one on a cover (#2383) — or a copy whose stamp is not
+   *  known for sure (ADR-0044, ADR-0065): *the same stamp* is not one stamp there, so such a copy
+   *  neither has nor is a twin. */
   twinnable: boolean;
 }
 

@@ -25,6 +25,7 @@
  * Pure: no Prisma, no React. `collection-structure.ts` reads the copies and the dictionaries.
  */
 
+import { NO_CONDITION } from "./piece-condition";
 import { DELIVERY_STATE_META, type DeliveryState } from "./delivery-state";
 import {
   NO_AREA,
@@ -105,7 +106,8 @@ export interface StructureCopy {
   forSale: boolean;
   forTrade: boolean;
   deliveryState: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383) — the *No condition* segment. */
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
   subtypeId: string | null;
@@ -439,7 +441,18 @@ export function structureSegments(
     case "disposition":
       return dispositionSegments(narrowing);
     case "condition":
-      return dictionarySegments(vocab.conditions, narrowing.conditionIds, "conditionIds", (c) => c.conditionId, null);
+      // A piece has no condition (#2383): *No condition* is the Copies filter's own value for it,
+      // offered only where there is a piece to put in it or the filter asks for it — a collection
+      // with no covers would otherwise read an empty row under every condition breakdown.
+      return dictionarySegments(
+        vocab.conditions,
+        narrowing.conditionIds,
+        "conditionIds",
+        (c) => c.conditionId,
+        copies.some((c) => c.conditionId === null) || narrowing.conditionIds.includes(NO_CONDITION)
+          ? { id: NO_CONDITION, label: "No condition" }
+          : null
+      );
     case "certificate":
       return dictionarySegments(
         vocab.certificateStatuses,

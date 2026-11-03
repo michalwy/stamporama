@@ -82,6 +82,7 @@ import {
   validateItemStampEntries,
   type ItemStampEntryInput,
 } from "./item-stamps";
+import { settleCopyConditionsTx } from "./item-condition";
 import { clearCandidatesTx, loadCandidateTreeTx, setCopyStampTx } from "./item-candidates";
 import {
   ACROSS_TREES,
@@ -93,11 +94,13 @@ import {
 import { variantChain } from "./candidate-set-rules";
 import {
   isMultiStampCount,
-  MULTI_STAMP,
   MULTI_STAMP_GROUP_KEY,
   multiStampFilterWhere,
-  NOT_MULTI_STAMP,
+  NOT_PIECE,
+  PIECE,
+  pieceFilterWhere,
   type MultiStampFilter,
+  type PieceFilter,
   type MultiStampGroupRow,
 } from "./multi-stamp";
 import {
@@ -110,6 +113,7 @@ import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import { orderFaultSummaries, FAULT_SUMMARY_SELECT, type FaultSummary } from "./faults";
 import { faultFilterWhere } from "./fault-filter";
 import { NO_AREA } from "./list-area-year-filter";
+import { NO_CONDITION } from "./piece-condition";
 import type { StructureCopy } from "./collection-structure-rules";
 import { CLOSED_OFFER_STATES, OPEN_OFFER_STATES, isOfferState } from "./offer-rules";
 import type { ItemOpenOffer, OwnOffers } from "./copy-open-offers";
@@ -404,7 +408,8 @@ export interface ItemData {
   /** Internal copy number (#268): per-collection, assigned on creation, never editable. */
   itemNo: number;
   stampId: string;
-  conditionId: string;
+  /** Null exactly when the copy is a piece, which has no condition (#2383). */
+  conditionId: string | null;
   certificateStatusId: string | null;
   /** Physical format; null = single. */
   formatId: string | null;
@@ -505,7 +510,7 @@ function toItemData(row: {
   collectionId: string;
   itemNo: number;
   stampId: string;
-  conditionId: string;
+  conditionId: string | null;
   certificateStatusId: string | null;
   formatId: string | null;
   inCollection: boolean;
@@ -530,7 +535,9 @@ function toItemData(row: {
 
 export interface ItemCreateInput {
   stampId: string;
-  conditionId: string;
+  /** Required of a loose stamp; null or absent for a **piece**, which has none (#2383) — one given
+   *  to a piece is dropped. */
+  conditionId?: string | null;
   certificateStatusId?: string | null;
   /** Physical format; null or absent = single. A multiple is one copy in one format and is
    *  never recorded as, or counted as, several single copies. */
@@ -590,7 +597,9 @@ async function assertLotOpenInCollection(
 
 export interface ItemUpdateInput {
   stampId?: string;
-  conditionId?: string;
+  /** Null for a piece, which has none (#2383); a piece turned back into a loose stamp must be given
+   *  one in the same save. One given to a piece is dropped. */
+  conditionId?: string | null;
   certificateStatusId?: string | null;
   /** Physical format; null = single (a copy that is one stamp on its own). */
   formatId?: string | null;
@@ -679,7 +688,7 @@ export async function createItem(
 ): Promise<ItemData> {
   await assertCollectionOwner(ownerId, collectionId);
   await assertStampInCollection(collectionId, data.stampId);
-  await assertConditionInCollection(collectionId, data.conditionId);
+  if (data.conditionId) await assertConditionInCollection(collectionId, data.conditionId);
   if (data.certificateStatusId) {
     await assertCertificateStatusInCollection(collectionId, data.certificateStatusId);
   }
@@ -712,7 +721,7 @@ export async function createItem(
         collectionId,
         itemNo,
         stampId: data.stampId,
-        conditionId: data.conditionId,
+        conditionId: data.conditionId || null,
         certificateStatusId: data.certificateStatusId ?? null,
         formatId: data.formatId ?? null,
         inCollection: data.inCollection ?? true,
@@ -734,9 +743,10 @@ export async function createItem(
     await createLeadingEntriesTx(tx, [{ id: created.id, stampId: created.stampId }]);
     if (data.candidateStampIds && data.candidateStampIds.length > 1) {
       await setCopyStampTx(tx, created.id, data.candidateStampIds);
-      return tx.item.findUniqueOrThrow({ where: { id: created.id }, select: ITEM_SELECT });
     }
-    return created;
+    // Read back: the candidate set may have re-pointed it, and a piece has dropped the condition it
+    // was given (#2383).
+    return tx.item.findUniqueOrThrow({ where: { id: created.id }, select: ITEM_SELECT });
   });
   return toItemData(item);
 }
@@ -834,7 +844,7 @@ export async function updateItem(
   if (data.stampId !== undefined) {
     await assertStampInCollection(collectionId, data.stampId);
   }
-  if (data.conditionId !== undefined) {
+  if (data.conditionId) {
     await assertConditionInCollection(collectionId, data.conditionId);
   }
   if (data.certificateStatusId) {
@@ -869,7 +879,8 @@ export async function updateItem(
   const { variantChangeNote, candidateStampIds, valueModifier, ...fields } = data;
   const updateData = {
     ...(fields.stampId !== undefined ? { stampId: fields.stampId } : {}),
-    ...(fields.conditionId !== undefined ? { conditionId: fields.conditionId } : {}),
+    // Blank is none — a piece's answer (#2383); `settleCopyConditionsTx` refuses it for a loose stamp.
+    ...(fields.conditionId !== undefined ? { conditionId: fields.conditionId || null } : {}),
     ...(fields.certificateStatusId !== undefined
       ? { certificateStatusId: fields.certificateStatusId }
       : {}),
@@ -899,11 +910,7 @@ export async function updateItem(
 
   const item = await prisma.$transaction(async (tx) => {
     await setMoveSourceTx(tx, move);
-    const updated = await tx.item.update({
-      where: { id: itemId },
-      data: updateData,
-      select: ITEM_SELECT,
-    });
+    await tx.item.update({ where: { id: itemId }, data: updateData });
     if (excludedPlatformIds) {
       // A replace, expressed as a delete of what is no longer ticked plus a create of what is:
       // `skipDuplicates` leaves the rows that survive untouched, so an exclusion keeps the date it
@@ -962,13 +969,13 @@ export async function updateItem(
         await clearCandidatesTx(tx, itemId);
       }
     }
-    if (data.stamps || candidateStampIds !== undefined) {
-      // Read the copy back: `stampId` and `stampCount` were just re-derived from the entries, and a
-      // caller handed the row as it stood before that would be holding the pointer the request
-      // proposed rather than the one the piece now carries.
-      return tx.item.findUniqueOrThrow({ where: { id: itemId }, select: ITEM_SELECT });
-    }
-    return updated;
+    // A format given a kind makes the copy a piece, whose condition goes; a piece turned back into a
+    // loose stamp must have been given one in this same save (#2383).
+    await settleCopyConditionsTx(tx, [itemId]);
+    // Read the copy back: `stampId` and `stampCount` may just have been re-derived from the entries,
+    // and the condition settled, and a caller handed the row as it stood before that would be
+    // holding what the request proposed rather than what the piece now carries.
+    return tx.item.findUniqueOrThrow({ where: { id: itemId }, select: ITEM_SELECT });
   });
   // The copy has just come **into the collector's hands** — not merely been recorded (ADR-0032 §7).
   // That, and not the moment the row was created, is when "does this close a want?" can be
@@ -1351,6 +1358,9 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  Absent is both — the list's default, since a carrier stays an ordinary copy for everything the
    *  list does. Narrows through the very fragments the counts spread (`multi-stamp.ts`). */
   multiStamp?: MultiStampFilter;
+  /** For or against the pieces (#2383) — several stamps, or one on a cover. Not on the bar: a grouped
+   *  list's member reads set it, `exclude` under a stamp's group and `only` in the pieces bucket. */
+  piece?: PieceFilter;
   /** The issues a copy's issue must be complete — or incomplete — in (#1884): `any` keeps the copies
    *  whose issue has a checklist held whole in any conditions, `one` one held whole in a single
    *  condition, `incomplete` the rest of the issues that have chips. Absent is *All*. Judged over
@@ -1394,8 +1404,9 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
  * needs an async lookup the caller already did. */
 /**
  * The `where` fragment for a multi-value axis whose **null is a value** (#427, #428) — format, where
- * `"single"` is the absence of one (ADR-0020), and certificate, where `"none"` is (ADR-0006 §2).
- * Not a plain `in` like condition or delivery state, because a null can never be a member of an `in`
+ * `"single"` is the absence of one (ADR-0020), certificate, where `"none"` is (ADR-0006 §2), and
+ * condition, where {@link NO_CONDITION} is a piece's (#2383). Not a plain `in` like delivery state,
+ * because a null can never be a member of an `in`
  * list: ticking the sentinel alongside a real value is two branches ORed together, and ticking it
  * alone is the null test on its own — the reading each single-select already had.
  *
@@ -1403,7 +1414,7 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
  * top level, where the search's own `OR` would collide with it.
  */
 function nullableIdWhere(
-  field: "formatId" | "certificateStatusId" | "subtypeId",
+  field: "formatId" | "certificateStatusId" | "subtypeId" | "conditionId",
   ids: readonly string[] | undefined,
   nullSentinel: string
 ): Record<string, unknown> | null {
@@ -1590,6 +1601,13 @@ function buildItemWhere(
   }
   const formats = nullableIdWhere("formatId", filters.formatIds, "single");
   if (formats) and.push(formats);
+  // One condition or several, one shape (#425): a single-entry `in` is what a duplicate group's
+  // member read passes, so the axis has exactly one filter on it — and *No condition* matches the
+  // pieces, which have none (#2383).
+  const conditions = nullableIdWhere("conditionId", filters.conditionIds, NO_CONDITION);
+  if (conditions) and.push(conditions);
+  // For or against the pieces (#2383), on the AND list: it shares `conditionId` with the line above.
+  if (filters.piece) and.push(pieceFilterWhere(filters.piece));
   const certificates = nullableIdWhere(
     "certificateStatusId",
     filters.certificateStatusIds,
@@ -1676,11 +1694,6 @@ function buildItemWhere(
 
   return {
     collectionId,
-    // One condition or several, one shape (#425): a single-entry `in` is what a duplicate group's
-    // member read passes, so the axis has exactly one filter on it.
-    ...(filters.conditionIds && filters.conditionIds.length > 0
-      ? { conditionId: { in: filters.conditionIds } }
-      : {}),
     // One stamp or a set of them, **one clause** on the axis (#425's shape) — spread as two, the
     // second would silently overwrite the first.
     ...(filters.stampId
@@ -1850,13 +1863,13 @@ async function withHeldFilter(
     : where;
   const counted = await prisma.item.findMany({
     where: {
-      AND: [countedWhere, NOT_MULTI_STAMP, ...((scope ?? filters).complete ? [NOT_ACROSS_TREES] : [])],
+      AND: [countedWhere, NOT_PIECE, ...((scope ?? filters).complete ? [NOT_ACROSS_TREES] : [])],
     },
     select: stackSelect,
   });
   const kept = heldStackKeys(counted, axes, filter);
   const rows = scope
-    ? await prisma.item.findMany({ where: { AND: [where, NOT_MULTI_STAMP] }, select: stackSelect })
+    ? await prisma.item.findMany({ where: { AND: [where, NOT_PIECE] }, select: stackSelect })
     : counted;
   const ids = rows.flatMap((row) => (inHeldStack(row, axes, kept) ? [row.id] : []));
   return { AND: [where, { id: { in: ids } }] };
@@ -2000,9 +2013,10 @@ export interface ItemListItem {
    *  not close a want, so this is also the upgrade signal: *you have one, and are still after a
    *  better one*. */
   wants: StampWantSummary | null;
-  conditionId: string;
-  conditionName: string;
-  conditionAbbreviation: string;
+  /** Null for a piece, which has no condition (#2383); its state is its franking and its faults. */
+  conditionId: string | null;
+  conditionName: string | null;
+  conditionAbbreviation: string | null;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
   /** Physical format; null = single. A multiple is one row, never N single rows. */
@@ -2338,7 +2352,7 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
   return {
     id: row.id,
     stampId: row.stampId,
-    conditionId: row.condition.id,
+    conditionId: row.condition?.id ?? null,
     certificateStatusId: row.certificateStatus?.id ?? null,
     formatId: row.format?.id ?? null,
     unknownVariant:
@@ -2424,9 +2438,9 @@ function toItemListItem(
     issueYear: firstIssue?.year ?? null,
     issues: row.stamp.issueMemberships.map((m) => m.issue),
     wants,
-    conditionId: row.condition.id,
-    conditionName: row.condition.name,
-    conditionAbbreviation: row.condition.abbreviation,
+    conditionId: row.condition?.id ?? null,
+    conditionName: row.condition?.name ?? null,
+    conditionAbbreviation: row.condition?.abbreviation ?? null,
     certificateStatusId: row.certificateStatus?.id ?? null,
     certificateStatusName: row.certificateStatus?.name ?? null,
     formatId: row.format?.id ?? null,
@@ -2545,14 +2559,15 @@ async function enrichItemRows(
     // Keyed **per copy**, each leaving itself out: the marker is drawn beside the very copy whose
     // delivery state it would otherwise count, and a purchase order that reported "1 in transit"
     // about the row you were reading was answering the wrong question.
-    // …and **never for a carrier** (#748). The marker says *this copy would satisfy a want* and
-    // *you hold one already*, and a multi-stamp copy is neither of those for any of its stamps
-    // (#745) — drawn on its row, it would file the piece under its leading stamp after all.
+    // …and **never for a piece** (#748, #2383). The marker says *this copy would satisfy a want*
+    // and *you hold one already*, and a piece — several stamps, or one on a cover — is neither of
+    // those for any of its stamps; drawn on its row, it would file the piece under its leading stamp
+    // after all. A piece is the copy with no condition (`item-condition.ts`).
     loadItemWantSummaries(
       collectionId,
       rows
         // …nor for a copy with a candidate set (#1651), which answers no want.
-        .filter((r) => !isMultiStampCount(r.stampCount) && r.candidateTrees === 0)
+        .filter((r) => r.condition !== null && r.candidateTrees === 0)
         .map((r) => ({ itemId: r.id, stampId: r.stampId }))
     ),
   ]);
@@ -2962,7 +2977,8 @@ export async function countItemsByCondition(
     where,
     _count: { _all: true },
   });
-  return new Map(rows.map((row) => [row.conditionId, row._count._all]));
+  // A piece has no condition (#2383) and is counted under `NO_CONDITION`, the filter's own value.
+  return new Map(rows.map((row) => [row.conditionId ?? NO_CONDITION, row._count._all]));
 }
 
 // ── Duplicate groups (#372) ──────────────────────────────────────────────────
@@ -3115,11 +3131,12 @@ export async function listItemDuplicateGroups(
     buildItemWhere(collectionId, filters, locationIds)
   );
 
-  // A duplicate group is keyed **on a stamp**, so a carrier cannot be in one (#748; ADR-0044 §3):
-  // filed under its leading stamp it would be counted as a duplicate of a stamp it is not a copy
-  // of. The carriers are counted into one bucket of their own below instead. Narrowed here, once,
-  // so the group counts and the member read that follows agree about it.
-  const where = { AND: [filtered, NOT_MULTI_STAMP] };
+  // A duplicate group is keyed **on a stamp**, so a piece cannot be in one (#748, #2383; ADR-0044
+  // §3, ADR-0079): filed under its leading stamp it would be counted as a duplicate of a stamp it is
+  // not a copy of — a cover carrying one stamp as much as one carrying several. The pieces are
+  // counted into one bucket of their own below instead. Narrowed here, once, so the group counts and
+  // the member read that follows agree about it.
+  const where = { AND: [filtered, NOT_PIECE] };
 
   // `by` is chosen at runtime from the axes, which Prisma's generic `groupBy` signature cannot
   // express — the alternative is four literal call sites of the same query.
@@ -3211,7 +3228,7 @@ export async function listItemDuplicateGroups(
     // Read from the members rather than the keys: with the Condition axis off a key names no
     // condition, and the row still says which ones it holds (#1537).
     prisma.stampCondition.findMany({
-      where: { id: { in: [...new Set(members.map((m) => m.conditionId))] } },
+      where: { id: { in: compactIds(members.map((m) => m.conditionId)) } },
       select: { id: true, name: true, abbreviation: true, sortOrder: true },
     }),
     axes.format
@@ -3296,7 +3313,7 @@ async function readMultiStampGroup(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filtered: any
 ): Promise<MultiStampGroupRow | null> {
-  const count = await prisma.item.count({ where: { AND: [filtered, MULTI_STAMP] } });
+  const count = await prisma.item.count({ where: { AND: [filtered, PIECE] } });
   return count > 0 ? { key: MULTI_STAMP_GROUP_KEY, count } : null;
 }
 
@@ -3481,15 +3498,16 @@ export async function listItemIssueGroups(
     buildItemWhere(collectionId, filters, locationIds)
   );
 
-  // A carrier is filed under **no** issue (#748; ADR-0044 §3). Its leading stamp's series is a
-  // claim about one of its stamps, and a cover franked from three series would otherwise sit under
-  // whichever was put first. The carriers are one bucket after the issue-less one instead, so the
-  // groups still partition the list and their counts still add up to it.
+  // A piece is filed under **no** issue (#748, #2383; ADR-0044 §3, ADR-0079). Its leading stamp's
+  // series is a claim about one of its stamps, and a cover franked from three series would otherwise
+  // sit under whichever was put first — and a cover carrying one stamp is no copy of it either. The
+  // pieces are one bucket after the issue-less one instead, so the groups still partition the list
+  // and their counts still add up to it.
   // A copy whose candidates span variant trees (#1651) is in no group's own count either: it is
   // counted below as *possibly* in each of its candidates' issues, so the groups' own counts and the
   // carriers' bucket still partition the rest of the list.
   const rows = await prisma.item.findMany({
-    where: { AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES] },
+    where: { AND: [where, NOT_PIECE, NOT_ACROSS_TREES] },
     select: {
       stamp: {
         select: {
@@ -3534,7 +3552,7 @@ export async function listItemIssueGroups(
   // are in, however many of its candidates share it. An issue only such a copy reaches still gets a
   // group, holding nothing certain.
   const possible = await prisma.item.findMany({
-    where: { AND: [where, NOT_MULTI_STAMP, ACROSS_TREES] },
+    where: { AND: [where, NOT_PIECE, ACROSS_TREES] },
     select: {
       candidates: {
         select: {
@@ -3725,13 +3743,13 @@ async function readIssueGroupCompleteness(
           by: ["stampId", "conditionId"],
           // AND-ed rather than spread: the filter `where` already carries an `AND` list and an
           // `OR` of its own, and a stray key would silently replace one of them.
-          // …and `NOT_MULTI_STAMP` beside it (#745/#748): a set figure is a count of copies *of* the
-          // checklist's stamps, which a carrier is not, and the header sits over groups that already
-          // leave the carriers out.
+          // …and `NOT_PIECE` beside it (#745/#748, #2383): a set figure is a count of copies *of* the
+          // checklist's stamps, which a piece is not, and the header sits over groups that already
+          // leave the pieces out.
           where: {
             // …and a copy whose candidates span several variant trees (#1651), which completes no
             // set until it is settled.
-            AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES, { stampId: { in: rollup.countingStampIds } }],
+            AND: [where, NOT_PIECE, NOT_ACROSS_TREES, { stampId: { in: rollup.countingStampIds } }],
           },
           _count: { _all: true },
         }),
@@ -3809,7 +3827,7 @@ async function withCompletenessFilter(
   const filter = filters.complete;
   if (!filter) return where;
   const rows = await prisma.item.findMany({
-    where: { AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES] },
+    where: { AND: [where, NOT_PIECE, NOT_ACROSS_TREES] },
     select: {
       id: true,
       stamp: { select: { issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issueId: true } } } },
@@ -3836,11 +3854,14 @@ async function withCompletenessFilter(
 /** The conditions one group's members are in, each with its count — most copies first, then the
  * collection's own condition order. A condition deleted between the two reads drops out. */
 function groupConditions(
-  members: { conditionId: string }[],
+  // Never a piece: the groups leave them out (`NOT_PIECE`, #2383), and a null would count nowhere.
+  members: { conditionId: string | null }[],
   conditionById: Map<string, { id: string; name: string; abbreviation: string; sortOrder: number }>
 ): CopyGroupCondition[] {
   const counts = new Map<string, number>();
-  for (const m of members) counts.set(m.conditionId, (counts.get(m.conditionId) ?? 0) + 1);
+  for (const m of members) {
+    if (m.conditionId !== null) counts.set(m.conditionId, (counts.get(m.conditionId) ?? 0) + 1);
+  }
   return [...counts]
     .flatMap(([id, count]) => {
       const condition = conditionById.get(id);

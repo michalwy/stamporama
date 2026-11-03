@@ -78,8 +78,9 @@ export function phoneCopiesSummary(
 
 /** The fields of a copy the phone states — a slice of the Copies list's own row. */
 export interface PhoneCopySource {
-  conditionName: string;
-  conditionAbbreviation: string;
+  /** Null for a piece, which has no condition (#2383) and states none. */
+  conditionName: string | null;
+  conditionAbbreviation: string | null;
   certificateStatusName: string | null;
   formatName: string | null;
   inCollection: boolean;

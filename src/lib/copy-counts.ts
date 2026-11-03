@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
-import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_PIECE } from "./multi-stamp";
 import { ACROSS_TREES, NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
@@ -61,7 +61,7 @@ export function anyHeldCopiesWhere(collectionId: string) {
     saleLineItems: { none: {} },
     // …and given to a partner, which is the third way (#644).
     ...NOT_TRADED_AWAY,
-    ...NOT_MULTI_STAMP,
+    ...NOT_PIECE,
     // …nor a copy whose candidates span several variant trees (#1651, ADR-0065): it is *possibly*
     // each of them and certainly none, until it is settled.
     ...NOT_ACROSS_TREES,
@@ -127,6 +127,8 @@ export async function countCopiesByStamp(
   });
 
   for (const row of rows) {
+    // A piece has no condition and is no stamp's copy (#2383); `heldCopiesWhere` has left it out.
+    if (row.conditionId === null) continue;
     const n = row._count._all;
     const entry = counts.get(row.stampId) ?? noCopies();
     entry.lines.push({
@@ -298,6 +300,7 @@ export async function countHeldCopyRowsByStamp(
   });
 
   for (const row of rows) {
+    if (row.conditionId === null) continue; // a piece (#2383), left out by `heldCopiesWhere`
     const entry: HeldCopyRow = {
       conditionId: row.conditionId,
       deliveryState: row.deliveryState,
@@ -346,6 +349,7 @@ export async function countCopiesByStampAndCondition(
   });
 
   for (const row of rows) {
+    if (row.conditionId === null) continue; // a piece (#2383), left out by `heldCopiesWhere`
     counts.set(stampConditionKey(row.stampId, row.conditionId), row._count._all);
   }
   return counts;

@@ -102,7 +102,8 @@ export interface SearchCopy {
   catalogNumbers: SearchCatalogLabel[];
   /** The copy's own lead photo, or its stamp's catalog photo when it has none. */
   photoId: string | null;
-  condition: SearchAxisValue;
+  /** Null for a piece — a cover, a fragment — which has no condition (#2383). */
+  condition: SearchAxisValue | null;
   /** Null is "no certificate", which the row leaves unsaid rather than chipping. */
   certificate: SearchAxisValue | null;
   /** Null is *single* — the format nothing is stored for, so there is nothing to draw. */

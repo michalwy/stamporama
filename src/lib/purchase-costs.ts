@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
+import { NOT_PIECE } from "./multi-stamp";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { getCollectionBaseCurrency } from "./pricing";
 import { loadCostEstimates } from "./cost-estimates";
@@ -96,7 +97,7 @@ export async function getStampPurchaseCosts(
 
   const baseCurrency = await getCollectionBaseCurrency(stamp.collectionId);
 
-  const items = await prisma.item.findMany({
+  const rows = await prisma.item.findMany({
     where: {
       collectionId: stamp.collectionId,
       // That stamp exactly — no rollup from variant children (#348's rule for copies).
@@ -106,6 +107,8 @@ export async function getStampPurchaseCosts(
       saleLineItems: { none: {} },
       // The fourth guard is the third exit (#644): a copy given to a partner is gone the same way.
       ...NOT_TRADED_AWAY,
+      // A piece is no copy of its stamp (#2383): what a cover cost is not what the stamp cost.
+      ...NOT_PIECE,
       disposedAt: null,
       deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
       // Bought, or from no lot at all — never from an opening balance (#1324).
@@ -121,6 +124,8 @@ export async function getStampPurchaseCosts(
       format: { select: { id: true, name: true, abbreviation: true, sortOrder: true } },
     },
   });
+  // `NOT_PIECE` has left out every copy without a condition; this only tells the compiler.
+  const items = rows.flatMap((item) => (item.condition ? [{ ...item, condition: item.condition }] : []));
   if (items.length === 0) return { baseCurrency, ...EMPTY };
 
   // What a key is *called* and where it sorts, read off any copy carrying it — every copy with the

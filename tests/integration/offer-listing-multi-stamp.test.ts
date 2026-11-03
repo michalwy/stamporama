@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { createItem } from "../../src/lib/items";
+import { createItem, updateItem } from "../../src/lib/items";
 import { setItemStamps } from "../../src/lib/item-stamps";
 import { createOffer, getOfferDetail, regenerateOfferText } from "../../src/lib/offers";
 
@@ -167,7 +167,8 @@ describe("{catalog} on a multi-stamp copy (#749)", () => {
     const offerId = await offerOver([cover]);
     assert.equal((await getOfferDetail(userId, offerId))?.name, "Mi·PL 500-01");
 
-    await setItemStamps(userId, cover, [{ stampId: first }]);
+    // A loose stamp again, given the condition a piece has none of (#2383).
+    await updateItem(userId, cover, { stamps: [{ stampId: first }], conditionId });
     assert.equal(await regenerateOfferText(userId, offerId, "name"), "Mi·PL 500");
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { conditioned } from "@/lib/piece-condition";
 import { markedCopiesNote } from "@/lib/catalog-price-mark";
 import { isMissingCatalogPrice } from "@/lib/valuation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -1062,6 +1063,8 @@ export function OfferSetsView({
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
+  // A piece has no condition to price (#2383); its row prices its stamps instead.
+  const quickPriceSubject = quickPriceItem ? conditioned(quickPriceItem) : null;
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
   // The copy form's dictionaries, fetched here as the copy's own screen fetches them (#673): cached
@@ -1394,13 +1397,13 @@ export function OfferSetsView({
         </div>
       )}
 
-      {quickPriceItem && (
+      {quickPriceSubject && (
         <QuickPriceDialog
-          subject={quickPriceItem}
+          subject={quickPriceSubject}
           collectionId={collectionId}
-          areaName={quickPriceItem.areaId ? (areaNameById.get(quickPriceItem.areaId) ?? null) : null}
-          primaryVendorId={quickPriceItem.areaId ? (primaryVendorByArea.get(quickPriceItem.areaId) ?? null) : null}
-          vendorMap={vendorMapFor(quickPriceItem.areaId, quickPriceItem.issueId)}
+          areaName={quickPriceSubject.areaId ? (areaNameById.get(quickPriceSubject.areaId) ?? null) : null}
+          primaryVendorId={quickPriceSubject.areaId ? (primaryVendorByArea.get(quickPriceSubject.areaId) ?? null) : null}
+          vendorMap={vendorMapFor(quickPriceSubject.areaId, quickPriceSubject.issueId)}
           isPending={isPending}
           error={copyError}
           onClose={() => {
@@ -1415,7 +1418,7 @@ export function OfferSetsView({
             invalidateAll(collectionId); // refresh copies + the suggested price
           }}
           onSubmit={(entries) => {
-            const it = quickPriceItem;
+            const it = quickPriceSubject;
             setCopyError(undefined);
             startTransition(async () => {
               const { quickSetCatalogPricesAction } = await import("@/app/actions/stamps");

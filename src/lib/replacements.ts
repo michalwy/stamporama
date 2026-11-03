@@ -104,7 +104,8 @@ export interface ReplacementCopyData {
   itemNo: number;
   stampId: string;
   stampLabel: string;
-  conditionId: string;
+  /** Null for a piece, which has no condition (#2383). */
+  conditionId: string | null;
   certificateStatusId: string | null;
   inCollection: boolean;
   forSale: boolean;
