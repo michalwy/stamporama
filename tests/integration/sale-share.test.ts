@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer, setOfferState } from "../../src/lib/offers";
-import { addSaleLines, createSale, getSaleDetail, setSaleStatus, swapSaleLineSet } from "../../src/lib/sales";
+import { addSaleLines, createSale, getSaleDetail, setSaleStatus, swapSaleLineSet, updateSaleNote } from "../../src/lib/sales";
 import {
   createSaleShareToken,
   readSaleShareLink,
@@ -233,6 +233,15 @@ describe("the buyer's copy choice link (#699)", () => {
       // The order is identified, and nothing else about the sale is: no figures anywhere in it.
       assert.equal(view.orderRef, "TX-1");
       assert.equal(JSON.stringify(view).includes("4.25"), false);
+    });
+
+    it("never shows the collector's private note (#2379)", async () => {
+      const { saleId } = await saleWithPendingLine();
+      await updateSaleNote(userId, saleId, "Buyer haggled hard — PRIVATE-NOTE-2379");
+      const { access: a } = await access(saleId);
+      const view = await readSaleShareView(a);
+      assert.ok(view);
+      assert.equal(JSON.stringify(view).includes("PRIVATE-NOTE-2379"), false);
     });
 
     it("says nothing is outstanding once the seller has settled the line themselves", async () => {

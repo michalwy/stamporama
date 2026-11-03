@@ -9,7 +9,7 @@ import { getSaleDetail } from "../../src/lib/sales";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
-import { GET, POST } from "../../src/app/api/v1/[...path]/route";
+import { GET, PATCH, POST } from "../../src/app/api/v1/[...path]/route";
 import type { AgentBuyer, AgentSale, AgentSaleRow } from "../../src/lib/agent-api/sale-reads";
 import type { ListResponse } from "../../src/lib/agent-api/list";
 
@@ -28,8 +28,8 @@ import type { ListResponse } from "../../src/lib/agent-api/list";
 
 const ts = Date.now();
 
-type Method = "GET" | "POST";
-const HANDLERS = { GET, POST };
+type Method = "GET" | "POST" | "PATCH";
+const HANDLERS = { GET, POST, PATCH };
 
 interface ApiErrorBody {
   error: { code: string; message: string; accepted?: string[] };
@@ -166,11 +166,11 @@ describe("the sale operations (#1949)", () => {
     return { id, offerNo: offer.offerNo, setIds: offer.sets.map((set) => set.id) };
   }
 
-  it("carries the six operations, four of them writes", () => {
-    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets"];
+  it("carries the seven operations, five of them writes", () => {
+    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets", "set_sale_note"];
     for (const name of names) assert.ok(OPERATIONS.some((operation) => operation.name === name), name);
     const writing = OPERATIONS.filter((operation) => names.includes(operation.name) && operation.writes).map((o) => o.name);
-    assert.deepEqual(writing.sort(), ["find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set"]);
+    assert.deepEqual(writing.sort(), ["find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set", "set_sale_note"]);
   });
 
   it("deletes no sale and moves none — no such operation exists", () => {
@@ -181,7 +181,8 @@ describe("the sale operations (#1949)", () => {
     // (#2204) — every line stays sold, on one sale or the other, and no status or amount changes.
     // A third records a proposal's accepted lots as a sale (#2303), as `sell_offer` records an offer's,
     // into a new sale or the buyer's open one, marked to review — it deletes and moves nothing.
-    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale"];
+    // A fourth writes the collector's private note (#2379), and nothing else about the sale.
+    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale", "set_sale_note"];
     const offenders = OPERATIONS.filter((operation) => {
       if (LEAVES_SALES_STANDING.includes(operation.name)) return false;
       const words = operation.name.split("_");
@@ -503,6 +504,44 @@ describe("the sale operations (#1949)", () => {
       assert.equal((await refused(readOnlyToken, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: "new" })).status, 403);
       // Every refusal left the lines where they were.
       assert.equal((await getSaleDetail(userId, source.id))!.lines.length, 2);
+    });
+  });
+
+  describe("set_sale_note (#2379)", () => {
+    it("writes, replaces and clears the note, line breaks kept, the sale marked each time", async () => {
+      await prisma.contact.create({ data: { collectionId, name: "Ewa Notująca", buyer: true } });
+      const offer = await facebookOffer(1);
+      const sale = await ok<AgentSale>(token, "POST", `/offers/${offer.id}/sale`, {
+        price: "6.00",
+        buyer: "Ewa Notująca",
+        sold_at: "2026-11-02",
+      });
+      assert.equal(sale.note, null);
+      await prisma.sale.update({ where: { id: sale.id }, data: { apiReviewAt: null, apiReviewCreated: false, apiReviewActions: [] } });
+
+      const note = "Agreed: ships with her next order.\nPromised a stockcard.";
+      const written = await ok<AgentSale>(token, "PATCH", `/sales/${sale.id}/note`, { note });
+      assert.equal(written.note, note);
+      assert.deepEqual(written.toReview?.actions, ["set the note"]);
+      assert.equal((await getSaleDetail(userId, sale.id))!.note, note, "the screen reads what was written");
+      const rows = await ok<ListResponse<AgentSaleRow>>(token, "GET", "/sales?buyer=Ewa%20Notuj%C4%85ca");
+      assert.equal(rows.items.find((row) => row.id === sale.id)?.note, note);
+
+      const replaced = await ok<AgentSale>(token, "PATCH", `/sales/${sale.id}/note`, { note: "Only this." });
+      assert.equal(replaced.note, "Only this.");
+
+      const cleared = await ok<AgentSale>(token, "PATCH", `/sales/${sale.id}/note`, { clear: true });
+      assert.equal(cleared.note, null);
+      // An action already named is not repeated on the marker.
+      assert.deepEqual(cleared.toReview?.actions, ["set the note", "cleared the note"]);
+
+      // Refused: both, neither, a blank note, another collection's sale, a read-only token.
+      assert.equal((await refused(token, "PATCH", `/sales/${sale.id}/note`, { note: "x", clear: true })).status, 400);
+      assert.equal((await refused(token, "PATCH", `/sales/${sale.id}/note`, {})).status, 400);
+      assert.equal((await refused(token, "PATCH", `/sales/${sale.id}/note`, { note: "   " })).status, 400);
+      assert.equal((await refused(token, "PATCH", "/sales/no-such-sale/note", { note: "x" })).status, 404);
+      assert.equal((await refused(readOnlyToken, "PATCH", `/sales/${sale.id}/note`, { note: "x" })).status, 403);
+      assert.equal((await getSaleDetail(userId, sale.id))!.note, null, "no refusal wrote anything");
     });
   });
 });

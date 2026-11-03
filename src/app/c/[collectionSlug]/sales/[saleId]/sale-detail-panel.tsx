@@ -46,6 +46,7 @@ import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
 import { SaleAttachmentsCard } from "./sale-attachments-card";
+import { SaleNoteCard } from "./sale-note-card";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
@@ -190,6 +191,8 @@ export function SaleDetailPanel({
   const [error, setError] = useState<string | undefined>();
   // The Attachments card's file input, which the header's `⋮ → Add attachments` opens (#2198).
   const attachmentInput = useRef<HTMLInputElement>(null);
+  // The note being written or changed (#2379) — the card is drawn while this is on, note or not.
+  const [editingNote, setEditingNote] = useState(false);
 
   // The status as chosen (#2270): drawn the moment it is chosen and saved behind the screen, over
   // the page's own until a reading of the page catches up. `sale` below is the page's sale with that
@@ -508,6 +511,16 @@ export function SaleDetailPanel({
                 onSelect: () => {
                   setError(undefined);
                   attachmentInput.current?.click();
+                },
+              },
+              {
+                key: "note",
+                label: sale.note ? "Edit note" : "Add note",
+                icon: "notes",
+                disabled: isPending,
+                onSelect: () => {
+                  setError(undefined);
+                  setEditingNote(true);
                 },
               },
             ]}
@@ -897,6 +910,20 @@ export function SaleDetailPanel({
           )}
         </div>
       </div>
+
+      {/* The collector's own note (#2379). Drawn while there is one or one is being written; the
+          header's ⋮ → Add note starts the first. */}
+      <SaleNoteCard
+        note={sale.note}
+        editing={editingNote}
+        setEditing={setEditingNote}
+        isPending={isPending}
+        run={run}
+        save={async (note) => {
+          const { updateSaleNoteAction } = await import("@/app/actions/sales");
+          return updateSaleNoteAction(sale.id, note);
+        }}
+      />
 
       {/* The parcel's packing supplies (#1898): with the postage, what my shipping is. */}
       <SaleSuppliesCard

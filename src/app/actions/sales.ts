@@ -9,6 +9,7 @@ import {
   updateSaleHeader,
   updateSaleAmount,
   updateSaleTransactionUrl,
+  updateSaleNote,
   updateSaleShipment,
   updateSaleShipping,
   addSaleLines,
@@ -183,6 +184,18 @@ export async function updateSaleTransactionUrlAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the transaction link.");
+  }
+}
+
+/** Set (or clear) the sale's note (#2379), in place from the detail screen. Blank clears it. Allowed
+ * in any fulfillment status. */
+export async function updateSaleNoteAction(saleId: string, raw: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await updateSaleNote(session.user.id, saleId, raw);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to save the note.");
   }
 }
 

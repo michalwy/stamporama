@@ -850,6 +850,25 @@ parcel, so they are kept with the sale rather than somewhere on your phone.
   When the sale is [merged](#merging-two-sales) into another, its files move with it; when it is
   [deleted](#deleting), they are deleted with it.
 
+## Note
+
+A sale can keep **one note of your own** — what was agreed with the buyer, an extra you promised,
+why the parcel is waiting. It is plain text: line breaks are kept, nothing else is formatted, and
+links are not made clickable.
+
+- **⋮ → Add note** in the sale's header starts it. While the sale has one, a **Note** card shows it
+  under the header; **Edit** changes it. **Save** keeps what you wrote (⌘/Ctrl+Enter does the same),
+  **Cancel** or Escape drops the change, and **Remove note** — or saving it empty — clears it. It can
+  be written whatever the sale's status is.
+- **The Sales list** marks a sale that has a note with a small note icon; hover it to read the note.
+- **It is only yours.** The note never reaches the buyer — not on the [copy choice
+  link](#letting-the-buyer-choose), the [packing list](#printing-a-packing-list) or the [message to
+  the buyer](#message-to-the-buyer). An offer's own private note is not copied into it, and the
+  list's search does not look into notes.
+- When the sale is [merged](#merging-two-sales) into another, its note is added below the remaining
+  sale's, after a blank line. When sets are [moved to another sale](#moving-sold-sets-to-another-sale),
+  the note stays where it was written. An [AI assistant](agent-api.md) can read and write the note too.
+
 ## What the assistant recorded — *To review · API*
 
 When an [AI assistant](agent-api.md) records a sale for you (see [what it can do on sales](agent-api.md#what-it-can-do-and-what-it-will-not)), or adds a sold offer to one you already
@@ -901,7 +920,8 @@ buyer bid from two accounts and asked for everything to go together, in one parc
    one of them.
 
 **Merge** then moves every sold set — with its price, its packed marks and any set still to be
-chosen — every packing supply the other sale used, its [attachments](#attachments), and the [conversation
+chosen — every packing supply the other sale used, its [attachments](#attachments), its
+[note](#note) (added below the remaining sale's), and the [conversation
 entries](#the-conversation-with-the-buyer) about it when the remaining sale is with the same buyer.
 Nothing is sold or withdrawn twice: the copies stay sold and the offers stay *Sold*. The totals, profit and [message to the
 buyer](#message-to-the-buyer) follow at once. If the other sale was recorded by an assistant and you

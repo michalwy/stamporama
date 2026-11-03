@@ -6283,6 +6283,11 @@ model Sale {
   apiReviewAt      DateTime?
   apiReviewCreated Boolean   @default(false)
   apiReviewActions String[]  @default([])
+  // The collector's own remark about the sale (#2379) — what was agreed with the buyer, a promised
+  // extra, why the parcel waits. Plain multi-line text, nothing formatted; null when there is none
+  // (a blank write stores null). **Private**: no share link, printout or generated message reads it.
+  // Not copied from the offer's `privateNote`; merging two sales appends the other's below this one.
+  note          String?
   createdAt     DateTime @default(now())
 
   collection    Collection        @relation(fields: [collectionId], references: [id], onDelete: Cascade)

@@ -73,6 +73,7 @@ import {
   type SaleMergeChoices,
   type SaleMergeSide,
 } from "./sale-merge-rules";
+import { mergedSaleNote, normalizeSaleNote, saleNoteAction } from "./sale-note";
 import {
   saleMoveSourceRefusal,
   saleMoveTargetRefusal,
@@ -968,6 +969,37 @@ export async function updateSaleTransactionUrl(
 ): Promise<void> {
   await assertSaleOwner(ownerId, saleId);
   await prisma.sale.update({ where: { id: saleId }, data: { transactionUrl: url } });
+}
+
+/** Set (or, with null or blank, clear) the collector's note on a sale (#2379), from the sale's own
+ * screen. Editable in any fulfillment status, like the transaction link: a note is record-keeping. */
+export async function updateSaleNote(ownerId: string, saleId: string, note: string | null): Promise<void> {
+  await assertSaleOwner(ownerId, saleId);
+  await prisma.sale.update({ where: { id: saleId }, data: { note: normalizeSaleNote(note) } });
+}
+
+/**
+ * {@link updateSaleNote} through the agent API (#2379): the same write, and the sale marked *to
+ * review* (#1948) in the same transaction, naming whether the note was set or cleared.
+ */
+export async function setSaleNoteThroughApi(
+  ownerId: string,
+  collectionId: string,
+  saleId: string,
+  note: string | null
+): Promise<void> {
+  const stored = normalizeSaleNote(note);
+  await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: { collectionId: true, collection: { select: { ownerId: true } } },
+    });
+    if (!sale || sale.collectionId !== collectionId || sale.collection.ownerId !== ownerId) {
+      throw new Error("Sale not found or access denied.");
+    }
+    await tx.sale.update({ where: { id: saleId }, data: { note: stored } });
+    await markSaleWrittenByApi(tx, saleId, { kind: "changed", actions: [saleNoteAction(stored)] });
+  });
 }
 
 /** What the collector says about the parcel itself (#491): who carried it and its tracking number. */
@@ -1906,6 +1938,8 @@ export interface SaleListItem {
    * last confirmed it, or null when nothing waits. The detail's {@link SaleDetail.apiReview} is read
    * off the same columns — a flag shown on a list is shown on the thing's own screen too. */
   apiReview: SaleApiReviewMark | null;
+  /** The collector's note (#2379), or null — the row's note icon, its text the icon's hint. */
+  note: string | null;
   createdAt: Date;
 }
 
@@ -1928,6 +1962,7 @@ const SALE_LIST_SELECT = {
   apiReviewAt: true,
   apiReviewCreated: true,
   apiReviewActions: true,
+  note: true,
   createdAt: true,
   platform: { select: { name: true } },
   buyer: { select: { name: true } },
@@ -2165,6 +2200,7 @@ function toSaleListItem(
     apiReviewAt: Date | null;
     apiReviewCreated: boolean;
     apiReviewActions: string[];
+    note: string | null;
     createdAt: Date;
     platform: { name: string };
     buyer: { name: string } | null;
@@ -2198,6 +2234,7 @@ function toSaleListItem(
     grossProceeds: gross.toFixed(2),
     netProceeds: netBase.toFixed(2),
     apiReview: readSaleApiReviewMark(row),
+    note: row.note,
     createdAt: row.createdAt,
   };
 }
@@ -2616,6 +2653,9 @@ export interface SaleDetail {
   /** The *to review* marker (#1948), off the columns the list's chip reads, or null when nothing
    * waits. Cleared only by {@link confirmSaleReview}. */
   apiReview: SaleApiReviewMark | null;
+  /** The collector's own note (#2379), or null. Private: the packing list, the share link and the
+   *  buyer message read this record or the sale and never draw it. */
+  note: string | null;
   createdAt: Date;
 }
 
@@ -2677,6 +2717,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       buyerId: true,
       externalRef: true,
       transactionUrl: true,
+      note: true,
       soldAt: true,
       currency: true,
       fxRateToBase: true,
@@ -2921,6 +2962,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
         }
       : null,
     apiReview: readSaleApiReviewMark(sale),
+    note: sale.note,
     createdAt: sale.createdAt,
   };
 }
@@ -3103,6 +3145,7 @@ const SALE_MERGE_SELECT = {
   apiReviewAt: true,
   apiReviewCreated: true,
   apiReviewActions: true,
+  note: true,
   buyerId: true,
   buyer: { select: { name: true } },
   lines: { select: { price: true } },
@@ -3180,7 +3223,8 @@ export interface SaleMergeInput {
  * numbers come from a counter, not from the rows there are.
  *
  * The remaining sale keeps its own buyer, date, order number, transaction link, shipping option and
- * status; the other buyer's contact is left as it is. Each amount — buyer handling or total paid,
+ * status; the other buyer's contact is left as it is. The notes are joined, the other's below
+ * (`mergedSaleNote`, #2379). Each amount — buyer handling or total paid,
  * commission, postage — is the remaining sale's, the other's or their sum, as `choices` says
  * (`mergedSaleAmounts`). A sale the agent API wrote and nobody confirmed makes the merged sale
  * *to review* too (`mergedSaleApiReview`).
@@ -3249,6 +3293,8 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
       data: {
         ...mergedSaleAmounts(remaining, other, choices),
         ...mergedSaleApiReview(remainingRow, otherRow),
+        // Nothing the collector wrote is lost (#2379): the other's note goes below this one's.
+        note: mergedSaleNote(remainingRow.note, otherRow.note),
       },
     });
     await tx.sale.delete({ where: { id: otherSaleId } });

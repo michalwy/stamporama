@@ -13,6 +13,7 @@ import {
   mergeSales,
   SaleActionBlockedError,
   soldItemIds,
+  updateSaleNote,
 } from "../../src/lib/sales";
 import { createPackingSupply, createPurchaseSupplyLine } from "../../src/lib/packing-supplies";
 import { createSaleSupplyLine } from "../../src/lib/sale-supplies";
@@ -190,6 +191,25 @@ describe("merging two sales (#2041)", () => {
     // Its number is never given again.
     const next = await newSale();
     assert.ok((await prisma.sale.findUniqueOrThrow({ where: { id: next } })).saleNo > otherNo);
+  });
+
+  it("keeps both notes, the other's below the remaining one's (#2379)", async () => {
+    const remaining = await newSale();
+    const other = await newSale();
+    await updateSaleNote(userId, remaining, "Two parcels.");
+    await updateSaleNote(userId, other, "Buyer pays the second postage.\nAsked for a receipt.");
+    await mergeSales(userId, { remainingSaleId: remaining, otherSaleId: other, choices: choose() });
+    assert.equal(
+      (await getSaleDetail(userId, remaining))!.note,
+      "Two parcels.\n\nBuyer pays the second postage.\nAsked for a receipt."
+    );
+
+    // The other's note alone becomes the remaining sale's.
+    const bare = await newSale();
+    const noted = await newSale();
+    await updateSaleNote(userId, noted, "Promised a stockcard.");
+    await mergeSales(userId, { remainingSaleId: bare, otherSaleId: noted, choices: choose() });
+    assert.equal((await getSaleDetail(userId, bare))!.note, "Promised a stockcard.");
   });
 
   it("makes the merged sale to review when the other was the agent's and unconfirmed", async () => {

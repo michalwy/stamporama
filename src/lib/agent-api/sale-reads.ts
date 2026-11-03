@@ -47,6 +47,8 @@ export interface AgentSaleRow {
   readonly baseCurrency: string;
   readonly externalRef: string | null;
   readonly transactionUrl: string | null;
+  /** The collector's own note (#2379), or null. */
+  readonly note: string | null;
   readonly toReview: AgentSaleReview | null;
   readonly path: string;
 }
@@ -80,6 +82,8 @@ export interface AgentSale {
   readonly baseCurrency: string;
   readonly externalRef: string | null;
   readonly transactionUrl: string | null;
+  /** The collector's own note (#2379), or null — private, written by `set_sale_note`. */
+  readonly note: string | null;
   readonly lines: readonly AgentSaleLine[];
   readonly gross: string;
   readonly buyerHandling: string | null;
@@ -132,6 +136,7 @@ export function saleRow(
     baseCurrency: string;
     externalRef: string | null;
     transactionUrl: string | null;
+    note: string | null;
     apiReview: { at: string; created: boolean; actions: readonly string[] } | null;
   },
   path: string
@@ -151,6 +156,7 @@ export function saleRow(
     baseCurrency: row.baseCurrency,
     externalRef: row.externalRef,
     transactionUrl: row.transactionUrl,
+    note: row.note,
     toReview: review(row.apiReview),
     path,
   };
@@ -170,6 +176,7 @@ export function saleRecord(
     baseCurrency: string;
     externalRef: string | null;
     transactionUrl: string | null;
+    note: string | null;
     lines: readonly {
       id: string;
       offerId: string | null;
@@ -206,6 +213,7 @@ export function saleRecord(
     baseCurrency: detail.baseCurrency,
     externalRef: detail.externalRef,
     transactionUrl: detail.transactionUrl,
+    note: detail.note,
     lines: detail.lines.map((line) => ({
       id: line.id,
       offerId: line.offerId,

@@ -1079,6 +1079,8 @@ const SALE_API_WRITES = new Map<string, string>([
   ["recordSaleLinesThroughApi", "src/lib/sales.ts"],
   // Moving sold sets to another open sale of the same buyer (#2204), both sales marked.
   ["moveSaleLinesThroughApi", "src/lib/sales.ts"],
+  // Setting or clearing the collector's note (#2379), the sale marked.
+  ["setSaleNoteThroughApi", "src/lib/sales.ts"],
   ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
 ]);
 
@@ -1121,6 +1123,12 @@ describe("the agent API's operation modules (#1949)", () => {
       2,
       "`moveSaleLinesThroughApi` writes a sale without the to-review marker (#1948)"
     );
+    // The note (#2379) is one write to one sale, marked once.
+    assert.equal(
+      [...exportedFunctionBody(domain, "setSaleNoteThroughApi").matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      1,
+      "`setSaleNoteThroughApi` writes a sale without the to-review marker (#1948)"
+    );
   });
 
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
@@ -1130,6 +1138,8 @@ describe("the agent API's operation modules (#1949)", () => {
     assert.ok(salesWriters.includes("mergeSales"));
     // The screen's own move (#2204) writes no marker, so only its API form is open.
     assert.ok(salesWriters.includes("moveSaleLines") && salesWriters.includes("moveSaleLinesThroughApi"));
+    // The screen's note write (#2379) writes no marker either.
+    assert.ok(salesWriters.includes("updateSaleNote") && salesWriters.includes("setSaleNoteThroughApi"));
     const closed = new Set([
       ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
       ...SALE_SHARE_WRITES,

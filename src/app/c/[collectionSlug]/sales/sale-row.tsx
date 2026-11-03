@@ -203,6 +203,21 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete, onConfirmRevie
               </a>
             </Tooltip>
           )}
+          {/* The collector's note (#2379): an icon whose hint is the note itself, line breaks kept. */}
+          {sale.note && (
+            <Tooltip
+              content={<span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{sale.note}</span>}
+              maxWidth="28rem"
+            >
+              <span
+                role="img"
+                aria-label="Has a note"
+                style={{ display: "inline-flex", alignItems: "center", color: "var(--color-text-muted)" }}
+              >
+                <Icon name="notes" size="sm" />
+              </span>
+            </Tooltip>
+          )}
           <Tooltip
             content="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
             align="end"

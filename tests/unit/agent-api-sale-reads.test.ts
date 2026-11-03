@@ -45,6 +45,7 @@ describe("the sale row (#1949)", () => {
     baseCurrency: "PLN",
     externalRef: null,
     transactionUrl: null,
+    note: "Promised a free stockcard.\nShip after the 20th.",
     apiReview: REVIEW,
     // What the screen's row carries and an agent is not told.
     pendingSetChoiceCount: 0,
@@ -67,6 +68,7 @@ describe("the sale row (#1949)", () => {
       baseCurrency: "PLN",
       externalRef: null,
       transactionUrl: null,
+      note: "Promised a free stockcard.\nShip after the 20th.",
       toReview: REVIEW,
       path: "/c/x/sales/s1",
     });
@@ -90,6 +92,7 @@ describe("the sale record (#1949)", () => {
     baseCurrency: "PLN",
     externalRef: null,
     transactionUrl: null,
+    note: null,
     lines: [
       {
         id: "l1",
@@ -153,6 +156,12 @@ describe("the sale record (#1949)", () => {
     assert.deepEqual(record.buyer, { id: "c1", name: "Jan Nowak" });
     assert.equal(record.net, "14.50");
     assert.equal(record.soldAt, "2026-10-15");
+    assert.equal(record.note, null);
+  });
+
+  it("states the collector's note as written, line breaks kept (#2379)", () => {
+    const note = "Agreed: two parcels.\nBuyer pays the second postage.";
+    assert.equal(saleRecord({ ...detail, note }, new Map(), "/p").note, note);
   });
 
   it("states an anonymous sale's buyer as absent", () => {
