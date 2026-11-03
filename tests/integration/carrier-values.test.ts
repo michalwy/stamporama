@@ -276,6 +276,9 @@ describe("a piece valued by its method (#2359)", () => {
     assert.deepEqual(v.piece?.unmapped, []);
     assert.deepEqual(v.piece?.methodSource, { kind: "collection" });
     assert.equal(v.piece?.usage, "mif");
+    // Prices in the collection's own currency need no original beside them (#2388).
+    assert.equal(v.piece?.currency, "EUR");
+    assert.ok(v.piece?.components.every((c) => c.originals === undefined));
     // Mi 201 and Mi 205 have no MiF price: either could have been the highest.
     assert.equal(v.piece?.partial, true);
   });
@@ -287,6 +290,32 @@ describe("a piece valued by its method (#2359)", () => {
     // The most expensive used price (Mi 200's 10) + 15 %.
     assert.equal((await valueOf(carrierId)).amount, "11.50");
     await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
+  });
+
+  it("keeps each converted price's original beside it, and names the collection currency (#2388)", async () => {
+    // EUR prices in a PLN collection: the rule reads the converted figure, the arithmetic both.
+    await prisma.collection.update({ where: { id: collectionId }, data: { baseCurrency: "PLN" } });
+    await prisma.exchangeRate.createMany({
+      data: [
+        ["EUR", "1"],
+        ["PLN", "4.25"],
+      ].map(([toCurrency, rate]) => ({ collectionId, fromCurrency: "EUR", toCurrency, rate, fetchedAt: new Date() })),
+    });
+    try {
+      await setPieceValuation(userId, carrierId, { franking: "philatelic_posted" });
+      const v = await valueOf(carrierId);
+      assert.equal(v.piece?.currency, "PLN");
+      const [term] = v.piece?.terms ?? [];
+      const component = v.piece?.components.find((c) => c.id === term?.componentId);
+      assert.equal(term?.unit, 42.5);
+      assert.deepEqual(component?.originals?.used, { amount: 10, currency: "EUR" });
+      // Mi 201 has no price at all, so nothing to keep.
+      assert.equal(v.piece?.components.find((c) => c.stampId === mi201)?.originals, undefined);
+    } finally {
+      await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
+      await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+      await prisma.collection.update({ where: { id: collectionId }, data: { baseCurrency: "EUR" } });
+    }
   });
 
   it("previews the value of a piece not yet written, by the franking chosen (#2353)", async () => {

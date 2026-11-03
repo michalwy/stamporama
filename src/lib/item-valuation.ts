@@ -24,6 +24,7 @@ import {
   type MethodArea,
   type PieceComponent,
   type PieceKind,
+  type PieceOriginal,
   type PiecePrice,
   type ValuationMethod,
 } from "./piece-valuation";
@@ -494,11 +495,19 @@ export async function valuateItemRows(
     const components: PieceComponent[] = entries.map((e) => {
       const unknown = isUnknownVariantStamp(e.stamp);
       const derived: PiecePrice[] = [];
+      const originals: Partial<Record<PiecePrice, PieceOriginal>> = {};
+      // A figure converted from the catalogue's currency keeps its original for the arithmetic (#2388).
+      const keep = (p: PiecePrice, v: CopyValuation): number | null => {
+        if (v.baseAmount !== null && v.amount !== null && v.currency !== null && v.currency !== baseCurrency) {
+          originals[p] = { amount: Number(v.amount), currency: v.currency };
+        }
+        return v.baseAmount;
+      };
       const price = (p: PiecePrice): number | null => {
         const conditionId = conditionOf(p);
         if (!conditionId) return null;
         const v = at(e.stampId, unknown, null, conditionId);
-        if (!v.unpriced || v.mark) return v.baseAmount;
+        if (!v.unpriced || v.mark) return keep(p, v);
         const ruled =
           method === "michel" &&
           p !== "on_piece" &&
@@ -511,14 +520,14 @@ export async function valuateItemRows(
         }
         const byRule = at(e.stampId, unknown, null, rule.usedConditionId, rule);
         if (byRule.baseAmount !== null) derived.push(p);
-        return byRule.baseAmount;
+        return keep(p, byRule);
       };
       return {
         id: e.id,
         stampId: e.stampId,
         quantity: e.quantity,
         multiple: e.formatId !== null,
-        used: usedId ? at(e.stampId, unknown, e.formatId, usedId).baseAmount : null,
+        used: usedId ? keep("used", at(e.stampId, unknown, e.formatId, usedId)) : null,
         usedSingle:
           usedId && e.formatId !== null ? at(e.stampId, unknown, null, usedId).baseAmount : null,
         coverEf: price("cover_ef"),
@@ -526,6 +535,7 @@ export async function valuateItemRows(
         coverMif: price("cover_mif"),
         onPiece: price("on_piece"),
         ...(derived.length ? { derived } : {}),
+        ...(Object.keys(originals).length ? { originals } : {}),
       };
     });
     for (const c of components) if (!c.multiple) c.usedSingle = c.used;

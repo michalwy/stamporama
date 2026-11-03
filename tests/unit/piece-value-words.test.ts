@@ -76,35 +76,35 @@ function read(
   components: PieceComponent[]
 ) {
   const result = valuePiece({ method, kind, franking, components });
-  const piece = { ...result, method, kind, components, columns: columnsFor(method) };
+  const piece = { ...result, method, kind, components, columns: columnsFor(method), currency: "PLN" };
   return { result, arithmetic: pieceArithmetic(piece, label), onPiece: onPiecePrice(piece) };
 }
 
 describe("pieceArithmetic — the figure as a sum the catalogue can check", () => {
   it("prints Fischer's mixed franking as 50 % of the highest ⊠ plus the others at used prices", () => {
     const { result, arithmetic } = read("fischer", "on_cover", "rate_correct", [A, B]);
-    assert.equal(arithmetic, "MiF: 50 % × Mi 124 ⊠ 50.00 + Mi 123 ⊙ 10.00 = 35.00");
+    assert.equal(arithmetic, "MiF: 50 % × Mi 124 ⊠ 50.00 PLN + Mi 123 ⊙ 10.00 PLN = 35.00 PLN");
     assert.equal(result.amount, 35);
   });
 
   it("prints Fischer's multiple franking as 150 % of ⊠ and the further stamps", () => {
     const { arithmetic } = read("fischer", "on_cover", "rate_correct", [{ ...A, quantity: 3 }]);
-    assert.equal(arithmetic, "MeF: 150 % × Mi 123 ⊠ 30.00 + Mi 123 ⊙ 10.00 = 55.00");
+    assert.equal(arithmetic, "MeF: 150 % × Mi 123 ⊠ 30.00 PLN + Mi 123 ⊙ 10.00 PLN = 55.00 PLN");
   });
 
   it("prints Michel's MiF as the one highest MiF price", () => {
     const { arithmetic } = read("michel", "on_cover", "rate_correct", [A, B]);
-    assert.equal(arithmetic, "MiF: Mi 124 MiF 50.00 = 50.00");
+    assert.equal(arithmetic, "MiF: Mi 124 MiF 50.00 PLN = 50.00 PLN");
   });
 
   it("prints Michel's philatelic cover as 115 % of the most expensive used price", () => {
     const { arithmetic, result } = read("michel", "on_cover", "philatelic_posted", [A, B]);
-    assert.equal(arithmetic, "Philatelic: 115 % × Mi 123 ⊙ 10.00 = 11.50");
+    assert.equal(arithmetic, "Philatelic: 115 % × Mi 123 ⊙ 10.00 PLN = 11.50 PLN");
     assert.equal(result.amount, 11.5);
   });
 
   it("names Fischer FP/FW/FM's prices as the catalogue does", () => {
-    assert.equal(read("fischer_fp_fw_fm", "on_cover", "rate_correct", [A]).arithmetic, "EF: Mi 123 FP 40.00 = 40.00");
+    assert.equal(read("fischer_fp_fw_fm", "on_cover", "rate_correct", [A]).arithmetic, "EF: Mi 123 FP 40.00 PLN = 40.00 PLN");
   });
 
   it("prints a sum with each quantity, and a missing price as a dash where it would be added", () => {
@@ -112,14 +112,14 @@ describe("pieceArithmetic — the figure as a sum the catalogue can check", () =
       { ...A, quantity: 2 },
       { ...B, used: null },
     ]);
-    assert.equal(arithmetic, "Sum of used: Mi 123 ⊙ 10.00 × 2 + Mi 124 ⊙ — = 20.00");
+    assert.equal(arithmetic, "Sum of used: Mi 123 ⊙ 10.00 PLN × 2 + Mi 124 ⊙ — = 20.00 PLN");
     assert.equal(result.partial, true);
   });
 
   it("adds up to the figure in whole cents, term by term", () => {
     const odd = stamp("a", { coverMif: 0.33, used: 0.07 });
     const { arithmetic, result } = read("fischer", "on_cover", "rate_correct", [odd, { ...B, coverMif: 0.01 }]);
-    assert.equal(arithmetic, "MiF: 50 % × Mi 123 ⊠ 0.33 + Mi 124 ⊙ 4.00 = 4.17");
+    assert.equal(arithmetic, "MiF: 50 % × Mi 123 ⊠ 0.33 PLN + Mi 124 ⊙ 4.00 PLN = 4.17 PLN");
     assert.equal(result.amount, 4.17);
   });
 
@@ -165,9 +165,30 @@ describe("naming a price by its condition (#2375)", () => {
     );
   });
 
+  it("shows a price converted from the catalogue's currency with its original (#2388)", () => {
+    const eur = {
+      ...A,
+      used: 7.95,
+      usedSingle: 7.95,
+      originals: { used: { amount: 1.8, currency: "EUR" } },
+    };
+    assert.equal(
+      read("michel", "on_cover", "philatelic_posted", [eur]).arithmetic,
+      "Philatelic: 115 % × Mi 123 ⊙ (1.80 EUR = 7.95 PLN) = 9.14 PLN"
+    );
+  });
+
+  it("gives each converted term its original and the total the collection currency only (#2388)", () => {
+    const eur = { ...A, quantity: 2, originals: { used: { amount: 2.3, currency: "EUR" } } };
+    assert.equal(
+      read("sum_of_used", "on_cover", "rate_correct", [eur, B]).arithmetic,
+      "Sum of used: Mi 123 ⊙ (2.30 EUR = 10.00 PLN) × 2 + Mi 124 ⊙ 4.00 PLN = 24.00 PLN"
+    );
+  });
+
   it("marks a price Michel's rule worked out as derived", () => {
     const ruled = { ...A, coverEf: 12, derived: ["cover_ef" as const] };
-    assert.equal(read("michel", "on_cover", "rate_correct", [ruled]).arithmetic, "EF: Mi 123 EF ~12.00 = 12.00");
+    assert.equal(read("michel", "on_cover", "rate_correct", [ruled]).arithmetic, "EF: Mi 123 EF ~12.00 PLN = 12.00 PLN");
   });
 });
 
@@ -212,6 +233,7 @@ describe("the method beside a piece — where it came from, and what As inherite
       ...result,
       unmapped: [],
       columns: {},
+      currency: "EUR",
       method: "michel",
       methodSource: { kind: "collection" },
       inherited: fromCollection,

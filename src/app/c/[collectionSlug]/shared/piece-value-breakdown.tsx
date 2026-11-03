@@ -21,7 +21,8 @@ import { Tooltip } from "./tooltip";
 
 // How a piece's value was reached (#2353), drawn the same way in its Valuation window and in the
 // identification step: each stamp's used price and its price on the piece, then the arithmetic under
-// them. Every figure is in the collection currency, where the method compared them.
+// them. Every figure is in the collection currency, where the method compared them; the arithmetic
+// names it, and a price converted from the catalogue's currency shows its original (#2388).
 
 /** The heading of the price-on-the-piece column (#2375): the condition the method maps it to — *FM*,
  *  *MiF* — or its role's name while that is not set up. */
@@ -86,8 +87,8 @@ export function PiecePriceFigure({
 }
 
 /**
- * The arithmetic and the rule under the stamps: *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 =
- * 22.00*, then the method, the franking and where the method came from, then what is missing.
+ * The arithmetic and the rule under the stamps: *MiF: 50 % × Mi 123 ⊠ (10.00 EUR = 40.00 PLN) +
+ * Mi 124 ⊙ 2.00 PLN = 22.00 PLN*, then the method, the franking and where the method came from, then what is missing.
  */
 export function PieceArithmetic({
   piece,

@@ -1292,9 +1292,13 @@ click its value), read top to bottom:
   appears once a price is typed and records them as the stamps' catalog prices, so every other piece
   and copy of those stamps reads them too. Closing the window without saving keeps nothing, and the
   window asks first.
-- **The computed value**, then the arithmetic it is — *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*
-  — so you can check it against the catalog: each price is named by its condition's symbol where it
-  has one (⊙, ⊠), else its abbreviation, and a price Michel's rule worked out carries `~`. A price the
+- **The computed value**, then the arithmetic it is — *MiF: 50 % × Mi 123 ⊠ 40.00 PLN + Mi 124 ⊙
+  2.00 PLN = 22.00 PLN* — so you can check it against the catalog: each price is named by its
+  condition's symbol where it has one (⊙, ⊠), else its abbreviation, and a price Michel's rule worked
+  out carries `~`. Every amount names its currency. The prices are compared in the collection's
+  currency, so a price your catalog gives in another one is shown with its original first —
+  *⊙ (1.80 EUR = 7.95 PLN)* — and the rule is applied to the converted figure; the total is in the
+  collection's currency. A price the
   sum needed but is missing is printed as a dash where it would have been added, and the value says it
   is partial.
 - **The method**, the franking and EF/MeF/MiF in one line, and where the method came from — an area,

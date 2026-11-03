@@ -1561,8 +1561,9 @@ document. Assigning is done by picking a copy from the list itself. There are th
   work; `-` and `?` record *does not exist* and *not determinable*. Each price is saved in its column's
   condition, as a single, with no certificate, at the latest edition of the stamp's main catalog — the
   condition you choose for the tile is the copy's, and changes no price the value reads. Under the list sits
-  the piece's **Computed value** with the arithmetic it is, *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙
-  2.00 = 22.00*, and the method that gives it — it follows as you type, and as you change the
+  the piece's **Computed value** with the arithmetic it is, *MiF: 50 % × Mi 123 ⊠ 40.00 PLN + Mi 124
+  ⊙ 2.00 PLN = 22.00 PLN* — a price converted from the catalog's currency shown with its original,
+  *⊙ (1.80 EUR = 7.95 PLN)*, as in the Valuation window — and the method that gives it — it follows as you type, and as you change the
   franking, the method or the stamps. **Identify the tile** saves the typed prices to the stamps'
   catalog prices before it creates the copy; if they cannot be saved, nothing is created and the step
   says why. Closing the step keeps none of them. The single catalog value field the step has for one stamp
