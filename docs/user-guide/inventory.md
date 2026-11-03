@@ -1146,7 +1146,10 @@ sit on the piece, and give each one a **quantity** and a **format of its own** w
 a block of four *on* the cover is one entry with the format *Block of 4*, never four entries. The
 same stamp twice loose is one entry of quantity **2**. A row's format list names the formats as the
 copy's own **Format** does — full name with the abbreviation, *Single* first — and where the row is
-too narrow for the whole name, hovering the control names the chosen format in full.
+too narrow for the whole name, hovering the control names the chosen format in full. Each row starts
+with the **stamp's own picture** — the variant's, once a variant is picked — so the rows of a set that
+all read alike can be checked against the piece in hand; rest the pointer on it to enlarge it, or
+click it to open it full size. A stamp without a picture shows the empty placeholder.
 
 A cover franked with eight stamps is **one trip through the picker**, not eight. **Browse…** stays
 open while you tick every stamp on the piece — pressing a stamp ticks it, pressing it again takes it
