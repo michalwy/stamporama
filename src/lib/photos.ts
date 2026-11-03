@@ -23,6 +23,7 @@ import { normalizeRole, sortPhotos, type PhotoRole } from "./photo-order";
 // Moved to a pure module so the unit suite can hold the order (#2075); kept importable from here.
 export { normalizeRole, sortPhotos, type PhotoRole };
 import { asQuarterTurn, isSideways } from "./tile-turn";
+import { pieceIsItsStamp } from "./tile-stamp-photo";
 import {
   PHOTO_SOURCE_MAX_LENGTH,
   normalizePhotoSource,
@@ -707,7 +708,7 @@ async function applyPhotoChangeSetForOwner(
 
 /** Seed a stamp's `main` image from a copy's front photo when the stamp has none yet (#149).
  * A no-op when the copy isn't identified to a stamp, carries a non-default physical format
- * (#346), or the stamp already has any photo. Reuses `promoteCopyPhotoToStamp`, so the stamp
+ * (#346) or several stamps (#2370), or the stamp already has any photo. Reuses `promoteCopyPhotoToStamp`, so the stamp
  * photo is an independent duplicate with its own bytes.
  *
  * Exported for scan-tile identification (#567), which gives a copy its front photo by reassigning
@@ -721,10 +722,10 @@ export async function autoSeedStampMainFromFront(
 ): Promise<void> {
   const item = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { stampId: true, formatId: true },
+    select: { stampId: true, formatId: true, stampCount: true },
   });
   if (!item?.stampId) return;
-  if (item.formatId !== null) return;
+  if (!pieceIsItsStamp(item)) return;
   const stampPhotoCount = await prisma.photo.count({ where: { stampId: item.stampId } });
   if (stampPhotoCount > 0) return;
   await promoteCopyPhotoToStamp(ownerId, frontPhotoId, { role: "main", title: null });

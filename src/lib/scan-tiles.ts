@@ -9,6 +9,7 @@ import { updateItem } from "./items";
 import type { ItemStampEntryInput } from "./item-stamps";
 import { intakeStamps } from "./lots";
 import { autoSeedStampMainFromFront, makeCopyPhotoStampMain } from "./photos";
+import { pieceIsItsStamp } from "./tile-stamp-photo";
 import {
   OPEN_TILE_STATES,
   ScanAuthError,
@@ -248,7 +249,10 @@ export async function identifyTilesAsNewCopies(
   // tile named twice would otherwise create two copies and give the second one no images, the images
   // having moved to the first.
   const tiles = await loadSelectedTiles(ownerId, tileIds);
-  const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, input.formatId);
+  const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, {
+    formatId: input.formatId,
+    stampCount: input.stamps?.length ? stampTotal(input.stamps) : 1,
+  });
   const target = { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) };
   const own = await tileOwnAnswers(tiles, input.tileAnswers ?? []);
   // The copy it replaces (#1937), refused here or recorded at the end — never a copy without its pair.
@@ -794,10 +798,15 @@ export async function reidentifyTileCopy(
     where: { itemId: tile.itemId },
     select: { id: true, role: true },
   });
+  // The stamps on the piece as the correction leaves them: the list sent, or the copy's own.
+  const stampCount = stamps
+    ? stampTotal(stamps)
+    : (await prisma.item.findUniqueOrThrow({ where: { id: tile.itemId }, select: { stampCount: true } }))
+        .stampCount;
   const stampPhotoFrom = chosenStampPhoto(
     [{ id: tile.id, photos: copyPhotos }],
     input.stampPhotoTileId,
-    input.formatId
+    { formatId: input.formatId, stampCount }
   );
   // Every field the step asked for is written, including the ones left empty: the condition dialog
   // opens on **what the copy is now**, so a blank is the collector clearing an answer rather than
@@ -1148,31 +1157,42 @@ async function movePhotosToItem(
 
 /**
  * The front photo the collector chose to give the stamp (#1340), checked before anything is written:
- * one of the tiles being identified, in the **default format**, and carrying a front. Null when the
- * answer is absent or null — the auto-seed, or nothing.
+ * one of the tiles being identified, in the **default format**, carrying **one stamp**, and carrying a
+ * front. Null when the answer is absent or null — the auto-seed, or nothing.
  *
  * The format rule is #346's, for the same reason: a block's or a pair's picture misrepresents the
- * single stamp the catalogue entry stands for. The dialog does not offer the choice on one, so a
- * request that makes it anyway is refused rather than quietly dropped.
+ * single stamp the catalogue entry stands for, and a cover's is a picture of none of its stamps
+ * (#2370). The dialog does not offer the choice on either, so a request that makes it anyway is
+ * refused rather than quietly dropped.
  */
 function chosenStampPhoto(
   tiles: readonly { id: string; photos: readonly { id: string; role: string | null }[] }[],
   stampPhotoTileId: string | null | undefined,
-  formatId: string | null | undefined
+  piece: { formatId: string | null | undefined; stampCount: number }
 ): string | null {
   if (stampPhotoTileId == null) return null;
   const tile = tiles.find((t) => t.id === stampPhotoTileId);
   if (!tile) {
     throw new ScanValidationError("The stamp's picture has to come from a tile being identified.");
   }
-  if (formatId) {
+  if (piece.formatId) {
     throw new ScanValidationError(
       "Only a single's picture can become the stamp's photo — this piece has a format."
+    );
+  }
+  if (!pieceIsItsStamp(piece)) {
+    throw new ScanValidationError(
+      "Only a single's picture can become the stamp's photo — this piece carries several stamps."
     );
   }
   const front = tile.photos.find((p) => p.role === "front");
   if (!front) throw new ScanValidationError("That tile has no front picture to give the stamp.");
   return front.id;
+}
+
+/** The stamps a list of entries describes, summed as `Item.stampCount` sums them (ADR-0044 §4). */
+function stampTotal(stamps: readonly ItemStampEntryInput[]): number {
+  return stamps.reduce((sum, entry) => sum + (entry.quantity ?? 1), 0);
 }
 
 /** Make a tile's front — by then its copy's — the stamp's main picture (#1340). Best-effort for

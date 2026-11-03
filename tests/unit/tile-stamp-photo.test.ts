@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   effectiveStampPhotoChoice,
+  pieceIsItsStamp,
   stampPhotoDefaultOn,
   stampPhotoFormValue,
 } from "../../src/lib/tile-stamp-photo";
@@ -49,5 +50,17 @@ describe("what the form sends as stampPhotoTileId (#1340)", () => {
   it("says no for a piece in another format, whatever the option said (#346)", () => {
     assert.equal(stampPhotoFormValue({ offered: false, on: true, tileId: "t1" }), "");
     assert.equal(stampPhotoFormValue({ offered: false, on: undefined, tileId: "t1" }), "");
+  });
+});
+
+describe("whose picture can become the stamp's photo (#346, #2370)", () => {
+  it("a single carrying one stamp, and nothing else", () => {
+    assert.equal(pieceIsItsStamp({ formatId: "", stampCount: 1 }), true);
+    assert.equal(pieceIsItsStamp({ formatId: null, stampCount: 1 }), true);
+    // A pair, or a cover format with one stamp on it: a format is never the stamp's picture.
+    assert.equal(pieceIsItsStamp({ formatId: "pair", stampCount: 1 }), false);
+    // A cover carrying several stamps — or the same stamp twice — in no format of its own.
+    assert.equal(pieceIsItsStamp({ formatId: "", stampCount: 2 }), false);
+    assert.equal(pieceIsItsStamp({ formatId: null, stampCount: 3 }), false);
   });
 });
