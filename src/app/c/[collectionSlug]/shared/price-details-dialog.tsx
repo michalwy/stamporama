@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DialogShell } from "@/app/dialog-shell";
+import { ConfirmDialog, DialogShell } from "@/app/dialog-shell";
 import { Tooltip } from "./tooltip";
 import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
@@ -94,6 +94,9 @@ export function PriceDetailsDialog({
   /** A price observation's row menu is open (#1633): the menu has its own Escape listener and is not
    * an escape layer, so the window stops being dismissable until it closes (#361). */
   const [menuOpen, setMenuOpen] = useState(false);
+  /** A piece's stamp prices are typed and not saved (#2368): closing asks first, as it keeps nothing. */
+  const [unsavedPrices, setUnsavedPrices] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   const stampQuery = useQuery<StampPriceDetails>({
     queryKey: ["stampPriceDetails", target.kind === "stamp" ? target.stampId : null],
@@ -131,14 +134,31 @@ export function PriceDetailsDialog({
   // currency — so no toolbar is drawn rather than two controls that do nothing.
   if (target.kind === "copy") {
     return (
-      <DialogShell title="Valuation" onClose={onClose} maxWidth="min(96vw, 60rem)" height="min(92vh, 48rem)">
+      <DialogShell
+        title="Valuation"
+        onClose={() => (unsavedPrices ? setConfirmingClose(true) : onClose())}
+        maxWidth="min(96vw, 60rem)"
+        height="min(92vh, 48rem)"
+        dismissable={!confirmingClose}
+      >
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "1.25rem 1.5rem" }}>
           <CarrierValueSections
             collectionId={target.collectionId}
             itemId={target.itemId}
             areas={target.areas}
+            onDirtyChange={setUnsavedPrices}
           />
         </div>
+        {confirmingClose && (
+          <ConfirmDialog
+            title="Close without saving?"
+            message="The stamp prices typed here are not saved. Close the window and they are lost."
+            actionLabel="Close without saving"
+            zIndexBase={120}
+            onClose={() => setConfirmingClose(false)}
+            onConfirm={onClose}
+          />
+        )}
       </DialogShell>
     );
   }

@@ -1638,7 +1638,7 @@ export async function updateStampWithCatalog(
 }
 
 /** A recorded cell as an input shows it: the amount at 2 dp, or a mark as it is typed (`-`, `?`). */
-function priceCellInput(row: { price: Prisma.Decimal | null; mark: string | null }): string {
+export function priceCellInput(row: { price: Prisma.Decimal | null; mark: string | null }): string {
   const mark = catalogPriceMarkOf(row.mark);
   if (mark) return catalogPriceMarkInput(mark);
   return row.price === null ? "" : row.price.toFixed(2);
@@ -2192,8 +2192,9 @@ export interface QuickCatalogPriceEntry {
  * latest edition (ADR-0006). Used by the lot intake / offer-set screens to price a copy inline
  * without opening the full stamp editor (#121, #164).
  *
- * **Always the single**, and there is deliberately no parameter for a format. A quick price is a
- * figure read straight off a paper catalogue, and a catalogue quotes singles: a multiple's value is
+ * **Always the single** for a copy's format — the one parameter for a format is for the four reserved
+ * rows of prices on cover and on piece (#2368), which a catalogue quotes as it quotes the single. A
+ * quick price is a figure read straight off a paper catalogue, and a catalogue quotes singles: a multiple's value is
  * that figure times the resolved `StampFormatFactor` (`pickFormatCatalogPrice`). Writing the
  * displayed format's row instead would file a single's quotation as the multiple's own price *and*
  * suppress the factor for good, from a dialog whose collector never asked for either. A multiple
@@ -2205,7 +2206,10 @@ export async function quickSetCatalogPrices(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: QuickCatalogPriceEntry[]
+  entries: QuickCatalogPriceEntry[],
+  /** The single unless given — a price on cover or on piece (#2368) passes its reserved row, which
+   *  the caller has checked is one. */
+  formatId: string | null = null
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -2248,7 +2252,7 @@ export async function quickSetCatalogPrices(
         catalogEditionId: edition.id,
         conditionId,
         certificateStatusId: certificateStatusId ?? null,
-        formatId: null,
+        formatId,
       },
       select: { id: true },
     });
@@ -2264,7 +2268,7 @@ export async function quickSetCatalogPrices(
           catalogEditionId: edition.id,
           conditionId,
           certificateStatusId: certificateStatusId ?? null,
-          formatId: null,
+          formatId,
           ...value,
           currency: catalog.currency,
         },

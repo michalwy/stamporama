@@ -33,6 +33,8 @@ import {
   type Franking,
   type ValuationMethod,
 } from "@/lib/piece-valuation";
+import { getPiecePriceFields, setPiecePrices, type PiecePriceFields } from "@/lib/piece-prices";
+import { parseTypedPiecePrices, type TypedPiecePrice } from "@/lib/piece-price-entry";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -214,9 +216,41 @@ function parseCandidateStampIds(formData: FormData): string[] | undefined {
 }
 
 /** A piece's computed value beside its stamps' used prices, for the Valuation dialog (#2359). */
-export async function getCarrierValuationAction(itemId: string): Promise<CarrierValuationRead> {
+export async function getCarrierValuationAction(
+  itemId: string,
+  typed: TypedPiecePrice[] = []
+): Promise<CarrierValuationRead> {
   const session = await getSession();
-  return getCarrierValuation(session.user.id, itemId);
+  return getCarrierValuation(session.user.id, itemId, parseTypedPiecePrices(typed));
+}
+
+/** What a piece's stamp price fields open on (#2368). */
+export async function getPiecePriceFieldsAction(
+  collectionId: string,
+  conditionId: string,
+  stampIds: string[]
+): Promise<PiecePriceFields> {
+  const session = await getSession();
+  return getPiecePriceFields(session.user.id, collectionId, { conditionId, stampIds });
+}
+
+/** Save the prices typed on a piece's stamps (#2368) — in identification before the copy is made,
+ *  in the Valuation window with its Save. */
+export async function setPiecePricesAction(
+  collectionId: string,
+  conditionId: string,
+  prices: TypedPiecePrice[]
+): Promise<{ error?: string }> {
+  const session = await getSession();
+  try {
+    await setPiecePrices(session.user.id, collectionId, {
+      conditionId,
+      prices: parseTypedPiecePrices(prices),
+    });
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "The prices could not be saved." };
+  }
 }
 
 /** The value a piece will have, for the identification step before it is written (#2353). */
@@ -230,6 +264,7 @@ export async function previewPieceValueAction(
     franking: isFranking(input.franking) ? input.franking : null,
     method:
       input.method === undefined ? undefined : isValuationMethod(input.method) ? input.method : null,
+    typed: parseTypedPiecePrices(input.typed),
   });
 }
 

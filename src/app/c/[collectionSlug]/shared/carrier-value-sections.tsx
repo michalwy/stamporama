@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { catalogLabel } from "@/lib/area-vendor";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CarrierValuationRead } from "@/lib/carrier-values";
@@ -14,13 +14,25 @@ import {
   isFranking,
   isValuationMethod,
 } from "@/lib/piece-valuation";
-import { inheritedMethodLabel, onPiecePrice } from "@/lib/piece-value-words";
+import { inheritedMethodLabel } from "@/lib/piece-value-words";
+import type { TypedPiecePrice } from "@/lib/piece-price-entry";
 import type { CopyValuation, PieceValuation } from "@/lib/valuation";
 import { valueModifierLabel } from "@/lib/value-modifier";
 import { formControl } from "@/app/control-style";
+import { DialogError, DialogPrimaryButton } from "@/app/dialog-shell";
 import { useInvalidateInventory } from "../inventory/use-inventory-query";
 import { CollapsibleSection } from "./collapsible-section";
-import { onPiecePriceHeading, PieceArithmetic, PiecePriceFigure } from "./piece-value-breakdown";
+import { onPiecePriceHeading, PieceArithmetic } from "./piece-value-breakdown";
+import {
+  PieceMissingNote,
+  PiecePriceCell,
+  piecePriceLabel,
+  PieceUmbrellaCell,
+  PieceVariantPrices,
+  usePiecePriceEntry,
+  usePiecePriceTyping,
+  type PiecePriceEntry,
+} from "./piece-stamp-prices";
 import { Empty, Muted, numStyle } from "./price-matrix";
 import { StampIdentity } from "./stamp-identity";
 import { useAreaVendorMaps } from "./use-area-vendor-maps";
@@ -32,10 +44,12 @@ import { useAreaVendorMaps } from "./use-area-vendor-maps";
  * (#2353):
  *
  * - each stamp on the piece with its **used** price and its price **on the piece** — the one the
- *   method reads here (EF, MeF or MiF on a cover, by what is on it; on piece for a fragment), a missing
- *   one marked on its stamp;
- * - the **computed value** with its arithmetic, the method and where it came from, then the franking
- *   and the piece's own method (#2369), each changed here and the value following;
+ *   method reads here (EF, MeF or MiF on a cover, by what is on it; on piece for a fragment) — each
+ *   in a field (#2368), typed in place as a checklist run's prices are, a missing one framed and
+ *   counted, and saved with **Save prices** once one is typed;
+ * - the **computed value** with its arithmetic, following the typing before anything is saved, the
+ *   method and where it came from, then the franking and the piece's own method (#2369), each
+ *   changed here and the value following;
  * - the copy's **modifier** (#2357) with its note and its **fault reduction** (#1560), ending in the
  *   copy's value — the figure every total, the offer price prefill and the trade's own valuation read.
  */
@@ -43,25 +57,19 @@ export function CarrierValueSections({
   collectionId,
   itemId,
   areas,
+  onDirtyChange,
 }: {
   collectionId: string;
   itemId: string;
   areas: CollectionAreaData[];
+  /** Whether prices are typed and not saved — the window asks before it closes on them (#2368). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const query = useQuery<CarrierValuationRead>({
-    // Under the inventory prefix, so an edit's `invalidateList` re-reads this with the list and its
-    // totals — the window and the row it was opened from cannot show two figures.
-    queryKey: ["inventory", collectionId, "carrierValuation", itemId] as const,
-    queryFn: async () => {
-      const { getCarrierValuationAction } = await import("@/app/actions/items");
-      return getCarrierValuationAction(itemId);
-    },
-  });
+  const query = useCarrierValuation(collectionId, itemId, NO_TYPED);
 
   if (query.isLoading) return <div style={{ color: "var(--color-text-muted)" }}>Loading value…</div>;
   if (!query.data) return <Empty>The value of this copy could not be read.</Empty>;
-  const value = query.data.value;
-  if (!query.data.multiStamp || !value?.piece) {
+  if (!query.data.multiStamp || !query.data.value?.piece) {
     return (
       <Empty>
         This copy is one stamp on its own, so it is valued from the catalog — open the valuation from
@@ -70,21 +78,113 @@ export function CarrierValueSections({
     );
   }
   return (
+    <PieceValue
+      base={query.data}
+      collectionId={collectionId}
+      areas={areas}
+      onDirtyChange={onDirtyChange}
+    />
+  );
+}
+
+const NO_TYPED: TypedPiecePrice[] = [];
+
+/** The piece's value, read with the stamp prices typed and not saved (#2368). */
+function useCarrierValuation(collectionId: string, itemId: string, typed: readonly TypedPiecePrice[]) {
+  return useQuery<CarrierValuationRead>({
+    // Under the inventory prefix, so an edit's `invalidateList` re-reads this with the list and its
+    // totals — the window and the row it was opened from cannot show two figures. With nothing typed
+    // the key is the window's first read, so the live read starts from it.
+    queryKey: ["inventory", collectionId, "carrierValuation", itemId, typed] as const,
+    queryFn: async () => {
+      const { getCarrierValuationAction } = await import("@/app/actions/items");
+      return getCarrierValuationAction(itemId, [...typed]);
+    },
+    // The figure stays on screen while the typing is read, rather than blinking out under the hand.
+    placeholderData: keepPreviousData,
+  });
+}
+
+function PieceValue({
+  base,
+  collectionId,
+  areas,
+  onDirtyChange,
+}: {
+  base: CarrierValuationRead;
+  collectionId: string;
+  areas: CollectionAreaData[];
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const { invalidateList } = useInvalidateInventory();
+  const typing = usePiecePriceTyping({
+    collectionId,
+    conditionId: base.conditionId,
+    stampIds: base.components.map((c) => c.stampId),
+    onSaved: () => void invalidateList(collectionId),
+  });
+  const live = useCarrierValuation(collectionId, base.itemId, typing.previewTyped);
+  const data = live.data?.value?.piece ? live.data : base;
+  const value = data.value!;
+  const piece = value.piece!;
+  const entry = usePiecePriceEntry(typing, piece);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dirty = entry.changes.length > 0 || entry.invalid;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  async function save() {
+    if (entry.invalid) {
+      setError("Enter a valid non-negative amount, - or ? in every price.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const { setPiecePricesAction } = await import("@/app/actions/items");
+    const r = await setPiecePricesAction(collectionId, data.conditionId, entry.changes);
+    if (r.error) setError(r.error);
+    else await typing.saved();
+    setSaving(false);
+  }
+
+  return (
     <CollapsibleSection title="Value of this piece" defaultOpen>
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <Muted>
-          Each stamp on the piece at its condition ({query.data.conditionName}), with no certificate, at
-          the latest catalog edition, in {query.data.baseCurrency}.
+          Each stamp&apos;s prices at the piece&apos;s condition ({data.conditionName}), with no
+          certificate, at the latest edition of its main catalog — type a missing one in, or over one
+          on file. The value is in {data.baseCurrency}.
         </Muted>
-        <StampPriceTable data={query.data} piece={value.piece} collectionId={collectionId} areas={areas} />
+        <PieceMissingNote entry={entry} />
+        <StampPriceTable
+          data={data}
+          piece={piece}
+          entry={entry}
+          collectionId={collectionId}
+          areas={areas}
+          disabled={saving}
+        />
+        {dirty && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <DialogPrimaryButton type="button" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save prices"}
+            </DialogPrimaryButton>
+            <Muted>Saved to the stamps&apos; catalog prices, so every piece and copy of them reads them.</Muted>
+          </div>
+        )}
+        {error && <DialogError>{error}</DialogError>}
         <PieceFigure
-          data={query.data}
+          data={data}
           value={value}
-          piece={value.piece}
+          piece={piece}
           collectionId={collectionId}
           areas={areas}
         />
       </div>
+      {/* An umbrella's *Full grid…* — the grid portals itself out of the window. */}
+      {typing.fullGrid.dialog}
     </CollapsibleSection>
   );
 }
@@ -283,22 +383,28 @@ const SELECT: React.CSSProperties = { ...formControl, padding: "0.15rem 0.4rem",
 function StampPriceTable({
   data,
   piece,
+  entry,
   collectionId,
   areas,
+  disabled,
 }: {
   data: CarrierValuationRead;
   piece: PieceValuation;
+  entry: PiecePriceEntry;
   collectionId: string;
   areas: CollectionAreaData[];
+  disabled: boolean;
 }) {
-  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
-  const onPiece = onPiecePrice(piece);
+  const maps = useAreaVendorMaps(areas, collectionId);
+  const { primaryVendorByArea, vendorMapFor } = maps;
   const heading = onPiecePriceHeading(piece);
+  const columnCount = 3 + entry.columns.length;
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={TABLE}>
         <thead>
           <tr>
+            <th style={TH}>#</th>
             <th style={TH}>Stamp</th>
             <th style={TH}>Format</th>
             <th style={{ ...TH, textAlign: "right" }}>Qty</th>
@@ -307,38 +413,112 @@ function StampPriceTable({
           </tr>
         </thead>
         <tbody>
-          {data.components.map((entry) => (
-            <tr key={entry.id}>
-              <td style={TD}>
-                <StampIdentity
-                  stamp={{
-                    name: entry.stampName,
-                    catalogNumbers: entry.catalogNumbers,
-                    colnectId: entry.colnectId,
-                    subtype: entry.subtype,
-                  }}
-                  vendorMap={vendorMapFor(entry.areaId, entry.issueId)}
-                  primaryVendorId={primaryVendorByArea.get(entry.areaId ?? "") ?? null}
-                  size="small"
-                />
-              </td>
-              <td style={TD}>
-                {entry.formatName ?? <span style={{ color: "var(--color-text-muted)" }}>single</span>}
-              </td>
-              <td style={{ ...TD, ...numStyle, textAlign: "right" }}>×{entry.quantity}</td>
-              <td style={{ ...TD, textAlign: "right" }}>
-                <PiecePriceFigure piece={piece} componentId={entry.id} price="used" />
-              </td>
-              {onPiece && (
-                <td style={{ ...TD, textAlign: "right" }}>
-                  <PiecePriceFigure piece={piece} componentId={entry.id} price={onPiece} />
-                </td>
-              )}
-            </tr>
-          ))}
+          {piece.components.map((component, index) => {
+            const entryRow = data.components.find((c) => c.id === component.id);
+            if (!entryRow) return null;
+            const row = entry.rows?.[index];
+            const label = catalogLabel(
+              {
+                areaId: entryRow.areaId,
+                issueId: entryRow.issueId,
+                catalogNumbers: entryRow.catalogNumbers,
+                name: entryRow.stampName,
+              },
+              maps
+            );
+            return (
+              <StampPriceRows
+                key={component.id}
+                index={index}
+                umbrella={!!row?.variants}
+                variants={
+                  row?.variants ? (
+                    <td colSpan={columnCount + 1} style={{ ...TD, paddingTop: 0 }}>
+                      <PieceVariantPrices
+                        entry={entry}
+                        row={row}
+                        rowIndex={index}
+                        umbrellaId={component.stampId}
+                        disabled={disabled}
+                        indent="2rem"
+                      />
+                    </td>
+                  ) : null
+                }
+                stamp={
+                  <StampIdentity
+                    stamp={{
+                      name: entryRow.stampName,
+                      catalogNumbers: entryRow.catalogNumbers,
+                      colnectId: entryRow.colnectId,
+                      subtype: entryRow.subtype,
+                    }}
+                    vendorMap={vendorMapFor(entryRow.areaId, entryRow.issueId)}
+                    primaryVendorId={primaryVendorByArea.get(entryRow.areaId ?? "") ?? null}
+                    size="small"
+                  />
+                }
+                format={entryRow.formatName}
+                quantity={entryRow.quantity}
+                prices={entry.columns.map((price) =>
+                  !row ? (
+                    <span key={price} style={{ color: "var(--color-text-muted)" }}>…</span>
+                  ) : row.variants ? (
+                    <PieceUmbrellaCell key={price} />
+                  ) : (
+                    <PiecePriceCell
+                      key={price}
+                      entry={entry}
+                      slot={row.slots.find((s) => s.price === price)}
+                      rowIndex={index}
+                      label={piecePriceLabel(label, price)}
+                      disabled={disabled}
+                    />
+                  )
+                )}
+              />
+            );
+          })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** One stamp's row, and its variants' prices under it when it is an umbrella. */
+function StampPriceRows({
+  index,
+  umbrella,
+  stamp,
+  format,
+  quantity,
+  prices,
+  variants,
+}: {
+  index: number;
+  umbrella: boolean;
+  stamp: React.ReactNode;
+  format: string | null;
+  quantity: number;
+  prices: React.ReactNode[];
+  variants: React.ReactNode;
+}) {
+  const cell = umbrella ? { ...TD, borderBottom: "none" } : TD;
+  return (
+    <>
+      <tr>
+        <td style={{ ...cell, ...numStyle, color: "var(--color-text-muted)" }}>{index + 1}</td>
+        <td style={cell}>{stamp}</td>
+        <td style={cell}>{format ?? <span style={{ color: "var(--color-text-muted)" }}>single</span>}</td>
+        <td style={{ ...cell, ...numStyle, textAlign: "right" }}>×{quantity}</td>
+        {prices.map((p, i) => (
+          <td key={i} style={{ ...cell, textAlign: "right" }}>
+            {p}
+          </td>
+        ))}
+      </tr>
+      {variants && <tr>{variants}</tr>}
+    </>
   );
 }
 

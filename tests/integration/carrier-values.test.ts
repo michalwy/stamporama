@@ -14,6 +14,8 @@ import {
   previewPieceValue,
   setPieceValuation,
 } from "../../src/lib/carrier-values";
+import { getPiecePriceFields, setPiecePrices } from "../../src/lib/piece-prices";
+import { piecePriceKey } from "../../src/lib/piece-price-entry";
 import { updateStampFormat } from "../../src/lib/stamp-formats";
 import { setAreaValuationMethod, setCollectionValuationMethod } from "../../src/lib/valuation-methods";
 import { convertRecordedPieceValues } from "../../src/lib/piece-value-conversion";
@@ -276,6 +278,90 @@ describe("a piece valued by its method (#2359)", () => {
     await assert.rejects(() =>
       previewPieceValue("someone-else", collectionId, { ...input, franking: "rate_correct" })
     );
+  });
+
+  it("opens a piece's price fields on what is on file, values typed prices unsaved, and saves them (#2368)", async () => {
+    const fields = await getPiecePriceFields(userId, collectionId, {
+      conditionId: mnhId,
+      stampIds: [mi200, mi201, mi205],
+    });
+    assert.equal(fields.stamps[mi205].currency, "EUR");
+    assert.equal(fields.stamps[mi205].isUmbrella, false);
+    assert.equal(fields.recorded[piecePriceKey(mi200, "used")], "10.00");
+    assert.equal(fields.recorded[piecePriceKey(mi200, "cover_mif")], "30.00");
+    // The block's own price is not a field: the used field is the single's.
+    assert.equal(Object.keys(fields.recorded).filter((k) => k.startsWith(mi200)).length, 4);
+    assert.equal(fields.recorded[piecePriceKey(mi205, "cover_mif")], undefined);
+
+    // Typed and not saved: the value reads it — Mi 205's MiF 45 is now the highest — and nothing is
+    // written. A comma is a decimal point.
+    const preview = await previewPieceValue(userId, collectionId, {
+      conditionId: mnhId,
+      formatId: coverId,
+      stamps: [
+        { stampId: mi200, quantity: 1, formatId: null },
+        { stampId: mi205, quantity: 1, formatId: null },
+      ],
+      itemId: null,
+      franking: "rate_correct",
+      typed: [{ stampId: mi205, price: "cover_mif", amount: "45,00" }],
+    });
+    assert.equal(preview?.amount, "45.00");
+    assert.equal(preview?.piece?.partial, false);
+    const window = await getCarrierValuation(userId, carrierId, [
+      { stampId: mi201, price: "cover_mif", amount: "50" },
+      { stampId: mi205, price: "cover_mif", amount: "not a price" },
+    ]);
+    assert.equal(window.value?.amount, "50.00");
+    assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: { in: [mi201] } } }), 0);
+    assert.equal((await valueOf(carrierId)).amount, "30.00");
+
+    // Saved where the value reads them: the main catalogue's latest edition, this condition, no
+    // certificate — the reserved row for a price on cover, the single for the used price.
+    await setPiecePrices(userId, collectionId, {
+      conditionId: mnhId,
+      prices: [
+        { stampId: mi205, price: "cover_mif", amount: "45,00" },
+        { stampId: mi201, price: "used", amount: "?" },
+      ],
+    });
+    const saved = await prisma.stampCatalogPrice.findMany({
+      where: { stampId: { in: [mi201, mi205] }, conditionId: mnhId },
+      select: { id: true, stampId: true, formatId: true, price: true, mark: true, catalogEditionId: true, certificateStatusId: true },
+    });
+    const mif = saved.find((p) => p.stampId === mi205 && p.formatId === cover.get("cover_mif"));
+    assert.equal(mif?.price?.toString(), "45");
+    assert.equal(mif?.catalogEditionId, editionId);
+    assert.equal(mif?.certificateStatusId, null);
+    const used = saved.find((p) => p.stampId === mi201);
+    assert.deepEqual([used?.formatId, used?.price, used?.mark], [null, null, "undeterminable"]);
+    // Every reader of the stamp reads it — the piece's own value among them.
+    assert.equal((await valueOf(carrierId)).amount, "45.00");
+
+    // Parsed before anything is written; and only the owner may.
+    await assert.rejects(() =>
+      setPiecePrices(userId, collectionId, {
+        conditionId: mnhId,
+        prices: [
+          { stampId: mi201, price: "cover_mif", amount: "7" },
+          { stampId: mi205, price: "used", amount: "abc" },
+        ],
+      })
+    );
+    assert.equal(
+      await prisma.stampCatalogPrice.count({ where: { stampId: mi201, formatId: cover.get("cover_mif") } }),
+      0
+    );
+    await assert.rejects(() =>
+      setPiecePrices("someone-else", collectionId, {
+        conditionId: mnhId,
+        prices: [{ stampId: mi205, price: "used", amount: "1" }],
+      })
+    );
+
+    // The tests below value the piece without them.
+    await prisma.stampCatalogPrice.deleteMany({ where: { id: { in: [mif!.id, used!.id] } } });
+    assert.equal((await valueOf(carrierId)).amount, "30.00");
   });
 
   it("takes the method of the most expensive stamp's area, and a copy's own wins", async () => {
