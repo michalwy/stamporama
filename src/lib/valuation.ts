@@ -21,6 +21,7 @@ import type {
   PieceComponent,
   PieceKind,
   PieceRule,
+  PieceFloor,
   PieceTerm,
   PieceValueResult,
   ValuationMethod,
@@ -363,8 +364,11 @@ export interface PieceValuation {
   /** The condition each price the method reads comes from (#2375), by price; a price whose role is
    *  not mapped has none. What the fields are headed by and the arithmetic names. */
   columns: Partial<Record<PiecePrice, PieceColumn>>;
-  /** The figure as a sum (#2353): what the Valuation window prints as the arithmetic. */
+  /** The rule's figure as a sum (#2353): what the Valuation window prints as the arithmetic. */
   terms: PieceTerm[];
+  /** The sum of used prices the rule's figure was compared with, the greater being the value
+   *  (#2397); null when the rule is *Sum of used* itself. */
+  floor: PieceFloor | null;
   /** Each entry on the piece with every price the rule may read, in the collection currency (#2353):
    *  its used price and its price on the piece, side by side. In the collector's order. */
   components: PieceComponent[];
@@ -379,7 +383,7 @@ export interface PieceValuation {
  */
 export function valuatePiece(
   result: PieceValueResult,
-  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing" | "terms" | "currency">,
+  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing" | "terms" | "currency" | "floor">,
   uncertain: boolean,
   baseCurrency: string
 ): CopyValuation {
@@ -403,6 +407,7 @@ export function valuatePiece(
       missing: result.missing,
       terms: result.terms,
       currency: baseCurrency,
+      floor: result.floor,
     },
     faultReduction: null,
     valueModifier: null,

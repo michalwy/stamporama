@@ -40,21 +40,31 @@ describe("piecePricesRead", () => {
     assert.deepEqual(read("michel", null, "rate_correct", two), all);
   });
 
-  it("asks every stamp's on-piece price on a fragment", () => {
+  it("asks every stamp's on-piece price on a fragment, and its used price for the floor (#2397)", () => {
     assert.deepEqual(read("fischer", "on_piece", "rate_correct", [entry("a"), entry("b")]), {
-      "e-a": ["on_piece"],
-      "e-b": ["on_piece"],
+      "e-a": ["on_piece", "used"],
+      "e-b": ["on_piece", "used"],
     });
   });
 
-  it("asks Michel's rate-correct cover for the price its franking names", () => {
-    assert.deepEqual(read("michel", "on_cover", "rate_correct", [entry("a")]), { "e-a": ["cover_ef"] });
-    assert.deepEqual(read("michel", "on_cover", "rate_correct", [entry("a", 2)]), { "e-a": ["cover_mef"] });
-    // MiF: every stamp's MiF is compared for the highest, so each is asked — the same stamp once.
+  it("asks Michel's rate-correct cover for the price its franking names, and every used price", () => {
+    assert.deepEqual(read("michel", "on_cover", "rate_correct", [entry("a")]), { "e-a": ["cover_ef", "used"] });
+    assert.deepEqual(read("michel", "on_cover", "rate_correct", [entry("a", 2)]), {
+      "e-a": ["cover_mef", "used"],
+    });
+    // MiF: every stamp's MiF is compared for the highest, so each is asked — the same stamp once; the
+    // floor reads every entry's used price, a later entry's included (#2397).
     assert.deepEqual(
       read("michel", "on_cover", "rate_correct", [entry("a"), entry("b"), entry("a", 1, false, "e-a2")]),
-      { "e-a": ["cover_mif"], "e-b": ["cover_mif"], "e-a2": [] }
+      { "e-a": ["cover_mif", "used"], "e-b": ["cover_mif", "used"], "e-a2": ["used"] }
     );
+  });
+
+  it("asks Fischer FP/FW/FM for its franking's price and every used price (#2397)", () => {
+    assert.deepEqual(read("fischer_fp_fw_fm", "on_cover", "rate_correct", [entry("a"), entry("b")]), {
+      "e-a": ["cover_mif", "used"],
+      "e-b": ["cover_mif", "used"],
+    });
   });
 
   it("asks a philatelic cover for each stamp's used price", () => {
@@ -65,7 +75,9 @@ describe("piecePricesRead", () => {
   });
 
   it("asks Fischer's MeF for ⊠ of the first and the used price of the third stamp on", () => {
-    assert.deepEqual(read("fischer", "on_cover", "rate_correct", [entry("a", 2)]), { "e-a": ["cover_mif"] });
+    assert.deepEqual(read("fischer", "on_cover", "rate_correct", [entry("a", 2)]), {
+      "e-a": ["cover_mif", "used"],
+    });
     assert.deepEqual(read("fischer", "on_cover", "rate_correct", [entry("a", 3)]), {
       "e-a": ["cover_mif", "used"],
     });

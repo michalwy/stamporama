@@ -96,9 +96,10 @@ describe("Michel", () => {
   });
 
   it("values a philatelic, posted cover at the most expensive used price + 15 %", () => {
-    const r = value("michel", "on_cover", "philatelic_posted", [A, B]);
+    const r = value("michel", "on_cover", "philatelic_posted", [A, { ...B, used: 1, usedSingle: 1 }]);
     assert.equal(r.amount, 11.5);
     assert.equal(r.rule, "philatelic");
+    assert.deepEqual(r.floor, { amount: 11, ruleAmount: 11.5, applied: false });
   });
 
   it("values a cover not posted at the sum of used prices", () => {
@@ -114,11 +115,19 @@ describe("Michel", () => {
     assert.deepEqual(r.missing, [{ componentId: "e-b", stampId: "b", price: "cover_mif" }]);
   });
 
-  it("says which price is missing on an EF cover, and has no figure without it", () => {
+  it("says which price is missing on an EF cover, and has no rule figure without it", () => {
     const r = value("michel", "on_cover", "rate_correct", [{ ...A, coverEf: null }]);
-    assert.equal(r.amount, null);
+    // The floor still stands: the rule priced nothing, the used price did (#2397).
+    assert.equal(r.amount, 10);
+    assert.deepEqual(r.floor, { amount: 10, ruleAmount: null, applied: true });
     assert.equal(r.partial, true);
     assert.deepEqual(r.missing, [{ componentId: "e-a", stampId: "a", price: "cover_ef" }]);
+  });
+
+  it("has no figure when neither the rule's price nor the used price is there", () => {
+    const r = value("michel", "on_cover", "rate_correct", [{ ...A, coverEf: null, used: null }]);
+    assert.equal(r.amount, null);
+    assert.deepEqual(r.missing.map((m) => m.price), ["cover_ef", "used"]);
   });
 });
 
@@ -138,8 +147,11 @@ describe("Fischer — one ⊠ price per stamp, its MiF price", () => {
   });
 
   it("counts a block on the cover as one stamp at its own used price", () => {
-    // The block takes the ⊠ share; the loose copy beside it is the further stamp.
-    assert.equal(value("fischer", "on_cover", "rate_correct", [blockOfA, twoOfA]).amount, 45 + 10 * 2 - 10);
+    // The block takes the ⊠ share; the loose copy beside it is the further stamp. Its used prices
+    // (the block's 50, two loose at 10) are the higher, so they are the value (#2397).
+    const r = value("fischer", "on_cover", "rate_correct", [blockOfA, twoOfA]);
+    assert.equal(r.floor?.ruleAmount, 45 + 10 * 2 - 10);
+    assert.equal(r.amount, 50 + 10 * 2);
   });
 
   it("values a MiF cover at 50 % of the highest ⊠ plus every other stamp at its used price", () => {
@@ -203,6 +215,63 @@ describe("Sum of used, and a piece whose format has no kind", () => {
   });
 });
 
+describe("never below the sum of used prices (#2397)", () => {
+  // Michel's example: six stamps at ⊙ 0.30 EUR, 1.33 PLN each, on a philatelic, posted cover.
+  const six = Array.from({ length: 6 }, (_, i) =>
+    stamp(`s${i}`, { used: 1.33, usedSingle: 1.33, coverEf: null, coverMef: null, coverMif: null })
+  );
+
+  it("values Michel's six-stamp philatelic cover at the sum of its used prices, not 115 % of one", () => {
+    const r = value("michel", "on_cover", "philatelic_posted", six);
+    assert.equal(r.rule, "philatelic");
+    assert.deepEqual(r.floor, { amount: 7.98, ruleAmount: 1.53, applied: true });
+    assert.equal(r.amount, 7.98);
+    assert.equal(r.partial, false);
+  });
+
+  it("values a rate-correct MiF cover at the sum when its MiF price is lower, under every method", () => {
+    // Highest MiF / FM 3, ⊠ 3 for each: every rule's figure is below the used prices' 14.
+    const cheap = [{ ...A, coverMif: 3 }, { ...B, coverMif: 3 }];
+    for (const method of ["michel", "fischer", "fischer_fp_fw_fm"] as const) {
+      const r = value(method, "on_cover", "rate_correct", cheap);
+      assert.equal(r.amount, 14, method);
+      assert.equal(r.floor?.applied, true, method);
+      assert.ok((r.floor?.ruleAmount ?? 0) < 14, method);
+    }
+  });
+
+  it("keeps the rule's figure when it is the higher, the sum still beside it", () => {
+    const r = value("michel", "on_cover", "rate_correct", [A, B]);
+    assert.equal(r.amount, 50);
+    assert.deepEqual(r.floor, { amount: 14, ruleAmount: 50, applied: false });
+  });
+
+  it("floors a fragment's on-piece sum too", () => {
+    const r = value("michel", "on_piece", "rate_correct", [{ ...A, onPiece: 1 }, { ...B, onPiece: 1 }]);
+    assert.equal(r.amount, 14);
+  });
+
+  it("makes the value partial under every method when a used price is missing — the floor could be higher", () => {
+    const components = [A, { ...B, used: null, usedSingle: null }];
+    for (const method of ["michel", "fischer", "fischer_fp_fw_fm"] as const) {
+      for (const kind of ["on_cover", "on_piece"] as const) {
+        const r = value(method, kind, "rate_correct", components);
+        assert.equal(r.partial, true, `${method} ${kind}`);
+        assert.ok(
+          r.missing.some((m) => m.stampId === "b" && m.price === "used"),
+          `${method} ${kind}`
+        );
+      }
+    }
+  });
+
+  it("is its own floor under Sum of used", () => {
+    assert.equal(value("sum_of_used", "on_cover", "rate_correct", [A, B]).floor, null);
+    assert.equal(value("michel", "on_cover", "not_posted", [A, B]).floor, null);
+    assert.equal(value("michel", null, "rate_correct", [A, B]).floor, null);
+  });
+});
+
 describe("a price whose role is not set up (#2375)", () => {
   it("leaves the value partial and names the price unmapped, not missing", () => {
     const result = valuePiece({
@@ -216,11 +285,12 @@ describe("a price whose role is not set up (#2375)", () => {
     assert.deepEqual(result.unmapped, ["cover_mif"]);
     assert.deepEqual(result.missing, []);
     // The used prices still add up where Fischer reads them: A, the most expensive, would have taken
-    // the ⊠ share, so only B is at its used price.
-    assert.equal(result.amount, 4);
+    // the ⊠ share, so only B is at its used price — and the floor, both used prices, is the value.
+    assert.equal(result.floor?.ruleAmount, 4);
+    assert.equal(result.amount, 14);
   });
 
-  it("has no figure when the one price read is unmapped — never filled from another role", () => {
+  it("gives the rule no figure when the one price read is unmapped — never filled from another role", () => {
     const result = valuePiece({
       method: "michel",
       kind: "on_cover",
@@ -228,8 +298,24 @@ describe("a price whose role is not set up (#2375)", () => {
       components: [{ ...A, coverEf: null }],
       unmapped: new Set(["cover_ef"]),
     });
-    assert.equal(result.amount, null);
+    // The used price is not read as the EF price: it is the floor, named as such (#2397).
+    assert.equal(result.floor?.ruleAmount, null);
+    assert.equal(result.amount, 10);
     assert.deepEqual(result.unmapped, ["cover_ef"]);
+  });
+
+  it("names the used price unmapped when the floor cannot read it (#2397)", () => {
+    const result = valuePiece({
+      method: "michel",
+      kind: "on_cover",
+      franking: "rate_correct",
+      components: [{ ...A, used: null }],
+      unmapped: new Set(["used"]),
+    });
+    assert.equal(result.amount, 40);
+    assert.equal(result.partial, true);
+    assert.deepEqual(result.unmapped, ["used"]);
+    assert.deepEqual(result.missing, []);
   });
 
   it("is not noted where the rule does not read it", () => {
