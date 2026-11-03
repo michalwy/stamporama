@@ -546,7 +546,8 @@ export function TileIdentifyChainDialogs({
             detail:
               [
                 draft.quantity > 1 ? `×${draft.quantity}` : null,
-                format ? (format.abbreviation || format.name) : null,
+                // Named in full (#2390): the entry's price is read at this format.
+                format ? (format.abbreviation ? `${format.name} (${format.abbreviation})` : format.name) : null,
               ]
                 .filter(Boolean)
                 .join(" ") || null,

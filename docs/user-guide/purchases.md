@@ -1550,7 +1550,9 @@ document. Assigning is done by picking a copy from the list itself. There are th
   from. Beside it, **Method** is the piece's own valuation method: *As inherited* — named with the
   method and where it comes from, *As inherited (Michel, from Germany)* — leaves the piece following
   its area, and any other choice gives it its own, saved with the copy. Once a condition is chosen,
-  **each stamp in the numbered list has a field for each price the value reads** — its **used** price and its price on the piece (its cover EF, MeF or MiF on a cover,
+  **each stamp in the numbered list** — shown with its own picture, and with its format named in full
+  (*Block of 4 (Bl4)*) where it is not a single, since its price is read at that format — **has a field
+  for each price the value reads** — its **used** price and its price on the piece (its cover EF, MeF or MiF on a cover,
   by what is on it; ⊠ under Fischer, FP, FW or FM under Fischer FP/FW/FM; its on-piece price on a
   fragment), each column headed by the condition it is read from under **Settings → Valuation
   methods**, and **not set up** where the method has no condition for it; a dash is a price the value

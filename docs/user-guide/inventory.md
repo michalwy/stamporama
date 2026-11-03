@@ -1224,7 +1224,9 @@ price off a format that does not say the piece is a cover, so to value it by one
 kind *On cover* or *On piece*. One stamp alone on a cover is valued the same
 way, as a cover (its cover EF price under Michel), and still counts as a copy of that stamp. It is
 shown the same way too: its Valuation window and its identification list the stamp with its price
-fields and the computed value, as for a piece carrying several.
+fields and the computed value, as for a piece carrying several. In both, each stamp's row starts with
+the stamp's own picture, and a stamp in a format other than single names that format in full with its
+abbreviation — *Block of 4 (Bl4)* — since its price is read at that format.
 
 **How a cover was posted** is its **franking**, set in the copy's **Edit** dialog, or next to the stamps
 on the piece when you identify a card scan tile:
