@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { addAlbumEntry, createAlbum } from "../../src/lib/albums";
-import { addStampToIssue } from "../../src/lib/issues";
+import { addStampToIssue, reorderIssueMembers } from "../../src/lib/issues";
 import { createItem } from "../../src/lib/items";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { DELETE, POST } from "../../src/app/api/v1/[...path]/route";
@@ -190,6 +190,26 @@ describe("a stamp between issues, and deleting a base stamp or an empty issue, t
         (await prisma.stampCatalogNumber.findMany({ where: { stampId: base }, select: { number: true } })).map((row) => row.number),
         ["511"]
       );
+    });
+
+    it("keeps the variants in the order they stood in the source issue (#2366)", async () => {
+      const source = await newIssue("Order source");
+      const target = await newIssue("Order target");
+      const base = await addStamp(source, "530");
+      const variants: string[] = [];
+      for (const letter of ["a", "b", "c", "d", "e", "f"]) variants.push(await addStamp(source, `530${letter}`, base));
+      // An order neither added nor by id — the move must read the tree's, not the rows'.
+      const order = [variants[3], variants[0], variants[5], variants[1], variants[4], variants[2]];
+      await reorderIssueMembers(userId, collectionId, source, order);
+
+      const answer = await ok<Moved>(token, "POST", `/stamps/${base}/issue`, { issue_id: target });
+      assert.deepEqual(answer.stampsMoved.map((row) => row.stampId), [base, ...order]);
+      const landed = await prisma.issueMember.findMany({
+        where: { issueId: target, stampId: { in: variants } },
+        orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
+        select: { stampId: true },
+      });
+      assert.deepEqual(landed.map((row) => row.stampId), order);
     });
 
     it("puts it at a position among the target's top-level stamps, and joins an existing standard checklist", async () => {
