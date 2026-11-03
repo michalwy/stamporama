@@ -1265,7 +1265,7 @@ labelled so, and an unmarked tile opens with **no faults** — never with the la
 belongs to one piece. The field sits straight after condition, certificate and format, with the rest of
 what describes the piece, and before the catalogue value, which is looked up afterwards. **Tags** sit
 beside it on the same row, each taking half, and each grows downwards as you add more; Tab goes from
-*Faults* to *Tags* to *Catalog value*.
+*Faults* to *Tags*, then through the value modifier below them to *Catalog value*.
 
 - **Several tiles identified as one stamp**: when they are all marked with the same faults, the field
   opens on them and they go on every copy. Otherwise it opens empty, the tiles marked with faults
@@ -1276,6 +1276,18 @@ beside it on the same row, each taking half, and each grows downwards as you add
   for faults. Each tile opens on the faults marked on it, and its row says how many it has.
 - **Identify again** does not ask: it corrects what the copy is, and the copy's faults are changed in
   its own dialog.
+
+**Value modifier in identification.** Under faults and tags, the step asks for the copy's
+[value modifier](inventory.md#adjusting-a-copys-catalog-value) — **Value modifier** (a percentage),
+**Amount** and **Modifier note**, the copy dialog's own fields and rules — for a cancellation or usage
+the catalog prices apart, read off the piece in hand. It opens **empty**, never with the last tile's,
+since a modifier belongs to one piece. Once something is typed, a line under the fields says what it
+comes to — *Catalog value 10.00 EUR · +200 % (Stempel Danzig) → 30.00 EUR* — before any reduction for
+faults: on a loose stamp from the figure in **Catalog value** (for a single; a multiple's value is that
+figure times its format's factor, so no line is shown), on a piece from its **Computed value**, which
+the line follows as you type. **Several tiles identified as one stamp** all take it. A run of a
+checklist and **Identify again** do not ask; change a copy's modifier in its own dialog or, on a piece,
+in its Valuation window.
 
 **Tags in identification.** Every identification dialog also asks for the new copy's **Tags**, beside
 *Faults* — the field the copy's own dialog has: pick a tag from your list, or type a new name and

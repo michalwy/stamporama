@@ -11,7 +11,10 @@ import {
   assertValueModifier,
   describeValueModifierState,
   parseValueModifierInput,
+  readValueModifier,
+  sameValueModifier,
   valueModifierColumns,
+  valueModifierDraftOf,
   valueModifierHint,
   valueModifierLabel,
 } from "../../src/lib/value-modifier";
@@ -233,5 +236,42 @@ describe("the words on a modified figure", () => {
     assert.equal(describeValueModifierState(0, 3), "None has a modifier yet.");
     assert.equal(describeValueModifierState(3, 3), "All 3 have a modifier.");
     assert.equal(describeValueModifierState(1, 3), "1 of 3 has a modifier.");
+  });
+});
+
+// Where a copy's value is worked out (#2398): identification and the Valuation window hold the fields
+// as text, and value what is typed before it is saved.
+describe("the modifier typed before it is saved (#2398)", () => {
+  it("fills the fields from a modifier on file, and leaves them empty for none", () => {
+    assert.deepEqual(valueModifierDraftOf(null), { percent: "", amount: "", note: "" });
+    assert.deepEqual(valueModifierDraftOf({ percent: -20, amount: "5.00", note: "Thin" }), {
+      percent: "-20",
+      amount: "5.00",
+      note: "Thin",
+    });
+  });
+
+  it("compares what the figures say, not how they are spelled", () => {
+    assert.ok(sameValueModifier(null, null));
+    assert.ok(!sameValueModifier(null, { percent: 10, amount: null, note: null }));
+    assert.ok(
+      sameValueModifier({ percent: null, amount: "5", note: null }, { percent: null, amount: "5.00", note: null })
+    );
+    assert.ok(
+      !sameValueModifier({ percent: 10, amount: null, note: "a" }, { percent: 10, amount: null, note: "b" })
+    );
+  });
+
+  it("reads a modifier sent to be valued, and none where it is not one", () => {
+    assert.deepEqual(readValueModifier({ percent: 200, amount: "-1.5", note: " Danzig " }), {
+      percent: 200,
+      amount: "-1.50",
+      note: "Danzig",
+    });
+    assert.equal(readValueModifier(null), null);
+    assert.equal(readValueModifier("200"), null);
+    assert.equal(readValueModifier({ percent: 0, amount: null, note: null }), null);
+    assert.equal(readValueModifier({ percent: -150, amount: null, note: null }), null);
+    assert.equal(readValueModifier({ percent: null, amount: null, note: "only a note" }), null);
   });
 });

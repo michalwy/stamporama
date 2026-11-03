@@ -14,6 +14,9 @@ export interface IntakeCatalogValue {
   /** The primary catalogue the figure would land on (its latest edition), or null when the stamp's
    * area has none — in which case there is no field on screen either. */
   catalogNameId: string | null;
+  /** That catalogue's currency, the figure's own (#2398); null with no catalogue. Read only by the
+   *  intake step, so a checklist run's cells leave it out. */
+  currency?: string | null;
   /** Exactly what is in the input. Blank is the ordinary case, not a missing answer: the paper
    * catalogue is not always to hand, and this step must never start blocking on it. */
   amount: string;
@@ -32,6 +35,7 @@ export interface IntakeCatalogValue {
 
 export const EMPTY_INTAKE_CATALOG_VALUE: IntakeCatalogValue = {
   catalogNameId: null,
+  currency: null,
   amount: "",
   recorded: null,
   loading: false,

@@ -484,6 +484,51 @@ describe("identifying scan tiles into copies (#567)", () => {
     });
   });
 
+  it("gives every copy of a pass the value modifier the step was given, note and all (#2398)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const outcomes = await identifyTilesAsNewCopies(userId, tileIds, {
+      stampId,
+      conditionId,
+      valueModifier: { percent: 200, amount: "-1.50", note: "Stempel Danzig" },
+    });
+    const rows = await prisma.item.findMany({
+      where: { id: { in: outcomes.map((o) => o.itemId) } },
+      select: { valueModifierPercent: true, valueModifierAmount: true, valueModifierNote: true },
+    });
+    assert.equal(rows.length, 2);
+    for (const row of rows) {
+      assert.equal(row.valueModifierPercent, 200);
+      assert.equal(row.valueModifierAmount?.toFixed(2), "-1.50");
+      assert.equal(row.valueModifierNote, "Stempel Danzig");
+    }
+
+    // None given is none — nothing is carried over from the pass before.
+    const [next] = await identifyTilesAsNewCopies(userId, [(await orderWithTiles()).tileIds[0]], {
+      stampId,
+      conditionId,
+    });
+    const plain = await prisma.item.findUniqueOrThrow({
+      where: { id: next.itemId },
+      select: { valueModifierPercent: true, valueModifierAmount: true, valueModifierNote: true },
+    });
+    assert.deepEqual(plain, { valueModifierPercent: null, valueModifierAmount: null, valueModifierNote: null });
+  });
+
+  it("refuses a modifier that is none before a copy exists (#2398)", async () => {
+    const { purchaseId, tileIds } = await orderWithTiles();
+    const before = await prisma.item.count({ where: { lot: { purchaseId } } });
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, tileIds, {
+          stampId,
+          conditionId,
+          valueModifier: { percent: 0, amount: null, note: null },
+        }),
+      /zero is no modifier/
+    );
+    assert.equal(await prisma.item.count({ where: { lot: { purchaseId } } }), before);
+  });
+
   it("has nothing to show only when the copy itself was deleted", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     const outcome = await identifyTileAsNewCopy(userId, tileIds[0], { stampId, conditionId });

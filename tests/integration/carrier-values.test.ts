@@ -402,6 +402,42 @@ describe("a piece valued by its method (#2359)", () => {
     );
   });
 
+  it("values a modifier typed and not saved, in the Valuation window and in identification (#2398)", async () => {
+    const own = await getCarrierValuation(userId, carrierId);
+    assert.equal(own.value?.valueModifier, null);
+    assert.equal(own.value?.faultReduction, null);
+    const base = Number(own.value?.amount);
+
+    const window = await getCarrierValuation(userId, carrierId, [], {
+      percent: 100,
+      amount: null,
+      note: "Stempel Danzig",
+    });
+    assert.equal(window.value?.amount, (base * 2).toFixed(2));
+    assert.equal(window.value?.valueModifier?.fullAmount, base.toFixed(2));
+    assert.equal(window.value?.valueModifier?.note, "Stempel Danzig");
+    // Nothing is written by a read.
+    const row = await prisma.item.findUniqueOrThrow({
+      where: { id: carrierId },
+      select: { valueModifierPercent: true },
+    });
+    assert.equal(row.valueModifierPercent, null);
+
+    const preview = await previewPieceValue(userId, collectionId, {
+      conditionId: mnhId,
+      formatId: coverId,
+      stamps: [
+        { stampId: mi200, quantity: 1, formatId: null },
+        { stampId: mi205, quantity: 1, formatId: null },
+      ],
+      itemId: null,
+      franking: "not_posted",
+      valueModifier: { percent: null, amount: "5.00", note: null },
+    });
+    assert.equal(preview?.valueModifier?.fullAmount, "14.00");
+    assert.equal(preview?.amount, "19.00");
+  });
+
   it("opens a piece's price fields on what is on file, values typed prices unsaved, and saves them (#2368)", async () => {
     const fields = await getPiecePriceFields(userId, collectionId, {
       columns: { used: mnhId, cover_mif: mifId },
