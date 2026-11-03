@@ -1564,7 +1564,11 @@ document. Assigning is done by picking a copy from the list itself. There are th
   franking, the method or the stamps. **Identify the tile** saves the typed prices to the stamps'
   catalog prices before it creates the copy; if they cannot be saved, nothing is created and the step
   says why. Closing the step keeps none of them. The single catalog value field the step has for one stamp
-  is not shown for a piece carrying several, since no one stamp's price is the piece's. A piece
+  is not shown for a piece carrying several, since no one stamp's price is the piece's. **One stamp
+  alone on a cover is a piece too**: choose a **Format** of kind *On cover* or *On piece* for it and the
+  box lists it under *One stamp on this piece* with its price fields and the computed value, in place
+  of the catalog value field — its value is the method's, not the stamp's own price; choose a format
+  without a kind and the catalog value field comes back. A piece
   carrying several stamps counts towards none of them — see
   [Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Assign to a copy on this order** — the auction path. An order settled from an
