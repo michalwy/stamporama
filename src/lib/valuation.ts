@@ -368,6 +368,8 @@ export interface PieceValuation {
   /** Each entry on the piece with every price the rule may read, in the collection currency (#2353):
    *  its used price and its price on the piece, side by side. In the collector's order. */
   components: PieceComponent[];
+  /** The collection currency, which every figure above is in — named in the arithmetic (#2388). */
+  currency: string;
 }
 
 /**
@@ -377,7 +379,7 @@ export interface PieceValuation {
  */
 export function valuatePiece(
   result: PieceValueResult,
-  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing" | "terms">,
+  piece: Omit<PieceValuation, "rule" | "usage" | "partial" | "missing" | "terms" | "currency">,
   uncertain: boolean,
   baseCurrency: string
 ): CopyValuation {
@@ -400,6 +402,7 @@ export function valuatePiece(
       partial: result.partial || piece.unmapped.length > 0,
       missing: result.missing,
       terms: result.terms,
+      currency: baseCurrency,
     },
     faultReduction: null,
     valueModifier: null,

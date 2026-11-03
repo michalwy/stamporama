@@ -118,6 +118,16 @@ export interface PieceComponent {
   /** The prices worked out by Michel's rule for a stamp still valid for postage (#2358) rather than
    *  read off the catalogue — shown as derived (`~`) in the piece's windows. */
   derived?: readonly PiecePrice[];
+  /** Each price converted from another currency, as the catalogue gives it (#2388) — what the
+   *  arithmetic prints beside the converted figure. A price already in the collection currency, or
+   *  missing, has none. */
+  originals?: Partial<Record<PiecePrice, PieceOriginal>>;
+}
+
+/** A price in the catalogue's own currency, before it was converted to the collection's (#2388). */
+export interface PieceOriginal {
+  amount: number;
+  currency: string;
 }
 
 /** How a cover is franked, by what is on it — counted in stamps, not rows. */

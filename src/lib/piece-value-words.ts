@@ -175,12 +175,15 @@ const ARITHMETIC_HEAD: Record<PieceRule, string | null> = {
 
 /**
  * How the figure was reached, as arithmetic that can be checked against the catalogue (#2353):
- * *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*. `label` names an entry — its catalogue
- * number, as the surface words one. A missing price is printed as a dash where it would have been
- * added, and the sum is of what is priced. Null when the rule added nothing at all.
+ * *MiF: 50 % × Mi 123 ⊠ 40.00 PLN + Mi 124 ⊙ 2.00 PLN = 22.00 PLN*. `label` names an entry — its
+ * catalogue number, as the surface words one. Every amount names its currency (#2388), and a price
+ * converted from the catalogue's is shown with its original — *Mi 123 ⊙ (1.80 EUR = 7.95 PLN)* — the
+ * rule applied to the converted figure; the rate itself is not printed, and the total is in the
+ * collection currency only. A missing price is printed as a dash where it would have been added, and
+ * the sum is of what is priced. Null when the rule added nothing at all.
  */
 export function pieceArithmetic(
-  piece: Pick<PieceValuation, "rule" | "usage" | "method" | "terms" | "columns" | "components">,
+  piece: Pick<PieceValuation, "rule" | "usage" | "method" | "terms" | "columns" | "components" | "currency">,
   label: (componentId: string) => string
 ): string | null {
   if (piece.terms.length === 0) return null;
@@ -192,8 +195,15 @@ export function pieceArithmetic(
   const parts = piece.terms.map((t) => {
     const share = t.percent === 100 ? "" : `${t.percent} % × `;
     const component = piece.components.find((c) => c.id === t.componentId);
-    const derived = component ? isDerivedPrice(component, t.price) : false;
-    const unit = t.unit === null ? "—" : `${derived ? "~" : ""}${t.unit.toFixed(2)}`;
+    const mark = component && isDerivedPrice(component, t.price) ? "~" : "";
+    const original = t.unit === null ? undefined : component?.originals?.[t.price];
+    const converted = `${mark}${t.unit?.toFixed(2)} ${piece.currency}`;
+    const unit =
+      t.unit === null
+        ? "—"
+        : original
+          ? `(${mark}${original.amount.toFixed(2)} ${original.currency} = ${converted})`
+          : converted;
     const times = t.times === 1 ? "" : ` × ${t.times}`;
     if (t.unit !== null) {
       cents += termCents(t.unit, t.percent) * t.times;
@@ -201,6 +211,6 @@ export function pieceArithmetic(
     }
     return `${share}${label(t.componentId)} ${priceSymbol(piece, t.price)} ${unit}${times}`;
   });
-  const sum = priced ? (cents / 100).toFixed(2) : "—";
+  const sum = priced ? `${(cents / 100).toFixed(2)} ${piece.currency}` : "—";
   return `${head ? `${head}: ` : ""}${parts.join(" + ")} = ${sum}`;
 }
