@@ -13,6 +13,7 @@ import {
   missingPricesText,
   onPiecePrice,
   pieceArithmetic,
+  pieceHeading,
   pieceValueRule,
   priceHeading,
   unmappedRolesText,
@@ -220,5 +221,16 @@ describe("the method beside a piece — where it came from, and what As inherite
     });
     assert.match(rule, /neither on cover nor on piece/);
     assert.match(rule, /give it a format of kind On cover or On piece/);
+  });
+});
+
+describe("pieceHeading — a piece's panel is headed by the piece, not its first stamp (#2392)", () => {
+  it("names the format and how many stamps the piece carries", () => {
+    assert.equal(pieceHeading("Cover", 6), "Cover · 6 stamps");
+    assert.equal(pieceHeading("Cover", 1), "Cover · 1 stamp");
+  });
+
+  it("gives the count alone where there is no format to name", () => {
+    assert.equal(pieceHeading(null, 3), "3 stamps");
   });
 });

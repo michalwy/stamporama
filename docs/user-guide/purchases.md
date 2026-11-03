@@ -1542,6 +1542,8 @@ document. Assigning is done by picking a copy from the list itself. There are th
   add them all with one press — each as quantity 1, single, in catalogue order; one already listed
   goes up by one instead. The tile still becomes **one copy**, carrying all of them; the box then lists
   them under *Several stamps on this piece*, and **Change the stamps on this piece…** reopens the list.
+  The box is headed by the piece rather than by the stamp you picked first — its format and how many
+  stamps it carries, *Cover · 6 stamps* — so each stamp appears once, in the list.
   Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual, and say
   how it was posted in **Franking**, which appears beside the stamps on the piece — *Rate-correct*,
   *Philatelic, posted* or *Not posted*; it decides which catalog price the piece's value is read

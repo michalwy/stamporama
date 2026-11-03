@@ -42,7 +42,7 @@ import {
   type Franking,
   type ValuationMethod,
 } from "@/lib/piece-valuation";
-import { inheritedMethodLabel } from "@/lib/piece-value-words";
+import { inheritedMethodLabel, pieceHeading } from "@/lib/piece-value-words";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
@@ -948,6 +948,12 @@ function IntakeConditionDialog({
   const summary =
     selection.kind === "checklist" ? (
       `Whole set: ${selection.label} — ${count} stamp${count === 1 ? "" : "s"}`
+    ) : pieceStamps ? (
+      // A piece is named as the piece (#2392): its stamps are the list under this line, the first
+      // stamp first, so its numbers here were that stamp twice — and read as if the piece were it.
+      <span style={{ color: "var(--color-text-primary)" }}>
+        {pieceHeading(formats.find((f) => f.id === formatId)?.name ?? null, carriedStampCount)}
+      </span>
     ) : selection.chips && selection.chips.length > 0 ? (
       // The numbers are what the piece is checked against, so they are the chips every stamp row
       // draws (#1525) rather than a line of small text — the main catalogue's leading, highlighted.

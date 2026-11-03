@@ -111,6 +111,14 @@ export function pieceValueTitle(piece: PieceValuation): string {
   return `Computed for this piece: ${pieceValueRule(piece)}${gaps.length ? `. Partial — ${gaps.join("; ")}.` : ""}`;
 }
 
+/** What heads a piece's panel in identification (#2392): the piece — its format and how many stamps
+ *  it carries, *Cover · 6 stamps* — never its first stamp, which the stamp list under it names. No
+ *  format is the single, which names no piece, so the count stands alone. */
+export function pieceHeading(formatName: string | null, stampCount: number): string {
+  const count = `${stampCount} stamp${stampCount === 1 ? "" : "s"}`;
+  return formatName ? `${formatName} · ${count}` : count;
+}
+
 /** Whether a component's price was worked out by Michel's rule rather than read (#2358, #2375) —
  *  shown as derived, `~`. */
 export function isDerivedPrice(component: PieceComponent, price: PiecePrice): boolean {
