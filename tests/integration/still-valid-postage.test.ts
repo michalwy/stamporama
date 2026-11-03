@@ -127,7 +127,9 @@ describe("stamps still valid for postage, under the Michel method (#2358, #2375)
 
   it("works nothing out for a stamp nothing marks: its EF price is simply missing", async () => {
     const v = await onCover();
-    assert.equal(v.amount, null);
+    // The rule has no figure; the value is the used price it is never below (#2397).
+    assert.equal(v.piece?.floor?.ruleAmount, null);
+    assert.equal(v.amount, "2.00");
     assert.deepEqual(v.piece?.missing.map((m) => m.price), ["cover_ef"]);
     assert.deepEqual(v.piece?.unmapped, []);
   });
@@ -135,7 +137,8 @@ describe("stamps still valid for postage, under the Michel method (#2358, #2375)
   it("says which role it lacks while never hinged is not mapped", async () => {
     await setAreaStillValidForPostage(userId, areaId, true);
     const v = await onCover();
-    assert.equal(v.amount, null);
+    assert.equal(v.piece?.floor?.ruleAmount, null);
+    assert.equal(v.amount, "2.00");
     assert.deepEqual(v.piece?.unmapped, [{ method: "michel", role: "never_hinged" }]);
   });
 
@@ -157,7 +160,8 @@ describe("stamps still valid for postage, under the Michel method (#2358, #2375)
     await setValuationMethodRole(userId, collectionId, { method: "fischer_fp_fw_fm", role: "used", conditionId: usedId });
     await setValuationMethodRole(userId, collectionId, { method: "fischer_fp_fw_fm", role: "fp", conditionId: efId });
     const v = await onCover();
-    assert.equal(v.amount, null);
+    assert.equal(v.piece?.floor?.ruleAmount, null);
+    assert.equal(v.amount, "2.00");
     assert.equal(v.piece?.components[0].derived, undefined);
     await prisma.collection.update({ where: { id: collectionId }, data: { valuationMethod: "michel" } });
   });
@@ -174,7 +178,7 @@ describe("stamps still valid for postage, under the Michel method (#2358, #2375)
 
   it("lets an issue be unmarked under a marked area", async () => {
     await setIssueStillValidForPostage(userId, issueId, false);
-    assert.equal((await onCover()).amount, null);
+    assert.equal((await onCover()).piece?.floor?.ruleAmount, null);
     await setIssueStillValidForPostage(userId, issueId, null);
     assert.equal((await onCover()).amount, "2.20");
   });

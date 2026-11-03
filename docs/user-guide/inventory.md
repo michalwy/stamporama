@@ -1247,6 +1247,12 @@ on the piece when you identify a card scan tile:
 A sum of used prices takes every stamp in its own format — a block as a block — times how many of it
 there are.
 
+**No piece is valued below the sum of its stamps' used prices**, whatever the method, the franking or
+the format: the value is the greater of what the method's rule gives and that sum. Michel values a
+philatelic cover at most 15 % above its most expensive used stamp, so a cover with six stamps at ⊙ 1.33
+would come to 1.53 by the rule — less than the 7.98 the stamps are worth soaked off. It is valued at
+7.98. Under *Sum of used* the sum is the value already.
+
 **EF, MeF or MiF** is read off what is on the cover, counting stamps rather than rows: one stamp once is
 EF; one stamp several times — a quantity above 1, or a block of it — is MeF; more than one stamp is MiF.
 Under Fischer a block counts as one stamp, since the app does not know how many stamps a format holds.
@@ -1270,7 +1276,8 @@ with the highest used price, read in the condition the collection's default meth
 prices from.
 
 **A missing price** makes the value **partial**: the figure counts what is priced, and the missing
-price is marked on its stamp. A price whose condition is **not set up** makes it partial too, and the
+price is marked on its stamp. A missing **used** price makes it partial under every method, since the
+sum of used prices could have been higher. A price whose condition is **not set up** makes it partial too, and the
 value names the method and the price — *Michel's Cover MiF is not set up*. With nothing priced at all
 the piece is unpriced, and its row shows **+ prices**.
 
@@ -1305,7 +1312,9 @@ click its value), read top to bottom:
   *⊙ (1.80 EUR = 7.95 PLN)* — and the rule is applied to the converted figure; the total is in the
   collection's currency. A price the
   sum needed but is missing is printed as a dash where it would have been added, and the value says it
-  is partial.
+  is partial. The sum of used prices follows, and which of the two is the value — *Philatelic: 115 % ×
+  Mi 7 ⊙ 1.33 = 1.53 · Sum of used 7.98 is higher → 7.98*, or *… · Sum of used 14.00 is lower → 50.00*
+  when the rule's figure stands.
 - **The method**, the franking and EF/MeF/MiF in one line, and where the method came from — an area,
   *set on this copy*, or the collection's default.
 - **Franking**, on a cover, and beside it **Method**, both of which you can change right there: the

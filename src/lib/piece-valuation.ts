@@ -27,6 +27,11 @@
 // Under both Fischer methods a fragment and a cover not posted are valued as under Michel, and a
 // philatelic cover as a rate-correct one, since Fischer states no rule for it.
 //
+// **No piece is valued below the sum of its stamps' used prices** (#2397; ADR-0078): whatever the
+// method, the franking or the kind, the value is the greater of the rule's figure and *Sum of used*,
+// read exactly as that method reads it — else soaking the stamps off would be worth more than the
+// cover. *Sum of used* is its own floor.
+//
 // **EF, MeF or MiF counts stamps, not rows**: one stamp once is EF; one stamp several times — a
 // quantity above 1, or an entry in a multiple format such as a block — is MeF; more than one stamp is
 // MiF. ADR-0020 gives a format no count of stamps, so where Fischer's formulas count, an entry in a
@@ -34,7 +39,8 @@
 //
 // A missing price makes the value **partial** and says which stamp and which price. For the highest
 // of several prices (MiF, the philatelic rule, Fischer's MiF) a stamp without one could have been the
-// highest, so it makes the value partial too. A value with nothing priced is no value at all.
+// highest, so it makes the value partial too, and so does a missing used price under every method,
+// since the floor could have been higher. A value with nothing priced is no value at all.
 
 export const VALUATION_METHODS = ["sum_of_used", "michel", "fischer", "fischer_fp_fw_fm"] as const;
 export type ValuationMethod = (typeof VALUATION_METHODS)[number];
@@ -177,12 +183,28 @@ export interface PieceTerm {
   times: number;
 }
 
+/**
+ * The sum of the stamps' used prices beside a rule's figure (#2397) — the floor no piece is valued
+ * below. Its terms are not kept: each stamp's used price is listed beside the piece already.
+ */
+export interface PieceFloor {
+  /** Σ used price × quantity, in the collection currency, 2-dp — null when no used price is priced. */
+  amount: number | null;
+  /** The rule's own figure, before the floor — what the arithmetic compares the floor with. */
+  ruleAmount: number | null;
+  /** True when the floor is the value: above the rule's figure, or the rule priced nothing. */
+  applied: boolean;
+}
+
 export interface PieceValueResult {
-  /** The value in the collection currency, 2-dp — null when nothing it reads is priced. */
+  /** The value in the collection currency, 2-dp — null when nothing it reads is priced. The greater
+   *  of the rule's figure and {@link floor}'s. */
   amount: number | null;
   rule: PieceRule;
-  /** The figure as a sum, in the order it was reached (#2353). */
+  /** The rule's figure as a sum, in the order it was reached (#2353) — without the floor. */
   terms: PieceTerm[];
+  /** The sum of used prices it was compared with (#2397); null when the rule is *Sum of used* itself. */
+  floor: PieceFloor | null;
   /** EF, MeF or MiF for a cover valued by its franking; null otherwise. */
   usage: CoverUsage | null;
   /** True when a price the rule reads is missing or its role is not set up: the figure, if any, is
@@ -234,8 +256,38 @@ export function mostExpensiveStamp(
   return best?.stampId ?? null;
 }
 
-/** Value a piece by its method. Pure; see the module header for every rule. */
+/** Value a piece by its method, never below the sum of its used prices. Pure; see the module header
+ *  for every rule. */
 export function valuePiece(input: PieceValueInput): PieceValueResult {
+  const ruled = valueByRule(input);
+  if (ruled.rule === "sum_of_used") return ruled;
+  return withUsedFloor(ruled, input);
+}
+
+/** The rule's figure and the floor's, the greater taken (#2397); the floor's gaps join the rule's. */
+function withUsedFloor(ruled: PieceValueResult, input: PieceValueInput): PieceValueResult {
+  const sum = new Accumulator(input.unmapped);
+  for (const c of input.components) sum.add(c, "used", c.used, c.quantity);
+  const floor = sum.result("sum_of_used", null);
+  const applied = floor.amount !== null && (ruled.amount === null || floor.amount > ruled.amount);
+  const missing = [
+    ...ruled.missing,
+    ...floor.missing.filter(
+      (m) => !ruled.missing.some((r) => r.componentId === m.componentId && r.price === m.price)
+    ),
+  ];
+  const unmapped = [...ruled.unmapped, ...floor.unmapped.filter((p) => !ruled.unmapped.includes(p))];
+  return {
+    ...ruled,
+    amount: applied ? floor.amount : ruled.amount,
+    floor: { amount: floor.amount, ruleAmount: ruled.amount, applied },
+    partial: missing.length > 0 || unmapped.length > 0,
+    missing,
+    unmapped,
+  };
+}
+
+function valueByRule(input: PieceValueInput): PieceValueResult {
   const { kind, franking, method, components } = input;
   const acc = new Accumulator(input.unmapped);
 
@@ -279,8 +331,8 @@ export function valuePiece(input: PieceValueInput): PieceValueResult {
  * The prices the value reads for each entry, by its id (#2368) — the fields the piece's stamps are
  * priced in, in place. **Decided by the rule alone, never by the figures**, so a field does not come
  * and go as prices are typed: a price compared for the highest is read whether or not it wins, and
- * under Fischer's mixed franking every stamp's used price is read, the top stamp's included, since
- * which stamp is the top one is a matter of the figures. Mirrors {@link valuePiece} branch by branch.
+ * every stamp's used price is read under every rule, the floor reading it (#2397). Mirrors
+ * {@link valuePiece} branch by branch.
  */
 export function piecePricesRead(
   input: Omit<PieceValueInput, "components"> & { components: readonly PieceEntryShape[] }
@@ -302,27 +354,25 @@ export function piecePricesRead(
   }
   if (kind === "on_piece") {
     for (const c of components) add(c, "on_piece");
-    return read;
+  } else {
+    const usage = coverUsage(components);
+    if (method === "michel" && franking === "philatelic_posted") {
+      for (const c of distinctStamps(components)) add(c, "used");
+    } else if (method === "fischer") {
+      if (usage === "ef") add(components[0], "cover_mif");
+      else if (usage === "mef") {
+        const units = fischerUnits(components);
+        add(units[0], "cover_mif");
+        for (const unit of units.slice(2)) add(unit, "used");
+      } else {
+        for (const c of distinctStamps(components)) add(c, "cover_mif");
+        for (const c of components) add(c, "used");
+      }
+    } else if (usage === "mif") for (const c of distinctStamps(components)) add(c, "cover_mif");
+    else add(components[0], usage === "ef" ? "cover_ef" : "cover_mef");
   }
-  const usage = coverUsage(components);
-  if (method === "michel" && franking === "philatelic_posted") {
-    for (const c of distinctStamps(components)) add(c, "used");
-    return read;
-  }
-  if (method === "fischer") {
-    if (usage === "ef") add(components[0], "cover_mif");
-    else if (usage === "mef") {
-      const units = fischerUnits(components);
-      add(units[0], "cover_mif");
-      for (const unit of units.slice(2)) add(unit, "used");
-    } else {
-      for (const c of distinctStamps(components)) add(c, "cover_mif");
-      for (const c of components) add(c, "used");
-    }
-    return read;
-  }
-  if (usage === "mif") for (const c of distinctStamps(components)) add(c, "cover_mif");
-  else add(components[0], usage === "ef" ? "cover_ef" : "cover_mef");
+  // The floor (#2397): every stamp's used price, whatever the rule.
+  for (const c of components) add(c, "used");
   return read;
 }
 
@@ -430,6 +480,7 @@ class Accumulator {
       amount: this.priced === 0 ? null : this.cents / 100,
       rule,
       terms: this.terms,
+      floor: null,
       usage,
       partial: this.missing.length > 0 || this.unmapped.length > 0,
       missing: this.missing,

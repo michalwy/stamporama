@@ -609,8 +609,11 @@ export interface AgentPieceValue {
   readonly pieceKind?: PieceKind;
   /** `ef`, `mef` or `mif` — how the cover is franked, counted in stamps. */
   readonly usage?: CoverUsage;
+  /** The figure is the sum of the stamps' used prices, higher than the method's rule gives — no piece
+   *  is valued below it (#2397; ADR-0078). */
+  readonly raisedToSumOfUsed?: boolean;
   /** A price the method reads is missing, or its role is not set up: the figure, if any, is a lower
-   *  bound. */
+   *  bound. A missing used price counts under every method, the floor reading it. */
   readonly partial?: boolean;
   /** Each missing price, with the condition it is read from (#2375) — where to type it. */
   readonly missing?: readonly {
@@ -719,6 +722,7 @@ function agentPieceValue(piece: PieceValuation): AgentPieceValue {
     franking: piece.franking,
     pieceKind: piece.kind ?? undefined,
     usage: piece.usage ?? undefined,
+    raisedToSumOfUsed: piece.floor?.applied || undefined,
     partial: piece.partial || undefined,
     missing: piece.missing.length
       ? piece.missing.map((m) =>

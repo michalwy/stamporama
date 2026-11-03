@@ -269,7 +269,9 @@ describe("a piece valued by its method (#2359)", () => {
 
   it("values a rate-correct MiF cover under Michel, the collection's default, at the highest MiF price", async () => {
     const v = await valueOf(carrierId);
-    assert.equal(v.amount, "30.00");
+    // The rule gives Mi 200's MiF 30; the stamps' used prices, 79, are higher and are the value (#2397).
+    assert.deepEqual(v.piece?.floor, { amount: 79, ruleAmount: 30, applied: true });
+    assert.equal(v.amount, "79.00");
     assert.equal(v.piece?.method, "michel");
     // Every price read from its mapped condition, named by it.
     assert.deepEqual(v.piece?.columns.cover_mif, { conditionId: mifId, abbreviation: "MiF", symbol: "⊠" });
@@ -279,16 +281,27 @@ describe("a piece valued by its method (#2359)", () => {
     // Prices in the collection's own currency need no original beside them (#2388).
     assert.equal(v.piece?.currency, "EUR");
     assert.ok(v.piece?.components.every((c) => c.originals === undefined));
-    // Mi 201 and Mi 205 have no MiF price: either could have been the highest.
+    // Mi 201 and Mi 205 have no MiF price: either could have been the highest; Mi 201 has no used
+    // price either, so the floor could have been higher.
     assert.equal(v.piece?.partial, true);
+    assert.deepEqual(
+      v.piece?.missing.map((m) => [m.stampId, m.price]),
+      [
+        [mi201, "cover_mif"],
+        [mi205, "cover_mif"],
+        [mi201, "used"],
+      ]
+    );
   });
 
   it("follows the franking", async () => {
     await setPieceValuation(userId, carrierId, { franking: "not_posted" });
     assert.equal((await valueOf(carrierId)).amount, "79.00");
     await setPieceValuation(userId, carrierId, { franking: "philatelic_posted" });
-    // The most expensive used price (Mi 200's 10) + 15 %.
-    assert.equal((await valueOf(carrierId)).amount, "11.50");
+    // The most expensive used price (Mi 200's 10) + 15 % — below the sum of used, which stands (#2397).
+    const philatelic = await valueOf(carrierId);
+    assert.equal(philatelic.piece?.floor?.ruleAmount, 11.5);
+    assert.equal(philatelic.amount, "79.00");
     await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
   });
 
@@ -315,6 +328,31 @@ describe("a piece valued by its method (#2359)", () => {
       await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
       await prisma.exchangeRate.deleteMany({ where: { collectionId } });
       await prisma.collection.update({ where: { id: collectionId }, data: { baseCurrency: "EUR" } });
+    }
+  });
+
+  it("values a philatelic cover at the sum of used, in the Valuation window and in identification (#2397)", async () => {
+    await setPieceValuation(userId, carrierId, { franking: "philatelic_posted" });
+    try {
+      const window = await getCarrierValuation(userId, carrierId);
+      assert.equal(window.value?.amount, "79.00");
+      assert.deepEqual(window.value?.piece?.floor, { amount: 79, ruleAmount: 11.5, applied: true });
+      // Mi 200 (10) and Mi 205 (4) on a philatelic cover: 11.50 by the rule, 14 soaked off.
+      const preview = await previewPieceValue(userId, collectionId, {
+        conditionId: mnhId,
+        formatId: coverId,
+        stamps: [
+          { stampId: mi200, quantity: 1, formatId: null },
+          { stampId: mi205, quantity: 1, formatId: null },
+        ],
+        itemId: null,
+        franking: "philatelic_posted",
+      });
+      assert.equal(preview?.amount, "14.00");
+      assert.deepEqual(preview?.piece?.floor, { amount: 14, ruleAmount: 11.5, applied: true });
+      assert.equal(preview?.piece?.partial, false);
+    } finally {
+      await setPieceValuation(userId, carrierId, { franking: "rate_correct" });
     }
   });
 
@@ -396,9 +434,9 @@ describe("a piece valued by its method (#2359)", () => {
       { stampId: mi201, price: "cover_mif", conditionId: mifId, amount: "50" },
       { stampId: mi205, price: "cover_mif", conditionId: mifId, amount: "not a price" },
     ]);
-    assert.equal(window.value?.amount, "50.00");
+    assert.equal(window.value?.piece?.floor?.ruleAmount, 50);
     assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: { in: [mi201] } } }), 0);
-    assert.equal((await valueOf(carrierId)).amount, "30.00");
+    assert.equal((await valueOf(carrierId)).piece?.floor?.ruleAmount, 30);
 
     // Saved where the value reads them: the main catalogue's latest edition, the column's condition,
     // single, no certificate.
@@ -420,7 +458,7 @@ describe("a piece valued by its method (#2359)", () => {
     const used = saved.find((p) => p.stampId === mi201);
     assert.deepEqual([used?.formatId, used?.price, used?.mark], [null, null, "undeterminable"]);
     // Every reader of the stamp reads it — the piece's own value among them.
-    assert.equal((await valueOf(carrierId)).amount, "45.00");
+    assert.equal((await valueOf(carrierId)).piece?.floor?.ruleAmount, 45);
 
     // Parsed before anything is written; and only the owner may.
     await assert.rejects(() =>
@@ -440,23 +478,26 @@ describe("a piece valued by its method (#2359)", () => {
 
     // The tests below value the piece without them.
     await prisma.stampCatalogPrice.deleteMany({ where: { id: { in: [mif!.id, used!.id] } } });
-    assert.equal((await valueOf(carrierId)).amount, "30.00");
+    assert.equal((await valueOf(carrierId)).piece?.floor?.ruleAmount, 30);
   });
 
   it("takes the method of the most expensive stamp's area, and a copy's own wins", async () => {
     await setCollectionValuationMethod(userId, collectionId, "sum_of_used");
     await setAreaValuationMethod(userId, areaId, "fischer");
     // 50 % of Mi 200's ⊠ 30 for one loose copy, then the other loose one at 10, the block at 55 and
-    // Mi 205 at 4; Mi 201 has neither price.
+    // Mi 205 at 4; Mi 201 has neither price. Above the sum of used, 79, so the rule's figure stands.
     const fischer = await valueOf(carrierId);
     assert.equal(fischer.amount, "84.00");
+    assert.deepEqual(fischer.piece?.floor, { amount: 79, ruleAmount: 84, applied: false });
     assert.deepEqual(fischer.piece?.methodSource, { kind: "area", areaId });
     const inherited = { method: "fischer", areaId, areaName: "Poland" };
     assert.deepEqual(fischer.piece?.inherited, inherited);
 
     await setPieceValuation(userId, carrierId, { method: "fischer_fp_fw_fm" });
     const own = await valueOf(carrierId);
-    assert.equal(own.amount, "30.00");
+    // The highest FM, 30, is below the sum of used (#2397).
+    assert.equal(own.piece?.floor?.ruleAmount, 30);
+    assert.equal(own.amount, "79.00");
     assert.deepEqual(own.piece?.methodSource, { kind: "copy" });
     // What *As inherited* names stays the area's while the copy has its own (#2369).
     assert.deepEqual(own.piece?.inherited, inherited);
@@ -562,11 +603,11 @@ describe("a piece valued by its method (#2359)", () => {
 
   it("reads the computed value in the holdings total and the copies by id", async () => {
     const holdings = await getHoldingsValuation(userId, collectionId, {});
-    assert.equal(holdings.totalBaseAmount, "34.00");
+    assert.equal(holdings.totalBaseAmount, "83.00");
     assert.equal(holdings.pricedCount, 2);
 
     const byId = await valuateItemsByIds(collectionId, [carrierId, ordinaryId]);
-    assert.equal(byId.get(carrierId)!.amount, "30.00");
+    assert.equal(byId.get(carrierId)!.amount, "79.00");
     assert.equal(byId.get(ordinaryId)!.amount, "4.00");
   });
 
@@ -584,8 +625,8 @@ describe("a piece valued by its method (#2359)", () => {
 
     const balance = (await readTradeBalance(userId, trade.id))!;
     const [line] = balance.lines.filter((l) => l.side === "give");
-    assert.equal(line.own, 30);
-    assert.equal(line.agreed, 30);
+    assert.equal(line.own, 79);
+    assert.equal(line.agreed, 79);
 
     await prisma.trade.delete({ where: { id: trade.id } });
   });
@@ -605,8 +646,8 @@ describe("a piece valued by its method (#2359)", () => {
 
     const v = await valueOf(carrierId);
     assert.equal(v.amount, "120.00");
-    assert.equal(v.valueModifier?.amount, "90.00");
-    assert.equal(v.valueModifier?.fullAmount, "30.00");
+    assert.equal(v.valueModifier?.amount, "41.00");
+    assert.equal(v.valueModifier?.fullAmount, "79.00");
     assert.equal((await valueOf(ordinaryId)).amount, "4.00");
 
     const stored = await prisma.item.findMany({
@@ -633,7 +674,9 @@ describe("a piece valued by its method (#2359)", () => {
     await setValuationMethodRole(userId, collectionId, { method: "michel", role: "cover_mif", conditionId: spare });
     const partial = await valueOf(carrierId);
     assert.deepEqual(partial.piece?.columns.cover_mif?.abbreviation, "SP");
-    assert.equal(partial.amount, null);
+    // No MiF price in the new column: the rule has no figure, the sum of used stands (#2397).
+    assert.equal(partial.piece?.floor?.ruleAmount, null);
+    assert.equal(partial.amount, "120.00");
     await prisma.stampCondition.delete({ where: { id: spare } });
     const unmapped = await valueOf(carrierId);
     assert.deepEqual(unmapped.piece?.unmapped, [{ method: "michel", role: "cover_mif" }]);

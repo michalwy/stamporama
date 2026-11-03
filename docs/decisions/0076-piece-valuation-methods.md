@@ -10,7 +10,9 @@ cover and on piece, #2356, which nothing read for a copy until now). Part of the
 #2353 and #2356–#2359; #2353 shows how the value was reached. **Amended by
 [ADR-0077](0077-valuation-method-roles.md) (#2375)**: every price a method reads comes from a condition
 it maps to each of its roles, the reserved cover formats are gone, and Michel's rule is the Michel
-method's — §4 and §7 say where.
+method's — §4 and §7 say where. **Amended by [ADR-0078](0078-piece-used-price-floor.md) (#2397)**: no
+piece is valued below the sum of its stamps' used prices, whatever the method (§1), and a missing used
+price makes every piece's value partial (§5).
 
 ## Context
 
@@ -52,6 +54,9 @@ Every price is read as every price is (ADR-0007 §7): the area's primary catalog
 edition, explicit or derived by a format multiplier, the unknown-variant rollup, **at the copy's
 condition and no certificate** (ADR-0044's component key), and compared in the collection currency.
 The most expensive stamp is the one with the highest used price as a single.
+
+*Amended by [ADR-0078](0078-piece-used-price-floor.md) (#2397):* under every method but *Sum of used*,
+the value is the greater of the rule's figure and the sum of the stamps' used prices.
 
 ### 2. Where the method comes from
 
@@ -97,6 +102,9 @@ A price the rule reads that is missing makes the value **partial**, and the valu
 and which price (`CopyValuation.piece.missing`). For the highest of several prices a stamp without one
 could have been the highest, so it makes the value partial too. The figure is what is priced, a lower
 bound; with nothing priced the piece is unpriced, never zero.
+
+*Amended by [ADR-0078](0078-piece-used-price-floor.md) (#2397):* the sum of used prices is read under
+every method, so a missing used price makes every piece's value partial.
 
 ### 6. The recorded value is retired
 

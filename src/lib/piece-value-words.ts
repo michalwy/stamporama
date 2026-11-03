@@ -114,7 +114,9 @@ export function unmappedRolesText(unmapped: readonly UnmappedRole[]): string | n
 /** The hover over a piece's value on a row. */
 export function pieceValueTitle(piece: PieceValuation): string {
   const gaps = [unmappedRolesText(piece.unmapped), missingPricesText(piece)].filter(Boolean);
-  return `Computed for this piece: ${pieceValueRule(piece)}${gaps.length ? `. Partial — ${gaps.join("; ")}.` : ""}`;
+  // The rule's words alone would explain a figure the floor replaced (#2397).
+  const floor = piece.floor?.applied ? ", raised to the sum of used prices, which is higher" : "";
+  return `Computed for this piece: ${pieceValueRule(piece)}${floor}${gaps.length ? `. Partial — ${gaps.join("; ")}.` : ""}`;
 }
 
 /** What heads a piece's panel in identification (#2392): the piece — its format and how many stamps
@@ -188,10 +190,15 @@ const ARITHMETIC_HEAD: Record<PieceRule, string | null> = {
  * converted from the catalogue's is shown with its original — *Mi 123 ⊙ (1.80 EUR = 7.95 PLN)* — the
  * rule applied to the converted figure; the rate itself is not printed, and the total is in the
  * collection currency only. A missing price is printed as a dash where it would have been added, and
- * the sum is of what is priced. Null when the rule added nothing at all.
+ * the sum is of what is priced. The sum of used prices it was compared with follows, and which is the
+ * value (#2397): *Philatelic: 115 % × Mi 7 ⊙ 1.33 PLN = 1.53 PLN · Sum of used 7.98 PLN is higher →
+ * 7.98 PLN*. Null when the rule added nothing at all.
  */
 export function pieceArithmetic(
-  piece: Pick<PieceValuation, "rule" | "usage" | "method" | "terms" | "columns" | "components" | "currency">,
+  piece: Pick<
+    PieceValuation,
+    "rule" | "usage" | "method" | "terms" | "columns" | "components" | "currency" | "floor"
+  >,
   label: (componentId: string) => string
 ): string | null {
   if (piece.terms.length === 0) return null;
@@ -220,5 +227,18 @@ export function pieceArithmetic(
     return `${share}${label(t.componentId)} ${priceSymbol(piece, t.price)} ${unit}${times}`;
   });
   const sum = priced ? `${(cents / 100).toFixed(2)} ${piece.currency}` : "—";
-  return `${head ? `${head}: ` : ""}${parts.join(" + ")} = ${sum}`;
+  return `${head ? `${head}: ` : ""}${parts.join(" + ")} = ${sum}${floorWords(piece.floor, piece.currency)}`;
+}
+
+/** *· Sum of used 7.98 PLN is higher → 7.98 PLN* — the floor beside the rule's figure (#2397), always
+ *  named so the comparison is visible; empty under *Sum of used* itself. */
+function floorWords(floor: PieceValuation["floor"], currency: string): string {
+  if (!floor) return "";
+  if (floor.amount === null) return " · Sum of used —";
+  const money = (n: number) => `${n.toFixed(2)} ${currency}`;
+  const amount = money(floor.amount);
+  if (floor.ruleAmount === null) return ` · Sum of used ${amount} → ${amount}`;
+  const compared =
+    floor.amount > floor.ruleAmount ? "is higher" : floor.amount < floor.ruleAmount ? "is lower" : "is the same";
+  return ` · Sum of used ${amount} ${compared} → ${money(floor.applied ? floor.amount : floor.ruleAmount)}`;
 }
