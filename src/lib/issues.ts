@@ -3040,6 +3040,9 @@ export async function moveStampNode(
     // `requiredForCompleteness` was selected here until #549's tests reached this path: the column
     // went away with #531's checklists, the value was never read, and Prisma rejects the query.
     select: { stampId: true, stamp: { select: { parentId: true } } },
+    // The tree's own order, so the subtree is collected — and renumbered in the target — the way its
+    // variants stood here. Without it the rows came back in whatever order the plan gave (#2366).
+    orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
   });
 
   const memberSet = new Map(allMembers.map((m) => [m.stampId, m]));
