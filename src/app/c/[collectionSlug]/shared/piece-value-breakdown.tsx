@@ -3,6 +3,7 @@
 import { PIECE_PRICE_LABELS, type PiecePrice } from "@/lib/piece-valuation";
 import {
   componentPrice,
+  methodSourceText,
   missingPricesText,
   onPiecePrice,
   pieceArithmetic,
@@ -70,13 +71,10 @@ export function PiecePriceFigure({
 export function PieceArithmetic({
   piece,
   label,
-  methodSource,
 }: {
   piece: PieceValuation;
   /** An entry named the way the surface names a stamp — its main catalogue number. */
   label: (componentId: string) => string;
-  /** Where the method came from, in words: *from Poland*, *set on this copy*. */
-  methodSource: string;
 }) {
   const arithmetic = pieceArithmetic(piece, label);
   const missing = missingPricesText(piece.missing);
@@ -88,7 +86,9 @@ export function PieceArithmetic({
         </div>
       )}
       <div style={{ color: "var(--color-text-muted)" }}>
-        {pieceValueRule(piece)} — method {methodSource}.
+        {/* Without a kind no method applies, so where one came from is beside the point (#2369). */}
+        {pieceValueRule(piece)}
+        {piece.kind === null ? "." : ` — method ${methodSourceText(piece)}.`}
       </div>
       {missing && (
         <div style={{ color: "var(--color-warning)" }}>

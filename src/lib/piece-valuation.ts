@@ -372,6 +372,19 @@ export interface MethodArea {
   id: string;
   parentId: string | null;
   valuationMethod: string | null;
+  /** For naming where an inherited method comes from (#2369). */
+  name?: string;
+}
+
+/**
+ * The method a piece has **without** its own (#2369) — the nearest area's or the collection's — and
+ * where it comes from: what *As inherited* names beside the method choice. `areaId` null is the
+ * collection's default.
+ */
+export interface InheritedMethod {
+  method: ValuationMethod;
+  areaId: string | null;
+  areaName: string | null;
 }
 
 /** The nearest ancestor-or-self area that sets a method, and the method — null when none does. */
@@ -387,6 +400,21 @@ export function areaMethod(
     current = current.parentId ? areas.get(current.parentId) : undefined;
   }
   return null;
+}
+
+/** {@link resolveMethod} with no method of the copy's own — what it inherits. */
+export function inheritedMethod(
+  areas: ReadonlyMap<string, MethodArea>,
+  areaId: string | null,
+  collectionMethod: ValuationMethod
+): InheritedMethod {
+  const fromArea = areaMethod(areas, areaId);
+  if (!fromArea) return { method: collectionMethod, areaId: null, areaName: null };
+  return {
+    method: fromArea.method,
+    areaId: fromArea.areaId,
+    areaName: areas.get(fromArea.areaId)?.name ?? null,
+  };
 }
 
 export function resolveMethod(

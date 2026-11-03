@@ -124,6 +124,9 @@ export interface PiecePreviewInput {
   stamps: readonly DraftPieceEntry[];
   /** The franking chosen, or null on a correction, which reads the copy's own. */
   franking: Franking | null;
+  /** The piece's own method chosen (#2369), null for *As inherited*; absent on a correction, which
+   *  reads the copy's own. */
+  method?: ValuationMethod | null;
   /** The copy a correction re-answers — its franking and own method are its own. */
   itemId: string | null;
 }
@@ -162,7 +165,7 @@ export async function previewPieceValue(
         itemId: key,
         stampCount: input.stamps.reduce((sum, s) => sum + s.quantity, 0),
         franking: input.franking ?? own?.franking ?? DEFAULT_FRANKING,
-        method: own?.method ?? null,
+        method: input.method !== undefined ? input.method : (own?.method ?? null),
         draftEntries: input.stamps,
       },
       faultReductionPercent: null,

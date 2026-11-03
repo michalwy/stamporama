@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
-import type { Franking } from "@/lib/piece-valuation";
+import type { Franking, ValuationMethod } from "@/lib/piece-valuation";
 import { onPiecePrice } from "@/lib/piece-value-words";
 import type { CopyValuation, PieceValuation } from "@/lib/valuation";
 import { PieceArithmetic, PiecePriceFigure, PriceSymbol } from "./piece-value-breakdown";
@@ -10,7 +10,7 @@ import { PieceArithmetic, PiecePriceFigure, PriceSymbol } from "./piece-value-br
 // What a piece carrying several stamps will be worth, in the identification step (#2353) — read
 // before the copy exists, by the method, exactly as the copy will be valued once written. Each stamp
 // on the piece shows its used price and its price on the piece; under them, the computed value and how
-// it was reached. Re-read as the condition, the format, the stamps or the franking change.
+// it was reached. Re-read as the condition, the format, the stamps, the franking or the method change.
 
 export interface PiecePreviewSubject {
   collectionId: string;
@@ -20,6 +20,9 @@ export interface PiecePreviewSubject {
   stamps: readonly DraftPieceEntry[];
   /** The franking chosen; null on a correction, which reads the copy's own. */
   franking: Franking | null;
+  /** The piece's own method chosen (#2369), null for *As inherited*; absent on a correction, which
+   *  reads the copy's own. */
+  method?: ValuationMethod | null;
   /** The copy a correction re-answers. */
   itemId: string | null;
 }
@@ -36,6 +39,7 @@ export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuat
         formatId: subject!.formatId || null,
         stamps: subject!.stamps,
         franking: subject!.franking,
+        method: subject!.method,
         itemId: subject!.itemId,
       });
     },
@@ -94,12 +98,6 @@ export function IdentifiedPieceFigure({
     const index = Number(componentId.slice(componentId.lastIndexOf(":") + 1));
     return labels[index] ?? `stamp ${index + 1}`;
   };
-  const source =
-    piece.methodSource.kind === "copy"
-      ? "set on this copy"
-      : piece.methodSource.kind === "area"
-        ? "from the most expensive stamp's area"
-        : "the collection's default";
   return (
     <div style={{ marginTop: "0.375rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
       <div style={{ color: "var(--color-text-primary)" }}>
@@ -115,7 +113,7 @@ export function IdentifiedPieceFigure({
           <span style={{ color: "var(--color-warning)" }}> partial</span>
         )}
       </div>
-      <PieceArithmetic piece={piece} label={label} methodSource={source} />
+      <PieceArithmetic piece={piece} label={label} />
     </div>
   );
 }

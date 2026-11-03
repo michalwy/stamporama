@@ -13,6 +13,7 @@ import { PIECE_COPY_SELECT, pieceCopyOf, type PieceCopyInput } from "./carrier-v
 import { isCoverKind, type CoverKind } from "./cover-kind";
 import {
   DEFAULT_VALUATION_METHOD,
+  inheritedMethod,
   isPiece,
   isPieceKind,
   isValuationMethod,
@@ -433,17 +434,14 @@ export async function valuateItemRows(
     for (const c of components) if (!c.multiple) c.usedSingle = c.used;
 
     const top = mostExpensiveStamp(components);
-    const resolved = resolveMethod(
-      copy.method,
-      methods!.areas,
-      top ? (areaByStamp.get(top) ?? null) : null,
-      methods!.collection
-    );
+    const topArea = top ? (areaByStamp.get(top) ?? null) : null;
+    const resolved = resolveMethod(copy.method, methods!.areas, topArea, methods!.collection);
     return valuatePiece(
       valuePiece({ kind, franking: copy.franking, method: resolved.method, components }),
       {
         method: resolved.method,
         methodSource: resolved.source,
+        inherited: inheritedMethod(methods!.areas, topArea, methods!.collection),
         franking: copy.franking,
         kind,
         components,
@@ -510,7 +508,7 @@ async function loadValuationMethods(
     }),
     prisma.collectionArea.findMany({
       where: { collectionId },
-      select: { id: true, parentId: true, valuationMethod: true },
+      select: { id: true, parentId: true, valuationMethod: true, name: true },
     }),
   ]);
   return {

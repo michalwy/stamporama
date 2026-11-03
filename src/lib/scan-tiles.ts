@@ -1,5 +1,5 @@
 import "server-only";
-import type { Franking } from "./piece-valuation";
+import type { Franking, ValuationMethod } from "./piece-valuation";
 import { prisma, type DbTransaction } from "./db";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { setCopyStamp } from "./item-candidates";
@@ -134,6 +134,9 @@ export interface TileIdentification {
   /** How the piece was franked and posted (#2359), asked beside the stamps on it; absent leaves the
    *  new copies rate-correct. */
   franking?: Franking;
+  /** The pieces' own valuation method (#2369), asked beside the franking; null or absent leaves
+   *  them following their area. */
+  valuationMethod?: ValuationMethod | null;
   stampId: string;
   /** Two or more stamps the pieces **might be** (#1651, ADR-0065) — *Several possible variants…*.
    *  `stampId` is then the first of them; each copy is given the set once it exists. */
@@ -304,11 +307,15 @@ export async function identifyTilesAsNewCopies(
   if (input.candidateStampIds && input.candidateStampIds.length > 1) {
     for (const copy of copies) await setCopyStamp(ownerId, copy.itemId, input.candidateStampIds);
   }
-  // The piece's franking (#2359), as the step answered it beside the stamps on it.
-  if (input.franking) {
+  // The piece's franking (#2359) and own method (#2369), as the step answered them beside the
+  // stamps on it.
+  if (input.franking || input.valuationMethod) {
     await prisma.item.updateMany({
       where: { id: { in: copies.map((c) => c.itemId) } },
-      data: { franking: input.franking },
+      data: {
+        ...(input.franking ? { franking: input.franking } : {}),
+        ...(input.valuationMethod ? { valuationMethod: input.valuationMethod } : {}),
+      },
     });
   }
   // The faults (#1558): the step's for every copy, or the tile's own where it keeps its marked ones.

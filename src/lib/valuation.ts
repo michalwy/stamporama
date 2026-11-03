@@ -12,6 +12,7 @@ import type { CostBasisTotal } from "./cost-basis";
 import type {
   CoverUsage,
   Franking,
+  InheritedMethod,
   MethodSource,
   MissingPiecePrice,
   PieceComponent,
@@ -338,6 +339,8 @@ export function applyValueModifier(
 export interface PieceValuation {
   method: ValuationMethod;
   methodSource: MethodSource;
+  /** The method it would have without one of its own (#2369), whatever its source now. */
+  inherited: InheritedMethod;
   franking: Franking;
   /** The format's kind; null when it has none and the piece is valued by the sum of used prices. */
   kind: PieceKind | null;

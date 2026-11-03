@@ -7,7 +7,13 @@ import {
   type PieceKind,
   type ValuationMethod,
 } from "../../src/lib/piece-valuation";
-import { onPiecePrice, pieceArithmetic } from "../../src/lib/piece-value-words";
+import {
+  inheritedMethodLabel,
+  methodSourceText,
+  onPiecePrice,
+  pieceArithmetic,
+  pieceValueRule,
+} from "../../src/lib/piece-value-words";
 
 // How a piece's value was reached (#2353): the terms the rule records as it adds, and the arithmetic
 // the Valuation window and the identification step print from them. The rules themselves are
@@ -111,5 +117,42 @@ describe("onPiecePrice — which price each stamp shows beside its used one", ()
     assert.equal(read("fischer", "on_cover", "rate_correct", [A]).onPiece, "cover_mif");
     assert.equal(read("michel", "on_piece", "rate_correct", [A, B]).onPiece, "on_piece");
     assert.equal(read("michel", null, "rate_correct", [A, B]).onPiece, null);
+  });
+});
+
+describe("the method beside a piece — where it came from, and what As inherited names (#2369)", () => {
+  const fromPoland = { method: "fischer" as const, areaId: "pl", areaName: "Poland" };
+  const fromCollection = { method: "michel" as const, areaId: null, areaName: null };
+
+  it("names the method inherited and where it comes from", () => {
+    assert.equal(inheritedMethodLabel(fromPoland), "As inherited (Fischer, from Poland)");
+    assert.equal(inheritedMethodLabel(fromCollection), "As inherited (Michel, the collection's default)");
+  });
+
+  it("says a copy's own method is its own, and an inherited one where it comes from", () => {
+    assert.equal(methodSourceText({ methodSource: { kind: "copy" }, inherited: fromPoland }), "set on this copy");
+    assert.equal(
+      methodSourceText({ methodSource: { kind: "area", areaId: "pl" }, inherited: fromPoland }),
+      "from Poland"
+    );
+    assert.equal(
+      methodSourceText({ methodSource: { kind: "collection" }, inherited: fromCollection }),
+      "the collection's default"
+    );
+  });
+
+  it("tells a piece without a kind to take a format with one, not another method", () => {
+    const result = valuePiece({ method: "michel", kind: null, franking: "rate_correct", components: [A, B] });
+    const rule = pieceValueRule({
+      ...result,
+      method: "michel",
+      methodSource: { kind: "collection" },
+      inherited: fromCollection,
+      franking: "rate_correct",
+      kind: null,
+      components: [A, B],
+    });
+    assert.match(rule, /neither on cover nor on piece/);
+    assert.match(rule, /give it a format of kind On cover or On piece/);
   });
 });

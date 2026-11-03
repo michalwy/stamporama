@@ -1,6 +1,11 @@
 "use server";
 
-import { isFranking, type Franking } from "@/lib/piece-valuation";
+import {
+  isFranking,
+  isValuationMethod,
+  type Franking,
+  type ValuationMethod,
+} from "@/lib/piece-valuation";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -392,8 +397,9 @@ export async function identifyTilesAction(
       // Every stamp on the piece, when the tile was identified as one carrying several (#750). The
       // copy dialog's own field and reading (#746): one list, one vocabulary.
       stamps: parseItemStampEntries(formData.get("stamps")),
-      // How the piece was franked (#2359), asked beside the stamps on it.
+      // How the piece was franked (#2359) and its own method (#2369), asked beside the stamps on it.
       franking: frankingOf(formData),
+      valuationMethod: valuationMethodOf(formData),
       stampPhotoTileId: stampPhotoTileId(formData),
       // The tiles keeping their own marked condition, certificate or faults (#1550, #1558), as the
       // step said.
@@ -423,6 +429,14 @@ export async function identifyTilesAction(
 function frankingOf(formData: FormData): Franking | undefined {
   const raw = formData.get("franking");
   return isFranking(raw) ? raw : undefined;
+}
+
+/** The `valuationMethod` field (#2369): absent unless the step describes a piece, `""` for *As
+ *  inherited*. */
+function valuationMethodOf(formData: FormData): ValuationMethod | null | undefined {
+  if (!formData.has("valuationMethod")) return undefined;
+  const raw = formData.get("valuationMethod");
+  return isValuationMethod(raw) ? raw : null;
 }
 
 /** The `candidateStampIds` field (#1651): a JSON list of stamp ids, or null when absent or unreadable. */
