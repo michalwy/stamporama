@@ -11,6 +11,7 @@ import {
   reorderStampConditions,
   getStampConditions,
   ConditionInUseError,
+  ConditionUsedByRecordsError,
   CONDITION_TRANSLATION_FIELDS,
   type StampConditionData,
 } from "@/lib/conditions";
@@ -29,11 +30,14 @@ async function getSession() {
   return session;
 }
 
+/** The conditions a copy can be in; with `withPriceOnly`, the price columns only too (#2374) — for
+ *  a price surface only. */
 export async function getStampConditionsAction(
-  collectionId: string
+  collectionId: string,
+  withPriceOnly = false
 ): Promise<StampConditionData[]> {
   const session = await getSession();
-  return getStampConditions(session.user.id, collectionId);
+  return getStampConditions(session.user.id, collectionId, { withPriceOnly });
 }
 
 function parseFields(formData: FormData): {
@@ -42,6 +46,7 @@ function parseFields(formData: FormData): {
   symbol: string | null;
   color: TagColor | null;
   priceRole: ConditionPriceRole | null | undefined;
+  priceOnly: boolean | undefined;
 } {
   // An unset or unrecognised colour (#728) is *no colour* — the neutral chip — rather than an
   // error: the field is a row of swatches with a None among them, so there is nothing to correct.
@@ -59,6 +64,8 @@ function parseFields(formData: FormData): {
           return isConditionPriceRole(role) ? role : null;
         })()
       : undefined,
+    // A price column only (#2374): a form without the field leaves it alone.
+    priceOnly: formData.has("priceOnly") ? formData.get("priceOnly") === "true" : undefined,
   };
 }
 
@@ -67,7 +74,7 @@ export async function createStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, symbol, color, priceRole } = parseFields(formData);
+  const { name, abbreviation, symbol, color, priceRole, priceOnly } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -77,6 +84,7 @@ export async function createStampConditionAction(
       symbol,
       color,
       priceRole,
+      priceOnly,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });
     return { status: "success" };
@@ -90,7 +98,7 @@ export async function updateStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, symbol, color, priceRole } = parseFields(formData);
+  const { name, abbreviation, symbol, color, priceRole, priceOnly } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
@@ -100,10 +108,12 @@ export async function updateStampConditionAction(
       symbol,
       color,
       priceRole,
+      priceOnly,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });
     return { status: "success" };
-  } catch {
+  } catch (err) {
+    if (err instanceof ConditionUsedByRecordsError) return { status: "error", message: err.message };
     return { status: "error", message: "Failed to update condition. Please try again." };
   }
 }

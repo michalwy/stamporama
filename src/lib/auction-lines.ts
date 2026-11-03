@@ -2,6 +2,7 @@ import "server-only";
 import type { CatalogPriceMark } from "./catalog-price-mark";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import {
   deriveCertifiedValue,
   lotLineRangeOf,
@@ -298,7 +299,7 @@ export async function baseToSaleRates(
  * every label is drawn from. Read once per pass. */
 async function readCollectionConditions(collectionId: string): Promise<NamedCondition[]> {
   return prisma.stampCondition.findMany({
-    where: { collectionId },
+    where: { collectionId, ...COPY_CONDITION_WHERE },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, abbreviation: true },
   });

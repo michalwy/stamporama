@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import {
   allocateItemNumbers,
@@ -1437,7 +1438,7 @@ export async function intakeStamps(
   const conditionId = input.conditionId?.trim();
   if (!conditionId) throw new Error("A condition is required.");
   const condition = await prisma.stampCondition.findFirst({
-    where: { id: conditionId, collectionId },
+    where: { id: conditionId, collectionId, ...COPY_CONDITION_WHERE },
     select: { id: true },
   });
   if (!condition) throw new Error("Condition not found in this collection.");
@@ -1910,7 +1911,7 @@ async function assertVariantDictionaries(
 ): Promise<void> {
   if (changes.conditionId) {
     const condition = await prisma.stampCondition.findFirst({
-      where: { id: changes.conditionId, collectionId },
+      where: { id: changes.conditionId, collectionId, ...COPY_CONDITION_WHERE },
       select: { id: true },
     });
     if (!condition) throw new Error("Condition not found in this collection.");

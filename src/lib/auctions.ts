@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import {
   allIn,
@@ -3512,7 +3513,7 @@ async function assertLineTargets(collectionId: string, input: AuctionLotLineInpu
   const [stamp, conditions, certificate, format] = await Promise.all([
     prisma.stamp.findFirst({ where: { id: input.stampId, collectionId }, select: { id: true } }),
     conditionIds.length > 0
-      ? prisma.stampCondition.count({ where: { id: { in: conditionIds }, collectionId } })
+      ? prisma.stampCondition.count({ where: { id: { in: conditionIds }, collectionId, ...COPY_CONDITION_WHERE } })
       : Promise.resolve(0),
     input.certificateStatusId
       ? prisma.certificateStatus.findFirst({
@@ -4535,7 +4536,7 @@ export async function settleAuctionSale(
   const picked = new Map((input.lineConditions ?? []).map((p) => [p.lineId, p.conditionId]));
   const collectionConditionIds = (
     await prisma.stampCondition.findMany({
-      where: { collectionId: sale.collectionId },
+      where: { collectionId: sale.collectionId, ...COPY_CONDITION_WHERE },
       select: { id: true },
     })
   ).map((condition) => condition.id);

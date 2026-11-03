@@ -53,6 +53,12 @@ export interface ConditionVocabularyEntry extends VocabularyEntry {
    * the abbreviation back, never the symbol.
    */
   readonly symbol?: string;
+  /**
+   * `true` on a **price column only** (#2374) — a cover's FP / FW / FM, Michel's ⊠ EF / MeF / MiF:
+   * the catalogue price tools read and write it, and nothing that describes a copy, a want or a line
+   * accepts it. Omitted on every other condition, on `label`'s rule.
+   */
+  readonly priceOnly?: true;
 }
 
 /** A vocabulary entry that also sits in a tree: areas and locations, and nothing else. */

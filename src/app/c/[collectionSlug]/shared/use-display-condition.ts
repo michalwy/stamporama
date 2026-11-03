@@ -25,6 +25,7 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
+/** The conditions a copy — or a want, a line, a lot — can be in: never a price column only (#2374). */
 export function useCollectionConditions(collectionId: string) {
   return useQuery<StampConditionData[]>({
     queryKey: ["conditions", collectionId],
@@ -36,8 +37,25 @@ export function useCollectionConditions(collectionId: string) {
   });
 }
 
+/**
+ * The conditions a **price** is recorded for: every one, the price columns only (#2374) in their
+ * places among them. What the lists' *Price for* switcher and the multiplier editors offer — never a
+ * picker for what a copy, a want or a line *is*, which keeps to {@link useCollectionConditions}. Its
+ * key extends that one's, so invalidating `["conditions", collectionId]` refreshes both.
+ */
+export function usePriceConditions(collectionId: string) {
+  return useQuery<StampConditionData[]>({
+    queryKey: ["conditions", collectionId, "prices"],
+    queryFn: async () => {
+      const { getStampConditionsAction } = await import("@/app/actions/conditions");
+      return getStampConditionsAction(collectionId, true);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useDisplayCondition(collectionId: string) {
-  const { data: conditions } = useCollectionConditions(collectionId);
+  const { data: conditions } = usePriceConditions(collectionId);
 
   // Read the persisted choice without setState-in-effect. getServerSnapshot
   // returns null so SSR and the first client render agree.

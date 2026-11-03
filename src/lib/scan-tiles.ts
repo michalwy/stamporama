@@ -1,6 +1,7 @@
 import "server-only";
 import type { Franking, ValuationMethod } from "./piece-valuation";
 import { prisma, type DbTransaction } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { setCopyStamp } from "./item-candidates";
 import { getRunChecklist } from "./checklists";
@@ -404,7 +405,7 @@ async function tileOwnAnswers(
   const faultIds = [...new Set(answers.flatMap((a) => a.faultIds ?? []))];
   const tagIds = [...new Set(answers.flatMap((a) => a.tagIds ?? []))];
   const [conditions, certs, faults, tags] = await Promise.all([
-    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
     prisma.fault.count({ where: { collectionId, id: { in: faultIds } } }),
     prisma.tag.count({ where: { collectionId, id: { in: tagIds } } }),
@@ -612,7 +613,7 @@ async function assertRunAnswersExist(
   const formatIds = distinct((a) => a.formatId);
   const locationIds = distinct((a) => a.location.locationId);
   const [conditions, certs, formats, locations] = await Promise.all([
-    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
     prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds }, ...COPY_FORMAT_WHERE } }),
     prisma.location.findMany({

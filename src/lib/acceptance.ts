@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { COPY_FORMAT_WHERE } from "./stamp-formats";
 
 // The acceptance vocabulary shared by a want (#532) and by a named profile (#533; ADR-0032 §1/§9).
@@ -39,7 +40,7 @@ export async function validateAcceptance(
   const [conditions, certs, formats] = await Promise.all([
     conditionIds.length
       ? prisma.stampCondition.findMany({
-          where: { collectionId, id: { in: conditionIds } },
+          where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE },
           select: { id: true },
         })
       : [],

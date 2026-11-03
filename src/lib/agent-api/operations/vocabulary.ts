@@ -123,6 +123,7 @@ export async function readCollectionVocabulary(
           name: true,
           abbreviation: true,
           symbol: true,
+          priceOnly: true,
           translations: { where: { language }, select: { name: true } },
         },
       }),
@@ -247,6 +248,8 @@ export async function readCollectionVocabulary(
         ...entry(row.id, row.name, row.abbreviation, labelFor(row.name, row.translations[0]?.name)),
         // The catalogue symbol (#1739), omitted rather than null where none is set — `label`'s rule.
         ...(symbol ? { symbol } : {}),
+        // A price column only (#2374), omitted where false — `label`'s rule again.
+        ...(row.priceOnly ? { priceOnly: true as const } : {}),
       };
     }),
     formats: formats.map((row) =>
@@ -326,7 +329,7 @@ export const getCollectionVocabularyOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one, and `priceOnly: true` where it is a price column only — a cover's FP, FW, FM — which the catalogue price tools accept and nothing describing a copy, a want or a line does. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

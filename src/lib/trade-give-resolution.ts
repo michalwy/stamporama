@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { assertSectionOwner, assertTradeOwner, assertContentEditable } from "./trade-access";
 // The pool is the picker's eligibility, and "already promised" is read once, in the module that
 // owns it — the same rule #657's pool follows, and for the same reason: a resolver that offered a
@@ -135,7 +136,7 @@ async function assertRequirementMembers(
   const conditionIds = [...new Set(requirements.map((r) => r.conditionId))];
   const [stamps, conditions] = await Promise.all([
     prisma.stamp.count({ where: { collectionId, id: { in: stampIds } } }),
-    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } }),
   ]);
   if (stamps !== stampIds.length) throw new Error("Pick a stamp for this line.");
   if (conditions !== conditionIds.length) throw new Error("A condition is required.");

@@ -3,6 +3,12 @@ import { prisma, type DbTransaction } from "./db";
 import { isTagColor, type TagColor } from "./tag-colors";
 import { isConditionPriceRole, type ConditionPriceRole } from "./still-valid-postage";
 import {
+  CONDITION_RECORD_KINDS,
+  COPY_CONDITION_WHERE,
+  conditionRecordUsesText,
+  type ConditionRecordUse,
+} from "./condition-price-only";
+import {
   syncEntityTranslations,
   translationsByLanguage,
   type TranslationValueMap,
@@ -55,6 +61,9 @@ export interface StampConditionData {
   /** The part this condition plays in Michel's rule for stamps still valid for postage (#2358) —
    *  `used` or `never_hinged`, at most one of each per collection; null on every other condition. */
   priceRole: ConditionPriceRole | null;
+  /** A price column only (#2374): on every price surface, in no picker that sets a copy's or a
+   *  record's condition. */
+  priceOnly: boolean;
 }
 
 /**
@@ -99,13 +108,20 @@ export async function seedDefaultConditions(
   });
 }
 
+/**
+ * The collection's conditions in their order. Those a copy can be in only, unless `withPriceOnly` —
+ * then the price columns only (#2374) keep their places among them: what a **price** surface asks for
+ * (the price grids, the lists' *Price for* switcher, the multipliers, filling one condition from
+ * another, the agent API's price tools, Settings → Conditions), and nothing else.
+ */
 export async function getStampConditions(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  options: { withPriceOnly?: boolean } = {}
 ): Promise<StampConditionData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.stampCondition.findMany({
-    where: { collectionId },
+    where: { collectionId, ...(options.withPriceOnly ? {} : COPY_CONDITION_WHERE) },
     orderBy: { sortOrder: "asc" },
     select: {
       id: true,
@@ -114,6 +130,7 @@ export async function getStampConditions(
       symbol: true,
       color: true,
       priceRole: true,
+      priceOnly: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
@@ -128,6 +145,7 @@ export async function getStampConditions(
     sortOrder: c.sortOrder,
     color: isTagColor(c.color) ? c.color : null,
     priceRole: isConditionPriceRole(c.priceRole) ? c.priceRole : null,
+    priceOnly: c.priceOnly,
   }));
 }
 
@@ -166,6 +184,8 @@ export async function createStampCondition(
     color?: TagColor | null;
     /** Its part in Michel's rule (#2358); taken from whichever condition held it before. */
     priceRole?: ConditionPriceRole | null;
+    /** A price column only (#2374). */
+    priceOnly?: boolean;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
@@ -186,6 +206,7 @@ export async function createStampCondition(
         symbol: data.symbol?.trim() || null,
         color: data.color ?? null,
         priceRole: data.priceRole ?? null,
+        priceOnly: data.priceOnly ?? false,
         sortOrder,
       },
       select: { id: true },
@@ -206,11 +227,18 @@ export async function updateStampCondition(
     /** Its part in Michel's rule (#2358): absent leaves it, null clears it, a role is taken from
      *  whichever condition held it before. */
     priceRole?: ConditionPriceRole | null;
+    /** A price column only (#2374): absent leaves it. Marking one that anything uses is refused with
+     *  a {@link ConditionUsedByRecordsError}. */
+    priceOnly?: boolean;
     translations?: TranslationValueMap;
   }
 ): Promise<void> {
   const collectionId = await resolveConditionCollection(conditionId);
   await assertCollectionOwner(ownerId, collectionId);
+  if (data.priceOnly) {
+    const uses = await conditionRecordUses(conditionId);
+    if (uses.length > 0) throw new ConditionUsedByRecordsError(uses);
+  }
   await prisma.$transaction(async (tx) => {
     if (data.priceRole) await releasePriceRole(tx, collectionId, data.priceRole, conditionId);
     await tx.stampCondition.update({
@@ -222,6 +250,7 @@ export async function updateStampCondition(
         ...(data.symbol !== undefined ? { symbol: data.symbol?.trim() || null } : {}),
         color: data.color ?? null,
         ...(data.priceRole !== undefined ? { priceRole: data.priceRole } : {}),
+        ...(data.priceOnly !== undefined ? { priceOnly: data.priceOnly } : {}),
       },
     });
   });
@@ -262,6 +291,38 @@ export async function deleteStampCondition(
     throw new ConditionInUseError();
   }
   await prisma.stampCondition.delete({ where: { id: conditionId } });
+}
+
+/**
+ * What, besides prices, is in this condition (#2374) — each kind of record with how many, in the words
+ * the refusal to make it a price column only shows. Catalogue prices and multipliers are not here:
+ * they are what a price column is for.
+ */
+export async function conditionRecordUses(conditionId: string): Promise<ConditionRecordUse[]> {
+  const where = { conditionId };
+  const counts = await Promise.all([
+    prisma.item.count({ where }),
+    prisma.wantCondition.count({ where }),
+    prisma.acceptanceProfileCondition.count({ where }),
+    prisma.tradeLine.count({ where }),
+    prisma.tradeSection.count({ where: { defaultConditionId: conditionId } }),
+    prisma.auctionLotLine.count({ where }),
+    prisma.auctionLotLineCondition.count({ where }),
+    prisma.offerListedVariant.count({ where }),
+    prisma.priceObservation.count({ where }),
+    prisma.scanTile.count({ where: { markConditionId: conditionId } }),
+    prisma.colnectConditionMapping.count({ where: { stampConditionId: conditionId } }),
+    prisma.platformCategoryLesson.count({ where }),
+  ]);
+  return CONDITION_RECORD_KINDS.map(([, kind], i) => ({ kind, count: counts[i] })).filter((u) => u.count > 0);
+}
+
+/** The refusal to make a condition in use a price column only (#2374), saying what uses it. */
+export class ConditionUsedByRecordsError extends Error {
+  constructor(readonly uses: ConditionRecordUse[]) {
+    super(conditionRecordUsesText(uses));
+    this.name = "ConditionUsedByRecordsError";
+  }
 }
 
 export class ConditionInUseError extends Error {

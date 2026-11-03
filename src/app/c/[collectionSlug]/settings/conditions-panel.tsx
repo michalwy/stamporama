@@ -21,6 +21,7 @@ import {
   AddRowAction,
   DetailForm,
   DetailPlaceholder,
+  FieldNote,
   Fields,
   INPUT_STYLE,
   InfoHint,
@@ -29,6 +30,7 @@ import {
   ListRow,
   ListRows,
   RowName,
+  RowTag,
   TranslationRows,
   countLabel,
   useListSelection,
@@ -94,6 +96,7 @@ export function ConditionsPanel({
                   drag={list.drag(condition.id)}
                 >
                   <RowName>{condition.name}</RowName>
+                  {condition.priceOnly && <RowTag>Price column</RowTag>}
                   {condition.priceRole && (
                     <span style={roleTagStyle}>{PRICE_ROLE_LABEL[condition.priceRole]}</span>
                   )}
@@ -177,6 +180,7 @@ function ConditionFields({
     condition ? condition.color : newColor
   );
   const [priceRole, setPriceRole] = useState<ConditionPriceRole | "">(condition?.priceRole ?? "");
+  const [priceOnly, setPriceOnly] = useState(condition?.priceOnly ?? false);
   const suffix = translatable ? ` — ${languageLabel(defaultLanguage)}` : "";
 
   return (
@@ -270,6 +274,22 @@ function ConditionFields({
         </LabelWithError>
         <TagColorPicker value={color} onChange={setColor} />
       </div>
+
+      {/* A price column only (#2374): a cover's FP / FW / FM, Michel's ⊠ EF / MeF / MiF. Sent either
+          way, so unticking it is a change too; one in use is refused with what uses it. */}
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}>
+        <input type="hidden" name="priceOnly" value={priceOnly ? "true" : "false"} />
+        <input
+          type="checkbox"
+          checked={priceOnly}
+          onChange={(e) => setPriceOnly(e.target.checked)}
+          style={{ marginTop: "0.15rem" }}
+        />
+        <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+          Price column only
+          <FieldNote>A column of the price grids that no copy, want or line is ever in.</FieldNote>
+        </span>
+      </label>
 
       {/* Which condition Michel's rule for stamps still valid for postage reads as used and which as
           never hinged (#2358) — one of each per collection, so choosing one here takes it from the

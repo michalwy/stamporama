@@ -114,7 +114,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getCatalogSettingsTree(session.user.id, collection.id),
-    getStampConditions(session.user.id, collection.id),
+    // With the price columns only (#2374): Conditions lists every one, and the multipliers take them.
+    getStampConditions(session.user.id, collection.id, { withPriceOnly: true }),
     // With the cover prices (#2356): the multipliers take them; the formats list leaves them out.
     getStampFormats(session.user.id, collection.id, {
       withCoverPrices: true,

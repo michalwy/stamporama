@@ -989,10 +989,33 @@ Each collection keeps its own list of **conditions** — the grades used when va
 - Tell **Michel's rule** which condition is *Used* and which is *Never hinged* — one of each, *U* and
   *MNH* to start with. The rule prices a stamp still valid for postage on a cover from those two; see
   [Stamps still valid for postage](inventory.md#stamps-still-valid-for-postage).
+- Tick **Price column only** for a condition the catalogues price but no copy is ever in — the cover
+  columns, such as Fischer's **FP**, **FW** and **FM** or Michel's ⊠ **EF**, **MeF** and **MiF**. Such a
+  condition keeps everything a condition has — name, abbreviation, symbol (⊠), translations, colour,
+  its place in the order — and its row says *Price column*. See
+  [Price-column-only conditions](#price-column-only-conditions) below.
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
 
 Certificate and guarantee status is tracked as a separate dimension, not as part of condition — see below. They are managed side by side: **Settings → Conditions** and **Settings → Certificate statuses**.
+
+### Price-column-only conditions
+
+A cover is used, and its franking is read off what is on it, so a copy is never *in* a cover column.
+A condition marked **Price column only** is therefore:
+
+- **a column on every price surface** — the stamp's price grid, the variant price grid, the checklist
+  price table, the **Price for** switcher on the Stamps and Issues lists, the format multipliers, and
+  **filling one condition from another**, which works to and from it as for any condition;
+- **in no picker that sets a condition** — not in identification, a copy's **Edit** dialog, bulk edit,
+  wants, offers, acceptance profiles, trade or auction lines, marks on scan tiles, price
+  observations, or the [Colnect condition mapping](#colnect-condition-mapping) — and not in the **Copies** list's
+  condition filter, since no copy can have one.
+
+A condition that anything already uses — a copy, a want, an acceptance profile, a trade or auction
+line, an offer, a price observation, a marked scan tile, a Colnect mapping — **cannot be marked**: the
+save is refused and the message says what uses it and how many. Catalogue prices and multipliers do
+not count, since they are what a price column is for. Unticking the box is always allowed.
 
 ### Conditions in other languages
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import {
@@ -815,7 +816,7 @@ async function sectionConditionData(
   const id = data.defaultConditionId?.trim() ?? "";
   if (!id) return { defaultConditionId: null };
   const condition = await prisma.stampCondition.findFirst({
-    where: { id, collectionId },
+    where: { id, collectionId, ...COPY_CONDITION_WHERE },
     select: { id: true },
   });
   if (!condition) throw new Error("That condition is not in this collection.");
