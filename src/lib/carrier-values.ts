@@ -27,7 +27,8 @@ export interface CarrierValuationRead {
    *  applies. Reported rather than refused, so a dialog opened on a row a moment before it was edited
    *  down to one stamp can say so instead of failing. */
   multiStamp: boolean;
-  /** The copy's condition — the one its stamps' prices are read and typed at (#2368). */
+  /** The copy's own condition. Its stamps' prices are read and typed in the conditions the method
+   *  maps (#2375), never in this one. */
   conditionId: string;
   conditionName: string;
   /** The piece's value as every list and total reads it — the method's result, modified and lowered
@@ -76,10 +77,7 @@ export async function getCarrierValuation(
     ...copyValuationOf(item),
   };
   const [valuations, baseCurrency] = await Promise.all([
-    valuateItemRows(item.collectionId, [ownRow], undefined, {
-      conditionId: item.conditionId,
-      prices: typed,
-    }),
+    valuateItemRows(item.collectionId, [ownRow], undefined, typed),
     getCollectionBaseCurrency(item.collectionId),
   ]);
 
@@ -183,7 +181,7 @@ export async function previewPieceValue(
       valueModifier: null,
       candidateStampIds: null,
     },
-  ], undefined, { conditionId: input.conditionId, prices: input.typed ?? [] });
+  ], undefined, input.typed ?? []);
   const value = valuations.get(key);
   return value?.piece ? value : null;
 }

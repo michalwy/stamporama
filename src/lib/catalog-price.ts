@@ -161,13 +161,6 @@ export interface FormatPricePick {
 }
 
 /**
- * How a format's missing price is derived from the single's: a multiplier, or — for a stamp still
- * valid for postage, on a cover price in the used condition — Michel's rule (#2358), which replaces
- * the multiplier there. Null when nothing derives.
- */
-export type FormatDerivation = number | StillValidRule | null;
-
-/**
  * A format's price: **explicit or derived** (ADR-0020). An explicit `StampCatalogPrice` recorded
  * for the format always wins; only in its absence is the single's price multiplied by the resolved
  * factor. Null format short-circuits to the plain pick — the single *is* the null case, and there
@@ -183,16 +176,13 @@ export function pickFormatCatalogPrice(
   conditionId: string | null,
   certificateStatusId: string | null,
   formatId: string | null,
-  factor: FormatDerivation
+  factor: number | null
 ): FormatPricePick {
   const pick = (fmt: string | null) =>
     pickCatalogCellFor(prices, primaryCatalogNameId, conditionId, certificateStatusId, fmt);
   if (!formatId) return { ...pick(null), derived: false };
   const explicit = pick(formatId);
   if (explicit.picked || explicit.mark) return { ...explicit, derived: false };
-  if (factor !== null && typeof factor === "object") {
-    return pickStillValidCoverPrice(prices, primaryCatalogNameId, certificateStatusId, factor);
-  }
   const single = pick(null);
   if (single.mark) return { picked: null, mark: single.mark, derived: false };
   if (factor === null || !single.picked) return { picked: null, mark: null, derived: false };
@@ -204,20 +194,20 @@ export function pickFormatCatalogPrice(
 }
 
 /**
- * A still-valid stamp's on-cover price by Michel's rule (#2358): from the used single the catalogue
- * answers with, and the never-hinged single **of the same edition** — the rule's floor is in that
- * edition's currency, and a cap from another edition would mix two catalogues' figures. A marked used
- * single carries its mark, as it does onto a multiple; with no used price there is nothing to rule on.
+ * A still-valid stamp's on-cover price by Michel's rule (#2358), as the *Michel* method works it out
+ * where the condition it maps as cover EF, MeF or MiF has none (#2375): from the used single the
+ * catalogue answers with, and the never-hinged single **of the same edition** — the rule's floor is
+ * in that edition's currency, and a cap from another edition would mix two catalogues' figures. A
+ * marked used single carries its mark; with no used price there is nothing to rule on.
  */
-function pickStillValidCoverPrice(
+export function pickStillValidPrice(
   prices: RawCatalogPrice[],
   primaryCatalogNameId: string | null,
   certificateStatusId: string | null,
   rule: StillValidRule
-): FormatPricePick {
+): PickedCell {
   const used = pickCatalogCellFor(prices, primaryCatalogNameId, rule.usedConditionId, certificateStatusId, null);
-  if (used.mark) return { picked: null, mark: used.mark, derived: false };
-  if (!used.picked) return { picked: null, mark: null, derived: false };
+  if (used.mark || !used.picked) return used;
   const { catalogNameId, editionYear } = used.picked;
   const neverHinged = prices.find(
     (p) =>
@@ -234,7 +224,6 @@ function pickStillValidCoverPrice(
       amount: stillValidCoverPrice(used.picked.amount, neverHinged ? Number(neverHinged.price) : null),
     },
     mark: null,
-    derived: true,
   };
 }
 
@@ -288,9 +277,8 @@ export function pickHeadlineCatalogPrice(input: {
   displayFormatId?: string | null;
   /** The multiplier resolved for `displayFormatId` on this stamp, or null when none applies. Used
    *  for the variant candidates too: a variant child sits in the same issue and area as its
-   *  umbrella, so the umbrella's factor is the one a catalog would print for it — and so is its
-   *  standing as still valid for postage (#2358). */
-  formatFactor?: FormatDerivation;
+   *  umbrella, so the umbrella's factor is the one a catalog would print for it. */
+  formatFactor?: number | null;
   baseCurrency: string;
   rates: Map<string, number | null>;
 }): HeadlineCatalogPrice {

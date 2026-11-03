@@ -109,7 +109,7 @@ export function FormatFactorsDialog({
   const [deleting, setDeleting] = useState<FormatFactorData | null>(null);
   const [error, setError] = useState<string | undefined>();
 
-  // A multiplier is a price rule, so the cover prices (#2356) take one too.
+  // A multiplier is a price rule: the formats and conditions a price is recorded for.
   const { data: formats = [] } = usePriceFormats(collectionId);
   const { data: conditions = [] } = usePriceConditions(collectionId);
 

@@ -132,18 +132,21 @@ describe("piecePriceSlots", () => {
 describe("changedPiecePrices", () => {
   const fields = [piecePriceOfKey(piecePriceKey("a", "used")), piecePriceOfKey(piecePriceKey("b", "cover_mif"))];
   const recorded = (key: string) => (key === piecePriceKey("a", "used") ? "1.50" : null);
+  // Each price lands in the condition its column is read from (#2375); FM is not set up here.
+  const COLUMNS: Record<string, string> = { used: "u", cover_mif: "fm" };
+  const conditionOf = (price: string) => COLUMNS[price] ?? null;
 
   it("sends what differs from what is on file, a comma read as a point", () => {
-    assert.deepEqual(changedPiecePrices({ [piecePriceKey("a", "used")]: "1,50" }, recorded, fields), {
+    assert.deepEqual(changedPiecePrices({ [piecePriceKey("a", "used")]: "1,50" }, recorded, fields, conditionOf), {
       changes: [],
       invalid: false,
     });
     assert.deepEqual(
-      changedPiecePrices({ [piecePriceKey("a", "used")]: "2", [piecePriceKey("b", "cover_mif")]: "?" }, recorded, fields),
+      changedPiecePrices({ [piecePriceKey("a", "used")]: "2", [piecePriceKey("b", "cover_mif")]: "?" }, recorded, fields, conditionOf),
       {
         changes: [
-          { stampId: "a", price: "used", amount: "2" },
-          { stampId: "b", price: "cover_mif", amount: "?" },
+          { stampId: "a", price: "used", conditionId: "u", amount: "2" },
+          { stampId: "b", price: "cover_mif", conditionId: "fm", amount: "?" },
         ],
         invalid: false,
       }
@@ -151,15 +154,24 @@ describe("changedPiecePrices", () => {
   });
 
   it("sends nothing for a blank field and refuses what is not a price", () => {
-    assert.deepEqual(changedPiecePrices({ [piecePriceKey("a", "used")]: "  " }, recorded, fields), {
+    assert.deepEqual(changedPiecePrices({ [piecePriceKey("a", "used")]: "  " }, recorded, fields, conditionOf), {
       changes: [],
       invalid: false,
     });
-    assert.equal(changedPiecePrices({ [piecePriceKey("b", "cover_mif")]: "abc" }, recorded, fields).invalid, true);
+    assert.equal(changedPiecePrices({ [piecePriceKey("b", "cover_mif")]: "abc" }, recorded, fields, conditionOf).invalid, true);
+  });
+
+  it("sends nothing for a price whose role is not set up", () => {
+    assert.deepEqual(
+      changedPiecePrices({ [piecePriceKey("b", "cover_mif")]: "3" }, recorded, fields, (p) =>
+        p === "used" ? "u" : null
+      ).changes,
+      []
+    );
   });
 
   it("leaves out a field no longer shown", () => {
-    assert.deepEqual(changedPiecePrices({ [piecePriceKey("c", "used")]: "3" }, recorded, fields).changes, []);
+    assert.deepEqual(changedPiecePrices({ [piecePriceKey("c", "used")]: "3" }, recorded, fields, conditionOf).changes, []);
   });
 });
 
@@ -167,12 +179,13 @@ describe("parseTypedPiecePrices", () => {
   it("keeps only well-formed prices", () => {
     assert.deepEqual(
       parseTypedPiecePrices([
-        { stampId: "a", price: "cover_ef", amount: "1" },
-        { stampId: "a", price: "bogus", amount: "1" },
-        { stampId: 3, price: "used", amount: "1" },
+        { stampId: "a", price: "cover_ef", conditionId: "ef", amount: "1" },
+        { stampId: "a", price: "bogus", conditionId: "ef", amount: "1" },
+        { stampId: "a", price: "used", amount: "1" },
+        { stampId: 3, price: "used", conditionId: "u", amount: "1" },
         null,
       ]),
-      [{ stampId: "a", price: "cover_ef", amount: "1" }]
+      [{ stampId: "a", price: "cover_ef", conditionId: "ef", amount: "1" }]
     );
     assert.deepEqual(parseTypedPiecePrices("nope"), []);
   });

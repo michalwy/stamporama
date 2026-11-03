@@ -31,6 +31,7 @@ import {
   PieceVariantPrices,
   usePiecePriceEntry,
   usePiecePriceTyping,
+  columnConditionsOf,
   type PiecePriceEntry,
 } from "./piece-stamp-prices";
 import { Empty, Muted, numStyle } from "./price-matrix";
@@ -119,7 +120,7 @@ function PieceValue({
   const { invalidateList } = useInvalidateInventory();
   const typing = usePiecePriceTyping({
     collectionId,
-    conditionId: base.conditionId,
+    columns: columnConditionsOf(base.value?.piece),
     stampIds: base.components.map((c) => c.stampId),
     onSaved: () => void invalidateList(collectionId),
   });
@@ -143,7 +144,7 @@ function PieceValue({
     setSaving(true);
     setError(null);
     const { setPiecePricesAction } = await import("@/app/actions/items");
-    const r = await setPiecePricesAction(collectionId, data.conditionId, entry.changes);
+    const r = await setPiecePricesAction(collectionId, entry.changes);
     if (r.error) setError(r.error);
     else await typing.saved();
     setSaving(false);
@@ -153,7 +154,7 @@ function PieceValue({
     <CollapsibleSection title="Value of this piece" defaultOpen>
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <Muted>
-          Each stamp&apos;s prices at the piece&apos;s condition ({data.conditionName}), with no
+          Each stamp&apos;s prices in the conditions this piece&apos;s method reads them from, with no
           certificate, at the latest edition of its main catalog — type a missing one in, or over one
           on file. The value is in {data.baseCurrency}.
         </Muted>
@@ -408,7 +409,7 @@ function StampPriceTable({
             <th style={TH}>Stamp</th>
             <th style={TH}>Format</th>
             <th style={{ ...TH, textAlign: "right" }}>Qty</th>
-            <th style={{ ...TH, textAlign: "right" }}>Used</th>
+            <th style={{ ...TH, textAlign: "right" }}>{entry.heading("used")}</th>
             {heading && <th style={{ ...TH, textAlign: "right" }}>{heading}</th>}
           </tr>
         </thead>
@@ -471,7 +472,7 @@ function StampPriceTable({
                       entry={entry}
                       slot={row.slots.find((s) => s.price === price)}
                       rowIndex={index}
-                      label={piecePriceLabel(label, price)}
+                      label={piecePriceLabel(label, entry.heading(price))}
                       disabled={disabled}
                     />
                   )

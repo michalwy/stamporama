@@ -13,6 +13,7 @@ import { setItemStamps } from "../../src/lib/item-stamps";
 import { createTrade } from "../../src/lib/trades";
 import { addTradeGiveLines } from "../../src/lib/trade-lines";
 import { readTradeBalance } from "../../src/lib/trade-valuation";
+import { setValuationMethodRole } from "../../src/lib/valuation-methods";
 
 // A copy's value lowered by a percentage typed on it, for its faults (#1560), against a real
 // database. The arithmetic is pinned in `tests/unit/valuation.test.ts`; what only a database can show
@@ -205,6 +206,8 @@ describe("a copy's value lowered for its faults (#1560)", () => {
       })
     ).id;
     await setItemStamps(userId, carrierId, [{ stampId: mi100 }, { stampId: mi101 }]);
+    // The default method's used prices are read in the condition it maps as used (#2375).
+    await setValuationMethodRole(userId, collectionId, { method: "michel", role: "used", conditionId: mnhId });
     try {
       // No format kind, so the sum of used prices: 45 + 10, less 25 %.
       const row = await getItemListItem(userId, carrierId);

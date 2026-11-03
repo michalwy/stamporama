@@ -2,7 +2,6 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
-import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { assertSectionOwner, assertTradeOwner, assertContentEditable } from "./trades";
 // The per-line guard lives a level down (`trade-access.ts`) since #642: the realisation half asks the
 // identical question and cannot ask this module for it without closing a loop through `trades.ts`.
@@ -1043,7 +1042,7 @@ async function receiveLineData(collectionId: string, input: TradeReceiveLineInpu
   const formatId = input.formatId
     ? ((
         await prisma.stampFormat.findFirst({
-          where: { id: input.formatId, collectionId, ...COPY_FORMAT_WHERE },
+          where: { id: input.formatId, collectionId },
           select: { id: true },
         })
       )?.id ?? null)

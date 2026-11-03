@@ -43,6 +43,7 @@ export type SettingsEntryKey =
   | "certificates"
   | "faults"
   | "formats"
+  | "valuation-methods"
   | "subtypes"
   | "attributes"
   | "size-presets"
@@ -146,8 +147,13 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     parts: [
       { key: "formats", label: "Formats" },
       { key: "multipliers", label: "Multipliers" },
-      { key: "valuation", label: "Valuation method" },
     ],
+  },
+  {
+    key: "valuation-methods",
+    group: "catalog",
+    label: "Valuation methods",
+    hint: "How a cover or a fragment is valued from its stamps' prices, and which condition each price is typed in.",
   },
   {
     key: "subtypes",

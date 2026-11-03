@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { PIECE_PRICE_LABELS, piecePricesRead, type PiecePrice } from "@/lib/piece-valuation";
-import { onPiecePrice } from "@/lib/piece-value-words";
+import { piecePricesRead, type PiecePrice } from "@/lib/piece-valuation";
+import { componentPrice as componentFigure, isDerivedPrice, onPiecePrice, priceHeading } from "@/lib/piece-value-words";
 import {
   changedPiecePrices,
   piecePriceOfKey,
@@ -30,11 +30,29 @@ import { useVariantPriceGrid } from "./use-variant-price-grid";
 // on the piece has one field, the later row naming where it is typed; a stamp with variants asks for
 // its variants' prices, with *Full grid…* for the rest. The value follows the typing before anything
 // is saved — the host hands `previewTyped` to its read — and the host saves with its own action.
+//
+// Each column is a condition the piece's method maps (#2375): its heading is the condition's
+// abbreviation, a figure typed lands in that condition, and a price whose role is not set up has no
+// field — it says so, and Settings → Valuation methods is where it is set up.
+
+/** The condition each price's column is read from, by price — `PieceValuation.columns` reduced to
+ *  the ids, which is what the fields are read and saved by. */
+export type PieceColumnConditions = Partial<Record<PiecePrice, string>>;
+
+/** A piece's columns as the fields want them. */
+export function columnConditionsOf(piece: PieceValuation | null | undefined): PieceColumnConditions | null {
+  if (!piece) return null;
+  const out: PieceColumnConditions = {};
+  for (const [price, column] of Object.entries(piece.columns) as [PiecePrice, { conditionId: string }][]) {
+    out[price] = column.conditionId;
+  }
+  return out;
+}
 
 /** The typing, before the piece's value is read: what the fields open on and what is typed in them. */
 export interface PiecePriceTyping {
   fields: PiecePriceFields | null;
-  /** What is typed, by field key — for the condition it was typed for. */
+  /** What is typed, by field key — for the columns it was typed for. */
   typed: Readonly<Record<string, string>>;
   setTyped: (key: string, value: string) => void;
   /** Every typed price that parses and differs from what is on file, settled for a moment — what the
@@ -47,47 +65,57 @@ export interface PiecePriceTyping {
 
 /**
  * What a piece's price fields open on, and what is typed in them. `stampIds` are the stamps on the
- * piece — known before its value is, so this read does not wait for it, and the value can be read
- * with the typing ({@link PiecePriceTyping.previewTyped}).
+ * piece and `columns` the conditions its method reads each price from (#2375) — known from the
+ * piece's last read, so the value can be read with the typing ({@link PiecePriceTyping.previewTyped}).
  */
 export function usePiecePriceTyping({
   collectionId,
-  conditionId,
+  columns,
   stampIds,
   onSaved,
 }: {
   collectionId: string;
-  conditionId: string;
+  /** Null while the piece's value has not been read yet. */
+  columns: PieceColumnConditions | null;
   stampIds: readonly string[];
   /** Whatever else shows these prices is stale once they are saved, or the full grid writes. */
   onSaved?: () => void;
 }): PiecePriceTyping {
   const queryClient = useQueryClient();
   const distinct = [...new Set(stampIds)].sort();
+  // Keyed by what the columns say, not by the object, which the host rebuilds on every read.
+  const columnsKey = JSON.stringify(
+    Object.entries(columns ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  );
+  const stableColumns = useMemo(
+    () => Object.fromEntries(JSON.parse(columnsKey) as [PiecePrice, string][]) as PieceColumnConditions,
+    [columnsKey]
+  );
   const query = useQuery<PiecePriceFields>({
-    queryKey: ["piecePriceFields", collectionId, conditionId, distinct] as const,
-    enabled: conditionId !== "" && distinct.length > 0,
+    queryKey: ["piecePriceFields", collectionId, columnsKey, distinct] as const,
+    enabled: columns !== null && distinct.length > 0,
     queryFn: async () => {
       const { getPiecePriceFieldsAction } = await import("@/app/actions/items");
-      return getPiecePriceFieldsAction(collectionId, conditionId, distinct);
+      return getPiecePriceFieldsAction(collectionId, stableColumns, distinct);
     },
   });
   const fields = query.data ?? null;
-  // Typed for one condition: another condition is another price, so the typing does not follow it.
-  const [typedState, setTypedState] = useState<{ conditionId: string; values: Record<string, string> }>({
-    conditionId,
+  // Typed for one set of columns: another mapping is another price, so the typing does not follow it.
+  const [typedState, setTypedState] = useState<{ columnsKey: string; values: Record<string, string> }>({
+    columnsKey,
     values: {},
   });
-  const typed = typedState.conditionId === conditionId ? typedState.values : EMPTY;
+  const typed = typedState.columnsKey === columnsKey ? typedState.values : EMPTY;
   const previewTyped = useDebouncedValue(
     useMemo(
       () =>
         changedPiecePrices(
           typed,
           (key) => fields?.recorded[key] ?? null,
-          Object.keys(typed).map(piecePriceOfKey)
+          Object.keys(typed).map(piecePriceOfKey),
+          (price) => stableColumns[price] ?? null
         ).changes,
-      [typed, fields]
+      [typed, fields, stableColumns]
     )
   );
   const refresh = async () => {
@@ -100,13 +128,13 @@ export function usePiecePriceTyping({
     typed,
     setTyped: (key, value) =>
       setTypedState((prev) => ({
-        conditionId,
-        values: { ...(prev.conditionId === conditionId ? prev.values : {}), [key]: value },
+        columnsKey,
+        values: { ...(prev.columnsKey === columnsKey ? prev.values : {}), [key]: value },
       })),
     previewTyped,
     saved: async () => {
       await refresh();
-      setTypedState({ conditionId, values: {} });
+      setTypedState({ columnsKey, values: {} });
     },
     fullGrid,
   };
@@ -120,6 +148,12 @@ export interface PiecePriceEntry {
   rows: PieceRowSlots[] | null;
   /** The columns, in order: the used price, then the price on the piece where the piece has one. */
   columns: PiecePrice[];
+  /** A column's heading: the condition it is read from (*U*, *FM*), or its role while unmapped. */
+  heading: (price: PiecePrice) => string;
+  /** Whether a column's role is mapped to a condition (#2375) — one that is not has no field. */
+  isMapped: (price: PiecePrice) => boolean;
+  /** A figure Michel's rule works out for an empty field (#2358), as the field's placeholder. */
+  derivedOf: (slot: PiecePriceSlot) => string | null;
   /** What a field shows: what is typed, else what is on file. */
   valueOf: (key: string) => string;
   /** What a save writes — the fields shown that say something other than what is on file. */
@@ -156,7 +190,8 @@ export function usePiecePriceEntry(typing: PiecePriceTyping, piece: PieceValuati
   }, [piece, fields, columns]);
 
   const shown = (rows ?? []).flatMap((r) => [...r.slots, ...(r.variants ?? []).flatMap((v) => v.slots)]);
-  const { changes, invalid } = changedPiecePrices(typed, recorded, shown);
+  const conditionOf = (price: PiecePrice) => piece?.columns[price]?.conditionId ?? null;
+  const { changes, invalid } = changedPiecePrices(typed, recorded, shown, conditionOf);
   const valueOf = (key: string) => typed[key] ?? recorded(key) ?? "";
   const isMissing = (slot: PiecePriceSlot, variant: boolean) => {
     if (valueOf(slot.key).trim() !== "") return false;
@@ -180,6 +215,14 @@ export function usePiecePriceEntry(typing: PiecePriceTyping, piece: PieceValuati
     typing,
     rows,
     columns,
+    heading: (price) => (piece ? priceHeading(piece, price) : price),
+    isMapped: (price) => conditionOf(price) !== null,
+    derivedOf: (slot) => {
+      const component = piece?.components.find((c) => c.stampId === slot.stampId);
+      if (!component || !isDerivedPrice(component, slot.price)) return null;
+      const figure = componentFigure(component, slot.price);
+      return figure === null ? null : `~${figure.toFixed(2)}`;
+    },
     valueOf,
     changes,
     invalid,
@@ -237,6 +280,16 @@ export function PiecePriceCell({
       </Tooltip>
     );
   }
+  if (!entry.isMapped(slot.price)) {
+    return (
+      <Tooltip
+        content={`${entry.heading(slot.price)} is not set up for this piece's method — choose its condition under Settings → Valuation methods.`}
+        align="end"
+      >
+        <span style={{ ...CELL, color: "var(--color-warning)" }}>not set up</span>
+      </Tooltip>
+    );
+  }
   const currency = entry.typing.fields?.stamps[slot.stampId]?.currency ?? null;
   if (currency === null) {
     return (
@@ -264,6 +317,7 @@ export function PiecePriceCell({
         priceMark
         aria-label={label}
         value={value}
+        placeholder={entry.derivedOf(slot) ?? undefined}
         onChange={(e) => entry.typing.setTyped(slot.key, e.target.value)}
         disabled={disabled}
         autoComplete="off"
@@ -293,9 +347,9 @@ export function PieceUmbrellaCell() {
   );
 }
 
-/** The accessible name of a field: *Mi 123 Cover MiF price*. */
-export function piecePriceLabel(stamp: string, price: PiecePrice): string {
-  return `${stamp} ${PIECE_PRICE_LABELS[price]} price`;
+/** The accessible name of a field: *Mi 123 FM price*. */
+export function piecePriceLabel(stamp: string, heading: string): string {
+  return `${stamp} ${heading} price`;
 }
 
 /**
@@ -364,7 +418,7 @@ export function PieceVariantPrices({
                 slot={v.slots.find((s) => s.price === price)}
                 rowIndex={rowIndex}
                 variant
-                label={piecePriceLabel(node.label, price)}
+                label={piecePriceLabel(node.label, entry.heading(price))}
                 disabled={disabled}
               />
             ))}

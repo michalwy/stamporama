@@ -1529,17 +1529,20 @@ document. Assigning is done by picking a copy from the list itself. There are th
   from. Beside it, **Method** is the piece's own valuation method: *As inherited* — named with the
   method and where it comes from, *As inherited (Michel, from Germany)* — leaves the piece following
   its area, and any other choice gives it its own, saved with the copy. Once a condition is chosen,
-  **each stamp in the numbered list has a field for each price the value reads** — its **used** price and its price on the piece (*Cover EF*, *MeF* or *MiF* on a cover,
-  by what is on it; ⊠ under Fischer; *On piece* on a fragment); a dash is a price the value does not
-  read. Type them in place, as in a checklist run: a price on file is filled in and can be typed over,
+  **each stamp in the numbered list has a field for each price the value reads** — its **used** price and its price on the piece (its cover EF, MeF or MiF on a cover,
+  by what is on it; ⊠ under Fischer, FP, FW or FM under Fischer FP/FW/FM; its on-piece price on a
+  fragment), each column headed by the condition it is read from under **Settings → Valuation
+  methods**, and **not set up** where the method has no condition for it; a dash is a price the value
+  does not read. Type them in place, as in a checklist run: a price on file is filled in and can be typed over,
   a missing one is framed in amber and counted in the note above the list, and Tab goes through them in
   the list's order. The same stamp twice has one field, the other row saying *as #1*; a stamp with
   variants asks for its variants' prices, with **Full grid…** for the rest. `1,50` and `1.50` both
-  work; `-` and `?` record *does not exist* and *not determinable*. Each price is for the condition
-  chosen, with no certificate, at the latest edition of the stamp's main catalog. Under the list sits
+  work; `-` and `?` record *does not exist* and *not determinable*. Each price is saved in its column's
+  condition, as a single, with no certificate, at the latest edition of the stamp's main catalog — the
+  condition you choose for the tile is the copy's, and changes no price the value reads. Under the list sits
   the piece's **Computed value** with the arithmetic it is, *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙
   2.00 = 22.00*, and the method that gives it — it follows as you type, and as you change the
-  franking, the method, the condition or the stamps. **Identify the tile** saves the typed prices to the stamps'
+  franking, the method or the stamps. **Identify the tile** saves the typed prices to the stamps'
   catalog prices before it creates the copy; if they cannot be saved, nothing is created and the step
   says why. Closing the step keeps none of them. The single catalog value field the step has for one stamp
   is not shown for a piece carrying several, since no one stamp's price is the piece's. A piece

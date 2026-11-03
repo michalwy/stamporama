@@ -10,15 +10,20 @@ import {
 import {
   inheritedMethodLabel,
   methodSourceText,
+  missingPricesText,
   onPiecePrice,
   pieceArithmetic,
   pieceValueRule,
+  priceHeading,
+  unmappedRolesText,
 } from "../../src/lib/piece-value-words";
+import type { PiecePrice } from "../../src/lib/piece-valuation";
+import type { PieceColumn } from "../../src/lib/valuation-method-roles";
 
 // How a piece's value was reached (#2353): the terms the rule records as it adds, and the arithmetic
 // the Valuation window and the identification step print from them. The rules themselves are
 // `piece-valuation.test.ts`; what is pinned here is that every rule's terms add up to its figure and
-// read as the catalogue states it.
+// read as the catalogue states it — each price named by the condition its method maps it to (#2375).
 
 function stamp(id: string, prices: Partial<PieceComponent> = {}): PieceComponent {
   return {
@@ -41,6 +46,28 @@ const B = stamp("b", { used: 4, usedSingle: 4, coverEf: 12, coverMef: 18, coverM
 const LABELS: Record<string, string> = { "e-a": "Mi 123", "e-b": "Mi 124" };
 const label = (id: string) => LABELS[id] ?? id;
 
+const column = (abbreviation: string, symbol: string | null = null): PieceColumn => ({
+  conditionId: abbreviation,
+  abbreviation,
+  symbol,
+});
+
+/** The conditions a collection might map — the catalogues' own symbols where they print one. */
+function columnsFor(method: ValuationMethod): Partial<Record<PiecePrice, PieceColumn>> {
+  const used = column("U", "⊙");
+  const onPiece = column("Bfst");
+  switch (method) {
+    case "michel":
+      return { used, cover_ef: column("EF"), cover_mef: column("MeF"), cover_mif: column("MiF"), on_piece: onPiece };
+    case "fischer":
+      return { used, cover_mif: column("Cover", "⊠"), on_piece: onPiece };
+    case "fischer_fp_fw_fm":
+      return { used, cover_ef: column("FP"), cover_mef: column("FW"), cover_mif: column("FM"), on_piece: onPiece };
+    case "sum_of_used":
+      return { used };
+  }
+}
+
 function read(
   method: ValuationMethod,
   kind: PieceKind | null,
@@ -48,7 +75,7 @@ function read(
   components: PieceComponent[]
 ) {
   const result = valuePiece({ method, kind, franking, components });
-  const piece = { ...result, method, kind, components };
+  const piece = { ...result, method, kind, components, columns: columnsFor(method) };
   return { result, arithmetic: pieceArithmetic(piece, label), onPiece: onPiecePrice(piece) };
 }
 
@@ -106,6 +133,43 @@ describe("pieceArithmetic — the figure as a sum the catalogue can check", () =
   });
 });
 
+describe("naming a price by its condition (#2375)", () => {
+  it("heads a column by the mapped condition's abbreviation, and by its role while it is not set up", () => {
+    const piece = { method: "fischer_fp_fw_fm" as const, columns: columnsFor("fischer_fp_fw_fm") };
+    assert.equal(priceHeading(piece, "cover_mif"), "FM");
+    assert.equal(priceHeading(piece, "used"), "U");
+    assert.equal(priceHeading({ method: "fischer" as const, columns: {} }, "cover_mif"), "Cover ⊠");
+  });
+
+  it("counts missing prices under their conditions' names", () => {
+    const { result } = read("michel", "on_cover", "rate_correct", [
+      { ...A, coverMif: null },
+      { ...B, coverMif: null },
+    ]);
+    assert.equal(
+      missingPricesText({ ...result, method: "michel", columns: columnsFor("michel") }),
+      "MiF price missing for 2 stamps"
+    );
+  });
+
+  it("says which roles of which method are not set up", () => {
+    assert.equal(unmappedRolesText([]), null);
+    assert.equal(unmappedRolesText([{ method: "fischer", role: "cover" }]), "Fischer's Cover ⊠ is not set up");
+    assert.equal(
+      unmappedRolesText([
+        { method: "michel", role: "cover_mif" },
+        { method: "michel", role: "never_hinged" },
+      ]),
+      "Michel's Cover MiF and Never hinged are not set up"
+    );
+  });
+
+  it("marks a price Michel's rule worked out as derived", () => {
+    const ruled = { ...A, coverEf: 12, derived: ["cover_ef" as const] };
+    assert.equal(read("michel", "on_cover", "rate_correct", [ruled]).arithmetic, "EF: Mi 123 EF ~12.00 = 12.00");
+  });
+});
+
 describe("onPiecePrice — which price each stamp shows beside its used one", () => {
   it("is the cover price the franking on the piece names", () => {
     assert.equal(read("michel", "on_cover", "rate_correct", [A]).onPiece, "cover_ef");
@@ -145,6 +209,8 @@ describe("the method beside a piece — where it came from, and what As inherite
     const result = valuePiece({ method: "michel", kind: null, franking: "rate_correct", components: [A, B] });
     const rule = pieceValueRule({
       ...result,
+      unmapped: [],
+      columns: {},
       method: "michel",
       methodSource: { kind: "collection" },
       inherited: fromCollection,

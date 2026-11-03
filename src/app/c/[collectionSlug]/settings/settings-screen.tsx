@@ -45,6 +45,7 @@ import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
 import { ValuationMethodPanel } from "./valuation-method-panel";
 import type { ValuationMethod } from "@/lib/piece-valuation";
+import type { ValuationMethodRoles } from "@/lib/valuation-method-roles";
 import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
@@ -193,6 +194,8 @@ interface SettingsScreenProps {
   duplicateCatalogMode: DuplicateCatalogMode;
   /** How pieces are valued where no area and no copy says otherwise (#2359). */
   valuationMethod: ValuationMethod;
+  /** Which condition plays each role of each valuation method (#2375). */
+  valuationMethodRoles: ValuationMethodRoles;
   photoStorageBytes: number;
   /** The local cache of remote storage objects (#591), shown beside the storage figure but never
    * added to it: one is the collector's data, the other is reclaimable scratch. */
@@ -787,6 +790,7 @@ function SettingsEntryBody({
   initialScanningProfiles,
   duplicateCatalogMode,
   valuationMethod,
+  valuationMethodRoles,
   photoStorageBytes,
   storageCache,
 }: SettingsScreenProps & { entryKey: string; part: string | null }) {
@@ -835,11 +839,6 @@ function SettingsEntryBody({
     case "formats":
       // Formats and their multipliers are one thing (#1469): a multiplier is a format's worth, set
       // per area and condition, so the two are tabs of one entry rather than two entries.
-      // The valuation method (#2359) is a third tab: what a piece in a format on cover or on piece is
-      // worth, set where its formats are.
-      if (part === "valuation") {
-        return <ValuationMethodPanel collectionId={collectionId} initialMethod={valuationMethod} />;
-      }
       return part === "multipliers" ? (
         <FormatFactorsPanel
           collectionId={collectionId}
@@ -852,8 +851,7 @@ function SettingsEntryBody({
       ) : (
         <FormatsPanel
           collectionId={collectionId}
-          // The cover prices (#2356) are the catalogues', not the collector's to edit or reorder.
-          initialFormats={initialFormats.filter((f) => !f.coverKind)}
+          initialFormats={initialFormats}
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
         />
@@ -865,6 +863,16 @@ function SettingsEntryBody({
           initialFaults={initialFaults}
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
+        />
+      );
+    case "valuation-methods":
+      // The default method (#2359) and each method's roles mapped to conditions (#2375), on one page.
+      return (
+        <ValuationMethodPanel
+          collectionId={collectionId}
+          initialMethod={valuationMethod}
+          initialRoles={valuationMethodRoles}
+          conditions={initialConditions}
         />
       );
     case "subtypes":

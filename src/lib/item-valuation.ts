@@ -9,11 +9,11 @@ import {
 } from "./pricing";
 import type { RawCatalogPrice } from "./catalog-price";
 import { makeFormatFactorLookup, makeStillValidLookup } from "./format-pricing";
-import { isStillValidCoverKind } from "./still-valid-postage";
 import { PIECE_COPY_SELECT, pieceCopyOf, type PieceCopyInput } from "./carrier-value";
-import { isCoverKind, type CoverKind } from "./cover-kind";
 import {
+  DEFAULT_FRANKING,
   DEFAULT_VALUATION_METHOD,
+  PIECE_PRICES,
   inheritedMethod,
   isPiece,
   isPieceKind,
@@ -24,8 +24,16 @@ import {
   type MethodArea,
   type PieceComponent,
   type PieceKind,
+  type PiecePrice,
   type ValuationMethod,
 } from "./piece-valuation";
+import {
+  methodRolesOf,
+  roleOfPrice,
+  type PieceColumn,
+  type UnmappedRole,
+  type ValuationMethodRoles,
+} from "./valuation-method-roles";
 import {
   applyFaultReduction,
   applyValueModifier,
@@ -39,6 +47,7 @@ import { childIsVariant, isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./va
 import { parsePriceCellInput } from "./catalog-price-mark";
 import { roundAmount } from "./decimal-input";
 import type { TypedPiecePrice } from "./piece-price-entry";
+import type { StillValidRule } from "./still-valid-postage";
 
 // Split out of `items.ts` so that **market** valuation can reuse it without the two modules
 // importing each other: `market-values.ts` values a lot's lines with the very same rule a copy is
@@ -183,14 +192,10 @@ export interface ValuationCatalogOverride {
 /**
  * A piece's stamp prices **typed but not saved** (#2368), valued as though they were on file — so the
  * value and its arithmetic follow the collector's typing before anything is written. Each lands where
- * the save would put it: the stamp's main catalogue at its latest edition, at `conditionId` with no
- * certificate, at the single for the used price and at the reserved row for a price on cover or on
- * piece. A figure that does not parse is not read.
+ * the save would put it: the stamp's main catalogue at its latest edition, in the condition its
+ * column is read from (#2375), single, no certificate. A figure that does not parse is not read.
  */
-export interface TypedCatalogPrices {
-  conditionId: string;
-  prices: readonly TypedPiecePrice[];
-}
+export type TypedCatalogPrices = readonly TypedPiecePrice[];
 
 /** Value a set of {@link ValuationRow}s. Loads the stamp prices, area primary catalogs, descendant
  * variant prices, format factors and currency rates **once** for the whole set, then applies the
@@ -202,11 +207,12 @@ export interface TypedCatalogPrices {
  * copies of ADR-0020 and #238 to keep in step. */
 export async function valuateItemRows(
   collectionId: string,
-  rows: ValuationRow[],
+  inputRows: ValuationRow[],
   override?: ValuationCatalogOverride,
   typed?: TypedCatalogPrices
 ): Promise<Map<string, CopyValuation>> {
-  if (rows.length === 0) return new Map();
+  if (inputRows.length === 0) return new Map();
+  let rows = inputRows;
 
   const [primaryCatalogByArea, baseCurrency] = await Promise.all([
     override
@@ -215,31 +221,33 @@ export async function valuateItemRows(
     getCollectionBaseCurrency(collectionId),
   ]);
 
-  // The format dictionary's kinds (#2359): which copy formats make a copy a piece, and the reserved
-  // rows (#2356) a piece's stamps — and anything priced in a piece format — are priced at.
+  // The format dictionary's kinds (#2359): which formats make a copy a piece.
   const formats = await prisma.stampFormat.findMany({
-    where: { collectionId, OR: [{ pieceKind: { not: null } }, { coverKind: { not: null } }] },
-    select: { id: true, pieceKind: true, coverKind: true },
+    where: { collectionId, pieceKind: { not: null } },
+    select: { id: true, pieceKind: true },
   });
   const pieceKindByFormat = new Map<string, PieceKind>();
-  const coverFormatId = new Map<CoverKind, string>();
-  const coverKindByFormat = new Map<string, CoverKind>();
-  for (const f of formats) {
-    if (isPieceKind(f.pieceKind)) pieceKindByFormat.set(f.id, f.pieceKind);
-    if (isCoverKind(f.coverKind)) {
-      coverFormatId.set(f.coverKind, f.id);
-      coverKindByFormat.set(f.id, f.coverKind);
-    }
-  }
+  for (const f of formats) if (isPieceKind(f.pieceKind)) pieceKindByFormat.set(f.id, f.pieceKind);
   const kindOf = (formatId: string | null) =>
     formatId ? (pieceKindByFormat.get(formatId) ?? null) : null;
-  /** A format of a kind has no prices of its own (#2359): they are the stamp's *Cover EF* or *On
-   *  piece* prices, so a want, a lot line or a trade line in it is priced there. */
-  const priceFormat = (formatId: string | null) => {
-    const kind = kindOf(formatId);
-    if (kind === null) return formatId;
-    return coverFormatId.get(kind === "on_cover" ? "cover_ef" : "on_piece") ?? formatId;
-  };
+
+  // A format of a kind has no prices of its own (#2359), so a want, a lot line or a trade line in it
+  // is valued as a piece of its one stamp (#2375, the collector's call): by its area's method or the
+  // collection's, rate-correct, from the conditions the method maps.
+  rows = rows.map((r) =>
+    r.copy === null && kindOf(r.formatId) !== null
+      ? {
+          ...r,
+          copy: {
+            itemId: r.id,
+            stampCount: 1,
+            franking: DEFAULT_FRANKING,
+            method: null,
+            draftEntries: [{ stampId: r.stampId, quantity: 1, formatId: null }],
+          },
+        }
+      : r
+  );
 
   // A piece is valued by its method from its stamps' prices (#2359), never as its leading stamp —
   // so its own `stampId` is not priced, its entries are.
@@ -318,10 +326,7 @@ export async function valuateItemRows(
     for (const id of set) stampIds.add(id);
   }
 
-  // A stamp still valid for postage takes its EF, MeF and MiF prices from Michel's rule (#2358),
-  // which replaces the multiplier there — read whenever something here is priced on cover.
-  const readsCoverPrices =
-    pieceRows.length > 0 || catalogRows.some((r) => kindOf(r.formatId) === "on_cover");
+  // The Michel method works a still-valid stamp's missing cover price out by Michel's rule (#2358).
   const [stamps, factorLookup, methods, stillValidFor] = await Promise.all([
     prisma.stamp.findMany({
       where: { id: { in: [...stampIds] } },
@@ -344,7 +349,7 @@ export async function valuateItemRows(
     }),
     makeFormatFactorLookup(collectionId),
     pieceRows.length ? loadValuationMethods(collectionId) : null,
-    readsCoverPrices ? makeStillValidLookup(collectionId) : null,
+    pieceRows.length ? makeStillValidLookup(collectionId) : null,
   ]);
 
   const pricesByStamp = new Map<string, RawCatalogPrice[]>();
@@ -374,7 +379,7 @@ export async function valuateItemRows(
     sortKeyByStamp.set(s.id, s.primaryCatalogSortKey);
   }
 
-  if (typed && typed.prices.length > 0) await applyTypedPrices(typed);
+  if (typed && typed.length > 0) await applyTypedPrices(typed);
 
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
 
@@ -414,56 +419,145 @@ export async function valuateItemRows(
   }
 
   /**
-   * A piece by its method (#2359; `piece-valuation.ts`): each stamp on it read at the copy's
-   * condition and no certificate — its used price at the entry's own format and as a single, and its
-   * four prices on cover and on piece — in the collection currency, then the rule.
+   * A piece by its method (#2359; `piece-valuation.ts`): each stamp on it read in the conditions the
+   * method maps (#2375) — its used price at the entry's own format and as a single, and its prices on
+   * cover and on piece at the single — no certificate, in the collection currency, then the rule. The
+   * copy's own condition steers nothing. The method comes from the most expensive stamp's area, that
+   * stamp found by the used price in the condition the **collection's** method maps as used (the
+   * collector's call: the method cannot be known before it is chosen).
    */
   function valuateWholePiece(r: ValuationRow): CopyValuation {
     const copy = r.copy!;
     const kind = kindOf(r.formatId);
+    const { roles, columns: columnOf } = methods!;
+    const entries = entriesByItem.get(copy.itemId) ?? [];
     let uncertain = false;
-    const at = (stampId: string, unknownVariant: boolean, formatId: string | null) => {
+    const at = (
+      stampId: string,
+      unknownVariant: boolean,
+      formatId: string | null,
+      conditionId: string,
+      stillValid: StillValidRule | null = null
+    ): CopyValuation => {
       const v = valuateAt(
-        { ...r, certificateStatusId: null, formatId, unknownVariant },
+        { ...r, conditionId, certificateStatusId: null, formatId, unknownVariant },
         stampId,
-        unknownVariant
+        unknownVariant,
+        stillValid
       );
       if (v.uncertain && !v.unpriced) uncertain = true;
-      return v.baseAmount;
+      return v;
     };
-    const cover = (k: CoverKind, stampId: string, unknownVariant: boolean) => {
-      const id = coverFormatId.get(k);
-      return id ? at(stampId, unknownVariant, id) : null;
+
+    const defaultUsed = roles[methods!.collection].used;
+    const probe = entries.map((e) => {
+      const unknownVariant = isUnknownVariantStamp(e.stamp);
+      const single = { ...r, conditionId: defaultUsed ?? "", certificateStatusId: null, formatId: null };
+      return {
+        stampId: e.stampId,
+        usedSingle: defaultUsed
+          ? valuateAt({ ...single, unknownVariant }, e.stampId, unknownVariant).baseAmount
+          : null,
+      };
+    });
+    const top = mostExpensiveStamp(probe);
+    const topArea = top ? (areaByStamp.get(top) ?? null) : null;
+    const resolved = resolveMethod(copy.method, methods!.areas, topArea, methods!.collection);
+    const method = resolved.method;
+    const mapping = roles[method];
+
+    const unmapped: UnmappedRole[] = [];
+    const unmappedPrices = new Set<PiecePrice>();
+    const columns: Partial<Record<PiecePrice, PieceColumn>> = {};
+    const conditionOf = (price: PiecePrice): string | null => {
+      const role = roleOfPrice(method, price);
+      return role ? (mapping[role] ?? null) : null;
     };
-    const components: PieceComponent[] = (entriesByItem.get(copy.itemId) ?? []).map((e) => {
+    for (const price of PIECE_PRICES) {
+      const role = roleOfPrice(method, price);
+      if (!role) continue;
+      const conditionId = mapping[role];
+      const column = conditionId ? columnOf.get(conditionId) : undefined;
+      if (column) columns[price] = column;
+      else unmappedPrices.add(price);
+    }
+    // Michel's rule (#2358), the Michel method's own: it reads the conditions mapped as used and
+    // never hinged, and with either unmapped it gives nothing — and says which.
+    const usedId = mapping.used;
+    const neverHingedId = mapping.never_hinged;
+    const rule: StillValidRule | null =
+      method === "michel" && usedId && neverHingedId
+        ? { usedConditionId: usedId, neverHingedConditionId: neverHingedId }
+        : null;
+    let ruleWanted = false;
+
+    const components: PieceComponent[] = entries.map((e) => {
       const unknown = isUnknownVariantStamp(e.stamp);
+      const derived: PiecePrice[] = [];
+      const price = (p: PiecePrice): number | null => {
+        const conditionId = conditionOf(p);
+        if (!conditionId) return null;
+        const v = at(e.stampId, unknown, null, conditionId);
+        if (!v.unpriced || v.mark) return v.baseAmount;
+        const ruled =
+          method === "michel" &&
+          p !== "on_piece" &&
+          p !== "used" &&
+          stillValidFor!(areaByStamp.get(e.stampId) ?? null, issueByStamp.get(e.stampId) ?? null);
+        if (!ruled) return null;
+        if (!rule) {
+          ruleWanted = true;
+          return null;
+        }
+        const byRule = at(e.stampId, unknown, null, rule.usedConditionId, rule);
+        if (byRule.baseAmount !== null) derived.push(p);
+        return byRule.baseAmount;
+      };
       return {
         id: e.id,
         stampId: e.stampId,
         quantity: e.quantity,
         multiple: e.formatId !== null,
-        used: at(e.stampId, unknown, e.formatId),
-        usedSingle: e.formatId === null ? null : at(e.stampId, unknown, null),
-        coverEf: cover("cover_ef", e.stampId, unknown),
-        coverMef: cover("cover_mef", e.stampId, unknown),
-        coverMif: cover("cover_mif", e.stampId, unknown),
-        onPiece: cover("on_piece", e.stampId, unknown),
+        used: usedId ? at(e.stampId, unknown, e.formatId, usedId).baseAmount : null,
+        usedSingle:
+          usedId && e.formatId !== null ? at(e.stampId, unknown, null, usedId).baseAmount : null,
+        coverEf: price("cover_ef"),
+        coverMef: price("cover_mef"),
+        coverMif: price("cover_mif"),
+        onPiece: price("on_piece"),
+        ...(derived.length ? { derived } : {}),
       };
     });
     for (const c of components) if (!c.multiple) c.usedSingle = c.used;
 
-    const top = mostExpensiveStamp(components);
-    const topArea = top ? (areaByStamp.get(top) ?? null) : null;
-    const resolved = resolveMethod(copy.method, methods!.areas, topArea, methods!.collection);
+    const result = valuePiece({
+      kind,
+      franking: copy.franking,
+      method,
+      components,
+      unmapped: unmappedPrices,
+    });
+    for (const price of result.unmapped) {
+      const role = roleOfPrice(method, price);
+      if (role && !unmapped.some((u) => u.role === role)) unmapped.push({ method, role });
+    }
+    // The rule was wanted for a stamp it could not price: name the role it lacks.
+    if (ruleWanted) {
+      for (const role of ["used", "never_hinged"] as const) {
+        if (!mapping[role] && !unmapped.some((u) => u.role === role)) unmapped.push({ method, role });
+      }
+    }
     return valuatePiece(
-      valuePiece({ kind, franking: copy.franking, method: resolved.method, components }),
+      result,
       {
-        method: resolved.method,
+        method,
         methodSource: resolved.source,
         inherited: inheritedMethod(methods!.areas, topArea, methods!.collection),
         franking: copy.franking,
         kind,
         components,
+        unmapped,
+        columns,
       },
       uncertain,
       baseCurrency
@@ -471,7 +565,7 @@ export async function valuateItemRows(
   }
 
   /** Put the typed prices in place of what is on file at their keys ({@link TypedCatalogPrices}). */
-  async function applyTypedPrices({ conditionId, prices }: TypedCatalogPrices): Promise<void> {
+  async function applyTypedPrices(prices: TypedCatalogPrices): Promise<void> {
     const catalogIds = new Set<string>();
     for (const p of prices) {
       const id = primaryCatalogByStamp.get(p.stampId);
@@ -491,25 +585,24 @@ export async function valuateItemRows(
       const catalogNameId = primaryCatalogByStamp.get(p.stampId);
       const catalog = catalogNameId ? catalogById.get(catalogNameId) : undefined;
       const year = catalog?.catalogEditions[0]?.year;
-      const formatId = p.price === "used" ? null : coverFormatId.get(p.price);
       const cell = parsePriceCellInput(p.amount);
-      if (!own || !catalog || year === undefined || formatId === undefined) continue;
+      if (!own || !catalog || year === undefined) continue;
       if (cell.kind !== "amount" && cell.kind !== "mark") continue;
       const sameKey = (q: RawCatalogPrice) =>
         q.catalogEdition.catalogNameId === catalog.id &&
         q.catalogEdition.year === year &&
-        q.conditionId === conditionId &&
+        q.conditionId === p.conditionId &&
         q.certificateStatusId === null &&
-        q.formatId === formatId;
+        q.formatId === null;
       pricesByStamp.set(p.stampId, [
         ...own.filter((q) => !sameKey(q)),
         {
           price: cell.kind === "amount" ? new Prisma.Decimal(roundAmount(cell.amount)) : null,
           mark: cell.kind === "mark" ? cell.mark : null,
           currency: catalog.currency,
-          conditionId,
+          conditionId: p.conditionId,
           certificateStatusId: null,
-          formatId,
+          formatId: null,
           catalogEdition: { year, catalogNameId: catalog.id },
         },
       ]);
@@ -517,31 +610,30 @@ export async function valuateItemRows(
     }
   }
 
-  /** `r`'s condition, certificate and format, valued as a copy of `stampId`. */
-  function valuateAt(r: ValuationRow, stampId: string, unknownVariant: boolean): CopyValuation {
+  /** `r`'s condition, certificate and format, valued as a copy of `stampId` — by Michel's rule for a
+   *  stamp still valid for postage when `stillValid` is given (#2358). */
+  function valuateAt(
+    r: ValuationRow,
+    stampId: string,
+    unknownVariant: boolean,
+    stillValid: StillValidRule | null = null
+  ): CopyValuation {
     const descendants = unknownVariant
       ? [...(descendantsByStamp.get(stampId) ?? new Set<string>())].filter(
           (id) => isVariantByStamp.get(id) ?? false
         )
       : null;
-    const formatId = priceFormat(r.formatId);
+    const formatId = r.formatId;
     const areaId = areaByStamp.get(stampId) ?? null;
     const issueId = issueByStamp.get(stampId) ?? null;
-    // Michel's rule for a still-valid stamp (#2358), on a cover price read in the used condition.
-    const stillValid =
-      stillValidFor && formatId && isStillValidCoverKind(coverKindByFormat.get(formatId))
-        ? stillValidFor(areaId, issueId)
-        : null;
     return valuateCopy({
       conditionId: r.conditionId,
       certificateStatusId: r.certificateStatusId,
       formatId,
       // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
       // one, is scaled by the same rule, since it shares the umbrella's issue and area.
-      formatFactor:
-        stillValid && stillValid.usedConditionId === r.conditionId
-          ? stillValid
-          : factorLookup(formatId, areaId, issueId, r.conditionId),
+      formatFactor: factorLookup(formatId, areaId, issueId, r.conditionId),
+      stillValid,
       unknownVariant,
       primaryCatalogNameId: primaryCatalogByStamp.get(stampId) ?? null,
       ownPrices: pricesByStamp.get(stampId) ?? [],
@@ -563,11 +655,15 @@ export async function valuateItemRows(
   }
 }
 
-/** The collection's valuation method and every area's own (#2359), for {@link resolveMethod}. */
-async function loadValuationMethods(
-  collectionId: string
-): Promise<{ collection: ValuationMethod; areas: Map<string, MethodArea> }> {
-  const [collection, areas] = await Promise.all([
+/** The collection's valuation method and every area's own (#2359), for {@link resolveMethod}, and
+ *  which condition plays each role of each method (#2375) with how each mapped one is named. */
+async function loadValuationMethods(collectionId: string): Promise<{
+  collection: ValuationMethod;
+  areas: Map<string, MethodArea>;
+  roles: ValuationMethodRoles;
+  columns: Map<string, PieceColumn>;
+}> {
+  const [collection, areas, roleRows] = await Promise.all([
     prisma.collection.findUniqueOrThrow({
       where: { id: collectionId },
       select: { valuationMethod: true },
@@ -576,12 +672,28 @@ async function loadValuationMethods(
       where: { collectionId },
       select: { id: true, parentId: true, valuationMethod: true, name: true },
     }),
+    prisma.valuationMethodRole.findMany({
+      where: { collectionId },
+      select: {
+        method: true,
+        role: true,
+        conditionId: true,
+        condition: { select: { abbreviation: true, symbol: true } },
+      },
+    }),
   ]);
   return {
     collection: isValuationMethod(collection.valuationMethod)
       ? collection.valuationMethod
       : DEFAULT_VALUATION_METHOD,
     areas: new Map(areas.map((a) => [a.id, a])),
+    roles: methodRolesOf(roleRows),
+    columns: new Map(
+      roleRows.map((r) => [
+        r.conditionId,
+        { conditionId: r.conditionId, abbreviation: r.condition.abbreviation, symbol: r.condition.symbol },
+      ])
+    ),
   };
 }
 

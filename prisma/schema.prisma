@@ -155,6 +155,8 @@ model Collection {
   stampConditions StampCondition[]
   certificateStatuses CertificateStatus[]
   stampFormats    StampFormat[]
+  /** Which condition plays each role of each valuation method (#2375). */
+  valuationMethodRoles ValuationMethodRole[]
   stampFormatFactors StampFormatFactor[]
   stampSubtypes   StampSubtype[]
   stampColors     StampColor[]
@@ -254,11 +256,6 @@ model StampCondition {
   /** Chip colour (#728): one of `TAG_COLORS`, or null for the neutral chip. A palette key rather
    *  than a hex — the theme decides what the hue is worth on each background. */
   color        String?
-  /** The part this condition plays in a rule that reads a stamp's prices by meaning rather than by
-   *  name (#2358): `used` or `never_hinged`, at most one of each per collection (a partial unique
-   *  index in the migration). Michel's rule for stamps still valid for postage reads both; null on
-   *  every other condition. Chosen under Settings → Conditions. */
-  priceRole    String?
   /** A price column only (#2374): a condition the catalogues price — a cover's FP / FW / FM, Michel's
    *  ⊠ EF / MeF / MiF — that no copy is ever in. On every price surface; in no picker that sets a
    *  copy's, a want's, a line's or any other record's condition. Refused while anything uses it. */
@@ -285,9 +282,33 @@ model StampCondition {
   tradeSectionDefaults TradeSection[] @relation("TradeSectionDefaultCondition")
   /** Tiles marked with this condition before they were identified (#1550). */
   scanTileMarks        ScanTile[]
+  /** The roles of the valuation methods this condition plays (#2375). */
+  valuationMethodRoles ValuationMethodRole[]
 
   @@index([collectionId])
   @@map("stamp_condition")
+}
+
+// Which of the collection's conditions plays each role a valuation method reads (#2375; ADR-0077):
+// *Michel* reads used, cover EF, MeF, MiF, on piece and never hinged; *Fischer* used, cover ⊠ and on
+// piece; *Fischer FP/FW/FM* used, FP, FW, FM and on piece; *Sum of used* used. Every price a piece's
+// value reads comes from the mapped condition — at the single, no certificate — and a role with no
+// row is not set up: the value is partial and says so, never filled from another role. Any condition
+// may be mapped, a price column only (#2374) or not. The pairs a method reads are listed by a CHECK
+// and in `valuation-method-roles.ts`. Deleting the condition unmaps the role.
+model ValuationMethodRole {
+  id           String @id @default(cuid())
+  collectionId String
+  method       String
+  role         String
+  conditionId  String
+
+  collection Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  condition  StampCondition @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, method, role])
+  @@index([conditionId])
+  @@map("valuation_method_role")
 }
 
 // A physical **format** — how many stamps are attached to each other and how (horizontal pair,
@@ -314,15 +335,10 @@ model StampFormat {
   name         String
   abbreviation String
   sortOrder    Int
-  // Set on the four reserved rows that carry a stamp's prices **on cover** and **on piece** (#2356):
-  // `cover_ef`, `cover_mef`, `cover_mif`, `on_piece`. Null on every format a copy can be in. They
-  // are priced like any format and never a copy's, a want's or a trade's — see `stamp-formats.ts`.
-  // One of each per collection (a partial unique index in the migration); a CHECK lists the values.
-  coverKind    String?
   // What a **copy** in this format is (#2359; ADR-0076): `on_cover`, `on_piece`, or null for neither
-  // (CHECK; never set on a reserved `coverKind` row). A copy whose format has a kind is valued by the
-  // piece's valuation method, and the format has no prices of its own — they are the stamp's
-  // *Cover EF* or *On piece* prices (`piece-format-kind.ts`).
+  // (CHECK). A copy — or a want, a lot line, a trade line — whose format has a kind is valued by its
+  // piece's valuation method from the conditions the method maps (#2375), so the format has no
+  // prices of its own and is left off the price surfaces.
   pieceKind    String?
 
   collection    Collection          @relation(fields: [collectionId], references: [id], onDelete: Cascade)

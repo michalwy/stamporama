@@ -11,11 +11,6 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import { deriveFormatPrice, formatFactorKey } from "@/lib/format-factor";
-import {
-  isStillValidCoverKind,
-  stillValidCoverPrice,
-  type StillValidRule,
-} from "@/lib/still-valid-postage";
 import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
 import { Icon } from "@/app/icons";
 
@@ -69,9 +64,6 @@ interface StampCatalogPricesTabProps {
   /** `formatId~conditionId` → multiplier, resolved server-side against this stamp's area and
    *  issue. A missing entry means nothing derives for that pair. */
   formatFactors: Record<string, number>;
-  /** Set when the stamp is still valid for postage (#2358): an empty EF, MeF or MiF cell in the used
-   *  condition shows Michel's rule instead of a multiplier. */
-  stillValid: StillValidRule | null;
   /** Which format's slice of the grid is shown; null is the single. */
   activeFormatId: string | null;
   onActiveFormatChange: (formatId: string | null) => void;
@@ -88,7 +80,6 @@ export function StampCatalogPricesTab({
   disabled,
   formats,
   formatFactors,
-  stillValid,
   activeFormatId,
   onActiveFormatChange,
 }: StampCatalogPricesTabProps) {
@@ -225,9 +216,6 @@ export function StampCatalogPricesTab({
   // The value a cell falls back to when nothing was entered for this format. Null on the single
   // tab (there is nothing to derive from), when no multiplier resolves, or when the single itself
   // is blank — a derived price is an inference from two facts and says nothing without both.
-  const ruleOnTab = isStillValidCoverKind(formats.find((f) => f.id === activeFormatId)?.coverKind)
-    ? stillValid
-    : null;
   function derivedFor(
     editionId: string,
     conditionId: string,
@@ -238,21 +226,6 @@ export function StampCatalogPricesTab({
     // A marked single (#1615) carries its mark onto the format, factor or not — the valuation's rule.
     const mark = settlePriceMarkInput(single);
     if (mark) return mark;
-    // A still-valid stamp's cover price in the used condition is Michel's rule, not a multiple
-    // (#2358): the used price +20 %, at least 0.40, capped by the same edition's never-hinged price.
-    if (ruleOnTab && conditionId === ruleOnTab.usedConditionId) {
-      if (single === "") return null;
-      const used = Number(normalizeDecimalInput(single));
-      if (!Number.isFinite(used)) return null;
-      const mint = (
-        priceEdits.get(priceCellKey(editionId, ruleOnTab.neverHingedConditionId, certId, null)) ?? ""
-      ).trim();
-      const mintAmount = mint === "" || settlePriceMarkInput(mint) ? null : Number(normalizeDecimalInput(mint));
-      return stillValidCoverPrice(
-        used,
-        mintAmount !== null && Number.isFinite(mintAmount) ? mintAmount : null
-      ).toFixed(2);
-    }
     const factor = formatFactors[formatFactorKey(activeFormatId, conditionId)];
     if (!factor) return null;
     if (single === "") return null;
@@ -380,8 +353,6 @@ export function StampCatalogPricesTab({
               {activeFormat.name}. Greyed values are derived from the single&apos;s price by this
               format&apos;s multiplier — nothing is stored until you type over one. Clear a cell to
               go back to the derived value.
-              {ruleOnTab &&
-                " This stamp is still valid for postage, so its used price here follows Michel's rule: the used price +20 %, at least 0.40, at most the never-hinged price."}
             </p>
           )}
         </div>

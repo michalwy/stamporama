@@ -52,6 +52,13 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   certificates: [],
   faults: [],
   formats: [],
+  // One card per method, titled from `VALUATION_METHOD_LABELS`, so only the default's is a label here.
+  "valuation-methods": [
+    {
+      label: "Default method",
+      words: ["michel", "fischer", "sum of used", "cover", "piece", "franking", "roles"],
+    },
+  ],
   subtypes: [],
   attributes: [],
   "size-presets": [],

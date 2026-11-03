@@ -274,8 +274,11 @@ does — *123aI or 123bI* — and never as one of them. It only ever changes a c
 does not create one.
 
 On **a cover or a fragment**, it reads how the piece's value was computed — the valuation method and
-where it came from, the franking, and any price that is missing — and it can set the piece's franking
-or give the copy a method of its own. The collection's and an area's methods stay yours to set.
+where it came from, the franking, any price that is missing with the condition it is read from, and
+any price whose condition is not set up — and it can set the piece's franking or give the copy a
+method of its own. It can also **read and set which condition each valuation method reads each price
+from** — the cards of **Settings → Valuation methods** — so that it knows which column a cover price it
+types belongs in. The collection's and an area's methods stay yours to set.
 
 On **stamp sizes** — the figures your album pages cut hawid strips to — it can put a size it reads
 in a catalogue or a dealer's list onto your stamps, so you do not type it stamp by stamp. It can:

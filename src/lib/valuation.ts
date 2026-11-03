@@ -1,12 +1,14 @@
 import {
   pickFormatCatalogPrice,
   pickLowestByBase,
+  pickStillValidPrice,
   baseValueOf,
   rolledUpCatalogPriceMark,
-  type FormatDerivation,
   type PickedPrice,
   type RawCatalogPrice,
 } from "./catalog-price";
+import type { StillValidRule } from "./still-valid-postage";
+import type { PieceColumn, UnmappedRole } from "./valuation-method-roles";
 import type { CatalogPriceMark } from "./catalog-price-mark";
 import type { CostBasisTotal } from "./cost-basis";
 import type {
@@ -15,6 +17,7 @@ import type {
   InheritedMethod,
   MethodSource,
   MissingPiecePrice,
+  PiecePrice,
   PieceComponent,
   PieceKind,
   PieceRule,
@@ -73,7 +76,11 @@ export interface CopyValuationInput {
   /** Multiplier deriving that format's price from the single's, when no explicit price for the
    *  format exists. Null when none applies — the copy is then unpriced rather than valued as a
    *  single, which would be a different stamp's figure. */
-  formatFactor?: FormatDerivation;
+  formatFactor?: number | null;
+  /** Set to read the figure by Michel's rule for a stamp still valid for postage (#2358) instead of
+   *  at `conditionId` — what the *Michel* method asks where its cover price is missing (#2375). The
+   *  single only; the variant rollup reads each variant by the same rule. */
+  stillValid?: StillValidRule | null;
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
   /** Primary catalog name id resolved from the copy's stamp area (may be null). */
@@ -346,9 +353,16 @@ export interface PieceValuation {
   kind: PieceKind | null;
   rule: PieceRule;
   usage: CoverUsage | null;
-  /** True when a price the rule reads is missing: the figure, if any, is a lower bound. */
+  /** True when a price the rule reads is missing or its role is not set up: the figure, if any, is
+   *  a lower bound. */
   partial: boolean;
   missing: MissingPiecePrice[];
+  /** The roles of the piece's method that a price it reads stands behind and that are not mapped to
+   *  a condition (#2375) — what the value names, with a link to Settings → Valuation methods. */
+  unmapped: UnmappedRole[];
+  /** The condition each price the method reads comes from (#2375), by price; a price whose role is
+   *  not mapped has none. What the fields are headed by and the arithmetic names. */
+  columns: Partial<Record<PiecePrice, PieceColumn>>;
   /** The figure as a sum (#2353): what the Valuation window prints as the arithmetic. */
   terms: PieceTerm[];
   /** Each entry on the piece with every price the rule may read, in the collection currency (#2353):
@@ -383,7 +397,7 @@ export function valuatePiece(
       ...piece,
       rule: result.rule,
       usage: result.usage,
-      partial: result.partial,
+      partial: result.partial || piece.unmapped.length > 0,
       missing: result.missing,
       terms: result.terms,
     },
@@ -397,14 +411,16 @@ export function valuatePiece(
 export function valuateCopy(input: CopyValuationInput): CopyValuation {
   const { conditionId, certificateStatusId, primaryCatalogNameId, baseCurrency, rates } = input;
   const pick = (prices: RawCatalogPrice[]) =>
-    pickFormatCatalogPrice(
-      prices,
-      primaryCatalogNameId,
-      conditionId,
-      certificateStatusId,
-      input.formatId ?? null,
-      input.formatFactor ?? null
-    );
+    input.stillValid
+      ? pickStillValidPrice(prices, primaryCatalogNameId, certificateStatusId, input.stillValid)
+      : pickFormatCatalogPrice(
+          prices,
+          primaryCatalogNameId,
+          conditionId,
+          certificateStatusId,
+          input.formatId ?? null,
+          input.formatFactor ?? null
+        );
 
   const own = pick(input.ownPrices);
 

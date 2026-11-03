@@ -34,7 +34,6 @@ import {
   summarizeUmbrellaCell,
   variantDescendantMap,
   variantPriceCellKey,
-  type CellDerivation,
 } from "@/lib/variant-price-cells";
 import type { VariantPriceGridData, VariantPriceScope } from "@/lib/variant-prices";
 
@@ -202,7 +201,7 @@ export const IntakeVariantPricesSection = forwardRef<
     variantPriceCellKey(id, editionId ?? "", a.conditionId, a.certId, format);
 
   const factorFor = useMemo(() => {
-    const map = new Map<string, CellDerivation>();
+    const map = new Map<string, number>();
     for (const f of grid?.formatFactors ?? []) {
       map.set(`${f.stampId}~${f.formatId}~${f.conditionId}`, f.factor);
     }
@@ -214,9 +213,7 @@ export const IntakeVariantPricesSection = forwardRef<
     a.formatId
       ? derivedCellAmount(
           values.get(keyOf(id, a, null)) ?? "",
-          factorFor.get(`${id}~${a.formatId}~${a.conditionId}`),
-          // Michel's rule for a still-valid stamp reads its never-hinged single too (#2358).
-          (conditionId) => values.get(keyOf(id, { ...a, conditionId }, null)) ?? ""
+          factorFor.get(`${id}~${a.formatId}~${a.conditionId}`)
         )
       : null;
   const amountOf = (id: string, a: Axes): number | null => {

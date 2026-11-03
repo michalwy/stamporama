@@ -5,9 +5,7 @@ import {
   buildEffectiveAreaCatalogMap,
   buildEffectivePrimaryCatalogMap,
 } from "./pricing";
-import { makeFormatFactorLookup, makeStillValidLookup } from "./format-pricing";
-import { isStillValidCoverKind } from "./still-valid-postage";
-import type { CellDerivation } from "./variant-price-cells";
+import { makeFormatFactorLookup } from "./format-pricing";
 import { makeOfferLabeller, STAMP_LABEL_SELECT, type StampLabelRow } from "./offer-labels";
 import { getStampConditions, type StampConditionData } from "./conditions";
 import { getCertificateStatuses, type CertificateStatusData } from "./certificate-statuses";
@@ -146,13 +144,12 @@ export interface VariantPriceRecord {
 }
 
 /** One resolved format multiplier (ADR-0020 §5). Only non-null ones are reported — an absent entry
- *  means nothing derives for that stamp × format × condition, which is the common case. A
- *  still-valid stamp's EF, MeF and MiF in the used condition carry Michel's rule instead (#2358). */
+ *  means nothing derives for that stamp × format × condition, which is the common case. */
 export interface VariantPriceFactor {
   stampId: string;
   formatId: string;
   conditionId: string;
-  factor: CellDerivation;
+  factor: number;
 }
 
 export interface VariantPriceGridData {
@@ -374,14 +371,13 @@ export async function getVariantPriceGrid(
     select: GRID_STAMP_SELECT,
   })) as GridStamp[];
 
-  const [labeller, conditions, certificateStatuses, formats, editions, priceRows, factorLookup, stillValidFor] =
+  const [labeller, conditions, certificateStatuses, formats, editions, priceRows, factorLookup] =
     await Promise.all([
       makeOfferLabeller(collectionId),
       // A price column only (#2374) is a column of the grid like any other condition.
       getStampConditions(ownerId, collectionId, { withPriceOnly: true }),
       getCertificateStatuses(ownerId, collectionId),
-      // The prices on cover and on piece (#2356) are tabs of the grid like a block's.
-      getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
+      getStampFormats(ownerId, collectionId),
       readAreaEditions(collectionId, areaId),
       stamps.length === 0
         ? Promise.resolve([])
@@ -398,7 +394,6 @@ export async function getVariantPriceGrid(
             },
           }),
       makeFormatFactorLookup(collectionId),
-      makeStillValidLookup(collectionId),
     ]);
 
   const labelOf = (stamp: GridStamp) =>
@@ -415,14 +410,9 @@ export async function getVariantPriceGrid(
     if (!stamp) continue;
     const stampAreaId = areaOfStamp(stamp) ?? areaId;
     const issueId = stamp.issueMemberships[0]?.issueId ?? null;
-    const stillValid = stillValidFor(stampAreaId, issueId);
     for (const format of formats) {
-      const ruled = stillValid && isStillValidCoverKind(format.coverKind) ? stillValid : null;
       for (const condition of conditions) {
-        const factor =
-          ruled && condition.id === ruled.usedConditionId
-            ? ruled
-            : factorLookup(format.id, stampAreaId, issueId, condition.id);
+        const factor = factorLookup(format.id, stampAreaId, issueId, condition.id);
         if (factor != null) {
           formatFactors.push({
             stampId: row.stampId,

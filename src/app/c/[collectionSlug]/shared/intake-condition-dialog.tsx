@@ -64,6 +64,8 @@ import {
   PieceVariantPrices,
   usePiecePriceEntry,
   usePiecePriceTyping,
+  columnConditionsOf,
+  type PieceColumnConditions,
 } from "./piece-stamp-prices";
 import { onPiecePriceHeading } from "./piece-value-breakdown";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
@@ -741,9 +743,15 @@ function IntakeConditionDialog({
   const [method, setMethod] = useState<ValuationMethod | null>(null);
   // The stamps' prices, typed in place on their rows (#2368): what is on file filled in, a missing one
   // framed, the value following the typing; saved with *Identify the tile*, before the copy is made.
+  // The columns are the method's (#2375), known once the piece has been read — the last preview's,
+  // held here because the preview below is read with this typing.
+  const [priceColumns, setPriceColumns] = useState<{ key: string; columns: PieceColumnConditions | null }>({
+    key: "null",
+    columns: null,
+  });
   const priceTyping = usePiecePriceTyping({
     collectionId,
-    conditionId,
+    columns: priceColumns.columns,
     stampIds: severalStamps && singleStamp ? carriedStamps.map((line) => line.entry.stampId) : [],
   });
   // Rebuilt every render; the query keys on its contents, not on the object.
@@ -761,6 +769,12 @@ function IntakeConditionDialog({
         }
       : null;
   const piecePreview = usePiecePreview(previewSubject);
+  const previewColumns = columnConditionsOf(piecePreview?.piece);
+  const previewColumnsKey = JSON.stringify(previewColumns);
+  if (previewColumnsKey !== priceColumns.key) {
+    // Adjusted while rendering, as React advises for state that follows a value (no effect).
+    setPriceColumns({ key: previewColumnsKey, columns: previewColumns });
+  }
   const prices = usePiecePriceEntry(priceTyping, piecePreview?.piece ?? null);
   const pricedPiece = piecePreview?.piece && previewSubject && prices.rows ? piecePreview.piece : null;
   // What *As inherited* names (#2369) is the preview's; one stamp on a cover format has no figure
@@ -901,7 +915,7 @@ function IntakeConditionDialog({
       setSavingPrice(true);
       setPriceError(undefined);
       const { setPiecePricesAction } = await import("@/app/actions/items");
-      const r = await setPiecePricesAction(collectionId, conditionId, prices.changes);
+      const r = await setPiecePricesAction(collectionId, prices.changes);
       setSavingPrice(false);
       if (r.error) {
         setPriceError(r.error);
@@ -1021,7 +1035,7 @@ function IntakeConditionDialog({
                             <span style={{ flex: 1 }} />
                             {prices.columns.map((price, c) => (
                               <span key={price} style={{ minWidth: "6rem", textAlign: "right" }}>
-                                {c === 0 ? "Used" : onPiecePriceHeading(pricedPiece)}
+                                {c === 0 ? prices.heading("used") : onPiecePriceHeading(pricedPiece)}
                               </span>
                             ))}
                           </li>
@@ -1050,7 +1064,7 @@ function IntakeConditionDialog({
                                         entry={prices}
                                         slot={row.slots.find((s) => s.price === price)}
                                         rowIndex={rowIndex}
-                                        label={piecePriceLabel(label, price)}
+                                        label={piecePriceLabel(label, prices.heading(price))}
                                         disabled={isPending || savingPrice}
                                       />
                                     )

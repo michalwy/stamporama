@@ -4,8 +4,13 @@
 //
 // A piece is a copy carrying several stamps (ADR-0044), or one stamp once on a format of kind *On
 // cover* or *On piece*. Its format's kind says which rules apply: a fragment is valued from on-piece
-// prices, a cover from the on-cover prices #2356 added — EF, MeF, MiF — by its **franking**, and a
-// piece whose format has no kind (an FDC, until #2355 settles it) by the sum of its stamps' used prices.
+// prices, a cover from on-cover prices — EF, MeF, MiF — by its **franking**, and a piece whose format
+// has no kind (an FDC, until #2355 settles it) by the sum of its stamps' used prices.
+//
+// Every price is read from the condition the method maps to the role behind it (#2375; ADR-0077,
+// `valuation-method-roles.ts`): the rules below name five prices — used, EF, MeF, MiF, on piece — and
+// the DB half reads each from its role's condition. A price whose role is not set up is noted as
+// **unmapped**, not missing: there is nothing to type it into until the method is told where it is.
 //
 // Four **methods**, set per area, inherited downwards, with a collection default (*Michel*) and a
 // copy's own winning over all:
@@ -14,7 +19,7 @@
 //   - *Michel* — on piece: Σ on-piece prices. On cover, rate-correct: EF → the EF price, MeF → the MeF
 //     price, MiF → the highest MiF price (a cover's ⊠ price is the cover's, so the rest add nothing).
 //     Philatelic, posted: the most expensive stamp's used price + 15 %. Not posted: Σ used prices.
-//   - *Fischer* — each stamp's ⊠ price is its MiF price (#2356). EF → ⊠. MeF → 150 % of ⊠ for the
+//   - *Fischer* — each stamp's ⊠ price is read as its MiF price. EF → ⊠. MeF → 150 % of ⊠ for the
 //     first two stamps, every further one at its used price. MiF → 50 % of the highest ⊠, every other
 //     stamp (further copies of that one included) at its used price.
 //   - *Fischer FP/FW/FM* — EF → FP (EF), MeF → FW (MeF), MiF → the highest FM (MiF), with no formula.
@@ -85,16 +90,13 @@ export function isPiece(stampCount: number, formatKind: PieceKind | null): boole
   return stampCount > 1 || formatKind !== null;
 }
 
-/** The prices a method may read, by name — which one a missing-price note names. */
-export type PiecePrice = "used" | "cover_ef" | "cover_mef" | "cover_mif" | "on_piece";
+/** The prices a method's rules read, by name — each from the condition of its role (#2375). */
+export const PIECE_PRICES = ["used", "cover_ef", "cover_mef", "cover_mif", "on_piece"] as const;
+export type PiecePrice = (typeof PIECE_PRICES)[number];
 
-export const PIECE_PRICE_LABELS: Record<PiecePrice, string> = {
-  used: "used",
-  cover_ef: "Cover EF",
-  cover_mef: "Cover MeF",
-  cover_mif: "Cover MiF",
-  on_piece: "On piece",
-};
+export function isPiecePrice(value: unknown): value is PiecePrice {
+  return typeof value === "string" && (PIECE_PRICES as readonly string[]).includes(value);
+}
 
 /** One entry on the piece, its prices in the collection currency (null when missing). */
 export interface PieceComponent {
@@ -113,6 +115,9 @@ export interface PieceComponent {
   coverMef: number | null;
   coverMif: number | null;
   onPiece: number | null;
+  /** The prices worked out by Michel's rule for a stamp still valid for postage (#2358) rather than
+   *  read off the catalogue — shown as derived (`~`) in the piece's windows. */
+  derived?: readonly PiecePrice[];
 }
 
 /** How a cover is franked, by what is on it — counted in stamps, not rows. */
@@ -170,9 +175,12 @@ export interface PieceValueResult {
   terms: PieceTerm[];
   /** EF, MeF or MiF for a cover valued by its franking; null otherwise. */
   usage: CoverUsage | null;
-  /** True when a price the rule reads is missing: the figure, if any, is a lower bound. */
+  /** True when a price the rule reads is missing or its role is not set up: the figure, if any, is
+   *  a lower bound. */
   partial: boolean;
   missing: MissingPiecePrice[];
+  /** The prices the rule reads whose role the method has not mapped to a condition (#2375). */
+  unmapped: PiecePrice[];
 }
 
 export interface PieceValueInput {
@@ -182,6 +190,8 @@ export interface PieceValueInput {
   method: ValuationMethod;
   /** In the collector's order. */
   components: readonly PieceComponent[];
+  /** The prices whose role the method has not mapped (#2375): read as missing, noted as unmapped. */
+  unmapped?: ReadonlySet<PiecePrice>;
 }
 
 /** What {@link coverUsage} and {@link piecePricesRead} count by — an entry without its prices. */
@@ -201,8 +211,10 @@ export function coverUsage(components: readonly PieceEntryShape[]): CoverUsage {
  * whose area decides the method, and Michel's philatelic rule's base. Ties and a piece with no used
  * price at all fall to the collector's order. Null only for a piece with no stamps.
  */
-export function mostExpensiveStamp(components: readonly PieceComponent[]): string | null {
-  let best: PieceComponent | null = null;
+export function mostExpensiveStamp(
+  components: readonly Pick<PieceComponent, "stampId" | "usedSingle">[]
+): string | null {
+  let best: Pick<PieceComponent, "stampId" | "usedSingle"> | null = null;
   for (const c of components) {
     if (best === null) best = c;
     else if (c.usedSingle !== null && (best.usedSingle === null || c.usedSingle > best.usedSingle)) {
@@ -215,7 +227,7 @@ export function mostExpensiveStamp(components: readonly PieceComponent[]): strin
 /** Value a piece by its method. Pure; see the module header for every rule. */
 export function valuePiece(input: PieceValueInput): PieceValueResult {
   const { kind, franking, method, components } = input;
-  const acc = new Accumulator();
+  const acc = new Accumulator(input.unmapped);
 
   if (
     components.length === 0 ||
@@ -362,7 +374,10 @@ class Accumulator {
   private cents = 0;
   private priced = 0;
   readonly missing: MissingPiecePrice[] = [];
+  readonly unmapped: PiecePrice[] = [];
   readonly terms: PieceTerm[] = [];
+
+  constructor(private readonly unmappedPrices: ReadonlySet<PiecePrice> = new Set()) {}
 
   /** `percent` of `unit`, rounded to the cent, `times` over — a missing unit is noted, not counted. */
   add(c: PieceComponent, price: PiecePrice, unit: number | null, times: number, percent = 100): void {
@@ -391,6 +406,10 @@ class Accumulator {
   }
 
   private note(c: PieceComponent, price: PiecePrice): void {
+    if (this.unmappedPrices.has(price)) {
+      if (!this.unmapped.includes(price)) this.unmapped.push(price);
+      return;
+    }
     if (!this.missing.some((m) => m.componentId === c.id && m.price === price)) {
       this.missing.push({ componentId: c.id, stampId: c.stampId, price });
     }
@@ -402,8 +421,9 @@ class Accumulator {
       rule,
       terms: this.terms,
       usage,
-      partial: this.missing.length > 0,
+      partial: this.missing.length > 0 || this.unmapped.length > 0,
       missing: this.missing,
+      unmapped: this.unmapped,
     };
   }
 }

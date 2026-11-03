@@ -2,7 +2,6 @@ import "server-only";
 import type { Franking, ValuationMethod } from "./piece-valuation";
 import { prisma, type DbTransaction } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
-import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { setCopyStamp } from "./item-candidates";
 import { getRunChecklist } from "./checklists";
 import { formatItemNo } from "./item-number";
@@ -615,7 +614,7 @@ async function assertRunAnswersExist(
   const [conditions, certs, formats, locations] = await Promise.all([
     prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds }, ...COPY_CONDITION_WHERE } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
-    prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds }, ...COPY_FORMAT_WHERE } }),
+    prisma.stampFormat.count({ where: { collectionId, id: { in: formatIds } } }),
     prisma.location.findMany({
       where: { collectionId, id: { in: locationIds } },
       select: { assignable: true },

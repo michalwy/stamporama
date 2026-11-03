@@ -17,9 +17,14 @@ import {
 import { getPiecePriceFields, setPiecePrices } from "../../src/lib/piece-prices";
 import { piecePriceKey } from "../../src/lib/piece-price-entry";
 import { updateStampFormat } from "../../src/lib/stamp-formats";
-import { setAreaValuationMethod, setCollectionValuationMethod } from "../../src/lib/valuation-methods";
+import {
+  getValuationMethodRoles,
+  setAreaValuationMethod,
+  setCollectionValuationMethod,
+  setValuationMethodRole,
+} from "../../src/lib/valuation-methods";
+import { valuateItemRows } from "../../src/lib/item-valuation";
 import { convertRecordedPieceValues } from "../../src/lib/piece-value-conversion";
-import { COVER_FORMATS } from "../../src/lib/cover-kind";
 import { createTrade } from "../../src/lib/trades";
 import { addTradeGiveLines } from "../../src/lib/trade-lines";
 import { readTradeBalance } from "../../src/lib/trade-valuation";
@@ -28,10 +33,11 @@ import { readTradeBalance } from "../../src/lib/trade-valuation";
 //
 // The rules — each method, each franking, EF/MeF/MiF, a missing price, which area decides — are
 // pinned in `tests/unit/piece-valuation.test.ts`. What only a database can show is that they reach
-// every reader: a piece's prices are read at the right keys (its stamps' used prices, the reserved
-// cover rows), a format given a kind takes its prices with it, the method is resolved from the copy,
-// the area and the collection, the holdings total and the trade read the computed figure, and a value
-// recorded before #2359 moves onto the modifier with the piece's worth unchanged.
+// every reader: a piece's prices are read in the conditions each method maps (#2375; ADR-0077), an
+// unmapped role leaves the value partial, the method is resolved from the copy, the area and the
+// collection, a line in a cover format is valued as a piece of its stamp, the holdings total and the
+// trade read the computed figure, and a value recorded before #2359 moves onto the modifier with the
+// piece's worth unchanged.
 
 const ts = Date.now();
 
@@ -41,6 +47,11 @@ describe("a piece valued by its method (#2359)", () => {
   let vendorId: string;
   let areaId: string;
   let mnhId: string;
+  /** Price columns only (#2374): the catalogue's cover prices. */
+  let efId: string;
+  let mefId: string;
+  let mifId: string;
+  let bfstId: string;
   let blk4Id: string;
   let coverId: string;
   let mi200: string;
@@ -51,10 +62,12 @@ describe("a piece valued by its method (#2359)", () => {
   let carrierId: string;
   /** An ordinary copy of Mi 205, so every total has a catalogue figure beside the piece. */
   let ordinaryId: string;
-  const cover = new Map<string, string>();
   let editionId: string;
 
-  async function stamp(name: string, prices: { amount: string; formatId?: string }[]) {
+  async function stamp(
+    name: string,
+    prices: { amount: string; formatId?: string; conditionId?: string }[]
+  ) {
     const row = await prisma.stamp.create({
       data: {
         collectionId,
@@ -67,7 +80,7 @@ describe("a piece valued by its method (#2359)", () => {
         data: {
           stampId: row.id,
           catalogEditionId: editionId,
-          conditionId: mnhId,
+          conditionId: p.conditionId ?? mnhId,
           certificateStatusId: null,
           formatId: p.formatId ?? null,
           price: p.amount,
@@ -131,28 +144,30 @@ describe("a piece valued by its method (#2359)", () => {
         data: { collectionId, name: "Cover", abbreviation: "Cov", sortOrder: 1 },
       })
     ).id;
-    for (const [i, f] of COVER_FORMATS.entries()) {
-      const row = await prisma.stampFormat.create({
-        data: { collectionId, name: f.name, abbreviation: f.abbreviation, sortOrder: i, coverKind: f.coverKind },
-      });
-      cover.set(f.coverKind, row.id);
-    }
+    const priceColumn = async (abbreviation: string, sortOrder: number, symbol: string | null = null) =>
+      (
+        await prisma.stampCondition.create({
+          data: { collectionId, name: abbreviation, abbreviation, symbol, sortOrder, priceOnly: true },
+        })
+      ).id;
+    efId = await priceColumn("EF", 1);
+    mefId = await priceColumn("MeF", 2);
+    mifId = await priceColumn("MiF", 3, "⊠");
+    bfstId = await priceColumn("Bfst", 4);
 
     // Mi 200 carries a price as the Cover format too — the trap a piece valued as its leading stamp,
-    // in its own format, would walk straight into; once Cover has a kind it is Mi 200's EF price,
-    // which the typed EF price already fills.
+    // in its own format, would walk straight into.
     mi200 = await stamp("Mi 200", [
       { amount: "10.00" },
       { amount: "55.00", formatId: blk4Id },
       { amount: "300.00", formatId: coverId },
-      { amount: "40.00", formatId: cover.get("cover_ef") },
-      { amount: "60.00", formatId: cover.get("cover_mef") },
-      { amount: "30.00", formatId: cover.get("cover_mif") },
+      { amount: "40.00", conditionId: efId },
+      { amount: "60.00", conditionId: mefId },
+      { amount: "30.00", conditionId: mifId },
     ]);
     mi201 = await stamp("Mi 201", []);
     mi205 = await stamp("Mi 205", [{ amount: "4.00" }]);
-    // Priced only on the Cover format: that price moves to its EF when Cover gets its kind.
-    mi210 = await stamp("Mi 210", [{ amount: "8.00" }, { amount: "25.00", formatId: coverId }]);
+    mi210 = await stamp("Mi 210", [{ amount: "8.00" }, { amount: "25.00", conditionId: efId }]);
 
     carrierId = (await createItem(userId, collectionId, { stampId: mi200, conditionId: mnhId })).id;
     await prisma.item.update({ where: { id: carrierId }, data: { formatId: coverId } });
@@ -169,6 +184,49 @@ describe("a piece valued by its method (#2359)", () => {
     await prisma.trade.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { ownerId: userId } });
     await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("leaves a piece without a figure while nothing is mapped, and says which role (#2375)", async () => {
+    const v = await valueOf(carrierId);
+    assert.equal(v.amount, null);
+    assert.equal(v.piece?.partial, true);
+    assert.deepEqual(v.piece?.unmapped, [{ method: "michel", role: "used" }]);
+    // Never filled from another role, and never from the copy's own condition.
+    assert.deepEqual(v.piece?.missing, []);
+  });
+
+  it("maps each method's roles to the collection's conditions, any condition, one role at a time", async () => {
+    const map = (method: Parameters<typeof setValuationMethodRole>[2]["method"], role: string, conditionId: string) =>
+      setValuationMethodRole(userId, collectionId, { method, role: role as never, conditionId });
+    for (const method of ["michel", "fischer", "fischer_fp_fw_fm", "sum_of_used"] as const) {
+      await map(method, "used", mnhId);
+    }
+    await map("michel", "cover_ef", efId);
+    await map("michel", "cover_mef", mefId);
+    await map("michel", "cover_mif", mifId);
+    await map("michel", "on_piece", bfstId);
+    await map("fischer", "cover", mifId);
+    await map("fischer", "on_piece", bfstId);
+    await map("fischer_fp_fw_fm", "fp", efId);
+    await map("fischer_fp_fw_fm", "fw", mefId);
+    await map("fischer_fp_fw_fm", "fm", mifId);
+    await map("fischer_fp_fw_fm", "on_piece", bfstId);
+    const roles = await getValuationMethodRoles(userId, collectionId);
+    assert.deepEqual(roles.fischer, { used: mnhId, cover: mifId, on_piece: bfstId });
+    assert.deepEqual(roles.sum_of_used, { used: mnhId });
+
+    // A role the method does not read, a condition of another collection, and someone else, refused.
+    await assert.rejects(() => map("fischer", "fm", mifId), /does not read/);
+    await assert.rejects(() => map("michel", "never_hinged", "no-such-condition"), /Condition not found/);
+    await assert.rejects(() =>
+      setValuationMethodRole("someone-else", collectionId, { method: "michel", role: "used", conditionId: mnhId })
+    );
+    // The database refuses the pair too.
+    await assert.rejects(() =>
+      prisma.valuationMethodRole.create({
+        data: { collectionId, method: "sum_of_used", role: "cover_ef", conditionId: efId },
+      })
+    );
   });
 
   it("values a piece whose format has no kind at the sum of used prices, partial where one is missing", async () => {
@@ -200,25 +258,22 @@ describe("a piece valued by its method (#2359)", () => {
     );
   });
 
-  it("moves a format's own prices to Cover EF when it is given the kind On cover", async () => {
+  it("gives a format the kind On cover and moves nothing (#2375)", async () => {
     await updateStampFormat(userId, coverId, { name: "Cover", abbreviation: "Cov", pieceKind: "on_cover" });
     const prices = await prisma.stampCatalogPrice.findMany({
-      where: { stampId: { in: [mi200, mi210] }, formatId: { in: [coverId, cover.get("cover_ef")!] } },
-      select: { stampId: true, formatId: true, price: true },
+      where: { stampId: { in: [mi200, mi210] }, formatId: coverId },
+      select: { stampId: true, price: true },
     });
-    assert.deepEqual(
-      prices.map((p) => [p.stampId, p.formatId, p.price?.toString()]).sort(),
-      [
-        [mi200, cover.get("cover_ef"), "40"],
-        [mi210, cover.get("cover_ef"), "25"],
-      ].sort()
-    );
+    assert.deepEqual(prices.map((p) => [p.stampId, p.price?.toString()]), [[mi200, "300"]]);
   });
 
   it("values a rate-correct MiF cover under Michel, the collection's default, at the highest MiF price", async () => {
     const v = await valueOf(carrierId);
     assert.equal(v.amount, "30.00");
     assert.equal(v.piece?.method, "michel");
+    // Every price read from its mapped condition, named by it.
+    assert.deepEqual(v.piece?.columns.cover_mif, { conditionId: mifId, abbreviation: "MiF", symbol: "⊠" });
+    assert.deepEqual(v.piece?.unmapped, []);
     assert.deepEqual(v.piece?.methodSource, { kind: "collection" });
     assert.equal(v.piece?.usage, "mif");
     // Mi 201 and Mi 205 have no MiF price: either could have been the highest.
@@ -282,15 +337,15 @@ describe("a piece valued by its method (#2359)", () => {
 
   it("opens a piece's price fields on what is on file, values typed prices unsaved, and saves them (#2368)", async () => {
     const fields = await getPiecePriceFields(userId, collectionId, {
-      conditionId: mnhId,
+      columns: { used: mnhId, cover_mif: mifId },
       stampIds: [mi200, mi201, mi205],
     });
     assert.equal(fields.stamps[mi205].currency, "EUR");
     assert.equal(fields.stamps[mi205].isUmbrella, false);
     assert.equal(fields.recorded[piecePriceKey(mi200, "used")], "10.00");
     assert.equal(fields.recorded[piecePriceKey(mi200, "cover_mif")], "30.00");
-    // The block's own price is not a field: the used field is the single's.
-    assert.equal(Object.keys(fields.recorded).filter((k) => k.startsWith(mi200)).length, 4);
+    // The block's own price is not a field: the used field is the single's; and only the columns asked.
+    assert.equal(Object.keys(fields.recorded).filter((k) => k.startsWith(mi200)).length, 2);
     assert.equal(fields.recorded[piecePriceKey(mi205, "cover_mif")], undefined);
 
     // Typed and not saved: the value reads it — Mi 205's MiF 45 is now the highest — and nothing is
@@ -304,32 +359,32 @@ describe("a piece valued by its method (#2359)", () => {
       ],
       itemId: null,
       franking: "rate_correct",
-      typed: [{ stampId: mi205, price: "cover_mif", amount: "45,00" }],
+      typed: [{ stampId: mi205, price: "cover_mif", conditionId: mifId, amount: "45,00" }],
     });
     assert.equal(preview?.amount, "45.00");
     assert.equal(preview?.piece?.partial, false);
     const window = await getCarrierValuation(userId, carrierId, [
-      { stampId: mi201, price: "cover_mif", amount: "50" },
-      { stampId: mi205, price: "cover_mif", amount: "not a price" },
+      { stampId: mi201, price: "cover_mif", conditionId: mifId, amount: "50" },
+      { stampId: mi205, price: "cover_mif", conditionId: mifId, amount: "not a price" },
     ]);
     assert.equal(window.value?.amount, "50.00");
     assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: { in: [mi201] } } }), 0);
     assert.equal((await valueOf(carrierId)).amount, "30.00");
 
-    // Saved where the value reads them: the main catalogue's latest edition, this condition, no
-    // certificate — the reserved row for a price on cover, the single for the used price.
+    // Saved where the value reads them: the main catalogue's latest edition, the column's condition,
+    // single, no certificate.
     await setPiecePrices(userId, collectionId, {
-      conditionId: mnhId,
       prices: [
-        { stampId: mi205, price: "cover_mif", amount: "45,00" },
-        { stampId: mi201, price: "used", amount: "?" },
+        { stampId: mi205, price: "cover_mif", conditionId: mifId, amount: "45,00" },
+        { stampId: mi201, price: "used", conditionId: mnhId, amount: "?" },
       ],
     });
     const saved = await prisma.stampCatalogPrice.findMany({
-      where: { stampId: { in: [mi201, mi205] }, conditionId: mnhId },
-      select: { id: true, stampId: true, formatId: true, price: true, mark: true, catalogEditionId: true, certificateStatusId: true },
+      where: { stampId: { in: [mi201, mi205] }, conditionId: { in: [mnhId, mifId] } },
+      select: { id: true, stampId: true, conditionId: true, formatId: true, price: true, mark: true, catalogEditionId: true, certificateStatusId: true },
     });
-    const mif = saved.find((p) => p.stampId === mi205 && p.formatId === cover.get("cover_mif"));
+    const mif = saved.find((p) => p.stampId === mi205 && p.conditionId === mifId);
+    assert.equal(mif?.formatId, null);
     assert.equal(mif?.price?.toString(), "45");
     assert.equal(mif?.catalogEditionId, editionId);
     assert.equal(mif?.certificateStatusId, null);
@@ -341,21 +396,16 @@ describe("a piece valued by its method (#2359)", () => {
     // Parsed before anything is written; and only the owner may.
     await assert.rejects(() =>
       setPiecePrices(userId, collectionId, {
-        conditionId: mnhId,
         prices: [
-          { stampId: mi201, price: "cover_mif", amount: "7" },
-          { stampId: mi205, price: "used", amount: "abc" },
+          { stampId: mi201, price: "cover_mif", conditionId: mifId, amount: "7" },
+          { stampId: mi205, price: "used", conditionId: mnhId, amount: "abc" },
         ],
       })
     );
-    assert.equal(
-      await prisma.stampCatalogPrice.count({ where: { stampId: mi201, formatId: cover.get("cover_mif") } }),
-      0
-    );
+    assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: mi201, conditionId: mifId } }), 0);
     await assert.rejects(() =>
       setPiecePrices("someone-else", collectionId, {
-        conditionId: mnhId,
-        prices: [{ stampId: mi205, price: "used", amount: "1" }],
+        prices: [{ stampId: mi205, price: "used", conditionId: mnhId, amount: "1" }],
       })
     );
 
@@ -419,6 +469,27 @@ describe("a piece valued by its method (#2359)", () => {
     const corrected = await previewPieceValue(userId, collectionId, { ...input, itemId: carrierId });
     assert.equal(corrected?.piece?.method, "sum_of_used");
     await setPieceValuation(userId, carrierId, { method: null });
+  });
+
+  it("values a line in a cover format as a piece of its one stamp (#2375)", async () => {
+    // A want, a lot line or a trade line is not a copy; in a format of a kind it has no prices of
+    // its own, so it is valued as one stamp once on that cover, rate-correct, by the area's method.
+    const line = {
+      id: "line",
+      stampId: mi200,
+      conditionId: mnhId,
+      certificateStatusId: null,
+      formatId: coverId,
+      unknownVariant: false,
+      copy: null,
+      faultReductionPercent: null,
+      valueModifier: null,
+      candidateStampIds: null,
+    };
+    const v = (await valuateItemRows(collectionId, [line])).get("line")!;
+    assert.equal(v.amount, "40.00");
+    assert.equal(v.piece?.usage, "ef");
+    assert.equal(v.piece?.franking, "rate_correct");
   });
 
   it("values one stamp once on a cover at its EF price, and still counts it", async () => {
@@ -496,29 +567,22 @@ describe("a piece valued by its method (#2359)", () => {
     assert.equal((await valueOf(carrierId)).amount, "120.00");
   });
 
-  it("reads a still-valid stamp's cover price from Michel's rule (#2358) in the used condition", async () => {
-    const usedId = (
+  it("unmaps a role when its condition is deleted, and the value says so (#2375)", async () => {
+    const spare = (
       await prisma.stampCondition.create({
-        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1, priceRole: "used" },
+        data: { collectionId, name: "Spare", abbreviation: "SP", sortOrder: 9, priceOnly: true },
       })
     ).id;
-    await prisma.stampCondition.update({ where: { id: mnhId }, data: { priceRole: "never_hinged" } });
-    await prisma.collectionArea.update({ where: { id: areaId }, data: { stillValidForPostage: true } });
-    const mi300 = await stamp("Mi 300", [{ amount: "5.00" }]);
-    await prisma.stampCatalogPrice.create({
-      data: { stampId: mi300, catalogEditionId: editionId, conditionId: usedId, price: "1.00", currency: "EUR" },
-    });
-    const piece = await createItem(userId, collectionId, { stampId: mi300, conditionId: usedId });
-    await updateItem(userId, piece.id, { formatId: coverId });
-    try {
-      // EF under Michel: max(0.40, 1.00 + 20 %), under the never-hinged 5.00.
-      const v = await valueOf(piece.id);
-      assert.equal(v.amount, "1.20");
-      assert.equal(v.piece?.usage, "ef");
-    } finally {
-      await prisma.item.delete({ where: { id: piece.id } });
-      await prisma.collectionArea.update({ where: { id: areaId }, data: { stillValidForPostage: null } });
-    }
+    await setValuationMethodRole(userId, collectionId, { method: "michel", role: "cover_mif", conditionId: spare });
+    const partial = await valueOf(carrierId);
+    assert.deepEqual(partial.piece?.columns.cover_mif?.abbreviation, "SP");
+    assert.equal(partial.amount, null);
+    await prisma.stampCondition.delete({ where: { id: spare } });
+    const unmapped = await valueOf(carrierId);
+    assert.deepEqual(unmapped.piece?.unmapped, [{ method: "michel", role: "cover_mif" }]);
+    assert.equal(unmapped.piece?.columns.cover_mif, undefined);
+    await setValuationMethodRole(userId, collectionId, { method: "michel", role: "cover_mif", conditionId: mifId });
+    assert.equal((await valueOf(carrierId)).amount, "120.00");
   });
 
   it("refuses a franking or a method the database does not know", async () => {
@@ -529,7 +593,7 @@ describe("a piece valued by its method (#2359)", () => {
       prisma.collectionArea.update({ where: { id: areaId }, data: { valuationMethod: "scott" } })
     );
     await assert.rejects(() =>
-      prisma.stampFormat.update({ where: { id: cover.get("cover_ef")! }, data: { pieceKind: "on_cover" } })
+      prisma.stampFormat.update({ where: { id: blk4Id }, data: { pieceKind: "on_envelope" } })
     );
   });
 });

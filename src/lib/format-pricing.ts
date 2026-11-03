@@ -3,14 +3,7 @@ import { prisma } from "./db";
 import { getFormatFactorRows } from "./format-factors";
 import { formatFactorKey, resolveFormatFactor } from "./format-factor";
 import { getStampFormats, type StampFormatData } from "./stamp-formats";
-import type { FormatDerivation } from "./catalog-price";
-import { isCoverKind } from "./cover-kind";
-import {
-  isStillValidCoverKind,
-  resolveStillValid,
-  stillValidRuleOf,
-  type StillValidRule,
-} from "./still-valid-postage";
+import { resolveStillValid } from "./still-valid-postage";
 
 // Resolving, for one stamp, the multiplier that applies to each (format, condition) pair.
 //
@@ -27,10 +20,6 @@ export interface StampFormatPricing {
   formats: StampFormatData[];
   /** `formatId~conditionId` → multiplier. A missing entry means nothing derives there. */
   factors: Record<string, number>;
-  /** Set when the stamp is still valid for postage and both of the rule's conditions are chosen
-   *  (#2358): its EF, MeF and MiF prices in the used condition then come from Michel's rule, in
-   *  place of their multipliers. */
-  stillValid: StillValidRule | null;
 }
 
 async function resolveStampCollection(stampId: string): Promise<string> {
@@ -84,16 +73,14 @@ export async function getStampFormatPricing(
   stampId: string
 ): Promise<StampFormatPricing> {
   const collectionId = await resolveStampCollection(stampId);
-  const [formats, rows, areaPath, stamp, stillValidFor] = await Promise.all([
-    // A tab for each of a copy's formats, then the prices on cover and on piece (#2356).
-    getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
+  const [formats, rows, areaPath, stamp] = await Promise.all([
+    getStampFormats(ownerId, collectionId),
     getFormatFactorRows(collectionId),
     areaPathIds(collectionId, stampId),
     prisma.stamp.findUnique({
       where: { id: stampId },
       select: { issueMemberships: { select: { issueId: true }, take: 1 } },
     }),
-    makeStillValidLookup(collectionId),
   ]);
   // A stamp belongs to at most one issue in practice; an issue anchor matches that one.
   const issueId = stamp?.issueMemberships[0]?.issueId ?? null;
@@ -115,7 +102,7 @@ export async function getStampFormatPricing(
       if (resolved) factors[formatFactorKey(format.id, condition.id)] = resolved.factor;
     }
   }
-  return { formats, factors, stillValid: stillValidFor(areaPath[0] ?? null, issueId) };
+  return { formats, factors };
 }
 
 /**
@@ -191,19 +178,15 @@ export async function makeFormatFactorLookup(
 }
 
 /**
- * Whether a stamp is still valid for postage (#2358), for many stamps at once — the rule it is then
- * priced by on cover, or null. The marks of the collection's areas and issues are loaded once and
- * resolved in memory: the issue's own mark first, then the area — the stamp's primary one, or the
- * issue's — and up the tree. Null for every stamp while either of the rule's conditions is unchosen.
+ * Whether a stamp is still valid for postage (#2358), for many stamps at once — what the *Michel*
+ * method's rule for such stamps asks (#2375). The marks of the collection's areas and issues are
+ * loaded once and resolved in memory: the issue's own mark first, then the area — the stamp's
+ * primary one, or the issue's — and up the tree.
  */
 export async function makeStillValidLookup(
   collectionId: string
-): Promise<(areaId: string | null, issueId: string | null) => StillValidRule | null> {
-  const [conditions, areas, issues] = await Promise.all([
-    prisma.stampCondition.findMany({
-      where: { collectionId, priceRole: { not: null } },
-      select: { id: true, priceRole: true },
-    }),
+): Promise<(areaId: string | null, issueId: string | null) => boolean> {
+  const [areas, issues] = await Promise.all([
     prisma.collectionArea.findMany({
       where: { collectionId },
       select: { id: true, parentId: true, stillValidForPostage: true },
@@ -213,10 +196,8 @@ export async function makeStillValidLookup(
       select: { id: true, stillValidForPostage: true },
     }),
   ]);
-  const rule = stillValidRuleOf(conditions);
-  if (!rule) return () => null;
   if (!areas.some((a) => a.stillValidForPostage) && !issues.some((i) => i.stillValidForPostage)) {
-    return () => null;
+    return () => false;
   }
 
   const areaById = new Map(areas.map((a) => [a.id, a]));
@@ -234,32 +215,7 @@ export async function makeStillValidLookup(
     return marks;
   };
   return (areaId, issueId) =>
-    resolveStillValid(issueId ? (issueMark.get(issueId) ?? null) : null, marksUp(areaId)) ? rule : null;
-}
-
-/**
- * {@link makeFormatFactorResolver} for a list's price column, which shows a cover price by Michel's
- * rule where a still-valid stamp's EF, MeF or MiF price in the used condition is missing (#2358).
- * Every other (format, condition) pair resolves its multiplier exactly as before.
- */
-export async function makeFormatDerivationResolver(
-  collectionId: string,
-  formatId: string | null,
-  conditionId: string | null
-): Promise<(areaId: string | null, issueId: string | null) => FormatDerivation> {
-  const [factorFor, format] = await Promise.all([
-    makeFormatFactorResolver(collectionId, formatId, conditionId),
-    formatId
-      ? prisma.stampFormat.findFirst({ where: { id: formatId, collectionId }, select: { coverKind: true } })
-      : null,
-  ]);
-  const kind = format?.coverKind;
-  if (!conditionId || !isCoverKind(kind) || !isStillValidCoverKind(kind)) return factorFor;
-  const stillValidFor = await makeStillValidLookup(collectionId);
-  return (areaId, issueId) => {
-    const rule = stillValidFor(areaId, issueId);
-    return rule && rule.usedConditionId === conditionId ? rule : factorFor(areaId, issueId);
-  };
+    resolveStillValid(issueId ? (issueMark.get(issueId) ?? null) : null, marksUp(areaId));
 }
 
 /**
@@ -271,9 +227,5 @@ export async function getCollectionFormatsForPricing(
   ownerId: string,
   collectionId: string
 ): Promise<StampFormatPricing> {
-  return {
-    formats: await getStampFormats(ownerId, collectionId, { withCoverPrices: true }),
-    factors: {},
-    stillValid: null,
-  };
+  return { formats: await getStampFormats(ownerId, collectionId), factors: {} };
 }

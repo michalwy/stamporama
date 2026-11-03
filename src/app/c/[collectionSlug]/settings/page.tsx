@@ -22,6 +22,7 @@ import { getColnectListMappings } from "@/lib/colnect-list-sync";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { getMailSettings } from "@/lib/mail/messages";
 import { getAuctionReminderSettings } from "@/lib/auction-reminder";
+import { getValuationMethodRoles } from "@/lib/valuation-methods";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
 import { listDelcampeListingProfiles } from "@/lib/delcampe-listing-profile";
@@ -111,16 +112,13 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     titleLanguages,
     mailSettings,
     auctionReminder,
+    valuationMethodRoles,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getCatalogSettingsTree(session.user.id, collection.id),
     // With the price columns only (#2374): Conditions lists every one, and the multipliers take them.
     getStampConditions(session.user.id, collection.id, { withPriceOnly: true }),
-    // With the cover prices (#2356): the multipliers take them; the formats list leaves them out.
-    getStampFormats(session.user.id, collection.id, {
-      withCoverPrices: true,
-      withPieceFormats: true,
-    }),
+    getStampFormats(session.user.id, collection.id),
     getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
@@ -152,6 +150,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getCollectionTitleLanguages(session.user.id, collection.id),
     getMailSettings(session.user.id, collection.id),
     getAuctionReminderSettings(session.user.id, collection.id),
+    getValuationMethodRoles(session.user.id, collection.id),
   ]);
 
   return (
@@ -223,6 +222,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
               ? collection.valuationMethod
               : DEFAULT_VALUATION_METHOD
           }
+          valuationMethodRoles={valuationMethodRoles}
           photoStorageBytes={photoStorageBytes}
           // Beside the figure above and never added to it (#591): the storage figure is how much of
           // the collector's data is held, this is how much disk the instance is using as scratch.

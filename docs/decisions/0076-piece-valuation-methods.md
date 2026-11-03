@@ -7,7 +7,10 @@ the issue, and its *to be confirmed* points were implemented as written, with th
 issue left open answered in §7. Amends [ADR-0044](0044-multi-stamp-copies.md) §6 (a carrier's value
 was the figure recorded on it, #747) and completes [ADR-0020](0020-stamp-format-axis.md) §10 (the prices on
 cover and on piece, #2356, which nothing read for a copy until now). Part of the cover valuation track
-#2353 and #2356–#2359; #2353 shows how the value was reached.
+#2353 and #2356–#2359; #2353 shows how the value was reached. **Amended by
+[ADR-0077](0077-valuation-method-roles.md) (#2375)**: every price a method reads comes from a condition
+it maps to each of its roles, the reserved cover formats are gone, and Michel's rule is the Michel
+method's — §4 and §7 say where.
 
 ## Context
 
@@ -77,6 +80,10 @@ giving a format the kind moves its prices and multipliers to *Cover EF* (*On pie
 key the reserved row already fills keeps the reserved row's. A want, a lot line or a trade line in such
 a format is priced at the reserved row for the same reason, and the price surfaces leave the format out.
 
+*Since ADR-0077 (#2375)*: giving a format a kind moves nothing, there being no reserved row to move to;
+the price surfaces still leave the format out, and a want, a lot line or a trade line in it is valued as
+a piece of its one stamp, rate-correct, from the conditions its method maps.
+
 One stamp once on a format of kind *On cover* is still a copy of that stamp and still counted (ADR-0044
 §3 is unchanged); only its value is the method's — its EF price under Michel.
 
@@ -110,7 +117,8 @@ kind, moving their prices as §4 does. The collector can change any of them afte
   counts, and a block is simply MeF.
 - **A still-valid stamp's cover prices come from Michel's rule** (#2358) for a piece too: where its
   EF, MeF or MiF price is read in the used condition, the rule replaces the multiplier, as on the price
-  surfaces.
+  surfaces. *Since ADR-0077 §4 (#2375)*: the rule is the Michel method's alone, read from the conditions
+  it maps as used and never hinged, and shown as derived in the piece's windows only.
 - **A piece's value is in the collection currency**, where its prices were compared; its modifier's
   amount is in that currency too.
 - **A trade's agreed valuation values a piece by its method in the agreed book**: the method is the

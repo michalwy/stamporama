@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "../../db";
-import { COPY_FORMAT_WHERE } from "../../stamp-formats";
 import { notFound } from "../errors";
 import { FACEBOOK_PLATFORM_MODULE } from "../../platform-modules";
 import type {
@@ -127,9 +126,8 @@ export async function readCollectionVocabulary(
           translations: { where: { language }, select: { name: true } },
         },
       }),
-      // A copy's formats: the cover prices (#2356) are named only by the catalogue price tools.
       prisma.stampFormat.findMany({
-        where: { collectionId, ...COPY_FORMAT_WHERE },
+        where: { collectionId },
         orderBy: { sortOrder: "asc" },
         select: {
           id: true,

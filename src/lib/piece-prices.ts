@@ -2,7 +2,6 @@ import "server-only";
 import { prisma } from "./db";
 import { buildEffectivePrimaryCatalogMap } from "./pricing";
 import { assertCollectionOwner } from "./platform-category";
-import { isCoverKind, type CoverKind } from "./cover-kind";
 import { parsePriceCellInput } from "./catalog-price-mark";
 import { priceCellInput, quickSetCatalogPrices } from "./stamps";
 import { getVariantSubtrees, type VariantPriceRow } from "./variant-prices";
@@ -11,9 +10,9 @@ import { piecePriceKey, type TypedPiecePrice } from "./piece-price-entry";
 import type { PiecePrice } from "./piece-valuation";
 
 // A piece's stamp prices typed in place (#2368) — the database half: what each field opens on, and
-// the save. Every field is a stamp × price at the piece's condition, no certificate, the latest
-// edition of the stamp's main catalogue — the used price at the single, a price on cover or on piece
-// at its reserved row (#2356) — which is exactly the price the piece's value reads.
+// the save. Every field is a stamp × price in the condition the piece's method maps to that price's
+// role (#2375), single, no certificate, the latest edition of the stamp's main catalogue — which is
+// exactly the price the piece's value reads.
 
 /** One stamp's fields: where its prices land and what is on file there. */
 export interface PiecePriceStamp {
@@ -31,17 +30,6 @@ export interface PiecePriceFields {
   recorded: Record<string, string>;
   /** Each umbrella's tree as the variant grid draws it (`subtree`), by the umbrella's id. */
   trees: Record<string, VariantPriceRow[]>;
-}
-
-/** The prices typed in place may land on: the single, and the four reserved rows by kind. */
-async function coverRows(collectionId: string): Promise<Map<CoverKind, string>> {
-  const rows = await prisma.stampFormat.findMany({
-    where: { collectionId, coverKind: { not: null } },
-    select: { id: true, coverKind: true },
-  });
-  const byKind = new Map<CoverKind, string>();
-  for (const r of rows) if (isCoverKind(r.coverKind)) byKind.set(r.coverKind, r.id);
-  return byKind;
 }
 
 /** Each stamp's main catalogue at its latest edition — where its prices are typed. */
@@ -84,13 +72,13 @@ async function mainCatalogs(
 
 /**
  * What the fields of a piece's stamps open on (#2368): each stamp's main catalogue and what is on file
- * for it at the piece's condition, and each umbrella's variants — the tree #618's grid draws — with
- * theirs. One read for the whole piece.
+ * for it in the condition of each column (#2375), and each umbrella's variants — the tree #618's grid
+ * draws — with theirs. One read for the whole piece.
  */
 export async function getPiecePriceFields(
   ownerId: string,
   collectionId: string,
-  input: { conditionId: string; stampIds: readonly string[] }
+  input: { columns: Partial<Record<PiecePrice, string>>; stampIds: readonly string[] }
 ): Promise<PiecePriceFields> {
   await assertCollectionOwner(ownerId, collectionId);
   const asked = await prisma.stamp.findMany({
@@ -106,29 +94,29 @@ export async function getPiecePriceFields(
   const stampIds = [
     ...new Set([...asked.map((s) => s.id), ...Object.values(trees).flat().map((r) => r.stampId)]),
   ];
-  const [catalogs, covers] = await Promise.all([
-    mainCatalogs(collectionId, stampIds),
-    coverRows(collectionId),
-  ]);
-  const priceByFormat = new Map<string | null, PiecePrice>([[null, "used"]]);
-  for (const [kind, id] of covers) priceByFormat.set(id, kind);
+  const catalogs = await mainCatalogs(collectionId, stampIds);
+  const pricesOfCondition = new Map<string, PiecePrice[]>();
+  for (const [price, conditionId] of Object.entries(input.columns) as [PiecePrice, string][]) {
+    pricesOfCondition.set(conditionId, [...(pricesOfCondition.get(conditionId) ?? []), price]);
+  }
 
   const prices = await prisma.stampCatalogPrice.findMany({
     where: {
       stampId: { in: [...catalogs.keys()] },
       catalogEditionId: { in: [...new Set([...catalogs.values()].map((c) => c.editionId))] },
-      conditionId: input.conditionId,
+      conditionId: { in: [...pricesOfCondition.keys()] },
       certificateStatusId: null,
-      OR: [{ formatId: null }, { formatId: { in: [...covers.values()] } }],
+      formatId: null,
     },
-    select: { stampId: true, catalogEditionId: true, formatId: true, price: true, mark: true },
+    select: { stampId: true, catalogEditionId: true, conditionId: true, price: true, mark: true },
   });
   const recorded: Record<string, string> = {};
   for (const p of prices) {
-    const price = priceByFormat.get(p.formatId);
     // Another catalogue's latest edition, where two areas' main catalogues differ.
-    if (!price || catalogs.get(p.stampId)?.editionId !== p.catalogEditionId) continue;
-    recorded[piecePriceKey(p.stampId, price)] = priceCellInput(p);
+    if (catalogs.get(p.stampId)?.editionId !== p.catalogEditionId) continue;
+    for (const price of pricesOfCondition.get(p.conditionId) ?? []) {
+      recorded[piecePriceKey(p.stampId, price)] = priceCellInput(p);
+    }
   }
 
   const stamps: Record<string, PiecePriceStamp> = {};
@@ -139,14 +127,15 @@ export async function getPiecePriceFields(
 }
 
 /**
- * Save the prices typed on a piece's stamps (#2368) — each where its field said it lands, and so read
- * by every other piece and copy of that stamp. Every figure is parsed before anything is written, so
- * a typo in the last field leaves the first ones unwritten too; a blank one is not sent at all.
+ * Save the prices typed on a piece's stamps (#2368) — each in the condition its column is read from
+ * (#2375), single, no certificate, and so read by every other piece and copy of that stamp. Every
+ * figure is parsed before anything is written, so a typo in the last field leaves the first ones
+ * unwritten too; a blank one is not sent at all.
  */
 export async function setPiecePrices(
   ownerId: string,
   collectionId: string,
-  input: { conditionId: string; prices: readonly TypedPiecePrice[] }
+  input: { prices: readonly TypedPiecePrice[] }
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   const parsed = input.prices.map((p) => {
@@ -157,25 +146,15 @@ export async function setPiecePrices(
     return { ...p, amount: cell.kind === "amount" ? cell.amount : cell.mark };
   });
   if (parsed.length === 0) return;
-  const [catalogs, covers] = await Promise.all([
-    mainCatalogs(
-      collectionId,
-      parsed.map((p) => p.stampId)
-    ),
-    coverRows(collectionId),
-  ]);
+  const catalogs = await mainCatalogs(
+    collectionId,
+    parsed.map((p) => p.stampId)
+  );
   for (const p of parsed) {
     const catalog = catalogs.get(p.stampId);
     if (!catalog) throw new Error("A stamp on this piece has no main catalogue to price it in.");
-    const formatId = p.price === "used" ? null : covers.get(p.price);
-    if (formatId === undefined) throw new Error("This collection has no row for that price on cover.");
-    await quickSetCatalogPrices(
-      ownerId,
-      p.stampId,
-      input.conditionId,
-      null,
-      [{ catalogNameId: catalog.catalogNameId, amount: p.amount }],
-      formatId
-    );
+    await quickSetCatalogPrices(ownerId, p.stampId, p.conditionId, null, [
+      { catalogNameId: catalog.catalogNameId, amount: p.amount },
+    ]);
   }
 }

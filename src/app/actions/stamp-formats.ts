@@ -28,14 +28,14 @@ async function getSession() {
   return session;
 }
 
-/** A copy's formats; with `withCoverPrices`, the cover-price rows too (#2356) — for a price
- *  surface only. */
+/** The collection's formats; with `forPrices`, without the formats of a kind (#2359) — for a price
+ *  surface. */
 export async function getStampFormatsAction(
   collectionId: string,
-  withCoverPrices = false
+  forPrices = false
 ): Promise<StampFormatData[]> {
   const session = await getSession();
-  return getStampFormats(session.user.id, collectionId, { withCoverPrices });
+  return getStampFormats(session.user.id, collectionId, { forPrices });
 }
 
 function parseFields(formData: FormData): {
