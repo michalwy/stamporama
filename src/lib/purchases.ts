@@ -22,6 +22,7 @@ import {
 } from "./purchase-kind";
 import { isPurchaseStatus, statusChangeStamp, type PurchaseStatus } from "./purchase-status";
 import { settleSupplies } from "./supply-settlement";
+import { normalizePurchaseNote } from "./purchase-note";
 import type { PhonePurchaseInput } from "./phone-purchase-rules";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
@@ -173,6 +174,8 @@ export interface PurchaseListItem {
   /** Started on the phone and not yet *Done at the desk* (#2006): when the phone started it, ISO,
    *  else null. The row's mark *started on the phone — to complete*. */
   toCompleteSince: string | null;
+  /** The document's note (#2378), else null — the row's note icon, its text the tooltip. */
+  note: string | null;
 }
 
 export interface PurchaseListFilters {
@@ -331,6 +334,7 @@ export async function listPurchasesPaginated(
       status: true,
       statusChangedAt: true,
       toCompleteSince: true,
+      note: true,
       shippingCost: true,
       contact: { select: { name: true } },
       platform: { select: { name: true } },
@@ -375,6 +379,7 @@ export async function listPurchasesPaginated(
       unvaluedLotCount: row.lots.filter((l) => l.price == null).length,
       statusChangedAt: row.statusChangedAt.toISOString(),
       toCompleteSince: row.toCompleteSince?.toISOString() ?? null,
+      note: row.note,
     };
   });
 
@@ -688,6 +693,23 @@ export async function markPurchaseDoneAtDesk(ownerId: string, purchaseId: string
   await prisma.purchase.updateMany({
     where: { id: purchaseId, toCompleteSince: { not: null } },
     data: { toCompleteSince: null },
+  });
+}
+
+/**
+ * The document's note (#2378): written as given, on any kind — a purchase, a trade's intake or an
+ * opening balance — and emptied by a blank one, which is stored as null. The text is the collector's
+ * own: nothing about the document's state refuses it, a completed one included.
+ */
+export async function setPurchaseNote(
+  ownerId: string,
+  purchaseId: string,
+  note: string | null
+): Promise<void> {
+  await assertPurchaseOwner(ownerId, purchaseId);
+  await prisma.purchase.update({
+    where: { id: purchaseId },
+    data: { note: normalizePurchaseNote(note) },
   });
 }
 

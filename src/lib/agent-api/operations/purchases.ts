@@ -7,6 +7,7 @@ import {
   createPurchase,
   getPurchase,
   listPurchasesPaginated,
+  setPurchaseNote,
   updatePurchase,
   type PurchaseStatus,
 } from "../../purchases";
@@ -76,10 +77,11 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // this module imports: `deleteLot` is on its list because it deletes a lot's copies with it, which
 // is why removal goes through `deleteEmptyLot` instead.
 //
-// **The incoming half of a trade is read-only here.** Its lot prices are the carried-over cost basis
-// of the copies that went the other way (#644) and are kept in step with them, not money anybody
-// paid, so no figure on it is the agent's to write. Opening balances are not reachable at all (#1321
-// is its own track).
+// **The incoming half of a trade is read-only here, but for its note.** Its lot prices are the
+// carried-over cost basis of the copies that went the other way (#644) and are kept in step with them,
+// not money anybody paid, so no figure on it is the agent's to write; the note (#2378) is the
+// collector's remark and is written on it as on any purchase. Opening balances are not reachable at
+// all (#1321 is its own track).
 //
 // ## Contacts
 //
@@ -240,7 +242,7 @@ export const listPurchasesOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "The purchases. `total` is lots, expenses, packing-supply lines and shipping added up in the purchase's own `currency`; `get_purchase` states the same money in the collection's base currency too. `fromTrade` marks the incoming half of a trade, which this surface reads and does not edit.",
+      "The purchases. `total` is lots, expenses, packing-supply lines and shipping added up in the purchase's own `currency`; `get_purchase` states the same money in the collection's base currency too. `fromTrade` marks the incoming half of a trade, which this surface reads and does not edit but for its note. `note` is the collector's own remark on the purchase, absent when there is none.",
   },
   handler: async (context, params) => readPurchases(context, params),
 };
@@ -297,13 +299,13 @@ export const getPurchaseOperation: Operation = {
   method: "GET",
   path: "/purchases/{purchaseId}",
   description:
-    "One purchase in full: who it was bought from and through, when, in what currency, its shipping, its lots, its expenses and its packing-supply lines, and what it all cost.",
+    "One purchase in full: who it was bought from and through, when, in what currency, its shipping, its lots, its expenses and its packing-supply lines, what it all cost, and the collector's note on it.",
   writes: false,
   parameters: [PURCHASE_ID_PARAMETER],
   result: {
     kind: "object",
     description:
-      "The purchase. `spend` is what the order cost as its screen states it: `paid` in the purchase's currency, and `base` in the collection's base currency at the rate frozen on the purchase — `null`, with `baseMissing` saying why, when no rate is recorded. Each lot carries its own `spend`, its price plus its share of the shipping, which is spread over every lot and expense by price. A lot's `copies` are managed in the app, never here; `removable` says whether `remove_purchase_lot` would take it. `editable` is false on the incoming half of a trade.",
+      "The purchase. `spend` is what the order cost as its screen states it: `paid` in the purchase's currency, and `base` in the collection's base currency at the rate frozen on the purchase — `null`, with `baseMissing` saying why, when no rate is recorded. Each lot carries its own `spend`, its price plus its share of the shipping, which is spread over every lot and expense by price. A lot's `copies` are managed in the app, never here; `removable` says whether `remove_purchase_lot` would take it. `editable` is false on the incoming half of a trade, where only the note is written. `note` is the collector's own remark, absent when there is none.",
   },
   handler: async (context, params) => readPurchase(context, params),
 };
@@ -546,8 +548,9 @@ export const createPurchaseOperation: Operation = {
   handler: async (context, params) => addPurchase(context, params),
 };
 
-/** What `update_purchase` may take off a purchase — the three header fields that may be empty. */
-const CLEARABLE_HEADER = ["seller", "platform", "shipping_cost"] as const;
+/** What `update_purchase` may take off a purchase — the three header fields that may be empty, and
+ *  its note (#2378). */
+const CLEARABLE_HEADER = ["seller", "platform", "shipping_cost", "note"] as const;
 
 const UPDATE_PURCHASE_PARAMETERS: readonly ParameterSpec[] = [
   PURCHASE_ID_PARAMETER,
@@ -564,12 +567,20 @@ const UPDATE_PURCHASE_PARAMETERS: readonly ParameterSpec[] = [
   CURRENCY_PARAMETER,
   SHIPPING_PARAMETER,
   {
+    name: "note",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The collector's note on the purchase, replacing the one there: plain text, line breaks kept, nothing else formatted. It is private — nothing that leaves the app shows it. The one thing written on the incoming half of a trade too, since it is no figure.",
+  },
+  {
     name: "clear",
     in: "body",
     type: "string[]",
     required: false,
     description:
-      "Header fields to empty — the seller, the platform or the shipping cost. Everything not named here or sent above is left as it is.",
+      "Fields to empty — the seller, the platform, the shipping cost or the note. Everything not named here or sent above is left as it is.",
     values: CLEARABLE_HEADER,
   },
 ];
@@ -580,21 +591,41 @@ export async function editPurchase(
 ): Promise<AgentPurchase> {
   const purchaseId = requiredString(params, "purchaseId");
   const ref = await assertPurchase(context, purchaseId);
-  assertEditable(ref, "editing its header");
 
   const clear = new Set(stringList(params, "clear"));
   const sellerValue = optionalString(params, "seller");
   const platformValue = optionalString(params, "platform");
   const shipping = optionalString(params, "shipping_cost");
+  const note = optionalString(params, "note");
   for (const [field, value] of [
     ["seller", sellerValue],
     ["platform", platformValue],
     ["shipping_cost", shipping],
+    ["note", note],
   ] as const) {
     if (value !== null && clear.has(field)) {
       throw invalidRequest(`"${field}" is both sent and named in "clear". Send one or the other.`);
     }
   }
+  const purchasedAt = optionalString(params, "purchased_at");
+  const currency = optionalString(params, "currency");
+
+  // The note (#2378) is the collector's remark, not a figure, so it is written on the incoming half of
+  // a trade as well; every header field stays refused there. A call that names only the note writes
+  // only the note, and leaves the header — and the exchange rate it freezes — alone.
+  const noteTouched = note !== null || clear.has("note");
+  const headerTouched =
+    sellerValue !== null ||
+    platformValue !== null ||
+    shipping !== null ||
+    purchasedAt !== null ||
+    currency !== null ||
+    [...clear].some((field) => field !== "note");
+  if (headerTouched || !noteTouched) assertEditable(ref, "editing its header");
+  if (noteTouched) {
+    await setPurchaseNote(context.ownerId, purchaseId, clear.has("note") ? null : note);
+  }
+  if (!headerTouched && noteTouched) return loadPurchase(context, purchaseId, ref);
 
   const current = await getPurchase(context.ownerId, purchaseId);
   if (!current) {
@@ -602,7 +633,6 @@ export async function editPurchase(
       `No purchase with id "${purchaseId}" is in this token's collection. Use \`list_purchases\` to find the right id.`
     );
   }
-  const purchasedAt = optionalString(params, "purchased_at");
 
   // `updatePurchase` replaces the whole header, so every field is restated: what was sent, or
   // what is there. The delivery status is always restated as it stands — nothing here moves it.
@@ -619,7 +649,7 @@ export async function editPurchase(
         ? await resolvePlatformParam(context, platformValue)
         : current.platformId,
     purchasedAt: purchasedAt !== null ? parseIsoDate(purchasedAt, "purchased_at") : current.purchasedAt,
-    currency: optionalString(params, "currency") ?? current.currency,
+    currency: currency ?? current.currency,
     shippingCost: clear.has("shipping_cost")
       ? null
       : shipping !== null
@@ -638,7 +668,7 @@ export const updatePurchaseOperation: Operation = {
   method: "PATCH",
   path: "/purchases/{purchaseId}",
   description:
-    "Correct a purchase's header: its seller, platform, date, currency or shipping. Only what is sent changes. Its lots and expenses have their own operations, and its delivery status is the collector's.",
+    "Correct a purchase's header — its seller, platform, date, currency or shipping — or write its note. Only what is sent changes. Its lots and expenses have their own operations, and its delivery status is the collector's. On the incoming half of a trade only the note is written.",
   writes: true,
   parameters: UPDATE_PURCHASE_PARAMETERS,
   result: {

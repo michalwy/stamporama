@@ -270,6 +270,8 @@ export interface AgentPurchaseRow {
   readonly total: string;
   /** The incoming half of a closed trade (#644): read-only here, its figures being carried over. */
   readonly fromTrade?: true;
+  /** The collector's note on it (#2378), when there is one. */
+  readonly note?: string;
   readonly path: string;
 }
 
@@ -288,6 +290,8 @@ export interface PurchaseListRow {
   readonly expenseCount: number;
   readonly total: string | null;
   readonly type: string;
+  /** Absent reads as none. */
+  readonly note?: string | null;
 }
 
 export function purchaseRow(row: PurchaseListRow, path: string): AgentPurchaseRow {
@@ -308,6 +312,7 @@ export function purchaseRow(row: PurchaseListRow, path: string): AgentPurchaseRo
     // Always set on a purchase (`PurchaseListItem.total` is null only on an opening balance).
     total: row.total ?? "0.00",
     fromTrade: row.type === "trade" ? (true as const) : undefined,
+    note: row.note ?? undefined,
     path,
   });
 }
@@ -361,11 +366,14 @@ export interface AgentPurchase {
   readonly currency: string;
   readonly status: string;
   readonly shippingCost?: string;
-  /** Whether this surface may write to it. False on the incoming half of a trade. */
+  /** Whether this surface may write to it. False on the incoming half of a trade, whose note alone
+   *  is still written. */
   readonly editable: boolean;
   readonly fromTrade?: true;
   /** The auction sale it was settled from (#28), by name. */
   readonly fromAuctionSale?: string;
+  /** The collector's note on it (#2378) — plain text, line breaks kept — when there is one. */
+  readonly note?: string;
   /** What the whole order cost. */
   readonly spend: AgentSpend;
   readonly lots: readonly AgentPurchaseLot[];
@@ -409,6 +417,8 @@ export interface PurchaseDetailRow {
   }[];
   readonly auctionSale: { name: string } | null;
   readonly trade: unknown | null;
+  /** The document's note (#2378); absent reads as none. */
+  readonly note?: string | null;
 }
 
 export function purchase(
@@ -436,6 +446,7 @@ export function purchase(
     editable: !fromTrade,
     fromTrade: fromTrade ? (true as const) : undefined,
     fromAuctionSale: row.auctionSale?.name,
+    note: row.note ?? undefined,
     spend: spend(row.spend),
     lots: row.lots.map((lot) =>
       compact({

@@ -1988,7 +1988,7 @@ of them write.
 | `get_purchase` | no | one purchase with its lots, its expenses and what it cost in both currencies |
 | `create_seller` | yes | a contact for a seller the collection has never bought from |
 | `create_purchase` | yes | the header: seller, platform, date, currency, shipping |
-| `update_purchase` | yes | correct the header; only what is sent changes, `clear` empties a field |
+| `update_purchase` | yes | correct the header or write the note (#2378); only what is sent changes, `clear` empties a field |
 | `add_purchase_lot` | yes | an open, empty, priced lot |
 | `update_purchase_lot` | yes | rename or reprice an **open** lot |
 | `remove_purchase_lot` | yes | take off a lot that is open, empty and on no other record |
@@ -2047,9 +2047,19 @@ line is never corrected or removed here (`updatePurchaseSupplyLine` and `deleteP
 are in `SHIPPING_CLOSED`): one lowered or moved after sales took from it hands their units back, a
 correction made on the order's screen with the batch in view.
 
-**The incoming half of a trade is read and never written.** Its lot prices are the carried-over
-cost basis of the copies that went the other way (#644), kept in step by `syncTradePurchasePool` —
-not money anybody paid — so every write refuses it and `get_purchase` says `editable: false`.
+**The incoming half of a trade is read and never written — but for its note.** Its lot prices are
+the carried-over cost basis of the copies that went the other way (#644), kept in step by
+`syncTradePurchasePool` — not money anybody paid — so every write refuses it and `get_purchase` says
+`editable: false`.
+
+**The note is read and written on every purchase this surface reaches** (#2378). `get_purchase` and
+`list_purchases` carry `note` when there is one; `update_purchase` takes `note` to replace it and
+`clear: ["note"]` to empty it, through `setPurchaseNote`, the screen's own write. **The note is the one
+thing written on the incoming half of a trade**, because it is the collector's remark and no figure:
+`editPurchase` refuses a trade's half whenever any header field is sent or cleared — and a call
+naming nothing at all, as before — and writes nothing on a refusal, the note included. A call naming
+only the note **does not call `updatePurchase`**, which would restate the header and re-freeze the
+exchange rate for nothing. An opening balance's note is not reached, as nothing about one is.
 **Opening balances are not reachable at all**: they are rows of the same table, and `assertPurchase`
 answers one as not found (#1321 is its own track).
 

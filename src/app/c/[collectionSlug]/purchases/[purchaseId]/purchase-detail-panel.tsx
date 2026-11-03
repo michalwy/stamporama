@@ -136,6 +136,7 @@ import { AttachCopiesDialog } from "./attach-copies-dialog";
 import { MoveToLotDialog, type MoveLotOption, type MoveLotRefusal } from "./move-to-lot-dialog";
 import { MoveCopiesToDocumentDialog } from "./move-copies-to-document-dialog";
 import { PurchaseExpensesCard } from "./purchase-expenses-card";
+import { PurchaseNoteCard } from "./purchase-note-card";
 import { PurchasePhoneCard } from "./purchase-phone-card";
 import { PurchasePhotosCard } from "./purchase-photos-card";
 import type { NotedStamp } from "@/lib/phone-purchase-rules";
@@ -416,6 +417,9 @@ export function PurchaseDetailPanel({
   // The order's other lines (#1907): an Expenses or Packing supplies card is drawn only once it has
   // one, so adding the first is the header's `⋮`, and the dialog it opens is held here.
   const [addingExpense, setAddingExpense] = useState(false);
+  // The Note card's editor (#2378): the card is drawn only once there is a note, so writing the first
+  // is the header's `⋮ → Add note`.
+  const [editingNote, setEditingNote] = useState(false);
   // The Photos card's file input, which the header's `⋮ → Add photos` opens (#2011).
   const photoInput = useRef<HTMLInputElement>(null);
   const [addingSupplies, setAddingSupplies] = useState(false);
@@ -925,6 +929,20 @@ export function PurchaseDetailPanel({
   // pinned copy cannot drift from the one it stands in for.
   const hasCopies = purchase.lots.some((l) => l.itemCount > 0);
   const headerLineActions: RowAction[] = [
+    ...(purchase.note
+      ? []
+      : [
+          {
+            key: "add-note",
+            label: "Add note",
+            icon: "notes" as const,
+            disabled: isPending,
+            onSelect: () => {
+              setError(undefined);
+              setEditingNote(true);
+            },
+          },
+        ]),
     ...(openingBalance
       ? []
       : [
@@ -1343,6 +1361,19 @@ export function PurchaseDetailPanel({
           style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 0 }}
         />
       </div>
+
+      {/* The document's note (#2378), under the figures and above the work — what was agreed, what is
+          still missing from the parcel. Drawn once it has one, or while the first is written. */}
+      <PurchaseNoteCard
+        purchaseId={purchase.id}
+        note={purchase.note}
+        editing={editingNote}
+        onEditingChange={setEditingNote}
+        isPending={isPending}
+        error={error}
+        run={run}
+        clearError={() => setError(undefined)}
+      />
 
       {/* Started on the phone (#2006): the mark, the stamps it noted and *Done at the desk*, above
           everything the desk does to complete it. */}

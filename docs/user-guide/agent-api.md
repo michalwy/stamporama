@@ -146,6 +146,8 @@ auction invoice, a seller's email — so you do not retype it. It can:
   a lot that is still empty**;
 - **add, change and remove expenses** — the things bought with the stamps that are not stock, like a
   magnifier or a catalogue;
+- **read, write, rewrite and remove the purchase's [note](purchases.md#a-documents-note)** — on the
+  order a closed trade created too, where the note is the one thing it writes;
 - **add packing supplies bought on the order** — a box of 100 envelopes at its price — which become a
   batch of that supply's stock, as on the purchase screen. It cannot change or remove a supply line
   once added; that stays on the purchase screen;
@@ -160,7 +162,8 @@ auction invoice, a seller's email — so you do not retype it. It can:
 take back.** It never adds, moves or removes a copy — the purchase arrives with empty lots, and you
 identify the stamps into them as you always do. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
-holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
+holds copies or has closed. It does not touch the order a closed trade created beyond its note, nor an
+opening balance at all, and it never sees or
 changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
 
