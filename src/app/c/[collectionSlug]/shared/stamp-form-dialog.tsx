@@ -206,7 +206,6 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [formatPricing, setFormatPricing] = useState<StampFormatPricing>({
     formats: [],
     factors: {},
-    stillValid: null,
   });
   const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
   const [pricesLoaded, setPricesLoaded] = useState(false);
@@ -1351,7 +1350,6 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   disabled={isPending}
                   formats={formatPricing.formats}
                   formatFactors={formatPricing.factors}
-                  stillValid={formatPricing.stillValid}
                   activeFormatId={activeFormatId}
                   onActiveFormatChange={setActiveFormatId}
                 />

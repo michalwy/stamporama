@@ -1,6 +1,5 @@
 import {
   FRANKING_LABELS,
-  PIECE_PRICE_LABELS,
   VALUATION_METHOD_LABELS,
   coverUsage,
   termCents,
@@ -11,10 +10,12 @@ import {
   type PieceRule,
 } from "./piece-valuation";
 import type { PieceValuation } from "./valuation";
+import { METHOD_ROLE_LABELS, roleOfPrice, type UnmappedRole } from "./valuation-method-roles";
 
 // The words a surface puts beside a piece's value (#2359) — pure, so the row, the copy page, the
 // Valuation window and the identification step say the same thing. The arithmetic (#2353) is the
-// Valuation window's and the identification step's.
+// Valuation window's and the identification step's. A price is named by the condition its method
+// maps it to (#2375) — *U*, *FM*, ⊠ — and by its role while the role is not set up.
 
 const RULE_WORDS: Record<PieceRule, string> = {
   sum_of_used: "sum of the stamps' used prices",
@@ -58,12 +59,28 @@ function inheritedFrom(inherited: InheritedMethod): string {
     : `from ${inherited.areaName ?? "its area"}`;
 }
 
-/** *Cover MiF price missing for 2 stamps*, or null when nothing is. */
-export function missingPricesText(missing: readonly MissingPiecePrice[]): string | null {
-  if (missing.length === 0) return null;
+type PieceNaming = Pick<PieceValuation, "method" | "columns">;
+
+/** The role a price stands for under the piece's method (#2375): *Cover MiF*, *Cover ⊠*, *FM*. */
+export function priceRoleLabel(piece: Pick<PieceValuation, "method">, price: PiecePrice): string {
+  const role = roleOfPrice(piece.method, price);
+  return role ? METHOD_ROLE_LABELS[role] : price;
+}
+
+/** A price's column heading (#2375): the mapped condition's abbreviation — *U*, *FM* — or, with its
+ *  role not set up, the role's name. */
+export function priceHeading(piece: PieceNaming, price: PiecePrice): string {
+  return piece.columns[price]?.abbreviation ?? priceRoleLabel(piece, price);
+}
+
+/** *FM price missing for 2 stamps*, or null when nothing is — each price named by its condition. */
+export function missingPricesText(
+  piece: PieceNaming & { missing: readonly MissingPiecePrice[] }
+): string | null {
+  if (piece.missing.length === 0) return null;
   const byPrice = new Map<string, number>();
-  for (const m of missing) {
-    const label = PIECE_PRICE_LABELS[m.price];
+  for (const m of piece.missing) {
+    const label = priceHeading(piece, m.price);
     byPrice.set(label, (byPrice.get(label) ?? 0) + 1);
   }
   return [...byPrice]
@@ -71,10 +88,33 @@ export function missingPricesText(missing: readonly MissingPiecePrice[]): string
     .join(", ");
 }
 
+/** *Michel's Cover MiF and Never hinged are not set up*, or null when every role read is (#2375). */
+export function unmappedRolesText(unmapped: readonly UnmappedRole[]): string | null {
+  if (unmapped.length === 0) return null;
+  const byMethod = new Map<string, string[]>();
+  for (const u of unmapped) {
+    const label = VALUATION_METHOD_LABELS[u.method];
+    byMethod.set(label, [...(byMethod.get(label) ?? []), METHOD_ROLE_LABELS[u.role]]);
+  }
+  return [...byMethod]
+    .map(([method, roles]) => {
+      const list =
+        roles.length === 1 ? roles[0] : `${roles.slice(0, -1).join(", ")} and ${roles[roles.length - 1]}`;
+      return `${method}'s ${list} ${roles.length === 1 ? "is" : "are"} not set up`;
+    })
+    .join("; ");
+}
+
 /** The hover over a piece's value on a row. */
 export function pieceValueTitle(piece: PieceValuation): string {
-  const missing = missingPricesText(piece.missing);
-  return `Computed for this piece: ${pieceValueRule(piece)}${missing ? `. Partial — ${missing}.` : ""}`;
+  const gaps = [unmappedRolesText(piece.unmapped), missingPricesText(piece)].filter(Boolean);
+  return `Computed for this piece: ${pieceValueRule(piece)}${gaps.length ? `. Partial — ${gaps.join("; ")}.` : ""}`;
+}
+
+/** Whether a component's price was worked out by Michel's rule rather than read (#2358, #2375) —
+ *  shown as derived, `~`. */
+export function isDerivedPrice(component: PieceComponent, price: PiecePrice): boolean {
+  return component.derived?.includes(price) ?? false;
 }
 
 /**
@@ -110,20 +150,11 @@ export function componentPrice(component: PieceComponent, price: PiecePrice): nu
   }
 }
 
-/** The short name of a price in the arithmetic: ⊙ for used, ⊠ for Fischer's cover price. */
-export function priceSymbol(price: PiecePrice, method: PieceValuation["method"]): string {
-  switch (price) {
-    case "used":
-      return "⊙";
-    case "cover_ef":
-      return method === "fischer_fp_fw_fm" ? "FP" : "EF";
-    case "cover_mef":
-      return method === "fischer_fp_fw_fm" ? "FW" : "MeF";
-    case "cover_mif":
-      return method === "fischer" ? "⊠" : method === "fischer_fp_fw_fm" ? "FM" : "MiF";
-    case "on_piece":
-      return "on piece";
-  }
+/** The short name of a price in the arithmetic (#2375): the mapped condition's symbol where it has
+ *  one — ⊙, ⊠ — else its abbreviation, else the role's name while it is not set up. */
+export function priceSymbol(piece: PieceNaming, price: PiecePrice): string {
+  const column = piece.columns[price];
+  return column ? (column.symbol ?? column.abbreviation) : priceRoleLabel(piece, price);
 }
 
 const ARITHMETIC_HEAD: Record<PieceRule, string | null> = {
@@ -143,7 +174,7 @@ const ARITHMETIC_HEAD: Record<PieceRule, string | null> = {
  * added, and the sum is of what is priced. Null when the rule added nothing at all.
  */
 export function pieceArithmetic(
-  piece: Pick<PieceValuation, "rule" | "usage" | "method" | "terms">,
+  piece: Pick<PieceValuation, "rule" | "usage" | "method" | "terms" | "columns" | "components">,
   label: (componentId: string) => string
 ): string | null {
   if (piece.terms.length === 0) return null;
@@ -154,13 +185,15 @@ export function pieceArithmetic(
   let priced = false;
   const parts = piece.terms.map((t) => {
     const share = t.percent === 100 ? "" : `${t.percent} % × `;
-    const unit = t.unit === null ? "—" : t.unit.toFixed(2);
+    const component = piece.components.find((c) => c.id === t.componentId);
+    const derived = component ? isDerivedPrice(component, t.price) : false;
+    const unit = t.unit === null ? "—" : `${derived ? "~" : ""}${t.unit.toFixed(2)}`;
     const times = t.times === 1 ? "" : ` × ${t.times}`;
     if (t.unit !== null) {
       cents += termCents(t.unit, t.percent) * t.times;
       priced = true;
     }
-    return `${share}${label(t.componentId)} ${priceSymbol(t.price, piece.method)} ${unit}${times}`;
+    return `${share}${label(t.componentId)} ${priceSymbol(piece, t.price)} ${unit}${times}`;
   });
   const sum = priced ? (cents / 100).toFixed(2) : "—";
   return `${head ? `${head}: ` : ""}${parts.join(" + ")} = ${sum}`;

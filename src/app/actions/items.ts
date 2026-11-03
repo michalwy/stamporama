@@ -29,8 +29,10 @@ import {
 } from "@/lib/carrier-values";
 import {
   isFranking,
+  isPiecePrice,
   isValuationMethod,
   type Franking,
+  type PiecePrice,
   type ValuationMethod,
 } from "@/lib/piece-valuation";
 import { getPiecePriceFields, setPiecePrices, type PiecePriceFields } from "@/lib/piece-prices";
@@ -224,29 +226,29 @@ export async function getCarrierValuationAction(
   return getCarrierValuation(session.user.id, itemId, parseTypedPiecePrices(typed));
 }
 
-/** What a piece's stamp price fields open on (#2368). */
+/** What a piece's stamp price fields open on (#2368), read in each column's condition (#2375). */
 export async function getPiecePriceFieldsAction(
   collectionId: string,
-  conditionId: string,
+  columns: Partial<Record<PiecePrice, string>>,
   stampIds: string[]
 ): Promise<PiecePriceFields> {
   const session = await getSession();
-  return getPiecePriceFields(session.user.id, collectionId, { conditionId, stampIds });
+  const clean: Partial<Record<PiecePrice, string>> = {};
+  for (const [price, conditionId] of Object.entries(columns ?? {})) {
+    if (isPiecePrice(price) && typeof conditionId === "string") clean[price] = conditionId;
+  }
+  return getPiecePriceFields(session.user.id, collectionId, { columns: clean, stampIds });
 }
 
 /** Save the prices typed on a piece's stamps (#2368) — in identification before the copy is made,
  *  in the Valuation window with its Save. */
 export async function setPiecePricesAction(
   collectionId: string,
-  conditionId: string,
   prices: TypedPiecePrice[]
 ): Promise<{ error?: string }> {
   const session = await getSession();
   try {
-    await setPiecePrices(session.user.id, collectionId, {
-      conditionId,
-      prices: parseTypedPiecePrices(prices),
-    });
+    await setPiecePrices(session.user.id, collectionId, { prices: parseTypedPiecePrices(prices) });
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : "The prices could not be saved." };

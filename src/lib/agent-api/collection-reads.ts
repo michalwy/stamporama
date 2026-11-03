@@ -20,6 +20,7 @@ import type {
   ValuationMethod,
 } from "../piece-valuation";
 import type { PieceValuation } from "../valuation";
+import type { MethodRole } from "../valuation-method-roles";
 import type { CatalogPriceMark } from "../catalog-price-mark";
 import { agentPhotoUrl } from "./photo-url";
 import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
@@ -608,9 +609,18 @@ export interface AgentPieceValue {
   readonly pieceKind?: PieceKind;
   /** `ef`, `mef` or `mif` — how the cover is franked, counted in stamps. */
   readonly usage?: CoverUsage;
-  /** A price the method reads is missing: the figure, if any, is a lower bound. */
+  /** A price the method reads is missing, or its role is not set up: the figure, if any, is a lower
+   *  bound. */
   readonly partial?: boolean;
-  readonly missing?: readonly { readonly stampId: string; readonly price: PiecePrice }[];
+  /** Each missing price, with the condition it is read from (#2375) — where to type it. */
+  readonly missing?: readonly {
+    readonly stampId: string;
+    readonly price: PiecePrice;
+    readonly conditionId?: string;
+  }[];
+  /** The roles of the method that a price it reads stands behind and that are not mapped to a
+   *  condition (#2375) — `set_valuation_method_role` sets them up. */
+  readonly notSetUp?: readonly { readonly method: ValuationMethod; readonly role: MethodRole }[];
 }
 
 export interface CopyValueRow {
@@ -711,8 +721,11 @@ function agentPieceValue(piece: PieceValuation): AgentPieceValue {
     usage: piece.usage ?? undefined,
     partial: piece.partial || undefined,
     missing: piece.missing.length
-      ? piece.missing.map((m) => ({ stampId: m.stampId, price: m.price }))
+      ? piece.missing.map((m) =>
+          compact({ stampId: m.stampId, price: m.price, conditionId: piece.columns[m.price]?.conditionId })
+        )
       : undefined,
+    notSetUp: piece.unmapped.length ? piece.unmapped : undefined,
   });
 }
 

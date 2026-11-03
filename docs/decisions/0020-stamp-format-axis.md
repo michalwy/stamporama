@@ -215,6 +215,10 @@ memory, with each area's ancestor path memoised. `makeFormatFactorResolver` is t
 
 ### 10. Prices on cover and on piece are four reserved formats (#2356)
 
+> **Reversed by [ADR-0077](0077-valuation-method-roles.md) (#2375).** The four rows, their prices and
+> multipliers are gone: a cover price is a condition the collector defines (a price column only, #2374),
+> and each valuation method maps the roles it reads to conditions. Kept below as the record.
+
 Catalogues price a stamp on a genuinely posted cover by franking — **EF**, **MeF**, **MiF** — and
 **on piece**, and those prices behave exactly like a block's: per edition, condition and certificate,
 recorded where the catalogue prints them and otherwise derived from the single's price by a
@@ -236,6 +240,11 @@ unambiguous. How a piece is valued from them is [ADR-0076](0076-piece-valuation-
 which also gives a copy format a *kind* — on cover, on piece — whose own prices are these rows'.
 
 ### 11. A still-valid stamp's cover prices follow Michel's rule, not a multiplier (#2358)
+
+> **Moved into the Michel method by [ADR-0077](0077-valuation-method-roles.md) §4 (#2375).** The rule is
+> no longer a derivation of the price grids, the lists or the agent's price reads, and
+> `StampCondition.priceRole` is gone: the method works the figure out for a piece from the conditions it
+> maps as used and never hinged. The marks on areas and issues stay. Kept below as the record.
 
 Michel prints no ⊠ price for a stamp still valid for postage and states a rule instead: at least
 0.40, or about 20 % above the used price, but no more than the never-hinged price when that is above

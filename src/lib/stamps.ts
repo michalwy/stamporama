@@ -22,7 +22,6 @@ import {
 import {
   type MoneyDisplay,
   type RawCatalogPrice,
-  type FormatDerivation,
   buildEffectiveAreaCatalogMap,
   buildEffectivePrimaryCatalogMap,
   pickFormatCatalogPrice,
@@ -49,7 +48,7 @@ import {
 } from "./photos";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
-import { makeFormatFactorLookup, makeFormatDerivationResolver } from "./format-pricing";
+import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
@@ -595,7 +594,7 @@ function toStampListItem(
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   displayFormatId: string | null,
-  factorFor: (areaId: string | null, issueId: string | null) => FormatDerivation,
+  factorFor: (areaId: string | null, issueId: string | null) => number | null,
   copyCounts: StampCopyCountMaps,
   wantsByStamp: Map<string, StampWantSummary>,
   /** Whether a membership lists its issue's specialised checklists too (#1617). */
@@ -707,7 +706,7 @@ async function buildStampListItems(
 ): Promise<StampListItem[]> {
   const [latestYearByName, factorFor, copyCounts, wantsByStamp] = await Promise.all([
     getLatestEditionYearByName(collectionId),
-    makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId),
+    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
     // Only the page's stamps (#348) — this funnel is reached with the rows already sliced.
     loadStampCopyCounts(collectionId, stamps.map((s) => s.id)),
     loadStampWantSummaries(collectionId, stamps.map((s) => s.id)),
@@ -2192,9 +2191,8 @@ export interface QuickCatalogPriceEntry {
  * latest edition (ADR-0006). Used by the lot intake / offer-set screens to price a copy inline
  * without opening the full stamp editor (#121, #164).
  *
- * **Always the single** for a copy's format — the one parameter for a format is for the four reserved
- * rows of prices on cover and on piece (#2368), which a catalogue quotes as it quotes the single. A
- * quick price is a figure read straight off a paper catalogue, and a catalogue quotes singles: a multiple's value is
+ * **Always the single**, and there is deliberately no parameter for a format. A quick price is a
+ * figure read straight off a paper catalogue, and a catalogue quotes singles: a multiple's value is
  * that figure times the resolved `StampFormatFactor` (`pickFormatCatalogPrice`). Writing the
  * displayed format's row instead would file a single's quotation as the multiple's own price *and*
  * suppress the factor for good, from a dialog whose collector never asked for either. A multiple
@@ -2206,10 +2204,7 @@ export async function quickSetCatalogPrices(
   stampId: string,
   conditionId: string,
   certificateStatusId: string | null,
-  entries: QuickCatalogPriceEntry[],
-  /** The single unless given — a price on cover or on piece (#2368) passes its reserved row, which
-   *  the caller has checked is one. */
-  formatId: string | null = null
+  entries: QuickCatalogPriceEntry[]
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -2252,7 +2247,7 @@ export async function quickSetCatalogPrices(
         catalogEditionId: edition.id,
         conditionId,
         certificateStatusId: certificateStatusId ?? null,
-        formatId,
+        formatId: null,
       },
       select: { id: true },
     });
@@ -2268,7 +2263,7 @@ export async function quickSetCatalogPrices(
           catalogEditionId: edition.id,
           conditionId,
           certificateStatusId: certificateStatusId ?? null,
-          formatId,
+          formatId: null,
           ...value,
           currency: catalog.currency,
         },

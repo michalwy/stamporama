@@ -1,23 +1,22 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { seedDefaultFormats } from "../../src/lib/stamp-formats";
-import { getStampFormatPricing } from "../../src/lib/format-pricing";
-import { getStampListItem } from "../../src/lib/stamps";
+import { valuateItemRows, type ValuationRow } from "../../src/lib/item-valuation";
 import { getVariantPriceGrid } from "../../src/lib/variant-prices";
 import { setAreaStillValidForPostage } from "../../src/lib/areas";
 import { setIssueStillValidForPostage } from "../../src/lib/issues";
-import { getStampConditions, updateStampCondition } from "../../src/lib/conditions";
+import { setValuationMethodRole } from "../../src/lib/valuation-methods";
 
-// **Stamps still valid for postage get their on-cover prices from Michel's rule (#2358).** The rule's
-// arithmetic is in `tests/unit/still-valid-postage.test.ts`; this file holds the rest of the *Done
-// when* as calls: a mark on an area reaching its stamps, an issue unmarked under it, the rule's
-// figure on the stamp's price grid, on the lists' `as` column and on the variant grid — derived, and
-// giving way to a typed price — and nothing derived while a condition is unchosen.
+// **Michel's rule for stamps still valid for postage (#2358) is part of the Michel method (#2375).**
+// The rule's arithmetic is in `tests/unit/still-valid-postage.test.ts`; this file holds the rest as
+// calls: a mark on an area reaching its stamps, an issue unmarked under it, the rule working from the
+// conditions the Michel method maps as used and never hinged where its cover EF condition has no
+// price — shown as derived, never written to the stamp's prices or shown on the grid — a typed price
+// winning, and the value saying which role is not set up while one is not.
 
 const ts = Date.now();
 
-describe("stamps still valid for postage (#2358)", () => {
+describe("stamps still valid for postage, under the Michel method (#2358, #2375)", () => {
   let userId: string;
   let collectionId: string;
   let areaId: string;
@@ -26,8 +25,8 @@ describe("stamps still valid for postage (#2358)", () => {
   let editionId: string;
   let usedId: string;
   let mintId: string;
-  let mifId: string;
-  let pieceId: string;
+  let efId: string;
+  let coverId: string;
 
   before(async () => {
     userId = `test-user-still-valid-${ts}`;
@@ -46,10 +45,11 @@ describe("stamps still valid for postage (#2358)", () => {
         data: { slug: `col-still-valid-${ts}`, name: "Still valid", baseCurrency: "EUR", ownerId: userId },
       })
     ).id;
-    await seedDefaultFormats(collectionId, prisma as never);
-    const formats = await prisma.stampFormat.findMany({ where: { collectionId, coverKind: { not: null } } });
-    mifId = formats.find((f) => f.coverKind === "cover_mif")!.id;
-    pieceId = formats.find((f) => f.coverKind === "on_piece")!.id;
+    coverId = (
+      await prisma.stampFormat.create({
+        data: { collectionId, name: "Cover", abbreviation: "Cov", sortOrder: 0, pieceKind: "on_cover" },
+      })
+    ).id;
 
     const michel = await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } });
     const book = await prisma.catalogName.create({ data: { vendorId: michel.id, name: "Michel Polen", currency: "EUR" } });
@@ -66,16 +66,15 @@ describe("stamps still valid for postage (#2358)", () => {
       })
     ).id;
     await prisma.collectionAreaCatalog.create({ data: { collectionAreaId: areaId, catalogNameId: book.id } });
-    mintId = (
-      await prisma.stampCondition.create({
-        data: { collectionId, name: "Mint Never Hinged", abbreviation: "MNH", sortOrder: 0, priceRole: "never_hinged" },
-      })
-    ).id;
-    usedId = (
-      await prisma.stampCondition.create({
-        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1, priceRole: "used" },
-      })
-    ).id;
+    const condition = async (abbreviation: string, sortOrder: number, priceOnly = false) =>
+      (
+        await prisma.stampCondition.create({
+          data: { collectionId, name: abbreviation, abbreviation, sortOrder, priceOnly },
+        })
+      ).id;
+    mintId = await condition("MNH", 0);
+    usedId = await condition("U", 1);
+    efId = await condition("EF", 2, true);
     issueId = (
       await prisma.issue.create({ data: { collectionId, issueNo: 1, collectionAreaId: areaId, name: "Definitives", year: 2015 } })
     ).id;
@@ -96,83 +95,87 @@ describe("stamps still valid for postage (#2358)", () => {
         { stampId, catalogEditionId: editionId, conditionId: mintId, price: 2.2, currency: "EUR" },
       ],
     });
+    for (const [role, conditionId] of [
+      ["used", usedId],
+      ["cover_ef", efId],
+    ] as const) {
+      await setValuationMethodRole(userId, collectionId, { method: "michel", role, conditionId });
+    }
   });
 
   after(async () => {
-    await prisma.stampCatalogPrice.deleteMany({ where: { stamp: { collectionId } } });
-    await prisma.issueMember.deleteMany({ where: { issue: { collectionId } } });
-    await prisma.stamp.deleteMany({ where: { collectionId } });
-    await prisma.issue.deleteMany({ where: { collectionId } });
-    await prisma.stampFormatFactor.deleteMany({ where: { collectionId } });
-    await prisma.stampFormat.deleteMany({ where: { collectionId } });
-    await prisma.stampCondition.deleteMany({ where: { collectionId } });
-    await prisma.collectionArea.deleteMany({ where: { collectionId } });
-    await prisma.catalogVendor.deleteMany({ where: { collectionId } });
     await prisma.collection.deleteMany({ where: { id: collectionId } });
     await prisma.user.deleteMany({ where: { id: userId } });
   });
 
-  const listMif = () =>
-    getStampListItem(userId, stampId, { displayConditionId: usedId, displayFormatId: mifId });
+  /** The stamp alone on a cover — a line in the Cover format, valued as a piece of it (#2375). */
+  const onCover = async () => {
+    const row: ValuationRow = {
+      id: "cover",
+      stampId,
+      conditionId: usedId,
+      certificateStatusId: null,
+      formatId: coverId,
+      unknownVariant: false,
+      copy: null,
+      faultReductionPercent: null,
+      valueModifier: null,
+      candidateStampIds: null,
+    };
+    return (await valuateItemRows(collectionId, [row])).get("cover")!;
+  };
 
-  it("derives nothing for a stamp nothing marks", async () => {
-    assert.equal((await getStampFormatPricing(userId, stampId)).stillValid, null);
-    assert.equal((await listMif()).mainCatalogPrice, null);
+  it("works nothing out for a stamp nothing marks: its EF price is simply missing", async () => {
+    const v = await onCover();
+    assert.equal(v.amount, null);
+    assert.deepEqual(v.piece?.missing.map((m) => m.price), ["cover_ef"]);
+    assert.deepEqual(v.piece?.unmapped, []);
   });
 
-  it("prices a marked area's stamps on cover by the rule — capped by the never-hinged price — as derived", async () => {
+  it("says which role it lacks while never hinged is not mapped", async () => {
     await setAreaStillValidForPostage(userId, areaId, true);
-    assert.deepEqual((await getStampFormatPricing(userId, stampId)).stillValid, {
-      usedConditionId: usedId,
-      neverHingedConditionId: mintId,
-    });
-    const item = await listMif();
-    // 2 + 20 % is 2.40, capped at the never-hinged 2.20.
-    assert.equal(item.mainCatalogPrice?.amount, "2.20");
-    assert.equal(item.mainCatalogPriceDerived, true);
+    const v = await onCover();
+    assert.equal(v.amount, null);
+    assert.deepEqual(v.piece?.unmapped, [{ method: "michel", role: "never_hinged" }]);
   });
 
-  it("fills the variant grid's cover cells in the used condition, and leaves on piece to its multiplier", async () => {
-    await prisma.stampFormatFactor.create({ data: { collectionId, formatId: pieceId, factor: 1.5 } });
+  it("works a marked area's stamp out by the rule — capped by the never-hinged price — as derived", async () => {
+    await setValuationMethodRole(userId, collectionId, { method: "michel", role: "never_hinged", conditionId: mintId });
+    const v = await onCover();
+    // 2 + 20 % is 2.40, capped at the never-hinged 2.20.
+    assert.equal(v.amount, "2.20");
+    assert.equal(v.piece?.partial, false);
+    assert.deepEqual(v.piece?.components[0].derived, ["cover_ef"]);
+    // The method's working, not a catalogue figure: nothing written, nothing on the grid.
+    assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId, conditionId: efId } }), 0);
     const grid = await getVariantPriceGrid(userId, { kind: "stamp", stampId });
-    const derivation = (formatId: string, conditionId: string) =>
-      grid.formatFactors.find((f) => f.stampId === stampId && f.formatId === formatId && f.conditionId === conditionId)
-        ?.factor;
-    assert.deepEqual(derivation(mifId, usedId), { usedConditionId: usedId, neverHingedConditionId: mintId });
-    assert.equal(derivation(pieceId, usedId), 1.5);
-    await prisma.stampFormatFactor.deleteMany({ where: { collectionId } });
+    assert.deepEqual(grid.formatFactors, []);
+  });
+
+  it("is a Michel rule only: another method reads its cover price as missing", async () => {
+    await prisma.collection.update({ where: { id: collectionId }, data: { valuationMethod: "fischer_fp_fw_fm" } });
+    await setValuationMethodRole(userId, collectionId, { method: "fischer_fp_fw_fm", role: "used", conditionId: usedId });
+    await setValuationMethodRole(userId, collectionId, { method: "fischer_fp_fw_fm", role: "fp", conditionId: efId });
+    const v = await onCover();
+    assert.equal(v.amount, null);
+    assert.equal(v.piece?.components[0].derived, undefined);
+    await prisma.collection.update({ where: { id: collectionId }, data: { valuationMethod: "michel" } });
   });
 
   it("lets a typed cover price win", async () => {
     await prisma.stampCatalogPrice.create({
-      data: { stampId, catalogEditionId: editionId, conditionId: usedId, formatId: mifId, price: 7, currency: "EUR" },
+      data: { stampId, catalogEditionId: editionId, conditionId: efId, price: 7, currency: "EUR" },
     });
-    const item = await listMif();
-    assert.equal(item.mainCatalogPrice?.amount, "7.00");
-    assert.equal(item.mainCatalogPriceDerived, false);
-    await prisma.stampCatalogPrice.deleteMany({ where: { stampId, formatId: mifId } });
+    const v = await onCover();
+    assert.equal(v.amount, "7.00");
+    assert.equal(v.piece?.components[0].derived, undefined);
+    await prisma.stampCatalogPrice.deleteMany({ where: { stampId, conditionId: efId } });
   });
 
   it("lets an issue be unmarked under a marked area", async () => {
     await setIssueStillValidForPostage(userId, issueId, false);
-    assert.equal((await getStampFormatPricing(userId, stampId)).stillValid, null);
-    assert.equal((await listMif()).mainCatalogPrice, null);
+    assert.equal((await onCover()).amount, null);
     await setIssueStillValidForPostage(userId, issueId, null);
-    assert.equal((await listMif()).mainCatalogPrice?.amount, "2.20");
-  });
-
-  it("moves a role to the condition chosen for it, and derives nothing while one is unchosen", async () => {
-    // Choosing *never hinged* for Used takes the role from MNH — and leaves *used* unchosen, since a
-    // condition plays one part.
-    await updateStampCondition(userId, usedId, { name: "Used", abbreviation: "U", priceRole: "never_hinged" });
-    const roles = new Map((await getStampConditions(userId, collectionId)).map((c) => [c.id, c.priceRole]));
-    assert.equal(roles.get(mintId), null);
-    assert.equal(roles.get(usedId), "never_hinged");
-    assert.equal((await getStampFormatPricing(userId, stampId)).stillValid, null);
-    assert.equal((await listMif()).mainCatalogPrice, null);
-
-    await updateStampCondition(userId, mintId, { name: "Mint Never Hinged", abbreviation: "MNH", priceRole: "never_hinged" });
-    await updateStampCondition(userId, usedId, { name: "Used", abbreviation: "U", priceRole: "used" });
-    assert.equal((await listMif()).mainCatalogPrice?.amount, "2.20");
+    assert.equal((await onCover()).amount, "2.20");
   });
 });

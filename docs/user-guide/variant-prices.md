@@ -20,7 +20,7 @@ Above the grid you choose three things once, for the whole grid:
 | --- | --- |
 | **Catalog edition** | which catalogue and which year — and with it the currency |
 | **Certificate** | *None* by default, which is what a printed catalogue quotes |
-| **Format tabs** | *Single*, one of your formats (pair, block of four…), or a price on cover — *Cover EF*, *Cover MeF*, *Cover MiF* — or *On piece* |
+| **Format tabs** | *Single*, or one of your formats (pair, block of four…) — a format of kind *On cover* or *On piece* is not one: a cover's value is its valuation method's |
 
 Typing:
 
@@ -76,10 +76,11 @@ On a format tab, a greyed, dashed cell shows what that format would be worth fro
 single's price and this issue's multiplier. Nothing is stored until you type over it;
 clearing it again goes back to the derived figure.
 
-The four cover tabs — **Cover EF**, **Cover MeF**, **Cover MiF** and **On piece** — are format tabs
-like any other: type the catalogue's ⊠ prices there, a single ⊠ price (Fischer's) into *Cover MiF*, or
-let a multiplier derive them. What each one means is in
-[Prices on cover and on piece](inventory.md#prices-on-cover-and-on-piece).
+A stamp's prices on cover and on piece — Michel's ⊠ EF, MeF, MiF and *Bfst*, Fischer's ⊠ or FP, FW,
+FM — are **columns**, conditions you mark [*Price column only*](collections.md#price-column-only-conditions):
+type the catalogue's row straight across, and fill a whole column from another with **Fill from another
+condition** below. Which column each valuation method reads is chosen under **Settings → Valuation
+methods**; see [Prices on cover and on piece](inventory.md#prices-on-cover-and-on-piece).
 
 ### Filling a certificate from None
 

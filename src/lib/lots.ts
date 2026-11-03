@@ -2,7 +2,6 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
-import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import {
   allocateItemNumbers,
   buildItemFilterWhere,
@@ -1457,7 +1456,7 @@ export async function intakeStamps(
   const formatId = input.formatId?.trim() || null;
   if (formatId) {
     const format = await prisma.stampFormat.findFirst({
-      where: { id: formatId, collectionId, ...COPY_FORMAT_WHERE },
+      where: { id: formatId, collectionId },
       select: { id: true },
     });
     if (!format) throw new Error("Format not found in this collection.");
@@ -1925,7 +1924,7 @@ async function assertVariantDictionaries(
   }
   if (changes.formatId) {
     const format = await prisma.stampFormat.findFirst({
-      where: { id: changes.formatId, collectionId, ...COPY_FORMAT_WHERE },
+      where: { id: changes.formatId, collectionId },
       select: { id: true },
     });
     if (!format) throw new Error("Format not found in this collection.");

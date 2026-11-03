@@ -616,7 +616,7 @@ describe("applyFaultReduction", () => {
 
   it("lowers a piece's computed value by the same rule (#2359)", () => {
     const computed = valuatePiece(
-      { amount: 80, rule: "sum_of_used", usage: null, partial: false, missing: [], terms: [] },
+      { amount: 80, rule: "sum_of_used", usage: null, partial: false, missing: [], unmapped: [], terms: [] },
       {
         method: "michel",
         methodSource: { kind: "collection" },
@@ -624,6 +624,8 @@ describe("applyFaultReduction", () => {
         franking: "rate_correct",
         kind: "on_cover",
         components: [],
+        unmapped: [],
+        columns: {},
       },
       false,
       "EUR"

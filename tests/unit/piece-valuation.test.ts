@@ -203,6 +203,48 @@ describe("Sum of used, and a piece whose format has no kind", () => {
   });
 });
 
+describe("a price whose role is not set up (#2375)", () => {
+  it("leaves the value partial and names the price unmapped, not missing", () => {
+    const result = valuePiece({
+      method: "fischer",
+      kind: "on_cover",
+      franking: "rate_correct",
+      components: [{ ...A, coverMif: null }, { ...B, coverMif: null }],
+      unmapped: new Set(["cover_mif"]),
+    });
+    assert.equal(result.partial, true);
+    assert.deepEqual(result.unmapped, ["cover_mif"]);
+    assert.deepEqual(result.missing, []);
+    // The used prices still add up where Fischer reads them: A, the most expensive, would have taken
+    // the ⊠ share, so only B is at its used price.
+    assert.equal(result.amount, 4);
+  });
+
+  it("has no figure when the one price read is unmapped — never filled from another role", () => {
+    const result = valuePiece({
+      method: "michel",
+      kind: "on_cover",
+      franking: "rate_correct",
+      components: [{ ...A, coverEf: null }],
+      unmapped: new Set(["cover_ef"]),
+    });
+    assert.equal(result.amount, null);
+    assert.deepEqual(result.unmapped, ["cover_ef"]);
+  });
+
+  it("is not noted where the rule does not read it", () => {
+    const result = valuePiece({
+      method: "michel",
+      kind: "on_cover",
+      franking: "rate_correct",
+      components: [A],
+      unmapped: new Set(["cover_mif", "on_piece"]),
+    });
+    assert.equal(result.partial, false);
+    assert.deepEqual(result.unmapped, []);
+  });
+});
+
 describe("which method values a piece", () => {
   const areas = new Map<string, MethodArea>([
     ["europe", { id: "europe", parentId: null, valuationMethod: "fischer" }],

@@ -41,7 +41,6 @@ import {
   shownCellAmount,
   variantDescendantMap,
   variantPriceCellKey,
-  type CellDerivation,
   type VariantTreeRow,
 } from "../variant-price-cells";
 import { invalidRequest, isApiError, type ApiError } from "./errors";
@@ -175,8 +174,7 @@ export interface FormatFactor {
   readonly stampId: string;
   readonly formatId: string;
   readonly conditionId: string;
-  /** A multiplier, or Michel's rule for a still-valid stamp's cover price (#2358). */
-  readonly factor: CellDerivation;
+  readonly factor: number;
 }
 
 /** A row of the grid's tree: what the arithmetic reads, plus what the answer names. */
@@ -260,9 +258,7 @@ export function catalogPriceCells(input: {
         ? null
         : derivedCellAmount(
             recorded.get(variantPriceCellKey(stampId, combo.editionId, combo.conditionId, combo.certId, null)) ?? "",
-            factorFor.get(`${stampId}~${combo.formatId}~${combo.conditionId}`),
-            (conditionId) =>
-              recorded.get(variantPriceCellKey(stampId, combo.editionId, conditionId, combo.certId, null)) ?? ""
+            factorFor.get(`${stampId}~${combo.formatId}~${combo.conditionId}`)
           );
     const shown = (stampId: string) => {
       const typed = own(stampId);

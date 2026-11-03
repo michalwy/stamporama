@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
-import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
 import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
@@ -117,7 +116,7 @@ async function completenessOf(
       select: { id: true, name: true, abbreviation: true },
     }),
     prisma.stampFormat.findMany({
-      where: { collectionId, ...COPY_FORMAT_WHERE },
+      where: { collectionId },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, abbreviation: true },
     }),

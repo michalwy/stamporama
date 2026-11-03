@@ -186,7 +186,7 @@ function FormatFields({
       </div>
 
       {/* What a copy in this format is (#2359): a cover or a fragment is valued by the piece's
-          valuation method, and its prices are the stamp's Cover EF and On piece. */}
+          valuation method from the conditions it maps (#2375), so the format's own prices are not read. */}
       <div style={{ maxWidth: "16rem" }}>
         <LabelWithError htmlFor="f-fmt-kind">Kind</LabelWithError>
         <select
@@ -204,7 +204,7 @@ function FormatFields({
         </select>
         <div style={kindHintStyle}>
           {format && !format.pieceKind
-            ? "Choosing a kind moves this format's prices to the stamps' Cover EF or On piece."
+            ? "With a kind, a copy in it is valued by its valuation method and its own prices are not read."
             : "A copy in it is valued by its valuation method."}
         </div>
       </div>

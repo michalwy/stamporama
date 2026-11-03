@@ -1,13 +1,13 @@
 import { parsePriceCellInput } from "./catalog-price-mark";
-import { PIECE_PRICE_LABELS, type PiecePrice } from "./piece-valuation";
+import { isPiecePrice, type PiecePrice } from "./piece-valuation";
 
 // A piece's stamp prices typed in place (#2368) — in identification and in the piece's Valuation
 // window, the way a checklist run asks for its prices. Pure: which row carries which field, and what
 // a save sends. The read and the write are `piece-prices.ts`.
 //
-// A field is a **stamp × price** — the used price (the single's, as every quick price is) or one of
-// the four prices on cover and on piece, at the piece's condition, no certificate, the latest edition
-// of the stamp's main catalogue: exactly the price the value reads.
+// A field is a **stamp × price** — the used price or one of the prices on cover and on piece — in the
+// condition the piece's method maps to that price's role (#2375), at the single, no certificate, the
+// latest edition of the stamp's main catalogue: exactly the price the value reads.
 
 /** A field's key: one stamp's one price. */
 export function piecePriceKey(stampId: string, price: PiecePrice): string {
@@ -24,6 +24,8 @@ export function piecePriceOfKey(key: string): { key: string; stampId: string; pr
 export interface TypedPiecePrice {
   stampId: string;
   price: PiecePrice;
+  /** The condition the field's column is read from (#2375) — where the figure lands. */
+  conditionId: string;
   amount: string;
 }
 
@@ -94,7 +96,9 @@ export function piecePriceSlots(
 export function changedPiecePrices(
   typed: Readonly<Record<string, string>>,
   recorded: (key: string) => string | null,
-  fields: readonly Pick<PiecePriceSlot, "key" | "stampId" | "price">[]
+  fields: readonly Pick<PiecePriceSlot, "key" | "stampId" | "price">[],
+  /** The condition each price's column is read from; a price with none has no field to save. */
+  conditionOf: (price: PiecePrice) => string | null
 ): { changes: TypedPiecePrice[]; invalid: boolean } {
   const changes: TypedPiecePrice[] = [];
   let invalid = false;
@@ -115,7 +119,10 @@ export function changedPiecePrices(
       cell.kind === "mark"
         ? before.kind === "mark" && before.mark === cell.mark
         : before.kind === "amount" && Math.round(before.amount * 100) === Math.round(cell.amount * 100);
-    if (!same) changes.push({ stampId: f.stampId, price: f.price, amount: raw.trim() });
+    const conditionId = conditionOf(f.price);
+    if (!same && conditionId) {
+      changes.push({ stampId: f.stampId, price: f.price, conditionId, amount: raw.trim() });
+    }
   }
   return { changes, invalid };
 }
@@ -126,9 +133,9 @@ export function parseTypedPiecePrices(value: unknown): TypedPiecePrice[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((v: unknown) => {
     if (typeof v !== "object" || v === null) return [];
-    const { stampId, price, amount } = v as Record<string, unknown>;
+    const { stampId, price, conditionId, amount } = v as Record<string, unknown>;
     if (typeof stampId !== "string" || typeof amount !== "string") return [];
-    if (typeof price !== "string" || !Object.hasOwn(PIECE_PRICE_LABELS, price)) return [];
-    return [{ stampId, price: price as PiecePrice, amount }];
+    if (typeof conditionId !== "string" || !isPiecePrice(price)) return [];
+    return [{ stampId, price, conditionId, amount }];
   });
 }

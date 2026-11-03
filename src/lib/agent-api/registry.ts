@@ -232,6 +232,10 @@ import {
 } from "./operations/areas";
 import { setCopyStampOperation, setCopyValuationOperation } from "./operations/copies";
 import {
+  getValuationMethodsOperation,
+  setValuationMethodRoleOperation,
+} from "./operations/valuation-methods";
+import {
   addCarrierServiceOperation,
   createCarrierOperation,
   createPackingSupplyOperation,
@@ -260,6 +264,8 @@ export const OPERATIONS: readonly Operation[] = [
   getCopyOperation,
   setCopyStampOperation,
   setCopyValuationOperation,
+  getValuationMethodsOperation,
+  setValuationMethodRoleOperation,
   listHoldingsOperation,
   summarizeValuationOperation,
   findUnlistedCopiesOperation,

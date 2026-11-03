@@ -64,8 +64,8 @@ it serves:
 
 - **General** — Collection (currency, default language and home market) and
   Photos & storage (the storage figures and how long generated images and finished scans are kept).
-- **Catalog** — Catalogs, Conditions, Certificate statuses, Formats, Subtypes, Attributes, Size
-  presets and Duplicate numbers.
+- **Catalog** — Catalogs, Conditions, Certificate statuses, Faults, Formats, Valuation methods,
+  Subtypes, Attributes, Size presets and Duplicate numbers.
 - **Collection** — Scanners, Tags, Album templates, Hawid stock, Corner ornaments and Ref card
   templates.
 - **Selling** — Collage templates, Carriers, Packing supplies, Platforms, Allegro, Delcampe, Facebook
@@ -82,8 +82,8 @@ line what the page is for — hover it. Where one thing has several parts they a
 of its page: **Formats** has *Formats* and *Multipliers*, and **Attributes** has a tab for each of
 its four lists.
 
-The plain forms — **Collection**, **Photos & storage**, **Bid recommendation**, **Duplicate numbers**
-and **Philasearch** — use the whole width of the window. Each setting is a **card** — its name, one
+The plain forms — **Collection**, **Photos & storage**, **Valuation methods**, **Bid
+recommendation**, **Duplicate numbers** and **Philasearch** — use the whole width of the window. Each setting is a **card** — its name, one
 short line saying what it is, and its control — and the cards sit side by side, two or three to a
 row depending on how wide the window is, so no field is ever stretched across the screen. Where a
 setting has more to say, an **ⓘ** beside its name says it when you hover it, and this guide says the
@@ -986,9 +986,6 @@ Each collection keeps its own list of **conditions** — the grades used when va
   the default conditions, and it is the same in every language. It feeds the `{conditionSymbol}`
   token in [templates](platforms.md#listing-templates); a condition without one prints nothing there.
 - Give each condition a **colour**, so its chip stands out wherever copies are listed — see [Condition and certificate colours](#condition-and-certificate-colours) below.
-- Tell **Michel's rule** which condition is *Used* and which is *Never hinged* — one of each, *U* and
-  *MNH* to start with. The rule prices a stamp still valid for postage on a cover from those two; see
-  [Stamps still valid for postage](inventory.md#stamps-still-valid-for-postage).
 - Tick **Price column only** for a condition the catalogues price but no copy is ever in — the cover
   columns, such as Fischer's **FP**, **FW** and **FM** or Michel's ⊠ **EF**, **MeF** and **MiF**. Such a
   condition keeps everything a condition has — name, abbreviation, symbol (⊠), translations, colour,
@@ -1016,6 +1013,32 @@ A condition that anything already uses — a copy, a want, an acceptance profile
 line, an offer, a price observation, a marked scan tile, a Colnect mapping — **cannot be marked**: the
 save is refused and the message says what uses it and how many. Catalogue prices and multipliers do
 not count, since they are what a price column is for. Unticking the box is always allowed.
+
+Which price column a cover is valued from is not the condition's to say: each valuation method is told
+under **Settings → Valuation methods** (below).
+
+### Valuation methods
+
+How a cover, a fragment or any piece carrying stamps is valued from its stamps' prices — see
+[What a piece carrying several stamps is worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth).
+The page has a card for the **Default method** — the one a piece is valued by where no area and no copy
+sets its own, *Michel* to start with — and a card for each method, listing the prices it reads with a
+condition picker beside each:
+
+| Method | Prices it reads |
+| --- | --- |
+| **Michel** | Used, Cover EF, Cover MeF, Cover MiF, On piece, Never hinged |
+| **Fischer** | Used, Cover ⊠, On piece |
+| **Fischer FP/FW/FM** | Used, FP, FW, FM, On piece |
+| **Sum of used** | Used |
+
+Choose for each the condition you type that price in — usually your ordinary *U* for **Used**, your
+*MNH* for **Never hinged** (Michel's rule for stamps still valid for postage reads it), and
+[price-column-only conditions](#price-column-only-conditions) for the cover prices. Any condition can
+be chosen, and one condition can serve several methods. A price left at **Not set up** is shown amber;
+a piece valued by that method goes without it, says so in its value, and links back here. Nothing is
+set up for you, and nothing is moved or worked out when you choose: the prices already in a condition
+are what the method reads from then on. Deleting a condition leaves its prices not set up.
 
 ### Conditions in other languages
 

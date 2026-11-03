@@ -43,10 +43,10 @@ export function useCollectionFormats(collectionId: string) {
 }
 
 /**
- * The formats a **price** is recorded for: a copy's, then the four on cover and on piece (#2356).
- * What the lists' price switcher and the multiplier editors offer — never a picker for what a copy,
- * a want or a line *is*, which keeps to {@link useCollectionFormats}. Its key extends that one's, so
- * invalidating `["formats", collectionId]` refreshes both.
+ * The formats a **price** is recorded for: every format but those of a kind (#2359), whose copies are
+ * valued by their piece's method. What the lists' price switcher and the multiplier editors offer —
+ * never a picker for what a copy, a want or a line *is*, which keeps to {@link useCollectionFormats}.
+ * Its key extends that one's, so invalidating `["formats", collectionId]` refreshes both.
  */
 export function usePriceFormats(collectionId: string) {
   return useQuery<StampFormatData[]>({

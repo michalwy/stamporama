@@ -42,7 +42,7 @@ import {
   type StampAttributeInput,
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
-import { makeFormatDerivationResolver } from "./format-pricing";
+import { makeFormatFactorResolver } from "./format-pricing";
 import {
   loadStampCopyCounts,
   NO_COPIES,
@@ -119,7 +119,7 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
-import { foldChecklistPrices, type ChecklistPricePick, type FormatDerivation } from "./catalog-price";
+import { foldChecklistPrices, type ChecklistPricePick } from "./catalog-price";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -376,7 +376,7 @@ function toStampNode(
     displayFormatId?: string | null;
     /** Multiplier applying to that format for this issue — one lookup per issue, because every
      *  member shares the issue's area and the issue itself. */
-    formatFactor?: FormatDerivation;
+    formatFactor?: number | null;
     rates: Map<string, number | null>;
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
     variantPricesByStamp: Map<string, UmbrellaVariantPrices>;
@@ -704,7 +704,7 @@ function computeChecklistPriceTotal(
   rates: Map<string, number | null>,
   variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null = null,
-  formatFactor: FormatDerivation | ((stampId: string) => FormatDerivation) = null
+  formatFactor: number | null | ((stampId: string) => number | null) = null
 ): IssuePriceTotal | null {
   const picks: ChecklistPricePick[] = [];
   let markedCount = 0;
@@ -906,7 +906,7 @@ function toIssueListItem(
   rates: Map<string, number | null>,
   variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null,
-  factorFor: (areaId: string | null, issueId: string | null) => FormatDerivation
+  factorFor: (areaId: string | null, issueId: string | null) => number | null
 ): IssueListItem {
   const memberByStamp = new Map(issue.members.map((m) => [m.stampId, m]));
   const primaryNameId = primaryCatalogByArea.get(issue.collectionAreaId) ?? null;
@@ -1014,7 +1014,7 @@ async function buildIssueListItems(
       where: { collectionId },
       select: { id: true, abbreviation: true },
     }),
-    makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId),
+    makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId),
   ]);
   const vendorAbbrev = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
@@ -1470,7 +1470,7 @@ export async function listIssueMembers(
     resolveDisplayConditionId(collectionId, requestedDisplayConditionId),
   ]);
   const primaryNameId = primaryCatalogByArea.get(collectionAreaId) ?? null;
-  const factorFor = await makeFormatDerivationResolver(collectionId, displayFormatId, displayConditionId);
+  const factorFor = await makeFormatFactorResolver(collectionId, displayFormatId, displayConditionId);
   const formatFactor = factorFor(collectionAreaId, issueId);
 
   // Umbrella members (unknown-variant base stamps) roll their headline price up from the

@@ -29,6 +29,8 @@ describe("settings navigation (#1469)", () => {
           // The copy's faults (#1557), beside the other two dictionaries a copy is described with.
           "Faults",
           "Formats",
+          // How a piece is valued and which condition each price is typed in (#2375).
+          "Valuation methods",
           "Subtypes",
           "Attributes",
           "Size presets",
@@ -82,7 +84,7 @@ describe("settings navigation (#1469)", () => {
       e.parts!.map((p) => p.label),
     ]);
     assert.deepEqual(withParts, [
-      ["formats", ["Formats", "Multipliers", "Valuation method"]],
+      ["formats", ["Formats", "Multipliers"]],
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
       ["allegro", ["Account", "Listing profiles", "Categories", "Platform"]],
       ["delcampe", ["Listing profiles", "Categories", "Platform"]],

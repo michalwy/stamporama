@@ -1079,58 +1079,56 @@ it under the input.
 
 ### Prices on cover and on piece
 
-Catalogues price a stamp on a cover differently from the same stamp used loose. Michel quotes a ⊠
-price per stamp for a genuinely posted, correctly franked cover, by how the cover is franked, and a
-price on piece (*Briefstück*). Every stamp has room for those four prices beside its loose ones:
+Catalogues price a stamp on a cover differently from the same stamp used loose, and print those prices
+as **columns** beside the loose ones, the way they print ** and ⊙. Michel quotes a ⊠ price per stamp for
+a genuinely posted, correctly franked cover, by how the cover is franked, and a price on piece
+(*Briefstück*):
 
-| Price | What the catalogue means |
+| Michel's column | What the catalogue means |
 | --- | --- |
-| **Cover EF** | single franking — the stamp alone on the cover |
-| **Cover MeF** | multiple franking — the same stamp several times |
-| **Cover MiF** | mixed franking — the stamp with other stamps |
-| **On piece** | the stamp on a piece cut from a cover |
+| **EF** | single franking — the stamp alone on the cover |
+| **MeF** | multiple franking — the same stamp several times |
+| **MiF** | mixed franking — the stamp with other stamps |
+| **Bfst** | the stamp on a piece cut from a cover |
 
-There is one set per stamp, whatever the kind of cover. A catalogue that prints a single ⊠ price —
-Fischer, whose ⊠ column is the mixed-franking price — has it typed into **Cover MiF**, leaving EF and
-MeF empty. Where Fischer prints FP, FW and FM (single, multiple and mixed franking, as for the General
-Government), they go into EF, MeF and MiF.
+Fischer prints one ⊠ column — or, for some areas such as the General Government, **FP**, **FW** and
+**FM** (single, multiple and mixed franking).
 
-They sit on the same price grid as everything else, as four more tabs after your formats — **Single**,
-**Block of 4**…, then **Cover EF**, **Cover MeF**, **Cover MiF** and **On piece** — per condition,
-certificate and catalogue edition, exactly like a block's price. `-` and `?` work on them as on any
-price. And like a block's they can be **derived by a multiplier** instead of typed: set one for
-*Cover MiF* under **Settings → Formats → Multipliers**, or from an area's or an issue's **⋮** menu,
-and the price is the single's times that multiplier, shown with `~`. The narrowest multiplier wins, and
-a price you type always wins over a derived one.
+These columns are **conditions you define**, under **Settings → Conditions**, marked
+[*Price column only*](collections.md#price-column-only-conditions): name them, abbreviate them, give them
+a symbol (⊠) and translations as you like. They then are columns of the price grid beside *MNH* and *U*
+— per catalogue edition and certificate, `-` and `?` working on them as on any price — and you type a
+catalogue row straight across. **Fill from another condition** on the
+[variant price grid](variant-prices.md#filling-one-condition-from-another) fills one of them from
+another by a ratio, once; nothing derives them on the fly.
 
-The **as** switcher on the Stamps and Issues lists offers them too, under *On cover and on piece*.
-
-They are prices only, never what a copy is: a cover you own is a copy in a format of your own, such
-as *Cover* (see below), and none of these four is offered in a copy's, a want's or a trade's
-**Format**. Nor are they listed under **Settings → Formats** — they are the catalogues' and the same in
-every collection. They are what a cover or a fragment you own is
-[valued from](#what-a-piece-carrying-several-stamps-is-worth).
+Which column is which is told to each **valuation method**, under **Settings → Valuation methods**: for
+*Michel*, which condition is its used price, its cover EF, MeF and MiF, its on-piece price and its
+never-hinged price; for *Fischer*, its used, cover ⊠ and on-piece; for *Fischer FP/FW/FM*, its used, FP,
+FW, FM and on-piece; for *Sum of used*, its used. Any condition can be chosen — *used* is normally your
+ordinary *U* — and one condition can serve several methods: Fischer's ⊠ and Michel's MiF may well be the
+same column. A role left at *Not set up* is not read, and a piece valued by that method says so (see
+[What a piece carrying several stamps is worth](#what-a-piece-carrying-several-stamps-is-worth)).
 
 #### Stamps still valid for postage
 
 Michel prints no ⊠ price for a stamp that can still frank a letter, and says how to value one on a
 cover instead: **at least 0.40, or about 20 % above the used price — but no more than the
-never-hinged price when that is above 0.40**. Stamporama applies that rule for you.
+never-hinged price when that is above 0.40**. The *Michel* method applies that rule for you.
 
 - **Mark what is still valid** from the **⋮** menu of an area on the Areas screen, or of an issue on
   the Issues list: **Mark still valid for postage**. An area's mark reaches every area and issue
   beneath it; **Unmark still valid for postage** on an issue under a marked area takes just that
   issue out, and the menu says when a mark is inherited.
-- **Choose which conditions the rule reads**, once, under **Settings → Conditions**: open a condition
-  and set **Michel's rule** to *Used* or *Never hinged*. New collections start with *U* and *MNH*
-  chosen. While either is unchosen, nothing is derived by the rule.
+- **Map Michel's used and never-hinged prices** under **Settings → Valuation methods**. While either is
+  not set up, the rule gives nothing, and the piece's value names the one missing.
 
-A still-valid stamp with no **Cover EF**, **Cover MeF** or **Cover MiF** price of its own then shows
-one in its **used** condition, worked out from that edition's used and never-hinged prices and shown
-greyed or with `~`, like any derived price. The 0.40 is in the catalogue's own currency. The rule
-takes the place of a multiplier for those three prices; **On piece** and the other conditions keep
-their multipliers, and a price you type always wins. Without a used price there is nothing to work
-from, and without a never-hinged price nothing caps it.
+Where a still-valid stamp on a cover valued by *Michel* has no price in the condition Michel's cover EF,
+MeF or MiF is mapped to, the method works one out from that edition's used and never-hinged prices. The
+0.40 is in the catalogue's own currency; without a used price there is nothing to work from, and without
+a never-hinged price nothing caps it. The figure is the method's working, not a catalogue price: it is
+shown with `~` in the cover's Valuation window and in identification only, never written to the stamp's
+prices and never shown on the price grid or the lists. A price you type always wins.
 
 ## Covers, fragments and other pieces carrying several stamps
 
@@ -1206,16 +1204,18 @@ Its own page shows the stamps it carries in your order, under **Stamps on this p
 No catalog prints a price for your particular cover, but catalogs say how to value one from its
 stamps' prices — and the app does that for you. A cover's, a fragment's or any piece's catalog value is
 **computed by a valuation method** from the prices of the stamps on it: their used prices, and the
-[prices on cover and on piece](#prices-on-cover-and-on-piece) you record for them.
+[prices on cover and on piece](#prices-on-cover-and-on-piece) you record for them — each read from the
+condition the method is told it is, under **Settings → Valuation methods**.
 
 **What kind of piece it is** comes from its format. Under **Settings → Formats**, give each format
 you use for pieces a **Kind**: *On cover* for *Cover*, *On piece* for a fragment, or *Neither*. A
-format with a kind has no prices of its own — giving it a kind moves the prices typed on its tab to
-the stamps' **Cover EF** (or **On piece**) prices. A piece whose format has neither kind — an FDC, for
+format with a kind has no prices of its own and is not a tab of the price grid: a cover's value is its
+method's. A want, an auction lot line or a trade line in such a format is valued the same way, as one
+stamp once on a rate-correct cover. A piece whose format has neither kind — an FDC, for
 now — is valued as the sum of its stamps' used prices, whatever its method: no method reads a cover
 price off a format that does not say the piece is a cover, so to value it by one, give it a format of
 kind *On cover* or *On piece*. One stamp alone on a cover is valued the same
-way, as a cover (its **Cover EF** price under Michel), and still counts as a copy of that stamp.
+way, as a cover (its cover EF price under Michel), and still counts as a copy of that stamp.
 
 **How a cover was posted** is its **franking**, set in the copy's **Edit** dialog, or next to the stamps
 on the piece when you identify a card scan tile:
@@ -1229,8 +1229,8 @@ on the piece when you identify a card scan tile:
 | Method | Fragment | Cover, rate-correct | Cover, philatelic | Cover, not posted |
 | --- | --- | --- | --- | --- |
 | **Michel** | sum of on-piece prices | EF: the stamp's EF price · MeF: its MeF price · MiF: the highest MiF price among the stamps | the most expensive used price + 15 % | sum of used prices |
-| **Fischer** | sum of on-piece prices | EF: the stamp's ⊠ (MiF) price · MeF: 150 % of ⊠ for two stamps, every further one at its used price · MiF: 50 % of the highest ⊠, every other stamp at its used price | as rate-correct | sum of used prices |
-| **Fischer FP/FW/FM** | sum of on-piece prices | EF: FP · MeF: FW · MiF: the highest FM — the EF, MeF and MiF prices as typed | as rate-correct | sum of used prices |
+| **Fischer** | sum of on-piece prices | EF: the stamp's ⊠ price · MeF: 150 % of ⊠ for two stamps, every further one at its used price · MiF: 50 % of the highest ⊠, every other stamp at its used price | as rate-correct | sum of used prices |
+| **Fischer FP/FW/FM** | sum of on-piece prices | EF: FP · MeF: FW · MiF: the highest FM | as rate-correct | sum of used prices |
 | **Sum of used** | sum of used prices | sum of used prices | sum of used prices | sum of used prices |
 
 A sum of used prices takes every stamp in its own format — a block as a block — times how many of it
@@ -1239,43 +1239,57 @@ there are.
 **EF, MeF or MiF** is read off what is on the cover, counting stamps rather than rows: one stamp once is
 EF; one stamp several times — a quantity above 1, or a block of it — is MeF; more than one stamp is MiF.
 Under Fischer a block counts as one stamp, since the app does not know how many stamps a format holds.
-Every price is read at the piece's condition, with no certificate, at the latest catalog edition, in
-your collection currency.
+
+**Where each price is read from** is the method's: under **Settings → Valuation methods**, each
+method's card lists the prices it reads — *Used*, *Cover EF*, *Cover MeF*, *Cover MiF*, *On piece* and
+*Never hinged* for Michel; *Used*, *Cover ⊠* and *On piece* for Fischer; *Used*, *FP*, *FW*, *FM* and *On
+piece* for Fischer FP/FW/FM; *Used* for Sum of used — with a condition picker beside each. Every price,
+the used price too, is read in the condition chosen there, as a single, with no certificate, at the
+latest catalog edition, in your collection currency; the piece's own condition does not change its
+value. Nothing is set up to begin with: until you choose them, a piece valued by that method says which
+of its prices are **not set up**, with a link to the page, and no price is ever read in another's
+place.
 
 **Which method** values a piece: the collection's default, **Michel** unless you change it under
-**Settings → Formats → Valuation method**; an area's own, set from its **⋮ → Valuation method…** on the
+**Settings → Valuation methods**; an area's own, set from its **⋮ → Valuation method…** on the
 Areas screen and inherited by the areas below it; or the copy's own, which wins over both — set in its
 **Edit** dialog, in its **Valuation** window, or when you identify a card scan tile as the piece. The area that decides is the area of the piece's **most expensive stamp** — the one
-with the highest used price.
+with the highest used price, read in the condition the collection's default method takes its used
+prices from.
 
 **A missing price** makes the value **partial**: the figure counts what is priced, and the missing
-price is marked on its stamp. With nothing priced at all the piece is unpriced, and its row shows
-**+ prices**.
+price is marked on its stamp. A price whose condition is **not set up** makes it partial too, and the
+value names the method and the price — *Michel's Cover MiF is not set up*. With nothing priced at all
+the piece is unpriced, and its row shows **+ prices**.
 
 **How the value was reached** is the piece's **Valuation** window (its row's **⋮ → Show valuation**, or
 click its value), read top to bottom:
 
 - **Each stamp on the piece**, numbered, with a field for each price the value reads: its **used**
-  price and its price **on the piece** — the one the method reads for this piece: its *Cover EF*, *MeF*
-  or *MiF* price on a cover, by what is on it (under Fischer its ⊠ price, which is its MiF price), its
-  *On piece* price on a fragment. A dash is a price the value does not read. **Type the prices in
+  price and its price **on the piece** — the one the method reads for this piece: its cover EF, MeF or
+  MiF price on a cover, by what is on it (under Fischer its ⊠ price, under Fischer FP/FW/FM its FP, FW
+  or FM), its on-piece price on a fragment. Each column is headed by the condition it is read from —
+  *U*, *MiF*, *FM* — and a price whose condition is not set up shows **not set up** instead of a field.
+  A dash is a price the value does not read. A price Michel's rule works out for a stamp still valid
+  for postage shows greyed, with `~`, in its empty field. **Type the prices in
   place**, as in a checklist run: a price already on file is filled in and can be typed over, a
   missing one is framed in amber, and a note above the stamps counts how many are still missing. Tab
   goes from one field to the next in the list's order. `1,50` and `1.50` are the same figure; `-`
   records that the catalog says the stamp does not exist there and `?` that its price cannot be
   determined, as on the price grid. The same stamp twice on the piece has one field — the other row
   shows its figure and says *as #1*. A stamp with variants asks for its **variants'** prices on lines
-  under it, with **Full grid…** for every other condition, certificate and format. Each price is for
-  the piece's condition, with no certificate, at the latest edition of the stamp's main catalog, in
-  that catalog's currency — the used price is the single's, as every catalog value you type is.
+  under it, with **Full grid…** for every other condition, certificate and format. Each price is
+  saved in its column's condition, as a single, with no certificate, at the latest edition of the
+  stamp's main catalog, in that catalog's currency.
   **The value and its arithmetic follow as you type**, before anything is saved. **Save prices**
   appears once a price is typed and records them as the stamps' catalog prices, so every other piece
   and copy of those stamps reads them too. Closing the window without saving keeps nothing, and the
   window asks first.
 - **The computed value**, then the arithmetic it is — *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*
-  — so you can check it against the catalog: ⊙ is a used price, ⊠ Fischer's cover price, *EF*, *MeF*
-  and *MiF* (*FP*, *FW*, *FM* under Fischer FP/FW/FM) Michel's. A price the sum needed but is missing
-  is printed as a dash where it would have been added, and the value says it is partial.
+  — so you can check it against the catalog: each price is named by its condition's symbol where it
+  has one (⊙, ⊠), else its abbreviation, and a price Michel's rule worked out carries `~`. A price the
+  sum needed but is missing is printed as a dash where it would have been added, and the value says it
+  is partial.
 - **The method**, the franking and EF/MeF/MiF in one line, and where the method came from — an area,
   *set on this copy*, or the collection's default.
 - **Franking**, on a cover, and beside it **Method**, both of which you can change right there: the

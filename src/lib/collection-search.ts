@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "./db";
-import { COPY_FORMAT_WHERE } from "./stamp-formats";
 import { searchStampsForPicker } from "./stamps";
 import { searchIssues } from "./issues";
 import { listItemsPaginated } from "./items";
@@ -385,7 +384,7 @@ async function loadAxisDictionaries(collectionId: string): Promise<AxisDictionar
       select: { id: true, name: true, abbreviation: true },
     }),
     prisma.stampFormat.findMany({
-      where: { collectionId, ...COPY_FORMAT_WHERE },
+      where: { collectionId },
       select: { id: true, name: true, abbreviation: true },
     }),
   ]);
