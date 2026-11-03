@@ -110,6 +110,13 @@ function taken(
   );
 }
 
+/** A row's format as the copy's Format control words it (#2391): *Single* for none, else the full
+ *  name with its abbreviation. */
+function formatFullName(formats: readonly StampFormatData[], formatId: string): string {
+  const format = formats.find((f) => f.id === formatId);
+  return format ? `${format.name} (${format.abbreviation})` : "Single";
+}
+
 export function ItemStampsField({
   collectionId,
   areas,
@@ -307,14 +314,18 @@ export function ItemStampsField({
 
               {/* The **component's** format, not the piece's: a block of four *on* this cover. The
                   piece's own format — Cover, FDC, Piece — is the dialog's Format field (ADR-0044 §5),
-                  and an option that would duplicate another row is disabled rather than refused. */}
-              <Tooltip content="This component's own format — a block of four on the piece. The piece itself is described by the copy's Format field.">
+                  and an option that would duplicate another row is disabled rather than refused.
+                  Worded as the copy's Format control is, full name and abbreviation (#2391): the
+                  closed control may cut it short, so the tooltip names the chosen format in full. */}
+              <Tooltip
+                content={`${formatFullName(formats, row.formatId)} — this component's own format, a block of four on the piece. The piece itself is described by the copy's Format field.`}
+              >
                 <select
                   value={row.formatId}
                   disabled={disabled}
                   aria-label="Component format"
                   onChange={(e) => update(row.key, { formatId: e.target.value })}
-                  style={{ ...INPUT_STYLE, maxWidth: "9rem" }}
+                  style={{ ...INPUT_STYLE, maxWidth: "12rem" }}
                 >
                   <option value="" disabled={taken(rows, row.stampId, "", row.key)}>
                     — Single —
@@ -325,7 +336,7 @@ export function ItemStampsField({
                       value={f.id}
                       disabled={taken(rows, row.stampId, f.id, row.key)}
                     >
-                      {f.abbreviation || f.name}
+                      {f.name} ({f.abbreviation})
                     </option>
                   ))}
                 </select>
