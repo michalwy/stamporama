@@ -1255,11 +1255,23 @@ price is marked on its stamp. With nothing priced at all the piece is unpriced, 
 **How the value was reached** is the piece's **Valuation** window (its row's **⋮ → Show valuation**, or
 click its value), read top to bottom:
 
-- **Each stamp on the piece** with two prices: its **used** price, in its own format, and its price
-  **on the piece** — the one the method reads for this piece: its *Cover EF*, *MeF* or *MiF* price on a
-  cover, by what is on it (under Fischer its ⊠ price, which is its MiF price), its *On piece* price on
-  a fragment. A missing price says *no price* in amber where the value needed it; a dash is a price the
-  value does not read.
+- **Each stamp on the piece**, numbered, with a field for each price the value reads: its **used**
+  price and its price **on the piece** — the one the method reads for this piece: its *Cover EF*, *MeF*
+  or *MiF* price on a cover, by what is on it (under Fischer its ⊠ price, which is its MiF price), its
+  *On piece* price on a fragment. A dash is a price the value does not read. **Type the prices in
+  place**, as in a checklist run: a price already on file is filled in and can be typed over, a
+  missing one is framed in amber, and a note above the stamps counts how many are still missing. Tab
+  goes from one field to the next in the list's order. `1,50` and `1.50` are the same figure; `-`
+  records that the catalog says the stamp does not exist there and `?` that its price cannot be
+  determined, as on the price grid. The same stamp twice on the piece has one field — the other row
+  shows its figure and says *as #1*. A stamp with variants asks for its **variants'** prices on lines
+  under it, with **Full grid…** for every other condition, certificate and format. Each price is for
+  the piece's condition, with no certificate, at the latest edition of the stamp's main catalog, in
+  that catalog's currency — the used price is the single's, as every catalog value you type is.
+  **The value and its arithmetic follow as you type**, before anything is saved. **Save prices**
+  appears once a price is typed and records them as the stamps' catalog prices, so every other piece
+  and copy of those stamps reads them too. Closing the window without saving keeps nothing, and the
+  window asks first.
 - **The computed value**, then the arithmetic it is — *MiF: 50 % × Mi 123 ⊠ 40.00 + Mi 124 ⊙ 2.00 = 22.00*
   — so you can check it against the catalog: ⊙ is a used price, ⊠ Fischer's cover price, *EF*, *MeF*
   and *MiF* (*FP*, *FW*, *FM* under Fischer FP/FW/FM) Michel's. A price the sum needed but is missing
@@ -1275,8 +1287,9 @@ click its value), read top to bottom:
 - Your **modifier** with its note, and the **reduction for faults**, each with the figure it gives,
   ending in **Value of this copy** — the figure every list and total reads.
 
-The same prices and arithmetic show when you identify a card scan tile as a piece carrying several
-stamps — see [Working through the tiles](purchases.md#working-through-the-tiles).
+The same price fields and arithmetic show when you identify a card scan tile as a piece carrying
+several stamps, where **Identify the tile** saves the prices — see
+[Working through the tiles](purchases.md#working-through-the-tiles).
 
 The computed value is what the Copies list total adds up, the asking price pre-filled when you list the
 piece, your own valuation of it in a trade and the figure a trade partner's catalog gives it. Its own

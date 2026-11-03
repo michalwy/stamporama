@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
   buildDescendantMap,
@@ -35,6 +36,9 @@ import {
   type ValueModifier,
 } from "./valuation";
 import { childIsVariant, isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { parsePriceCellInput } from "./catalog-price-mark";
+import { roundAmount } from "./decimal-input";
+import type { TypedPiecePrice } from "./piece-price-entry";
 
 // Split out of `items.ts` so that **market** valuation can reuse it without the two modules
 // importing each other: `market-values.ts` values a lot's lines with the very same rule a copy is
@@ -176,6 +180,18 @@ export interface ValuationCatalogOverride {
   catalogNameByArea: Map<string, string | null>;
 }
 
+/**
+ * A piece's stamp prices **typed but not saved** (#2368), valued as though they were on file — so the
+ * value and its arithmetic follow the collector's typing before anything is written. Each lands where
+ * the save would put it: the stamp's main catalogue at its latest edition, at `conditionId` with no
+ * certificate, at the single for the used price and at the reserved row for a price on cover or on
+ * piece. A figure that does not parse is not read.
+ */
+export interface TypedCatalogPrices {
+  conditionId: string;
+  prices: readonly TypedPiecePrice[];
+}
+
 /** Value a set of {@link ValuationRow}s. Loads the stamp prices, area primary catalogs, descendant
  * variant prices, format factors and currency rates **once** for the whole set, then applies the
  * pure `valuateCopy` rule — which is why every caller batches rather than valuing row by row.
@@ -187,7 +203,8 @@ export interface ValuationCatalogOverride {
 export async function valuateItemRows(
   collectionId: string,
   rows: ValuationRow[],
-  override?: ValuationCatalogOverride
+  override?: ValuationCatalogOverride,
+  typed?: TypedCatalogPrices
 ): Promise<Map<string, CopyValuation>> {
   if (rows.length === 0) return new Map();
 
@@ -357,6 +374,8 @@ export async function valuateItemRows(
     sortKeyByStamp.set(s.id, s.primaryCatalogSortKey);
   }
 
+  if (typed && typed.prices.length > 0) await applyTypedPrices(typed);
+
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
 
   const result = new Map<string, CopyValuation>();
@@ -449,6 +468,53 @@ export async function valuateItemRows(
       uncertain,
       baseCurrency
     );
+  }
+
+  /** Put the typed prices in place of what is on file at their keys ({@link TypedCatalogPrices}). */
+  async function applyTypedPrices({ conditionId, prices }: TypedCatalogPrices): Promise<void> {
+    const catalogIds = new Set<string>();
+    for (const p of prices) {
+      const id = primaryCatalogByStamp.get(p.stampId);
+      if (id) catalogIds.add(id);
+    }
+    const catalogs = await prisma.catalogName.findMany({
+      where: { id: { in: [...catalogIds] } },
+      select: {
+        id: true,
+        currency: true,
+        catalogEditions: { select: { year: true }, orderBy: { year: "desc" }, take: 1 },
+      },
+    });
+    const catalogById = new Map(catalogs.map((c) => [c.id, c]));
+    for (const p of prices) {
+      const own = pricesByStamp.get(p.stampId);
+      const catalogNameId = primaryCatalogByStamp.get(p.stampId);
+      const catalog = catalogNameId ? catalogById.get(catalogNameId) : undefined;
+      const year = catalog?.catalogEditions[0]?.year;
+      const formatId = p.price === "used" ? null : coverFormatId.get(p.price);
+      const cell = parsePriceCellInput(p.amount);
+      if (!own || !catalog || year === undefined || formatId === undefined) continue;
+      if (cell.kind !== "amount" && cell.kind !== "mark") continue;
+      const sameKey = (q: RawCatalogPrice) =>
+        q.catalogEdition.catalogNameId === catalog.id &&
+        q.catalogEdition.year === year &&
+        q.conditionId === conditionId &&
+        q.certificateStatusId === null &&
+        q.formatId === formatId;
+      pricesByStamp.set(p.stampId, [
+        ...own.filter((q) => !sameKey(q)),
+        {
+          price: cell.kind === "amount" ? new Prisma.Decimal(roundAmount(cell.amount)) : null,
+          mark: cell.kind === "mark" ? cell.mark : null,
+          currency: catalog.currency,
+          conditionId,
+          certificateStatusId: null,
+          formatId,
+          catalogEdition: { year, catalogNameId: catalog.id },
+        },
+      ]);
+      currencies.push(catalog.currency);
+    }
   }
 
   /** `r`'s condition, certificate and format, valued as a copy of `stampId`. */

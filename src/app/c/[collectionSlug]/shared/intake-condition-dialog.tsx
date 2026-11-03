@@ -51,11 +51,21 @@ import { REPLACING_DISPOSITION } from "@/lib/replacement-rules";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import {
+  componentIdAt,
   IdentifiedPieceFigure,
-  IdentifiedStampPrices,
   usePiecePreview,
   type PiecePreviewSubject,
 } from "./identified-piece-value";
+import {
+  PieceMissingNote,
+  PiecePriceCell,
+  piecePriceLabel,
+  PieceUmbrellaCell,
+  PieceVariantPrices,
+  usePiecePriceEntry,
+  usePiecePriceTyping,
+} from "./piece-stamp-prices";
+import { onPiecePriceHeading } from "./piece-value-breakdown";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
 import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
 import {
@@ -129,6 +139,13 @@ export const CHIP: React.CSSProperties = {
   color: "var(--color-text-secondary)",
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
+};
+
+/** A stamp's row on the piece with its price fields (#2368) — the stamp, then one column per price. */
+const PIECE_PRICE_ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
 };
 
 export const INPUT_STYLE: React.CSSProperties = {
@@ -722,6 +739,13 @@ function IntakeConditionDialog({
   const [franking, setFranking] = useState<Franking>(DEFAULT_FRANKING);
   // The piece's own method (#2369), beside the franking and asked with it; null is *As inherited*.
   const [method, setMethod] = useState<ValuationMethod | null>(null);
+  // The stamps' prices, typed in place on their rows (#2368): what is on file filled in, a missing one
+  // framed, the value following the typing; saved with *Identify the tile*, before the copy is made.
+  const priceTyping = usePiecePriceTyping({
+    collectionId,
+    conditionId,
+    stampIds: severalStamps && singleStamp ? carriedStamps.map((line) => line.entry.stampId) : [],
+  });
   // Rebuilt every render; the query keys on its contents, not on the object.
   const previewSubject: PiecePreviewSubject | null =
     severalStamps && singleStamp
@@ -733,9 +757,12 @@ function IntakeConditionDialog({
           franking: correctedCopyId ? null : franking,
           ...(correctedCopyId ? {} : { method }),
           itemId: correctedCopyId ?? null,
+          typed: priceTyping.previewTyped,
         }
       : null;
   const piecePreview = usePiecePreview(previewSubject);
+  const prices = usePiecePriceEntry(priceTyping, piecePreview?.piece ?? null);
+  const pricedPiece = piecePreview?.piece && previewSubject && prices.rows ? piecePreview.piece : null;
   // What *As inherited* names (#2369) is the preview's; one stamp on a cover format has no figure
   // drawn here, so it is read for the name alone — the stamp as a single on that format.
   const methodPreview = usePiecePreview(
@@ -748,6 +775,7 @@ function IntakeConditionDialog({
           franking,
           method,
           itemId: null,
+          typed: [],
         })
       : null
   );
@@ -863,6 +891,24 @@ function IntakeConditionDialog({
     // Before, and blocking on failure, because a figure the collector read off the paper catalogue
     // must not be dropped in silence; and safely retried, because the field prefills from what is
     // now recorded, so a second attempt at a failed intake writes nothing a second time.
+    // The stamps' prices typed on the piece (#2368) go before it for #593's reasons: facts about the
+    // stamps, blocking on failure, and written once — the fields then open on what is on file.
+    if (selection.kind === "stamp" && severalStamps && (prices.changes.length > 0 || prices.invalid)) {
+      if (prices.invalid) {
+        setPriceError("Enter a valid non-negative amount, - or ? in every price.");
+        return;
+      }
+      setSavingPrice(true);
+      setPriceError(undefined);
+      const { setPiecePricesAction } = await import("@/app/actions/items");
+      const r = await setPiecePricesAction(collectionId, conditionId, prices.changes);
+      setSavingPrice(false);
+      if (r.error) {
+        setPriceError(r.error);
+        return;
+      }
+      await priceTyping.saved();
+    }
     if (selection.kind === "stamp" && !severalStamps) {
       const entry = catalogValueEntry(catalogValueRef.current);
       if (entry) {
@@ -963,20 +1009,69 @@ function IntakeConditionDialog({
                         <strong>Several stamps on this piece</strong> — one copy, counted towards none of
                         them:
                       </div>
-                      <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-                        {carriedStamps.map((line, i) => (
-                          <li key={i} style={{ marginTop: "0.125rem" }}>
-                            <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
-                            {piecePreview && previewSubject && (
-                              <IdentifiedStampPrices
-                                value={piecePreview}
-                                subject={previewSubject}
-                                index={i}
-                              />
-                            )}
+                      {pricedPiece && (
+                        <div style={{ marginTop: "0.25rem" }}>
+                          <PieceMissingNote entry={prices} />
+                        </div>
+                      )}
+                      {/* Numbered, so a stamp's second row can say which row its price is typed on. */}
+                      <ol style={{ margin: "0.25rem 0 0", paddingLeft: "1.5rem" }}>
+                        {pricedPiece && (
+                          <li style={{ listStyle: "none", ...PIECE_PRICE_ROW, color: "var(--color-text-muted)", fontSize: "0.75rem" }}>
+                            <span style={{ flex: 1 }} />
+                            {prices.columns.map((price, c) => (
+                              <span key={price} style={{ minWidth: "6rem", textAlign: "right" }}>
+                                {c === 0 ? "Used" : onPiecePriceHeading(pricedPiece)}
+                              </span>
+                            ))}
                           </li>
-                        ))}
-                      </ul>
+                        )}
+                        {carriedStamps.map((line, i) => {
+                          const rowIndex =
+                            pricedPiece && previewSubject
+                              ? pricedPiece.components.findIndex((c) => c.id === componentIdAt(previewSubject, i))
+                              : -1;
+                          const row = rowIndex >= 0 ? prices.rows?.[rowIndex] : undefined;
+                          const label =
+                            (line.chips.find((c) => c.primary) ?? line.chips[0])?.label ?? line.name ?? `stamp ${i + 1}`;
+                          return (
+                            <li key={i} style={{ marginTop: "0.125rem" }}>
+                              <div style={PIECE_PRICE_ROW}>
+                                <span style={{ flex: 1, minWidth: 0 }}>
+                                  <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
+                                </span>
+                                {row &&
+                                  prices.columns.map((price) =>
+                                    row.variants ? (
+                                      <PieceUmbrellaCell key={price} />
+                                    ) : (
+                                      <PiecePriceCell
+                                        key={price}
+                                        entry={prices}
+                                        slot={row.slots.find((s) => s.price === price)}
+                                        rowIndex={rowIndex}
+                                        label={piecePriceLabel(label, price)}
+                                        disabled={isPending || savingPrice}
+                                      />
+                                    )
+                                  )}
+                              </div>
+                              {row?.variants && (
+                                <PieceVariantPrices
+                                  entry={prices}
+                                  row={row}
+                                  rowIndex={rowIndex}
+                                  umbrellaId={line.entry.stampId}
+                                  disabled={isPending || savingPrice}
+                                  indent="1rem"
+                                />
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                      {/* An umbrella's *Full grid…* — the grid portals itself out of this step. */}
+                      {priceTyping.fullGrid.dialog}
                     </div>
                   )}
                   {/* How the piece was franked (#2359) and its own method (#2369), next to the

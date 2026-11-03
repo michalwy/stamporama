@@ -184,8 +184,11 @@ export interface PieceValueInput {
   components: readonly PieceComponent[];
 }
 
+/** What {@link coverUsage} and {@link piecePricesRead} count by — an entry without its prices. */
+type PieceEntryShape = Pick<PieceComponent, "id" | "stampId" | "quantity" | "multiple">;
+
 /** EF, MeF or MiF, counting stamps rather than rows (see the module header). */
-export function coverUsage(components: readonly PieceComponent[]): CoverUsage {
+export function coverUsage(components: readonly PieceEntryShape[]): CoverUsage {
   const stamps = new Set(components.map((c) => c.stampId));
   if (stamps.size > 1) return "mif";
   const [only] = components;
@@ -250,6 +253,64 @@ export function valuePiece(input: PieceValueInput): PieceValueResult {
   return acc.result("cover_price", usage);
 }
 
+/**
+ * The prices the value reads for each entry, by its id (#2368) — the fields the piece's stamps are
+ * priced in, in place. **Decided by the rule alone, never by the figures**, so a field does not come
+ * and go as prices are typed: a price compared for the highest is read whether or not it wins, and
+ * under Fischer's mixed franking every stamp's used price is read, the top stamp's included, since
+ * which stamp is the top one is a matter of the figures. Mirrors {@link valuePiece} branch by branch.
+ */
+export function piecePricesRead(
+  input: Omit<PieceValueInput, "components"> & { components: readonly PieceEntryShape[] }
+): Map<string, PiecePrice[]> {
+  const { kind, franking, method, components } = input;
+  const read = new Map<string, PiecePrice[]>(components.map((c) => [c.id, []]));
+  const add = (c: PieceEntryShape, price: PiecePrice) => {
+    const prices = read.get(c.id)!;
+    if (!prices.includes(price)) prices.push(price);
+  };
+  if (
+    components.length === 0 ||
+    kind === null ||
+    method === "sum_of_used" ||
+    (kind === "on_cover" && franking === "not_posted")
+  ) {
+    for (const c of components) add(c, "used");
+    return read;
+  }
+  if (kind === "on_piece") {
+    for (const c of components) add(c, "on_piece");
+    return read;
+  }
+  const usage = coverUsage(components);
+  if (method === "michel" && franking === "philatelic_posted") {
+    for (const c of distinctStamps(components)) add(c, "used");
+    return read;
+  }
+  if (method === "fischer") {
+    if (usage === "ef") add(components[0], "cover_mif");
+    else if (usage === "mef") {
+      const units = fischerUnits(components);
+      add(units[0], "cover_mif");
+      for (const unit of units.slice(2)) add(unit, "used");
+    } else {
+      for (const c of distinctStamps(components)) add(c, "cover_mif");
+      for (const c of components) add(c, "used");
+    }
+    return read;
+  }
+  if (usage === "mif") for (const c of distinctStamps(components)) add(c, "cover_mif");
+  else add(components[0], usage === "ef" ? "cover_ef" : "cover_mef");
+  return read;
+}
+
+/** One unit per stamp, multiples first — Fischer's count (module header). */
+function fischerUnits<T extends PieceEntryShape>(components: readonly T[]): T[] {
+  return [...components]
+    .sort((a, b) => Number(b.multiple) - Number(a.multiple))
+    .flatMap((c) => Array.from({ length: c.quantity }, () => c));
+}
+
 function fischer(
   components: readonly PieceComponent[],
   usage: CoverUsage,
@@ -262,9 +323,7 @@ function fischer(
   }
   // One unit per stamp; an entry in a multiple format is one unit of its quantity (module header).
   // Multiples first, so the two stamps priced at ⊠ are taken from them before any loose single.
-  const units = [...components]
-    .sort((a, b) => Number(b.multiple) - Number(a.multiple))
-    .flatMap((c) => Array.from({ length: c.quantity }, () => c));
+  const units = fischerUnits(components);
 
   if (usage === "mef") {
     const [first] = units;
@@ -289,7 +348,7 @@ function fischer(
 }
 
 /** The first entry of each stamp, in the collector's order. */
-function distinctStamps(components: readonly PieceComponent[]): PieceComponent[] {
+function distinctStamps<T extends PieceEntryShape>(components: readonly T[]): T[] {
   const seen = new Set<string>();
   return components.filter((c) => {
     if (seen.has(c.stampId)) return false;

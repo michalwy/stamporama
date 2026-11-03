@@ -3,14 +3,15 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { DraftPieceEntry } from "@/lib/carrier-value";
 import type { Franking, ValuationMethod } from "@/lib/piece-valuation";
-import { onPiecePrice } from "@/lib/piece-value-words";
 import type { CopyValuation, PieceValuation } from "@/lib/valuation";
-import { PieceArithmetic, PiecePriceFigure, PriceSymbol } from "./piece-value-breakdown";
+import type { TypedPiecePrice } from "@/lib/piece-price-entry";
+import { PieceArithmetic } from "./piece-value-breakdown";
 
 // What a piece carrying several stamps will be worth, in the identification step (#2353) — read
 // before the copy exists, by the method, exactly as the copy will be valued once written. Each stamp
-// on the piece shows its used price and its price on the piece; under them, the computed value and how
-// it was reached. Re-read as the condition, the format, the stamps, the franking or the method change.
+// on the piece has its used price and its price on the piece typed in place (#2368,
+// `piece-stamp-prices.tsx`); under them, the computed value and how it was reached. Re-read as the
+// condition, the format, the stamps, the franking, the method or the typed prices change.
 
 export interface PiecePreviewSubject {
   collectionId: string;
@@ -25,6 +26,8 @@ export interface PiecePreviewSubject {
   method?: ValuationMethod | null;
   /** The copy a correction re-answers. */
   itemId: string | null;
+  /** Stamp prices typed and not yet saved (#2368), read as if they were. */
+  typed: readonly TypedPiecePrice[];
 }
 
 /** The preview's value, or null while there is none — no condition yet, or not a piece. */
@@ -41,6 +44,7 @@ export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuat
         franking: subject!.franking,
         method: subject!.method,
         itemId: subject!.itemId,
+        typed: subject!.typed,
       });
     },
     // A change of franking re-reads; the old figure stays on screen until the new one is in, rather
@@ -51,37 +55,8 @@ export function usePiecePreview(subject: PiecePreviewSubject | null): CopyValuat
 }
 
 /** The id the preview files the entry at `index` under — `previewPieceValue`'s key, then its index. */
-function componentIdAt(subject: PiecePreviewSubject, index: number): string {
+export function componentIdAt(subject: PiecePreviewSubject, index: number): string {
   return `${subject.itemId ?? "preview"}:${index}`;
-}
-
-/** One stamp's used price and its price on the piece, beside it in the list. */
-export function IdentifiedStampPrices({
-  value,
-  subject,
-  index,
-}: {
-  value: CopyValuation;
-  subject: PiecePreviewSubject;
-  index: number;
-}) {
-  const piece = value.piece!;
-  const componentId = componentIdAt(subject, index);
-  const onPiece = onPiecePrice(piece);
-  return (
-    <span style={{ display: "inline-flex", gap: "0.4rem", marginLeft: "0.5rem", fontSize: "0.8125rem" }}>
-      <span>
-        <PriceSymbol piece={piece} price="used" />{" "}
-        <PiecePriceFigure piece={piece} componentId={componentId} price="used" />
-      </span>
-      {onPiece && (
-        <span>
-          · <PriceSymbol piece={piece} price={onPiece} />{" "}
-          <PiecePriceFigure piece={piece} componentId={componentId} price={onPiece} />
-        </span>
-      )}
-    </span>
-  );
 }
 
 /** The computed value under the stamps, and how it was reached. */

@@ -12,6 +12,7 @@ import { pieceCopyOf, type DraftPieceEntry } from "./carrier-value";
 import { assertCollectionOwner } from "./platform-category";
 import { DEFAULT_FRANKING, type Franking, type ValuationMethod } from "./piece-valuation";
 import type { CopyValuation } from "./valuation";
+import type { TypedPiecePrice } from "./piece-price-entry";
 
 // The value of a **piece** (#2359; ADR-0076) for the Valuation dialog and the identification step —
 // the database half. The rule a piece is valued by is `piece-valuation.ts`, applied inside
@@ -26,6 +27,8 @@ export interface CarrierValuationRead {
    *  applies. Reported rather than refused, so a dialog opened on a row a moment before it was edited
    *  down to one stamp can say so instead of failing. */
   multiStamp: boolean;
+  /** The copy's condition — the one its stamps' prices are read and typed at (#2368). */
+  conditionId: string;
   conditionName: string;
   /** The piece's value as every list and total reads it — the method's result, modified and lowered
    *  for faults — with each stamp's prices and the arithmetic on `piece` (#2353). Null for a copy
@@ -42,7 +45,9 @@ export interface CarrierValuationRead {
  */
 export async function getCarrierValuation(
   ownerId: string,
-  itemId: string
+  itemId: string,
+  /** Stamp prices typed in the window and not yet saved (#2368), valued as if they were. */
+  typed: readonly TypedPiecePrice[] = []
 ): Promise<CarrierValuationRead> {
   const stamps = await getItemStamps(ownerId, itemId);
   const item = await prisma.item.findUniqueOrThrow({
@@ -71,7 +76,10 @@ export async function getCarrierValuation(
     ...copyValuationOf(item),
   };
   const [valuations, baseCurrency] = await Promise.all([
-    valuateItemRows(item.collectionId, [ownRow]),
+    valuateItemRows(item.collectionId, [ownRow], undefined, {
+      conditionId: item.conditionId,
+      prices: typed,
+    }),
     getCollectionBaseCurrency(item.collectionId),
   ]);
 
@@ -82,6 +90,7 @@ export async function getCarrierValuation(
     collectionId: item.collectionId,
     baseCurrency,
     multiStamp: value.piece !== null,
+    conditionId: item.conditionId,
     conditionName: item.condition.name,
     value: value.piece ? value : null,
     components: stamps.entries,
@@ -129,6 +138,8 @@ export interface PiecePreviewInput {
   method?: ValuationMethod | null;
   /** The copy a correction re-answers — its franking and own method are its own. */
   itemId: string | null;
+  /** Stamp prices typed on the piece and not yet saved (#2368), valued as if they were. */
+  typed?: readonly TypedPiecePrice[];
 }
 
 /**
@@ -172,7 +183,7 @@ export async function previewPieceValue(
       valueModifier: null,
       candidateStampIds: null,
     },
-  ]);
+  ], undefined, { conditionId: input.conditionId, prices: input.typed ?? [] });
   const value = valuations.get(key);
   return value?.piece ? value : null;
 }
