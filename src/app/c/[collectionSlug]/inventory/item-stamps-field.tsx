@@ -16,6 +16,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { Icon } from "@/app/icons";
 import { baseBtn } from "@/app/button-style";
+import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import { PhotoThumb } from "./photo-thumb";
 import { StampPickerAutocomplete } from "./stamp-picker-autocomplete";
 import { StampPickerBrowser } from "./stamp-picker-browser";
 import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
@@ -42,6 +44,11 @@ import { fromSearchItem, type PickedStamp } from "./stamp-picker-shared";
 // not eight. Each lands as quantity 1, single, in catalogue order after the rows already listed; a
 // stamp already on the piece raises its row's quantity instead (`item-stamp-additions.ts`). The
 // autocomplete and a row's own Change stamp still pick one.
+//
+// **Each row shows the stamp's own picture** (#2390) — in a set like an overprint series every row
+// reads the same, and the picture is what the piece in hand is checked against. It is the stamp's,
+// the variant's when a variant is picked, never the piece's; a stamp without one keeps the empty
+// placeholder so the rows stay aligned.
 
 const INPUT_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.5rem",
@@ -257,6 +264,7 @@ export function ItemStampsField({
                   <DragGrip label="Reorder — the order the stamps sit on the piece" />
                 </span>
               )}
+              <PieceStampThumb collectionId={collectionId} stampId={row.stampId} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
@@ -436,6 +444,23 @@ export function ItemStampsField({
         />
       )}
     </div>
+  );
+}
+
+/** A row's stamp picture (#2390): the stamp's own photos through the same cached read the tile
+ *  identification uses, so a photo the identification just replaced is the one shown here too. Out of
+ *  the Tab order — a picture is looked at, never a stop between a row's grip and its quantity. */
+function PieceStampThumb({ collectionId, stampId }: { collectionId: string; stampId: string }) {
+  const { data: photos } = useStampPhotos(collectionId, stampId);
+  return (
+    <PhotoThumb
+      collectionId={collectionId}
+      photos={photos ?? []}
+      plain
+      reserveWhenEmpty
+      size="3rem"
+      tabIndex={-1}
+    />
   );
 }
 

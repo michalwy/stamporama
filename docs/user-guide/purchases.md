@@ -1538,7 +1538,7 @@ document. Assigning is done by picking a copy from the list itself. There are th
   **A cover, a fragment or an FDC** is identified the same way, from the same step: press **Another
   stamp on this piece…** in the box that names the stamp you picked, and list every stamp the piece
   carries — the same list the copy's own Edit dialog has, with a quantity and a format per stamp, the
-  one you picked first. Its **Browse…** lets you tick **several stamps at once**, from any issue, and
+  one you picked first, and each stamp's own picture at the start of its row. Its **Browse…** lets you tick **several stamps at once**, from any issue, and
   add them all with one press — each as quantity 1, single, in catalogue order; one already listed
   goes up by one instead. The tile still becomes **one copy**, carrying all of them; the box then lists
   them under *Several stamps on this piece*, and **Change the stamps on this piece…** reopens the list.
