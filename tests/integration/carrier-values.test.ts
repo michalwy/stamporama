@@ -500,6 +500,34 @@ describe("a piece valued by its method (#2359)", () => {
     assert.equal(v.piece?.usage, "ef");
     const row = await getItemListItem(userId, single.id);
     assert.equal(row.multiStamp, false);
+
+    // Shown as any piece (#2382): its Valuation window lists the one stamp and the computed value,
+    // identification previews it from the stamp alone, and a typed EF price is read in the condition
+    // the method maps — never the copy's own.
+    const window = await getCarrierValuation(userId, single.id);
+    assert.equal(window.multiStamp, true);
+    assert.equal(window.value?.amount, "25.00");
+    assert.deepEqual(window.components.map((c) => c.stampId), [mi210]);
+    const columns = window.value?.piece?.columns;
+    assert.equal(columns?.cover_ef?.conditionId, efId);
+    const draft = {
+      conditionId: mnhId,
+      formatId: coverId,
+      stamps: [{ stampId: mi210, quantity: 1, formatId: null }],
+      itemId: null,
+      franking: "rate_correct" as const,
+    };
+    assert.equal((await previewPieceValue(userId, collectionId, draft))?.amount, "25.00");
+    const typed = await previewPieceValue(userId, collectionId, {
+      ...draft,
+      typed: [{ stampId: mi210, price: "cover_ef", conditionId: efId, amount: "31" }],
+    });
+    assert.equal(typed?.amount, "31.00");
+    const fields = await getPiecePriceFields(userId, collectionId, {
+      columns: { used: mnhId, cover_ef: efId },
+      stampIds: [mi210],
+    });
+    assert.equal(fields.recorded[piecePriceKey(mi210, "cover_ef")], "25.00");
     await prisma.item.delete({ where: { id: single.id } });
   });
 

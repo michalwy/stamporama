@@ -725,6 +725,22 @@ function IntakeConditionDialog({
   // stamps, or a format of a piece kind — is not offered the section at all (#2370): its picture is
   // of none of its stamps, so there is nothing to compare.
   const coverPiece = severalStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null);
+  // The stamps of a piece valued by its method (#2359), as their rows list them — several, or one
+  // once on a format of a kind, which is a piece like any other (#2382): its prices and computed value
+  // are shown, never the loose stamp's catalogue value. Null while the pick is not a piece.
+  const pieceStamps: CarriedStampLine[] | null =
+    selection.kind !== "stamp" || !coverPiece
+      ? null
+      : listsStamps
+        ? carriedStamps
+        : [
+            {
+              chips: selection.chips ?? [],
+              name: selection.chips ? (selection.name ?? null) : selection.label,
+              detail: null,
+              entry: { stampId: selection.stampId, quantity: 1, formatId: null },
+            },
+          ];
   const stampPhotoOffered = pieceIsItsStamp({ formatId, stampCount: carriedStampCount });
   // The section comes back unticked unless the stamp has no photo: an answer given before it was
   // taken away is not carried over.
@@ -732,7 +748,7 @@ function IntakeConditionDialog({
 
   // The franking (#2359) and what the piece will be worth by it (#2353): each stamp's used price and
   // its price on the piece, and the computed value under them, re-read as the answers change. Only
-  // where the stamps on the piece are listed — one stamp on its own shows its own price, below.
+  // for a piece — a loose stamp shows its own price, below.
   const askFranking =
     onEditStamps !== undefined &&
     !correctedCopyId &&
@@ -752,16 +768,16 @@ function IntakeConditionDialog({
   const priceTyping = usePiecePriceTyping({
     collectionId,
     columns: priceColumns.columns,
-    stampIds: severalStamps && singleStamp ? carriedStamps.map((line) => line.entry.stampId) : [],
+    stampIds: pieceStamps ? pieceStamps.map((line) => line.entry.stampId) : [],
   });
   // Rebuilt every render; the query keys on its contents, not on the object.
   const previewSubject: PiecePreviewSubject | null =
-    severalStamps && singleStamp
+    pieceStamps
       ? {
           collectionId,
           conditionId,
           formatId,
-          stamps: carriedStamps.map((line) => line.entry),
+          stamps: pieceStamps.map((line) => line.entry),
           franking: correctedCopyId ? null : franking,
           ...(correctedCopyId ? {} : { method }),
           itemId: correctedCopyId ?? null,
@@ -777,22 +793,6 @@ function IntakeConditionDialog({
   }
   const prices = usePiecePriceEntry(priceTyping, piecePreview?.piece ?? null);
   const pricedPiece = piecePreview?.piece && previewSubject && prices.rows ? piecePreview.piece : null;
-  // What *As inherited* names (#2369) is the preview's; one stamp on a cover format has no figure
-  // drawn here, so it is read for the name alone — the stamp as a single on that format.
-  const methodPreview = usePiecePreview(
-    askFranking && selection.kind === "stamp"
-      ? (previewSubject ?? {
-          collectionId,
-          conditionId,
-          formatId,
-          stamps: [{ stampId: selection.stampId, quantity: 1, formatId: null }],
-          franking,
-          method,
-          itemId: null,
-          typed: [],
-        })
-      : null
-  );
   // …and never when the images are already in hand (#567): a tile hands the copy its own crops.
   const photos = singleStamp && !hidePhotos;
   const photoValueRef = useRef<PhotoEditorValue>({
@@ -907,7 +907,7 @@ function IntakeConditionDialog({
     // now recorded, so a second attempt at a failed intake writes nothing a second time.
     // The stamps' prices typed on the piece (#2368) go before it for #593's reasons: facts about the
     // stamps, blocking on failure, and written once — the fields then open on what is on file.
-    if (selection.kind === "stamp" && severalStamps && (prices.changes.length > 0 || prices.invalid)) {
+    if (pieceStamps && (prices.changes.length > 0 || prices.invalid)) {
       if (prices.invalid) {
         setPriceError("Enter a valid non-negative amount, - or ? in every price.");
         return;
@@ -923,7 +923,7 @@ function IntakeConditionDialog({
       }
       await priceTyping.saved();
     }
-    if (selection.kind === "stamp" && !severalStamps) {
+    if (selection.kind === "stamp" && !pieceStamps) {
       const entry = catalogValueEntry(catalogValueRef.current);
       if (entry) {
         setSavingPrice(true);
@@ -1016,12 +1016,23 @@ function IntakeConditionDialog({
                   {summary}
                   {/* The stamps on the piece (#750), when it carries more than the one picked. The chip
                       and its sentence are the Copies list's own (#748): a piece carrying several stamps
-                      is a copy of none of them, and this is the last place to see that before it is. */}
-                  {carriedStamps && carriedStamps.length > 0 && (
+                      is a copy of none of them, and this is the last place to see that before it is.
+                      One stamp once on a cover is a piece too (#2382), listed the same way for its
+                      prices — and still a copy of its stamp (#2359). */}
+                  {(listsStamps || pieceStamps) && (
                     <div style={{ marginTop: "0.375rem" }}>
                       <div style={{ color: "var(--color-text-primary)" }}>
-                        <strong>Several stamps on this piece</strong> — one copy, counted towards none of
-                        them:
+                        {severalStamps || !pieceStamps ? (
+                          <>
+                            <strong>Several stamps on this piece</strong> — one copy, counted towards none
+                            of them:
+                          </>
+                        ) : (
+                          <>
+                            <strong>One stamp on this piece</strong> — a copy of it, valued by the
+                            piece&apos;s method:
+                          </>
+                        )}
                       </div>
                       {pricedPiece && (
                         <div style={{ marginTop: "0.25rem" }}>
@@ -1040,7 +1051,7 @@ function IntakeConditionDialog({
                             ))}
                           </li>
                         )}
-                        {carriedStamps.map((line, i) => {
+                        {(pieceStamps ?? carriedStamps ?? []).map((line, i) => {
                           const rowIndex =
                             pricedPiece && previewSubject
                               ? pricedPiece.components.findIndex((c) => c.id === componentIdAt(previewSubject, i))
@@ -1137,8 +1148,8 @@ function IntakeConditionDialog({
                           style={{ ...formControl, padding: "0.15rem 0.4rem", fontSize: "0.8125rem" }}
                         >
                           <option value="">
-                            {methodPreview?.piece
-                              ? inheritedMethodLabel(methodPreview.piece.inherited)
+                            {piecePreview?.piece
+                              ? inheritedMethodLabel(piecePreview.piece.inherited)
                               : "As inherited"}
                           </option>
                           {VALUATION_METHODS.map((m) => (
@@ -1149,10 +1160,10 @@ function IntakeConditionDialog({
                         </select>
                       </div>
                     )}
-                  {piecePreview && previewSubject && carriedStamps && (
+                  {piecePreview && previewSubject && pieceStamps && (
                     <IdentifiedPieceFigure
                       value={piecePreview}
-                      labels={carriedStamps.map(
+                      labels={pieceStamps.map(
                         (line) =>
                           (line.chips.find((c) => c.primary) ?? line.chips[0])?.label ??
                           line.name ??
@@ -1425,9 +1436,9 @@ function IntakeConditionDialog({
                     One field, the primary catalogue only: the full quick-price dialog stays for the
                     multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
                     intake only, the rule photos and the format field follow — one figure cannot be the
-                    catalogue value of a whole set's stamps — nor of a piece carrying several (#2353),
-                    whose stamps' prices and computed value are listed beside them above. */}
-                {selection.kind === "stamp" && !severalStamps && (
+                    catalogue value of a whole set's stamps — nor of a piece (#2353), one stamp once on
+                    a cover included (#2382), whose stamps' prices and computed value are listed above. */}
+                {selection.kind === "stamp" && !pieceStamps && (
                   <IntakeCatalogValueField
                     stampId={selection.stampId}
                     conditionId={conditionId}
