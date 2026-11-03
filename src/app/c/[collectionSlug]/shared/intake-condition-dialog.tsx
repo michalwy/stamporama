@@ -37,9 +37,11 @@ import {
   FRANKING_LABELS,
   VALUATION_METHODS,
   VALUATION_METHOD_LABELS,
+  formatsToIdentifyAs,
   isFranking,
   isValuationMethod,
   type Franking,
+  type IdentifyAs,
   type ValuationMethod,
 } from "@/lib/piece-valuation";
 import { inheritedMethodLabel, pieceHeading } from "@/lib/piece-value-words";
@@ -101,6 +103,7 @@ import {
   LS_LAST_LOCATION,
   LS_LAST_DISPOSITION,
   LS_LAST_SCAN_LOT,
+  LS_LAST_PIECE_FORMAT,
 } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
 import {
@@ -432,9 +435,22 @@ export interface IntakeConditionDialogProps {
    * pick, since they are what the pick now describes.
    */
   carriedStamps?: CarriedStampLine[];
-  /** Open the stamp editor over this step (#750). Present only in the scan-tile chain, where the
-   * piece is on screen to be read: nowhere else is there a single piece of paper being described. */
+  /** Open the stamp editor over this step (#750). Present only in the scan-tile chain's *Identify as
+   * a piece* (#2401), where the piece is on screen to be read: nowhere else is there a single piece of
+   * paper being described, and the ordinary identification is a loose stamp's. */
   onEditStamps?: () => void;
+  /**
+   * How the scan tile is being identified (#2401) — absent on every intake with no tile behind it,
+   * which keeps every format and the step as it was.
+   *
+   * `"loose"`, the ordinary identification, is a loose stamp's only: its Format leaves out the
+   * formats of kind *On cover* or *On piece*. `"piece"`, *Identify as a piece*, is a piece's from the
+   * start: its stamps are listed with their prices and the computed value, the franking and method
+   * beside them, no condition and no single catalogue value — and its Format offers only the formats
+   * of a kind, preset to the one the last piece was identified in and required before saving, since
+   * the format is what makes one stamp a piece.
+   */
+  identifyAs?: IdentifyAs;
   /** The copy a re-identified scan tile already became (#1207) — the piece on screen, so left out
    * of the held copies it is compared with. Absent on every intake that creates a copy. */
   correctedCopyId?: string;
@@ -507,6 +523,7 @@ function IntakeConditionDialog({
   lotChoice,
   carriedStamps,
   onEditStamps,
+  identifyAs,
   correctedCopyId,
   priceVariantsInGrid,
   offerStampPhoto,
@@ -663,19 +680,46 @@ function IntakeConditionDialog({
   // A repeat (#595) is the one thing that fills it, and it is not an exception to any of that: the
   // collector pressed a button naming the format, which is a format that was chosen. The reset below
   // still holds — a different pick clears it, including the pick that follows a repeat.
-  const [formatId, setFormatId] = useState(prefill?.formatId ?? "");
+  //
+  // *Identify as a piece* (#2401) is the other, and it is the collector's own exception: a piece's
+  // format is not a pair or a block but what the piece *is*, and a run of covers is a run of covers.
+  // So piece mode opens on the format the last piece was identified in (`LS_LAST_PIECE_FORMAT`), kept
+  // apart from this field's loose-stamp answer, which is still remembered nowhere; and a new lead
+  // stamp — the piece's list reordered — does not clear it, the format being the piece's and not the
+  // lead's.
+  const pieceMode = identifyAs === "piece";
+  const [formatId, setFormatId] = useState(
+    () => prefill?.formatId ?? (pieceMode ? readLast(LS_LAST_PIECE_FORMAT, collectionId) : "")
+  );
+  const [formatOrigin, setFormatOrigin] = useState<SeedOrigin | null>(() =>
+    !prefill && pieceMode && readLast(LS_LAST_PIECE_FORMAT, collectionId) ? "last-used" : null
+  );
   // The copy the piece replaces (#1937), held against the pick for the same reason: a copy of the
   // previous stamp is never an answer about this one.
   const [replacesItemId, setReplacesItemId] = useState<string | null>(null);
   const [formatSelection, setFormatSelection] = useState(selection);
   if (formatSelection !== selection) {
     setFormatSelection(selection);
-    setFormatId("");
+    if (!pieceMode) {
+      setFormatId("");
+      setFormatOrigin(null);
+    }
     setReplacesItemId(null);
   }
   // Fetched here rather than threaded through the purchase screen, the reason the copy dialog
   // fetches it: it is one more dictionary and the screens that need it are not the ones that have it.
-  const { data: formats = [] } = useCollectionFormats(collectionId);
+  const { data: formats = [], isSuccess: formatsLoaded } = useCollectionFormats(collectionId);
+  // What the Format field offers (#2401): a loose stamp none of a kind, a piece only those.
+  const offeredFormats = formatsToIdentifyAs(formats, identifyAs);
+  // A remembered or prefilled format this step does not offer — deleted since, or its kind taken
+  // away — is not an answer: it falls back to none, as a deleted condition does. Adjusted while
+  // rendering, once the dictionary is in, rather than in an effect that would draw the stale one.
+  if (formatsLoaded && formatId && !offeredFormats.some((f) => f.id === formatId)) {
+    setFormatId("");
+    setFormatOrigin(null);
+  }
+  /** A piece's format must be one of a kind before it is saved (#2401). */
+  const pieceFormatMissing = pieceMode && !offeredFormats.some((f) => f.id === formatId);
   const [locationId, setLocationId] = useState(() => {
     const last = prefill ? prefill.locationId : readLast(LS_LAST_LOCATION, collectionId);
     // Only restore an assignable location that still exists (grouping-only nodes and
@@ -743,7 +787,8 @@ function IntakeConditionDialog({
   // A single only (#346): a pair's picture misrepresents the stamp. A cover or a fragment — several
   // stamps, or a format of a piece kind — is not offered the section at all (#2370): its picture is
   // of none of its stamps, so there is nothing to compare.
-  const coverPiece = severalStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null);
+  const coverPiece =
+    pieceMode || severalStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null);
   // The stamps of a piece valued by its method (#2359), as their rows list them — several, or one
   // once on a format of a kind, which is a piece like any other (#2382): its prices and computed value
   // are shown, never the loose stamp's catalogue value. Null while the pick is not a piece.
@@ -760,7 +805,7 @@ function IntakeConditionDialog({
               entry: { stampId: selection.stampId, quantity: 1, formatId: null },
             },
           ];
-  const stampPhotoOffered = pieceIsItsStamp({ formatId, stampCount: carriedStampCount });
+  const stampPhotoOffered = !pieceMode && pieceIsItsStamp({ formatId, stampCount: carriedStampCount });
   // The section comes back unticked unless the stamp has no photo: an answer given before it was
   // taken away is not carried over.
   if (!stampPhotoOffered && stampPhotoChoice !== null) setStampPhotoChoice(null);
@@ -769,10 +814,11 @@ function IntakeConditionDialog({
   // its price on the piece, and the computed value under them, re-read as the answers change. Only
   // for a piece — a loose stamp shows its own price, below.
   const askFranking =
-    onEditStamps !== undefined &&
     !correctedCopyId &&
     singleStamp &&
-    (listsStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null));
+    (pieceMode ||
+      (onEditStamps !== undefined &&
+        (listsStamps || formats.some((f) => f.id === formatId && f.pieceKind !== null))));
   const [franking, setFranking] = useState<Franking>(DEFAULT_FRANKING);
   // The piece's own method (#2369), beside the franking and asked with it; null is *As inherited*.
   const [method, setMethod] = useState<ValuationMethod | null>(null);
@@ -896,6 +942,10 @@ function IntakeConditionDialog({
       setModifierError(parsedModifier.message);
       return;
     }
+    if (pieceFormatMissing) return;
+    // The piece's format leads the next piece (#2401) — and only a piece's: the loose stamp's format
+    // is remembered nowhere (#573).
+    if (pieceMode) writeLast(LS_LAST_PIECE_FORMAT, collectionId, formatId);
     // A piece has none (#2383), and leaves the condition the next loose stamp is seeded with alone.
     if (!coverPiece) writeLast(LS_LAST_CONDITION, collectionId, conditionId);
     writeLast(LS_LAST_CERT, collectionId, certId);
@@ -1415,26 +1465,40 @@ function IntakeConditionDialog({
                       many stamps and "block of four" could not be true of all of them. Absent entirely
                       until the collection defines formats, as the inventory list's own format controls
                       are — most collections never define any. */}
-                  {singleStamp && formats.length > 0 && (
+                  {/* A piece always asks it (#2401): its format of a kind is what makes it one. */}
+                  {singleStamp && (offeredFormats.length > 0 || pieceMode) && (
                     <div style={{ flex: 1 }}>
-                      <LabelWithError htmlFor="intake-format">Format</LabelWithError>
+                      <LabelWithError htmlFor="intake-format">
+                        Format
+                        <SeedOriginNote origin={formatOrigin} />
+                      </LabelWithError>
                       <select
                         id="intake-format"
                         name="formatId"
                         value={formatId}
-                        onChange={(e) => setFormatId(e.target.value)}
+                        onChange={(e) => {
+                          setFormatId(e.target.value);
+                          setFormatOrigin(null);
+                        }}
                         disabled={isPending}
                         style={INPUT_STYLE}
                       >
                         {/* No "single" row exists in the dictionary — a copy with no format *is* the
-                            single, exactly as no certificate means none. */}
-                        <option value="">— Single —</option>
-                        {formats.map((f) => (
+                            single, exactly as no certificate means none. A piece has no single: its
+                            format is chosen. */}
+                        <option value="">{pieceMode ? "— Choose —" : "— Single —"}</option>
+                        {offeredFormats.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.name} ({f.abbreviation})
                           </option>
                         ))}
                       </select>
+                      {pieceMode && formatsLoaded && offeredFormats.length === 0 && (
+                        <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                          No format has the kind <em>On cover</em> or <em>On piece</em> — give one a kind
+                          under Settings → Formats.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1685,7 +1749,12 @@ function IntakeConditionDialog({
           cancelLabel="Back"
           onCancel={onBack}
           disabled={
-            isPending || (!coverPiece && !conditionId) || photosUploading || photoScaleInvalid || savingPrice
+            isPending ||
+            (!coverPiece && !conditionId) ||
+            pieceFormatMissing ||
+            photosUploading ||
+            photoScaleInvalid ||
+            savingPrice
           }
           // The caller's error and this dialog's own read the same way, and only one can be
           // standing: a failed catalogue write returns before the intake is attempted at all.

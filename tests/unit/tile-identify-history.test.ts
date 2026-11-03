@@ -255,6 +255,24 @@ describe("identifyHistory", () => {
     );
   });
 
+  it("says which rows are pieces, a piece answering no condition (#2401, #2383)", () => {
+    const history = identifyHistory([
+      batch(1, [
+        tile("loose", { item: item({ createdAt: "2026-09-04T10:00:00.000Z" }) }),
+        tile("cover", {
+          item: item({ conditionId: null, formatId: "f-cover", createdAt: "2026-09-04T10:01:00.000Z" }),
+        }),
+      ]),
+    ]);
+    assert.deepEqual(
+      history.map((e) => [e.tileId, e.piece]),
+      [
+        ["cover", true],
+        ["loose", false],
+      ]
+    );
+  });
+
   it("falls back to the back when the copy has no front", () => {
     const [entry] = identifyHistory([
       batch(1, [tile("t1", { item: item({ frontPhotoId: null }) })]),

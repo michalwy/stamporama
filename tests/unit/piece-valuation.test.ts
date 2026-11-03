@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   coverUsage,
+  formatsToIdentifyAs,
   isPiece,
   mostExpensiveStamp,
   resolveMethod,
@@ -55,6 +56,20 @@ describe("isPiece — which copies a method values", () => {
     assert.equal(isPiece(1, "on_cover"), true);
     assert.equal(isPiece(1, "on_piece"), true);
   });
+});
+
+describe("formatsToIdentifyAs — the formats a scan tile's identification offers (#2401)", () => {
+  const formats = [
+    { id: "pair", pieceKind: null },
+    { id: "cover", pieceKind: "on_cover" as const },
+    { id: "piece", pieceKind: "on_piece" as const },
+  ];
+  it("offers a loose stamp none of a kind", () =>
+    assert.deepEqual(formatsToIdentifyAs(formats, "loose").map((f) => f.id), ["pair"]));
+  it("offers a piece only those of a kind", () =>
+    assert.deepEqual(formatsToIdentifyAs(formats, "piece").map((f) => f.id), ["cover", "piece"]));
+  it("offers every format to an intake with no tile behind it", () =>
+    assert.deepEqual(formatsToIdentifyAs(formats, undefined).map((f) => f.id), ["pair", "cover", "piece"]));
 });
 
 describe("coverUsage — EF, MeF or MiF counts stamps, not rows", () => {

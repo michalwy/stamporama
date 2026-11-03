@@ -109,7 +109,9 @@ function IdentifyHistoryRow({
 }) {
   const photoUrl = (variant: "thumb" | "full") =>
     entry.photoId ? `/api/collections/${collectionId}/photos/${entry.photoId}/${variant}` : null;
-  const blocked = disabled || !canIdentify;
+  // A piece is listed and not repeated (#2401): it is identified through *Identify as a piece*, and
+  // its row is here to be recognised — the next cover is rarely franked the same way.
+  const blocked = disabled || !canIdentify || entry.piece;
 
   /** The number the stamp is reached for by, **prefixed** — `Mi·DE-BM 68`, not `68` — for the
    * picture's hover label. One rule with the copies list, because the collector is matching this
@@ -157,7 +159,7 @@ function IdentifyHistoryRow({
           color: "var(--color-text-primary)",
           font: "inherit",
           fontSize: "0.8125rem",
-          cursor: blocked ? "not-allowed" : "pointer",
+          cursor: entry.piece ? "default" : blocked ? "not-allowed" : "pointer",
           opacity: disabled ? 0.6 : 1,
         }}
       >
@@ -214,10 +216,16 @@ function IdentifyHistoryRow({
             )}
             {/* A piece carrying more than its first stamp (#750) — said on the row, because
                 pressing it identifies the next tile as that piece and not as the stamp named. */}
-            {entry.answers.stamps.length > 0 && (
-              <span style={{ color: "var(--color-accent)", whiteSpace: "nowrap" }}>
-                several stamps
+            {entry.piece ? (
+              <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                {entry.answers.stamps.length > 1 ? "piece, several stamps" : "piece"} — not repeated
               </span>
+            ) : (
+              entry.answers.stamps.length > 0 && (
+                <span style={{ color: "var(--color-accent)", whiteSpace: "nowrap" }}>
+                  several stamps
+                </span>
+              )
             )}
           </span>
           {/* The copy it became, in the number the copies list is searched by (#268) — said quietly,

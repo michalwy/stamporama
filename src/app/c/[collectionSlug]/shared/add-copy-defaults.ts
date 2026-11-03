@@ -23,6 +23,13 @@ export const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
 // refuses. Suffixed by the caller as `<collectionId>:<purchaseId>`.
 export const LS_LAST_SCAN_LOT = "stamporama:intake:scanLotId";
 
+// The format the last **piece** was identified in (#2401), remembered per collection so a run of
+// covers opens on *Cover* rather than asking it each time. Only *Identify as a piece* reads or writes
+// it, and only formats of a kind are offered there — so it is kept apart from the loose stamp's
+// format, which is deliberately not remembered at all (#573): a single is the default state of the
+// world, while a run of covers is a run of covers.
+export const LS_LAST_PIECE_FORMAT = "stamporama:intake:pieceFormatId";
+
 // Whether the identification step's variant-prices section was last left closed (#1337), remembered
 // per collection so a run of umbrellas does not cost a click each. Stored only as `closed`: open is
 // the default, the section being the step's pricing for an umbrella rather than something to reveal.

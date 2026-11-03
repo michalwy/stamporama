@@ -1547,22 +1547,40 @@ document. Assigning is done by picking a copy from the list itself. There are th
   answer leads, since a card, or a run of them, is usually worked through before you start the next.
   With a single lot nothing is asked at all.
 
-  **A cover, a fragment or an FDC** is identified the same way, from the same step: press **Another
-  stamp on this piece…** in the box that names the stamp you picked, and list every stamp the piece
-  carries — the same list the copy's own Edit dialog has, with a quantity and a format per stamp, the
-  one you picked first, and each stamp's own picture at the start of its row. Its **Browse…** lets you tick **several stamps at once**, from any issue, and
-  add them all with one press — each as quantity 1, single, in catalogue order; one already listed
-  goes up by one instead. The tile still becomes **one copy**, carrying all of them; the box then lists
-  them under *Several stamps on this piece*, and **Change the stamps on this piece…** reopens the list.
-  The box is headed by the piece rather than by the stamp you picked first — its format and how many
-  stamps it carries, *Cover · 6 stamps* — so each stamp appears once, in the list.
-  Give the piece itself its format (*Cover*, *FDC*) in the step's **Format** field as usual, and say
-  how it was posted in **Franking**, which appears beside the stamps on the piece — *Rate-correct*,
+  This is the identification of a **loose stamp**: its **Format** offers singles, pairs, blocks and
+  the like, but not the formats of kind *On cover* or *On piece*, and it has no way to add a second
+  stamp. A tile that is a cover or a fragment is identified as one from the start, below — if you only
+  notice in the condition step, **Back** to the picker and close it, and press **Identify as a piece…**
+  in the tile dialog instead.
+
+  **A cover, a fragment or an FDC: Identify as a piece…** sits in the tile dialog's footer beside
+  **Identify as a new copy**. It works on **one** tile — with several ticked it is greyed out, a piece
+  being one piece of paper. The picker opens ready to **tick every stamp on the piece**, from any
+  issue — a search for the next one keeps the ticks — with the piece beside it; **the first stamp you
+  tick leads the piece**, and the ticks are listed in the order you ticked them. **Continue with N
+  stamps** takes them all to the condition step, each as quantity 1, single, in that order. A cover
+  carrying a single stamp is identified the same way, with one stamp ticked.
+
+  The condition step then opens **as a piece's**. The tile still becomes **one copy**, carrying every
+  stamp; the box lists them under *Several stamps on this piece* (or *One stamp on this piece*), and
+  **Change the stamps on this piece…** opens the same list the copy's own Edit dialog has, where stamps
+  are added, removed, reordered and given a quantity and a format, each with its own picture at the
+  start of its row. **Back** returns to the picker with the stamps still ticked — tick another and the
+  rows already listed keep their quantities and formats. The box is headed by the piece rather than
+  by its first stamp — its format and how many stamps it carries, *Cover · 6 stamps* — so each stamp
+  appears once, in the list. A piece has no condition, so the step does not ask one.
+
+  The piece's **Format** offers only the formats of kind *On cover* or *On piece*, and opens on the
+  one **your last piece** was identified in, marked *last used* — remembered for this collection,
+  apart from anything the loose stamps use. The first time there is none, and the step will not save
+  until you choose one: it is the format that makes a single stamp a piece. If none of your formats
+  has a kind yet, the field says so; give one a kind under **Settings → Formats**. Say how the piece
+  was posted in **Franking**, which appears beside the stamps on the piece — *Rate-correct*,
   *Philatelic, posted* or *Not posted*; it decides which catalog price the piece's value is read
   from. Beside it, **Method** is the piece's own valuation method: *As inherited* — named with the
   method and where it comes from, *As inherited (Michel, from Germany)* — leaves the piece following
-  its area, and any other choice gives it its own, saved with the copy. Once a condition is chosen,
-  **each stamp in the numbered list** — shown with its own picture, and with its format named in full
+  its area, and any other choice gives it its own, saved with the copy.
+  **Each stamp in the numbered list** — shown with its own picture, and with its format named in full
   (*Block of 4 (Bl4)*) where it is not a single, since its price is read at that format — **has a field
   for each price the value reads** — its **used** price and its price on the piece (its cover EF, MeF or MiF on a cover,
   by what is on it; ⊠ under Fischer, FP, FW or FM under Fischer FP/FW/FM; its on-piece price on a
@@ -1573,21 +1591,18 @@ document. Assigning is done by picking a copy from the list itself. There are th
   the list's order. The same stamp twice has one field, the other row saying *as #1*; a stamp with
   variants asks for its variants' prices, with **Full grid…** for the rest. `1,50` and `1.50` both
   work; `-` and `?` record *does not exist* and *not determinable*. Each price is saved in its column's
-  condition, as a single, with no certificate, at the latest edition of the stamp's main catalog — the
-  condition you choose for the tile is the copy's, and changes no price the value reads. Under the list sits
+  condition, as a single, with no certificate, at the latest edition of the stamp's main catalog. Under the list sits
   the piece's **Computed value** with the arithmetic it is, *MiF: 50 % × Mi 123 ⊠ 40.00 PLN + Mi 124
   ⊙ 2.00 PLN = 22.00 PLN* — a price converted from the catalog's currency shown with its original,
   *⊙ (1.80 EUR = 7.95 PLN)*, as in the Valuation window — then the sum of the stamps' used prices it is
   never below, and the method that gives it — it follows as you type, and as you change the
   franking, the method or the stamps. **Identify the tile** saves the typed prices to the stamps'
   catalog prices before it creates the copy; if they cannot be saved, nothing is created and the step
-  says why. Closing the step keeps none of them. The single catalog value field the step has for one stamp
-  is not shown for a piece carrying several, since no one stamp's price is the piece's. **One stamp
-  alone on a cover is a piece too**: choose a **Format** of kind *On cover* or *On piece* for it and the
-  box lists it under *One stamp on this piece* with its price fields and the computed value, in place
-  of the catalog value field — its value is the method's, not the stamp's own price; choose a format
-  without a kind and the catalog value field comes back. A piece
-  carrying several stamps counts towards none of them — see
+  says why. Closing the step keeps none of them. The single catalog value field a loose stamp's step
+  has is not shown for a piece, since no one stamp's price is the piece's — **one stamp alone on a
+  cover** included: its value is the method's, not the stamp's own price. A copy you took in as a loose
+  stamp can still be made a piece in its own **Edit** dialog, and a piece made loose there. A piece
+  counts towards none of its stamps — see
   [Covers, fragments and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Assign to a copy on this order** — the auction path. An order settled from an
   [auction sale](auctions.md#settling-a-parcel-into-a-purchase) already holds identified copies,
@@ -1710,8 +1725,10 @@ you want is often not the one immediately before.
 **Each identification appears once.** Ten copies of one stamp taken in one after another is one row,
 not ten — the list is ten *different* things to press, which is the depth it exists to give. Two rows
 are separate when they would read differently: a different stamp, a different condition, a
-different format, or different stamps on the piece. A row for a cover says **several stamps**, and
-pressing it identifies this tile as that cover — every stamp on it, not only the first. Where two otherwise identical intakes differed only in something the row does not
+different format, or different stamps on the piece. A **piece** — a cover or a fragment — is listed
+too, marked *piece — not repeated*, but pressing it does nothing: the next cover is rarely franked
+the same way, so a piece is identified through **Identify as a piece…**, and its row is there for you
+to recognise. Where two otherwise identical intakes differed only in something the row does not
 show — a certificate, a location, its ref, the lot — the **most recent** one stands for them, and it
 is that one's answers you get.
 
@@ -1968,10 +1985,12 @@ say everything the identification said: the stamp, the condition, the certificat
 location and its ref, the dispositions, and the catalogue value while the paper catalogue is open at
 the right page.
 
-A **cover** is corrected as a cover: the condition step lists the stamps it carries, picking a
-stamp in the picker re-answers the first of them and leaves the others on the piece, and **Change the
-stamps on this piece…** is where the rest are changed — take the list down to one stamp and the copy
-is an ordinary copy of that stamp again.
+A **piece** — a cover or a fragment — is corrected as a piece: the picker opens as *Identify as a
+piece…* does, with the stamps it carries already ticked in their order, and the condition step opens
+as a piece's on its list, its format and the rest of its answers. Untick a stamp to take it off,
+tick another to add it; **Change the stamps on this piece…** is where quantities, formats and the
+order are changed. A loose stamp is corrected in the ordinary picker. To turn a piece back into a
+loose stamp, or a loose stamp into a piece, use the copy's own **Edit** dialog.
 
 Two things differ from a first identification. The picker marks the stamp the copy is pointing at
 now as **current** on its own row, so you can see what you are replacing while you choose the
