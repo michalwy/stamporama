@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
 import { normalizeMarketCode } from "./market-anchoring";
@@ -142,6 +143,7 @@ export async function setCollectionHomeMarket(
     where: { id: collectionId },
     data: { homeMarket: code },
   });
+  forgetRealizationRatios();
 }
 
 /**
@@ -251,6 +253,7 @@ export async function setCollectionBidPercents(
     throw new Error("Collection not found or access denied.");
   }
   await prisma.collection.update({ where: { id: collectionId }, data });
+  forgetRealizationRatios();
 }
 
 export async function getCollectionsByOwner(ownerId: string) {

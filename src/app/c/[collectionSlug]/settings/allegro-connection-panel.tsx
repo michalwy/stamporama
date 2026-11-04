@@ -276,10 +276,9 @@ export function AllegroConnectionPanel({
     startTransition(async () => {
       const result = await testAllegroConnectionAction(collectionId);
       if (result.status === "error") setNotice({ tone: "error", message: result.message });
-      else {
-        setNotice({ tone: "ok", message: result.detail });
-        router.refresh();
-      }
+      else setNotice({ tone: "ok", message: result.detail });
+      // Either way: a refused token is recorded as needing a reconnect, which the card shows (#2426).
+      router.refresh();
     });
   }
 

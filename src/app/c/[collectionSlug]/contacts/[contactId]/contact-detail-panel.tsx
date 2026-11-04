@@ -285,6 +285,8 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
                 setError(undefined);
                 // The page reads through the contacts query, so the list's invalidation refreshes it.
                 invalidate(collectionId);
+                // The tab is titled with the name on the server (#2426).
+                router.refresh();
                 toast({ message: `${(fd.get("name") as string) || "Contact"} saved` });
               } else if (result.status === "error") setError(result.message);
             });

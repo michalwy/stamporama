@@ -6222,6 +6222,59 @@ function platformItemsFor(
   return [...rows.values()];
 }
 
+/** What the offer's page reads on the server (#2426): enough to check the offer is the owner's and in
+ *  this collection, to title the tab and to record the visit. The screen itself is drawn from
+ *  {@link getOfferDetail} through the client's own read, so the page asking it too — and the tab
+ *  title a third time — was the valuation and the ready gate worked out three times per load. */
+export interface OfferPageHeader {
+  id: string;
+  collectionId: string;
+  offerNo: number;
+  name: string | null;
+  label: string;
+  platformName: string;
+}
+
+export async function getOfferPageHeader(
+  ownerId: string,
+  offerId: string
+): Promise<OfferPageHeader | null> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      id: true,
+      collectionId: true,
+      offerNo: true,
+      name: true,
+      platform: { select: { name: true } },
+      collection: { select: { ownerId: true } },
+    },
+  });
+  if (!offer || offer.collection.ownerId !== ownerId) return null;
+  // The composition is read only for an untitled offer, and the labeller only then: since #365/#380
+  // an offer is titled on its first composition change, so this is usually one row.
+  let label = offerDisplayLabel(offer.name, [], null);
+  if (!offer.name?.trim()) {
+    const [sets, labeller] = await Promise.all([
+      prisma.offerSet.findMany({
+        where: { offerId },
+        select: OFFER_SETS_SELECT,
+        orderBy: OFFER_SETS_ORDER_BY,
+      }),
+      makeOfferLabeller(offer.collectionId),
+    ]);
+    label = offerDisplayLabel(offer.name, sets, labeller);
+  }
+  return {
+    id: offer.id,
+    collectionId: offer.collectionId,
+    offerNo: offer.offerNo,
+    name: offer.name,
+    label,
+    platformName: offer.platform.name,
+  };
+}
+
 /** Distinct issue ids across every copy in an offer's sets, for the sets view's issue-group
  * headers (loaded once on the page, mirrors the sale/purchase views). */
 export async function getOfferIssueIds(offerId: string): Promise<string[]> {

@@ -1,4 +1,5 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, beforeEach, after } from "node:test";
+import { forgetRealizationRatios } from "@/lib/realization-ratio-cache";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
@@ -10,6 +11,10 @@ import { createOffer, addOfferSet, getOfferDetail } from "../../src/lib/offers";
 // reporting zero.
 
 describe("per-set catalogue value + cost (#378)", () => {
+  // The fixtures are written straight to the database, past the writers that clear the learned
+  // ratios (#2426), and several tests share one collection: each starts from a fresh learning.
+  beforeEach(() => forgetRealizationRatios());
+
   let userId: string;
   let collectionId: string;
   let platformId: string;

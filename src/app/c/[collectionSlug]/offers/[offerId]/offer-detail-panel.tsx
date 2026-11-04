@@ -255,7 +255,7 @@ export function OfferDetailPanel({
   const skippedParam = Number(searchParams.get("skipped")) || 0;
   const { data: offer, isLoading } = useOfferDetail(collectionId, offerId);
   const { data: copies = [], isLoading: copiesLoading } = useOfferCopies(collectionId, offerId, true);
-  const { invalidateAll, showOfferPrice } = useInvalidateOffers();
+  const { invalidateAll, showOfferPrice, settleOfferField } = useInvalidateOffers();
   // Confirmation toasts (#541) — used sparingly here. Most of this screen *is* the result: an edited
   // title redraws in place, a set added appears in the list below. What gets one is the act whose
   // effect is a chip disappearing or a state word changing at the top of a long page.
@@ -518,7 +518,8 @@ export function OfferDetailPanel({
 
   /** Patch a single header field in place, then refresh. A price shows its typed figure at once
    *  (#2413), as the Prepare screen does (#1894): written into the offer's read before the save, and
-   *  put back if the save fails; the rest of the screen catches up with the re-read. */
+   *  put back if the save fails; the rest of the screen catches up with the re-read — of only what
+   *  the field can change (#2426). */
   function patch(
     field: "price" | "startingPrice" | "url" | "descriptionFormat" | OfferTextField,
     value: string
@@ -530,11 +531,16 @@ export function OfferDetailPanel({
       const stated = parseStatedPrice(field, value);
       if (stated.ok) restore = showOfferPrice(collectionId, offerId, field, stated.value);
     }
+    // The state the edit was made in, which decides whether the notification centre is asked again.
+    const state = offer?.state ?? null;
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       const result = await patchOfferAction(offerId, field, value);
-      if (result.status === "success") invalidateAll(collectionId);
-      else {
+      if (result.status === "success") {
+        void settleOfferField(collectionId, offerId, field, state);
+        // The recent visit is recorded under the title the page read on the server (#2426).
+        if (field === "name") router.refresh();
+      } else {
         restore?.();
         setActionError(result.message);
       }
@@ -1726,6 +1732,8 @@ export function OfferDetailPanel({
           onDone={() => {
             setComposing(false);
             invalidateAll(collectionId);
+            // A set can bring copies of an issue the page's headers do not have yet (#2426).
+            router.refresh();
           }}
         />
       )}

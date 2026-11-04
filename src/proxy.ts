@@ -34,6 +34,16 @@ import { CURRENT_SCREEN_HEADER, screenPath } from "@/lib/sign-in-return";
 // information and not authorization: nothing downstream is permitted by it, and the header is
 // **set** rather than added, so a browser sending one of its own has it overwritten. The rules that
 // read it are in `src/lib/sign-in-return.ts`.
+//
+// **A server action is the one request it does not renew on** (#2426). Next merges a cookie the
+// proxy sets into the action's own cookies, and an action whose cookies changed is answered as one
+// that revalidated everything: the browser drops its prefetched screens and fetches the whole page
+// again — every server component of the layout and the page — after every edit on every screen,
+// whether or not the edit could change any of it. On an offer that was two full valuations per
+// price typed. An action is never the collector's only request: the screen it runs on was loaded
+// through here, and the reads that follow an edit come through here too, so the lease still moves
+// with every visit. What an action changes is re-read because the screen asks for it —
+// `router.refresh()`, a query invalidated, `revalidatePath` — never as a side effect of a cookie.
 
 export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
@@ -43,6 +53,7 @@ export function proxy(request: NextRequest) {
   );
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
+  if (isServerActionRequest(request)) return response;
 
   for (const name of SESSION_COOKIE_NAMES) {
     const cookie = request.cookies.get(name);
@@ -59,6 +70,13 @@ export function proxy(request: NextRequest) {
   }
 
   return response;
+}
+
+/** The header Next's client sends with every server-action call, carrying the action's id. */
+const SERVER_ACTION_HEADER = "next-action";
+
+function isServerActionRequest(request: NextRequest): boolean {
+  return request.method === "POST" && request.headers.has(SERVER_ACTION_HEADER);
 }
 
 export const config = {

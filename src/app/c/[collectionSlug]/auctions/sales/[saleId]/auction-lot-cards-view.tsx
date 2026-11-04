@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
@@ -702,6 +703,9 @@ export function AuctionLotCardsView({
   /** The lot *Fill catalogue values* (#2094) is open on. */
   const [fillingLot, setFillingLot] = useState<AuctionLotDetailView | null>(null);
   const [linePending, startLineTransition] = useTransition();
+  // The issue headers the lines are grouped under are the page's own read, so a line of a stamp from
+  // an issue not yet in the sale needs the page read again (#2426).
+  const router = useRouter();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   // The band names a tag filter by its tags' names (#1625).
@@ -718,6 +722,7 @@ export function AuctionLotCardsView({
       else {
         setDraft(null);
         onChanged();
+        router.refresh();
       }
     });
   }

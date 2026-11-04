@@ -661,6 +661,8 @@ export function TradeDetailPanel({
                 invalidateTrade(collectionId);
                 // A save may have created the partner on the fly; refresh the picker's cache.
                 invalidatePartners(collectionId);
+                // The tab is titled with the partner on the server (#2426).
+                router.refresh();
               } else {
                 setActionError(result.message);
               }

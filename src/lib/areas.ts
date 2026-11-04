@@ -1,6 +1,7 @@
 import "server-only";
 import { isValuationMethod, type ValuationMethod } from "./piece-valuation";
 import { prisma } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { recomputeSortKeysForAreas } from "./catalog-sort-key-recompute";
 import { normalizeMarketList } from "./market-anchoring";
 import {
@@ -555,6 +556,8 @@ export async function updateCollectionArea(
     const subtree = await areaSubtreeIds(collectionId, areaId);
     await recomputeSortKeysForAreas(collectionId, subtree);
   }
+  // The area's anchoring markets and its catalogue are what the learned ratios count by (#2426).
+  forgetRealizationRatios();
 }
 
 /**

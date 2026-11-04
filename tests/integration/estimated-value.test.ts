@@ -1,4 +1,5 @@
 import { describe, it, before, beforeEach, after } from "node:test";
+import { forgetRealizationRatios } from "@/lib/realization-ratio-cache";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import {
@@ -19,6 +20,10 @@ import { readLearnedCatalogueFactors } from "../../src/lib/realization-ratios";
 // runs offline — the same arrangement `market-value.test.ts` makes beside it.
 
 describe("estimated value (#602)", () => {
+  // The fixtures are written straight to the database, past the writers that clear the learned
+  // ratios (#2426), and several tests share one collection: each starts from a fresh learning.
+  beforeEach(() => forgetRealizationRatios());
+
   let userId: string;
   let collectionId: string;
   let sellerId: string;
@@ -91,6 +96,8 @@ describe("estimated value (#602)", () => {
 
   async function setManualFactor(factor: string | null): Promise<void> {
     await prisma.catalogName.update({ where: { id: catalogNameId }, data: { manualFactor: factor } });
+    // Past `updateCatalogName`, which is what clears the learned ratios in the app (#2426).
+    forgetRealizationRatios();
   }
 
   async function sale(): Promise<string> {

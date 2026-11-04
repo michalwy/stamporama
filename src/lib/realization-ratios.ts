@@ -21,6 +21,7 @@ import { onlySettledLots, type SettledConditionLot } from "./auction-line-condit
 import { OBSERVATION_SELECT, observationInput } from "./price-observations";
 import { anchoringResolver, resultMarket } from "./market-anchoring";
 import { buildAnchoringMarketsMap, getCollectionHomeMarket } from "./market-anchorings";
+import { cachedRealizationRatios } from "./realization-ratio-cache";
 
 // **The learned realization ratio, read out of the lots already recorded** (#520; ADR-0029 §2).
 //
@@ -276,9 +277,12 @@ export interface RatioEvidenceObservation {
  * A collection with no closed lots yields a resolver that answers `fallback` to everything, which
  * is the cold start ADR-0029 §9 describes and not an error.
  */
-export async function loadRealizationRatios(
-  collectionId: string
-): Promise<RealizationRatioResolver> {
+export function loadRealizationRatios(collectionId: string): Promise<RealizationRatioResolver> {
+  // Kept for a while once learned (#2426) — `realization-ratio-cache.ts` has the rule.
+  return cachedRealizationRatios(collectionId, () => learnRealizationRatios(collectionId));
+}
+
+async function learnRealizationRatios(collectionId: string): Promise<RealizationRatioResolver> {
   const [collection, catalogues, lots, observationRows] = await Promise.all([
     prisma.collection.findUnique({
       where: { id: collectionId },

@@ -1,4 +1,5 @@
 import { describe, it, before, beforeEach, after } from "node:test";
+import { forgetRealizationRatios } from "@/lib/realization-ratio-cache";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import {
@@ -24,6 +25,10 @@ import { getAuctionLotBidEvidence } from "../../src/lib/bid-recommendations";
 // exactly the "no rate to be had" state the unconvertible flag exists for.
 
 describe("auction lot line anchors (#510)", () => {
+  // The fixtures are written straight to the database, past the writers that clear the learned
+  // ratios (#2426), and several tests share one collection: each starts from a fresh learning.
+  beforeEach(() => forgetRealizationRatios());
+
   let userId: string;
   let collectionId: string;
   let sellerId: string;

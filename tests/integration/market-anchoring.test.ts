@@ -1,4 +1,5 @@
 import { describe, it, before, beforeEach, after } from "node:test";
+import { forgetRealizationRatios } from "@/lib/realization-ratio-cache";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import {
@@ -53,6 +54,10 @@ async function send<T>(context: OperationContext, name: string, path: Record<str
 }
 
 describe("markets and anchoring (#1634)", () => {
+  // The fixtures are written straight to the database, past the writers that clear the learned
+  // ratios (#2426), and several tests share one collection: each starts from a fresh learning.
+  beforeEach(() => forgetRealizationRatios());
+
   const userId = `test-user-markets-${ts}`;
   let collectionId: string;
   let context: OperationContext;
