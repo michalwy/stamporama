@@ -7321,6 +7321,16 @@ model Contact {
   // remembered value rather than a setting, so nothing in the contact form edits it, and
   // `onDelete: SetNull` — deleting the platform must forget the memory, never block the delete.
   defaultAuctionPlatformId String?
+  // ── Free extras (#2416) ────────────────────────────────────────────────────────────────────
+  // This contact's own free-extras terms, the same three as a platform's (#2409), for a regular
+  // customer treated more generously. All optional and each positive when set (CHECK
+  // `contact_free_extras_positive`); **read live**, never seeded. On a sale to the contact each field
+  // is combined with the platform's by taking the one better for the buyer — the lower minimum, the
+  // higher percentage, the higher maximum; a field set on only one side is that side's. The two
+  // amounts are in the collection's base currency, converted into the sale's where the two differ.
+  freeExtrasMinimumOrder  Decimal? @db.Decimal(10, 2)
+  freeExtrasBudgetPercent Decimal? @db.Decimal(5, 2)
+  freeExtrasMaximumBudget Decimal? @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

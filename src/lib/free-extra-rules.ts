@@ -160,7 +160,8 @@ export function freeExtraTotals(
 // sale. Below the minimum the sale says no free extra is due, but nothing stops one being added by
 // hand — a hint, not a block.
 
-/** A platform's free-extras settings, its two amounts already in cents of the sale's currency. */
+/** A platform's free-extras settings — or a contact's (#2416) — its two amounts already in cents of the
+ *  sale's currency. */
 export interface FreeExtraPlatformDefaults {
   minimumOrderCents: number | null;
   budgetPercent: number | null;
@@ -210,4 +211,82 @@ export function prefillFreeExtras(
     budgetCents = defaults.maximumBudgetCents;
   }
   return { kind: "due", budgetCents: budgetCents != null && budgetCents > 0 ? budgetCents : null, capped };
+}
+
+// ── A contact's own free-extras terms (#2416) ──────────────────────────────────────────────────────
+//
+// A regular customer can be treated more generously than the platform treats every buyer on it: a
+// contact has the same three fields, and on a sale to it each field is combined with the platform's
+// by taking the one **better for the buyer** — the lower minimum order, the higher percentage, the
+// higher maximum budget (settled with the collector on 2026-11-04). Only fields that are set take
+// part: one left empty on either side is not read as "no minimum" or "no cap", or every empty field
+// would win and the comparison would mean nothing. A field set on one side only is that side's.
+
+/** Where each of the combined terms came from — what the sale says beside the prefilled values. */
+export interface FreeExtraTermSources {
+  minimumOrder: "platform" | "contact" | null;
+  budgetPercent: "platform" | "contact" | null;
+  maximumBudget: "platform" | "contact" | null;
+}
+
+/** One field of the two sides, combined: the better of the two set values, the platform's at a tie
+ *  — the contact's then improves on nothing. */
+function better(
+  platform: number | null,
+  contact: number | null,
+  prefer: "lower" | "higher"
+): { value: number | null; source: "platform" | "contact" | null } {
+  if (contact == null) return { value: platform, source: platform == null ? null : "platform" };
+  if (platform == null) return { value: contact, source: "contact" };
+  const contactWins = prefer === "lower" ? contact < platform : contact > platform;
+  return contactWins ? { value: contact, source: "contact" } : { value: platform, source: "platform" };
+}
+
+/**
+ * The platform's and the contact's terms combined (#2416), each field the better for the buyer, with
+ * where each came from. Either side may be null (no buyer, or one that states nothing); both null is
+ * null, and the dialog opens as {@link prefillFreeExtras} says of none.
+ */
+export function combineFreeExtraTerms(
+  platform: FreeExtraPlatformDefaults | null,
+  contact: FreeExtraPlatformDefaults | null
+): { terms: FreeExtraPlatformDefaults; sources: FreeExtraTermSources } | null {
+  if (!platform && !contact) return null;
+  const minimumOrder = better(platform?.minimumOrderCents ?? null, contact?.minimumOrderCents ?? null, "lower");
+  const budgetPercent = better(platform?.budgetPercent ?? null, contact?.budgetPercent ?? null, "higher");
+  const maximumBudget = better(
+    platform?.maximumBudgetCents ?? null,
+    contact?.maximumBudgetCents ?? null,
+    "higher"
+  );
+  return {
+    terms: {
+      minimumOrderCents: minimumOrder.value,
+      budgetPercent: budgetPercent.value,
+      maximumBudgetCents: maximumBudget.value,
+    },
+    sources: {
+      minimumOrder: minimumOrder.source,
+      budgetPercent: budgetPercent.source,
+      maximumBudget: maximumBudget.source,
+    },
+  };
+}
+
+/** A contact's free-extras terms (#2416) in one line, for its page and the merge preview — *10% of
+ *  the order · at most 5.00 PLN · from an order of 50.00 PLN* — or null where it states none. */
+export function freeExtraTermsSummary(
+  terms: {
+    freeExtrasMinimumOrder: string | null;
+    freeExtrasBudgetPercent: string | null;
+    freeExtrasMaximumBudget: string | null;
+  },
+  currency: string
+): string | null {
+  const parts = [
+    terms.freeExtrasBudgetPercent != null ? `${terms.freeExtrasBudgetPercent}% of the order` : null,
+    terms.freeExtrasMaximumBudget != null ? `at most ${terms.freeExtrasMaximumBudget} ${currency}` : null,
+    terms.freeExtrasMinimumOrder != null ? `from an order of ${terms.freeExtrasMinimumOrder} ${currency}` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }

@@ -25,6 +25,9 @@ const blank: ContactMergeDetails = {
   defaultShippingCost: null,
   buyerPremiumPercent: null,
   buyerPremiumFixed: null,
+  freeExtrasMinimumOrder: null,
+  freeExtrasBudgetPercent: null,
+  freeExtrasMaximumBudget: null,
 };
 
 const contact = (data: Partial<ContactMergeDetails>): ContactMergeDetails => ({ ...blank, ...data });
@@ -82,6 +85,23 @@ describe("mergedContactDetails (#2043)", () => {
       ["CHF", null, null, null]
     );
     assert.deepEqual(pickTerms(mergedContactDetails(contact({}), theirs)), ["EUR", null, "20.00", null]);
+  });
+});
+
+describe("mergedContactDetails — free-extras terms (#2416)", () => {
+  it("takes them as one set — the other's only when the remaining has none", () => {
+    const theirs = contact({ freeExtrasBudgetPercent: "10", freeExtrasMaximumBudget: "5.00" });
+    const pick = (c: ContactMergeDetails) => [
+      c.freeExtrasMinimumOrder,
+      c.freeExtrasBudgetPercent,
+      c.freeExtrasMaximumBudget,
+    ];
+    assert.deepEqual(pick(mergedContactDetails(contact({ freeExtrasMinimumOrder: "20.00" }), theirs)), [
+      "20.00",
+      null,
+      null,
+    ]);
+    assert.deepEqual(pick(mergedContactDetails(contact({}), theirs)), [null, "10", "5.00"]);
   });
 });
 

@@ -13,8 +13,14 @@ import { baseBtn } from "@/app/button-style";
 import { formControl } from "@/app/control-style";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { FreeExtraCandidateRow, FreeExtraPlatformDefaultsData } from "@/lib/sales";
+import type {
+  FreeExtraCandidateRow,
+  FreeExtraContactTermsData,
+  FreeExtraPlatformDefaultsData,
+  FreeExtraTermsData,
+} from "@/lib/sales";
 import {
+  combineFreeExtraTerms,
   freeExtraTotals,
   fromCents,
   parseFreeExtraLimits,
@@ -24,7 +30,9 @@ import {
   type FreeExtraBudgetKind,
   type FreeExtraCandidate,
   type FreeExtraLimits,
+  type FreeExtraPlatformDefaults,
   type FreeExtraPrefill,
+  type FreeExtraTermSources,
 } from "@/lib/free-extra-rules";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -51,6 +59,10 @@ import { useFreeExtraCandidates } from "../use-sales-query";
 // dialog then opens with the platform's budget filled in — its percentage of the order, capped at its
 // maximum — and below its minimum order says that none is due, filling nothing in. Both are where the
 // dialog starts, not limits on it: the collector can change the budget, or add an extra by hand.
+//
+// The buyer may have terms of their own (#2416): each field is then the better for the buyer of the
+// contact's and the platform's (`combineFreeExtraTerms`), and the header line marks the ones that
+// came from the contact.
 
 const LIMIT_INPUT: React.CSSProperties = {
   ...formControl,
@@ -104,25 +116,52 @@ const LISTED_CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** The platform's rule in one line, for the header — what the prefilled budget came from. */
-function describePlatformRule(
-  defaults: FreeExtraPlatformDefaultsData,
+/** One side's terms in cents of the sale's currency, as the rules read them. */
+function termsInCents(d: FreeExtraTermsData | null): FreeExtraPlatformDefaults | null {
+  return (
+    d && {
+      minimumOrderCents: d.minimumOrder != null ? toCents(d.minimumOrder) : null,
+      budgetPercent: d.budgetPercent != null ? Number(d.budgetPercent) : null,
+      maximumBudgetCents: d.maximumBudget != null ? toCents(d.maximumBudget) : null,
+    }
+  );
+}
+
+/** The rule the dialog opened with, in one line for the header — what the prefilled budget came
+ *  from, each term from the contact marked as theirs (#2416). */
+function describeFreeExtraRule(
+  platform: FreeExtraPlatformDefaultsData | null,
+  contact: FreeExtraContactTermsData | null,
+  sources: FreeExtraTermSources,
   prefill: FreeExtraPrefill,
   currency: string
 ): string {
-  const { platformName, minimumOrder, budgetPercent, maximumBudget } = defaults;
-  const money = (amount: string) =>
-    `${defaults.convertedFrom ? "≈ " : ""}${amount} ${currency}`;
+  const side = (source: "platform" | "contact" | null) => (source === "contact" ? contact : platform);
+  const field = (key: keyof FreeExtraTermSources) => side(sources[key])?.[key] ?? null;
+  const money = (key: "minimumOrder" | "maximumBudget", amount: string) =>
+    `${side(sources[key])?.convertedFrom ? "≈ " : ""}${amount} ${currency}`;
+  const theirs = (key: keyof FreeExtraTermSources) =>
+    sources[key] === "contact" && contact ? ` (${contact.contactName}'s)` : "";
+  const minimumOrder = field("minimumOrder");
+  const budgetPercent = field("budgetPercent");
+  const maximumBudget = field("maximumBudget");
+  const anyContact = Object.values(sources).includes("contact");
   if (prefill.kind === "below-minimum" && minimumOrder) {
-    return `No free extra is due: ${platformName} gives them from an order of ${money(minimumOrder)}.`;
+    const who = sources.minimumOrder === "contact" && contact ? `for ${contact.contactName}` : `on ${platform?.platformName}`;
+    return `No free extra is due: ${who} they start from an order of ${money("minimumOrder", minimumOrder)}.`;
   }
   const parts = [
-    budgetPercent ? `${budgetPercent}% of the order` : null,
-    maximumBudget ? `at most ${money(maximumBudget)}` : null,
+    budgetPercent ? `${budgetPercent}% of the order${theirs("budgetPercent")}` : null,
+    maximumBudget ? `at most ${money("maximumBudget", maximumBudget)}${theirs("maximumBudget")}` : null,
+    minimumOrder ? `from an order of ${money("minimumOrder", minimumOrder)}${theirs("minimumOrder")}` : null,
   ].filter(Boolean);
-  const from = minimumOrder ? `from an order of ${money(minimumOrder)}` : null;
-  const rule = [parts.join(", "), from].filter(Boolean).join(", ");
-  return `Free extras on ${platformName}: ${rule}.`;
+  const where = [
+    platform ? `on ${platform.platformName}` : null,
+    anyContact && contact ? `for ${contact.contactName}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `Free extras ${where}: ${parts.join(", ")}.`;
 }
 
 function asCandidate(row: FreeExtraCandidateRow): FreeExtraCandidate {
@@ -170,21 +209,20 @@ export function FreeExtrasDialog({
   const rows = useMemo(() => data?.candidates ?? [], [data]);
   const candidates = useMemo(() => rows.map(asCandidate), [rows]);
   const orderCents = data ? toCents(data.orderValue) : 0;
-  const defaults = data?.platformDefaults ?? null;
-  const prefill = useMemo<FreeExtraPrefill | null>(() => {
-    if (!data) return null;
-    const d = data.platformDefaults;
-    return prefillFreeExtras(
-      d && {
-        minimumOrderCents: d.minimumOrder != null ? toCents(d.minimumOrder) : null,
-        budgetPercent: d.budgetPercent != null ? Number(d.budgetPercent) : null,
-        maximumBudgetCents: d.maximumBudget != null ? toCents(d.maximumBudget) : null,
-      },
-      toCents(data.orderValue)
-    );
-  }, [data]);
+  // The platform's terms and the buyer's own (#2416), each field the better for the buyer.
+  const combined = useMemo(
+    () =>
+      data
+        ? combineFreeExtraTerms(termsInCents(data.platformDefaults), termsInCents(data.contactTerms))
+        : null,
+    [data]
+  );
+  const prefill = useMemo<FreeExtraPrefill | null>(
+    () => (data ? prefillFreeExtras(combined?.terms ?? null, toCents(data.orderValue)) : null),
+    [data, combined]
+  );
 
-  // The platform's budget is filled in once, when the candidates first arrive — a refetch must not
+  // The budget is filled in once, when the candidates first arrive — a refetch must not
   // write over what the collector has typed since (#2409).
   const [seeded, setSeeded] = useState(false);
   if (prefill && !seeded) {
@@ -302,7 +340,7 @@ export function FreeExtrasDialog({
               </span>
             </Tooltip>
           )}
-          {defaults && prefill && prefill.kind !== "none" && (
+          {data && combined && prefill && prefill.kind !== "none" && (
             <span
               style={{
                 fontSize: "0.8125rem",
@@ -313,7 +351,13 @@ export function FreeExtrasDialog({
                     : "var(--color-text-secondary)",
               }}
             >
-              {describePlatformRule(defaults, prefill, currency)}
+              {describeFreeExtraRule(
+                data.platformDefaults,
+                data.contactTerms,
+                combined.sources,
+                prefill,
+                currency
+              )}
             </span>
           )}
           <span

@@ -166,6 +166,13 @@ export interface ContactData extends ContactRoles {
   defaultShippingCost: string | null;
   buyerPremiumPercent: string | null;
   buyerPremiumFixed: string | null;
+  /** This contact's own free-extras terms (#2416), each null when it states none: the minimum order
+   * value and the maximum budget as 2-dp strings in the collection's base currency, the default budget
+   * as a percentage of the order. On a sale to the contact each is combined with the platform's
+   * (#2409), the better for the buyer applying. Read live, never seeded. Any role may set them. */
+  freeExtrasMinimumOrder: string | null;
+  freeExtrasBudgetPercent: string | null;
+  freeExtrasMaximumBudget: string | null;
   createdAt: Date;
 }
 
@@ -188,6 +195,9 @@ const CONTACT_SELECT = {
   defaultShippingCost: true,
   buyerPremiumPercent: true,
   buyerPremiumFixed: true,
+  freeExtrasMinimumOrder: true,
+  freeExtrasBudgetPercent: true,
+  freeExtrasMaximumBudget: true,
   createdAt: true,
 } as const;
 
@@ -199,11 +209,17 @@ type ContactRow = Omit<
   | "defaultShippingCost"
   | "buyerPremiumPercent"
   | "buyerPremiumFixed"
+  | "freeExtrasMinimumOrder"
+  | "freeExtrasBudgetPercent"
+  | "freeExtrasMaximumBudget"
   | "facebookProfileUrls"
 > & {
   defaultShippingCost: Decimal | null;
   buyerPremiumPercent: Decimal | null;
   buyerPremiumFixed: Decimal | null;
+  freeExtrasMinimumOrder: Decimal | null;
+  freeExtrasBudgetPercent: Decimal | null;
+  freeExtrasMaximumBudget: Decimal | null;
   facebookProfiles: { url: string }[];
 };
 
@@ -216,6 +232,11 @@ function toContactData({ facebookProfiles, ...row }: ContactRow): ContactData {
     defaultShippingCost: row.defaultShippingCost?.toFixed(2) ?? null,
     buyerPremiumPercent: row.buyerPremiumPercent?.toFixed(2) ?? null,
     buyerPremiumFixed: row.buyerPremiumFixed?.toFixed(2) ?? null,
+    freeExtrasMinimumOrder: row.freeExtrasMinimumOrder?.toFixed(2) ?? null,
+    // As typed — 5, not 5.00 — since a percentage is read as a number, not as money (as on a platform).
+    freeExtrasBudgetPercent:
+      row.freeExtrasBudgetPercent != null ? String(Number(row.freeExtrasBudgetPercent)) : null,
+    freeExtrasMaximumBudget: row.freeExtrasMaximumBudget?.toFixed(2) ?? null,
   };
 }
 
@@ -238,6 +259,39 @@ function sellerDefaults(data: ContactCreateInput): {
     defaultShippingCost: amount(data.defaultShippingCost),
     buyerPremiumPercent: amount(data.buyerPremiumPercent),
     buyerPremiumFixed: amount(data.buyerPremiumFixed),
+  };
+}
+
+/** A free-extras term (#2416) as written: blank is none, anything else a positive figure — at most
+ *  100 for the percentage, which is of the order's value. Refused rather than dropped, unlike
+ *  {@link amount}: a term silently left out would prefill nothing, with no word why. */
+function freeExtrasFigure(
+  raw: string | null | undefined,
+  what: string,
+  max: number = 99_999_999.99
+): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > max) {
+    throw new ContactFieldError(
+      max === 100
+        ? `The ${what} must be a percentage above 0 and at most 100.`
+        : `The ${what} must be an amount above 0.`
+    );
+  }
+  return value;
+}
+
+function freeExtrasTerms(data: ContactCreateInput): {
+  freeExtrasMinimumOrder: string | null;
+  freeExtrasBudgetPercent: string | null;
+  freeExtrasMaximumBudget: string | null;
+} {
+  return {
+    freeExtrasMinimumOrder: freeExtrasFigure(data.freeExtrasMinimumOrder, "minimum order for free extras"),
+    freeExtrasBudgetPercent: freeExtrasFigure(data.freeExtrasBudgetPercent, "free-extras budget", 100),
+    freeExtrasMaximumBudget: freeExtrasFigure(data.freeExtrasMaximumBudget, "maximum free-extras budget"),
   };
 }
 
@@ -267,6 +321,12 @@ export interface ContactCreateInput {
   defaultShippingCost?: string | null;
   buyerPremiumPercent?: string | null;
   buyerPremiumFixed?: string | null;
+  /** The contact's own free-extras terms (#2416), each null for none, amounts in the collection's
+   * base currency. Blank stores null; a figure that is not positive — or a percentage over 100 — is
+   * refused with {@link ContactFieldError}. */
+  freeExtrasMinimumOrder?: string | null;
+  freeExtrasBudgetPercent?: string | null;
+  freeExtrasMaximumBudget?: string | null;
 }
 
 /** A contact row for the management UI: the full contact plus how many purchases
@@ -417,6 +477,7 @@ export async function createContact(
   if (!name) throw new Error("Contact name is required.");
   const profileUrls = profileUrlsData(data.facebookProfileUrls) ?? [];
   const market = marketData(data.market) ?? null;
+  const freeExtras = freeExtrasTerms(data);
   try {
     return toContactData(await prisma.$transaction(async (tx) => {
       const { id } = await tx.contact.create({
@@ -424,6 +485,7 @@ export async function createContact(
           collectionId,
           name,
           ...sellerDefaults(data),
+          ...freeExtras,
           notes: data.notes ?? null,
           fullName: data.fullName ?? null,
           email: data.email ?? null,
@@ -461,6 +523,7 @@ export async function updateContact(
   if (!name) throw new Error("Contact name is required.");
   const profileUrls = profileUrlsData(data.facebookProfileUrls);
   const market = marketData(data.market);
+  const freeExtras = freeExtrasTerms(data);
   try {
     return toContactData(await prisma.$transaction(async (tx) => {
       await tx.contact.update({
@@ -468,6 +531,7 @@ export async function updateContact(
         data: {
           name,
           ...sellerDefaults(data),
+          ...freeExtras,
           notes: data.notes ?? null,
           fullName: data.fullName ?? null,
           email: data.email ?? null,
@@ -717,6 +781,9 @@ export async function mergeContacts(
         defaultShippingCost: merged.defaultShippingCost,
         buyerPremiumPercent: merged.buyerPremiumPercent,
         buyerPremiumFixed: merged.buyerPremiumFixed,
+        freeExtrasMinimumOrder: merged.freeExtrasMinimumOrder,
+        freeExtrasBudgetPercent: merged.freeExtrasBudgetPercent,
+        freeExtrasMaximumBudget: merged.freeExtrasMaximumBudget,
         // A remembered value, not a detail on the form — still the other's memory is better than none.
         defaultAuctionPlatformId: remainingRow.defaultAuctionPlatformId ?? otherRow.defaultAuctionPlatformId,
       },

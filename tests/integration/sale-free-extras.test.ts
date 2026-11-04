@@ -7,6 +7,7 @@ import { createTrade } from "../../src/lib/trades";
 import { addTradeGiveLines } from "../../src/lib/trade-lines";
 import { addProposalLots, createProposal, getDirectPlatform } from "../../src/lib/proposals";
 import { PlatformFieldError, updatePlatform } from "../../src/lib/platforms";
+import { ContactFieldError, createContact, getContactListItem, updateContact } from "../../src/lib/contacts";
 import {
   addSaleCopySet,
   addSaleFreeExtras,
@@ -35,10 +36,10 @@ describe("free extras on a sale (#2408)", () => {
   const blocked = (reason: string) => (e: unknown) =>
     e instanceof SaleActionBlockedError && e.reason === reason;
 
-  const newSale = () =>
+  const newSale = (buyerId: string | null = null) =>
     createSale(userId, collectionId, {
       platformId,
-      buyerId: null,
+      buyerId,
       externalRef: null,
       transactionUrl: null,
       soldAt: new Date("2026-11-04"),
@@ -333,5 +334,93 @@ describe("free extras on a sale (#2408)", () => {
       maximumBudget: "2.00",
       convertedFrom: null,
     });
+  });
+  // #2416: the buyer's own terms travel beside the platform's, in the sale's currency; the dialog
+  // combines the two (`combineFreeExtraTerms`, pinned in the unit suite).
+  it("stores a contact's free-extras terms and refuses ones that are not positive", async () => {
+    const created = await createContact(userId, collectionId, {
+      name: `Regular ${ts}`,
+      buyer: true,
+      freeExtrasMinimumOrder: "10",
+      freeExtrasBudgetPercent: "12.5",
+    });
+    assert.equal(created.freeExtrasMinimumOrder, "10.00");
+    assert.equal(created.freeExtrasBudgetPercent, "12.5");
+    assert.equal(created.freeExtrasMaximumBudget, null);
+
+    for (const bad of [
+      { freeExtrasMinimumOrder: "0" },
+      { freeExtrasBudgetPercent: "-1" },
+      { freeExtrasBudgetPercent: "101" },
+      { freeExtrasMaximumBudget: "abc" },
+    ]) {
+      await assert.rejects(
+        updateContact(userId, created.id, { name: created.name, buyer: true, ...bad }),
+        ContactFieldError
+      );
+    }
+    const kept = await getContactListItem(userId, created.id);
+    assert.equal(kept?.freeExtrasBudgetPercent, "12.5");
+
+    // Cleared by leaving the fields empty.
+    const cleared = await updateContact(userId, created.id, { name: created.name, buyer: true });
+    assert.equal(cleared.freeExtrasMinimumOrder, null);
+    assert.equal(cleared.freeExtrasBudgetPercent, null);
+  });
+
+  it("sends the buyer's terms with the candidates, and none for a buyer who states none", async () => {
+    const plain = await createContact(userId, collectionId, { name: `Plain ${ts}`, buyer: true });
+    const toPlain = await newSale(plain.id);
+    assert.equal((await listFreeExtraCandidates(userId, toPlain)).contactTerms, null);
+    // A sale with no buyer has none either.
+    assert.equal((await listFreeExtraCandidates(userId, saleId)).contactTerms, null);
+
+    const regular = await createContact(userId, collectionId, {
+      name: `Generous ${ts}`,
+      buyer: true,
+      freeExtrasBudgetPercent: "10",
+      freeExtrasMaximumBudget: "3.00",
+    });
+    const toRegular = await newSale(regular.id);
+    const result = await listFreeExtraCandidates(userId, toRegular);
+    assert.deepEqual(result.contactTerms, {
+      contactName: regular.name,
+      minimumOrder: null,
+      budgetPercent: "10",
+      maximumBudget: "3.00",
+      convertedFrom: null,
+    });
+    // The platform's are still sent on their own — the two are combined in the dialog.
+    assert.equal(result.platformDefaults?.platformName, "Fair");
+  });
+
+  it("converts the buyer's amounts from the collection's currency into the sale's", async () => {
+    const regular = await createContact(userId, collectionId, {
+      name: `Abroad ${ts}`,
+      buyer: true,
+      freeExtrasMinimumOrder: "5.00",
+      freeExtrasMaximumBudget: "1.50",
+    });
+    const pln = await newSale(regular.id);
+    await prisma.sale.update({ where: { id: pln }, data: { currency: "PLN", fxRateToBase: "0.25" } });
+    await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+    await prisma.exchangeRate.createMany({
+      data: [
+        { collectionId, fromCurrency: "EUR", toCurrency: "EUR", rate: 1, fetchedAt: new Date() },
+        { collectionId, fromCurrency: "EUR", toCurrency: "PLN", rate: 4, fetchedAt: new Date() },
+      ],
+    });
+    try {
+      const result = await listFreeExtraCandidates(userId, pln);
+      assert.deepEqual(result.contactTerms, {
+        contactName: regular.name,
+        minimumOrder: "20.00",
+        budgetPercent: null,
+        maximumBudget: "6.00",
+        convertedFrom: "EUR",
+      });
+    } finally {
+      await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+    }
   });
 });

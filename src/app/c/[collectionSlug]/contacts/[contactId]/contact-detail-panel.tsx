@@ -25,6 +25,7 @@ import {
 } from "@/lib/contact-page-rules";
 import { costPercent, formatCostPercent, type CostToCatalog } from "@/lib/cost-to-catalog";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { freeExtraTermsSummary } from "@/lib/free-extra-rules";
 import { AUCTION_SALE_STATUS_LABEL, type AuctionLotOutcome } from "@/lib/auction-rules";
 import { TAG_FILTER_PARAM, TAG_MODE_PARAM } from "@/lib/tag-filter";
 import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
@@ -294,6 +295,7 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       {merging && (
         <MergeContactsDialog
           collectionId={collectionId}
+          baseCurrency={data.baseCurrency}
           contactId={contact.id}
           isPending={isPending}
           error={error}
@@ -359,6 +361,8 @@ function ContactCard({ data }: { data: ContactPage }) {
           )}
         </Field>
         <Field label="Market">{market}</Field>
+        {/* Its own free-extras terms (#2416), improving on a platform's on a sale to it. */}
+        <Field label="Free extras">{freeExtraTermsSummary(c, data.baseCurrency)}</Field>
       </FieldGrid>
       {c.notes && (
         <div style={{ marginTop: "0.75rem" }}>

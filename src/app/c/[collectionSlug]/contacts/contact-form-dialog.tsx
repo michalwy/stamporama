@@ -16,6 +16,7 @@ import { COMMON_MARKETS } from "@/lib/market-anchoring";
 import type { ContactListItem } from "@/lib/contacts";
 import { CONTACT_ROLES } from "./contact-roles";
 import { NumericInput } from "../shared/numeric-input";
+import { InfoHint } from "../shared/info-hint";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 
@@ -358,6 +359,62 @@ export function ContactFormDialog({
                       </p>
                     </div>
                   )}
+
+                  {/* The contact's own free-extras terms (#2416), for a regular customer treated more
+                      generously than a platform's terms (#2409) treat every buyer: on a sale to it each
+                      field is combined with the platform's, the better for the buyer applying. Any role
+                      may have them — whoever a sale is made to is its buyer. */}
+                  <div style={FIELD_GAP}>
+                    <LabelWithError>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                        Free extras (optional)
+                        <InfoHint>
+                          What the Add free extras action on a sale to this contact opens with, combined
+                          with the sale&rsquo;s platform: the lower minimum order, the higher percentage
+                          and the higher maximum apply. A field left empty uses the platform&rsquo;s.
+                          Amounts are in the collection&rsquo;s currency.
+                        </InfoHint>
+                      </span>
+                    </LabelWithError>
+                    <div style={{ display: "flex", gap: "0.75rem" }}>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-free-extras-minimum-order">From an order of</LabelWithError>
+                        <NumericInput
+                          kind="amount"
+                          id="contact-free-extras-minimum-order"
+                          name="freeExtrasMinimumOrder"
+                          defaultValue={contact?.freeExtrasMinimumOrder ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-free-extras-budget-percent">Budget (% of order)</LabelWithError>
+                        <NumericInput
+                          kind="number"
+                          id="contact-free-extras-budget-percent"
+                          name="freeExtrasBudgetPercent"
+                          defaultValue={contact?.freeExtrasBudgetPercent ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <LabelWithError htmlFor="contact-free-extras-maximum-budget">At most</LabelWithError>
+                        <NumericInput
+                          kind="amount"
+                          id="contact-free-extras-maximum-budget"
+                          name="freeExtrasMaximumBudget"
+                          defaultValue={contact?.freeExtrasMaximumBudget ?? ""}
+                          placeholder="—"
+                          disabled={isPending}
+                          style={INPUT_STYLE}
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   <div>
                     <LabelWithError htmlFor="contact-notes">Notes</LabelWithError>

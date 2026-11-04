@@ -85,6 +85,10 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     exchangePartner: bool(formData, "exchangePartner"),
     auctionHouse: bool(formData, "auctionHouse"),
     other: bool(formData, "other"),
+    // The contact's own free-extras terms (#2416) — any role may have them; either decimal separator.
+    freeExtrasMinimumOrder: normalizeDecimalInput(str(formData, "freeExtrasMinimumOrder")) || null,
+    freeExtrasBudgetPercent: normalizeDecimalInput(str(formData, "freeExtrasBudgetPercent")) || null,
+    freeExtrasMaximumBudget: normalizeDecimalInput(str(formData, "freeExtrasMaximumBudget")) || null,
     // The seller's defaults for auction sales (#350). Role-gated — an `auctionHouse` counts as a
     // seller here, since a house is who one buys from — and the amounts accept either decimal
     // separator (#233).

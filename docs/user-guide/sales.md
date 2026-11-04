@@ -182,6 +182,10 @@ maximum, and a line in the header says what the platform's rule is. Change it fr
 nothing is ticked until you press **Propose**. When the order is under the platform's minimum, the
 header says **no free extra is due** and nothing is filled in — you can still add one by hand.
 
+When the sale's buyer has [free extras of their own](contacts.md#free-extras), each value is the one
+better for the buyer — the lower minimum order, the higher percentage, the higher maximum — of theirs
+and the platform's, and the header line marks the ones that came from the buyer with their name.
+
 Only copies that could really go are proposed: **in stock** (in hand, not sold, traded away or
 disposed of), marked **for sale** or **for trade** — never a copy kept only in your collection —
 on no open trade or proposal, and with a value. A copy with no value cannot be ranked or counted
