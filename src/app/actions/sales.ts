@@ -15,6 +15,7 @@ import {
   addSaleLines,
   readSaleHeadline,
   addSaleCopySet,
+  addSaleFreeExtras,
   updateSaleLinePrice,
   removeSaleLine,
   removeSaleLines,
@@ -331,6 +332,24 @@ export async function addSaleCopySetAction(
     return { status: "success", ...(await readSaleHeadline(session.user.id, saleId)) };
   } catch (e) {
     return fail(e, "Failed to add the copies to the sale.");
+  }
+}
+
+/** Add the ticked copies to a sale as free extras (#2408): one line each, on no offer, at price 0. */
+export async function addSaleFreeExtrasAction(
+  saleId: string,
+  itemIds: string[],
+  opts: { toSentSale?: boolean } = {}
+): Promise<AddSaleLinesActionState> {
+  const session = await getSession();
+  if (itemIds.length === 0) {
+    return { status: "error", message: "Tick at least one copy to give away." };
+  }
+  try {
+    await addSaleFreeExtras(session.user.id, saleId, itemIds, { toSentSale: opts.toSentSale === true });
+    return { status: "success", ...(await readSaleHeadline(session.user.id, saleId)) };
+  } catch (e) {
+    return fail(e, "Failed to add the free extras to the sale.");
   }
 }
 

@@ -6598,6 +6598,12 @@ model SaleLine {
   offerSetId String?
   // Line sale price in the sale's transaction currency.
   price      Decimal @db.Decimal(10, 2)
+  // A **free extra** (#2408): a copy put into the parcel for nothing, on top of what the buyer
+  // bought — proposed on the sale's screen, cheapest first. Otherwise an ordinary line: the copy
+  // leaves the holdings on it and its cost basis counts against the sale's profit. A CHECK
+  // (`sale_line_free_extra_shape`) holds it to a set on no offer at price 0, so its price is not
+  // edited and it adds nothing to the order's value.
+  freeExtra  Boolean @default(false)
   // The line names a set, but **nobody has chosen it yet** (#697).
   //
   // An offer listed at quantity 3 has three sets, and a buyer who takes one has said *one of these*,

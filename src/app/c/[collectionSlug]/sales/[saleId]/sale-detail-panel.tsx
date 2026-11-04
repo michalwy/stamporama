@@ -34,6 +34,7 @@ import { SaleFormDialog } from "../sale-form-dialog";
 import { SentAsSelect, findCarrierService } from "../sent-as-select";
 import { AddSaleLineDialog } from "../add-sale-line-dialog";
 import { AddCopiesDialog } from "./add-copies-dialog";
+import { FreeExtrasDialog } from "./free-extras-dialog";
 import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
 import { SaleApiReviewChip } from "../sale-review-chip";
@@ -142,6 +143,7 @@ type Dialog =
   | { kind: "editHeader" }
   | { kind: "addLines" }
   | { kind: "addCopies" }
+  | { kind: "freeExtras" }
   | { kind: "removeLine"; lineId: string; label: string }
   | { kind: "chooseSet"; lineId: string }
   | { kind: "share" }
@@ -978,6 +980,20 @@ export function SaleDetailPanel({
               Add copies
             </button>
           </Tooltip>
+          {/* Copies given away on top of the order (#2408), proposed cheapest first. */}
+          <Tooltip content="Put copies into the parcel for free — the sale proposes the cheapest within a count and a budget">
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setDialog({ kind: "freeExtras" });
+              }}
+              disabled={isPending}
+              style={SECONDARY_BTN}
+            >
+              Add free extras
+            </button>
+          </Tooltip>
           <button
             type="button"
             onClick={() => {
@@ -1127,6 +1143,34 @@ export function SaleDetailPanel({
                 const { addSaleCopySetAction } = await import("@/app/actions/sales");
                 // This very sale was opened, so a sent one takes the copies too — the sold sets' rule (#1950).
                 return addSaleCopySetAction(sale.id, set, { toSentSale: true });
+              },
+              () => setDialog({ kind: "none" })
+            )
+          }
+        />
+      )}
+
+      {dialog.kind === "freeExtras" && (
+        <FreeExtrasDialog
+          collectionId={collectionId}
+          saleId={sale.id}
+          baseCurrency={sale.baseCurrency}
+          areas={areas}
+          locations={locations}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onSubmit={(itemIds) =>
+            run(
+              async () => {
+                const { addSaleFreeExtrasAction } = await import("@/app/actions/sales");
+                // This very sale was opened, so a sent one takes them too — the sold sets' rule (#1950).
+                return addSaleFreeExtrasAction(sale.id, itemIds, { toSentSale: true });
               },
               () => setDialog({ kind: "none" })
             )

@@ -92,6 +92,19 @@ const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
  *  not an outstanding decision but a settled one, and what it adds is *who* settled it — the seller
  *  packing the parcel is entitled to know the copy in front of them was asked for rather than
  *  picked. Gone the moment the seller swaps the set themselves, because then it is their pick again. */
+/** A free extra (#2408) — given away on top of the order, at no price. */
+const FREE_EXTRA_CHIP: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  padding: "0.0625rem 0.375rem",
+  borderRadius: "0.375rem",
+  color: "var(--color-accent)",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-accent-soft)",
+};
+
 const BUYER_CHOSE_CHIP: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -1142,8 +1155,9 @@ function SoldUnitCard({
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               {line.copyCount} cop{line.copyCount === 1 ? "y" : "ies"}
-              {/* Sold without being listed (#2021): the set belongs to this sale alone. */}
-              {line.offerSetId === null && " · on no offer"}
+              {/* Sold without being listed (#2021): the set belongs to this sale alone. A free extra
+                  (#2408) is one too, and its chip says the more useful thing. */}
+              {line.offerSetId === null && !line.freeExtra && " · on no offer"}
               {/* Sold through an offer listed on another platform (#2343). */}
               {line.fromPlatformName && line.offerNo !== null && ` · from ${line.fromPlatformName} #${line.offerNo}`}
             </span>
@@ -1154,6 +1168,11 @@ function SoldUnitCard({
                 outstanding and then makes the reader go and find the control for it is two clicks
                 where one will do, so pressing it opens the very picker the `⋮` menu opens. The click
                 is stopped so the card does not collapse under the dialog. */}
+            {line.freeExtra && (
+              <Tooltip content="Given away on top of the order: no price, and its cost counts against the sale's profit">
+                <span style={FREE_EXTRA_CHIP}>Free extra</span>
+              </Tooltip>
+            )}
             {line.setChoicePending && (
               <Tooltip content="Nobody has said which of this offer's sets actually left — press to choose">
                 <button
@@ -1184,7 +1203,14 @@ function SoldUnitCard({
         {/* Click stops the card toggle so editing the price doesn't collapse the card (#258). */}
         <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <div style={{ fontSize: "0.875rem", fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)" }}>
-            <EditableLinePrice value={line.price} currency={currency} onSave={onEditPrice} />
+            {/* A free extra's price is 0 by what it is (#2408), so it is not edited. */}
+            {line.freeExtra ? (
+              <span>
+                {line.price} {currency}
+              </span>
+            ) : (
+              <EditableLinePrice value={line.price} currency={currency} onSave={onEditPrice} />
+            )}
             {line.priceBase && (
               <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                 ≈ {line.priceBase} {ctx.baseCurrency}

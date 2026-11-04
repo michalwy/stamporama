@@ -238,6 +238,33 @@ A sale's own platform still cannot change while it holds lines, and merging or m
 sales still asks for the same platform: those are about the sale, not about where its sets were
 listed.
 
+
+### 10. A sale line may be a free extra (#2408)
+
+Collectors put a few stamps into a parcel for nothing, on top of what the buyer bought, and picking
+them from the whole stock by hand is slow. Decided with the collector on 2026-11-04, the sale
+**proposes** them and the collector confirms.
+
+- **A free extra is a line of §8 at price 0, marked `SaleLine.freeExtra`** — one copy per line. A
+  CHECK holds the shape (no offer, no set, price 0), and its price is not edited. Everything else is
+  an ordinary line: the copy leaves the holdings through `sale_line_item`, a listed copy's offers are
+  flagged as for any copy sold on no offer, and the price-weighted allocation gives it no share of
+  handling, commission or shipping, so its profit is minus its cost basis — the cost counts against
+  the sale.
+- **The proposal ranks by catalogue value, the lowest first**, and at equal value a copy on no open
+  offer before a listed one. Purchase cost never ranks, and what the buyer bought does not steer the
+  choice.
+- **It respects a count and a budget**, either or both; the budget is an amount in the sale's
+  currency or a percentage of the **order** — the sale's paid lines, without shipping or free
+  extras. Values are converted from the base currency at the sale's rate; a copy with no value is
+  not proposed.
+- **Only copies for sale or for trade are proposed** — never one kept only in the collection — and
+  only in stock, on no open trade or proposal, and in no listing in active bidding.
+
+Considered and rejected: a **flag on the sale** listing given-away copies apart from its lines. The
+copies leave the holdings and carry a cost exactly as sold ones do, and every read that retires a
+copy or sums a sale's cost already reads lines; a second path would have to be taught to each of them.
+
 ## Consequences
 
 - **Removed:** `Lot` / `LotItem` / `LotSubLot` tables and the standalone **Lots** screen,

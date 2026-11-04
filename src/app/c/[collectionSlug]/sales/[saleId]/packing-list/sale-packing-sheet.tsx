@@ -63,9 +63,10 @@ function packedNote(group: PackingListGroup): string | null {
 }
 
 /** That a set went out on no offer (#2021), as the sale screen's line says — the heading names the
- *  offer of every other one (#2189). */
+ *  offer of every other one (#2189) — or as a free extra (#2408), which is one too. */
 function setNote(group: PackingListGroup): string | null {
-  return [group.set?.onNoOffer ? "on no offer" : null, packedNote(group)].filter(Boolean).join(" · ") || null;
+  const how = group.set?.freeExtra ? "free extra" : group.set?.onNoOffer ? "on no offer" : null;
+  return [how, packedNote(group)].filter(Boolean).join(" · ") || null;
 }
 
 export function SalePackingSheet({
