@@ -802,6 +802,12 @@ Two things fall out of this:
   photo is taken even when the limit has no room for it — it simply pushes the last image
   [past the limit](#holding-a-photo-back), which your own order can still overrule.
 
+A single-stamp set with **no photo** for the sides the listing shows is left out of the
+arithmetic altogether, with this rule on or off: it takes no slot, sits in no collage, and the plan
+is the one you would get without it. The Photos card still names it, so you can scan it. A copy
+without a photo in a multi-stamp set keeps the all-or-nothing rule for missing scans: its set
+loses that side's image rather than show the set with a stamp missing.
+
 Turn **Single photos while the limit allows** off in the [photo settings](#photo-settings) and the
 single-stamp sets are always collaged instead, as they were before this rule existed. It is
 per-offer, so one listing can be arranged differently from the next.

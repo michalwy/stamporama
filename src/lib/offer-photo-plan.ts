@@ -72,6 +72,16 @@
 // - Off, grouping is exactly what it was before #521, which is what an offer prepared under the old
 //   rule keeps.
 //
+// Single-copy sets with nothing to draw (#2410)
+// ---------------------------------------------
+// A single-copy set whose copy has no scan for any attempted side is left out of the pool, under
+// either rule above: it takes no slot, joins no collage and does not count towards the singles-or-
+// collage arithmetic, so the plan is the one the offer would get without it. Pooled, it would cancel
+// the collage it landed in (the all-or-nothing rule below) and leave photographed copies out. It is
+// not drawn as an empty tile; it is still reported in `skipped`, as a group of its own with no image.
+// Multi-copy sets keep the all-or-nothing rule: a set is one thing being sold, and a collage of it
+// with one stamp missing would misrepresent it.
+//
 // Front / back
 // ------------
 // - Which sides are attempted comes from the offer's `photoSides` (#308).
@@ -616,7 +626,14 @@ function buildGroups(sets: readonly PlanSet[], options: GroupingOptions): CopyGr
   const { capacity, groupCapacity, preferSingles, maxPhotos, sides, unpublished, attachmentCost } =
     options;
   const slots = walkSets(sets, capacity, groupCapacity);
-  const singles = slots.flatMap((slot) => (slot.kind === "single" ? [slot.entry] : []));
+  // A single-copy set with nothing to draw (#2410) is set aside before any arithmetic: it takes no
+  // slot, sits in no collage — where the all-or-nothing rule would cancel the collage over it — and
+  // so the pool is grouped exactly as it would be without it.
+  const drawable = (entry: SingleEntry) =>
+    groupImages([entry.copy], sides).some((image) => image.produced);
+  const singles = slots.flatMap((slot) =>
+    slot.kind === "single" && drawable(slot.entry) ? [slot.entry] : []
+  );
 
   // How many of the pool's copies stand alone. Without #521's rule none of them do, which is the
   // original behaviour: every run of singles is chunked to the collage's capacity.
@@ -655,6 +672,11 @@ function buildGroups(sets: readonly PlanSet[], options: GroupingOptions): CopyGr
 
   for (const slot of slots) {
     if (slot.kind === "single") {
+      if (!drawable(slot.entry)) {
+        // A group of its own that renders nothing, so the copy is still reported (#314).
+        groups.push(groupOf([slot.entry]));
+        continue;
+      }
       if (!preferSingles) {
         run.push(slot.entry);
         continue;
