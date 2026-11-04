@@ -943,6 +943,32 @@ export function useInvalidateOffers() {
      *  invalidating every offer list on the collection would be noise for one header. */
     invalidateDetail: (collectionId: string, offerId: string) =>
       queryClient.invalidateQueries({ queryKey: offerKeys.detail(collectionId, offerId) }),
+    /** A price typed on the offer's own screen (#2413): its stored figure written into the offer's
+     *  read the moment the field is left, as the Prepare screen shows its own (#1894), before the save
+     *  and the re-read that follows it — which, the detail being a valuation and a ready gate, is a
+     *  wait the collector can see. Everything else on the screen that follows from the price catches
+     *  up with that re-read. A read already under way is cancelled first, so an answer that left
+     *  before the typing cannot put the old figure back. Returns what puts the stored figure back
+     *  when the save fails. */
+    showOfferPrice: (
+      collectionId: string,
+      offerId: string,
+      field: "price" | "startingPrice",
+      value: string | null
+    ) => {
+      const key = offerKeys.detail(collectionId, offerId);
+      void queryClient.cancelQueries({ queryKey: key, exact: true });
+      const before = queryClient.getQueryData<OfferDetail>(key);
+      queryClient.setQueryData<OfferDetail>(key, (offer) =>
+        offer && (field === "price" ? { ...offer, price: value ?? "0.00" } : { ...offer, startingPrice: value })
+      );
+      return () => {
+        if (!before) return;
+        queryClient.setQueryData<OfferDetail>(key, (offer) =>
+          offer && (field === "price" ? { ...offer, price: before.price } : { ...offer, startingPrice: before.startingPrice })
+        );
+      };
+    },
     /** A price typed on the Prepare screen (#1894): written into the row in place, and every other
      *  offer read marked stale. Refetching the screen itself would rebuild every loaded page — a
      *  valuation and a photo plan per row — for each of a run of prices typed one after another, and

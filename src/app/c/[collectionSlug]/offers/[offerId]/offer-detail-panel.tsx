@@ -75,6 +75,7 @@ import {
   OFFER_STATE_LABEL,
   quickAdvanceTarget,
   priceLabel,
+  parseStatedPrice,
   pricingReadyFor,
   requiresSets,
   type ManualOfferTarget,
@@ -254,7 +255,7 @@ export function OfferDetailPanel({
   const skippedParam = Number(searchParams.get("skipped")) || 0;
   const { data: offer, isLoading } = useOfferDetail(collectionId, offerId);
   const { data: copies = [], isLoading: copiesLoading } = useOfferCopies(collectionId, offerId, true);
-  const { invalidateAll } = useInvalidateOffers();
+  const { invalidateAll, showOfferPrice } = useInvalidateOffers();
   // Confirmation toasts (#541) — used sparingly here. Most of this screen *is* the result: an edited
   // title redraws in place, a set added appears in the list below. What gets one is the act whose
   // effect is a chip disappearing or a state word changing at the top of a long page.
@@ -515,17 +516,28 @@ export function OfferDetailPanel({
       )
     : undefined;
 
-  /** Patch a single header field in place, then refresh. */
+  /** Patch a single header field in place, then refresh. A price shows its typed figure at once
+   *  (#2413), as the Prepare screen does (#1894): written into the offer's read before the save, and
+   *  put back if the save fails; the rest of the screen catches up with the re-read. */
   function patch(
     field: "price" | "startingPrice" | "url" | "descriptionFormat" | OfferTextField,
     value: string
   ) {
     setActionError(undefined);
+    let restore: (() => void) | null = null;
+    if (field === "price" || field === "startingPrice") {
+      // A figure the save will refuse is not shown: the refusal is, and the stored one stays.
+      const stated = parseStatedPrice(field, value);
+      if (stated.ok) restore = showOfferPrice(collectionId, offerId, field, stated.value);
+    }
     startTransition(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       const result = await patchOfferAction(offerId, field, value);
       if (result.status === "success") invalidateAll(collectionId);
-      else setActionError(result.message);
+      else {
+        restore?.();
+        setActionError(result.message);
+      }
     });
   }
 

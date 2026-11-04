@@ -107,6 +107,7 @@ import {
   isOfferState,
   parsePrice,
   parseStartingPrice,
+  parseStatedPrice,
   parseOfferDate,
   parseOfferEndsAt,
   normalizeUrl,
@@ -784,21 +785,17 @@ export async function patchOfferAction(
   try {
     if (field === "descriptionFormat") {
       await patchOffer(session.user.id, offerId, { descriptionFormat: rawValue });
-    } else if (field === "startingPrice") {
-      // An auction's opening figure (#449): blank clears it, unlike the price, because an auction
-      // whose opening was never noted is an ordinary case rather than a gap to insist on.
-      const starting = parseStartingPrice(rawValue);
-      if (!starting.ok) return { status: "error", message: starting.message };
-      await patchOffer(session.user.id, offerId, { startingPrice: starting.value });
-    } else if (field === "price") {
-      const raw = rawValue.trim();
-      let price = "0.00";
-      if (raw) {
-        const priced = parsePrice(raw);
-        if (!priced.ok) return { status: "error", message: priced.message };
-        price = priced.value;
-      }
-      await patchOffer(session.user.id, offerId, { price });
+    } else if (field === "startingPrice" || field === "price") {
+      // The stored figure is the one the offer's screen already shows (#2413). An auction's opening
+      // figure (#449) clears on blank, unlike the price, because an auction whose opening was never
+      // noted is an ordinary case rather than a gap to insist on.
+      const stated = parseStatedPrice(field, rawValue);
+      if (!stated.ok) return { status: "error", message: stated.message };
+      await patchOffer(
+        session.user.id,
+        offerId,
+        field === "price" ? { price: stated.value ?? "0.00" } : { startingPrice: stated.value }
+      );
     } else if (field === "url") {
       await patchOffer(session.user.id, offerId, { url: normalizeUrl(rawValue) });
     } else {
