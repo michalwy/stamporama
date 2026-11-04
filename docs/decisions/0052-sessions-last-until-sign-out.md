@@ -9,6 +9,9 @@ sibling and is untouched by this.
 **Amended by #1468** (2026-09-29): the lifetime is 400 days, not ten years, and the stored row slides
 daily rather than monthly. The rule is unchanged — see *Amendment: the 400-day ceiling* below.
 
+**Amended by #2426** (2026-11-04): a server action is the one request the cookie is not renewed on —
+see *Amendment: not on a server action* below.
+
 ## Context
 
 The collector was returned to the sign-in screen in the middle of working. Not often, but
@@ -168,3 +171,13 @@ A unit test now signs in through Better Auth itself — the app's own session op
 in-memory store — and fails if any cookie it sets states more than 400 days, with a control that
 signing in with ten years is refused. Pinning the numbers alone never reached the serializer, which
 is how the defect shipped.
+
+## Amendment: not on a server action (#2426)
+
+§2's *every request* turned out to include server actions, and Next treats a cookie the proxy sets on
+an action as a cookie the action changed: it answers the action as one that revalidated everything,
+and the browser fetches the whole current page again after every edit, on every screen. The proxy
+now passes a request carrying the `Next-Action` header through without renewing. The lease is
+unaffected in practice — the screen an action runs on was loaded through the proxy and the reads
+after an edit come through it too — and the cost of the alternative was a full page render per
+edit. What an action changes is re-read because the screen asks for it (`docs/agents/platform.md`).

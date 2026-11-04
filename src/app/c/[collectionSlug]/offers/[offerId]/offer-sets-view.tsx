@@ -5,7 +5,7 @@ import { markedCopiesNote } from "@/lib/catalog-price-mark";
 import { isMissingCatalogPrice } from "@/lib/valuation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { ItemIssueRef, ItemListItem } from "@/lib/items";
@@ -1059,6 +1059,9 @@ export function OfferSetsView({
   const unknownVariantCount = copies.filter((c) => c.variantToSettle).length;
 
   const { invalidateAll } = useInvalidateOffers();
+  // The issue headers the copies are grouped under are the page's own read: a copy re-pointed at a
+  // stamp of another issue, or a stamp moved to one, needs the page read again (#2426).
+  const router = useRouter();
   // The stamp behind a listed copy is named by every copy list too (#676).
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
@@ -1465,6 +1468,7 @@ export function OfferSetsView({
                 invalidateAll(collectionId); // the rows, and the listing text built off them
                 void invalidateInventory(collectionId);
                 void invalidateStampsAndIssues(collectionId);
+                router.refresh(); // the issue headers
               }
             });
           }}
@@ -1510,6 +1514,7 @@ export function OfferSetsView({
                 invalidateAll(collectionId); // the rows, and the listing text built off them
                 void invalidateInventory(collectionId);
                 void invalidateStampsAndIssues(collectionId);
+                router.refresh(); // the issue headers
               }
             });
           }}

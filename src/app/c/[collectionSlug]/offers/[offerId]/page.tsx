@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
-import { getOfferDetail, getOfferIssueIds } from "@/lib/offers";
+import { getOfferIssueIds, getOfferPageHeader } from "@/lib/offers";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: OfferDetailPageProps): Promis
   const { offerId } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return {};
-  const offer = await getOfferDetail(session.user.id, offerId);
+  const offer = await getOfferPageHeader(session.user.id, offerId);
   if (!offer) return {};
   // The number leads, so two offers open side by side are two tabs told apart (#2112).
   return { title: `Offer ${formatEntityNo(offer.offerNo)} — ${offer.platformName}` };
@@ -43,7 +43,7 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const offer = await getOfferDetail(session.user.id, offerId);
+  const offer = await getOfferPageHeader(session.user.id, offerId);
   if (!offer || offer.collectionId !== collection.id) notFound();
 
   // Supporting lookups for the copy rows in the sets view (the copies themselves stream in via a

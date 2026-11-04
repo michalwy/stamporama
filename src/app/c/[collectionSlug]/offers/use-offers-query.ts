@@ -52,6 +52,12 @@ import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
 import type { SeriesRecombinationResult } from "@/lib/series-recombination";
 import type { OfferGeneratorPreview } from "@/lib/offer-generator";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import {
+  fieldSaveRereads,
+  fieldSaveTouchesActionItems,
+  type OfferInlineField,
+} from "@/lib/offer-field-rereads";
+import { invalidateWithoutActionItems } from "../action-items-refresh";
 import type { OfferSearchField } from "@/lib/offer-search-fields";
 
 interface OffersPage {
@@ -968,6 +974,26 @@ export function useInvalidateOffers() {
           offer && (field === "price" ? { ...offer, price: before.price } : { ...offer, startingPrice: before.startingPrice })
         );
       };
+    },
+    /** One inline field saved on the offer's own screen (#2426): only the reads it can change are
+     *  asked again (`fieldSaveRereads`) — never the offer's copies, photo plan, cover walk or listing
+     *  duplicates — and the notification centre only when the offer is up on its platform, where the
+     *  edit leaves the listing behind. */
+    settleOfferField: (
+      collectionId: string,
+      offerId: string,
+      field: OfferInlineField,
+      /** Null when the screen has no reading of the offer to say: the centre is asked again. */
+      state: OfferState | null
+    ) => {
+      const filters = {
+        queryKey: offerKeys.all(collectionId),
+        predicate: (query: { queryKey: readonly unknown[] }) =>
+          fieldSaveRereads(field, offerId, query.queryKey),
+      };
+      return state === null || fieldSaveTouchesActionItems(state)
+        ? queryClient.invalidateQueries(filters)
+        : invalidateWithoutActionItems(queryClient, filters);
     },
     /** A price typed on the Prepare screen (#1894): written into the row in place, and every other
      *  offer read marked stale. Refetching the screen itself would rebuild every loaded page — a

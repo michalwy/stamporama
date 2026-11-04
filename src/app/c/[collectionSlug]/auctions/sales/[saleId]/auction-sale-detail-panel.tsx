@@ -740,6 +740,8 @@ export function AuctionSaleDetailPanel({
           onSaved={() => {
             setDialog({ kind: "none" });
             invalidateAll(collectionId);
+            // A new lot's lines can name an issue the page's headers do not have yet (#2426).
+            router.refresh();
           }}
         />
       )}

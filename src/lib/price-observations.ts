@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { getCollectionBaseCurrency } from "./pricing";
 import { fetchEcbRateOn } from "./exchange-rates";
@@ -726,6 +727,7 @@ export async function createPriceObservation(
     data: { collectionId, stampId, ...input, fxRateToBase },
     select: { id: true },
   });
+  forgetRealizationRatios();
   return row.id;
 }
 
@@ -767,6 +769,7 @@ export async function updatePriceObservation(
     where: { id: observationId },
     data: { ...input, fxRateToBase, ...(stampId !== undefined ? { stampId } : {}) },
   });
+  forgetRealizationRatios();
 }
 
 export async function deletePriceObservation(ownerId: string, observationId: string): Promise<void> {
@@ -777,4 +780,5 @@ export async function deletePriceObservation(ownerId: string, observationId: str
   if (!existing) return;
   await assertCollectionOwner(ownerId, existing.collectionId);
   await prisma.priceObservation.delete({ where: { id: observationId } });
+  forgetRealizationRatios();
 }

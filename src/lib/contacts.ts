@@ -1,6 +1,7 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { normalizeLanguage } from "./languages";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { FACEBOOK_PROFILES_SELECT } from "./facebook-sales";
@@ -525,7 +526,7 @@ export async function updateContact(
   const market = marketData(data.market);
   const freeExtras = freeExtrasTerms(data);
   try {
-    return toContactData(await prisma.$transaction(async (tx) => {
+    const updated = toContactData(await prisma.$transaction(async (tx) => {
       await tx.contact.update({
         where: { id: contactId },
         data: {
@@ -548,6 +549,9 @@ export async function updateContact(
       if (profileUrls) await writeFacebookProfiles(tx, collectionId, contactId, profileUrls);
       return tx.contact.findUniqueOrThrow({ where: { id: contactId }, select: CONTACT_SELECT });
     }));
+    // An auction house's market decides which of its results the learned ratios count (#2426).
+    forgetRealizationRatios();
+    return updated;
   } catch (err) {
     throw uniqueViolationError(err, name);
   }

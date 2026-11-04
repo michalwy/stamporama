@@ -241,6 +241,21 @@ describe("the middleware that renews the lease", () => {
     }
   });
 
+  it("does not renew on a server action, so an edit does not reload the whole screen", () => {
+    // #2426 — Next answers an action whose cookies changed as one that revalidated everything, and a
+    // cookie set here counts as changed: every edit made the browser fetch the whole page again.
+    const action = new NextRequest("https://stamps.example.com/c/main/offers/abc", {
+      method: "POST",
+      headers: { cookie: "better-auth.session_token=tok.sig", "next-action": "7f3a9c" },
+    });
+    assert.deepEqual(setCookies(proxy(action)), []);
+    // The screen the action runs on, and the reads after it, still renew.
+    const read = new NextRequest("https://stamps.example.com/api/collections/abc/offers/abc", {
+      headers: { cookie: "better-auth.session_token=tok.sig" },
+    });
+    assert.equal(setCookies(proxy(read)).length, 1);
+  });
+
   it("touches nothing when the browser sent no session cookie", () => {
     assert.deepEqual(setCookies(proxy(request())), []);
     assert.deepEqual(setCookies(proxy(request("theme=dark"))), []);

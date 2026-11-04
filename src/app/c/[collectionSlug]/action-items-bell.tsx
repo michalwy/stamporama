@@ -8,6 +8,7 @@ import type { ActionItemGroup, ActionItemSeverity, ActionItemsResult } from "@/l
 import { Icon } from "@/app/icons";
 import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { Tooltip } from "./shared/tooltip";
+import { takeQuietInvalidation } from "./action-items-refresh";
 import { formatInstant, formatRelative } from "./auctions/auction-format";
 
 /**
@@ -69,6 +70,8 @@ function useRefreshOnAnyInvalidation(collectionId: string) {
       if (event.type !== "updated" || event.action.type !== "invalidate") return;
       // Our own invalidation, including the one this very handler schedules.
       if (event.query.queryKey[0] === ACTION_ITEMS_KEY) return;
+      // A save that knows it cannot change anything counted here (#2426).
+      if (takeQuietInvalidation(event.query.queryHash)) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: [ACTION_ITEMS_KEY, collectionId] });

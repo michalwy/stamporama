@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { readLearnedCatalogueFactors } from "./realization-ratios";
 
 async function assertCollectionOwner(
@@ -198,6 +199,7 @@ export async function createCatalogName(
   await prisma.catalogName.create({
     data: { vendorId, name: data.name, currency: data.currency, manualFactor: data.manualFactor ?? null },
   });
+  forgetRealizationRatios();
 }
 
 export async function updateCatalogName(
@@ -216,6 +218,7 @@ export async function updateCatalogName(
       ...(data.manualFactor !== undefined && { manualFactor: data.manualFactor }),
     },
   });
+  forgetRealizationRatios();
 }
 
 export async function deleteCatalogName(

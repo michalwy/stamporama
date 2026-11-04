@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
+import { forgetRealizationRatios } from "./realization-ratio-cache";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import {
   allIn,
@@ -2370,6 +2371,7 @@ export async function createAuctionLot(
   // Adding a lot is what "last used" means — it happens far more often than starting a sale, and
   // it is the moment the collector confirmed this seller is reached through this platform.
   await rememberSellerPlatform(parties.sellerId, parties.platformId);
+  forgetRealizationRatios();
   return lot.id;
 }
 
@@ -2928,6 +2930,7 @@ export async function updateAuctionLot(
       notes: input.notes,
     },
   });
+  forgetRealizationRatios();
 }
 
 /**
@@ -2991,6 +2994,7 @@ export async function setAuctionLotNotStamps(
     where: { id: lotId },
     data: { notStamps: input.notStamps, notStampsDescription: description },
   });
+  forgetRealizationRatios();
 }
 
 /**
@@ -3162,6 +3166,7 @@ export async function recordAuctionLotTransition(
     where: { id: lotId },
     data: await lotTransitionData(lot.collectionId, lotId, transition),
   });
+  forgetRealizationRatios();
   // Closing the sale's last open lot asks whether to finish the sale too (#1954). Reopening a lot
   // can never leave a sale ready, so only a close or a cancel looks. The agent API's own close does
   // not ask: the sale is left marked as ready, and asks when its screen is next opened.
@@ -3603,6 +3608,7 @@ export async function createAuctionLotLine(
     },
     select: { id: true },
   });
+  forgetRealizationRatios();
   return line.id;
 }
 
@@ -3660,6 +3666,7 @@ export async function updateAuctionLotLine(
       quantity: input.quantity,
     },
   });
+  forgetRealizationRatios();
 }
 
 /** Remove a line from a lot's composition. */
@@ -3667,6 +3674,7 @@ export async function deleteAuctionLotLine(ownerId: string, lineId: string): Pro
   const line = await assertLineOwner(ownerId, lineId);
   assertLotEditable(line);
   await prisma.auctionLotLine.delete({ where: { id: lineId } });
+  forgetRealizationRatios();
 }
 
 /** Delete a lot. Composition lines cascade with it; a lot already settled is refused, because the
@@ -3675,6 +3683,7 @@ export async function deleteAuctionLot(ownerId: string, lotId: string): Promise<
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.delete({ where: { id: lotId } });
+  forgetRealizationRatios();
 }
 
 // ── The *to review* marker (#1626) ──────────────────────────────────────────
@@ -4024,6 +4033,7 @@ export async function addAuctionLotThroughApi(
     return { lotId: lot.id, saleId };
   });
   await rememberSellerPlatform(sellerId, platform.id);
+  forgetRealizationRatios();
   return { outcome: "created", ...written, saleCreated: !joined };
 }
 
@@ -4163,6 +4173,7 @@ export async function updateAuctionLotThroughApi(
       await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: marked });
     }
   });
+  forgetRealizationRatios();
   return { outcome: "written", changed };
 }
 
@@ -4198,6 +4209,7 @@ export async function replaceAuctionLotLinesThroughApi(
     }
     await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["lines"] });
   });
+  forgetRealizationRatios();
 }
 
 /**
@@ -4258,6 +4270,7 @@ export async function recordAuctionLotOutcomeThroughApi(
     await tx.auctionLot.update({ where: { id: lotId }, data });
     await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["outcome"] });
   });
+  forgetRealizationRatios();
   return { changed: ["outcome"] };
 }
 

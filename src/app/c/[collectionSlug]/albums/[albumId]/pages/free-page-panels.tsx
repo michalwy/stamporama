@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   ConfirmDialog,
   DialogActions,
@@ -620,6 +621,8 @@ export function PicturePickerDialog({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
+  // The pictures are the page's own read, which this dialog is seeded from each time it opens.
+  const router = useRouter();
 
   async function upload(file: File) {
     setUploading(true);
@@ -651,6 +654,8 @@ export function PicturePickerDialog({
       }
       setPictures((held) => held.filter((p) => p.id !== picture.id));
       setDeleting(null);
+      // Read again, or the picture deleted here is offered the next time the dialog opens (#2426).
+      router.refresh();
     });
   }
 
