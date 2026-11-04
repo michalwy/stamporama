@@ -245,8 +245,14 @@ Collectors put a few stamps into a parcel for nothing, on top of what the buyer 
 them from the whole stock by hand is slow. Decided with the collector on 2026-11-04, the sale
 **proposes** them and the collector confirms.
 
-- **A free extra is a line of §8 at price 0, marked `SaleLine.freeExtra`** — one copy per line. A
-  CHECK holds the shape (no offer, no set, price 0), and its price is not edited. Everything else is
+- **A sale's free extras are one line of §8 at price 0, marked `SaleLine.freeExtra`** and named
+  **Free extras** — fixed text, the same on every platform, never a template (#2420; #2408 made one
+  line per copy, which filled a sale and its packing list with zero-priced lines). Later additions join
+  that line; a merge or a move that would leave a sale with two folds them into one; sales recorded
+  before #2420, one line per copy, are left as they are. A CHECK holds the shape (no offer, no set,
+  price 0), and its price is not edited. One copy can be taken off it alone, as off any line of §8,
+  the line going with its last copy; an offer's line is still removed whole (the collector's answer on
+  2026-11-04). Everything else is
   an ordinary line: the copy leaves the holdings through `sale_line_item`, a listed copy's offers are
   flagged as for any copy sold on no offer, and the price-weighted allocation gives it no share of
   handling, commission or shipping, so its profit is minus its cost basis — the cost counts against

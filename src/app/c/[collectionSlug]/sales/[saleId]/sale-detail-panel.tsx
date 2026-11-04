@@ -145,6 +145,7 @@ type Dialog =
   | { kind: "addCopies" }
   | { kind: "freeExtras" }
   | { kind: "removeLine"; lineId: string; label: string }
+  | { kind: "removeCopy"; itemId: string; label: string }
   | { kind: "chooseSet"; lineId: string }
   | { kind: "share" }
   | { kind: "buyerMessage" }
@@ -1035,6 +1036,10 @@ export function SaleDetailPanel({
           setError(undefined);
           setDialog({ kind: "removeSets", lineIds });
         }}
+        onRemoveCopy={(itemId, label) => {
+          setError(undefined);
+          setDialog({ kind: "removeCopy", itemId, label });
+        }}
         onEditPrice={(lineId, price) =>
           run(async () => {
             const { updateSaleLinePriceAction } = await import("@/app/actions/sales");
@@ -1453,6 +1458,33 @@ export function SaleDetailPanel({
               toast({ message: `${result.removed} sold ${result.removed === 1 ? "set" : "sets"} removed` });
               router.refresh();
             });
+          }}
+        />
+      )}
+      {dialog.kind === "removeCopy" && (
+        <ConfirmDialog
+          title="Take copy off the sale"
+          message={`Take “${dialog.label}” off this sale? It becomes available again; the rest of its line stays, and the line goes once its last copy has.`}
+          actionLabel="Take off"
+          pendingLabel="Taking off…"
+          variant="destructive"
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onConfirm={() => {
+            const itemId = dialog.itemId;
+            run(
+              async () => {
+                const { removeSaleLineCopyAction } = await import("@/app/actions/sales");
+                return removeSaleLineCopyAction(itemId);
+              },
+              () => setDialog({ kind: "none" })
+            );
           }}
         />
       )}

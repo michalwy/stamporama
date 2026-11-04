@@ -18,6 +18,7 @@ import {
   addSaleFreeExtras,
   updateSaleLinePrice,
   removeSaleLine,
+  removeSaleLineCopy,
   removeSaleLines,
   SaleLinesGoneError,
   swapSaleLineSet,
@@ -335,7 +336,8 @@ export async function addSaleCopySetAction(
   }
 }
 
-/** Add the ticked copies to a sale as free extras (#2408): one line each, on no offer, at price 0. */
+/** Add the ticked copies to a sale as free extras (#2408): onto its one *Free extras* line (#2420),
+ *  on no offer, at price 0. */
 export async function addSaleFreeExtrasAction(
   saleId: string,
   itemIds: string[],
@@ -394,6 +396,17 @@ export async function removeSaleLineAction(lineId: string): Promise<SaleActionSt
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to remove the sold unit.");
+  }
+}
+
+/** Take one copy off its sale line (#2420) — a line on no offer only; the last copy takes the line. */
+export async function removeSaleLineCopyAction(itemId: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await removeSaleLineCopy(session.user.id, itemId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to take the copy off the sale.");
   }
 }
 

@@ -107,9 +107,11 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
     { grouping: "set", locationLabel: "code" }
   );
   const status = saleStatusMeta(sale.status);
-  // Free extras (#2408) are lines, but not sets the buyer bought: the header counts them apart.
-  const freeExtras = sale.lines.filter((l) => l.freeExtra).length;
-  const soldSets = sale.lines.length - freeExtras;
+  // Free extras (#2408) are a line, but not a set the buyer bought: the header counts their copies
+  // apart (#2420 puts them all on one line).
+  const freeLines = sale.lines.filter((l) => l.freeExtra);
+  const freeExtras = freeLines.reduce((n, l) => n + l.copyCount, 0);
+  const soldSets = sale.lines.length - freeLines.length;
 
   return (
     <Screen cap="sheet" className="print-sheet">
