@@ -1555,7 +1555,7 @@ document. Assigning is done by picking a copy from the list itself. There are th
 
   **A cover, a fragment or an FDC: Identify as a piece…** sits in the tile dialog's footer beside
   **Identify as a new copy**. It works on **one** tile — with several ticked it is greyed out, a piece
-  being one piece of paper. The picker opens ready to **tick every stamp on the piece**, from any
+  being one piece of paper, and **As the stamps of a checklist…** stands between it and the primary. The picker opens ready to **tick every stamp on the piece**, from any
   issue — a search for the next one keeps the ticks — with the piece beside it; **the first stamp you
   tick leads the piece**, and the ticks are listed in the order you ticked them. **Continue with N
   stamps** takes them all to the condition step, each as quantity 1, single, in that order. A cover
