@@ -92,30 +92,6 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
-const VALUE_CELL: React.CSSProperties = {
-  width: "8rem",
-  flexShrink: 0,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-end",
-  justifyContent: "center",
-  gap: "0.2rem",
-  padding: "0 0.75rem",
-  fontSize: "0.875rem",
-  fontVariantNumeric: "tabular-nums",
-  color: "var(--color-text-primary)",
-};
-
-const LISTED_CHIP: React.CSSProperties = {
-  fontSize: "0.6875rem",
-  fontWeight: 500,
-  padding: "0 0.375rem",
-  borderRadius: "0.25rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  whiteSpace: "nowrap",
-};
-
 /** One side's terms in cents of the sale's currency, as the rules read them. */
 function termsInCents(d: FreeExtraTermsData | null): FreeExtraPlatformDefaults | null {
   return (
@@ -392,7 +368,6 @@ export function FreeExtrasDialog({
               const item = row.item;
               const checked = ticked.has(item.id);
               const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
-              const value = `${row.value} ${currency}`;
               return (
                 <div
                   key={item.id}
@@ -411,16 +386,6 @@ export function FreeExtrasDialog({
                       style={{ cursor: "pointer" }}
                     />
                   </CheckCell>
-                  <div style={VALUE_CELL}>
-                    {row.converted ? (
-                      <Tooltip content={`Its value converted from ${baseCurrency}`}>
-                        <span>≈ {value}</span>
-                      </Tooltip>
-                    ) : (
-                      <span>{value}</span>
-                    )}
-                    {row.listed && <span style={LISTED_CHIP}>listed</span>}
-                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <InventoryItemRow
                       collectionId={collectionId}
