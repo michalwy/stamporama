@@ -21,6 +21,14 @@ import {
   type FreeExtraPoolCopy,
   type FreeExtraSeriesCandidate,
 } from "./free-extra-rules";
+import {
+  freeExtraFiltersNarrow,
+  freeExtraYearFacets,
+  freeExtraYearSelects,
+  NO_FREE_EXTRA_FILTERS,
+  type FreeExtraFilters,
+  type FreeExtraYearFacet,
+} from "./free-extra-filters";
 import { orderedPoolChecklists } from "./lot-builder";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import type { LotChecklist } from "./lot-builder-rules";
@@ -47,6 +55,7 @@ import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
 import { sortSetItems } from "./offer-set-order";
 import {
   allocateEntityNumber,
+  buildItemFilterWhere,
   listItemsPaginated,
   valuateItemsByIds,
   type ItemListItem,
@@ -1725,6 +1734,9 @@ export interface FreeExtraCandidates {
   unvaluedCount: number;
   /** More candidates exist than were sent. */
   truncated: boolean;
+  /** The rail's year facets (#2423): the candidates — loose copies and the copies of whole sets — that
+   *  every filter but the year leaves, counted by year of issue. */
+  yearFacets: FreeExtraYearFacet[];
   /** The sale's platform's free-extras settings (#2409), in the sale's currency — null where the
    *  platform states none. */
   platformDefaults: FreeExtraPlatformDefaultsData | null;
@@ -1761,7 +1773,7 @@ async function loadFreeExtraPool(
   collectionId: string,
   includeSpecialised: boolean
 ): Promise<{
-  rows: { id: string; itemNo: number; listed: boolean }[];
+  rows: { id: string; itemNo: number; listed: boolean; issuedYear: number | null }[];
   pool: FreeExtraPoolCopy[];
   checklists: LotChecklist[];
 }> {
@@ -1775,6 +1787,7 @@ async function loadFreeExtraPool(
       certificateStatusId: true,
       formatId: true,
       stampCount: true,
+      stamp: { select: { issuedYear: true } },
       _count: {
         select: {
           offerSetMemberships: { where: { offerSet: { offer: { state: { in: [...OPEN_OFFER_STATES] } } } } },
@@ -1799,7 +1812,12 @@ async function loadFreeExtraPool(
     includeSpecialised
   );
   return {
-    rows: found.map((r) => ({ id: r.id, itemNo: r.itemNo, listed: r._count.offerSetMemberships > 0 })),
+    rows: found.map((r) => ({
+      id: r.id,
+      itemNo: r.itemNo,
+      listed: r._count.offerSetMemberships > 0,
+      issuedYear: r.stamp.issuedYear,
+    })),
     pool,
     checklists,
   };
@@ -1814,11 +1832,18 @@ async function loadFreeExtraPool(
  * **No complete set is broken** (#2422): the complete sets come as series, each whole, and only the
  * copies above them as loose candidates. A set holding an unvalued copy is not offered, and its copies
  * stay in it. `includeSpecialised` is the screens' switch (#1617) over which checklists count.
+ *
+ * **`filters` narrow what is offered** (#2423) — area, year, condition, certificate and format, read
+ * as the Copies list reads them — and are applied before the list is cut to its cheapest, so a buyer's
+ * area is offered in full. Which copies form complete sets is still counted over the whole pool, so a
+ * filter never makes a set look broken or whole; a set is offered when every copy of it is in the
+ * filters.
  */
 export async function listFreeExtraCandidates(
   ownerId: string,
   saleId: string,
-  includeSpecialised = false
+  includeSpecialised = false,
+  filters: FreeExtraFilters = NO_FREE_EXTRA_FILTERS
 ): Promise<FreeExtraCandidates> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -1880,6 +1905,33 @@ export async function listFreeExtraCandidates(
   }
 
   const { rows, pool, checklists } = await loadFreeExtraPool(collectionId, includeSpecialised);
+  // The filters (#2423): every axis but the year is the Copies list's own `where`, run over the pool;
+  // the year is the rail's reading of the stamp's year, held apart so the rail's facets can be
+  // counted over every other filter.
+  const yearOf = new Map(rows.map((r) => [r.id, r.issuedYear]));
+  const matchingOtherAxes = freeExtraFiltersNarrow({ ...filters, year: null })
+    ? new Set(
+        (
+          await prisma.item.findMany({
+            where: {
+              AND: [
+                { collectionId, ...FREE_EXTRA_CANDIDATE_WHERE },
+                await buildItemFilterWhere(collectionId, {
+                  areaIds: filters.areaIds ?? undefined,
+                  conditionIds: filters.conditionIds,
+                  certificateStatusIds: filters.certificateStatusIds,
+                  formatIds: filters.formatIds,
+                }),
+              ],
+            },
+            select: { id: true },
+          })
+        ).map((r) => r.id)
+      )
+    : null;
+  const inOtherAxes = (id: string) => matchingOtherAxes === null || matchingOtherAxes.has(id);
+  const inFilters = (id: string) => inOtherAxes(id) && freeExtraYearSelects(filters, yearOf.get(id) ?? null);
+
   const valuations = await valuateItemsByIds(
     collectionId,
     rows.map((r) => r.id)
@@ -1889,7 +1941,7 @@ export async function listFreeExtraCandidates(
   for (const r of rows) {
     const base = valuations.get(r.id)?.baseAmount ?? null;
     if (base == null) {
-      unvaluedCount += 1;
+      if (inFilters(r.id)) unvaluedCount += 1;
       continue;
     }
     candidateOf.set(r.id, {
@@ -1913,8 +1965,19 @@ export async function listFreeExtraCandidates(
       },
     ];
   });
-  const ranked = rankFreeExtraCandidates(valuedLoose).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
-  const rankedSeries = rankFreeExtraSeries(valuedSeries).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
+  // A set goes whole, so it is offered when every copy of it is in the filters.
+  const seriesIn = (s: FreeExtraSeriesCandidate, test: (id: string) => boolean) =>
+    s.copies.every((c) => test(c.itemId));
+  const yearFacets = freeExtraYearFacets(
+    [
+      ...valuedLoose.filter((c) => inOtherAxes(c.itemId)),
+      ...valuedSeries.filter((s) => seriesIn(s, inOtherAxes)).flatMap((s) => s.copies),
+    ].map((c) => yearOf.get(c.itemId) ?? null)
+  );
+  const filteredLoose = valuedLoose.filter((c) => inFilters(c.itemId));
+  const filteredSeries = valuedSeries.filter((s) => seriesIn(s, inFilters));
+  const ranked = rankFreeExtraCandidates(filteredLoose).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
+  const rankedSeries = rankFreeExtraSeries(filteredSeries).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
   const ids = [...ranked.map((c) => c.itemId), ...rankedSeries.flatMap((s) => s.copies.map((c) => c.itemId))];
   const [{ items }, checklistRows] = await Promise.all([
     ids.length > 0
@@ -1953,7 +2016,8 @@ export async function listFreeExtraCandidates(
     }),
     candidates: ranked.flatMap(rowOf),
     unvaluedCount,
-    truncated: valuedLoose.length > ranked.length || valuedSeries.length > rankedSeries.length,
+    truncated: filteredLoose.length > ranked.length || filteredSeries.length > rankedSeries.length,
+    yearFacets,
     platformDefaults,
     contactTerms,
   };
