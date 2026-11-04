@@ -260,6 +260,18 @@ function NavItem({
 }) {
   const [hovered, setHovered] = useState(false);
   const tint = useContext(SectionTintContext);
+  const router = useRouter();
+
+  /**
+   * The sidebar warms a screen up when the collector **reaches for it**, never because it is on
+   * screen (#2425). A `<Link>`'s default prefetch watches the viewport, and Next schedules every
+   * visible link again whenever the router's tree changes or its cache is invalidated — so each
+   * `router.refresh()` and each server action after an edit sent one request per sidebar row, ~25
+   * at a time, three waves per saved price on an offer. Prefetching on hover and focus keeps the
+   * head start a click had (the prefetch Next would have made, made a moment before the click), and
+   * a row already in the router's cache sends nothing on a second hover.
+   */
+  const warmUp = () => router.prefetch(href);
 
   /**
    * The colour this row speaks in when it is the one you are on.
@@ -286,7 +298,12 @@ function NavItem({
   return (
     <Link
       href={href}
-      onMouseEnter={() => setHovered(true)}
+      prefetch={false}
+      onFocus={warmUp}
+      onMouseEnter={() => {
+        setHovered(true);
+        warmUp();
+      }}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
