@@ -1017,3 +1017,94 @@ describe("planOfferPhotos single-first grouping (#521)", () => {
     assert.equal(plan.overLimitCount, 0);
   });
 });
+
+// Single-copy sets with nothing to draw (#2410) ------------------------------
+
+describe("planOfferPhotos single-copy sets without a photo (#2410)", () => {
+  /** The images without their group keys, which count the photo-less group too. */
+  const contents = (images: PlannedImage[]) =>
+    collages(images).map((image) => `${image.side}:${image.tiles.map((t) => t.itemId).join(",")}`);
+
+  /** Six photographed single-copy sets `a`…`f`, plus `g` with no photo at the given position. */
+  const withPhotoless = (at: number): PlanSet[] => {
+    const ids = ["a", "b", "c", "d", "e", "f"];
+    const copies = ids.map((id) => copy(id));
+    copies.splice(at, 0, copy("g", { front: false, back: false }));
+    return copies.map((c, i) => set(`s${i}`, i, [c]));
+  };
+  const photographedOnly = (): PlanSet[] =>
+    ["a", "b", "c", "d", "e", "f"].map((id, i) => set(`s${i}`, i, [copy(id)]));
+
+  it("collages the leftover copies when a photo-less set is last (the Colnect case)", () => {
+    // Five photos, singles first, seven one-stamp sets of which the seventh has no photo.
+    const plan = planOfferPhotos({
+      sets: withPhotoless(6),
+      photoSides: "front",
+      collage: { collageRows: 2, collageColumns: 3 },
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(contents(plan.images), [
+      "front:a",
+      "front:b",
+      "front:c",
+      "front:d",
+      "front:e,f",
+    ]);
+    assert.equal(plan.overLimitCount, 0);
+    // Still named, never dropped in silence (#314).
+    assert.deepEqual(
+      plan.skipped.map((s) => s.missingItemIds),
+      [["g"]]
+    );
+  });
+
+  for (const at of [0, 3, 6]) {
+    it(`plans as if the photo-less set were absent, wherever it sits (position ${at})`, () => {
+      for (const photoSides of ["front", "both", "paired"] as const) {
+        for (const preferSingles of [true, false]) {
+          const base = {
+            photoSides,
+            collage: { collageRows: 2, collageColumns: 3 },
+            maxPhotos: 5,
+            preferSingles,
+          };
+          assert.deepEqual(
+            contents(planOfferPhotos({ ...base, sets: withPhotoless(at) }).images),
+            contents(planOfferPhotos({ ...base, sets: photographedOnly() }).images),
+            `${photoSides}, preferSingles ${preferSingles}`
+          );
+        }
+      }
+    });
+  }
+
+  it("treats a copy with no scan for the attempted side as photo-less", () => {
+    // Front only: a back scan does not make the copy drawable.
+    const sets = withPhotoless(6);
+    sets[6] = set("s6", 6, [copy("g", { front: false, back: true })]);
+    const plan = planOfferPhotos({
+      sets,
+      photoSides: "front",
+      collage: { collageRows: 2, collageColumns: 3 },
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(contents(plan.images).at(-1), "front:e,f");
+  });
+
+  it("keeps the all-or-nothing rule for a multi-copy set", () => {
+    const plan = planOfferPhotos({
+      sets: [set("s1", 0, [copy("a"), copy("b", { front: false, back: false })])],
+      photoSides: "front",
+      collage,
+      maxPhotos: 5,
+      preferSingles: true,
+    });
+
+    assert.deepEqual(contents(plan.images), []);
+    assert.deepEqual(skips(plan), ["g0:front:b"]);
+  });
+});
