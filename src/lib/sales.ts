@@ -1568,31 +1568,28 @@ export async function addSaleCopySet(
 // its cost basis counts against the sale's profit. A listed copy given away leaves its offers as any
 // copy sold on no offer does (ADR-0013 §8): the derivation flags them.
 
+/** Free-extras terms as stored — a platform's (#2409) or a contact's (#2416). */
+interface FreeExtraTermsRow {
+  freeExtrasMinimumOrder: Prisma.Decimal | null;
+  freeExtrasBudgetPercent: Prisma.Decimal | null;
+  freeExtrasMaximumBudget: Prisma.Decimal | null;
+}
+
 /**
- * A platform's free-extras settings (#2409) in the sale's currency. The two amounts are in the
- * platform's own currency, or the collection's base where the platform has none, and are converted
- * at today's rate where that differs from the sale's — they are the platform's standing rule, not a
- * figure of this sale's, so the sale's frozen rate does not apply. Null where the platform states
- * none. Where no rate is known the amounts cannot be read in this sale's currency, and the settings
- * are left out whole: half a rule — a percentage with its cap or its minimum missing — would
- * propose more than the platform allows.
+ * Free-extras terms in the sale's currency, from the currency `from` they are stated in. They are a
+ * standing rule, not a figure of this sale's, so they are converted at today's rate, not the sale's
+ * frozen one. Null where none is stated. Where no rate is known the amounts cannot be read in this
+ * sale's currency, and the terms are left out whole: half a rule — a percentage with its cap or its
+ * minimum missing — would propose more than the terms allow.
  */
-async function freeExtraPlatformDefaults(
+async function freeExtraTermsInSale(
   collectionId: string,
   saleCurrency: string,
-  baseCurrency: string,
-  platform: {
-    name: string;
-    platformCurrency: string | null;
-    freeExtrasMinimumOrder: Prisma.Decimal | null;
-    freeExtrasBudgetPercent: Prisma.Decimal | null;
-    freeExtrasMaximumBudget: Prisma.Decimal | null;
-  }
-): Promise<FreeExtraPlatformDefaultsData | null> {
-  const { freeExtrasMinimumOrder: min, freeExtrasBudgetPercent: pct, freeExtrasMaximumBudget: max } =
-    platform;
+  from: string,
+  row: FreeExtraTermsRow
+): Promise<FreeExtraTermsData | null> {
+  const { freeExtrasMinimumOrder: min, freeExtrasBudgetPercent: pct, freeExtrasMaximumBudget: max } = row;
   if (min == null && pct == null && max == null) return null;
-  const from = platform.platformCurrency ?? baseCurrency;
   const converts = (min != null || max != null) && from !== saleCurrency;
   let rate = 1;
   if (converts) {
@@ -1607,12 +1604,41 @@ async function freeExtraPlatformDefaults(
   }
   const inSale = (d: Prisma.Decimal | null) => (d == null ? null : fromCents(toCents(Number(d) * rate)));
   return {
-    platformName: platform.name,
     minimumOrder: inSale(min),
     budgetPercent: pct == null ? null : String(Number(pct)),
     maximumBudget: inSale(max),
     convertedFrom: converts ? from : null,
   };
+}
+
+/** The platform's free-extras settings (#2409) in the sale's currency — stated in the platform's own
+ *  currency, or the collection's base where the platform has none. */
+async function freeExtraPlatformDefaults(
+  collectionId: string,
+  saleCurrency: string,
+  baseCurrency: string,
+  platform: FreeExtraTermsRow & { name: string; platformCurrency: string | null }
+): Promise<FreeExtraPlatformDefaultsData | null> {
+  const terms = await freeExtraTermsInSale(
+    collectionId,
+    saleCurrency,
+    platform.platformCurrency ?? baseCurrency,
+    platform
+  );
+  return terms && { platformName: platform.name, ...terms };
+}
+
+/** The buyer's own free-extras terms (#2416) in the sale's currency — stated in the collection's
+ *  base currency. Null for a sale with no buyer, or a buyer who states none. */
+async function freeExtraContactTerms(
+  collectionId: string,
+  saleCurrency: string,
+  baseCurrency: string,
+  buyer: (FreeExtraTermsRow & { name: string }) | null
+): Promise<FreeExtraContactTermsData | null> {
+  if (!buyer) return null;
+  const terms = await freeExtraTermsInSale(collectionId, saleCurrency, baseCurrency, buyer);
+  return terms && { contactName: buyer.name, ...terms };
 }
 
 /** How many candidates the dialog is sent, cheapest first — far more than a parcel takes. */
@@ -1670,18 +1696,31 @@ export interface FreeExtraCandidates {
   /** The sale's platform's free-extras settings (#2409), in the sale's currency — null where the
    *  platform states none. */
   platformDefaults: FreeExtraPlatformDefaultsData | null;
+  /** The buyer's own free-extras terms (#2416), in the sale's currency — null for a sale with no
+   *  buyer, or a buyer who states none. The dialog combines them with the platform's
+   *  (`combineFreeExtraTerms`), each field the better for the buyer. */
+  contactTerms: FreeExtraContactTermsData | null;
 }
 
-/** A platform's free-extras settings as the dialog reads them (#2409): the two amounts in the
- *  sale's currency, 2 dp, the percentage as stored. */
-export interface FreeExtraPlatformDefaultsData {
-  platformName: string;
+/** Free-extras terms as the dialog reads them: the two amounts in the sale's currency, 2 dp, the
+ *  percentage as stored. */
+export interface FreeExtraTermsData {
   minimumOrder: string | null;
   budgetPercent: string | null;
   maximumBudget: string | null;
   /** The two amounts were converted into the sale's currency from this one; null where they are
    *  already in it. */
   convertedFrom: string | null;
+}
+
+/** A platform's free-extras settings (#2409), as the dialog reads them. */
+export interface FreeExtraPlatformDefaultsData extends FreeExtraTermsData {
+  platformName: string;
+}
+
+/** The buyer's own free-extras terms (#2416), as the dialog reads them. */
+export interface FreeExtraContactTermsData extends FreeExtraTermsData {
+  contactName: string;
 }
 
 /**
@@ -1711,6 +1750,14 @@ export async function listFreeExtraCandidates(
           freeExtrasMaximumBudget: true,
         },
       },
+      buyer: {
+        select: {
+          name: true,
+          freeExtrasMinimumOrder: true,
+          freeExtrasBudgetPercent: true,
+          freeExtrasMaximumBudget: true,
+        },
+      },
     },
   });
   if (!sale || sale.collection.ownerId !== ownerId) {
@@ -1722,6 +1769,12 @@ export async function listFreeExtraCandidates(
     currency,
     sale.collection.baseCurrency,
     sale.platform
+  );
+  const contactTerms = await freeExtraContactTerms(
+    collectionId,
+    currency,
+    sale.collection.baseCurrency,
+    sale.buyer
   );
   const baseCurrency = sale.collection.baseCurrency;
   let rate = 1;
@@ -1790,6 +1843,7 @@ export async function listFreeExtraCandidates(
     unvaluedCount,
     truncated: valued.length > ranked.length,
     platformDefaults,
+    contactTerms,
   };
 }
 

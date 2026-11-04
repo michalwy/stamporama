@@ -53,12 +53,29 @@ collection's home market. A price observation takes its house's market, or its p
 is no house; one of your own lots takes its sale's seller's, or the sale's platform's. Changing it
 re-judges every result already recorded — nothing is stored on the results.
 
+### Free extras
+
+Any contact can have **free extras** of its own — for a regular customer you want to be more generous
+with than a [platform's free extras](platforms.md#offers-and-sales) are with every buyer on it. The
+same three fields, all optional:
+
+- **From an order of** — the minimum order value from which free extras are due;
+- **Budget (% of order)** — the default budget, as a percentage of the order (at most 100);
+- **At most** — the maximum budget.
+
+The amounts are in the collection's currency and are converted where a sale's currency differs. On a
+sale to the contact, [Add free extras](sales.md#free-extras) opens with whichever value of each is
+**better for the buyer**, the contact's or the platform's: the **lower** minimum order, the **higher**
+percentage and the **higher** maximum. Only fields that are set take part — one left empty here uses
+the platform's, and one set only here applies even where the platform has none. A contact with none
+set changes nothing.
+
 ### Tabs follow the roles
 
 A plain address-book contact is one short form. Tick **Seller** or **Auction house** and the dialog
 grows a second **tab** for what that role brings with it:
 
-- **Contact** — name, full name, email, phone, Facebook profiles, roles, market and notes. Always there, and where you land.
+- **Contact** — name, full name, email, phone, Facebook profiles, roles, market, free extras and notes. Always there, and where you land.
 - **Auction defaults** — the currency and fee terms a seller trades on.
 
 The tabs are **grouping only**: it is still one record with one **Save changes**, and what you typed
@@ -86,7 +103,7 @@ Click a contact's row to open its **page** — what you have done with that pers
 Ctrl-click, or the middle button, opens it in a new tab.
 
 The top of the page says **who** the contact is: the name, full name, roles, email, phone,
-Facebook profiles, market and notes. **Edit** opens the same dialog as the row's pencil, and
+Facebook profiles, market, free extras and notes. **Edit** opens the same dialog as the row's pencil, and
 **Merge with…** makes this contact and another one into one (see [Merging two contacts](#merging-two-contacts)).
 
 Below it, a **period switch** — **This year**, **Last 12 months** or **All time** — narrows every
@@ -203,7 +220,8 @@ the merged contact beside them, and you choose **which one remains**. The merged
 - carries **both sets of roles**;
 - keeps its own **notes**, with the other's added under them;
 - takes the other's **auction defaults** only if it has none of its own — a currency and its fees are
-  one seller's terms, so they are never mixed from two.
+  one seller's terms, so they are never mixed from two;
+- takes the other's **free extras** the same way — only if it has none of its own.
 
 Before you merge, the dialog says how many **purchases**, **sales** and **trades** — and any tracked
 **auction sales**, **price observations** and **conversation entries** — of the other contact will

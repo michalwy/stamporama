@@ -24,6 +24,9 @@ export interface ContactMergeDetails {
   defaultShippingCost: string | null;
   buyerPremiumPercent: string | null;
   buyerPremiumFixed: string | null;
+  freeExtrasMinimumOrder: string | null;
+  freeExtrasBudgetPercent: string | null;
+  freeExtrasMaximumBudget: string | null;
 }
 
 /** The seller defaults for auction sales (#350): one set of terms, so they are taken together. */
@@ -32,6 +35,13 @@ const SELLER_DEFAULT_FIELDS = [
   "defaultShippingCost",
   "buyerPremiumPercent",
   "buyerPremiumFixed",
+] as const;
+
+/** The free-extras terms (#2416): one customer's deal, so they are taken together too. */
+const FREE_EXTRAS_FIELDS = [
+  "freeExtrasMinimumOrder",
+  "freeExtrasBudgetPercent",
+  "freeExtrasMaximumBudget",
 ] as const;
 
 /** The remaining contact as it is once `other` is merged into it. */
@@ -44,6 +54,9 @@ export function mergedContactDetails(
   const sellerDefaultsFrom = SELLER_DEFAULT_FIELDS.some((field) => remaining[field] != null)
     ? remaining
     : other;
+  // The free-extras terms are one deal with the customer, so the same rule: a contact with any of its
+  // own keeps them all rather than pairing its percentage with the other's cap.
+  const freeExtrasFrom = FREE_EXTRAS_FIELDS.some((field) => remaining[field] != null) ? remaining : other;
   return {
     name: remaining.name,
     notes: mergedNotes(remaining.notes, other.notes),
@@ -64,6 +77,9 @@ export function mergedContactDetails(
     defaultShippingCost: sellerDefaultsFrom.defaultShippingCost,
     buyerPremiumPercent: sellerDefaultsFrom.buyerPremiumPercent,
     buyerPremiumFixed: sellerDefaultsFrom.buyerPremiumFixed,
+    freeExtrasMinimumOrder: freeExtrasFrom.freeExtrasMinimumOrder,
+    freeExtrasBudgetPercent: freeExtrasFrom.freeExtrasBudgetPercent,
+    freeExtrasMaximumBudget: freeExtrasFrom.freeExtrasMaximumBudget,
   };
 }
 

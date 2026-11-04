@@ -7,6 +7,8 @@ import {
   orderValueCents,
   parseFreeExtraLimits,
   prefillFreeExtras,
+  combineFreeExtraTerms,
+  freeExtraTermsSummary,
   proposeFreeExtras,
   rankFreeExtraCandidates,
   toCents,
@@ -200,5 +202,85 @@ describe("prefillFreeExtras", () => {
       budgetCents: null,
       capped: false,
     });
+  });
+});
+
+// A contact's own terms (#2416): each field the better for the buyer of the two that are set.
+describe("combineFreeExtraTerms", () => {
+  const terms = (min: number | null, pct: number | null, max: number | null) => ({
+    minimumOrderCents: min,
+    budgetPercent: pct,
+    maximumBudgetCents: max,
+  });
+
+  it("is null where neither side states anything", () => {
+    assert.equal(combineFreeExtraTerms(null, null), null);
+  });
+
+  it("is the platform's alone where the contact states none", () => {
+    assert.deepEqual(combineFreeExtraTerms(terms(4000, 5, 300), null), {
+      terms: terms(4000, 5, 300),
+      sources: { minimumOrder: "platform", budgetPercent: "platform", maximumBudget: "platform" },
+    });
+  });
+
+  it("takes the lower minimum, the higher percentage and the higher maximum", () => {
+    assert.deepEqual(combineFreeExtraTerms(terms(4000, 5, 300), terms(2000, 10, 200)), {
+      terms: terms(2000, 10, 300),
+      sources: { minimumOrder: "contact", budgetPercent: "contact", maximumBudget: "platform" },
+    });
+    assert.deepEqual(combineFreeExtraTerms(terms(2000, 10, 200), terms(4000, 5, 300)), {
+      terms: terms(2000, 10, 300),
+      sources: { minimumOrder: "platform", budgetPercent: "platform", maximumBudget: "contact" },
+    });
+  });
+
+  it("keeps the platform's at a tie — the contact improves on nothing", () => {
+    assert.deepEqual(combineFreeExtraTerms(terms(4000, 5, 300), terms(4000, 5, 300))?.sources, {
+      minimumOrder: "platform",
+      budgetPercent: "platform",
+      maximumBudget: "platform",
+    });
+  });
+
+  it("uses the platform's for a field the contact leaves empty, and the contact's where only it sets one", () => {
+    // An empty field is not read as "no minimum" or "no cap": it takes no part.
+    assert.deepEqual(combineFreeExtraTerms(terms(4000, null, 300), terms(null, 10, null)), {
+      terms: terms(4000, 10, 300),
+      sources: { minimumOrder: "platform", budgetPercent: "contact", maximumBudget: "platform" },
+    });
+    assert.deepEqual(combineFreeExtraTerms(null, terms(null, 10, 500)), {
+      terms: terms(null, 10, 500),
+      sources: { minimumOrder: null, budgetPercent: "contact", maximumBudget: "contact" },
+    });
+  });
+
+  it("prefills from the combined terms", () => {
+    const combined = combineFreeExtraTerms(terms(4000, 5, 300), terms(2000, 10, null));
+    // 30.00 is under the platform's minimum but not the contact's: 10% of it, capped at 3.00.
+    assert.deepEqual(prefillFreeExtras(combined?.terms ?? null, toCents("30.00")), {
+      kind: "due",
+      budgetCents: 300,
+      capped: false,
+    });
+  });
+});
+
+describe("freeExtraTermsSummary", () => {
+  it("lists what is set, and is null for none", () => {
+    assert.equal(
+      freeExtraTermsSummary(
+        { freeExtrasMinimumOrder: "50.00", freeExtrasBudgetPercent: "10", freeExtrasMaximumBudget: "5.00" },
+        "PLN"
+      ),
+      "10% of the order · at most 5.00 PLN · from an order of 50.00 PLN"
+    );
+    assert.equal(
+      freeExtraTermsSummary(
+        { freeExtrasMinimumOrder: null, freeExtrasBudgetPercent: null, freeExtrasMaximumBudget: null },
+        "PLN"
+      ),
+      null
+    );
   });
 });

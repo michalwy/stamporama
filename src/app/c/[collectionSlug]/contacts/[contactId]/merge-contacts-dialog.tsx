@@ -17,6 +17,7 @@ import type { ContactMergeCandidate } from "@/lib/contacts";
 import { mergedContactDetails, type ContactMergeDetails } from "@/lib/contact-merge-rules";
 import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { freeExtraTermsSummary } from "@/lib/free-extra-rules";
 import { CONTACT_ROLES } from "../contact-roles";
 import { contactKeys, useContacts } from "../use-contacts-query";
 
@@ -54,6 +55,8 @@ type Side = "a" | "b";
 
 interface MergeContactsDialogProps {
   collectionId: string;
+  /** The collection's currency — what a contact's free-extras amounts are in (#2416). */
+  baseCurrency: string;
   /** The contact whose page this is. */
   contactId: string;
   isPending: boolean;
@@ -69,6 +72,7 @@ interface MergeContactsDialogProps {
  */
 export function MergeContactsDialog({
   collectionId,
+  baseCurrency,
   contactId,
   isPending,
   error,
@@ -114,6 +118,8 @@ export function MergeContactsDialog({
   }
 
   const showAuctionDefaults = a && b && [a, b].some((c) => sellerTerms(c) !== "—");
+  // The free-extras terms (#2416), only where either contact has some.
+  const showFreeExtras = a && b && [a, b].some((c) => freeExtraTermsSummary(c, baseCurrency) != null);
   const showAuctionSales = a && b && a.auctionSaleCount + b.auctionSaleCount > 0;
   const showObservations = a && b && a.priceObservationCount + b.priceObservationCount > 0;
   const showConversation = a && b && a.conversationEntryCount + b.conversationEntryCount > 0;
@@ -189,6 +195,14 @@ export function MergeContactsDialog({
                   <Row label="Roles" a={roles(a)} b={roles(b)} merged={roles(merged)} />
                   {showAuctionDefaults && (
                     <Row label="Auction defaults" a={sellerTerms(a)} b={sellerTerms(b)} merged={sellerTerms(merged)} />
+                  )}
+                  {showFreeExtras && (
+                    <Row
+                      label="Free extras"
+                      a={freeExtraTermsSummary(a, baseCurrency)}
+                      b={freeExtraTermsSummary(b, baseCurrency)}
+                      merged={freeExtraTermsSummary(merged, baseCurrency)}
+                    />
                   )}
                   <Row label="Notes" a={notes(a.notes)} b={notes(b.notes)} merged={notes(merged.notes)} />
                   <CountRow label="Purchases" a={a.purchaseCount} b={b.purchaseCount} />

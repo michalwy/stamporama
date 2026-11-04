@@ -265,6 +265,10 @@ them from the whole stock by hand is slow. Decided with the collector on 2026-11
   converted into the sale's currency, they prefill the budget once; below the minimum the sale says
   no free extra is due. Both are a starting point, never a limit — the collector can change the
   budget or add an extra by hand.
+- **A contact can improve on them** (#2416): the same three fields on `Contact`, in the collection's
+  currency. On a sale to it each field is the one better for the buyer — the lower minimum, the higher
+  percentage, the higher maximum — of the contact's and the platform's; only set fields take part, so
+  an empty one uses the other side's.
 
 Considered and rejected: a **flag on the sale** listing given-away copies apart from its lines. The
 copies leave the holdings and carry a cost exactly as sold ones do, and every read that retires a

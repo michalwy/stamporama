@@ -153,7 +153,8 @@ extras](sales.md#free-extras) on a sale here opens with: the budget filled in as
 the order, capped at the maximum, and changeable for that sale. Below the minimum order the dialog
 says no free extra is due and fills nothing in, but you can still add one by hand — it is a hint, not
 a block. Leave all three empty and the dialog opens empty, as it always has. Every platform has them,
-Facebook's included.
+Facebook's included. A [contact](contacts.md#free-extras) can have terms of its own that improve on
+these for sales to it.
 
 A platform also has **Refresh quick buys after (days)**: how long a quick buy may be up there before
 it has sunk out of sight and wants posting again — a few days on Delcampe, for example. An
