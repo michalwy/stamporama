@@ -193,6 +193,14 @@ B), there is no complete set and all three may go. Only copies that could be giv
 towards a set, and a set holding a copy with no value is not offered. Adding copies that would break
 a set is refused.
 
+**Narrow the copies to what the buyer collects.** The area tree and the years on the left, and
+**condition**, **certificate** and **format** above the list, filter the candidates as they filter
+**Copies**. **Propose** then picks only from what the filters leave, replacing whatever was ticked.
+A copy you ticked stays ticked when a filter hides it: the summary still counts it, and **Add**
+says how many ticked copies are hidden by the filters. A whole series is listed when all its copies
+are in the filters; whether a set is complete is still counted over all your copies, so a filter
+never frees a copy that would break one. The filters start empty each time the dialog opens.
+
 When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
 opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its
 maximum, and a line beside the summary says what the platform's rule is. Change it freely for this

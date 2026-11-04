@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   SaleListItem,
   SellableOffer,
@@ -12,6 +12,7 @@ import type { ItemListItem } from "@/lib/items";
 import type { SaleStatus } from "@/lib/sale-status";
 import type { SaleSearchField } from "@/lib/sale-search-fields";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { writeFreeExtraFilterQuery, type FreeExtraFilters } from "@/lib/free-extra-filters";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -163,15 +164,20 @@ export function useStockCopiesForSale(
 }
 
 /** The copies a sale may give away as free extras (#2408), ranked — read fresh each time the dialog
- *  opens, since what is in stock moves under it. */
-export function useFreeExtraCandidates(collectionId: string, saleId: string) {
+ *  opens, since what is in stock moves under it, and again as its filters change (#2423), keeping the
+ *  last list on screen meanwhile. */
+export function useFreeExtraCandidates(collectionId: string, saleId: string, filters: FreeExtraFilters) {
+  const query = writeFreeExtraFilterQuery(filters).toString();
   return useQuery<FreeExtraCandidates>({
-    queryKey: ["sales", collectionId, "free-extras", saleId],
+    queryKey: ["sales", collectionId, "free-extras", saleId, query],
     staleTime: 0,
     gcTime: 0,
     retry: false,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const res = await fetch(`/api/collections/${collectionId}/sales/${saleId}/free-extras`);
+      const res = await fetch(
+        `/api/collections/${collectionId}/sales/${saleId}/free-extras${query ? `?${query}` : ""}`
+      );
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Failed to load copies");
       return body as FreeExtraCandidates;
