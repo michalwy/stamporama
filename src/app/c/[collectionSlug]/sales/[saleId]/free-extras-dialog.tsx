@@ -13,16 +13,18 @@ import { baseBtn } from "@/app/button-style";
 import { formControl } from "@/app/control-style";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { FreeExtraCandidateRow } from "@/lib/sales";
+import type { FreeExtraCandidateRow, FreeExtraPlatformDefaultsData } from "@/lib/sales";
 import {
   freeExtraTotals,
   fromCents,
   parseFreeExtraLimits,
+  prefillFreeExtras,
   proposeFreeExtras,
   toCents,
   type FreeExtraBudgetKind,
   type FreeExtraCandidate,
   type FreeExtraLimits,
+  type FreeExtraPrefill,
 } from "@/lib/free-extra-rules";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -44,6 +46,11 @@ import { useFreeExtraCandidates } from "../use-sales-query";
 // What may be proposed, and each copy's value in the sale's currency, are the server's
 // (`listFreeExtraCandidates`): only copies for sale or for trade that have a value, on no open trade
 // or proposal. The write re-checks them.
+//
+// The sale's platform may state when free extras are due and how generous they are (#2409): the
+// dialog then opens with the platform's budget filled in — its percentage of the order, capped at its
+// maximum — and below its minimum order says that none is due, filling nothing in. Both are where the
+// dialog starts, not limits on it: the collector can change the budget, or add an extra by hand.
 
 const LIMIT_INPUT: React.CSSProperties = {
   ...formControl,
@@ -97,6 +104,27 @@ const LISTED_CHIP: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** The platform's rule in one line, for the header — what the prefilled budget came from. */
+function describePlatformRule(
+  defaults: FreeExtraPlatformDefaultsData,
+  prefill: FreeExtraPrefill,
+  currency: string
+): string {
+  const { platformName, minimumOrder, budgetPercent, maximumBudget } = defaults;
+  const money = (amount: string) =>
+    `${defaults.convertedFrom ? "≈ " : ""}${amount} ${currency}`;
+  if (prefill.kind === "below-minimum" && minimumOrder) {
+    return `No free extra is due: ${platformName} gives them from an order of ${money(minimumOrder)}.`;
+  }
+  const parts = [
+    budgetPercent ? `${budgetPercent}% of the order` : null,
+    maximumBudget ? `at most ${money(maximumBudget)}` : null,
+  ].filter(Boolean);
+  const from = minimumOrder ? `from an order of ${money(minimumOrder)}` : null;
+  const rule = [parts.join(", "), from].filter(Boolean).join(", ");
+  return `Free extras on ${platformName}: ${rule}.`;
+}
+
 function asCandidate(row: FreeExtraCandidateRow): FreeExtraCandidate {
   return {
     itemId: row.item.id,
@@ -142,6 +170,30 @@ export function FreeExtrasDialog({
   const rows = useMemo(() => data?.candidates ?? [], [data]);
   const candidates = useMemo(() => rows.map(asCandidate), [rows]);
   const orderCents = data ? toCents(data.orderValue) : 0;
+  const defaults = data?.platformDefaults ?? null;
+  const prefill = useMemo<FreeExtraPrefill | null>(() => {
+    if (!data) return null;
+    const d = data.platformDefaults;
+    return prefillFreeExtras(
+      d && {
+        minimumOrderCents: d.minimumOrder != null ? toCents(d.minimumOrder) : null,
+        budgetPercent: d.budgetPercent != null ? Number(d.budgetPercent) : null,
+        maximumBudgetCents: d.maximumBudget != null ? toCents(d.maximumBudget) : null,
+      },
+      toCents(data.orderValue)
+    );
+  }, [data]);
+
+  // The platform's budget is filled in once, when the candidates first arrive — a refetch must not
+  // write over what the collector has typed since (#2409).
+  const [seeded, setSeeded] = useState(false);
+  if (prefill && !seeded) {
+    setSeeded(true);
+    if (prefill.kind === "due" && prefill.budgetCents != null) {
+      setBudget(fromCents(prefill.budgetCents));
+      setBudgetKind("amount");
+    }
+  }
 
   function propose() {
     const parsed = parseFreeExtraLimits({ count, budget, budgetKind }, orderCents);
@@ -249,6 +301,20 @@ export function FreeExtrasDialog({
                 Order: {data.orderValue} {currency}
               </span>
             </Tooltip>
+          )}
+          {defaults && prefill && prefill.kind !== "none" && (
+            <span
+              style={{
+                fontSize: "0.8125rem",
+                paddingBottom: "0.5rem",
+                color:
+                  prefill.kind === "below-minimum"
+                    ? "var(--color-warning)"
+                    : "var(--color-text-secondary)",
+              }}
+            >
+              {describePlatformRule(defaults, prefill, currency)}
+            </span>
           )}
           <span
             style={{

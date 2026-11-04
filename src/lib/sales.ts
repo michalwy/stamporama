@@ -1568,6 +1568,53 @@ export async function addSaleCopySet(
 // its cost basis counts against the sale's profit. A listed copy given away leaves its offers as any
 // copy sold on no offer does (ADR-0013 §8): the derivation flags them.
 
+/**
+ * A platform's free-extras settings (#2409) in the sale's currency. The two amounts are in the
+ * platform's own currency, or the collection's base where the platform has none, and are converted
+ * at today's rate where that differs from the sale's — they are the platform's standing rule, not a
+ * figure of this sale's, so the sale's frozen rate does not apply. Null where the platform states
+ * none. Where no rate is known the amounts cannot be read in this sale's currency, and the settings
+ * are left out whole: half a rule — a percentage with its cap or its minimum missing — would
+ * propose more than the platform allows.
+ */
+async function freeExtraPlatformDefaults(
+  collectionId: string,
+  saleCurrency: string,
+  baseCurrency: string,
+  platform: {
+    name: string;
+    platformCurrency: string | null;
+    freeExtrasMinimumOrder: Prisma.Decimal | null;
+    freeExtrasBudgetPercent: Prisma.Decimal | null;
+    freeExtrasMaximumBudget: Prisma.Decimal | null;
+  }
+): Promise<FreeExtraPlatformDefaultsData | null> {
+  const { freeExtrasMinimumOrder: min, freeExtrasBudgetPercent: pct, freeExtrasMaximumBudget: max } =
+    platform;
+  if (min == null && pct == null && max == null) return null;
+  const from = platform.platformCurrency ?? baseCurrency;
+  const converts = (min != null || max != null) && from !== saleCurrency;
+  let rate = 1;
+  if (converts) {
+    let known: number;
+    try {
+      known = (await getOrFetchRate(collectionId, from, saleCurrency)).rate;
+    } catch {
+      return null;
+    }
+    if (!(known > 0)) return null;
+    rate = known;
+  }
+  const inSale = (d: Prisma.Decimal | null) => (d == null ? null : fromCents(toCents(Number(d) * rate)));
+  return {
+    platformName: platform.name,
+    minimumOrder: inSale(min),
+    budgetPercent: pct == null ? null : String(Number(pct)),
+    maximumBudget: inSale(max),
+    convertedFrom: converts ? from : null,
+  };
+}
+
 /** How many candidates the dialog is sent, cheapest first — far more than a parcel takes. */
 export const FREE_EXTRA_CANDIDATE_LIMIT = 500;
 
@@ -1620,6 +1667,21 @@ export interface FreeExtraCandidates {
   unvaluedCount: number;
   /** More candidates exist than were sent. */
   truncated: boolean;
+  /** The sale's platform's free-extras settings (#2409), in the sale's currency — null where the
+   *  platform states none. */
+  platformDefaults: FreeExtraPlatformDefaultsData | null;
+}
+
+/** A platform's free-extras settings as the dialog reads them (#2409): the two amounts in the
+ *  sale's currency, 2 dp, the percentage as stored. */
+export interface FreeExtraPlatformDefaultsData {
+  platformName: string;
+  minimumOrder: string | null;
+  budgetPercent: string | null;
+  maximumBudget: string | null;
+  /** The two amounts were converted into the sale's currency from this one; null where they are
+   *  already in it. */
+  convertedFrom: string | null;
 }
 
 /**
@@ -1640,12 +1702,27 @@ export async function listFreeExtraCandidates(
       fxRateToBase: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       lines: { select: { price: true, freeExtra: true } },
+      platform: {
+        select: {
+          name: true,
+          platformCurrency: true,
+          freeExtrasMinimumOrder: true,
+          freeExtrasBudgetPercent: true,
+          freeExtrasMaximumBudget: true,
+        },
+      },
     },
   });
   if (!sale || sale.collection.ownerId !== ownerId) {
     throw new Error("Sale not found or access denied.");
   }
   const { collectionId, currency } = sale;
+  const platformDefaults = await freeExtraPlatformDefaults(
+    collectionId,
+    currency,
+    sale.collection.baseCurrency,
+    sale.platform
+  );
   const baseCurrency = sale.collection.baseCurrency;
   let rate = 1;
   if (currency !== baseCurrency) {
@@ -1712,6 +1789,7 @@ export async function listFreeExtraCandidates(
     }),
     unvaluedCount,
     truncated: valued.length > ranked.length,
+    platformDefaults,
   };
 }
 

@@ -176,6 +176,12 @@ extras**, beside **Add copies**, proposes which copies to give away:
 4. Press **Add**. Each ticked copy becomes a line of its own, priced at **0** and marked **Free
    extra**.
 
+When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
+opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its
+maximum, and a line in the header says what the platform's rule is. Change it freely for this sale;
+nothing is ticked until you press **Propose**. When the order is under the platform's minimum, the
+header says **no free extra is due** and nothing is filled in — you can still add one by hand.
+
 Only copies that could really go are proposed: **in stock** (in hand, not sold, traded away or
 disposed of), marked **for sale** or **for trade** — never a copy kept only in your collection —
 on no open trade or proposal, and with a value. A copy with no value cannot be ranked or counted

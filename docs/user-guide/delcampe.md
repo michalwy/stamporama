@@ -42,8 +42,8 @@ The tab offers what selling on Delcampe actually uses, all described on the
 
 - **Platform** — **Switched on**, **Market** and **Notes**.
 - **Offers and sales** — **Currency**, **Listing language**, **Default listing type** (and, for an
-  auction, **Default starting price**), **Minimum price**, **Refresh quick buys after**, **Message to
-  buyer** and **Shipping options**.
+  auction, **Default starting price**), **Minimum price**, **Free extras**, **Refresh quick buys
+  after**, **Message to buyer** and **Shipping options**.
 - **Listing texts** — the **Title**, **Description** and **Photo tile labels** templates with the
   description's format, and **Max title** and **Max description**.
 - **Photos** — every photo setting a generic platform has.

@@ -260,6 +260,11 @@ them from the whole stock by hand is slow. Decided with the collector on 2026-11
   not proposed.
 - **Only copies for sale or for trade are proposed** — never one kept only in the collection — and
   only in stock, on no open trade or proposal, and in no listing in active bidding.
+- **The platform sets where the proposal starts** (#2409): a minimum order value, a default budget as
+  a percentage of the order and a maximum budget capping it, all optional, on `Platform`. Read live,
+  converted into the sale's currency, they prefill the budget once; below the minimum the sale says
+  no free extra is due. Both are a starting point, never a limit — the collector can change the
+  budget or add an extra by hand.
 
 Considered and rejected: a **flag on the sale** listing given-away copies apart from its lines. The
 copies leave the holdings and carry a cost exactly as sold ones do, and every read that retires a

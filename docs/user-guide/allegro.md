@@ -45,8 +45,8 @@ The **Platform** tab offers only what selling on Allegro uses — each is descri
 
 - **Platform** — whether it is **switched on**, its **market** and your **notes**.
 - **Offers and sales** — **currency**, **listing language**, **default listing type** (and the
-  **default starting price** while that is an auction), **minimum price**, **message to buyer** and
-  **shipping options**.
+  **default starting price** while that is an auction), **minimum price**, **free extras**, **message to buyer**
+  and **shipping options**.
 - **Listing texts** — the **title**, **description** and **photo tile label** templates, the
   description's format, and the **max title** and **max description** limits.
 - **Photos** — the photo limits, covering symbols, the sides to photograph, the collage template,

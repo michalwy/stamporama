@@ -299,6 +299,7 @@ Valuation of an unknown-variant copy (lowest child-variant catalog price, flagge
 - **Generic platforms** — `platformModule` null, added under Settings → Platforms. `@@unique([collectionId, name])`; `createPlatform` / `updatePlatform` refuse a module's name in any case.
 - **`enabled`** decides whether the pickers offer it for a new record (`searchPlatforms`, the `/platforms/search` route the party picker uses on a platform field); every record naming it keeps it. `resolvePlatform` is the platform field's find-or-create — an existing platform by name, any case, else a new generic one.
 - Delete (`deletePlatform`) is refused for a module platform and while any `Restrict` reference names it (offers, sales, purchases, auction sales, price observations); what it owns cascades (shipping options, Allegro and Delcampe profiles and memories, Facebook groups and defaults, category lessons, copy exclusions).
+- **Free extras** (#2409): `freeExtrasMinimumOrder?` / `freeExtrasBudgetPercent?` / `freeExtrasMaximumBudget?` — when a sale on the platform is due free extras and their budget, read live by `listFreeExtraCandidates` (converted into the sale's currency) to prefill the sale's free-extras dialog through the pure `prefillFreeExtras`. CHECK `platform_free_extras_positive`.
 - The move (`20261016130000_platform_entity`) kept every id: each platform took its contact's, so only the foreign keys moved. Domain module `src/lib/platforms.ts`; actions `src/app/actions/platforms.ts`.
 
 ### Per-language entity text

@@ -457,6 +457,57 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
             </FieldNote>
           </div>
 
+          {/* When a sale here is due free extras and how generous they are (#2409): they prefill the
+              free-extras action on the sale (#2408), on every platform, Facebook's included. */}
+          <div>
+            <LabelWithError>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                Free extras (optional)
+                <InfoHint>
+                  What the Add free extras action on a sale here opens with. Below the minimum order the
+                  sale says no free extra is due, but one can still be added by hand. The budget is the
+                  percentage of the order, capped at the maximum; with the maximum alone, the maximum is
+                  the budget. Amounts are in the platform&rsquo;s currency.
+                </InfoHint>
+              </span>
+            </LabelWithError>
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <LabelWithError htmlFor="platform-free-extras-minimum-order">From an order of</LabelWithError>
+                <NumericInput
+                  kind="amount"
+                  id="platform-free-extras-minimum-order"
+                  name="freeExtrasMinimumOrder"
+                  defaultValue={platform?.freeExtrasMinimumOrder ?? ""}
+                  placeholder="any"
+                  style={INPUT_STYLE}
+                />
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <LabelWithError htmlFor="platform-free-extras-budget-percent">Budget (% of order)</LabelWithError>
+                <NumericInput
+                  kind="number"
+                  id="platform-free-extras-budget-percent"
+                  name="freeExtrasBudgetPercent"
+                  defaultValue={platform?.freeExtrasBudgetPercent ?? ""}
+                  placeholder="—"
+                  style={INPUT_STYLE}
+                />
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <LabelWithError htmlFor="platform-free-extras-maximum-budget">At most</LabelWithError>
+                <NumericInput
+                  kind="amount"
+                  id="platform-free-extras-maximum-budget"
+                  name="freeExtrasMaximumBudget"
+                  defaultValue={platform?.freeExtrasMaximumBudget ?? ""}
+                  placeholder="no cap"
+                  style={INPUT_STYLE}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Not on Facebook: there the refresh and the buyer's message are Facebook's own settings,
               which its groups follow (#1661). */}
           {!isFacebook && usesRefresh && (

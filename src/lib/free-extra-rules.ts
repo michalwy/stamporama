@@ -151,3 +151,63 @@ export function freeExtraTotals(
     overBudget: limits?.budgetCents != null && valueCents > limits.budgetCents,
   };
 }
+
+// ── A platform's free-extras settings (#2409) ──────────────────────────────────────────────────────
+//
+// Each platform states when its sales are due free extras and how generous they are: a minimum order
+// value, a default budget as a percentage of the order, and a maximum budget capping what the
+// percentage gives. The dialog opens from them; the collector can still change the budget for the
+// sale. Below the minimum the sale says no free extra is due, but nothing stops one being added by
+// hand — a hint, not a block.
+
+/** A platform's free-extras settings, its two amounts already in cents of the sale's currency. */
+export interface FreeExtraPlatformDefaults {
+  minimumOrderCents: number | null;
+  budgetPercent: number | null;
+  maximumBudgetCents: number | null;
+}
+
+/** What the dialog opens with, read off the platform's settings and the order. */
+export type FreeExtraPrefill =
+  /** The platform states nothing: the dialog opens empty, as before #2409. */
+  | { kind: "none" }
+  /** The order is under the platform's minimum: no free extra is due, and no budget is filled in. */
+  | { kind: "below-minimum"; minimumOrderCents: number }
+  /** Free extras are due. `budgetCents` is null where the platform states no budget, or the one it
+   *  gives comes to nothing; `capped` says the maximum cut the percentage's figure down. */
+  | { kind: "due"; budgetCents: number | null; capped: boolean };
+
+/**
+ * The budget a platform proposes for an order (#2409): its percentage of the order's value, capped
+ * at its maximum. With the maximum alone, the maximum is the budget; with the percentage alone,
+ * nothing caps it. An order under the minimum is due none. A budget that rounds down to 0 fills
+ * nothing in — the limits refuse a budget of 0.
+ */
+export function prefillFreeExtras(
+  defaults: FreeExtraPlatformDefaults | null,
+  orderCents: number
+): FreeExtraPrefill {
+  if (
+    !defaults ||
+    (defaults.minimumOrderCents == null &&
+      defaults.budgetPercent == null &&
+      defaults.maximumBudgetCents == null)
+  ) {
+    return { kind: "none" };
+  }
+  if (defaults.minimumOrderCents != null && orderCents < defaults.minimumOrderCents) {
+    return { kind: "below-minimum", minimumOrderCents: defaults.minimumOrderCents };
+  }
+  let budgetCents: number | null = null;
+  let capped = false;
+  if (defaults.budgetPercent != null) {
+    budgetCents = Math.floor((orderCents * defaults.budgetPercent) / 100);
+    if (defaults.maximumBudgetCents != null && budgetCents > defaults.maximumBudgetCents) {
+      budgetCents = defaults.maximumBudgetCents;
+      capped = true;
+    }
+  } else if (defaults.maximumBudgetCents != null) {
+    budgetCents = defaults.maximumBudgetCents;
+  }
+  return { kind: "due", budgetCents: budgetCents != null && budgetCents > 0 ? budgetCents : null, capped };
+}
