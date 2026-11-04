@@ -134,6 +134,13 @@ export interface PlatformData {
   /** After how many days an active quick buy here needs posting again (#1718), or null for never.
    * Not read for the Facebook platform, whose threshold is on Settings → Facebook (#1661). */
   refreshQuickBuysAfterDays: number | null;
+  /** When this platform's sales are due free extras and how generous they are (#2409), each null
+   * when the platform states none: the minimum order value and the maximum budget as 2-dp strings in
+   * the platform's currency (the collection's where it has none), the default budget as a percentage
+   * of the order. Read live to prefill a sale's free-extras action, never seeded. */
+  freeExtrasMinimumOrder: string | null;
+  freeExtrasBudgetPercent: string | null;
+  freeExtrasMaximumBudget: string | null;
   /** The message a buyer is sent after a sale here (#1815), or null for none. Not read for the
    * Facebook platform, whose message is on Settings → Facebook (#1661). */
   buyerMessageTemplate: string | null;
@@ -192,6 +199,9 @@ const PLATFORM_SELECT = {
   minimumPrice: true,
   defaultListingType: true,
   refreshQuickBuysAfterDays: true,
+  freeExtrasMinimumOrder: true,
+  freeExtrasBudgetPercent: true,
+  freeExtrasMaximumBudget: true,
   buyerMessageTemplate: true,
   proposalMessageTemplate: true,
   maxPhotos: true,
@@ -213,9 +223,19 @@ const PLATFORM_SELECT = {
   createdAt: true,
 } as const;
 
-type PlatformRow = Omit<PlatformData, "defaultStartingPrice" | "minimumPrice"> & {
+type PlatformRow = Omit<
+  PlatformData,
+  | "defaultStartingPrice"
+  | "minimumPrice"
+  | "freeExtrasMinimumOrder"
+  | "freeExtrasBudgetPercent"
+  | "freeExtrasMaximumBudget"
+> & {
   defaultStartingPrice: Decimal | null;
   minimumPrice: Decimal | null;
+  freeExtrasMinimumOrder: Decimal | null;
+  freeExtrasBudgetPercent: Decimal | null;
+  freeExtrasMaximumBudget: Decimal | null;
 };
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
@@ -225,6 +245,11 @@ function toPlatformData(row: PlatformRow): PlatformData {
     ...row,
     defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
     minimumPrice: row.minimumPrice?.toFixed(2) ?? null,
+    freeExtrasMinimumOrder: row.freeExtrasMinimumOrder?.toFixed(2) ?? null,
+    // As typed — 5, not 5.00 — since a percentage is read as a number, not as money.
+    freeExtrasBudgetPercent:
+      row.freeExtrasBudgetPercent != null ? String(Number(row.freeExtrasBudgetPercent)) : null,
+    freeExtrasMaximumBudget: row.freeExtrasMaximumBudget?.toFixed(2) ?? null,
   };
 }
 
@@ -294,6 +319,11 @@ export interface PlatformInput {
   defaultListingType?: string | null;
   /** The quick-buy refresh threshold (#1718) in days, or null for never. Out of range is refused. */
   refreshQuickBuysAfterDays?: number | null;
+  /** The free-extras settings (#2409), each null for none. Blank stores null; a figure that is not
+   * positive — or a percentage over 100 — is refused. */
+  freeExtrasMinimumOrder?: string | null;
+  freeExtrasBudgetPercent?: string | null;
+  freeExtrasMaximumBudget?: string | null;
   /** The message to a buyer after a sale here (#1815), or null for none. Blank stores null. */
   buyerMessageTemplate?: string | null;
   /** The Direct platform's proposal message (#2288), or null for none. Blank stores null; ignored on
@@ -349,6 +379,25 @@ function amount(raw: string | null | undefined): string | null {
   const value = raw?.trim();
   if (!value) return null;
   return Number.isFinite(Number(value)) ? value : null;
+}
+
+/** A free-extras setting (#2409) as written: blank is none, anything else a positive figure — at
+ *  most 100 for the percentage, which is of the order's value. Refused rather than dropped, unlike
+ *  {@link amount}: a budget silently left out would prefill nothing, with no word why. */
+function freeExtrasFigure(
+  raw: string | null | undefined,
+  what: string,
+  max: number = 99_999_999.99
+): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > max) {
+    throw new PlatformFieldError(
+      max === 100 ? `The ${what} must be a percentage above 0 and at most 100.` : `The ${what} must be an amount above 0.`
+    );
+  }
+  return value;
 }
 
 /**
@@ -409,6 +458,9 @@ async function settingsData(
     refreshQuickBuysAfterDays: uses("refreshQuickBuysAfterDays")
       ? refreshDays(data.refreshQuickBuysAfterDays)
       : null,
+    freeExtrasMinimumOrder: freeExtrasFigure(data.freeExtrasMinimumOrder, "minimum order for free extras"),
+    freeExtrasBudgetPercent: freeExtrasFigure(data.freeExtrasBudgetPercent, "free-extras budget", 100),
+    freeExtrasMaximumBudget: freeExtrasFigure(data.freeExtrasMaximumBudget, "maximum free-extras budget"),
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
     proposalMessageTemplate:
       platformModule === DIRECT_PLATFORM_MODULE ? data.proposalMessageTemplate?.trim() || null : null,

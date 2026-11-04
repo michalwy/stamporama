@@ -7558,6 +7558,19 @@ model Platform {
   // Facebook's own is `FacebookDefaults.refreshQuickBuysAfterDays`, which its groups follow; this
   // column is not read for the Facebook platform.
   refreshQuickBuysAfterDays Int?
+  // ── Free extras (#2409) ────────────────────────────────────────────────────────────────────
+  // When this platform's sales are due free extras and how generous they are: the free-extras
+  // action on a sale (#2408) opens from them. All optional (null = not stated; none set = the action
+  // opens empty) and each positive when set (CHECK `platform_free_extras_positive`). **Read live**,
+  // never seeded: they prefill the dialog, which the collector can still change for the sale.
+  //
+  // The two amounts are in `platformCurrency`, or the collection's base where the platform has none,
+  // converted into the sale's currency where the two differ. Below the minimum order the sale shows
+  // that no free extra is due — a hint, not a block. The budget is the percentage of the order,
+  // capped at the maximum; with the maximum alone, the maximum is the budget.
+  freeExtrasMinimumOrder  Decimal? @db.Decimal(10, 2)
+  freeExtrasBudgetPercent Decimal? @db.Decimal(5, 2)
+  freeExtrasMaximumBudget Decimal? @db.Decimal(10, 2)
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

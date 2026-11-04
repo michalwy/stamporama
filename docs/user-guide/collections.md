@@ -623,8 +623,8 @@ The tab offers only what selling on Colnect uses — the [platform's settings](p
 less four:
 
 - **Platform** — switched on, market and notes.
-- **Offers and sales** — currency, listing language, minimum price, *refresh quick buys after*,
-  the message to the buyer and the shipping options.
+- **Offers and sales** — currency, listing language, minimum price, free extras, *refresh quick
+  buys after*, the message to the buyer and the shipping options.
 - **Listing texts** — the title, description, private note and photo tile label templates, and the
   limits on the description and the private note (Colnect caps both at 100 characters).
 - **Photos** — all of them: the limits, cover symbols, sides, collage template, single photos and

@@ -27,7 +27,8 @@ The Platform tab holds only what selling on Facebook uses:
 - **Platform** — **Switched on**, the **Market** results on Facebook count in, and your **Notes**.
 - **Offers and sales** — the **Currency** every Facebook offer and sale is in (unless its group has
   one of its own), the **Listing language**, the **Minimum price** the *min* button beside an
-  offer's price applies, and the **Shipping options** a Facebook sale picks from.
+  offer's price applies, the **Free extras** a Facebook sale's *Add free extras* opens with, and the
+  **Shipping options** a Facebook sale picks from.
 - **Listing texts** — the **Listing templates** that write each offer's title, description, private
   note and photo tile labels (a post puts the title and the description in through `{title}` and
   `{description}`), the description's format, and the **Listing text limits** an offer's texts are

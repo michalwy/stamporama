@@ -139,6 +139,22 @@ It is shown even when the suggested price beside it is already higher, since a c
 to list at the floor is exactly what it was added for. Leave it empty for platforms with no such
 figure.
 
+A platform's **Free extras** say when a sale here is due a few stamps for nothing on top of the order,
+and how generous they are — all three optional:
+
+- **From an order of** — the minimum order value. Below it no free extra is due.
+- **Budget (% of order)** — the default budget, as a percentage of the order's value (at most 100).
+- **At most** — the maximum budget. It caps what the percentage gives; set on its own, it *is* the
+  budget.
+
+The amounts are in the platform's currency — the collection's where the platform has none — and are
+converted into a sale's currency where the two differ. They are what [Add free
+extras](sales.md#free-extras) on a sale here opens with: the budget filled in as the percentage of
+the order, capped at the maximum, and changeable for that sale. Below the minimum order the dialog
+says no free extra is due and fills nothing in, but you can still add one by hand — it is a hint, not
+a block. Leave all three empty and the dialog opens empty, as it always has. Every platform has them,
+Facebook's included.
+
 A platform also has **Refresh quick buys after (days)**: how long a quick buy may be up there before
 it has sunk out of sight and wants posting again — a few days on Delcampe, for example. An
 active quick buy up that long is marked on the offers list (see [Quick buys that need

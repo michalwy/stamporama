@@ -6,6 +6,7 @@ import { createOffer, setOfferState } from "../../src/lib/offers";
 import { createTrade } from "../../src/lib/trades";
 import { addTradeGiveLines } from "../../src/lib/trade-lines";
 import { addProposalLots, createProposal, getDirectPlatform } from "../../src/lib/proposals";
+import { PlatformFieldError, updatePlatform } from "../../src/lib/platforms";
 import {
   addSaleCopySet,
   addSaleFreeExtras,
@@ -251,5 +252,86 @@ describe("free extras on a sale (#2408)", () => {
     const listed = result.candidates.find((c) => c.item.id === ids.listed)!;
     assert.equal(listed.value, "4.00");
     assert.equal(listed.converted, true);
+  });
+
+  // #2409: the platform's free-extras settings travel with the candidates, in the sale's currency.
+  it("sends no platform defaults where the platform states none", async () => {
+    const result = await listFreeExtraCandidates(userId, saleId);
+    assert.equal(result.platformDefaults, null);
+  });
+
+  it("stores a platform's free-extras settings and refuses ones that are not positive", async () => {
+    const saved = await updatePlatform(userId, platformId, {
+      name: "Fair",
+      platformCurrency: "EUR",
+      freeExtrasMinimumOrder: "15",
+      freeExtrasBudgetPercent: "7.5",
+      freeExtrasMaximumBudget: "1.20",
+    });
+    assert.equal(saved.freeExtrasMinimumOrder, "15.00");
+    assert.equal(saved.freeExtrasBudgetPercent, "7.5");
+    assert.equal(saved.freeExtrasMaximumBudget, "1.20");
+
+    for (const bad of [
+      { freeExtrasMinimumOrder: "0" },
+      { freeExtrasBudgetPercent: "-1" },
+      { freeExtrasBudgetPercent: "101" },
+      { freeExtrasMaximumBudget: "abc" },
+    ]) {
+      await assert.rejects(
+        updatePlatform(userId, platformId, { name: "Fair", platformCurrency: "EUR", ...bad }),
+        PlatformFieldError
+      );
+    }
+    // The refused writes left the settings as they were.
+    const result = await listFreeExtraCandidates(userId, saleId);
+    assert.deepEqual(result.platformDefaults, {
+      platformName: "Fair",
+      minimumOrder: "15.00",
+      budgetPercent: "7.5",
+      maximumBudget: "1.20",
+      convertedFrom: null,
+    });
+  });
+
+  it("converts the platform's amounts into the sale's currency where the two differ", async () => {
+    const pln = await newSale();
+    await prisma.sale.update({ where: { id: pln }, data: { currency: "PLN", fxRateToBase: "0.25" } });
+    // Seeded, so nothing depends on the ECB: 1 EUR = 4 PLN today.
+    await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+    await prisma.exchangeRate.createMany({
+      data: [
+        { collectionId, fromCurrency: "EUR", toCurrency: "EUR", rate: 1, fetchedAt: new Date() },
+        { collectionId, fromCurrency: "EUR", toCurrency: "PLN", rate: 4, fetchedAt: new Date() },
+      ],
+    });
+    try {
+      const result = await listFreeExtraCandidates(userId, pln);
+      assert.deepEqual(result.platformDefaults, {
+        platformName: "Fair",
+        minimumOrder: "60.00",
+        budgetPercent: "7.5",
+        maximumBudget: "4.80",
+        convertedFrom: "EUR",
+      });
+    } finally {
+      await prisma.exchangeRate.deleteMany({ where: { collectionId } });
+    }
+  });
+
+  it("reads a platform with no currency of its own in the collection's", async () => {
+    await updatePlatform(userId, platformId, {
+      name: "Fair",
+      platformCurrency: null,
+      freeExtrasMaximumBudget: "2.00",
+    });
+    const result = await listFreeExtraCandidates(userId, saleId);
+    assert.deepEqual(result.platformDefaults, {
+      platformName: "Fair",
+      minimumOrder: null,
+      budgetPercent: null,
+      maximumBudget: "2.00",
+      convertedFrom: null,
+    });
   });
 });

@@ -6,6 +6,7 @@ import {
   fromCents,
   orderValueCents,
   parseFreeExtraLimits,
+  prefillFreeExtras,
   proposeFreeExtras,
   rankFreeExtraCandidates,
   toCents,
@@ -131,5 +132,73 @@ describe("freeExtraTotals", () => {
   it("is over nothing before a proposal was made", () => {
     const t = freeExtraTotals([candidate(1, "9.00")], null);
     assert.equal(t.overCount || t.overBudget, false);
+  });
+});
+
+// A platform's free-extras settings (#2409): what the dialog opens with.
+describe("prefillFreeExtras", () => {
+  const rule = (min: string | null, pct: number | null, max: string | null) => ({
+    minimumOrderCents: min == null ? null : toCents(min),
+    budgetPercent: pct,
+    maximumBudgetCents: max == null ? null : toCents(max),
+  });
+
+  it("opens empty for a platform that states nothing", () => {
+    assert.deepEqual(prefillFreeExtras(null, toCents("50.00")), { kind: "none" });
+    assert.deepEqual(prefillFreeExtras(rule(null, null, null), toCents("50.00")), { kind: "none" });
+  });
+
+  it("takes the percentage of the order, rounded down to the cent", () => {
+    assert.deepEqual(prefillFreeExtras(rule(null, 5, null), toCents("33.33")), {
+      kind: "due",
+      budgetCents: 166,
+      capped: false,
+    });
+  });
+
+  it("caps the percentage at the maximum", () => {
+    assert.deepEqual(prefillFreeExtras(rule(null, 10, "3.00"), toCents("50.00")), {
+      kind: "due",
+      budgetCents: 300,
+      capped: true,
+    });
+    assert.deepEqual(prefillFreeExtras(rule(null, 10, "6.00"), toCents("50.00")), {
+      kind: "due",
+      budgetCents: 500,
+      capped: false,
+    });
+  });
+
+  it("with the maximum alone, the maximum is the budget", () => {
+    assert.deepEqual(prefillFreeExtras(rule(null, null, "4.00"), toCents("50.00")), {
+      kind: "due",
+      budgetCents: 400,
+      capped: false,
+    });
+  });
+
+  it("under the minimum order, no free extra is due and no budget is filled in", () => {
+    assert.deepEqual(prefillFreeExtras(rule("40.00", 10, "3.00"), toCents("39.99")), {
+      kind: "below-minimum",
+      minimumOrderCents: 4000,
+    });
+    // At the minimum it is due.
+    assert.equal(prefillFreeExtras(rule("40.00", 10, "3.00"), toCents("40.00")).kind, "due");
+  });
+
+  it("states free extras due with no budget where the platform gives only a minimum", () => {
+    assert.deepEqual(prefillFreeExtras(rule("40.00", null, null), toCents("50.00")), {
+      kind: "due",
+      budgetCents: null,
+      capped: false,
+    });
+  });
+
+  it("fills nothing in where the percentage comes to under a cent", () => {
+    assert.deepEqual(prefillFreeExtras(rule(null, 1, null), toCents("0.50")), {
+      kind: "due",
+      budgetCents: null,
+      capped: false,
+    });
   });
 });
