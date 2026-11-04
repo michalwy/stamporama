@@ -947,17 +947,10 @@ export function TileIdentifyDialog({
           // the two are the two answers to *what are these tiles*, and on the left it stood among
           // setting the pieces aside and throwing them away. A single tile has no run to give.
           // *Identify as a piece* (#2401) beside them for the same reason: a cover or a fragment is a
-          // third answer to the same question, and it is known before the picker opens.
+          // third answer to the same question, and it is known before the picker opens. It comes
+          // **before** the checklist run (#2405), the collector's order.
           beforeAction={
             <>
-              {count > 1 ? (
-                <DialogSecondaryButton
-                  onClick={() => onIdentifyIssueRun(pieces)}
-                  disabled={pending || !canIdentify}
-                >
-                  <Icon name="list" size="sm" /> As the stamps of a checklist…
-                </DialogSecondaryButton>
-              ) : null}
               {count > 1 ? (
                 <Tooltip content="A piece is one piece of paper — tick one tile to identify it as a piece">
                   <DialogSecondaryButton disabled>
@@ -972,6 +965,14 @@ export function TileIdentifyDialog({
                   <Icon name="piece" size="sm" /> Identify as a piece…
                 </DialogSecondaryButton>
               )}
+              {count > 1 ? (
+                <DialogSecondaryButton
+                  onClick={() => onIdentifyIssueRun(pieces)}
+                  disabled={pending || !canIdentify}
+                >
+                  <Icon name="list" size="sm" /> As the stamps of a checklist…
+                </DialogSecondaryButton>
+              ) : null}
             </>
           }
           leading={
