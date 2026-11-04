@@ -1175,7 +1175,7 @@ export function SaleDetailPanel({
               async () => {
                 const { addSaleFreeExtrasAction } = await import("@/app/actions/sales");
                 // This very sale was opened, so a sent one takes them too — the sold sets' rule (#1950).
-                return addSaleFreeExtrasAction(sale.id, itemIds, { toSentSale: true });
+                return addSaleFreeExtrasAction(sale.id, itemIds, { toSentSale: true, collectionId });
               },
               () => setDialog({ kind: "none" })
             )

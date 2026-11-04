@@ -1,4 +1,6 @@
 import { normalizeDecimalInput } from "./decimal-input";
+import { assembleSets, type GeneratorCopy } from "./offer-generator-rules";
+import type { LotChecklist } from "./lot-builder-rules";
 
 // Free extras on a sale (#2408): copies put into the parcel for nothing, on top of what the buyer
 // bought. The sale proposes them and the collector confirms; this module is the pure half — the
@@ -14,6 +16,9 @@ import { normalizeDecimalInput } from "./decimal-input";
 // - The limits are a **count** and a **budget**, either or both; the budget is an amount in the
 //   sale's currency or a percentage of the order's value — the sale's paid lines, without shipping
 //   and without the free extras themselves.
+// - **A free extra never breaks a complete set** (#2422): a whole series may go, and is proposed
+//   before loose copies; a copy goes loose only where its stamp is held more times than the series'
+//   complete sets need.
 //
 // Every figure here is in whole **cents** of the sale's currency, so a budget of 5.00 holds five
 // copies at 1.00 exactly rather than four and a rounding error.
@@ -116,25 +121,133 @@ export function rankFreeExtraCandidates<T extends FreeExtraCandidate>(candidates
   return [...candidates].sort(compareFreeExtraCandidates);
 }
 
+/** A complete set of a series offered as one free extra (#2422): its copies go together or not at
+ *  all. It is worth its copies' values summed, and counts as that many copies. */
+export interface FreeExtraSeriesCandidate {
+  /** Stable within one read: the checklist and the set's lowest copy number. */
+  key: string;
+  copies: readonly FreeExtraCandidate[];
+}
+
+/** A series' value: its copies' values summed. */
+export function seriesValueCents(series: FreeExtraSeriesCandidate): number {
+  return series.copies.reduce((sum, c) => sum + c.valueCents, 0);
+}
+
+/** The order series are proposed in: the lowest value first; at equal value a series with no copy on
+ *  an open offer before one with any; then the fewer copies, then the lowest copy number. */
+export function compareFreeExtraSeries(a: FreeExtraSeriesCandidate, b: FreeExtraSeriesCandidate): number {
+  const value = seriesValueCents(a) - seriesValueCents(b);
+  if (value !== 0) return value;
+  const listedA = a.copies.some((c) => c.listed);
+  const listedB = b.copies.some((c) => c.listed);
+  if (listedA !== listedB) return listedA ? 1 : -1;
+  if (a.copies.length !== b.copies.length) return a.copies.length - b.copies.length;
+  const first = (s: FreeExtraSeriesCandidate) => Math.min(...s.copies.map((c) => c.itemNo));
+  return first(a) - first(b);
+}
+
+/** The series in the proposal's order ({@link compareFreeExtraSeries}), as a new array. */
+export function rankFreeExtraSeries<T extends FreeExtraSeriesCandidate>(series: readonly T[]): T[] {
+  return [...series].sort(compareFreeExtraSeries);
+}
+
 /**
- * The copies proposed: walking the ranked candidates, each one taken while there is room under both
- * limits — no more copies than the count, and a total no higher than the budget. A copy that would
- * go over the budget is passed over; in ranked order every copy after it is worth as much or more,
- * so the walk ends there in practice, but a caller's own order is not trusted to be ranked.
+ * The copies proposed (#2408, #2422). **Whole series first**: walking the ranked series, each one
+ * taken while it fits under both limits — its copies against the count, its summed value against the
+ * budget — and one that does not fit passed over for the next. **Then loose copies**, by the same
+ * walk over what the series left of the limits: each copy taken while there is room, one that would
+ * go over the budget passed over. In ranked order every copy after it is worth as much or more, so
+ * the walk ends there in practice, but a caller's own order is not trusted to be ranked.
  */
 export function proposeFreeExtras(
   ranked: readonly FreeExtraCandidate[],
-  limits: FreeExtraLimits
+  limits: FreeExtraLimits,
+  series: readonly FreeExtraSeriesCandidate[] = []
 ): string[] {
   const picked: string[] = [];
   let total = 0;
+  const fits = (copies: number, valueCents: number) =>
+    (limits.count === null || picked.length + copies <= limits.count) &&
+    (limits.budgetCents === null || total + valueCents <= limits.budgetCents);
+  for (const s of series) {
+    const value = seriesValueCents(s);
+    if (s.copies.length === 0 || !fits(s.copies.length, value)) continue;
+    for (const c of s.copies) picked.push(c.itemId);
+    total += value;
+  }
   for (const c of ranked) {
     if (limits.count !== null && picked.length >= limits.count) break;
-    if (limits.budgetCents !== null && total + c.valueCents > limits.budgetCents) continue;
+    if (!fits(1, c.valueCents)) continue;
     picked.push(c.itemId);
     total += c.valueCents;
   }
   return picked;
+}
+
+// ── Complete sets are never broken (#2422) ─────────────────────────────────────────────────────────
+//
+// Settled with the collector on 2026-11-04: a free extra never breaks a complete set. A series' number
+// of complete sets is the smallest count among its stamps, and a copy may go loose only where its
+// stamp is held more times than that — A×2, B×3, C×2 lets one B go; A×3, B×3, C×3 lets none.
+//
+// *A series* and *a complete set* are what complete-set offers already read (#1287): the offer
+// generator's `assembleSets`, over the Series checklists in precedence order, a set uniform in
+// condition, certificate status and format (no mixing), a variant filling its parent's slot, a
+// checklist of one stamp no series, a multi-stamp copy filling nothing. The pool is the copies the
+// sale may propose at all (`FREE_EXTRA_CANDIDATE_WHERE`, valued or not): a copy on a trade or another
+// sale counts towards no set.
+
+/** A copy of the pool as the set rule reads it. */
+export type FreeExtraPoolCopy = Omit<GeneratorCopy, "catalogSortKey" | "listedStampId">;
+
+/** The pool split: every complete set, and the copies left over once they are counted. */
+export interface FreeExtraPoolSplit {
+  sets: { checklistId: string; itemIds: string[] }[];
+  looseItemIds: string[];
+}
+
+function assemble(pool: readonly FreeExtraPoolCopy[], checklists: readonly LotChecklist[]) {
+  return assembleSets(
+    pool.map((copy) => ({ ...copy, catalogSortKey: null })),
+    checklists
+  );
+}
+
+/** Which of the pool's copies form complete sets, and which are above them and may go loose. */
+export function splitFreeExtraPool(
+  pool: readonly FreeExtraPoolCopy[],
+  checklists: readonly LotChecklist[]
+): FreeExtraPoolSplit {
+  const { sets, singles } = assemble(pool, checklists);
+  return {
+    sets: sets.map((set) => ({ checklistId: set.checklistId!, itemIds: set.copies.map((c) => c.itemId) })),
+    looseItemIds: singles.map((single) => single.copies[0].itemId),
+  };
+}
+
+/**
+ * Whether giving `takenIds` away would break a complete set: the pool would then hold fewer complete
+ * sets than it did, less those the taken copies make whole among themselves. Read off the counts,
+ * not off which copy went into which set, so any copy of a stamp held above its sets passes — the
+ * write does not depend on the dialog having been shown the same copies.
+ */
+export function freeExtrasBreakASet(
+  pool: readonly FreeExtraPoolCopy[],
+  takenIds: readonly string[],
+  checklists: readonly LotChecklist[]
+): boolean {
+  const taken = new Set(takenIds);
+  const before = assemble(pool, checklists).sets.length;
+  const left = assemble(
+    pool.filter((c) => !taken.has(c.itemId)),
+    checklists
+  ).sets.length;
+  const whole = assemble(
+    pool.filter((c) => taken.has(c.itemId)),
+    checklists
+  ).sets.length;
+  return left < before - whole;
 }
 
 /**
