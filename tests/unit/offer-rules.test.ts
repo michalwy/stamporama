@@ -20,6 +20,7 @@ import {
   normalizeListingType,
   priceLabel,
   parseStartingPrice,
+  parseStatedPrice,
   parseOfferEndsAt,
   auctionNeedsResolution,
   pricingReadyFor,
@@ -333,6 +334,23 @@ describe("parseStartingPrice", () => {
 
   it("rejects a negative figure", () => {
     assert.equal(parseStartingPrice("-1").ok, false);
+  });
+});
+
+describe("parseStatedPrice (#2413)", () => {
+  it("gives the asking price as it is stored, blank meaning no price yet", () => {
+    assert.deepEqual(parseStatedPrice("price", "12,5"), { ok: true, value: "12.50" });
+    assert.deepEqual(parseStatedPrice("price", "  "), { ok: true, value: "0.00" });
+  });
+
+  it("gives the starting price as it is stored, blank clearing it", () => {
+    assert.deepEqual(parseStatedPrice("startingPrice", "7"), { ok: true, value: "7.00" });
+    assert.deepEqual(parseStatedPrice("startingPrice", ""), { ok: true, value: null });
+  });
+
+  it("refuses what the save refuses, so nothing is shown that will not be stored", () => {
+    assert.equal(parseStatedPrice("price", "-1").ok, false);
+    assert.equal(parseStatedPrice("startingPrice", "abc").ok, false);
   });
 });
 

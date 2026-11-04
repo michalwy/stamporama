@@ -270,7 +270,9 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
 - **Your price** — the offer's own price, last, with the base-currency equivalent in brackets
   (*≈ 0.22 PLN*) when the offer's currency differs from your collection's. It reads as plain text;
   **click it** to type a new one. On an auction this row is the **Current price** — where the
-  bidding stands.
+  bidding stands. A price you type, or click below, shows as soon as you leave the field, as on
+  Prepare; what follows from it — the ready check, the warnings, the platform card — catches up a
+  moment later. If the save fails, the old price comes back and the error says why.
 
 **Profit over cost** is one figure with its percentage — *−0.02 (−29%)* — green when it is a profit
 and in the warning colour when it is a loss. A figure that does not exist is left out rather than

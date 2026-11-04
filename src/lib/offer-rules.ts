@@ -295,6 +295,18 @@ export function parseStartingPrice(
   return { ok: true, value: roundAmount(n) };
 }
 
+/** What a price field's typed text is stored as (#2413): the asking price, where blank means no price
+ * yet (`0.00`), or the starting price, where blank clears it. One function for the save and for the
+ * offer's screen, which shows the stored figure the moment the field is left rather than after the
+ * save and the re-read — so the two cannot disagree about what was typed. */
+export function parseStatedPrice(
+  field: "price" | "startingPrice",
+  raw: string
+): { ok: true; value: string | null } | { ok: false; message: string } {
+  if (field === "startingPrice") return parseStartingPrice(raw);
+  return raw.trim() ? parsePrice(raw) : { ok: true, value: "0.00" };
+}
+
 /** Normalise a listing URL: trim, drop when blank. Not validated beyond non-empty — collectors
  * paste whatever the platform gives them. */
 export function normalizeUrl(raw: string): string | null {
