@@ -49,6 +49,7 @@ import { assertCollectionOwner } from "@/lib/platform-category";
 import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
 import { sellPhoneOffer, type PhoneOfferSaleInput } from "@/lib/phone-offers";
 import { removeSaleAttachment } from "@/lib/sale-attachments";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
@@ -341,14 +342,18 @@ export async function addSaleCopySetAction(
 export async function addSaleFreeExtrasAction(
   saleId: string,
   itemIds: string[],
-  opts: { toSentSale?: boolean } = {}
+  opts: { toSentSale?: boolean; collectionId?: string } = {}
 ): Promise<AddSaleLinesActionState> {
   const session = await getSession();
   if (itemIds.length === 0) {
     return { status: "error", message: "Tick at least one copy to give away." };
   }
   try {
-    await addSaleFreeExtras(session.user.id, saleId, itemIds, { toSentSale: opts.toSentSale === true });
+    await addSaleFreeExtras(session.user.id, saleId, itemIds, {
+      toSentSale: opts.toSentSale === true,
+      // The series the write keeps whole are the ones the dialog was shown (#2422): the same switch.
+      includeSpecialised: opts.collectionId ? await readIncludeSpecialised(opts.collectionId) : false,
+    });
     return { status: "success", ...(await readSaleHeadline(session.user.id, saleId)) };
   } catch (e) {
     return fail(e, "Failed to add the free extras to the sale.");

@@ -12,8 +12,13 @@ import {
   freeExtraTermsSummary,
   proposeFreeExtras,
   rankFreeExtraCandidates,
+  rankFreeExtraSeries,
+  splitFreeExtraPool,
+  freeExtrasBreakASet,
   toCents,
   type FreeExtraCandidate,
+  type FreeExtraPoolCopy,
+  type FreeExtraSeriesCandidate,
 } from "../../src/lib/free-extra-rules";
 
 // Free extras on a sale (#2408): the limits as typed, the ranking and the proposal.
@@ -326,5 +331,103 @@ describe("freeExtraTermsSummary", () => {
       ),
       null
     );
+  });
+});
+
+// A free extra never breaks a complete set (#2422).
+
+describe("splitFreeExtraPool — the issue's three examples", () => {
+  const series = [{ checklistId: "abc", stampIds: ["A", "B", "C"] }];
+  let n = 0;
+  /** `count` copies of a stamp, numbered in order, in one condition. */
+  function held(stampId: string, count: number, conditionId = "used"): FreeExtraPoolCopy[] {
+    return Array.from({ length: count }, () => {
+      n += 1;
+      return {
+        itemId: `${stampId}${n}`,
+        itemNo: n,
+        stampId,
+        conditionId,
+        certificateStatusId: null,
+        formatId: null,
+        multiStamp: false,
+        variantChain: [stampId],
+      };
+    });
+  }
+  const stampsOf = (ids: readonly string[]) => ids.map((id) => id.replace(/\d+$/, "")).sort();
+
+  it("A×3, B×3, C×3: three complete sets and nothing loose", () => {
+    const split = splitFreeExtraPool([...held("A", 3), ...held("B", 3), ...held("C", 3)], series);
+    assert.equal(split.sets.length, 3);
+    assert.deepEqual(split.looseItemIds, []);
+  });
+
+  it("A×2, B×3, C×2: two complete sets and one B loose", () => {
+    const split = splitFreeExtraPool([...held("A", 2), ...held("B", 3), ...held("C", 2)], series);
+    assert.equal(split.sets.length, 2);
+    assert.deepEqual(stampsOf(split.looseItemIds), ["B"]);
+  });
+
+  it("A×2, B×0, C×1: no complete set, so both A and the C loose", () => {
+    const split = splitFreeExtraPool([...held("A", 2), ...held("C", 1)], series);
+    assert.equal(split.sets.length, 0);
+    assert.deepEqual(stampsOf(split.looseItemIds), ["A", "A", "C"]);
+  });
+
+  it("counts a set only in one condition", () => {
+    const split = splitFreeExtraPool([...held("A", 1), ...held("B", 1), ...held("C", 1, "mint")], series);
+    assert.equal(split.sets.length, 0);
+    assert.equal(split.looseItemIds.length, 3);
+  });
+
+  it("refuses to give away a copy that breaks a set, and allows a whole set or a copy above them", () => {
+    const pool = [...held("A", 2), ...held("B", 3), ...held("C", 2)];
+    const [a1] = pool.filter((c) => c.stampId === "A");
+    const bs = pool.filter((c) => c.stampId === "B");
+    const [c1] = pool.filter((c) => c.stampId === "C");
+    // Any one B is above the two sets, whichever copy it is.
+    for (const b of bs) assert.equal(freeExtrasBreakASet(pool, [b.itemId], series), false);
+    // Two Bs leave one B for two sets.
+    assert.equal(freeExtrasBreakASet(pool, [bs[0].itemId, bs[1].itemId], series), true);
+    assert.equal(freeExtrasBreakASet(pool, [a1.itemId], series), true);
+    // A whole set goes, and with it the B above the sets.
+    assert.equal(freeExtrasBreakASet(pool, [a1.itemId, bs[0].itemId, c1.itemId], series), false);
+    assert.equal(freeExtrasBreakASet(pool, [a1.itemId, bs[0].itemId, bs[1].itemId, c1.itemId], series), false);
+    assert.equal(
+      freeExtrasBreakASet(pool, [a1.itemId, bs[0].itemId, bs[1].itemId, bs[2].itemId, c1.itemId], series),
+      true
+    );
+  });
+});
+
+describe("proposeFreeExtras with whole series", () => {
+  const seriesOf = (key: string, ...copies: FreeExtraCandidate[]): FreeExtraSeriesCandidate => ({ key, copies });
+  const cheap = seriesOf("cheap", candidate(10, "0.20"), candidate(11, "0.30"));
+  const dear = seriesOf("dear", candidate(20, "1.00"), candidate(21, "1.00"), candidate(22, "1.00"));
+  const loose = rankFreeExtraCandidates([candidate(1, "0.10"), candidate(2, "0.40")]);
+
+  it("ranks series by their summed value", () => {
+    assert.deepEqual(
+      rankFreeExtraSeries([dear, cheap]).map((s) => s.key),
+      ["cheap", "dear"]
+    );
+  });
+
+  it("fits whole series first, cheapest first, then fills with loose copies", () => {
+    assert.deepEqual(
+      proposeFreeExtras(loose, { count: null, budgetCents: 390 }, rankFreeExtraSeries([dear, cheap])),
+      ["i10", "i11", "i20", "i21", "i22", "i1"]
+    );
+  });
+
+  it("counts a series as its copies, and passes over one that does not fit", () => {
+    // Three copies allowed: the dear series would make five, so the cheap one and a loose copy go.
+    assert.deepEqual(
+      proposeFreeExtras(loose, { count: 3, budgetCents: null }, rankFreeExtraSeries([cheap, dear])),
+      ["i10", "i11", "i1"]
+    );
+    // A budget under the cheap series' 0.50 leaves only loose copies.
+    assert.deepEqual(proposeFreeExtras(loose, { count: null, budgetCents: 45 }, [cheap]), ["i1"]);
   });
 });

@@ -262,6 +262,36 @@ export async function loadPoolChecklists(
   return [...byChecklist].map(([checklistId, stampIds]) => ({ checklistId, stampIds }));
 }
 
+/**
+ * The checklists the pool can touch, **in precedence order** (#531): issue by issue in catalogue order,
+ * each issue's checklists in the order set on it, a checklist spanning issues last. The offer generator
+ * (#1287) and free extras (#2422) both read complete sets in this order.
+ */
+export async function orderedPoolChecklists(
+  collectionId: string,
+  copies: readonly CoverageCopy[],
+  includeSpecialised: boolean
+): Promise<LotChecklist[]> {
+  const checklists = await loadPoolChecklists(collectionId, copies, includeSpecialised);
+  if (checklists.length === 0) return [];
+  const rows = await prisma.checklist.findMany({
+    where: { id: { in: checklists.map((c) => c.checklistId) }, collectionId },
+    select: { id: true, sortOrder: true, issueId: true, issue: { select: { primaryCatalogSortKey: true } } },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return [...checklists].sort((a, b) => {
+    const ra = byId.get(a.checklistId);
+    const rb = byId.get(b.checklistId);
+    if (!ra?.issueId !== !rb?.issueId) return ra?.issueId ? -1 : 1;
+    return (
+      compareCatalogSortKeys(ra?.issue?.primaryCatalogSortKey ?? null, rb?.issue?.primaryCatalogSortKey ?? null) ||
+      (ra?.issueId ?? "").localeCompare(rb?.issueId ?? "") ||
+      (ra?.sortOrder ?? 0) - (rb?.sortOrder ?? 0) ||
+      a.checklistId.localeCompare(b.checklistId)
+    );
+  });
+}
+
 // ── The pool summary ────────────────────────────────────────────────────────────────────────────
 
 /**

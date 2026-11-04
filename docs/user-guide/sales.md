@@ -167,7 +167,7 @@ extras**, beside **Add copies**, proposes which copies to give away:
 1. Type **Copies** — how many at most — and/or a **Budget**: an amount in the sale's currency, or,
    with **% of order** chosen, a percentage of the **order** (the sale's sold sets, without shipping
    and without free extras; the dialog's footer shows it). Either may be left empty, but not both.
-2. Press **Propose**. The copies are listed **cheapest first** by their catalogue value — never by
+2. Press **Propose**. Whole series come first (see below); then the copies are listed **cheapest first** by their catalogue value — never by
    what you paid — and, at the same value, copies on no offer come before listed ones (a listed
    copy shows its offer's chip). The proposal ticks the cheapest that fit **both** limits: no more copies than the count,
    and a total no higher than the budget. What the buyer bought does not affect the choice.
@@ -180,6 +180,18 @@ extras**, beside **Add copies**, proposes which copies to give away:
 4. Press **Add**. The ticked copies go onto **one line** of the sale, named **Free extras**, priced
    at **0** and marked **Free extra**, with the copies listed under it as on any set. Adding more
    later puts them on that same line rather than opening a second one.
+
+**A free extra never breaks a complete series.** A complete set of a series — every stamp of one of
+your [checklists](collections.md#checklists), all in one condition, certificate status and format, as for
+[complete-set offers](inventory.md#generating-offers-in-bulk) — can go **whole**: it is listed first,
+as one row named after its issue and checklist that ticks all its copies together, worth their
+values summed and counting as that many copies. **Propose** fits whole series first, cheapest first,
+and fills what the limits leave with single copies. A single copy is offered only when its stamp is
+held **more times than the series' complete sets need**: with a series A B C held A×2, B×3, C×2 there
+are two complete sets and one B to spare; held A×3, B×3, C×3, no copy goes alone; held A×2, C×1 (no
+B), there is no complete set and all three may go. Only copies that could be given away at all count
+towards a set, and a set holding a copy with no value is not offered. Adding copies that would break
+a set is refused.
 
 When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
 opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its

@@ -10,12 +10,21 @@ import { type OfferState, isOfferState, OPEN_OFFER_STATES } from "./offer-rules"
 import { OPEN_TRADE_STATUSES } from "./contact-page-rules";
 import { OPEN_PROPOSAL_STATUSES } from "./proposal-rules";
 import {
+  freeExtrasBreakASet,
   fromCents,
   orderValueCents,
   rankFreeExtraCandidates,
+  rankFreeExtraSeries,
+  splitFreeExtraPool,
   toCents,
   type FreeExtraCandidate,
+  type FreeExtraPoolCopy,
+  type FreeExtraSeriesCandidate,
 } from "./free-extra-rules";
+import { orderedPoolChecklists } from "./lot-builder";
+import { loadVariantChains } from "./checklist-variant-rollup";
+import type { LotChecklist } from "./lot-builder-rules";
+import { issueLineTitle } from "./offer-generator-rules";
 import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { offerSetOrdinal, saleLineName, type SaleLineName } from "./sale-line-name";
@@ -142,7 +151,9 @@ export type SaleBlockReason =
   /** A free extra's price (#2408), which is 0 by what it is. */
   | "free-extra"
   /** One copy taken off an offer's set (#2420): that line is the set as listed, removed whole. */
-  | "on-offer";
+  | "on-offer"
+  /** Free extras that would break a complete set (#2422): only whole sets, and copies above them. */
+  | "breaks-set";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1686,13 +1697,31 @@ export interface FreeExtraCandidateRow {
   listed: boolean;
 }
 
+/** A complete set of a series the dialog offers as one free extra (#2422): ticked, all its copies go. */
+export interface FreeExtraSeriesRow {
+  /** Stable within one read — the row's key and the proposal's tie-break. */
+  key: string;
+  checklistId: string;
+  /** `Issue · Checklist`, as a generated set offer is named (#2104). */
+  title: string;
+  /** Its copies' values summed, in the sale's currency, 2 dp. */
+  value: string;
+  /** Its copies, in the checklist's order. */
+  copies: FreeExtraCandidateRow[];
+}
+
 export interface FreeExtraCandidates {
   currency: string;
   /** The order's value: the sale's paid lines, without shipping and free extras, 2 dp. */
   orderValue: string;
-  /** Ranked, at most {@link FREE_EXTRA_CANDIDATE_LIMIT}. */
+  /** Complete sets that may go whole (#2422), ranked — proposed before any loose copy. At most
+   *  {@link FREE_EXTRA_CANDIDATE_LIMIT}. */
+  series: FreeExtraSeriesRow[];
+  /** Loose copies — only those above the complete sets (#2422) — ranked, at most
+   *  {@link FREE_EXTRA_CANDIDATE_LIMIT}. */
   candidates: FreeExtraCandidateRow[];
-  /** Copies that could be given away but have no value, so are never proposed. */
+  /** Copies that could be given away but have no value, so are never proposed — nor is a series
+   *  holding one. */
   unvaluedCount: number;
   /** More candidates exist than were sent. */
   truncated: boolean;
@@ -1726,15 +1755,70 @@ export interface FreeExtraContactTermsData extends FreeExtraTermsData {
   contactName: string;
 }
 
+/** The copies a sale may give away, as the complete-set rule reads them (#2422), with the series
+ *  they could complete in precedence order — the offer generator's read (#1287). */
+async function loadFreeExtraPool(
+  collectionId: string,
+  includeSpecialised: boolean
+): Promise<{
+  rows: { id: string; itemNo: number; listed: boolean }[];
+  pool: FreeExtraPoolCopy[];
+  checklists: LotChecklist[];
+}> {
+  const found = await prisma.item.findMany({
+    where: { collectionId, ...FREE_EXTRA_CANDIDATE_WHERE },
+    select: {
+      id: true,
+      itemNo: true,
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      formatId: true,
+      stampCount: true,
+      _count: {
+        select: {
+          offerSetMemberships: { where: { offerSet: { offer: { state: { in: [...OPEN_OFFER_STATES] } } } } },
+        },
+      },
+    },
+  });
+  const chains = await loadVariantChains(collectionId, [...new Set(found.map((r) => r.stampId))]);
+  const pool: FreeExtraPoolCopy[] = found.map((r) => ({
+    itemId: r.id,
+    itemNo: r.itemNo,
+    stampId: r.stampId,
+    conditionId: r.conditionId,
+    certificateStatusId: r.certificateStatusId,
+    formatId: r.formatId,
+    multiStamp: r.stampCount > 1,
+    variantChain: chains.get(r.stampId) ?? [r.stampId],
+  }));
+  const checklists = await orderedPoolChecklists(
+    collectionId,
+    pool.filter((c) => !c.multiStamp),
+    includeSpecialised
+  );
+  return {
+    rows: found.map((r) => ({ id: r.id, itemNo: r.itemNo, listed: r._count.offerSetMemberships > 0 })),
+    pool,
+    checklists,
+  };
+}
+
 /**
  * The copies a sale may propose as free extras (#2408), ranked — the lowest value first, an unlisted
  * copy before a listed one of the same value. Values are the copies' catalogue valuations, converted
  * from the base currency into the sale's at the sale's frozen rate (or today's, where none was
  * frozen); a copy with no value cannot be ranked or counted against a budget and is left out.
+ *
+ * **No complete set is broken** (#2422): the complete sets come as series, each whole, and only the
+ * copies above them as loose candidates. A set holding an unvalued copy is not offered, and its copies
+ * stay in it. `includeSpecialised` is the screens' switch (#1617) over which checklists count.
  */
 export async function listFreeExtraCandidates(
   ownerId: string,
-  saleId: string
+  saleId: string,
+  includeSpecialised = false
 ): Promise<FreeExtraCandidates> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
@@ -1795,23 +1879,12 @@ export async function listFreeExtraCandidates(
     rate = known;
   }
 
-  const rows = await prisma.item.findMany({
-    where: { collectionId, ...FREE_EXTRA_CANDIDATE_WHERE },
-    select: {
-      id: true,
-      itemNo: true,
-      _count: {
-        select: {
-          offerSetMemberships: { where: { offerSet: { offer: { state: { in: [...OPEN_OFFER_STATES] } } } } },
-        },
-      },
-    },
-  });
+  const { rows, pool, checklists } = await loadFreeExtraPool(collectionId, includeSpecialised);
   const valuations = await valuateItemsByIds(
     collectionId,
     rows.map((r) => r.id)
   );
-  const valued: (FreeExtraCandidate & { converted: boolean })[] = [];
+  const candidateOf = new Map<string, FreeExtraCandidate>();
   let unvaluedCount = 0;
   for (const r of rows) {
     const base = valuations.get(r.id)?.baseAmount ?? null;
@@ -1819,32 +1892,68 @@ export async function listFreeExtraCandidates(
       unvaluedCount += 1;
       continue;
     }
-    valued.push({
+    candidateOf.set(r.id, {
       itemId: r.id,
       itemNo: r.itemNo,
       valueCents: toCents(base / rate),
-      listed: r._count.offerSetMemberships > 0,
-      converted: currency !== baseCurrency,
+      listed: r.listed,
     });
   }
-  const ranked = rankFreeExtraCandidates(valued).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
-  const ids = ranked.map((c) => c.itemId);
-  const { items } =
+  const split = splitFreeExtraPool(pool, checklists);
+  const valuedLoose = split.looseItemIds.flatMap((id) => candidateOf.get(id) ?? []);
+  const valuedSeries: (FreeExtraSeriesCandidate & { checklistId: string })[] = split.sets.flatMap((set) => {
+    const copies = set.itemIds.map((id) => candidateOf.get(id));
+    if (copies.some((c) => c === undefined)) return [];
+    const valued = copies as FreeExtraCandidate[];
+    return [
+      {
+        key: `${set.checklistId}:${Math.min(...valued.map((c) => c.itemNo))}`,
+        checklistId: set.checklistId,
+        copies: valued,
+      },
+    ];
+  });
+  const ranked = rankFreeExtraCandidates(valuedLoose).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
+  const rankedSeries = rankFreeExtraSeries(valuedSeries).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
+  const ids = [...ranked.map((c) => c.itemId), ...rankedSeries.flatMap((s) => s.copies.map((c) => c.itemId))];
+  const [{ items }, checklistRows] = await Promise.all([
     ids.length > 0
-      ? await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })
-      : { items: [] as ItemListItem[] };
+      ? listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })
+      : Promise.resolve({ items: [] as ItemListItem[] }),
+    rankedSeries.length > 0
+      ? prisma.checklist.findMany({
+          where: { id: { in: [...new Set(rankedSeries.map((s) => s.checklistId))] }, collectionId },
+          select: { id: true, name: true, issue: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
+  const checklistById = new Map(checklistRows.map((c) => [c.id, c]));
+  const converted = currency !== baseCurrency;
+  const rowOf = (c: FreeExtraCandidate): FreeExtraCandidateRow[] => {
+    const item = itemById.get(c.itemId);
+    return item ? [{ item, value: fromCents(c.valueCents), converted, listed: c.listed }] : [];
+  };
   return {
     currency,
     orderValue: fromCents(orderValueCents(sale.lines.map((l) => ({ price: String(l.price), freeExtra: l.freeExtra })))),
-    candidates: ranked.flatMap((c) => {
-      const item = itemById.get(c.itemId);
-      return item
-        ? [{ item, value: fromCents(c.valueCents), converted: c.converted, listed: c.listed }]
-        : [];
+    series: rankedSeries.flatMap((s) => {
+      const copies = s.copies.flatMap(rowOf);
+      if (copies.length !== s.copies.length) return [];
+      const checklist = checklistById.get(s.checklistId);
+      return [
+        {
+          key: s.key,
+          checklistId: s.checklistId,
+          title: issueLineTitle(checklist?.issue?.name, checklist?.name),
+          value: fromCents(s.copies.reduce((sum, c) => sum + c.valueCents, 0)),
+          copies,
+        },
+      ];
     }),
+    candidates: ranked.flatMap(rowOf),
     unvaluedCount,
-    truncated: valued.length > ranked.length,
+    truncated: valuedLoose.length > ranked.length || valuedSeries.length > rankedSeries.length,
     platformDefaults,
     contactTerms,
   };
@@ -1854,7 +1963,8 @@ export async function listFreeExtraCandidates(
  * Add the ticked copies to a sale as **free extras** (#2408): onto the sale's one free-extras line
  * (#2420) — on no offer, at price 0, marked `freeExtra` — which is opened the first time and grown on
  * every later addition. Every copy must still be one the sale could propose
- * ({@link FREE_EXTRA_CANDIDATE_WHERE}); the unique on `sale_line_item.itemId` backstops a copy sold
+ * ({@link FREE_EXTRA_CANDIDATE_WHERE}), and together they must break no complete set (#2422,
+ * `freeExtrasBreakASet`); the unique on `sale_line_item.itemId` backstops a copy sold
  * elsewhere between the check and the write. A sale already sent takes them only with `toSentSale`,
  * by `addSaleLines`' rule (#1950). The sale is locked first, so two additions at once still share one
  * line. Returns that line's id.
@@ -1863,7 +1973,7 @@ export async function addSaleFreeExtras(
   ownerId: string,
   saleId: string,
   itemIdsRaw: readonly string[],
-  opts: { toSentSale?: boolean } = {}
+  opts: { toSentSale?: boolean; includeSpecialised?: boolean } = {}
 ): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
   const itemIds = [...new Set(itemIdsRaw)];
@@ -1883,6 +1993,14 @@ export async function addSaleFreeExtras(
     throw new SaleActionBlockedError(
       "not-in-stock",
       "One or more of these copies can no longer be given away — sold, on a trade or a proposal, or no longer for sale or trade. Open the proposal again."
+    );
+  }
+  // A free extra never breaks a complete set (#2422): whole sets, and copies above them, only.
+  const { pool, checklists } = await loadFreeExtraPool(ref.collectionId, opts.includeSpecialised ?? false);
+  if (freeExtrasBreakASet(pool, itemIds, checklists)) {
+    throw new SaleActionBlockedError(
+      "breaks-set",
+      "Giving these copies away would break a complete series. Give the whole series, or only copies held above its complete sets. Open the proposal again."
     );
   }
   return refusingDoubleSale(() =>

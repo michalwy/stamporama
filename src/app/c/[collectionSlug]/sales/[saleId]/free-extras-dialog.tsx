@@ -18,6 +18,7 @@ import type {
   FreeExtraCandidateRow,
   FreeExtraContactTermsData,
   FreeExtraPlatformDefaultsData,
+  FreeExtraSeriesRow,
   FreeExtraTermsData,
 } from "@/lib/sales";
 import {
@@ -33,6 +34,7 @@ import {
   type FreeExtraCandidate,
   type FreeExtraPlatformDefaults,
   type FreeExtraPrefill,
+  type FreeExtraSeriesCandidate,
   type FreeExtraSummary,
   type FreeExtraTermSources,
 } from "@/lib/free-extra-rules";
@@ -62,6 +64,11 @@ import { useFreeExtraCandidates } from "../use-sales-query";
 // What may be proposed, and each copy's value in the sale's currency, are the server's
 // (`listFreeExtraCandidates`): only copies for sale or for trade that have a value, on no open trade
 // or proposal. The write re-checks them.
+//
+// A free extra never breaks a complete set (#2422). The server sends the complete sets apart, each
+// as one row that ticks all of its copies together, and as loose rows only the copies above them;
+// *Propose* fits whole series first, cheapest first, and fills what is left with loose copies. The
+// series rows come first in the list, as they do in the proposal.
 //
 // The sale's platform may state when free extras are due and how generous they are (#2409): the
 // dialog then opens with the platform's budget filled in — its percentage of the order, capped at its
@@ -226,6 +233,18 @@ function asCandidate(row: FreeExtraCandidateRow): FreeExtraCandidate {
   };
 }
 
+function asSeriesCandidate(row: FreeExtraSeriesRow): FreeExtraSeriesCandidate {
+  return { key: row.key, copies: row.copies.map(asCandidate) };
+}
+
+const SERIES_HEADING: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: "0.75rem",
+  padding: "0.5rem 1rem 0.25rem",
+  fontSize: "0.8125rem",
+};
+
 export function FreeExtrasDialog({
   collectionId,
   saleId,
@@ -258,7 +277,14 @@ export function FreeExtrasDialog({
 
   const currency = data?.currency ?? "";
   const rows = useMemo(() => data?.candidates ?? [], [data]);
+  const seriesRows = useMemo(() => data?.series ?? [], [data]);
   const candidates = useMemo(() => rows.map(asCandidate), [rows]);
+  const series = useMemo(() => seriesRows.map(asSeriesCandidate), [seriesRows]);
+  // Every copy that can be ticked, a series' copies included — what the summary sums.
+  const everyCopy = useMemo(
+    () => [...series.flatMap((s) => s.copies), ...candidates],
+    [series, candidates]
+  );
   const orderCents = data ? toCents(data.orderValue) : 0;
   // The platform's terms and the buyer's own (#2416), each field the better for the buyer.
   const combined = useMemo(
@@ -291,7 +317,20 @@ export function FreeExtrasDialog({
       return;
     }
     setLimitsError(undefined);
-    setTicked(new Set(proposeFreeExtras(candidates, parsed.limits)));
+    setTicked(new Set(proposeFreeExtras(candidates, parsed.limits, series)));
+  }
+
+  /** A series goes whole (#2422): its row ticks or unticks every copy of it at once. */
+  function toggleSeries(itemIds: readonly string[]) {
+    setTicked((prev) => {
+      const next = new Set(prev);
+      const all = itemIds.every((id) => next.has(id));
+      for (const id of itemIds) {
+        if (all) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
   }
 
   function toggle(id: string) {
@@ -303,7 +342,7 @@ export function FreeExtrasDialog({
     });
   }
 
-  const tickedCandidates = candidates.filter((c) => ticked.has(c.itemId));
+  const tickedCandidates = everyCopy.filter((c) => ticked.has(c.itemId));
   const summary = freeExtraSummary(
     tickedCandidates,
     readFreeExtraLimits({ count, budget, budgetKind }, orderCents)
@@ -386,7 +425,7 @@ export function FreeExtrasDialog({
               color: "var(--color-text-muted)",
             }}
           >
-            Cheapest first; at the same value, copies on no offer before listed ones.
+            Whole series first, then single copies — cheapest first, copies on no offer before listed ones.
           </span>
         </div>
         {limitsError && (
@@ -400,13 +439,68 @@ export function FreeExtrasDialog({
             <p style={HINT_STYLE}>Loading copies…</p>
           ) : loadError ? (
             <p style={{ ...HINT_STYLE, color: "var(--color-error)" }}>{loadError.message}</p>
-          ) : rows.length === 0 ? (
+          ) : rows.length === 0 && seriesRows.length === 0 ? (
             <p style={HINT_STYLE}>
               No copies to give away. Only copies in stock, for sale or for trade, with a value, and on
-              no open trade or proposal are proposed.
+              no open trade or proposal are proposed — and never one that would break a complete
+              series.
             </p>
           ) : (
-            rows.map((row, i) => {
+            <>
+            {seriesRows.map((row) => {
+              const itemIds = row.copies.map((c) => c.item.id);
+              const checked = itemIds.every((id) => ticked.has(id));
+              return (
+                <div
+                  key={row.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "stretch",
+                    borderBottom: "1px solid var(--color-border)",
+                    background: checked ? "var(--color-accent-soft)" : undefined,
+                  }}
+                >
+                  <CheckCell style={SELECT_STRIP}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSeries(itemIds)}
+                      aria-label={`Give the whole series away: ${row.title}`}
+                      style={{ cursor: "pointer" }}
+                    />
+                  </CheckCell>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={SERIES_HEADING}>
+                      <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{row.title}</span>
+                      <span style={{ color: "var(--color-text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                        Whole series · {row.copies.length} {row.copies.length === 1 ? "copy" : "copies"} ·{" "}
+                        {row.value} {currency}
+                      </span>
+                    </div>
+                    {row.copies.map((copy, i) => {
+                      const item = copy.item;
+                      const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
+                      return (
+                        <InventoryItemRow
+                          key={item.id}
+                          collectionId={collectionId}
+                          item={item}
+                          areas={areas}
+                          locations={locations}
+                          baseCurrency={baseCurrency}
+                          primaryVendorId={primaryVendorId}
+                          vendorMap={vendorMapFor(item.areaId, item.issueId)}
+                          isLast={i === row.copies.length - 1}
+                          readOnly
+                          showCostBasis
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            {rows.map((row, i) => {
               const item = row.item;
               const checked = ticked.has(item.id);
               const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
@@ -444,7 +538,8 @@ export function FreeExtrasDialog({
                   </div>
                 </div>
               );
-            })
+            })}
+            </>
           )}
           {data && (data.unvaluedCount > 0 || data.truncated) && (
             <p style={{ ...HINT_STYLE, padding: "0.75rem 1.5rem" }}>

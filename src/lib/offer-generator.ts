@@ -2,9 +2,8 @@ import "server-only";
 import { prisma } from "./db";
 import { candidateIdsOf } from "./candidate-set-rules";
 import { buildItemFilterWhere, listItemsPaginated, type ItemListFiltersPaginated, type ItemListItem } from "./items";
-import { listableOnPlatformFilters, loadPoolChecklists } from "./lot-builder";
+import { listableOnPlatformFilters, orderedPoolChecklists } from "./lot-builder";
 import { loadVariantChains } from "./checklist-variant-rollup";
-import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { CLOSED_OFFER_STATES, isOfferState, type OfferState } from "./offer-rules";
@@ -178,7 +177,7 @@ async function readGeneratorState(
   }));
 
   const [checklists, members] = await Promise.all([
-    orderedChecklists(
+    orderedPoolChecklists(
       collectionId,
       copies.filter((copy) => !copy.multiStamp),
       includeSpecialised
@@ -211,35 +210,6 @@ async function readGeneratorState(
     targets: input.targets,
   });
   return { platformName: platform.name, askedCopies: askedIds.length, skipped, copies, checklists, offers, plan };
-}
-
-/**
- * The checklists the pool can touch, **in precedence order** (#531): issue by issue in catalogue order,
- * each issue's checklists in the order set on it, a checklist spanning issues last.
- */
-async function orderedChecklists(
-  collectionId: string,
-  copies: readonly GeneratorCopy[],
-  includeSpecialised: boolean
-): Promise<LotChecklist[]> {
-  const checklists = await loadPoolChecklists(collectionId, copies, includeSpecialised);
-  if (checklists.length === 0) return [];
-  const rows = await prisma.checklist.findMany({
-    where: { id: { in: checklists.map((c) => c.checklistId) }, collectionId },
-    select: { id: true, sortOrder: true, issueId: true, issue: { select: { primaryCatalogSortKey: true } } },
-  });
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  return [...checklists].sort((a, b) => {
-    const ra = byId.get(a.checklistId);
-    const rb = byId.get(b.checklistId);
-    if (!ra?.issueId !== !rb?.issueId) return ra?.issueId ? -1 : 1;
-    return (
-      compareCatalogSortKeys(ra?.issue?.primaryCatalogSortKey ?? null, rb?.issue?.primaryCatalogSortKey ?? null) ||
-      (ra?.issueId ?? "").localeCompare(rb?.issueId ?? "") ||
-      (ra?.sortOrder ?? 0) - (rb?.sortOrder ?? 0) ||
-      a.checklistId.localeCompare(b.checklistId)
-    );
-  });
 }
 
 /** The offers a pass may add sets to — on Facebook, only those in `facebookGroupId` (none without one). */
