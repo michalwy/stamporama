@@ -37,7 +37,11 @@ import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { VALUE_MODIFIER_HINT } from "@/app/c/[collectionSlug]/shared/value-modifier-fields";
+import {
+  VALUE_MODIFIER_HINT,
+  ValueModifierDisclosure,
+} from "@/app/c/[collectionSlug]/shared/value-modifier-fields";
+import { valueModifierDraftOf, type ValueModifierDraft } from "@/lib/value-modifier";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { usePlatforms } from "@/app/c/[collectionSlug]/shared/use-platforms";
 import {
@@ -215,6 +219,11 @@ export function InventoryItemFormDialog({
   // The format chosen now (#2359): a format on cover or on piece makes the copy a piece, valued by
   // its method — so its franking and method are asked for as soon as one is picked.
   const [formatChoice, setFormatChoice] = useState(item?.formatId ?? "");
+  // What the value modifier's fields hold (#2404), only so their folded line can name it — the fields
+  // themselves stay uncontrolled, submitted with the form.
+  const [modifierDraft, setModifierDraft] = useState<ValueModifierDraft>(() =>
+    valueModifierDraftOf(item?.valueModifier ?? null)
+  );
   // Last-used condition / location / disposition, remembered globally across every add-copy
   // entry point (#234). Add mode only; edit mode always reflects the item being edited. Computed
   // once at mount so the fields stay stable while the dialog is open.
@@ -757,54 +766,64 @@ export function InventoryItemFormDialog({
               </div>
 
               {/* A catalogue exception on this piece (#2357): its catalog value × (1 + %) + amount,
-                  before the faults' reduction above, with a note saying why. */}
-              <div style={{ ...ROW, gridTemplateColumns: "6.5rem 7.5rem 1fr" }}>
-                <div>
-                  <Tooltip content={VALUE_MODIFIER_HINT} style={{ display: "flex", width: "fit-content" }}>
-                    <GroupLabel htmlFor="copy-value-modifier-percent">Value modifier</GroupLabel>
-                  </Tooltip>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  before the faults' reduction above, with a note saying why. Folded to one line next to
+                  the faults (#2404) — most copies never take one — and open on a copy that has one. */}
+              <ValueModifierDisclosure
+                draft={modifierDraft}
+                currency={null}
+                defaultOpen={item?.valueModifier != null}
+              >
+                <div style={{ ...ROW, gridTemplateColumns: "6.5rem 7.5rem 1fr" }}>
+                  <div>
+                    <Tooltip content={VALUE_MODIFIER_HINT} style={{ display: "flex", width: "fit-content" }}>
+                      <GroupLabel htmlFor="copy-value-modifier-percent">Value modifier</GroupLabel>
+                    </Tooltip>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      <NumericInput
+                        kind="number"
+                        inputMode="text"
+                        id="copy-value-modifier-percent"
+                        name="valueModifierPercent"
+                        placeholder="None"
+                        defaultValue={item?.valueModifier?.percent ?? ""}
+                        onChange={(e) => setModifierDraft((d) => ({ ...d, percent: e.target.value }))}
+                        disabled={isPending}
+                        {...NO_AUTOFILL}
+                        style={{ ...INPUT_STYLE, textAlign: "right" }}
+                      />
+                      <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <GroupLabel htmlFor="copy-value-modifier-amount">Amount</GroupLabel>
                     <NumericInput
-                      kind="number"
+                      kind="amount"
                       inputMode="text"
-                      id="copy-value-modifier-percent"
-                      name="valueModifierPercent"
+                      id="copy-value-modifier-amount"
+                      name="valueModifierAmount"
                       placeholder="None"
-                      defaultValue={item?.valueModifier?.percent ?? ""}
+                      defaultValue={item?.valueModifier?.amount ?? ""}
+                      onChange={(e) => setModifierDraft((d) => ({ ...d, amount: e.target.value }))}
                       disabled={isPending}
                       {...NO_AUTOFILL}
                       style={{ ...INPUT_STYLE, textAlign: "right" }}
                     />
-                    <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                  </div>
+                  <div>
+                    <GroupLabel htmlFor="copy-value-modifier-note">Modifier note</GroupLabel>
+                    <TextInput
+                      id="copy-value-modifier-note"
+                      name="valueModifierNote"
+                      placeholder="e.g. Stempel Danzig +200 %"
+                      defaultValue={item?.valueModifier?.note ?? ""}
+                      onChange={(e) => setModifierDraft((d) => ({ ...d, note: e.target.value }))}
+                      disabled={isPending}
+                      {...NO_AUTOFILL}
+                      style={INPUT_STYLE}
+                    />
                   </div>
                 </div>
-                <div>
-                  <GroupLabel htmlFor="copy-value-modifier-amount">Amount</GroupLabel>
-                  <NumericInput
-                    kind="amount"
-                    inputMode="text"
-                    id="copy-value-modifier-amount"
-                    name="valueModifierAmount"
-                    placeholder="None"
-                    defaultValue={item?.valueModifier?.amount ?? ""}
-                    disabled={isPending}
-                    {...NO_AUTOFILL}
-                    style={{ ...INPUT_STYLE, textAlign: "right" }}
-                  />
-                </div>
-                <div>
-                  <GroupLabel htmlFor="copy-value-modifier-note">Modifier note</GroupLabel>
-                  <TextInput
-                    id="copy-value-modifier-note"
-                    name="valueModifierNote"
-                    placeholder="e.g. Stempel Danzig +200 %"
-                    defaultValue={item?.valueModifier?.note ?? ""}
-                    disabled={isPending}
-                    {...NO_AUTOFILL}
-                    style={INPUT_STYLE}
-                  />
-                </div>
-              </div>
+              </ValueModifierDisclosure>
 
               {/* The collector's own labels on this copy (#1192), saved with the rest of it. The
                   copy's own: nothing comes from the stamp it is linked to. */}

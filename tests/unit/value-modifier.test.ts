@@ -17,6 +17,7 @@ import {
   valueModifierDraftOf,
   valueModifierHint,
   valueModifierLabel,
+  valueModifierSummary,
 } from "../../src/lib/value-modifier";
 
 // A copy's catalogue value adjusted on the copy (#2357): catalogue value × (1 + percent) + amount,
@@ -228,6 +229,12 @@ describe("the words on a modified figure", () => {
       "Catalogue 10.00 EUR, +200 % (Stempel Danzig)"
     );
     assert.equal(valueModifierHint("10.00", "EUR", modifier(null, "5.00")), "Catalogue 10.00 EUR, +5.00 EUR");
+  });
+
+  it("names a set modifier on its folded line, the note after the figures (#2404)", () => {
+    assert.equal(valueModifierSummary(modifier(200, null, "Stempel Danzig"), "EUR"), "+200 % · Stempel Danzig");
+    assert.equal(valueModifierSummary(modifier(null, "5.00"), "PLN"), "+5.00 PLN");
+    assert.equal(valueModifierSummary(modifier(-50, "5.00", "Thin"), null), "−50 % +5.00 · Thin");
   });
 
   it("words the bulk edit's line for one copy and for many", () => {

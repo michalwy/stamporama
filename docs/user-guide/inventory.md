@@ -398,7 +398,10 @@ Catalogs carry exceptions a price grid cannot hold: a surcharge for a particular
 the **Value modifier** row of the copy dialog, under the faults and their reduction — or where the
 value is being worked out: while
 [identifying a scan tile](purchases.md#marking-the-condition-before-identifying), and in a piece's
-[Valuation window](#what-a-piece-carrying-several-stamps-is-worth), beside the value it adjusts:
+[Valuation window](#what-a-piece-carrying-several-stamps-is-worth), beside the value it adjusts.
+Most copies never take one, so everywhere it is **folded to one line**, **▸ Value modifier**: click it
+to open the fields. A modifier that is set is named on that line — *Value modifier +200 % · Stempel
+Danzig* — so it is never hidden, and a copy that has one opens with the fields showing:
 
 - **Value modifier** — a whole percentage, positive or negative, from −100 up;
 - **Amount** — added after the percentage, and may be negative. It is in the **currency of the
@@ -1347,7 +1350,8 @@ click its value), read top to bottom:
 - On a piece whose format has neither kind, the line says so and that the fix is a format of kind *On
   cover* or *On piece* — the method is not what is missing.
 - **Value modifier**, **Amount** and **Modifier note** — the copy's
-  [modifier](#adjusting-a-copys-catalog-value), which you can change right there: the figures below
+  [modifier](#adjusting-a-copys-catalog-value), folded to one line unless the copy has one, which you
+  can change right there: the figures below
   follow what you type at once, and **Save modifier** keeps it. Closing the window with a modifier
   typed and not saved asks first, as it does for prices.
 - Your **modifier** with its note, and the **reduction for faults**, each with the figure it gives,

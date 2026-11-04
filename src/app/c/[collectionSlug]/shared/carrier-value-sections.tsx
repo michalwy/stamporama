@@ -45,7 +45,7 @@ import { PieceStampThumb } from "./piece-stamp-thumb";
 import { StampIdentity } from "./stamp-identity";
 import { useAreaVendorMaps } from "./use-area-vendor-maps";
 import { useDebouncedValue } from "./autocomplete";
-import { ValueModifierFields } from "./value-modifier-fields";
+import { ValueModifierDisclosure, ValueModifierFields } from "./value-modifier-fields";
 
 /**
  * The Valuation window's answer for a **piece** (#2359; ADR-0076) — a cover, a fragment, several
@@ -235,25 +235,33 @@ function PieceValue({
           collectionId={collectionId}
           areas={areas}
           modifierEditor={
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", maxWidth: "36rem" }}>
-              <ValueModifierFields
-                idPrefix="valuation-value-modifier"
-                value={modifierDraft}
-                onChange={(next) => {
-                  setModifierDraft(next);
-                  setModifierError(undefined);
-                }}
-                disabled={savingModifier}
-                inputStyle={MODIFIER_INPUT}
+            // Folded to one line unless the copy has a modifier (#2404), which opens it.
+            <div style={{ maxWidth: "36rem" }}>
+              <ValueModifierDisclosure
+                draft={modifierDraft}
+                currency={value.currency}
+                defaultOpen={savedModifier !== null}
                 error={modifierError ?? (parsedModifier.ok ? undefined : parsedModifier.message)}
-              />
-              {modifierChanged && (
-                <div>
-                  <DialogPrimaryButton type="button" onClick={saveModifier} disabled={savingModifier}>
-                    {savingModifier ? "Saving…" : "Save modifier"}
-                  </DialogPrimaryButton>
-                </div>
-              )}
+              >
+                <ValueModifierFields
+                  idPrefix="valuation-value-modifier"
+                  value={modifierDraft}
+                  onChange={(next) => {
+                    setModifierDraft(next);
+                    setModifierError(undefined);
+                  }}
+                  disabled={savingModifier}
+                  inputStyle={MODIFIER_INPUT}
+                  error={modifierError ?? (parsedModifier.ok ? undefined : parsedModifier.message)}
+                />
+                {modifierChanged && (
+                  <div>
+                    <DialogPrimaryButton type="button" onClick={saveModifier} disabled={savingModifier}>
+                      {savingModifier ? "Saving…" : "Save modifier"}
+                    </DialogPrimaryButton>
+                  </div>
+                )}
+              </ValueModifierDisclosure>
             </div>
           }
         />
