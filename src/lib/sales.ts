@@ -140,7 +140,9 @@ export type SaleBlockReason =
    *  be compared to its order and budget. */
   | "no-rate"
   /** A free extra's price (#2408), which is 0 by what it is. */
-  | "free-extra";
+  | "free-extra"
+  /** One copy taken off an offer's set (#2420): that line is the set as listed, removed whole. */
+  | "on-offer";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1563,9 +1565,10 @@ export async function addSaleCopySet(
 //
 // Copies put into the parcel for nothing, on top of what the buyer bought. The sale proposes them —
 // the cheapest first, an unlisted copy before a listed one of the same value, within a count and a
-// budget (`free-extra-rules.ts`) — and the collector confirms the ticked ones. Each becomes a line of
-// its own on no offer at price 0, marked `freeExtra`: the copy leaves the holdings as on any line and
-// its cost basis counts against the sale's profit. A listed copy given away leaves its offers as any
+// budget (`free-extra-rules.ts`) — and the collector confirms the ticked ones. They all go onto **one
+// line** of the sale (#2420), on no offer at price 0, marked `freeExtra` and named *Free extras*
+// (`sale-line-name.ts`); later additions join it. Each copy leaves the holdings as on any line and its
+// cost basis counts against the sale's profit. A listed copy given away leaves its offers as any
 // copy sold on no offer does (ADR-0013 §8): the derivation flags them.
 
 /** Free-extras terms as stored — a platform's (#2409) or a contact's (#2416). */
@@ -1848,18 +1851,20 @@ export async function listFreeExtraCandidates(
 }
 
 /**
- * Add the ticked copies to a sale as **free extras** (#2408): one line each, on no offer, at price 0,
- * marked `freeExtra`. Every copy must still be one the sale could propose
+ * Add the ticked copies to a sale as **free extras** (#2408): onto the sale's one free-extras line
+ * (#2420) — on no offer, at price 0, marked `freeExtra` — which is opened the first time and grown on
+ * every later addition. Every copy must still be one the sale could propose
  * ({@link FREE_EXTRA_CANDIDATE_WHERE}); the unique on `sale_line_item.itemId` backstops a copy sold
  * elsewhere between the check and the write. A sale already sent takes them only with `toSentSale`,
- * by `addSaleLines`' rule (#1950). Returns the new lines' ids.
+ * by `addSaleLines`' rule (#1950). The sale is locked first, so two additions at once still share one
+ * line. Returns that line's id.
  */
 export async function addSaleFreeExtras(
   ownerId: string,
   saleId: string,
   itemIdsRaw: readonly string[],
   opts: { toSentSale?: boolean } = {}
-): Promise<string[]> {
+): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
   const itemIds = [...new Set(itemIdsRaw)];
   if (itemIds.length === 0) {
@@ -1882,24 +1887,91 @@ export async function addSaleFreeExtras(
   }
   return refusingDoubleSale(() =>
     prisma.$transaction(async (tx) => {
-      const ids: string[] = [];
-      for (const itemId of itemIds) {
-        const line = await tx.saleLine.create({
-          data: {
-            saleId,
-            offerId: null,
-            offerSetId: null,
-            price: "0",
-            freeExtra: true,
-            items: { create: [{ itemId }] },
-          },
-          select: { id: true },
-        });
-        ids.push(line.id);
+      await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${saleId} FOR UPDATE`;
+      // A sale recorded before #2420 may hold several, one copy each: they stay, and the first takes
+      // what is added now.
+      const existing = await tx.saleLine.findFirst({
+        where: { saleId, freeExtra: true },
+        orderBy: { id: "asc" },
+        select: { id: true },
+      });
+      if (existing) {
+        await tx.saleLineItem.createMany({ data: itemIds.map((itemId) => ({ saleLineId: existing.id, itemId })) });
+        return existing.id;
       }
-      return ids;
+      const line = await tx.saleLine.create({
+        data: {
+          saleId,
+          offerId: null,
+          offerSetId: null,
+          price: "0",
+          freeExtra: true,
+          items: { create: itemIds.map((itemId) => ({ itemId })) },
+        },
+        select: { id: true },
+      });
+      return line.id;
     })
   );
+}
+
+/**
+ * Bring a sale's free-extras lines together into one (#2420) — after a merge or a move has put a
+ * second one on it. The first line keeps its id; the others' copies join it with their packed marks,
+ * and the emptied lines go. A sale with one or none is left alone.
+ */
+async function foldFreeExtraLines(tx: DbTransaction, saleId: string): Promise<void> {
+  const lines = await tx.saleLine.findMany({
+    where: { saleId, freeExtra: true },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (lines.length < 2) return;
+  const [keep, ...rest] = lines.map((l) => l.id);
+  await tx.saleLineItem.updateMany({ where: { saleLineId: { in: rest } }, data: { saleLineId: keep } });
+  await tx.saleLine.deleteMany({ where: { id: { in: rest } } });
+}
+
+/**
+ * Take one copy off its sale line (#2420), the copy available again as after any removal. Only a
+ * line on **no offer** takes it — copies picked on the sale (#2021) or its free extras (#2408): an
+ * offer's line is the set as listed, and is removed whole (the collector's answer on 2026-11-04).
+ * The line keeps its price; once its last copy is gone, the line goes too. Returns whether it did.
+ */
+export async function removeSaleLineCopy(
+  ownerId: string,
+  itemId: string
+): Promise<{ lineRemoved: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.saleLineItem.findUnique({
+      where: { itemId },
+      select: {
+        saleLine: {
+          select: {
+            id: true,
+            saleId: true,
+            offerSetId: true,
+            sale: { select: { collection: { select: { ownerId: true } } } },
+          },
+        },
+      },
+    });
+    if (!row || row.saleLine.sale.collection.ownerId !== ownerId) {
+      throw new Error("Sold copy not found or access denied.");
+    }
+    const line = row.saleLine;
+    if (line.offerSetId !== null) {
+      throw new SaleActionBlockedError(
+        "on-offer",
+        "This copy left as part of an offer's set. Remove the whole set from the sale instead."
+      );
+    }
+    await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${line.saleId} FOR UPDATE`;
+    await tx.saleLineItem.delete({ where: { itemId } });
+    const left = await tx.saleLineItem.count({ where: { saleLineId: line.id } });
+    if (left === 0) await tx.saleLine.delete({ where: { id: line.id } });
+    return { lineRemoved: left === 0 };
+  });
 }
 
 /** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which
@@ -2851,7 +2923,8 @@ export interface SaleDetailLine {
   priceBase: string | null;
   /** How many physical copies left on this line (its copies load lazily on the detail screen). */
   copyCount: number;
-  /** A free extra (#2408): one copy given away on no offer at price 0, which is not edited. */
+  /** The sale's free extras (#2408): copies given away on no offer at price 0, all on this one line
+   *  (#2420, named *Free extras*), whose price is not edited. */
   freeExtra: boolean;
   /** The line names a set nobody has chosen yet (#697) — an automatic pick took one of the offer's
    *  interchangeable sets, and *Choose set* is what settles it. */
@@ -3223,6 +3296,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       name: saleLineName({
         setLabel: setLbl,
         setNumbers: labeller.set({ ...labelSet, title: null }),
+        freeExtra: l.freeExtra,
         offer: l.offer && {
           offerNo: l.offer.offerNo,
           title: offerDisplayLabel(l.offer.name, l.offer.sets, labeller),
@@ -3666,6 +3740,8 @@ export async function mergeSales(ownerId: string, input: SaleMergeInput): Promis
       },
     });
     await tx.sale.delete({ where: { id: otherSaleId } });
+    // Both sales' free extras are one line on the remaining sale (#2420).
+    await foldFreeExtraLines(tx, remainingSaleId);
     // The moved lines now read the remaining sale's date (#1898).
     await settleSupplies(
       tx,
@@ -3882,6 +3958,8 @@ async function moveSaleLinesIn(
   }
 
   await tx.saleLine.updateMany({ where: { id: { in: lineIds } }, data: { saleId: to.id } });
+  // Free extras moved onto a sale that has its own join that sale's one line (#2420).
+  await foldFreeExtraLines(tx, to.id);
   return {
     sourceSaleId,
     sourceSaleNo: sourceRow.saleNo,
@@ -3920,6 +3998,9 @@ export interface SaleCopyItem extends ItemListItem {
   saleLineId: string;
   /** The copy is a free extra (#2408) — given away, which the packing list marks. */
   freeExtra: boolean;
+  /** The copy's line names no offer's set (#2021, #2408) — so the copy can be taken off it alone
+   *  (#2420), where an offer's set is removed whole. */
+  onNoOffer: boolean;
 }
 
 /** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) and the offer
@@ -3931,7 +4012,9 @@ async function withPacked(collectionId: string, items: ItemListItem[]): Promise<
     select: {
       itemId: true,
       packed: true,
-      saleLine: { select: { id: true, freeExtra: true, offer: { select: { offerNo: true } } } },
+      saleLine: {
+        select: { id: true, freeExtra: true, offerSetId: true, offer: { select: { offerNo: true } } },
+      },
     },
   });
   const byId = new Map(rows.map((r) => [r.itemId, r]));
@@ -3951,6 +4034,7 @@ async function withPacked(collectionId: string, items: ItemListItem[]): Promise<
       offerNo: row?.saleLine.offer?.offerNo ?? null,
       saleLineId: row?.saleLine.id ?? "",
       freeExtra: row?.saleLine.freeExtra ?? false,
+      onNoOffer: row ? row.saleLine.offerSetId === null : false,
     };
   });
 }

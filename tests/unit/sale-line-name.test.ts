@@ -45,6 +45,12 @@ describe("saleLineName", () => {
     assert.deepEqual(name, { offerNo: null, title: "Chopin pair", numbers: NUMBERS });
   });
 
+  it("names a sale's free-extras line Free extras, its copies' numbers under it (#2420)", () => {
+    const name = saleLineName({ setLabel: NUMBERS, setNumbers: NUMBERS, offer: null, freeExtra: true });
+    assert.deepEqual(name, { offerNo: null, title: "Free extras", numbers: NUMBERS });
+    assert.equal(saleLineHeading(name), "Free extras");
+  });
+
   it("prints no second line when there are no numbers", () => {
     assert.equal(
       saleLineName({ setLabel: "Copy", setNumbers: "", offer: { offerNo: 1, title: "Lot", set: null } }).numbers,

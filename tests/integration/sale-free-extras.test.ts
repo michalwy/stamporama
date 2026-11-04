@@ -15,6 +15,10 @@ import {
   getSaleDetail,
   listFreeExtraCandidates,
   listSaleCopies,
+  mergeSales,
+  moveSaleLines,
+  removeSaleLineCopy,
+  setSaleLineItemPacked,
   updateSaleLinePrice,
   SaleActionBlockedError,
 } from "../../src/lib/sales";
@@ -32,6 +36,11 @@ describe("free extras on a sale (#2408)", () => {
   let platformId: string;
   let saleId: string;
   const ids: Record<string, string> = {};
+  let make: (
+    price: string | null,
+    data: { forSale?: boolean; forTrade?: boolean; inCollection?: boolean },
+    costBasis?: string
+  ) => Promise<string>;
 
   const blocked = (reason: string) => (e: unknown) =>
     e instanceof SaleActionBlockedError && e.reason === reason;
@@ -91,7 +100,7 @@ describe("free extras on a sale (#2408)", () => {
     platformId = (await prisma.platform.create({ data: { collectionId, name: "Fair" } })).id;
 
     let n = 0;
-    const make = async (
+    make = async (
       price: string | null,
       data: { forSale?: boolean; forTrade?: boolean; inCollection?: boolean },
       costBasis?: string
@@ -206,16 +215,15 @@ describe("free extras on a sale (#2408)", () => {
     assert.equal(result.truncated, false);
   });
 
-  it("adds the ticked copies as free extras: one line each, at price 0, the order unchanged", async () => {
-    const lineIds = await addSaleFreeExtras(userId, saleId, [ids.unlisted, ids.forTrade]);
-    assert.equal(lineIds.length, 2);
+  it("adds the ticked copies as free extras: one line named Free extras, at price 0, the order unchanged", async () => {
+    const lineId = await addSaleFreeExtras(userId, saleId, [ids.unlisted, ids.forTrade]);
 
     const sale = (await getSaleDetail(userId, saleId))!;
     const free = sale.lines.filter((l) => l.freeExtra);
-    assert.deepEqual(free.map((l) => [l.price, l.copyCount, l.offerSetId]).sort(), [
-      ["0.00", 1, null],
-      ["0.00", 1, null],
-    ]);
+    assert.deepEqual(
+      free.map((l) => [l.id, l.price, l.copyCount, l.offerSetId, l.name.title]),
+      [[lineId, "0.00", 2, null, "Free extras"]]
+    );
     assert.equal(sale.grossProceeds, "20.00");
     // The free extras' cost counts against the profit: 20 − (5.00 + 0.30 + 0.70).
     assert.equal(sale.profit.cost, "6.00");
@@ -422,5 +430,84 @@ describe("free extras on a sale (#2408)", () => {
     } finally {
       await prisma.exchangeRate.deleteMany({ where: { collectionId } });
     }
+  });
+
+  it("grows the sale's one free-extras line on a later addition (#2420)", async () => {
+    const sale = await newSale();
+    const [a, b, c] = [await make("0.40", { forSale: true }), await make("0.40", { forSale: true }), await make("0.40", { forSale: true })];
+    const first = await addSaleFreeExtras(userId, sale, [a]);
+    await setSaleLineItemPacked(userId, a, true);
+    const second = await addSaleFreeExtras(userId, sale, [b, c]);
+    assert.equal(second, first);
+    const lines = (await getSaleDetail(userId, sale))!.lines;
+    assert.deepEqual(lines.map((l) => [l.freeExtra, l.copyCount]), [[true, 3]]);
+    const copies = await listSaleCopies(userId, sale);
+    assert.deepEqual(
+      copies.map((c) => [c.id, c.saleLineId, c.packed, c.onNoOffer]).sort(),
+      [
+        [a, first, true, true],
+        [b, first, false, true],
+        [c, first, false, true],
+      ].sort()
+    );
+  });
+
+  it("takes one copy off a line on no offer, and the line with its last copy (#2420)", async () => {
+    const sale = await newSale();
+    const [a, b] = [await make("0.40", { forSale: true }), await make("0.40", { forSale: true })];
+    const lineId = await addSaleFreeExtras(userId, sale, [a, b]);
+    assert.deepEqual(await removeSaleLineCopy(userId, a), { lineRemoved: false });
+    let lines = (await getSaleDetail(userId, sale))!.lines;
+    assert.deepEqual(lines.map((l) => [l.id, l.copyCount]), [[lineId, 1]]);
+    // Back in stock, so the sale may propose it again.
+    const candidates = await listFreeExtraCandidates(userId, sale);
+    assert.ok(candidates.candidates.some((c) => c.item.id === a));
+
+    assert.deepEqual(await removeSaleLineCopy(userId, b), { lineRemoved: true });
+    lines = (await getSaleDetail(userId, sale))!.lines;
+    assert.deepEqual(lines, []);
+  });
+
+  it("does not take one copy off an offer's set", async () => {
+    const sale = await newSale();
+    const id = await make("0.40", { forSale: true });
+    const offerId = await createOffer(
+      userId,
+      collectionId,
+      { platformId, url: null, price: "2.00", startingPrice: null, currency: "EUR", listingDate: null },
+      { seedItemIds: [id], seedPerCopy: true }
+    );
+    const offerSetId = (await prisma.offerSet.findFirstOrThrow({ where: { offerId } })).id;
+    await prisma.saleLine.create({
+      data: { saleId: sale, offerId, offerSetId, price: "2.00", items: { create: [{ itemId: id }] } },
+    });
+    await assert.rejects(removeSaleLineCopy(userId, id), blocked("on-offer"));
+  });
+
+  it("keeps one free-extras line when a merge or a move brings a second (#2420)", async () => {
+    const buyer = await createContact(userId, collectionId, { name: `Merge buyer ${ts}`, buyer: true });
+    const [a, b, c] = [await make("0.40", { forSale: true }), await make("0.40", { forSale: true }), await make("0.40", { forSale: true })];
+    const remaining = await newSale(buyer.id);
+    const other = await newSale(buyer.id);
+    const kept = await addSaleFreeExtras(userId, remaining, [a]);
+    await addSaleFreeExtras(userId, other, [b]);
+    await setSaleLineItemPacked(userId, b, true);
+    await mergeSales(userId, {
+      remainingSaleId: remaining,
+      otherSaleId: other,
+      choices: { buyer: "remaining", commission: "remaining", postage: "remaining" },
+    });
+    let lines = (await getSaleDetail(userId, remaining))!.lines;
+    assert.deepEqual(lines.map((l) => [l.id, l.copyCount]), [[kept, 2]]);
+    const packed = await prisma.saleLineItem.findUniqueOrThrow({ where: { itemId: b } });
+    assert.deepEqual([packed.saleLineId, packed.packed], [kept, true]);
+
+    const third = await newSale(buyer.id);
+    const moving = await addSaleFreeExtras(userId, third, [c]);
+    // A paid set stays behind: a move never takes every set of a sale.
+    await addSaleCopySet(userId, third, { itemIds: [await make("0.40", { forSale: true })], price: "1.00" });
+    await moveSaleLines(userId, { sourceSaleId: third, lineIds: [moving], target: { saleId: remaining } });
+    lines = (await getSaleDetail(userId, remaining))!.lines;
+    assert.deepEqual(lines.map((l) => [l.id, l.copyCount]), [[kept, 3]]);
   });
 });

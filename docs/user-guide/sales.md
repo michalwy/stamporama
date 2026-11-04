@@ -177,8 +177,9 @@ extras**, beside **Add copies**, proposes which copies to give away:
    type and tick. A budget given as a percentage shows as the amount it comes to. When your ticks go
    over a limit the summary turns amber and says **over by** how much; that is your call, and
    **Add** stays available. With neither limit given it shows only what is ticked.
-4. Press **Add**. Each ticked copy becomes a line of its own, priced at **0** and marked **Free
-   extra**.
+4. Press **Add**. The ticked copies go onto **one line** of the sale, named **Free extras**, priced
+   at **0** and marked **Free extra**, with the copies listed under it as on any set. Adding more
+   later puts them on that same line rather than opening a second one.
 
 When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
 opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its
@@ -197,11 +198,16 @@ against a budget, so the dialog only says how many such copies there are. Each r
 its right end, as on **Copies**; values in another currency than the sale's are converted at the
 sale's rate to rank them and add them up.
 
-A free extra is an ordinary line in everything else: its copy leaves your holdings, a listed copy
-leaves its offers as a copy sold off no offer does (the offer is flagged **Needs action**), and its
-**cost counts against the sale's profit**. Its price cannot be edited — remove it and add the copy
-as a sold set if it was sold after all. On the [packing list](#printing-a-packing-list) its line is
-marked *(free)*, and the header counts free extras apart from the sold sets.
+The free extras are an ordinary line in everything else: each copy leaves your holdings, a listed
+copy leaves its offers as a copy sold off no offer does (the offer is flagged **Needs action**), and
+their **cost counts against the sale's profit**. The line's price cannot be edited. To give one copy
+back, take it off the line from its row's **⋮ → Take off the sale** (see
+[Taking one copy off](#taking-one-copy-off)) — and add it as a sold set if it was sold after all;
+once the last copy has gone, the line goes too. On the [packing list](#printing-a-packing-list) the
+**Free extras** line shows with its copies, each marked *(free)*, and the header counts the free
+extras' copies apart from the sold sets. Merging two sales, or moving the free extras to a sale that
+has its own, leaves one **Free extras** line. A sale recorded before free extras shared a line keeps
+its one line per copy.
 
 ### Step 3 — amounts
 
@@ -590,6 +596,14 @@ follow from the sets it has left. **It is all or nothing**: if any ticked set is
 sale (moved or removed from another tab), nothing is removed and the dialog names which. Afterwards
 the selection is clear.
 
+#### Taking one copy off
+
+A set [sold off no offer](#selling-copies-that-are-on-no-offer) and the **Free extras** line are only
+the copies on them, so one copy can go alone: its row's **⋮ → Take off the sale** asks once, then the
+copy is available again and the rest of the line stays, at its price. Once the last copy has gone,
+the line goes too. A set sold through an offer is the set as listed and has no such entry — remove the
+whole set from its card's **⋮**.
+
 ### How a sold set is named
 
 **A sold set is named by the offer it sold through** — its number and title, flag included where
@@ -603,6 +617,8 @@ line; hover it to read them in full.
 - The offer's title is read **as it is now**: retitle the offer and the sale follows.
 - A [set sold off no offer](#selling-copies-that-are-on-no-offer), and a set whose offer has since
   been deleted, keeps the set's own name, with no link.
+- The sale's [free extras](#free-extras) are named **Free extras** — the same on every platform —
+  with their copies' numbers under it.
 
 ### Choosing which set left
 

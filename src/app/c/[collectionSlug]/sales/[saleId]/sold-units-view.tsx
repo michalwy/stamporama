@@ -9,6 +9,7 @@ import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleCopyRef, SaleDetailLine } from "@/lib/sales";
 import { saleLineHeading } from "@/lib/sale-line-name";
+import { formatItemNo } from "@/lib/item-number";
 import { describeEstimated, describeLeftOut, explainWithoutCost, type UnitProfit } from "@/lib/sale-profit";
 import { COST_ESTIMATE_STYLE, ESTIMATE_MARK_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { DIRECTION_COLOR } from "@/app/c/[collectionSlug]/shared/figure-direction-color";
@@ -186,6 +187,8 @@ interface CopyCtx {
   packedPending: boolean;
   /** Active packed-status filter (#192): copies are narrowed to it before grouping/rendering. */
   packedFilter: PackedFilter;
+  /** Take one copy off its line (#2420) — offered only on a line on no offer. */
+  onRemoveCopy: (itemId: string, label: string) => void;
 }
 
 interface CopyGroup {
@@ -339,6 +342,34 @@ function CopyRow({ item, ctx, isLast }: { item: SaleCopyItem; ctx: CopyCtx; isLa
           showCostBasis
         />
       </div>
+      {/* One copy off its line (#2420): a line on no offer — copies picked on the sale, its free
+          extras — is only the copies on it, so one can go alone. An offer's set is removed whole,
+          from its card's ⋮. */}
+      {item.onNoOffer && (
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            flexShrink: 0,
+            padding: "0 0.5rem",
+            borderBottom: rowBorder,
+          }}
+        >
+          <RowActionsMenu
+            ariaLabel="Sold copy actions"
+            actions={[
+              {
+                key: "remove-copy",
+                label: "Take off the sale",
+                icon: "remove",
+                danger: true,
+                onSelect: () =>
+                  ctx.onRemoveCopy(item.id, `${formatItemNo(item.itemNo)}${item.stampName ? ` · ${item.stampName}` : ""}`),
+              },
+            ]}
+          />
+        </span>
+      )}
     </div>
   );
 }
@@ -545,6 +576,8 @@ interface SoldUnitsViewProps {
   onMove: (lineIds: string[]) => void;
   /** *Remove* (#2315) for the ticked sold sets in view. */
   onRemoveTicked: (lineIds: string[]) => void;
+  /** *Take off the sale* (#2420) for one copy of a line on no offer. */
+  onRemoveCopy: (itemId: string, label: string) => void;
 }
 
 /** The sold-units list for the packing view (ADR-0012, #166): the same rich, sortable copy
@@ -566,6 +599,7 @@ export function SoldUnitsView({
   onChooseSet,
   onMove,
   onRemoveTicked,
+  onRemoveCopy,
 }: SoldUnitsViewProps) {
   const hydrated = useHydrated();
   const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
@@ -654,6 +688,7 @@ export function SoldUnitsView({
     onTogglePacked,
     packedPending,
     packedFilter,
+    onRemoveCopy,
   };
 
   // Whole-sale copies for the flat / location views — one lazy query, run only when not by-lot.

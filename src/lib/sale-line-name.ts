@@ -5,6 +5,12 @@ import { formatEntityNo } from "./quick-jump";
 // while *#2848 · 🇵🇱 Polska: Zestaw znaczków kasowanych* is the listing the buyer bought. The numbers
 // are not dropped: they move to a muted second line. One rule for the sale's screen and its printed
 // packing list, so the two name a line alike.
+//
+// A sale's free extras (#2420) are one line, and it is named by what it is: **Free extras**, the
+// same fixed words on every platform, with the copies' numbers on the second line as on any set.
+
+/** What a sale's free-extras line is called (#2420) — fixed text, not a template. */
+export const FREE_EXTRAS_LINE_TITLE = "Free extras";
 
 /** The offer a sale line sold through, as the line is named by it. */
 export interface SaleLineOffer {
@@ -24,6 +30,8 @@ export interface SaleLineNameInput {
   setNumbers: string;
   /** Null on a set sold off no offer (#2021), and on one whose offer has since been deleted. */
   offer: SaleLineOffer | null;
+  /** The line holds the sale's free extras (#2408, #2420): named {@link FREE_EXTRAS_LINE_TITLE}. */
+  freeExtra?: boolean;
 }
 
 export interface SaleLineName {
@@ -39,6 +47,9 @@ export interface SaleLineName {
 /** `#2848 · <offer title> — set 2 of 5 · <set's own name>`, the parts as {@link SaleLineName} keeps them. */
 export function saleLineName(line: SaleLineNameInput): SaleLineName {
   const { offer } = line;
+  if (line.freeExtra) {
+    return { offerNo: null, title: FREE_EXTRAS_LINE_TITLE, numbers: secondLine(FREE_EXTRAS_LINE_TITLE, line.setNumbers) };
+  }
   if (!offer) return { offerNo: null, title: line.setLabel, numbers: secondLine(line.setLabel, line.setNumbers) };
   const which = offer.set
     ? ` — set ${offer.set.position} of ${offer.set.count}${offer.set.ownName ? ` · ${offer.set.ownName}` : ""}`
