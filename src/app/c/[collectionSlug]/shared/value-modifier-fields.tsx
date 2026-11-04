@@ -1,8 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { LabelWithError } from "@/app/dialog-shell";
+import { Icon } from "@/app/icons";
 import type { ValueModifier } from "@/lib/valuation";
-import { valueModifierLabel, type ValueModifierDraft } from "@/lib/value-modifier";
+import {
+  parseValueModifierInput,
+  valueModifierLabel,
+  valueModifierSummary,
+  type ValueModifierDraft,
+} from "@/lib/value-modifier";
 import { NO_AUTOFILL } from "./no-autofill";
 import { NumericInput } from "./numeric-input";
 import { TextInput } from "./text-input";
@@ -10,12 +17,90 @@ import { Tooltip } from "./tooltip";
 
 // A copy's value modifier (#2357) where a copy's value is worked out (#2398) — identification and the
 // piece's Valuation window — as the copy's Edit dialog asks it: the same three fields, the same hint,
-// read by the same `parseValueModifierInput`. The Edit dialog keeps its own uncontrolled fields; these
-// are held as text by the surface, which values what is typed before it is saved.
+// read by the same `parseValueModifierInput`, folded behind the same `ValueModifierDisclosure` line
+// (#2404). The Edit dialog keeps its own uncontrolled fields; these are held as text by the surface,
+// which values what is typed before it is saved.
 
 /** The value modifier's hover (#2357) — the Edit dialog's, and every other place that asks it. */
 export const VALUE_MODIFIER_HINT =
   "A catalogue exception this copy carries — a cancellation surcharge, a rare usage. Its catalog value is multiplied by the percentage, then the amount is added (in the catalog's own currency), and only then do faults take their reduction. The note says why, and is shown wherever the modifier is. Leave both figures empty for none.";
+
+/**
+ * The modifier behind one line (#2404): most copies never take one, so its fields stay folded under
+ * *Value modifier* until opened — and a modifier that is set is named on that line, *Value modifier
+ * +200 % · Stempel Danzig*, so it is never hidden. Folded, the fields stay mounted and are only not
+ * drawn, so a surrounding form still submits them and an uncontrolled field keeps what was typed. An
+ * error holds it open: a refusal is never folded away.
+ */
+export function ValueModifierDisclosure({
+  draft,
+  currency,
+  defaultOpen = false,
+  error,
+  children,
+}: {
+  /** What the fields hold now — the line names it once it reads as a modifier. */
+  draft: ValueModifierDraft;
+  /** The currency of the figure the amount adjusts; null where none is known. */
+  currency: string | null;
+  /** Open on arriving — a copy that already has a modifier, in Edit and its Valuation window. */
+  defaultOpen?: boolean;
+  /** Why what is typed is not saved, if it is not. */
+  error?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const shown = open || Boolean(error);
+  const parsed = parseValueModifierInput(draft.percent, draft.amount, draft.note);
+  const summary = !parsed.ok
+    ? "not a valid modifier"
+    : parsed.value
+      ? valueModifierSummary(parsed.value, currency)
+      : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+      <button
+        type="button"
+        aria-expanded={shown}
+        onClick={() => setOpen(!shown)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          width: "fit-content",
+          padding: 0,
+          border: "none",
+          background: "none",
+          font: "inherit",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          textAlign: "left",
+          color: "var(--color-text-secondary)",
+          cursor: "pointer",
+        }}
+      >
+        <span style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
+          <Icon name={shown ? "collapse" : "expand"} size="sm" />
+        </span>
+        <span>Value modifier</span>
+        {summary && (
+          <span
+            style={{
+              fontWeight: 400,
+              color: parsed.ok ? "var(--color-text-primary)" : "var(--color-error)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {summary}
+          </span>
+        )}
+      </button>
+      <div style={shown ? { display: "flex", flexDirection: "column", gap: "0.375rem" } : { display: "none" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /** The three fields, named as the copy form names them so a surrounding form submits them. */
 export function ValueModifierFields({

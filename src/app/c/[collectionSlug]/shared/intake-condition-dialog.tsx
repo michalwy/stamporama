@@ -65,7 +65,7 @@ import {
   usePiecePreview,
   type PiecePreviewSubject,
 } from "./identified-piece-value";
-import { ValueModifierFields, ValueModifierResult } from "./value-modifier-fields";
+import { ValueModifierDisclosure, ValueModifierFields, ValueModifierResult } from "./value-modifier-fields";
 import {
   PieceMissingNote,
   PiecePriceCell,
@@ -1055,6 +1055,30 @@ function IntakeConditionDialog({
       modifier: typedModifier,
     };
   })();
+  // The value modifier (#2398): a catalogue exception read off the piece in hand — a cancellation, a
+  // rare usage — with what it comes to under it. Empty as the step opens; every copy made takes it.
+  // Under the prices it adjusts, folded to one line (#2404) since most copies never take one; a new
+  // copy has none, so it always opens folded.
+  const modifierSection = askFaults ? (
+    <ValueModifierDisclosure
+      draft={modifierDraft}
+      currency={pieceStamps ? (piecePreview?.currency ?? null) : catalogFigure.currency}
+      error={modifierError}
+    >
+      <ValueModifierFields
+        idPrefix="intake-value-modifier"
+        value={modifierDraft}
+        onChange={(next) => {
+          setModifierDraft(next);
+          setModifierError(undefined);
+        }}
+        disabled={isPending}
+        inputStyle={INPUT_STYLE}
+        error={modifierError}
+      />
+      {modifierResult && <ValueModifierResult {...modifierResult} />}
+    </ValueModifierDisclosure>
+  ) : null;
   const count = selection.kind === "checklist" ? selection.requiredCount : 1;
   const summary =
     selection.kind === "checklist" ? (
@@ -1291,6 +1315,8 @@ function IntakeConditionDialog({
                       )}
                     />
                   )}
+                  {/* A piece's modifier, under its price panel and computed value (#2404). */}
+                  {modifierSection && pieceStamps && <div style={{ marginTop: "0.5rem" }}>{modifierSection}</div>}
                   {onEditStamps && selection.kind === "stamp" && (
                     <div style={{ marginTop: "0.375rem" }}>
                       <button
@@ -1564,26 +1590,6 @@ function IntakeConditionDialog({
                   </div>
                 )}
 
-                {/* The value modifier (#2398), beside the faults as on the copy's Edit dialog: a
-                    catalogue exception read off the piece in hand — a cancellation, a rare usage — with
-                    what it comes to under it. Empty as the step opens; every copy made takes it. */}
-                {askFaults && (
-                  <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                    <ValueModifierFields
-                      idPrefix="intake-value-modifier"
-                      value={modifierDraft}
-                      onChange={(next) => {
-                        setModifierDraft(next);
-                        setModifierError(undefined);
-                      }}
-                      disabled={isPending}
-                      inputStyle={INPUT_STYLE}
-                      error={modifierError}
-                    />
-                    {modifierResult && <ValueModifierResult {...modifierResult} />}
-                  </div>
-                )}
-
                 {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
                     Under the row it is keyed on, with only the faults and tags between (#1593, #1640) — a
                     catalogue price belongs to a condition × certificate, and its input keeps that row's
@@ -1618,6 +1624,9 @@ function IntakeConditionDialog({
                     }
                   />
                 )}
+                {/* A loose stamp's modifier, under the prices it adjusts (#2404); a piece's is under its
+                    price panel, above. */}
+                {modifierSection && !pieceStamps && <div style={{ marginTop: "0.75rem" }}>{modifierSection}</div>}
               </>
             }
             right={

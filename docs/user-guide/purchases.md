@@ -1265,7 +1265,7 @@ labelled so, and an unmarked tile opens with **no faults** — never with the la
 belongs to one piece. The field sits straight after condition, certificate and format, with the rest of
 what describes the piece, and before the catalogue value, which is looked up afterwards. **Tags** sit
 beside it on the same row, each taking half, and each grows downwards as you add more; Tab goes from
-*Faults* to *Tags*, then through the value modifier below them to *Catalog value*.
+*Faults* to *Tags*, then to *Catalog value* and the value modifier under it.
 
 - **Several tiles identified as one stamp**: when they are all marked with the same faults, the field
   opens on them and they go on every copy. Otherwise it opens empty, the tiles marked with faults
@@ -1277,11 +1277,14 @@ beside it on the same row, each taking half, and each grows downwards as you add
 - **Identify again** does not ask: it corrects what the copy is, and the copy's faults are changed in
   its own dialog.
 
-**Value modifier in identification.** Under faults and tags, the step asks for the copy's
+**Value modifier in identification.** Under the prices it adjusts — a loose stamp's **Catalog value**
+(or its **Variant prices**), a piece's price panel and **Computed value** — the step offers the copy's
 [value modifier](inventory.md#adjusting-a-copys-catalog-value) — **Value modifier** (a percentage),
 **Amount** and **Modifier note**, the copy dialog's own fields and rules — for a cancellation or usage
-the catalog prices apart, read off the piece in hand. It opens **empty**, never with the last tile's,
-since a modifier belongs to one piece. Once something is typed, a line under the fields says what it
+the catalog prices apart, read off the piece in hand. Most copies never take one, so it is **folded to
+one line**, **▸ Value modifier**, until you click it; once a modifier is typed the line names it
+(*Value modifier +200 % · Stempel Danzig*) even folded. It opens **empty** and folded, never with the
+last tile's, since a modifier belongs to one piece. Once something is typed, a line under the fields says what it
 comes to — *Catalog value 10.00 EUR · +200 % (Stempel Danzig) → 30.00 EUR* — before any reduction for
 faults: on a loose stamp from the figure in **Catalog value** (for a single; a multiple's value is that
 figure times its format's factor, so no line is shown), on a piece from its **Computed value**, which

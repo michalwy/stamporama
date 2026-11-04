@@ -37,6 +37,15 @@ export function valueModifierLabel(
 }
 
 /**
+ * The modifier as its folded line names it (#2404) — the figures, then the note: *+200 % · Stempel
+ * Danzig*, *+5.00 EUR*. The line names only a modifier that is set, so a set one is never hidden.
+ */
+export function valueModifierSummary(modifier: ValueModifier, currency: string | null): string {
+  const label = valueModifierLabel(modifier, currency);
+  return modifier.note ? `${label} · ${modifier.note}` : label;
+}
+
+/**
  * The hint on a modified figure: the catalogue's, then the modifier with its note — *Catalogue
  * 10.00 EUR, +200 % (Stempel Danzig)*. The modified figure itself is what the surface prints.
  */
