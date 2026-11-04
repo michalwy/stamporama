@@ -17,6 +17,9 @@ export type ProposalStatus = "preparing" | "sent" | "sold" | "declined";
 
 export const PROPOSAL_STATUSES: readonly ProposalStatus[] = ["preparing", "sent", "sold", "declined"];
 
+/** The statuses a proposal is still open in — its lots still hold their copies for the buyer. */
+export const OPEN_PROPOSAL_STATUSES: readonly ProposalStatus[] = ["preparing", "sent"];
+
 export const PROPOSAL_STATUS_LABEL: Record<ProposalStatus, string> = {
   preparing: "Preparing",
   sent: "Sent",

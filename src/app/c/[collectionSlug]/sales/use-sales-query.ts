@@ -6,6 +6,7 @@ import type {
   SellableOffer,
   SaleCopyItem,
   SaleLineSetChoice,
+  FreeExtraCandidates,
 } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
 import type { SaleStatus } from "@/lib/sale-status";
@@ -157,6 +158,23 @@ export function useStockCopiesForSale(
       const res = await fetch(`/api/collections/${collectionId}/sales/stock-copies?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;
+    },
+  });
+}
+
+/** The copies a sale may give away as free extras (#2408), ranked — read fresh each time the dialog
+ *  opens, since what is in stock moves under it. */
+export function useFreeExtraCandidates(collectionId: string, saleId: string) {
+  return useQuery<FreeExtraCandidates>({
+    queryKey: ["sales", collectionId, "free-extras", saleId],
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/sales/${saleId}/free-extras`);
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Failed to load copies");
+      return body as FreeExtraCandidates;
     },
   });
 }

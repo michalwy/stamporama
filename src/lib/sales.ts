@@ -6,7 +6,16 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { packedFromPlaces, takeOffLocationTx } from "./location-moves";
 import { getOrFetchRate } from "./exchange-rates";
-import { type OfferState, isOfferState } from "./offer-rules";
+import { type OfferState, isOfferState, OPEN_OFFER_STATES } from "./offer-rules";
+import { OPEN_TRADE_STATUSES } from "./contact-page-rules";
+import { OPEN_PROPOSAL_STATUSES } from "./proposal-rules";
+import {
+  fromCents,
+  orderValueCents,
+  rankFreeExtraCandidates,
+  toCents,
+  type FreeExtraCandidate,
+} from "./free-extra-rules";
 import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { offerSetOrdinal, saleLineName, type SaleLineName } from "./sale-line-name";
@@ -126,7 +135,12 @@ export type SaleBlockReason =
   | "cannot-move"
   /** Ticked sold sets that cannot all be removed at once (#2315): one or more are no longer on the
    *  sale. */
-  | "cannot-remove";
+  | "cannot-remove"
+  /** Free extras (#2408) in a sale currency with no known rate from the base, so copy values cannot
+   *  be compared to its order and budget. */
+  | "no-rate"
+  /** A free extra's price (#2408), which is 0 by what it is. */
+  | "free-extra";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -1545,6 +1559,217 @@ export async function addSaleCopySet(
   });
 }
 
+// ── Free extras (#2408) ─────────────────────────────────────────────────────
+//
+// Copies put into the parcel for nothing, on top of what the buyer bought. The sale proposes them —
+// the cheapest first, an unlisted copy before a listed one of the same value, within a count and a
+// budget (`free-extra-rules.ts`) — and the collector confirms the ticked ones. Each becomes a line of
+// its own on no offer at price 0, marked `freeExtra`: the copy leaves the holdings as on any line and
+// its cost basis counts against the sale's profit. A listed copy given away leaves its offers as any
+// copy sold on no offer does (ADR-0013 §8): the derivation flags them.
+
+/** How many candidates the dialog is sent, cheapest first — far more than a parcel takes. */
+export const FREE_EXTRA_CANDIDATE_LIMIT = 500;
+
+/** `Item` fragment: a copy that may be **proposed** as a free extra. In stock (in hand, not
+ *  disposed of, sold or traded away); kept for sale or for trade — never a copy kept only in the
+ *  collection (the collector's call, 2026-11-04); on no open trade, either side of a suggestion; on
+ *  no open proposal's lot; and in no listing in active bidding, which a bid has already committed. */
+const FREE_EXTRA_CANDIDATE_WHERE: Prisma.ItemWhereInput = {
+  ...IN_STOCK_COPY_WHERE,
+  AND: [
+    { OR: [{ forSale: true }, { forTrade: true }] },
+    { tradeLines: { none: { trade: { status: { in: [...OPEN_TRADE_STATUSES] } } } } },
+    { proposedTradeLines: { none: { trade: { status: { in: [...OPEN_TRADE_STATUSES] } } } } },
+    {
+      offerSetMemberships: {
+        none: {
+          offerSet: {
+            offer: {
+              state: { in: [...OPEN_OFFER_STATES] },
+              OR: [
+                { proposal: { status: { in: [...OPEN_PROPOSAL_STATUSES] } } },
+                { state: "active", inActiveBidding: true },
+              ],
+            },
+          },
+        },
+      },
+    },
+  ],
+};
+
+/** One copy the dialog offers as a free extra, in the proposal's order. */
+export interface FreeExtraCandidateRow {
+  item: ItemListItem;
+  /** Its catalogue value in the sale's currency, 2 dp. */
+  value: string;
+  /** The value was converted into the sale's currency from the collection's base (#2388). */
+  converted: boolean;
+  /** On an open offer somewhere — ranked after an unlisted copy of the same value. */
+  listed: boolean;
+}
+
+export interface FreeExtraCandidates {
+  currency: string;
+  /** The order's value: the sale's paid lines, without shipping and free extras, 2 dp. */
+  orderValue: string;
+  /** Ranked, at most {@link FREE_EXTRA_CANDIDATE_LIMIT}. */
+  candidates: FreeExtraCandidateRow[];
+  /** Copies that could be given away but have no value, so are never proposed. */
+  unvaluedCount: number;
+  /** More candidates exist than were sent. */
+  truncated: boolean;
+}
+
+/**
+ * The copies a sale may propose as free extras (#2408), ranked — the lowest value first, an unlisted
+ * copy before a listed one of the same value. Values are the copies' catalogue valuations, converted
+ * from the base currency into the sale's at the sale's frozen rate (or today's, where none was
+ * frozen); a copy with no value cannot be ranked or counted against a budget and is left out.
+ */
+export async function listFreeExtraCandidates(
+  ownerId: string,
+  saleId: string
+): Promise<FreeExtraCandidates> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collectionId: true,
+      currency: true,
+      fxRateToBase: true,
+      collection: { select: { ownerId: true, baseCurrency: true } },
+      lines: { select: { price: true, freeExtra: true } },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const { collectionId, currency } = sale;
+  const baseCurrency = sale.collection.baseCurrency;
+  let rate = 1;
+  if (currency !== baseCurrency) {
+    const known =
+      sale.fxRateToBase != null
+        ? Number(sale.fxRateToBase)
+        : (await getOrFetchRate(collectionId, currency, baseCurrency)).rate;
+    if (known == null || !(known > 0)) {
+      throw new SaleActionBlockedError(
+        "no-rate",
+        `No exchange rate from ${currency} to ${baseCurrency} is known, so copy values cannot be compared in this sale's currency.`
+      );
+    }
+    rate = known;
+  }
+
+  const rows = await prisma.item.findMany({
+    where: { collectionId, ...FREE_EXTRA_CANDIDATE_WHERE },
+    select: {
+      id: true,
+      itemNo: true,
+      _count: {
+        select: {
+          offerSetMemberships: { where: { offerSet: { offer: { state: { in: [...OPEN_OFFER_STATES] } } } } },
+        },
+      },
+    },
+  });
+  const valuations = await valuateItemsByIds(
+    collectionId,
+    rows.map((r) => r.id)
+  );
+  const valued: (FreeExtraCandidate & { converted: boolean })[] = [];
+  let unvaluedCount = 0;
+  for (const r of rows) {
+    const base = valuations.get(r.id)?.baseAmount ?? null;
+    if (base == null) {
+      unvaluedCount += 1;
+      continue;
+    }
+    valued.push({
+      itemId: r.id,
+      itemNo: r.itemNo,
+      valueCents: toCents(base / rate),
+      listed: r._count.offerSetMemberships > 0,
+      converted: currency !== baseCurrency,
+    });
+  }
+  const ranked = rankFreeExtraCandidates(valued).slice(0, FREE_EXTRA_CANDIDATE_LIMIT);
+  const ids = ranked.map((c) => c.itemId);
+  const { items } =
+    ids.length > 0
+      ? await listItemsPaginated(ownerId, collectionId, { ids, pageSize: ids.length })
+      : { items: [] as ItemListItem[] };
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  return {
+    currency,
+    orderValue: fromCents(orderValueCents(sale.lines.map((l) => ({ price: String(l.price), freeExtra: l.freeExtra })))),
+    candidates: ranked.flatMap((c) => {
+      const item = itemById.get(c.itemId);
+      return item
+        ? [{ item, value: fromCents(c.valueCents), converted: c.converted, listed: c.listed }]
+        : [];
+    }),
+    unvaluedCount,
+    truncated: valued.length > ranked.length,
+  };
+}
+
+/**
+ * Add the ticked copies to a sale as **free extras** (#2408): one line each, on no offer, at price 0,
+ * marked `freeExtra`. Every copy must still be one the sale could propose
+ * ({@link FREE_EXTRA_CANDIDATE_WHERE}); the unique on `sale_line_item.itemId` backstops a copy sold
+ * elsewhere between the check and the write. A sale already sent takes them only with `toSentSale`,
+ * by `addSaleLines`' rule (#1950). Returns the new lines' ids.
+ */
+export async function addSaleFreeExtras(
+  ownerId: string,
+  saleId: string,
+  itemIdsRaw: readonly string[],
+  opts: { toSentSale?: boolean } = {}
+): Promise<string[]> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  const itemIds = [...new Set(itemIdsRaw)];
+  if (itemIds.length === 0) {
+    throw new SaleActionBlockedError("empty", "Tick at least one copy to give away.");
+  }
+  if (isSaleSent(ref.status) && !opts.toSentSale) {
+    throw new SaleActionBlockedError(
+      "sale-sent",
+      "This sale has already been sent. Add to an open sale or start a new one."
+    );
+  }
+  const available = await prisma.item.count({
+    where: { id: { in: itemIds }, collectionId: ref.collectionId, ...FREE_EXTRA_CANDIDATE_WHERE },
+  });
+  if (available !== itemIds.length) {
+    throw new SaleActionBlockedError(
+      "not-in-stock",
+      "One or more of these copies can no longer be given away — sold, on a trade or a proposal, or no longer for sale or trade. Open the proposal again."
+    );
+  }
+  return refusingDoubleSale(() =>
+    prisma.$transaction(async (tx) => {
+      const ids: string[] = [];
+      for (const itemId of itemIds) {
+        const line = await tx.saleLine.create({
+          data: {
+            saleId,
+            offerId: null,
+            offerSetId: null,
+            price: "0",
+            freeExtra: true,
+            items: { create: [{ itemId }] },
+          },
+          select: { id: true },
+        });
+        ids.push(line.id);
+      }
+      return ids;
+    })
+  );
+}
+
 /** Override a sold unit's line sale price in place (#258): the actual amount this set sold for, which
  * can differ from the offer's asking price (e.g. a discount given to the buyer). The override lives
  * only on this sale line — the originating offer's own asking price is never touched. Gross, net, and
@@ -1557,10 +1782,17 @@ export async function updateSaleLinePrice(
 ): Promise<void> {
   const line = await prisma.saleLine.findUnique({
     where: { id: lineId },
-    select: { sale: { select: { collection: { select: { ownerId: true } } } } },
+    select: { freeExtra: true, sale: { select: { collection: { select: { ownerId: true } } } } },
   });
   if (!line || line.sale.collection.ownerId !== ownerId) {
     throw new Error("Sale line not found or access denied.");
+  }
+  // A free extra (#2408) is given away: its price is 0 by what it is, and a price makes it a sale.
+  if (line.freeExtra) {
+    throw new SaleActionBlockedError(
+      "free-extra",
+      "A free extra has no price. Remove it and add the copy as a sold set instead."
+    );
   }
   await prisma.saleLine.update({ where: { id: lineId }, data: { price } });
 }
@@ -2487,6 +2719,8 @@ export interface SaleDetailLine {
   priceBase: string | null;
   /** How many physical copies left on this line (its copies load lazily on the detail screen). */
   copyCount: number;
+  /** A free extra (#2408): one copy given away on no offer at price 0, which is not edited. */
+  freeExtra: boolean;
   /** The line names a set nobody has chosen yet (#697) — an automatic pick took one of the offer's
    *  interchangeable sets, and *Choose set* is what settles it. */
   setChoicePending: boolean;
@@ -2778,6 +3012,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
             },
           },
           price: true,
+          freeExtra: true,
           setChoicePending: true,
           setChosenByBuyerAt: true,
           offerSet: {
@@ -2868,6 +3103,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           ? null
           : (Number(l.price) * Number(sale.fxRateToBase)).toFixed(2),
       copyCount: l.items.length,
+      freeExtra: l.freeExtra,
       setChoicePending: l.setChoicePending,
       setChosenByBuyerAt: l.setChosenByBuyerAt?.toISOString() ?? null,
       itemLabels: l.items.map((li) => labeller.copy(li.item.stamp)),
@@ -3550,6 +3786,8 @@ export interface SaleCopyItem extends ItemListItem {
   /** The sale line (sold set) this copy left on — what the packing list divided by set reads
    *  (#2187). */
   saleLineId: string;
+  /** The copy is a free extra (#2408) — given away, which the packing list marks. */
+  freeExtra: boolean;
 }
 
 /** Merge the per-copy packed flags (keyed by `itemId`, unique in `sale_line_item`) and the offer
@@ -3561,7 +3799,7 @@ async function withPacked(collectionId: string, items: ItemListItem[]): Promise<
     select: {
       itemId: true,
       packed: true,
-      saleLine: { select: { id: true, offer: { select: { offerNo: true } } } },
+      saleLine: { select: { id: true, freeExtra: true, offer: { select: { offerNo: true } } } },
     },
   });
   const byId = new Map(rows.map((r) => [r.itemId, r]));
@@ -3580,6 +3818,7 @@ async function withPacked(collectionId: string, items: ItemListItem[]): Promise<
       packed: row?.packed ?? false,
       offerNo: row?.saleLine.offer?.offerNo ?? null,
       saleLineId: row?.saleLine.id ?? "",
+      freeExtra: row?.saleLine.freeExtra ?? false,
     };
   });
 }

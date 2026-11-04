@@ -159,6 +159,35 @@ as when a copy sells under another listing — see [what a sale changes](#what-a
 The same can be done from **Copies**: tick the copies and choose **Sell…** — see [selling copies
 without an offer](inventory.md#selling-copies-without-an-offer).
 
+### Free extras
+
+A few stamps often go into the parcel for nothing, on top of what the buyer bought. **Add free
+extras**, beside **Add copies**, proposes which copies to give away:
+
+1. Type **Copies** — how many at most — and/or a **Budget**: an amount in the sale's currency, or,
+   with **% of order** chosen, a percentage of the **order** (the sale's sold sets, without shipping
+   and without free extras; the dialog shows it). Either may be left empty, but not both.
+2. Press **Propose**. The copies are listed **cheapest first** by their catalogue value — never by
+   what you paid — and, at the same value, copies on no offer come before listed ones (marked
+   *listed*). The proposal ticks the cheapest that fit **both** limits: no more copies than the count,
+   and a total no higher than the budget. What the buyer bought does not affect the choice.
+3. Untick a proposed copy, or tick another one from the list below it to swap it in. The footer
+   adds up the ticked copies and says when your own ticks go over a limit — that is your call.
+4. Press **Add**. Each ticked copy becomes a line of its own, priced at **0** and marked **Free
+   extra**.
+
+Only copies that could really go are proposed: **in stock** (in hand, not sold, traded away or
+disposed of), marked **for sale** or **for trade** — never a copy kept only in your collection —
+on no open trade or proposal, and with a value. A copy with no value cannot be ranked or counted
+against a budget, so the dialog only says how many such copies there are. Values in another currency
+than the sale's are converted at the sale's rate and shown with *≈*.
+
+A free extra is an ordinary line in everything else: its copy leaves your holdings, a listed copy
+leaves its offers as a copy sold off no offer does (the offer is flagged **Needs action**), and its
+**cost counts against the sale's profit**. Its price cannot be edited — remove it and add the copy
+as a sold set if it was sold after all. On the [packing list](#printing-a-packing-list) its line is
+marked *(free)*, and the header counts free extras apart from the sold sets.
+
 ### Step 3 — amounts
 
 The **Amounts** section shows the proceeds breakdown: the gross of the line prices, the shared

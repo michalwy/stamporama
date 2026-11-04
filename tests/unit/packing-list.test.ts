@@ -353,6 +353,30 @@ describe("buildPackingList over transaction lines", () => {
   });
 });
 
+// ── Free extras (#2408) ───────────────────────────────────────────────────────
+
+describe("buildPackingList with free extras", () => {
+  it("marks a free extra's row and never merges it with a sold copy of the same stamp", () => {
+    const list = buildPackingList(
+      [copy({}), copy({ freeExtra: true }), copy({})],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    const rows = list.groups[0].rows;
+    assert.equal(rows.length, 2);
+    const free = rows.find((r) => r.freeExtra);
+    const sold = rows.find((r) => !r.freeExtra);
+    assert.equal(free?.quantity, 1);
+    assert.equal(sold?.quantity, 2);
+  });
+
+  it("reads a copy without the flag — a trade's give line — as not free", () => {
+    const list = buildPackingList([copy({})], AREAS, LOCATIONS, MAPS);
+    assert.equal(list.groups[0].rows[0].freeExtra, false);
+  });
+});
+
 // ── A sale divided by sold set (#2187) ────────────────────────────────────────
 
 function soldSet(position: number, over: Partial<PackingSet> = {}): PackingSet {
@@ -361,6 +385,7 @@ function soldSet(position: number, over: Partial<PackingSet> = {}): PackingSet {
     title: `Set ${position}`,
     numbers: null,
     onNoOffer: false,
+    freeExtra: false,
     price: "10.00 PLN",
     position,
     ...over,

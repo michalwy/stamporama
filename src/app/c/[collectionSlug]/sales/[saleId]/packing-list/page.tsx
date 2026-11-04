@@ -93,7 +93,8 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         title: saleLineHeading(line.name),
         numbers: line.name.numbers,
         onNoOffer: line.offerSetId === null,
-        price: `${line.price} ${sale.currency}`,
+        freeExtra: line.freeExtra,
+        price: line.freeExtra ? "free" : `${line.price} ${sale.currency}`,
         position: positions.get(line.id) ?? 0,
       },
     ])
@@ -106,6 +107,9 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
     { grouping: "set", locationLabel: "code" }
   );
   const status = saleStatusMeta(sale.status);
+  // Free extras (#2408) are lines, but not sets the buyer bought: the header counts them apart.
+  const freeExtras = sale.lines.filter((l) => l.freeExtra).length;
+  const soldSets = sale.lines.length - freeExtras;
 
   return (
     <Screen cap="sheet" className="print-sheet">
@@ -173,7 +177,9 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           <Meta label="Status" value={status.label} />
           <Meta
             label="Copies"
-            value={`${list.totalCopies} in ${sale.lines.length} sold ${sale.lines.length === 1 ? "set" : "sets"}`}
+            value={`${list.totalCopies} in ${soldSets} sold ${soldSets === 1 ? "set" : "sets"}${
+              freeExtras > 0 ? ` + ${freeExtras} free ${freeExtras === 1 ? "extra" : "extras"}` : ""
+            }`}
           />
           <Meta label="Packed" value={`${list.packedCopies} of ${list.totalCopies}`} />
         </div>

@@ -105,6 +105,8 @@ export interface PackingSet {
   numbers: string | null;
   /** Sold off no offer (#2021) — not merely an offer since deleted, which has no number either. */
   onNoOffer: boolean;
+  /** A free extra (#2408) — given away on top of the order. */
+  freeExtra: boolean;
   /** The line's price as printed (`25.00 PLN`). */
   price: string;
   /** Where the set's section sits on the sheet — the caller's order (see {@link packingSetOrder}). */
@@ -164,6 +166,8 @@ export interface PackingCopy {
   line?: PackingLine | null;
   /** The sold set this copy left in, read by the sheet divided by set. Absent elsewhere. */
   set?: PackingSet | null;
+  /** Given away as a free extra (#2408), which its row says. Absent outside a sale. */
+  freeExtra?: boolean;
 }
 
 export interface PackingListRow {
@@ -211,6 +215,9 @@ export interface PackingListRow {
   quantity: number;
   /** True when every copy behind the row is already ticked at source. */
   packed: boolean;
+  /** The copies behind the row are free extras (#2408) — part of the merge key, so a row is all of
+   *  one or none. */
+  freeExtra: boolean;
   /** The line this row **is**, or null on a per-copy sheet. A row carrying one always stands for a
    * single copy — see {@link PackingLine}. */
   line: PackingLine | null;
@@ -353,6 +360,7 @@ export function buildPackingList(
       copy.certificateStatusId ?? "",
       copy.locationRef ?? "",
       copy.packed ? "1" : "0",
+      copy.freeExtra ? "free" : "",
     ].join("|");
     currency ??= copy.line?.value?.currency ?? null;
     const existing = bucket.rows.get(rowKey);
@@ -383,6 +391,7 @@ export function buildPackingList(
       offerNos: copy.offerNo == null ? [] : [copy.offerNo],
       quantity: 1,
       packed: copy.packed,
+      freeExtra: copy.freeExtra ?? false,
       line: copy.line ?? null,
     });
   }

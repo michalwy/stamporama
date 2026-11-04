@@ -136,7 +136,18 @@ export const PACKING_COLUMN = {
     defaultOn: true,
     nowrap: true,
     strong: true,
-    render: (row) => row.catalog,
+    // A free extra (#2408) is marked where the row is named, so no column choice can drop the mark.
+    render: (row) =>
+      row.freeExtra ? (
+        <>
+          {row.catalog}{" "}
+          <span style={{ fontWeight: 500, fontSize: "0.75em", color: "var(--color-text-secondary)" }}>
+            (free)
+          </span>
+        </>
+      ) : (
+        row.catalog
+      ),
   },
   area: {
     key: "area",
