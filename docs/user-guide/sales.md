@@ -166,25 +166,29 @@ extras**, beside **Add copies**, proposes which copies to give away:
 
 1. Type **Copies** — how many at most — and/or a **Budget**: an amount in the sale's currency, or,
    with **% of order** chosen, a percentage of the **order** (the sale's sold sets, without shipping
-   and without free extras; the dialog shows it). Either may be left empty, but not both.
+   and without free extras; the dialog's footer shows it). Either may be left empty, but not both.
 2. Press **Propose**. The copies are listed **cheapest first** by their catalogue value — never by
    what you paid — and, at the same value, copies on no offer come before listed ones (a listed
    copy shows its offer's chip). The proposal ticks the cheapest that fit **both** limits: no more copies than the count,
    and a total no higher than the budget. What the buyer bought does not affect the choice.
-3. Untick a proposed copy, or tick another one from the list below it to swap it in. The footer
-   adds up the ticked copies and says when your own ticks go over a limit — that is your call.
+3. Untick a proposed copy, or tick another one from the list below it to swap it in. The summary
+   in the footer, beside **Add**, shows the **budget**, what is **ticked** and what is **left** —
+   for the value, and for the number of copies when you gave one — and follows the fields as you
+   type and tick. A budget given as a percentage shows as the amount it comes to. When your ticks go
+   over a limit the summary turns amber and says **over by** how much; that is your call, and
+   **Add** stays available. With neither limit given it shows only what is ticked.
 4. Press **Add**. Each ticked copy becomes a line of its own, priced at **0** and marked **Free
    extra**.
 
 When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
 opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its
-maximum, and a line in the header says what the platform's rule is. Change it freely for this sale;
-nothing is ticked until you press **Propose**. When the order is under the platform's minimum, the
-header says **no free extra is due** and nothing is filled in — you can still add one by hand.
+maximum, and a line beside the summary says what the platform's rule is. Change it freely for this
+sale; nothing is ticked until you press **Propose**. When the order is under the platform's minimum,
+that line says **no free extra is due** and nothing is filled in — you can still add one by hand.
 
 When the sale's buyer has [free extras of their own](contacts.md#free-extras), each value is the one
 better for the buyer — the lower minimum order, the higher percentage, the higher maximum — of theirs
-and the platform's, and the header line marks the ones that came from the buyer with their name.
+and the platform's, and the rule's line marks the ones that came from the buyer with their name.
 
 Only copies that could really go are proposed: **in stock** (in hand, not sold, traded away or
 disposed of), marked **for sale** or **for trade** — never a copy kept only in your collection —

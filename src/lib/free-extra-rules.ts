@@ -137,18 +137,52 @@ export function proposeFreeExtras(
   return picked;
 }
 
-/** What the ticked copies come to, against the limits — the dialog's footer. Ticking past a limit by
- *  hand is the collector's call; the footer says so rather than refusing it. */
-export function freeExtraTotals(
+/**
+ * The limits as they stand in the fields, for the summary (#2419): each field read on its own, and
+ * one left blank — or not yet a figure {@link parseFreeExtraLimits} would take — is no limit. Never
+ * refuses: the summary follows what is being typed, and *Propose* is where a bad figure is named.
+ */
+export function readFreeExtraLimits(raw: FreeExtraLimitsRaw, orderCents: number): FreeExtraLimits {
+  const count = parseFreeExtraLimits({ ...raw, budget: "" }, orderCents);
+  const budget = parseFreeExtraLimits({ ...raw, count: "" }, orderCents);
+  return {
+    count: count.ok ? count.limits.count : null,
+    budgetCents: budget.ok ? budget.limits.budgetCents : null,
+  };
+}
+
+/** One limit against the ticked copies: what it allows, and what is left of it — below 0 when the
+ *  ticks go over, by that much. */
+export interface FreeExtraLimitStanding {
+  limit: number;
+  left: number;
+  over: boolean;
+}
+
+/** What the ticked copies come to, against the limits — the dialog's summary (#2419). */
+export interface FreeExtraSummary {
+  count: number;
+  valueCents: number;
+  /** Null where no count is given. */
+  countLimit: FreeExtraLimitStanding | null;
+  /** In cents; null where no budget is given. */
+  budget: FreeExtraLimitStanding | null;
+}
+
+/** The ticked copies summed and set against the limits. Ticking past a limit by hand is the
+ *  collector's call: the summary says by how much, and nothing refuses it. */
+export function freeExtraSummary(
   ticked: readonly FreeExtraCandidate[],
-  limits: FreeExtraLimits | null
-): { count: number; valueCents: number; overCount: boolean; overBudget: boolean } {
+  limits: FreeExtraLimits
+): FreeExtraSummary {
   const valueCents = ticked.reduce((sum, c) => sum + c.valueCents, 0);
+  const standing = (limit: number | null, used: number): FreeExtraLimitStanding | null =>
+    limit == null ? null : { limit, left: limit - used, over: used > limit };
   return {
     count: ticked.length,
     valueCents,
-    overCount: limits?.count != null && ticked.length > limits.count,
-    overBudget: limits?.budgetCents != null && valueCents > limits.budgetCents,
+    countLimit: standing(limits.count, ticked.length),
+    budget: standing(limits.budgetCents, valueCents),
   };
 }
 

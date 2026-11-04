@@ -2,7 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   compareFreeExtraCandidates,
-  freeExtraTotals,
+  freeExtraSummary,
+  readFreeExtraLimits,
   fromCents,
   orderValueCents,
   parseFreeExtraLimits,
@@ -124,16 +125,59 @@ describe("proposeFreeExtras", () => {
   });
 });
 
-describe("freeExtraTotals", () => {
-  it("sums the ticked copies and says which limit they go over", () => {
-    const t = freeExtraTotals([candidate(1, "1.00"), candidate(2, "1.50")], { count: 1, budgetCents: 300 });
-    assert.deepEqual(t, { count: 2, valueCents: 250, overCount: true, overBudget: false });
-    assert.equal(fromCents(t.valueCents), "2.50");
+// The summary (#2419): budget, ticked and left, side by side, read off the fields as typed.
+describe("readFreeExtraLimits", () => {
+  it("reads each field on its own, a percentage taken of the order", () => {
+    assert.deepEqual(readFreeExtraLimits({ count: "3", budget: "10", budgetKind: "percent" }, 4555), {
+      count: 3,
+      budgetCents: 455,
+    });
   });
 
-  it("is over nothing before a proposal was made", () => {
-    const t = freeExtraTotals([candidate(1, "9.00")], null);
-    assert.equal(t.overCount || t.overBudget, false);
+  it("takes a blank or unfinished field as no limit, and keeps the other", () => {
+    assert.deepEqual(readFreeExtraLimits({ count: "", budget: "2,50", budgetKind: "amount" }, 0), {
+      count: null,
+      budgetCents: 250,
+    });
+    assert.deepEqual(readFreeExtraLimits({ count: "4", budget: "0", budgetKind: "amount" }, 1000), {
+      count: 4,
+      budgetCents: null,
+    });
+    assert.deepEqual(readFreeExtraLimits({ count: "", budget: "", budgetKind: "amount" }, 1000), {
+      count: null,
+      budgetCents: null,
+    });
+  });
+});
+
+describe("freeExtraSummary", () => {
+  it("sets the ticked copies against each limit, with what is left", () => {
+    const s = freeExtraSummary([candidate(1, "1.00"), candidate(2, "1.50")], { count: 5, budgetCents: 300 });
+    assert.deepEqual(s, {
+      count: 2,
+      valueCents: 250,
+      countLimit: { limit: 5, left: 3, over: false },
+      budget: { limit: 300, left: 50, over: false },
+    });
+  });
+
+  it("says by how much the ticks go over a limit", () => {
+    const s = freeExtraSummary([candidate(1, "1.00"), candidate(2, "1.50")], { count: 1, budgetCents: 200 });
+    assert.deepEqual(s.countLimit, { limit: 1, left: -1, over: true });
+    assert.deepEqual(s.budget, { limit: 200, left: -50, over: true });
+    assert.equal(fromCents(-s.budget!.left), "0.50");
+  });
+
+  it("is exactly at a limit without going over it", () => {
+    const s = freeExtraSummary([candidate(1, "3.00")], { count: 1, budgetCents: 300 });
+    assert.equal(s.countLimit?.over, false);
+    assert.equal(s.budget?.over, false);
+    assert.equal(s.budget?.left, 0);
+  });
+
+  it("with neither limit given, only sums the ticked copies", () => {
+    const s = freeExtraSummary([candidate(1, "9.00")], { count: null, budgetCents: null });
+    assert.deepEqual(s, { count: 1, valueCents: 900, countLimit: null, budget: null });
   });
 });
 
