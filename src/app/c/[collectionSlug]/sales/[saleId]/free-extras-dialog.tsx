@@ -10,6 +10,7 @@ import {
   DialogSecondaryButton,
 } from "@/app/dialog-shell";
 import { baseBtn } from "@/app/button-style";
+import { DIALOG_FOOTER_ACTIONS, DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
 import { formControl } from "@/app/control-style";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -21,17 +22,18 @@ import type {
 } from "@/lib/sales";
 import {
   combineFreeExtraTerms,
-  freeExtraTotals,
+  freeExtraSummary,
   fromCents,
   parseFreeExtraLimits,
   prefillFreeExtras,
   proposeFreeExtras,
+  readFreeExtraLimits,
   toCents,
   type FreeExtraBudgetKind,
   type FreeExtraCandidate,
-  type FreeExtraLimits,
   type FreeExtraPlatformDefaults,
   type FreeExtraPrefill,
+  type FreeExtraSummary,
   type FreeExtraTermSources,
 } from "@/lib/free-extra-rules";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -49,7 +51,13 @@ import { useFreeExtraCandidates } from "../use-sales-query";
 // percentage of the order — and *Propose* ticks the cheapest candidates that fit both
 // (`proposeFreeExtras`). The list is every candidate in the proposal's order, so the proposed copies
 // sit at the top and the next ones under them: a swap is unticking one and ticking another. Ticking
-// past a limit by hand is the collector's call, and the footer says so rather than refusing it.
+// past a limit by hand is the collector's call: the summary turns amber and says by how much, and
+// *Add* stays open.
+//
+// The summary (#2419) is one place, in the footer beside *Add*, holding the order, the platform's or
+// buyer's rule, and the budget, ticked and left — of the value, and of the count when one is given.
+// It reads the fields as they stand (`readFreeExtraLimits`), so a budget filled in from the platform
+// shows before anything is proposed and a figure typed since counts at once.
 //
 // What may be proposed, and each copy's value in the sale's currency, are the server's
 // (`listFreeExtraCandidates`): only copies for sale or for trade that have a value, on no open trade
@@ -140,6 +148,75 @@ function describeFreeExtraRule(
   return `Free extras ${where}: ${parts.join(", ")}.`;
 }
 
+const SUMMARY_CELL: React.CSSProperties = { padding: "0.0625rem 0 0.0625rem 1rem", textAlign: "right", whiteSpace: "nowrap" };
+const SUMMARY_HEAD: React.CSSProperties = { ...SUMMARY_CELL, fontSize: "0.6875rem", fontWeight: 500, color: "var(--color-text-muted)" };
+
+/**
+ * Budget, ticked and left side by side (#2419): a row for the value, and one for the count of copies.
+ * A limit not given leaves its row with the ticked figure alone; with neither given, the summary is
+ * only the ticked count and value. Over a limit, the row and the box turn amber and *left* says by
+ * how much — a warning, never a block.
+ */
+function FreeExtrasSummary({ summary, currency }: { summary: FreeExtraSummary; currency: string }) {
+  const money = (cents: number) => `${fromCents(cents)} ${currency}`.trim();
+  const copies = (n: number) => `${n} ${n === 1 ? "copy" : "copies"}`;
+  if (!summary.budget && !summary.countLimit) {
+    return (
+      <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+        Ticked: {copies(summary.count)} · {money(summary.valueCents)}
+      </span>
+    );
+  }
+  const anyOver = Boolean(summary.budget?.over || summary.countLimit?.over);
+  const rows = [
+    { label: "Value", ticked: money(summary.valueCents), standing: summary.budget, show: money },
+    { label: "Copies", ticked: String(summary.count), standing: summary.countLimit, show: String },
+  ];
+  return (
+    <table
+      aria-label="Free extras against the budget"
+      style={{
+        borderCollapse: "separate",
+        fontSize: "0.8125rem",
+        fontVariantNumeric: "tabular-nums",
+        padding: "0.25rem 0.75rem 0.25rem 0",
+        borderRadius: "0.375rem",
+        border: `1px solid ${anyOver ? "var(--color-warning-border)" : "var(--color-border)"}`,
+        background: anyOver ? "var(--color-warning-soft)" : undefined,
+        borderSpacing: 0,
+      }}
+    >
+      <thead>
+        <tr>
+          <th style={SUMMARY_HEAD} />
+          <th style={SUMMARY_HEAD}>Budget</th>
+          <th style={SUMMARY_HEAD}>Ticked</th>
+          <th style={SUMMARY_HEAD}>Left</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ label, ticked, standing, show }) => (
+          <tr
+            key={label}
+            style={{ color: standing?.over ? "var(--color-warning)" : "var(--color-text-secondary)" }}
+          >
+            <th scope="row" style={{ ...SUMMARY_HEAD, textAlign: "left", paddingLeft: "0.75rem" }}>
+              {label}
+            </th>
+            <td style={{ ...SUMMARY_CELL, color: standing ? undefined : "var(--color-text-muted)" }}>
+              {standing ? show(standing.limit) : "any"}
+            </td>
+            <td style={SUMMARY_CELL}>{ticked}</td>
+            <td style={{ ...SUMMARY_CELL, fontWeight: standing?.over ? 600 : undefined }}>
+              {standing ? (standing.over ? `over by ${show(-standing.left)}` : show(standing.left)) : ""}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function asCandidate(row: FreeExtraCandidateRow): FreeExtraCandidate {
   return {
     itemId: row.item.id,
@@ -176,8 +253,6 @@ export function FreeExtrasDialog({
   const [count, setCount] = useState("");
   const [budget, setBudget] = useState("");
   const [budgetKind, setBudgetKind] = useState<FreeExtraBudgetKind>("amount");
-  // The limits the current ticks were proposed under — what the footer measures against.
-  const [limits, setLimits] = useState<FreeExtraLimits | null>(null);
   const [limitsError, setLimitsError] = useState<string | undefined>();
   const [ticked, setTicked] = useState<Set<string>>(new Set());
 
@@ -216,7 +291,6 @@ export function FreeExtrasDialog({
       return;
     }
     setLimitsError(undefined);
-    setLimits(parsed.limits);
     setTicked(new Set(proposeFreeExtras(candidates, parsed.limits)));
   }
 
@@ -229,18 +303,13 @@ export function FreeExtrasDialog({
     });
   }
 
-  const totals = freeExtraTotals(
-    candidates.filter((c) => ticked.has(c.itemId)),
-    limits
+  const tickedCandidates = candidates.filter((c) => ticked.has(c.itemId));
+  const summary = freeExtraSummary(
+    tickedCandidates,
+    readFreeExtraLimits({ count, budget, budgetKind }, orderCents)
   );
-  const tickedIds = candidates.filter((c) => ticked.has(c.itemId)).map((c) => c.itemId);
+  const tickedIds = tickedCandidates.map((c) => c.itemId);
   const canSubmit = !isPending && tickedIds.length > 0;
-  const over = [
-    totals.overCount && limits?.count != null ? `more than ${limits.count} copies` : null,
-    totals.overBudget && limits?.budgetCents != null
-      ? `over the budget of ${fromCents(limits.budgetCents)} ${currency}`
-      : null,
-  ].filter(Boolean);
 
   if (typeof document === "undefined") return null;
 
@@ -309,33 +378,6 @@ export function FreeExtrasDialog({
               Propose
             </button>
           </form>
-          {data && (
-            <Tooltip content="The order is the sale's sold sets — without shipping and without free extras. A percentage budget is taken of it.">
-              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", paddingBottom: "0.5rem" }}>
-                Order: {data.orderValue} {currency}
-              </span>
-            </Tooltip>
-          )}
-          {data && combined && prefill && prefill.kind !== "none" && (
-            <span
-              style={{
-                fontSize: "0.8125rem",
-                paddingBottom: "0.5rem",
-                color:
-                  prefill.kind === "below-minimum"
-                    ? "var(--color-warning)"
-                    : "var(--color-text-secondary)",
-              }}
-            >
-              {describeFreeExtraRule(
-                data.platformDefaults,
-                data.contactTerms,
-                combined.sources,
-                prefill,
-                currency
-              )}
-            </span>
-          )}
           <span
             style={{
               marginLeft: "auto",
@@ -416,19 +458,40 @@ export function FreeExtrasDialog({
       </div>
 
       <DialogFooter error={error}>
-        <DialogSecondaryButton onClick={onClose} disabled={isPending}>
-          Cancel
-        </DialogSecondaryButton>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span
-            style={{
-              fontSize: "0.8125rem",
-              color: over.length > 0 ? "var(--color-warning)" : "var(--color-text-secondary)",
-            }}
-          >
-            {totals.count} {totals.count === 1 ? "copy" : "copies"} · {fromCents(totals.valueCents)} {currency}
-            {over.length > 0 ? ` — ${over.join(" and ")}` : ""}
-          </span>
+        <div style={{ ...DIALOG_FOOTER_LEADING, display: "flex", alignItems: "center", gap: "1.5rem" }}>
+          {data && (
+            <div style={{ flex: "1 1 0", display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.8125rem" }}>
+              <Tooltip content="The order is the sale's sold sets — without shipping and without free extras. A percentage budget is taken of it.">
+                <span style={{ color: "var(--color-text-secondary)", alignSelf: "flex-start" }}>
+                  Order: {data.orderValue} {currency}
+                </span>
+              </Tooltip>
+              {combined && prefill && prefill.kind !== "none" && (
+                <span
+                  style={{
+                    color:
+                      prefill.kind === "below-minimum"
+                        ? "var(--color-warning)"
+                        : "var(--color-text-secondary)",
+                  }}
+                >
+                  {describeFreeExtraRule(
+                    data.platformDefaults,
+                    data.contactTerms,
+                    combined.sources,
+                    prefill,
+                    currency
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+          <FreeExtrasSummary summary={summary} currency={currency} />
+        </div>
+        <div style={DIALOG_FOOTER_ACTIONS}>
+          <DialogSecondaryButton onClick={onClose} disabled={isPending}>
+            Cancel
+          </DialogSecondaryButton>
           <DialogPrimaryButton type="button" onClick={() => onSubmit(tickedIds)} disabled={!canSubmit}>
             {isPending
               ? "Adding…"
