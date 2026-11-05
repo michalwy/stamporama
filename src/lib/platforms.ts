@@ -9,6 +9,7 @@ import { isOfferListingType } from "./offer-rules";
 import { normalizeMarketCode } from "./market-anchoring";
 import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 import {
+  COLNECT_PLATFORM_MODULE,
   DIRECT_PLATFORM_MODULE,
   FACEBOOK_PLATFORM_MODULE,
   MODULE_PLATFORMS,
@@ -127,6 +128,9 @@ export interface PlatformData {
    * on the offer's screen, one button away. Unlike {@link defaultStartingPrice} it is kept whatever
    * {@link defaultListingType} says — a floor is a floor on whatever figure the seller states. */
   minimumPrice: string | null;
+  /** How far under a Colnect market price a click on it prices an offer (#2454), a 2-dp string in
+   * the platform's currency, or null for the default step (0.01). Colnect platform only. */
+  marketPriceStep: string | null;
   /** How a new offer on this platform is sold by default (#449) — `fixed` | `auction`, or null when
    * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
    * {@link defaultStartingPrice} is, never seeded-and-followed. */
@@ -197,6 +201,7 @@ const PLATFORM_SELECT = {
   titleLanguage: true,
   defaultStartingPrice: true,
   minimumPrice: true,
+  marketPriceStep: true,
   defaultListingType: true,
   refreshQuickBuysAfterDays: true,
   freeExtrasMinimumOrder: true,
@@ -227,12 +232,14 @@ type PlatformRow = Omit<
   PlatformData,
   | "defaultStartingPrice"
   | "minimumPrice"
+  | "marketPriceStep"
   | "freeExtrasMinimumOrder"
   | "freeExtrasBudgetPercent"
   | "freeExtrasMaximumBudget"
 > & {
   defaultStartingPrice: Decimal | null;
   minimumPrice: Decimal | null;
+  marketPriceStep: Decimal | null;
   freeExtrasMinimumOrder: Decimal | null;
   freeExtrasBudgetPercent: Decimal | null;
   freeExtrasMaximumBudget: Decimal | null;
@@ -245,6 +252,7 @@ function toPlatformData(row: PlatformRow): PlatformData {
     ...row,
     defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
     minimumPrice: row.minimumPrice?.toFixed(2) ?? null,
+    marketPriceStep: row.marketPriceStep?.toFixed(2) ?? null,
     freeExtrasMinimumOrder: row.freeExtrasMinimumOrder?.toFixed(2) ?? null,
     // As typed — 5, not 5.00 — since a percentage is read as a number, not as money.
     freeExtrasBudgetPercent:
@@ -315,6 +323,9 @@ export interface PlatformInput {
   defaultStartingPrice?: string | null;
   /** The floor this platform lists at (#731), or null when it states none. */
   minimumPrice?: string | null;
+  /** The Colnect market price step (#2454), or null for the default. Written on the Colnect platform
+   *  only; a figure that is not positive is refused. */
+  marketPriceStep?: string | null;
   /** How a new offer on this platform is sold by default (#449), or null for "no preference". */
   defaultListingType?: string | null;
   /** The quick-buy refresh threshold (#1718) in days, or null for never. Out of range is refused. */
@@ -455,6 +466,12 @@ async function settingsData(
     // The platform's floor (#731). Written on its own rather than through the helper above,
     // because it is the one per-listing figure that does not depend on the listing type.
     minimumPrice: amount(data.minimumPrice),
+    // The step a click on a Colnect market price undercuts by (#2454) — Colnect's alone, so it is
+    // written empty on every other platform, #1957's rule.
+    marketPriceStep:
+      platformModule === COLNECT_PLATFORM_MODULE
+        ? freeExtrasFigure(data.marketPriceStep, "market price step")
+        : null,
     refreshQuickBuysAfterDays: uses("refreshQuickBuysAfterDays")
       ? refreshDays(data.refreshQuickBuysAfterDays)
       : null,

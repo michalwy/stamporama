@@ -5818,6 +5818,12 @@ model Offer {
   // Unique per collection, the guard `delcampeItemId` above carries and for its reason: two offers
   // claiming one live listing is a contradiction, not a state to be reconciled later.
   colnectSaleId        String?
+  // The last read of Colnect's marketplace for this offer's stamps (#2454): every condition's
+  // listings, already in the offer's currency, the collector's own set apart — the shape is
+  // `StoredColnectMarketRead` (`colnect-market-rules.ts`). Kept until the next read replaces it. Not a
+  // price observation and counted towards nothing: Market stays the realised-price figure (#1633).
+  colnectMarketRead    Json?
+  colnectMarketReadAt  DateTime?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Platform   @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
@@ -7535,6 +7541,10 @@ model Platform {
   // No currency column of its own, for #553's reason: the platform already locks one (#196), and a
   // second one could only ever disagree with it. Nullable — no floor is the normal case.
   minimumPrice Decimal? @db.Decimal(10, 2)
+  // How far under a Colnect market price a click on it prices an offer (#2454), in
+  // `platformCurrency`. Read on the Colnect platform only; null is the default step, 0.01. Positive
+  // when set (CHECK `platform_market_price_step_positive`).
+  marketPriceStep Decimal? @db.Decimal(10, 2)
   // How a new offer on this platform is sold by default (#449): `fixed` | `auction`. Read at
   // creation exactly as `defaultOfferPrice` is and then owned by the offer, which is what makes a
   // platform one only ever auctions on cost nothing per listing. Nullable — null is "no preference",

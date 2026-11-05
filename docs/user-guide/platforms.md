@@ -142,6 +142,10 @@ It is shown even when the suggested price beside it is already higher, since a c
 to list at the floor is exactly what it was added for. Leave it empty for platforms with no such
 figure.
 
+The **Colnect** platform also has a **Market price step**: how far under a Colnect price a click on
+the offer's [Colnect market card](offers.md#checking-the-colnect-market) puts the offer's price, in
+the platform's currency. Left blank it is 0.01.
+
 A platform's **Free extras** say when a sale here is due a few stamps for nothing on top of the order,
 and how generous they are — all three optional:
 

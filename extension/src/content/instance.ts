@@ -50,7 +50,19 @@ import {
   parseCloseHandoff,
   type CloseHandoffState,
 } from "../core/colnect-close-handoff";
+import {
+  describeMarketRead,
+  MARKET_ELEMENT_ID,
+  MARKET_MESSAGE_ATTRIBUTE,
+  MARKET_REQUEST_ATTRIBUTE,
+  MARKET_RESULT_ATTRIBUTE,
+  MARKET_STATE_ATTRIBUTE,
+  parseMarketHandoff,
+  type MarketHandoffState,
+} from "../core/colnect-market-handoff";
 import type {
+  ColnectMarketRequest,
+  ColnectMarketResponse,
   ColnectApplyProgressNotice,
   ColnectCloseRequest,
   ColnectCloseResponse,
@@ -402,6 +414,61 @@ async function pumpClose(): Promise<void> {
   else reportClose(handoff.requestId, "error", res.error);
 }
 
+// ── The Colnect market handoff (#2454) ───────────────────────────────────────
+// The close's two motions on a seventh node. A read of a few pages and one answer: `running`, then the
+// read itself on `data-market-result` for the page to record — this script records nothing.
+
+const marketsHandled = new Set<string>();
+let lastMarketPayload: string | null = null;
+
+function marketElement(): HTMLElement | null {
+  return document.getElementById(MARKET_ELEMENT_ID);
+}
+
+function reportMarket(requestId: string, state: MarketHandoffState, message: string, result?: string): void {
+  const el = marketElement();
+  if (!el) return; // the collector navigated on; the card keeps its last read
+  // The result goes on before the state, so a page that reacts to `done` finds the read already there.
+  if (result !== undefined) el.setAttribute(MARKET_RESULT_ATTRIBUTE, result);
+  else el.removeAttribute(MARKET_RESULT_ATTRIBUTE);
+  el.setAttribute(MARKET_REQUEST_ATTRIBUTE, requestId);
+  el.setAttribute(MARKET_STATE_ATTRIBUTE, state);
+  el.setAttribute(MARKET_MESSAGE_ATTRIBUTE, message);
+}
+
+async function pumpMarket(): Promise<void> {
+  const el = marketElement();
+  if (!el) return;
+  const raw = el.textContent;
+  if (raw === lastMarketPayload) return;
+  lastMarketPayload = raw;
+  const handoff = parseMarketHandoff(raw);
+  if (!handoff || marketsHandled.has(handoff.requestId)) return;
+  marketsHandled.add(handoff.requestId);
+
+  reportMarket(handoff.requestId, "running", "Reading Colnect's market…");
+
+  let res: ColnectMarketResponse;
+  try {
+    res = (await chrome.runtime.sendMessage({
+      type: "colnect-market",
+      task: handoff.task,
+      requestId: handoff.requestId,
+    } satisfies ColnectMarketRequest)) as ColnectMarketResponse;
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    reportMarket(
+      handoff.requestId,
+      "error",
+      `The Assistant could not be reached from this page (${why}). Reload this page and try again.`
+    );
+    return;
+  }
+  if (res.ok) {
+    reportMarket(handoff.requestId, "done", describeMarketRead(res.read), JSON.stringify(res.read));
+  } else reportMarket(handoff.requestId, "error", res.error);
+}
+
 /**
  * Whether this page is still following `requestId` — which is what decides who activates the offer
  * (#412).
@@ -489,6 +556,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
   void pumpApply();
   void pumpExport();
   void pumpClose();
+  void pumpMarket();
 
   // The elements are written by a click inside a client-rendered screen, so they appear (and are
   // rewritten for the next offer) long after load. Watching the whole document is the cheap, obvious
@@ -512,6 +580,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
       void pumpApply();
       void pumpExport();
       void pumpClose();
+      void pumpMarket();
     });
   }).observe(document.documentElement, {
     childList: true,

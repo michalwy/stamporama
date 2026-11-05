@@ -58,6 +58,7 @@ import { OfferFacebookCard } from "./offer-facebook-card";
 import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { OfferPriceTable } from "./offer-price-table";
+import { OfferColnectMarketCard } from "./offer-colnect-market-card";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
@@ -290,6 +291,8 @@ export function OfferDetailPanel({
   // The Assistant handoff (#414), exactly as the bulk workspace drives it (#407): the hidden node
   // is this page's own, and the extension answers on it.
   const assistantPresent = useAssistantPresence();
+  // A Colnect market read was kept (#2454): the card is drawn from the offer's own read.
+  const onMarketRecorded = useCallback(() => invalidateAll(collectionId), [invalidateAll, collectionId]);
   // Submitting the filled form is what takes this offer live (#412) — the header then shows a
   // different state, a listing date and a URL, so the screen is re-read exactly as it is after its
   // own Activate. The report strip stays: it is the record of what just happened.
@@ -1613,6 +1616,21 @@ export function OfferDetailPanel({
           kit={offer.facebook}
           onChanged={() => invalidateAll(collectionId)}
           onRepost={canRepost ? () => setReposting(true) : undefined}
+        />
+      )}
+
+      {/* What Colnect's market asks for this offer's stamps, per condition (#2454) — the Colnect
+          platform's own card, in the slot the other platforms' cards take. Null (and so absent) on
+          every offer that is not on Colnect. */}
+      {offer.colnectMarket && (
+        <OfferColnectMarketCard
+          collectionId={collectionId}
+          offerId={offerId}
+          market={offer.colnectMarket}
+          assistantPresent={assistantPresent}
+          editable={editable}
+          onApply={(amount) => patch(askingPriceField, amount)}
+          onRecorded={onMarketRecorded}
         />
       )}
 

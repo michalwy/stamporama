@@ -57,6 +57,7 @@ import { forgetLinkTab, getLinkTab, linkTabFinished, rememberLinkTab } from "./l
 import { resumeColnectApply, runColnectApply } from "./colnect-apply";
 import { runColnectExport } from "./colnect-export";
 import { runColnectClose } from "./colnect-close";
+import { runColnectMarket } from "./colnect-market";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
@@ -485,6 +486,15 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // Colnect has, because the page withdraws the offer on exactly that answer.
   if (msg?.type === "colnect-close") {
     runColnectClose(msg.task)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    return true;
+  }
+
+  // "Read Colnect's market for this offer's stamps" (#2454) — a read of a few pages, answered in this
+  // message once it is done; the page records it.
+  if (msg?.type === "colnect-market") {
+    runColnectMarket(msg.task)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     return true;

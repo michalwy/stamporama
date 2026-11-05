@@ -1508,6 +1508,55 @@ reference you consult rarely. Click its heading either way — the heading count
 listing you are only skimming does not pay for the list. The two states are remembered separately, so
 collapsing it on a live listing does not shut it on the one you are building next.
 
+## Checking the Colnect market
+
+The Items card's **Market** link opens one condition of one stamp at a time. An offer on **Colnect**
+also carries a **Colnect market** card, under the description, which reads them all for you: press
+**Check Colnect market** and the [Assistant](assistant.md#reading-the-colnect-market) reads every
+condition's listings of the offer's stamps on Colnect, in your own Colnect session, and the card shows
+where they sit. Nothing is read on its own — only when you press the button.
+
+Each condition is one row, and each row is a **strip of dots**: one dot per listing, on a price axis.
+A solid line marks the **lowest** price and a dashed one the **median**, and beside the strip are the
+lowest price, the median and how many offers there are. That tells a lone 0.01 among prices around
+1 € apart from a stamp that most sellers really do offer at 0.01. The axis is logarithmic — 0.01 and
+10 € fit on one strip — and it is the same for every row of the read, with a few round figures under
+it, so one condition can be compared with another at a glance.
+
+- **The rows are your conditions.** Each is named by the condition of yours that is
+  [mapped](collections.md#colnect-condition-mapping) to that Colnect grade, with Colnect's grade
+  beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
+  offer's copies are in is the **highlighted** row.
+- **A condition nobody is selling in** says *no offers*, with an empty strip. If no condition has any,
+  the card says so.
+- **Your own Colnect listings are left out** of the strips and counted apart (*+1 yours*), so the
+  offer never undercuts itself. A listing counts as yours when it is sold by the Colnect account the
+  Assistant read with, or when one of your offers records its sale code.
+- **Lots are left out too.** A listing of several stamps has one price for all of them, so it says
+  nothing about this one; the card says how many it left out.
+- **Prices are in the offer's currency.** Colnect shows every price in your own Colnect currency and
+  converts the ones its sellers list in another; a price converted — by Colnect, or by Stamporama at
+  the rate it already holds — has a dashed rim, and hovering it says what the seller asked.
+- **Hover a dot** to see its price and the seller's note about the piece, where they wrote one.
+
+**Click a price to price the offer just under it.** A dot uses that listing's price, the **lowest**
+and **median** figures use theirs, and the offer's price becomes that price less the
+[market price step](platforms.md#the-platforms-settings) of the Colnect platform — 0.01 unless you
+set another. The price shows at once, exactly as a typed one does. Whether a price is absurd, in
+either direction, is yours to judge: the card filters nothing and suggests nothing. On a sold or
+withdrawn offer the prices are not links.
+
+An offer listed under several Colnect items — a lot of different stamps — gets one block per item,
+named by its catalogue number, all on the one axis. A stamp whose variant you have not identified is
+read under the [variant it is listed under](#a-stamp-whose-variant-you-havent-identified).
+
+The card shows when the read was taken, and **Refresh** reads again and replaces it. The read stays
+with the offer until then. It is only a picture of what is being asked: it is not a recorded price
+and does not change the **Market** figure, which stays what copies actually sold for.
+
+Without the Assistant in this browser the button is greyed out and says so, as every Assistant
+action does; with no stamp of the offer linked to Colnect yet, it says that instead.
+
 ## Building a bulk lot
 
 Selling a hundred stamps as one job lot is an ordinary offer — the copies are catalogued and valued

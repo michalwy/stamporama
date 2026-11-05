@@ -570,6 +570,19 @@ Several listings can be closed — or updated — from the **offers list** too, 
 ticked ones together; the Assistant takes them one after another. See
 [Updating and closing from the offers list](offers.md#updating-and-closing-from-the-offers-list).
 
+## Reading the Colnect market
+
+An offer on Colnect has a [Colnect market card](offers.md#checking-the-colnect-market), and its
+**Check Colnect market** button asks the Assistant to read what Colnect's marketplace asks for the
+offer's stamps — every condition, every page of listings, cheapest first. It does so from a Colnect
+tab it finds open (or opens in the background), in your own Colnect session, the way
+[closing a listing](#closing-a-colnect-listing) does, one page a second. It only reads: nothing on
+Colnect is clicked, changed or posted, and nothing is read until you press the button.
+
+The listings go back to the offer's screen, which keeps them and draws the strips. If Colnect shows
+something other than its market list — you are signed out, its protection page is in the way — the
+card says the read failed and keeps the last one, rather than claiming nobody is selling the stamp.
+
 ## Clickable Stamporama links
 
 If you put the [`{offerUrl}` token](contacts.md) in a platform's **private note** template, your

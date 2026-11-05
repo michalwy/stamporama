@@ -139,8 +139,11 @@ describe("the schema this rule was reasoned about", () => {
     // read by `album-ornament-svg.ts` into numbers and `#rrggbb` colours.
     // `facebookPostSnapshot`: a published Facebook post's template and figures (#1800), which must
     // come back byte for byte as they were posted — so it is left alone like the others.
+    // `colnectMarketRead`: the last Colnect market read (#2454), figures and grades plus the sellers'
+    // notes — which `parseColnectMarketReadInput` has already collapsed and trimmed before it is kept.
     assert.deepEqual(found, [
       "allegroCategoryParameters",
+      "colnectMarketRead",
       "drawing",
       "drawing",
       "facebookPostSnapshot",

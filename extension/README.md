@@ -416,6 +416,26 @@ confirms in Stamporama.
   lands on the node as `closed` or `error`. The page withdraws the offer on `closed`; the extension
   never touches the offer.
 
+### Reading the Colnect market (#2454)
+
+A **read**, and the second thing after the list export that the Assistant fetches from Colnect rather
+than drives. An offer on Colnect's **Check Colnect market** writes a `MarketTask` (`offerId`,
+`collectionId`, the Colnect item ids with their catalogue labels) into a seventh handoff node,
+`stamporama-assistant-colnect-market` (`src/core/colnect-market-handoff.ts`).
+
+- The worker (`src/background/colnect-market.ts`) takes a tab from `colnect-tab.ts` and asks its
+  content script for each item in turn; the content script fetches
+  `/en/stamps/marketplace/item/<id>/sort/by_price`, every page of it, on the collector's own session —
+  Colnect's anti-bot interstitial answers anything else — and parses it there, the worker having no
+  DOM.
+- `src/platform/colnect/market.ts` is the only reader, tested against markup copied from the live
+  page: condition by grade number, price and currency off the `content` attributes, Colnect's own
+  conversion marked, lots counted rather than read. A page that is not the market list is an error,
+  never "no listings".
+- The whole read goes back on the node (`data-market-result`) with `done`; the page records it. The
+  extension decides nothing about it — which listings are the collector's own, or what a price is in
+  the offer's currency, is the instance's to work out.
+
 ## Find in Stamporama (#529)
 
 The one gesture that is **not** a toolbar click: a selection on any page, right-clicked →
