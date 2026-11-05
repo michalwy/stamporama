@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  assertIssueFormatInCollection,
+  STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
+  stampIssueFormatLabel,
+  type StampIssueFormatDisplayRow,
+} from "./stamp-issue-formats";
 import type { Decimal } from "@prisma/client/runtime/client";
 import {
   catalogPriceMarkInput,
@@ -81,6 +87,7 @@ import {
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
 import type { StampSizeFields } from "./stamp-size";
+import type { StampIssueFormatLabel } from "./stamp-issue-format-defaults";
 import { roundAmount } from "./decimal-input";
 import { parseStampNoSearch } from "./quick-jump";
 import type { StampSearchField } from "./stamp-search-fields";
@@ -486,6 +493,9 @@ export interface StampListItem {
   /** The stamp's six catalogue attributes (#736/#737), dictionary references already resolved to
    *  their names. Every value is null on a stamp that states none, which is the normal case. */
   attributes: StampAttributeLabels;
+  /** The form the stamp was issued in (#2439) — souvenir sheet, booklet pane… — or null for an
+   *  ordinary stamp, which is the normal case. */
+  issueFormat: StampIssueFormatLabel | null;
   /** What the stamp states about its physical size (#763), in millimetres — its own figures only.
    *  Nothing is resolved through the checklist here: a list and a detail page report what the
    *  record holds, and the borrowed figure belongs to the surfaces that draw boxes with it. */
@@ -551,6 +561,7 @@ const STAMP_LIST_SELECT = {
   // parent, on one of its variants or on its issue is not on this stamp.
   tags: TAG_SUMMARY_SELECT,
   ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
+  ...STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
   ...STAMP_SIZE_SELECT,
   sizeScanningProfile: { select: SCANNING_PROFILE_SELECT },
 } as const;
@@ -584,7 +595,7 @@ function toStampListItem(
     checklistEntries: { checklistId: string }[];
     photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
     tags: { tag: { id: string; name: string; color: string | null } }[];
-  } & StampAttributeDisplayRow & {
+  } & StampAttributeDisplayRow & StampIssueFormatDisplayRow & {
       widthMm: Prisma.Decimal | null;
       heightMm: Prisma.Decimal | null;
       sizeScanningProfile: Parameters<typeof toScanningProfileView>[0] | null;
@@ -687,6 +698,7 @@ function toStampListItem(
     wants: wantsByStamp.get(stamp.id) ?? null,
     tags: orderTagSummaries(stamp.tags),
     attributes: stampAttributeLabels(stamp),
+    issueFormat: stampIssueFormatLabel(stamp),
     size: stampSizeFields(stamp),
     sizeMeasuredWith: stamp.sizeScanningProfile
       ? profileLabel(toScanningProfileView(stamp.sizeScanningProfile))
@@ -1517,6 +1529,7 @@ export async function updateStampWithCatalog(
 ): Promise<{ umbrellas: UmbrellaWithOwnPrices[] }> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
+  await assertIssueFormatInCollection(collectionId, data.issueFormatId);
   // The parent this edit made an umbrella while it carried prices of its own, as the policy left
   // them (#1573) — told to a caller with no dialog to ask in, as `addVariantRangeToStamp` tells it.
   let umbrellas: UmbrellaWithOwnPrices[] = [];
@@ -1579,8 +1592,9 @@ export async function updateStampWithCatalog(
         // Omit when undefined so callers that don't manage the field leave it untouched;
         // a blank string clears it to null.
         ...(data.colnectId !== undefined ? { colnectId: data.colnectId || null } : {}),
-        // The six catalogue attributes (#736), on the same rule: a key absent from `data` is a
-        // field the caller's form did not render, and its stored value is not touched.
+        // The six catalogue attributes (#736) and the issue format (#2439), on the same rule: a key
+        // absent from `data` is a field the caller's form did not render, and its stored value is
+        // not touched.
         ...pickStampAttributeWrites(data),
         // What the size was measured with (#1443) — recorded, kept or cleared with the size.
         ...(await stampSizeProfileWrite(tx, collectionId, stampId, data)),

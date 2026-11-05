@@ -39,6 +39,7 @@ import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
 import { FaultsPanel } from "./faults-panel";
 import { AttributeDictionaryPanel } from "./attributes-panel";
+import { IssueFormatsPanel } from "./issue-formats-panel";
 import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
 import { TagsPanel } from "./tags-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
@@ -78,6 +79,7 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { FaultData } from "@/lib/faults";
 import type { StampAttributeLists } from "@/lib/stamp-attributes";
+import type { StampIssueFormatData } from "@/lib/stamp-issue-formats";
 import type { StampSizePresetData } from "@/lib/stamp-size-presets";
 import type { TagData } from "@/lib/tags";
 import { STAMP_ATTRIBUTE_KINDS, type StampAttributeKind } from "@/lib/stamp-attribute-kinds";
@@ -126,6 +128,8 @@ interface SettingsScreenProps {
   initialFaults: FaultData[];
   /** The four stamp-attribute dictionaries (#72) — colour, watermark, paper, printing method. */
   initialAttributes: StampAttributeLists;
+  /** The issue-format dictionary (#2439), with how many stamps carry each. */
+  initialIssueFormats: StampIssueFormatData[];
   /** The collection's stamp size presets (#804) — the seventh and eighth attribute's dictionary,
    *  a saved pair of millimetres copied onto a stamp rather than referenced by it. */
   initialStampSizePresets: StampSizePresetData[];
@@ -758,6 +762,7 @@ function SettingsEntryBody({
   initialSubtypes,
   initialFaults,
   initialAttributes,
+  initialIssueFormats,
   initialStampSizePresets,
   initialTags,
   initialCollageTemplates,
@@ -901,6 +906,15 @@ function SettingsEntryBody({
         />
       );
     }
+    case "issue-formats":
+      return (
+        <IssueFormatsPanel
+          collectionId={collectionId}
+          initialIssueFormats={initialIssueFormats}
+          titleLanguages={titleLanguages}
+          defaultLanguage={defaultLanguage}
+        />
+      );
     case "size-presets":
       // An entry of its own rather than a fifth tab of Attributes (#1469): a preset is a saved pair
       // of millimetres copied onto a stamp (#804; ADR-0048 §8), not a value a stamp refers to.

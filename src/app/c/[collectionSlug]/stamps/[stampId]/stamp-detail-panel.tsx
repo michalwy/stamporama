@@ -25,6 +25,8 @@ import {
   statedStampAttributes,
 } from "@/lib/stamp-attribute-kinds";
 import { formatStampSize } from "@/lib/stamp-size";
+import { NO_ISSUE_FORMAT_LABEL } from "@/lib/stamp-issue-format-defaults";
+import { tagColorTokens } from "@/lib/tag-colors";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { CopyCountBadge, dispositionParts } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
@@ -206,9 +208,25 @@ export function StampDetailPanel({
                 six, so what is *not* stated is visible too. */}
             <DetailCard
               title="Attributes"
-              empty={statedAttributes.length === 0 && statedSize === null}
+              empty={
+                statedAttributes.length === 0 && statedSize === null && stamp.issueFormat === null
+              }
             >
               <FieldGrid min="9rem">
+                {/* The form the stamp was issued in (#2439), first because it is catalogue identity.
+                    None is an ordinary stamp, and reads as one rather than as a gap. */}
+                <Field label="Issue format">
+                  {stamp.issueFormat ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                      <span style={issueFormatChipStyle(stamp.issueFormat.color)}>
+                        {stamp.issueFormat.abbreviation}
+                      </span>
+                      {stamp.issueFormat.name}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--color-text-muted)" }}>{NO_ISSUE_FORMAT_LABEL}</span>
+                  )}
+                </Field>
                 {STAMP_ATTRIBUTE_FIELDS.map(({ key, label }) => (
                   <Field key={key} label={label}>
                     {stamp.attributes[key]}
@@ -425,4 +443,18 @@ function IssueMembershipRow({
       <ChecklistMembershipChip checklists={membership.checklists} />
     </div>
   );
+}
+
+/** The issue format's abbreviation in the colour its settings row gives it (#2439, #728). */
+function issueFormatChipStyle(color: string | null): React.CSSProperties {
+  const tokens = tagColorTokens(color);
+  return {
+    fontSize: "0.75rem",
+    fontWeight: 600,
+    color: tokens.color,
+    background: tokens.background,
+    border: `1px solid ${tokens.border}`,
+    borderRadius: "0.25rem",
+    padding: "0.05rem 0.35rem",
+  };
 }

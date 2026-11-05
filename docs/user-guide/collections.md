@@ -1336,6 +1336,36 @@ All six are available as tokens in [listing texts](platforms.md#listing-template
 
 The four list ones use the language of the platform being listed on, and the title preview marks one that has no translation yet so you can fill it in from there. Denomination and perforation are printed as recorded in every language.
 
+## Issue formats
+
+A copy's [format](inventory.md#pairs-blocks-and-other-multiples) says how *your piece* was cut or kept — a single, a pair, a block of
+four, a cover. A stamp's **issue format** says something else: the form the stamp itself was
+**issued** in — a souvenir sheet, a miniature sheet, a tête-bêche pair, a booklet pane. That is
+catalogue identity, the same for every copy of the stamp, and it is what catalogues and buyers name.
+
+Manage the list under **Settings → Issue formats**, beside **Attributes**. A new collection starts
+with *Souvenir sheet* (Bl), *Stamp from a souvenir sheet* (exBl), *Miniature sheet* (MS),
+*Tête-bêche* (TB), *Se-tenant* (ST), *Booklet* (MH), *Booklet pane* (HBl), *Stamp from a booklet*
+(exMH), *Coil stamp* (Coil) and *Postal stationery* (PS), each in a colour of its own.
+
+- **No issue format means an ordinary stamp.** There is no *Stamp* entry and none is needed, just as
+  there is no *Single* format. Every stamp you had before the list existed reads as an ordinary stamp
+  until you set one.
+- **Add**, **rename** and **recolour** an entry in its pane — a name, an abbreviation and a colour;
+  the colour is the one its chip is drawn in. **Reorder** by dragging rows; the order is the order the
+  stamp form offers them in. Each row says how many stamps use it, and one in use cannot be deleted
+  until those stamps are changed.
+- The name and the abbreviation translate like a [condition's](#conditions-in-other-languages) — a
+  box per listing language, each falling back to the text above on its own.
+- *Stamp from a souvenir sheet* and *Stamp from a booklet* are there because catalogues list a stamp
+  taken out of a sheet or a booklet separately: a copy of it is a copy of a stamp of its own, not of
+  the sheet.
+
+Set it on the stamp form's **Details** tab, in the **Issue format** dropdown, which reads
+**— (stamp)** when empty. A stamp has at most one. Nothing is inherited: a variant of a souvenir
+sheet states its own issue format, as it states its own attributes. The stamp's page shows it at the
+top of its **Attributes** card. Valuation, holdings and copy formats do not read it.
+
 ## Tags
 
 The six attributes above are what the *catalogue* says about a stamp. A **tag** is what **you** say

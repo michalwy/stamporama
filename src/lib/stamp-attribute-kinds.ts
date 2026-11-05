@@ -129,6 +129,10 @@ export interface StampAttributeInput {
   watermarkId?: string | null;
   paperId?: string | null;
   printingId?: string | null;
+  /** The form the stamp was issued in (#2439) — souvenir sheet, booklet pane… — on the same rule:
+   * `null` is an ordinary stamp. Not one of the six, but entered on the same form and written by the
+   * same patch, so it rides the same field list. */
+  issueFormatId?: string | null;
   /** The size, in millimetres (#763), on the same `undefined` / `null` / value rule as the six —
    * but numbers, because unlike a denomination a size is arithmetic: it is divided into a hawid
    * strip. Parsed by {@link parseStampSizeInput}, which reports a figure it cannot read instead of
@@ -156,10 +160,12 @@ export const STAMP_SIZE_LABELS: Readonly<
   heightMm: { field: "Height (mm)", example: "e.g. 25.5" },
 };
 
-/** The six column names a write and a form both address them by. */
+/** The six column names a write and a form both address them by — and the issue format's
+ * (#2439), a reference written on exactly the same `undefined` / `null` / id rule. */
 export const STAMP_ATTRIBUTE_INPUT_FIELDS = [
   ...STAMP_TEXT_ATTRIBUTES,
   ...STAMP_ATTRIBUTE_KINDS.map((kind) => `${kind}Id` as const),
+  "issueFormatId",
 ] as const satisfies readonly (keyof StampAttributeInput)[];
 
 /** The stamp form's six fields off a submitted `FormData` (#736), parsed once for both the add and

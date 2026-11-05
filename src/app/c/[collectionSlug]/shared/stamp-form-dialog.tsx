@@ -25,6 +25,8 @@ import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { StampAttributeLists, StampAttributeValues } from "@/lib/stamp-attributes";
+import type { StampIssueFormatData } from "@/lib/stamp-issue-formats";
+import { NO_ISSUE_FORMAT_LABEL } from "@/lib/stamp-issue-format-defaults";
 import {
   STAMP_ATTRIBUTE_KINDS,
   STAMP_ATTRIBUTE_LABELS,
@@ -117,6 +119,7 @@ const BLANK_ATTRIBUTES: StampAttributeValues = {
   watermarkId: null,
   paperId: null,
   printingId: null,
+  issueFormatId: null,
 };
 
 /** The rule and spacing above a Details section set under another one — the photos in one column,
@@ -456,6 +459,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
   const [attributeLists, setAttributeLists] = useState<StampAttributeLists | null>(null);
   const [attributes, setAttributes] = useState<StampAttributeValues>(BLANK_ATTRIBUTES);
   const [attributesLoaded, setAttributesLoaded] = useState(false);
+  // The issue formats (#2439) a stamp can be issued in, loaded with the attribute lists: the stored
+  // value rides the same by-stampId fetch, so the field is gated on the same load.
+  const [issueFormats, setIssueFormats] = useState<StampIssueFormatData[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -463,14 +469,18 @@ export function StampFormDialog(props: StampFormDialogProps) {
       import("@/app/actions/stamp-attributes").then((m) =>
         m.getStampAttributeListsAction(collectionId)
       ),
+      import("@/app/actions/stamp-issue-formats").then((m) =>
+        m.getStampIssueFormatsAction(collectionId)
+      ),
       editStampId
         ? import("@/app/actions/stamp-attributes").then((m) =>
             m.getStampAttributeValuesAction(editStampId)
           )
         : Promise.resolve(null),
-    ]).then(([lists, values]) => {
+    ]).then(([lists, formats, values]) => {
       if (cancelled) return;
       setAttributeLists(lists);
+      setIssueFormats(formats);
       if (values) setAttributes(values);
       setAttributesLoaded(true);
     });
@@ -1293,6 +1303,32 @@ export function StampFormDialog(props: StampFormDialogProps) {
                     { value: "false", label: <Icon name="reject" size="sm" />, title: "Not a variant" },
                   ]}
                 />
+              </div>
+            )}
+
+            {/* The form the stamp was issued in (#2439) — catalogue identity, so on Details beside the
+                number and the subtype rather than among the usually-empty attributes. Empty is an
+                ordinary stamp and says so. Rendered only once the stored value has loaded, so a save
+                made before then leaves it untouched rather than clearing it; not inherited from the
+                parent, as no attribute is. */}
+            {attributesLoaded && issueFormats.length > 0 && (
+              <div style={{ marginTop: "1.25rem", maxWidth: "20rem" }}>
+                <LabelWithError htmlFor="f-stamp-issue-format">Issue format</LabelWithError>
+                <select
+                  id="f-stamp-issue-format"
+                  name="issueFormatId"
+                  value={attributes.issueFormatId ?? ""}
+                  onChange={(e) => setAttribute("issueFormatId", e.target.value)}
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                >
+                  <option value="">{NO_ISSUE_FORMAT_LABEL}</option>
+                  {issueFormats.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.abbreviation})
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

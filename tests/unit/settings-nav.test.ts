@@ -33,6 +33,7 @@ describe("settings navigation (#1469)", () => {
           "Valuation methods",
           "Subtypes",
           "Attributes",
+          "Issue formats",
           "Size presets",
           "Duplicate numbers",
         ],

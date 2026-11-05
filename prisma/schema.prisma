@@ -163,6 +163,7 @@ model Collection {
   stampWatermarks StampWatermark[]
   stampPapers     StampPaper[]
   stampPrintings  StampPrinting[]
+  stampIssueFormats StampIssueFormat[]
   checklists      Checklist[]
   wants           Want[]
   acceptanceProfiles AcceptanceProfile[]
@@ -650,6 +651,43 @@ model StampPrintingTranslation {
 
   @@id([stampPrintingId, language])
   @@map("stamp_printing_translation")
+}
+
+// The form the stamp was **issued** in (#2439) — souvenir sheet, miniature sheet, tête-bêche,
+// booklet pane — as distinct from a copy's `StampFormat`, which is how the collector's piece was
+// cut or kept. Catalogue identity, so it sits on `Stamp` and is the same for every copy. Shaped like
+// `StampFormat` (name and abbreviation, both translatable) with a condition's chip colour (#728).
+// **No issue format means an ordinary stamp**: no "Stamp" row exists or is seeded, exactly as no
+// "Single" format does. Seeded on collection creation, then the collector's to edit.
+model StampIssueFormat {
+  id           String  @id @default(cuid())
+  collectionId String
+  name         String
+  abbreviation String
+  sortOrder    Int
+  /** Chip colour: one of `TAG_COLORS`, or null for the neutral chip — as a condition's (#728). */
+  color        String?
+
+  collection   Collection                    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  stamps       Stamp[]
+  translations StampIssueFormatTranslation[]
+
+  @@index([collectionId])
+  @@map("stamp_issue_format")
+}
+
+// Per-language `name` / `abbreviation` for an issue format — `StampFormatTranslation`'s shape; the
+// two fall back independently.
+model StampIssueFormatTranslation {
+  stampIssueFormatId String
+  language           String
+  name               String?
+  abbreviation       String?
+
+  stampIssueFormat StampIssueFormat @relation(fields: [stampIssueFormatId], references: [id], onDelete: Cascade)
+
+  @@id([stampIssueFormatId, language])
+  @@map("stamp_issue_format_translation")
 }
 
 // A named, reusable collage render preset (#307). How many stamps fit sensibly on one collage is a
@@ -3540,6 +3578,9 @@ model Stamp {
   watermarkId  String?
   paperId      String?
   printingId   String?
+  // The form the stamp was issued in (#2439) — souvenir sheet, booklet pane… — or null for an
+  // ordinary stamp. At most one, not inherited down the variant tree (ADR-0010).
+  issueFormatId String?
   // The stamp's physical size in millimetres (#763), a seventh and eighth catalogue fact on the
   // same terms as the six above: on `Stamp` because size is catalogue identity, optional because a
   // stamp that states none is the normal case, and not inherited down the variant tree. A tenth of
@@ -3583,6 +3624,7 @@ model Stamp {
   watermark         StampWatermark?       @relation(fields: [watermarkId], references: [id], onDelete: Restrict)
   paper             StampPaper?           @relation(fields: [paperId], references: [id], onDelete: Restrict)
   printing          StampPrinting?        @relation(fields: [printingId], references: [id], onDelete: Restrict)
+  issueFormat       StampIssueFormat?     @relation(fields: [issueFormatId], references: [id], onDelete: Restrict)
   sizeScanningProfile ScanningProfile?    @relation("StampSizeScanningProfile", fields: [sizeScanningProfileId], references: [id], onDelete: NoAction)
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
@@ -3630,6 +3672,7 @@ model Stamp {
   @@index([watermarkId])
   @@index([paperId])
   @@index([printingId])
+  @@index([issueFormatId])
   @@index([collectionId, issuedYear, primaryCatalogSortKey])
   @@index([collectionId, primaryCatalogSortKey])
   // *Which stamp is Colnect item 1234567* (#687/#688) — the join key read in the direction the list
