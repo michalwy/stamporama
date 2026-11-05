@@ -64,6 +64,11 @@ const FIGURE_BTN: React.CSSProperties = {
 
 const MUTED: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-muted)" };
 
+/** The figure the collector prices against — the lowest price in the offer's own condition — is set
+ * larger and bold, so it is seen at a glance (#2463). A line height of 1 keeps it within the strip's
+ * height, so the row does not grow. */
+const LEAD_FIGURE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, lineHeight: 1 };
+
 /** How high a strip is, and how far apart stacked dots sit — listings at one price stack upward. */
 const STRIP_HEIGHT = 30;
 const DOT = 7;
@@ -178,17 +183,21 @@ function Figure({
   currency,
   step,
   onApply,
+  lead = false,
 }: {
   label: string;
   amount: string;
   currency: string;
   step: string;
   onApply: ((amount: string) => void) | null;
+  /** The lowest price of the offer's own condition, set larger and bold (#2463). */
+  lead?: boolean;
 }) {
+  const emphasis = lead ? LEAD_FIGURE : undefined;
   if (!onApply) {
     return (
       <span>
-        {label} <span style={{ fontVariantNumeric: "tabular-nums" }}>{amount}</span>
+        {label} <span style={{ fontVariantNumeric: "tabular-nums", ...emphasis }}>{amount}</span>
       </span>
     );
   }
@@ -197,7 +206,7 @@ function Figure({
     <Tooltip content={`Price this offer at ${setsTo} ${currency}`}>
       <span>
         {label}{" "}
-        <button type="button" style={FIGURE_BTN} onClick={() => onApply(setsTo)}>
+        <button type="button" style={{ ...FIGURE_BTN, ...emphasis }} onClick={() => onApply(setsTo)}>
           {amount}
         </button>
       </span>
@@ -361,14 +370,24 @@ export function OfferColnectMarketCard({
                         display: "flex",
                         gap: "0.75rem",
                         flexWrap: "wrap",
+                        alignItems: "baseline",
                         padding: "0.25rem 0",
                       }}
                     >
                       {row.count === 0 ? (
-                        <span style={{ color: "var(--color-text-muted)" }}>no offers</span>
+                        <span style={{ color: "var(--color-text-muted)", ...(row.highlighted ? LEAD_FIGURE : undefined) }}>
+                          no offers
+                        </span>
                       ) : (
                         <>
-                          <Figure label="lowest" amount={row.lowest!} currency={currency} step={step} onApply={apply} />
+                          <Figure
+                            label="lowest"
+                            amount={row.lowest!}
+                            currency={currency}
+                            step={step}
+                            onApply={apply}
+                            lead={row.highlighted}
+                          />
                           <Figure label="median" amount={row.median!} currency={currency} step={step} onApply={apply} />
                           <span>
                             {row.count} offer{row.count === 1 ? "" : "s"}
