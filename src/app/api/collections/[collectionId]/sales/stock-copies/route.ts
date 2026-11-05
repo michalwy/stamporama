@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listStockCopiesForSale } from "@/lib/sales";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 
 // The copies in stock a set on no offer can be picked from (#2021) — in hand, unsold, not traded
 // away or disposed of. Scoped by area here; the picker filters the rest client-side, as the trade
@@ -22,6 +23,7 @@ export async function GET(
     const items = await listStockCopiesForSale(session.user.id, collectionId, {
       areaIds: areaIds.length > 0 ? areaIds : null,
       notOnOpenOffer: request.nextUrl.searchParams.get("notOnOpenOffer") === "true",
+      issueFormatIds: parseIssueFormatIds(request.nextUrl.searchParams.get(ISSUE_FORMAT_FILTER_PARAM)),
     });
     return NextResponse.json({ items });
   } catch {

@@ -844,6 +844,7 @@ async function planAttachableCopies(
     conditionIds: query.conditionIds,
     certificateStatusIds: query.certificateStatusIds,
     formatIds: query.formatIds,
+    issueFormatIds: query.issueFormatIds,
     // The Copies list's location filter (#2209): the subtree unless `locationExact`, and
     // `NO_LOCATION` the copies filed nowhere — resolved by the same `buildItemFilterWhere`.
     ...(query.locationId

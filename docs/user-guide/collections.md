@@ -1380,6 +1380,30 @@ A listing text names it with `{issueFormat}` or `{issueFormatAbbr}` — see
 [listing templates](platforms.md#listing-templates) — so a buyer searching for *souvenir sheet* or
 *Block* finds the listing. On an ordinary stamp both print nothing.
 
+### Filtering by issue format
+
+Wherever stamps or copies are filtered by what they are, an **issue format** dropdown sits beside the
+other filters: tick one or more values and the list keeps the stamps — or the copies of the stamps —
+in any of them. **Stamp (none)** is a value of its own, for the ordinary stamps, so *only the souvenir
+sheets*, *everything but the souvenir sheets* (tick *Stamp (none)* and the rest) and *souvenir sheets
+and miniature sheets* can all be asked.
+
+- **A copy is filtered by its stamp's issue format.** A cover or other piece carrying
+  [several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps) matches
+  when **any** of them does: a cover bearing a souvenir sheet is found by *Souvenir sheet*.
+- **Lists:** the Issues list (an issue is kept when it holds a stamp in a ticked format; its stamp
+  tree opens whole), the Stamps list, the Copies list and its Structure view, the Wants list (by the
+  wanted stamp) and the listing workspace (an offer is kept when every copy in it passes, as with the
+  area and the year).
+- **Builders:** the [Lot builder](offers.md#building-a-bulk-lot), whose [saved
+  criteria](offers.md#saved-criteria) remember it, and Series from singles.
+- **Pickers:** the stamp picker, the copies of a new offer, Compose set, Attach copies on a purchase,
+  a sale's Add copies and Add free extras, and the trade copy picker.
+
+On the lists it stays in the address, and the Copies list remembers it between visits like its other
+filters; a picker's own filter starts empty each time it opens, except *Attach copies*, which
+remembers all of its filters.
+
 ## Tags
 
 The six attributes above are what the *catalogue* says about a stamp. A **tag** is what **you** say

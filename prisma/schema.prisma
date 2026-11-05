@@ -808,6 +808,8 @@ model LotBuilderPreset {
   // criteria are read, exactly as a stale link's are.
   conditionIds String[]
   formatIds    String[]
+  // The stamp's issue format (#2440), the same kind of list; `"stamp"` matches the ordinary stamps.
+  issueFormatIds String[] @default([])
 
   // The per-copy catalogue-value ceiling. Decimal rather than Int: a ceiling of 2.50 is an ordinary
   // thing to want, and the criterion is compared against a computed catalogue value.

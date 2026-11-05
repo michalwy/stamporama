@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listComposableCopies } from "@/lib/offers";
 import { readSearchParam } from "@/lib/text-input";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 
 // Copies eligible to add to an offer's set (ADR-0013): For sale, delivered, not sold, and not
 // already in a set of this offer. `notOnOpenOffer=true` narrows them to the copies on no other open
@@ -27,6 +28,7 @@ export async function GET(
       notOnOpenOffer: sp.get("notOnOpenOffer") === "true",
       search,
       areaIds: areaIds.length > 0 ? areaIds : undefined,
+      issueFormatIds: parseIssueFormatIds(sp.get(ISSUE_FORMAT_FILTER_PARAM)),
     });
     return NextResponse.json({ items });
   } catch {

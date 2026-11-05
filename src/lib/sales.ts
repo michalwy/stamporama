@@ -1516,12 +1516,14 @@ export interface SaleCopySetDraft {
 export async function listStockCopiesForSale(
   ownerId: string,
   collectionId: string,
-  /** `notOnOpenOffer`: only the copies on no open offer, on any platform (#2338). */
-  filters: { areaIds?: string[] | null; notOnOpenOffer?: boolean } = {}
+  /** `notOnOpenOffer`: only the copies on no open offer, on any platform (#2338). `issueFormatIds`:
+   *  the stamps' issue formats (#2440), narrowed here like the area; empty is every one. */
+  filters: { areaIds?: string[] | null; notOnOpenOffer?: boolean; issueFormatIds?: string[] } = {}
 ): Promise<ItemListItem[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     areaIds: filters.areaIds ?? undefined,
+    issueFormatIds: filters.issueFormatIds,
     notOnOpenOffer: filters.notOnOpenOffer || undefined,
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
@@ -1921,6 +1923,7 @@ export async function listFreeExtraCandidates(
                   conditionIds: filters.conditionIds,
                   certificateStatusIds: filters.certificateStatusIds,
                   formatIds: filters.formatIds,
+                  issueFormatIds: filters.issueFormatIds,
                 }),
               ],
             },

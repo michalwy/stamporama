@@ -4,6 +4,7 @@
 // `server-only`, so the panel can read the labels and the domain module the kinds.
 
 import { parseSizeMm } from "./stamp-size";
+import { ISSUE_FORMAT_FILTER_PARAM } from "./issue-format-filter";
 
 export const STAMP_ATTRIBUTE_KINDS = ["color", "watermark", "paper", "printing"] as const;
 
@@ -234,17 +235,25 @@ export const STAMP_ATTRIBUTE_FILTER_KEYS = STAMP_ATTRIBUTE_KINDS.map(
   (kind) => `${kind}Ids` as const
 );
 
-export type StampAttributeFilterKey = (typeof STAMP_ATTRIBUTE_FILTER_KEYS)[number];
+/** The keys the Stamps list carries its catalogue filters under: the four dictionaries, and the
+ * issue format (#2440), which travels with them — the same multi-select reading over a stamp column,
+ * with `ORDINARY_STAMP_ISSUE_FORMAT` standing for the stamps that have none. */
+export const STAMP_LIST_CATALOGUE_FILTER_KEYS = [
+  ...STAMP_ATTRIBUTE_FILTER_KEYS,
+  ISSUE_FORMAT_FILTER_PARAM,
+] as const;
+
+export type StampAttributeFilterKey = (typeof STAMP_LIST_CATALOGUE_FILTER_KEYS)[number];
 
 export type StampAttributeFilters = Partial<Record<StampAttributeFilterKey, string[]>>;
 
-/** The four filters off a query string, each a comma-joined id list. An absent or empty param is
- * *no filter*, which is what an empty `MultiSelectFilter` selection means everywhere else. */
+/** The catalogue filters off a query string, each a comma-joined id list. An absent or empty param
+ * is *no filter*, which is what an empty `MultiSelectFilter` selection means everywhere else. */
 export function stampAttributeFiltersFromParams(
   sp: URLSearchParams | { get(key: string): string | null }
 ): StampAttributeFilters {
   const filters: StampAttributeFilters = {};
-  for (const key of STAMP_ATTRIBUTE_FILTER_KEYS) {
+  for (const key of STAMP_LIST_CATALOGUE_FILTER_KEYS) {
     const ids = (sp.get(key) ?? "").split(",").filter(Boolean);
     if (ids.length > 0) filters[key] = ids;
   }

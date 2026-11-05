@@ -272,6 +272,7 @@ export function StructurePanel({
       certificateStatusIds: csv(read("certificateStatusIds")),
       formatIds: csv(read("formatIds")),
       subtypeIds: csv(read("subtypeIds")),
+      issueFormatIds: csv(read("issueFormatIds")),
       deliveryStates: csv(read("deliveryStates")),
       tagIds: csv(read("tagIds")),
       tagMode: isTagFilterMode(rawTagMode) ? rawTagMode : DEFAULT_TAG_FILTER_MODE,
@@ -474,6 +475,7 @@ export function StructurePanel({
               certificateStatusIds={values.certificateStatusIds}
               formatIds={values.formatIds}
               subtypeIds={values.subtypeIds}
+              issueFormatIds={values.issueFormatIds}
               multiStamp={values.multiStamp}
               complete={values.complete}
               held={values.held}

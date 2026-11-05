@@ -280,6 +280,7 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
         yearTo: null,
         conditionIds: [],
         formatIds: [],
+        issueFormatIds: [],
         maxCatalogValue: null,
         // A target past the pool takes the whole of it.
         countMin: 1000,

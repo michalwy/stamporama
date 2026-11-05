@@ -24,6 +24,7 @@ const carried = (issues: typeof legions[]) => ({
   areaId: null,
   issueId: issues[0]?.id ?? null,
   issues,
+  issueFormatId: null,
 });
 
 describe("copyIssues", () => {

@@ -44,6 +44,7 @@ import {
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { readYearFilter } from "./list-area-year-filter";
 import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
+import { issueFormatStampWhere } from "./issue-format-filter";
 
 // The priority vocabulary lives in the pure module, since the form and the list toolbar render it
 // and this one is `server-only`. Re-exported here so a server caller has one import.
@@ -335,6 +336,9 @@ export interface WantListFilters {
   /** Wants that would take a copy in **any** of these conditions — an acceptance set that is empty
    *  ("any") matches every condition named, exactly as it does when a copy actually arrives. */
   conditionIds?: string[];
+  /** The wanted stamp's issue format (#2440): any of these, `ORDINARY_STAMP_ISSUE_FORMAT` matching
+   *  the stamps with none. Absent is every one. */
+  issueFormatIds?: string[];
   /** The wanted stamp's own primary area, already expanded to descendants by the caller (#385). */
   areaIds?: string[];
   /** `"none"` is the no-year bucket; otherwise a numeric year string or a span of years (#2258),
@@ -418,6 +422,10 @@ function buildWantListWhere(
     stamp.issueMemberships =
       filters.issueId === NO_ISSUE ? { none: {} } : { some: { issueId: filters.issueId } };
   }
+  // The wanted stamp's issue format (#2440). Its fragment may be an `OR` (an ordinary stamp beside a
+  // real format); nothing else on `stamp` is one, so it merges in without colliding.
+  const issueFormats = issueFormatStampWhere(filters.issueFormatIds);
+  if (issueFormats) Object.assign(stamp, issueFormats);
   if (Object.keys(stamp).length > 0) where.stamp = stamp;
 
   const text = filters.search?.trim();

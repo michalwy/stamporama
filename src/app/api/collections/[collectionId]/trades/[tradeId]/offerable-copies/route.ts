@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { readYearFilter } from "@/lib/list-area-year-filter";
@@ -33,6 +34,7 @@ export async function GET(
       ...readYearFilter(sp.get("year")),
       forTradeOnly: sp.get("forTrade") !== "false",
       notOnOpenOffer: sp.get("notOnOpenOffer") === "true",
+      issueFormatIds: parseIssueFormatIds(sp.get(ISSUE_FORMAT_FILTER_PARAM)),
     });
     return NextResponse.json({ items });
   } catch {

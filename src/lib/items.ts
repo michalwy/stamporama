@@ -175,6 +175,7 @@ import { setMoveSourceTx, takeOffLocationTx, type MoveSource } from "./location-
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { HOLDING_STATES, type HoldingState } from "./copy-card-states";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
+import { issueFormatItemWhere } from "./issue-format-filter";
 import {
   lotCatalogBasis,
   type CatalogBasisCopy,
@@ -1190,6 +1191,11 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  subtype but *Forgery* would silently drop every copy of a base stamp too (ADR-0049 §7). Read off
    *  the copy's leading stamp, as the area and the year are. */
   subtypeIds?: string[];
+  /** Restrict to copies of stamps in any of these issue formats (#2440) — an **OR**, empty/absent
+   *  meaning every one; `ORDINARY_STAMP_ISSUE_FORMAT` matches the ordinary stamps (no issue format).
+   *  Unlike the subtype, read off **every** stamp the copy carries: a several-stamp piece matches
+   *  when any of them does (`issue-format-filter.ts`). */
+  issueFormatIds?: string[];
   /** Restrict to copies whose linked stamp belongs to any of these areas (the selected
    * area plus its descendants, resolved by the caller). Mirrors the stamps list area
    * sidebar (#106): matched via `Item.stamp` → `StampCollectionArea`. */
@@ -1624,6 +1630,10 @@ function buildItemWhere(
   // search's at the top level exactly as the two above would.
   const subtypes = nullableIdWhere("subtypeId", filters.subtypeIds, "none");
   if (subtypes) and.push({ stamp: subtypes });
+  // The stamp's issue format (#2440), over the leading and the carried stamps, so its `OR` goes in
+  // the AND list for the same reason as the line above.
+  const issueFormats = issueFormatItemWhere(filters.issueFormatIds);
+  if (issueFormats) and.push(issueFormats);
   // "No ref" (#421) is two stored values — null, and the empty string a cleared field can leave —
   // so it goes in the AND list rather than as a top-level `OR` the search would collide with.
   if (filters.locationRef === NO_LOCATION_REF) {
@@ -1965,6 +1975,8 @@ export interface CarriedStamp {
   issueId: string | null;
   /** Every issue this stamp is filed in, `issueId`'s first — see {@link ItemListItem.issues}. */
   issues: ItemIssueRef[];
+  /** The stamp's issue format (#2440); null is an ordinary stamp. */
+  issueFormatId: string | null;
 }
 
 /** One issue a copy's stamp is filed in, as a row menu names it (#1382). */
@@ -1999,6 +2011,9 @@ export interface ItemListItem {
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
+  /** The stamp's issue format (#2440); null is an ordinary stamp. A several-stamp piece's carried
+   *  stamps carry their own on {@link carriedStamps}. */
+  issueFormatId: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   /** The stamp's Colnect Marketplace item-ID (#247), or null when unset — shown as a
    *  link to its Colnect page next to the catalog numbers (#290). */
@@ -2316,6 +2331,8 @@ const ITEM_LIST_SELECT = {
       stamp: {
         select: {
           name: true,
+          // The carried stamp's issue format (#2440), for a filter run over rows already read.
+          issueFormatId: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
           // Every membership rather than the first (#1382), for the row menu's issue entries; the
@@ -2343,6 +2360,8 @@ const ITEM_LIST_SELECT = {
       subtype: { select: { name: true, isDefault: true } },
       // The stamp's issue format (#2439), which the packing list can print (#2444).
       ...STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
+      // Its issue format (#2440), for a filter run over rows already read.
+      issueFormatId: true,
       // Every membership rather than the first (#1382): the row is still listed under the first, and
       // the rest are what the row menu offers beside it. A stamp is filed in one issue far more
       // often than in two, so this is the same one narrow row almost always.
@@ -2440,6 +2459,7 @@ function toItemListItem(
     issuedDay: row.stamp.issuedDay,
     issuedMonth: row.stamp.issuedMonth,
     issuedYear: row.stamp.issuedYear,
+    issueFormatId: row.stamp.issueFormatId,
     catalogNumbers: row.stamp.catalogNumbers,
     colnectId: row.stamp.colnectId,
     areaId,
@@ -2525,6 +2545,7 @@ function carriedStampOf(entry: ItemListRow["stamps"][number]): CarriedStamp {
     areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
     issueId: entry.stamp.issueMemberships[0]?.issue.id ?? null,
     issues: entry.stamp.issueMemberships.map((m) => m.issue),
+    issueFormatId: entry.stamp.issueFormatId,
   };
 }
 

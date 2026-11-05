@@ -27,6 +27,7 @@ import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-s
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { roundAmount } from "@/lib/decimal-input";
@@ -660,6 +661,15 @@ export function LotBuilderPanel({
                 />
               </Field>
             )}
+
+            {/* The stamps' issue format (#2440) — a lot of souvenir sheets is drawn by ticking one. */}
+            <Field label="Issue formats">
+              <IssueFormatFilter
+                collectionId={collectionId}
+                selected={criteria.issueFormatIds}
+                onChange={(ids) => patchCriteria({ issueFormatIds: ids })}
+              />
+            </Field>
 
             {/* The one criterion that cannot be SQL: a catalogue value is computed and never stored,
                 so it is applied after the valuation pass. An **unpriced copy passes it** and is

@@ -10,6 +10,7 @@ import { readYearFilter } from "@/lib/list-area-year-filter";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
 import { isHoldingState, type HoldingState } from "@/lib/copy-card-states";
+import { ISSUE_FORMAT_FILTER_PARAM } from "@/lib/issue-format-filter";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -63,6 +64,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
     formatIds: readCsvParam(sp, "formatIds"),
     subtypeIds: readCsvParam(sp, "subtypeIds"),
+    issueFormatIds: readCsvParam(sp, ISSUE_FORMAT_FILTER_PARAM),
     deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
     search: readSearchParam(sp),

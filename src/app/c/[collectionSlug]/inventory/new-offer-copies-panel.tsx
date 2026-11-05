@@ -26,6 +26,7 @@ import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -261,6 +262,16 @@ export function NewOfferCopiesPanel({
               />
             </div>
           )}
+          {/* The stamps' issue format (#2440); a several-stamp piece shows when any of its stamps is in one. */}
+          <div style={{ width: "11rem", flexShrink: 0 }}>
+            <IssueFormatFilter
+              fullWidth
+              collectionId={collectionId}
+              selected={[...filters.issueFormatIds]}
+              onChange={(ids) => setFilters((f) => ({ ...f, issueFormatIds: ids }))}
+              {...(onMenuOpenChange ? { onOpenChange: onMenuOpenChange } : {})}
+            />
+          </div>
           <Tooltip content={`Only the copies whose catalogue value is at least this much, in ${baseCurrency}. A copy with no catalogue value is hidden while it is set.`}>
             <NumericInput
               kind="amount"

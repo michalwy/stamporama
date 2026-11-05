@@ -1536,8 +1536,9 @@ not marked for sale are not in the pool at all — mark them in bulk on the [Cop
 first if that is where your duplicates are sitting.
 
 Then you narrow it: an **area** on the rail down the left side, a span of **issued years**, the
-**conditions** and **formats** you will allow, and a **maximum catalogue value per copy** so a dear
-stamp cannot fall into a job lot by accident.
+**conditions** and **formats** you will allow, the stamps' **[issue formats](collections.md#filtering-by-issue-format)**
+— a lot of souvenir sheets is one tick — and a **maximum catalogue value per copy** so a dear stamp
+cannot fall into a job lot by accident.
 
 The rail's **+ sub-areas / this area only** toggle applies here as it does on every other list: pick
 *Germany* with sub-areas on and the lot may be drawn from everything filed under it, turn it off and
@@ -1567,7 +1568,7 @@ A duplicate here means **a stamp, rolled up through its variants**: two copies o
 
 ### Saved criteria
 
-Eleven controls is a lot to state, and most of it repeats: if you build job lots for a living you
+Twelve controls is a lot to state, and most of it repeats: if you build job lots for a living you
 build the same *kind* of lot over and over. **Save as…** on *The pick* keeps what is on screen under
 a name, and the select beside it puts it all back.
 
@@ -1575,7 +1576,7 @@ What a saved set holds:
 
 - the platform, with the listing type and, on Facebook, the group
 - the issued-year span
-- the conditions and formats you allow
+- the conditions and formats you allow, and the issue formats
 - the maximum catalogue value per copy
 - both targets — the piece range and the catalogue-value range
 - the complete-sets preference, the per-stamp cap and the duplicates preference
@@ -1822,8 +1823,9 @@ The **Copies** band under the platform steers it:
   used one can make one series, but a certified copy and an uncertified one still cannot. The heading
   then names only the axes that are not mixed. The *Certificates* and *Formats* switches appear only
   when the collection defines certificate statuses or formats.
-- **Filters** for **condition**, **certificate**, **format** and **subtype**, each a multi-select like
-  the ones on the [Copies list](inventory.md). *No certificate*, *Single* and *No subtype* can be
+- **Filters** for **condition**, **certificate**, **format**, **subtype** and **[issue
+  format](collections.md#filtering-by-issue-format)**, each a multi-select like the ones on the
+  [Copies list](inventory.md). *No certificate*, *Single*, *No subtype* and *Stamp (none)* can be
   ticked like any other value. A filter narrows the copies **before** a series counts as complete, so
   a series complete only thanks to a copy the filter leaves out is not listed. Filters and switches
   combine plainly: filtering to MNH and MH with *Conditions* off gives separate MNH and MH cards; with

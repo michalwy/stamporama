@@ -1,5 +1,7 @@
 "use client";
 
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -118,6 +120,10 @@ export function ListingWorkspacePanel({
   // no selection left to mirror and the address is already saying so.
   const mixedOnly = searchParams.get("group") === MIXED_GROUP;
   const { filterAreaId, year } = useListAreaYearFilter(collectionId, areas);
+  // The stamps' issue format (#2440), in the address like the Mixed group: an offer shows when every
+  // copy in it passes.
+  const issueFormatParam = searchParams.get(ISSUE_FORMAT_FILTER_PARAM);
+  const issueFormatIds = useMemo(() => parseIssueFormatIds(issueFormatParam), [issueFormatParam]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -149,20 +155,20 @@ export function ListingWorkspacePanel({
   // The rail's facets are counted against the *area* selection but not their own dimension, so each
   // count says what clicking it would show. A Mixed selection replaces both, so its facets go quiet.
   const yearFacets = useMemo(
-    () => (mixedOnly ? [] : offerYearFacets(offers, { areaIds })),
-    [offers, areaIds, mixedOnly]
+    () => (mixedOnly ? [] : offerYearFacets(offers, { areaIds, issueFormatIds })),
+    [offers, areaIds, mixedOnly, issueFormatIds]
   );
   // Each rail drops its own dimension and keeps the other (#843), so the area counts honour the
   // year the same way the year counts honour the area. Under a Mixed selection they keep counting
   // rather than going quiet the way the years do: clicking an area here *leaves* Mixed (and clears
   // the year with it), so what the row promises is its plain, unnarrowed count.
   const areaFacets = useMemo(
-    () => offerAreaFacets(offers, { year: mixedOnly ? null : (parsedYear ?? null) }),
-    [offers, parsedYear, mixedOnly]
+    () => offerAreaFacets(offers, { year: mixedOnly ? null : (parsedYear ?? null), issueFormatIds }),
+    [offers, parsedYear, mixedOnly, issueFormatIds]
   );
   const mixedCount = useMemo(
-    () => offers.filter((o) => offerMatchesFilters(o, { mixedOnly: true })).length,
-    [offers]
+    () => offers.filter((o) => offerMatchesFilters(o, { mixedOnly: true, issueFormatIds })).length,
+    [offers, issueFormatIds]
   );
 
   const visible = useMemo(
@@ -172,9 +178,10 @@ export function ListingWorkspacePanel({
           areaIds: mixedOnly ? undefined : areaIds,
           year: mixedOnly ? undefined : parsedYear,
           mixedOnly,
+          issueFormatIds,
         })
       ),
-    [offers, areaIds, parsedYear, mixedOnly]
+    [offers, areaIds, parsedYear, mixedOnly, issueFormatIds]
   );
 
   // The rail's order is the list's order, so the page reads down the same tree the rail shows.
@@ -460,6 +467,11 @@ export function ListingWorkspacePanel({
             </option>
           ))}
         </select>
+        <IssueFormatFilter
+          collectionId={collectionId}
+          selected={issueFormatIds}
+          onChange={(ids) => updateParams({ [ISSUE_FORMAT_FILTER_PARAM]: ids.join(",") })}
+        />
         <span style={{ ...FILTER_CONTROL_STYLE, border: "none", background: "none", color: "var(--color-text-muted)" }}>
           {platformId
             ? isLoading

@@ -28,6 +28,7 @@ function copy(overrides: Partial<NewOfferCopy> = {}): NewOfferCopy {
     issueName: null,
     areaId: null,
     catalogNumbers: [],
+    issueFormatId: null,
     multiStamp: false,
     carriedStamps: [],
     value: { baseAmountDisplay: null, uncertain: false },
@@ -41,10 +42,11 @@ function copy(overrides: Partial<NewOfferCopy> = {}): NewOfferCopy {
   };
 }
 
-const carried = (stampId: string, numbers: string[] = []) => ({
+const carried = (stampId: string, numbers: string[] = [], issueFormatId: string | null = null) => ({
   stampId,
   areaId: "gg",
   catalogNumbers: numbers.map((number) => ({ catalogVendorId: "fi", number })),
+  issueFormatId,
 });
 const priced = (amount: string, o: Partial<NewOfferCopy> = {}) =>
   copy({ value: { baseAmountDisplay: amount, uncertain: false }, ...o });
@@ -325,6 +327,25 @@ describe("filterNewOfferCopies", () => {
     const h = copy({ conditionId: "hinged" });
     const filtered = filterNewOfferCopies([m, u, h], { ...NO_NEW_OFFER_COPY_FILTERS, conditionIds: ["used", "hinged"] });
     assert.deepEqual(filtered.map((c) => c.id), [u.id, h.id]);
+  });
+
+  it("narrows to the stamps' issue formats ticked, Stamp (none) being the ordinary stamps (#2440)", () => {
+    const sheet = copy({ issueFormatId: "bl" });
+    const pane = copy({ issueFormatId: "hbl" });
+    const plain = copy();
+    // A cover leading with an ordinary stamp and carrying a souvenir sheet is found by either.
+    const cover = copy({
+      multiStamp: true,
+      carriedStamps: [carried("s-plain", [], null), carried("s-sheet", [], "bl")],
+    });
+    const only = (ids: string[]) =>
+      filterNewOfferCopies([sheet, pane, plain, cover], { ...NO_NEW_OFFER_COPY_FILTERS, issueFormatIds: ids }).map(
+        (c) => c.id
+      );
+    assert.deepEqual(only(["bl"]), [sheet.id, cover.id]);
+    assert.deepEqual(only(["stamp"]), [plain.id, cover.id]);
+    assert.deepEqual(only(["stamp", "hbl"]), [pane.id, plain.id, cover.id]);
+    assert.equal(newOfferCopyFiltersActive({ ...NO_NEW_OFFER_COPY_FILTERS, issueFormatIds: ["bl"] }), true);
   });
 
   it("keeps the copies worth at least the floor, and hides one with no catalogue value", () => {

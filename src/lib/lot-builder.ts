@@ -149,6 +149,7 @@ async function poolFilters(
     ...(criteria.yearTo !== null ? { yearTo: criteria.yearTo } : {}),
     ...(criteria.conditionIds.length > 0 ? { conditionIds: criteria.conditionIds } : {}),
     ...(criteria.formatIds.length > 0 ? { formatIds: criteria.formatIds } : {}),
+    ...(criteria.issueFormatIds.length > 0 ? { issueFormatIds: criteria.issueFormatIds } : {}),
   };
 }
 

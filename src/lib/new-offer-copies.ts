@@ -21,6 +21,7 @@
 //    two copies of a stamp does not make the other stop being a duplicate.
 //  - **The groups** (#1795) are by issue or by stamp, each summed like the whole set.
 
+import { copyStampIssueFormatIds, matchesIssueFormatFilter } from "./issue-format-filter";
 import { NO_CONDITION } from "./piece-condition";
 import { copiesCost, copyCostFigure, type CopyCostInput, type OfferSetCost } from "./offer-cost";
 import { formatItemNo } from "./item-number";
@@ -40,10 +41,13 @@ export interface NewOfferCopy extends Omit<CopyCostInput, "label"> {
   areaId: string | null;
   catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   multiStamp: boolean;
+  /** The stamp's issue format (#2440); null is an ordinary stamp. */
+  issueFormatId: string | null;
   carriedStamps: readonly {
     stampId: string;
     areaId: string | null;
     catalogNumbers: readonly { catalogVendorId: string; number: string }[];
+    issueFormatId: string | null;
   }[];
   value: { baseAmountDisplay: string | null; uncertain: boolean };
 }
@@ -255,6 +259,9 @@ export interface NewOfferCopyFilters {
   duplicatesOnly: boolean;
   /** The conditions shown, or empty for every condition. */
   conditionIds: readonly string[];
+  /** The stamps' issue formats shown (#2440), or empty for every one; a several-stamp piece is shown
+   *  when any of its stamps is in one. */
+  issueFormatIds: readonly string[];
   /** A catalogue-value floor in the base currency as typed, or blank for none. A copy with no
    *  catalogue value is not known to be worth it, so it is hidden while a floor is set. */
   minValue: string;
@@ -263,6 +270,7 @@ export interface NewOfferCopyFilters {
 export const NO_NEW_OFFER_COPY_FILTERS: NewOfferCopyFilters = {
   duplicatesOnly: false,
   conditionIds: [],
+  issueFormatIds: [],
   minValue: "",
 };
 
@@ -275,7 +283,12 @@ function floorCents(minValue: string): number | null {
 }
 
 export function newOfferCopyFiltersActive(filters: NewOfferCopyFilters): boolean {
-  return filters.duplicatesOnly || filters.conditionIds.length > 0 || floorCents(filters.minValue) !== null;
+  return (
+    filters.duplicatesOnly ||
+    filters.conditionIds.length > 0 ||
+    filters.issueFormatIds.length > 0 ||
+    floorCents(filters.minValue) !== null
+  );
 }
 
 /** The copies the filters let through, in the order given. A new array; nothing is taken out of the
@@ -287,6 +300,7 @@ export function filterNewOfferCopies<T extends NewOfferCopy>(copies: readonly T[
   return copies.filter((copy) => {
     if (doubled && !doubled.has(copy.id)) return false;
     if (conditions && !conditions.has(copy.conditionId ?? NO_CONDITION)) return false;
+    if (!matchesIssueFormatFilter(copyStampIssueFormatIds(copy), filters.issueFormatIds)) return false;
     if (floor !== null) {
       if (copy.value.baseAmountDisplay == null) return false;
       if (cents(copy.value.baseAmountDisplay) < floor) return false;

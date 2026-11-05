@@ -182,6 +182,8 @@ export interface SeriesCriteria {
   certificateStatusIds: string[];
   formatIds: string[];
   subtypeIds: string[];
+  /** The stamps' issue formats (#2440), `"stamp"` matching the ordinary stamps. */
+  issueFormatIds: string[];
   mixing: SeriesMixing;
 }
 
@@ -190,6 +192,7 @@ export const DEFAULT_SERIES_CRITERIA: SeriesCriteria = {
   certificateStatusIds: [],
   formatIds: [],
   subtypeIds: [],
+  issueFormatIds: [],
   mixing: NO_MIXING,
 };
 
@@ -218,7 +221,13 @@ export function parseSeriesCombination(value: unknown): SeriesCombination | null
   return out;
 }
 
-export const SERIES_FILTER_PARAMS =["conditionIds", "certificateStatusIds", "formatIds", "subtypeIds"] as const;
+export const SERIES_FILTER_PARAMS = [
+  "conditionIds",
+  "certificateStatusIds",
+  "formatIds",
+  "subtypeIds",
+  "issueFormatIds",
+] as const;
 
 export const SERIES_MIXING_PARAMS: Record<keyof SeriesMixing, string> = {
   condition: "mixConditions",
@@ -241,6 +250,7 @@ export function parseSeriesCriteria(sp: URLSearchParams): SeriesCriteria {
     certificateStatusIds: csv(sp, "certificateStatusIds"),
     formatIds: csv(sp, "formatIds"),
     subtypeIds: csv(sp, "subtypeIds"),
+    issueFormatIds: csv(sp, "issueFormatIds"),
     mixing: {
       condition: sp.get(SERIES_MIXING_PARAMS.condition) === "true",
       certificate: sp.get(SERIES_MIXING_PARAMS.certificate) === "true",

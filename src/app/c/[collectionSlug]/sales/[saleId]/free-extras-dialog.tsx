@@ -51,6 +51,7 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
@@ -291,6 +292,7 @@ export function FreeExtrasDialog({
   const [conditionIds, setConditionIds] = useState<string[]>([]);
   const [certificateStatusIds, setCertificateStatusIds] = useState<string[]>([]);
   const [formatIds, setFormatIds] = useState<string[]>([]);
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const [includeSubAreas] = useSubtreeScope("area");
   const filters = useMemo<FreeExtraFilters>(
     () => ({
@@ -299,8 +301,9 @@ export function FreeExtrasDialog({
       conditionIds,
       certificateStatusIds,
       formatIds,
+      issueFormatIds,
     }),
-    [areas, areaId, includeSubAreas, year, conditionIds, certificateStatusIds, formatIds]
+    [areas, areaId, includeSubAreas, year, conditionIds, certificateStatusIds, formatIds, issueFormatIds]
   );
   const narrowed = freeExtraFiltersNarrow(filters);
   const { data: conditions = [] } = useCollectionConditions(collectionId);
@@ -559,6 +562,15 @@ export function FreeExtrasDialog({
                 />
               </FilterSlot>
             )}
+            {/* The stamps' issue format (#2440): a several-stamp piece passes on any of its stamps. */}
+            <FilterSlot width={FILTER_WIDTH.issueFormats}>
+              <IssueFormatFilter
+                fullWidth
+                collectionId={collectionId}
+                selected={issueFormatIds}
+                onChange={setIssueFormatIds}
+              />
+            </FilterSlot>
           </div>
           {limitsError && (
             <div style={{ padding: "0.5rem 1.5rem 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>

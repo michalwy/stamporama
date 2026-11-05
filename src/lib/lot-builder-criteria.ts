@@ -46,6 +46,9 @@ export interface LotBuilderCriteria {
   /** Allowed physical formats — an OR, empty meaning every format. `"single"` is a value like any
    *  other and matches the copies with no format (ADR-0020). */
   formatIds: string[];
+  /** Allowed issue formats of the copies' stamps (#2440) — an OR, empty meaning every one.
+   *  `ORDINARY_STAMP_ISSUE_FORMAT` matches the ordinary stamps. */
+  issueFormatIds: string[];
   /** Per-copy catalog-value ceiling, applied in the rules and not in the `where` (#758). */
   maxCatalogValue: number | null;
   countMin: number | null;
@@ -151,6 +154,7 @@ export type LotRecipeKey =
   | "yearTo"
   | "conditionIds"
   | "formatIds"
+  | "issueFormatIds"
   | "maxCatalogValue"
   | "countMin"
   | "countMax"
@@ -177,6 +181,7 @@ export const LOT_RECIPE_KEYS: readonly LotRecipeKey[] = [
   "yearTo",
   "conditionIds",
   "formatIds",
+  "issueFormatIds",
   "maxCatalogValue",
   "countMin",
   "countMax",
@@ -200,6 +205,7 @@ export function toLotRecipe(criteria: LotRecipe): LotRecipe {
     yearTo: criteria.yearTo,
     conditionIds: [...criteria.conditionIds],
     formatIds: [...criteria.formatIds],
+    issueFormatIds: [...criteria.issueFormatIds],
     maxCatalogValue: criteria.maxCatalogValue,
     countMin: criteria.countMin,
     countMax: criteria.countMax,
@@ -298,6 +304,7 @@ export function parseLotBuilderRequest(params: URLSearchParams): LotBuilderReque
       yearTo: num(params.get("yearTo")),
       conditionIds: params.getAll("condition").filter(Boolean),
       formatIds: params.getAll("format").filter(Boolean),
+      issueFormatIds: params.getAll("issueFormat").filter(Boolean),
       maxCatalogValue: num(params.get("maxValue")),
       countMin: num(params.get("countMin")),
       countMax: num(params.get("countMax")),
@@ -338,6 +345,7 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
   putNum(params, "yearTo", criteria.yearTo);
   for (const id of criteria.conditionIds) params.append("condition", id);
   for (const id of criteria.formatIds) params.append("format", id);
+  for (const id of criteria.issueFormatIds) params.append("issueFormat", id);
   putNum(params, "maxValue", criteria.maxCatalogValue);
   putNum(params, "countMin", criteria.countMin);
   putNum(params, "countMax", criteria.countMax);

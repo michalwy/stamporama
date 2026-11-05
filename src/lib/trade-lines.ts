@@ -756,6 +756,8 @@ const COMMITTING_LINE = { fulfillment: { in: [...COMMITTING_FULFILLMENTS] } };
 export interface OfferableCopyFilters {
   /** The selected area and its descendants, already resolved by the caller — the picker's sidebar. */
   areaIds?: string[] | null;
+  /** The stamps' issue formats (#2440); empty is every one. */
+  issueFormatIds?: string[];
   search?: string;
   year?: number | "none";
   /** A span of years, both ends included (#2258) — either end may be open. */
@@ -804,6 +806,7 @@ export async function listOfferableCopies(
 
   const { items } = await listItemsPaginated(ownerId, collectionId, {
     areaIds: filters.areaIds ?? undefined,
+    issueFormatIds: filters.issueFormatIds,
     search: filters.search,
     year: filters.year,
     yearFrom: filters.yearFrom,

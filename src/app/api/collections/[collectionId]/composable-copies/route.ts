@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listComposableCopies } from "@/lib/offers";
 import { readSearchParam } from "@/lib/text-input";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 
 // Copies eligible to go into an offer not made yet (#2291) — a post's *New lot…* picks them before the
 // offer exists: For sale, delivered and not sold, as for an offer's own set. `notOfferedOn` narrows them to
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         facebookPostId: sp.get("exceptPost") || null,
       },
       areaIds: areaIds.length > 0 ? areaIds : undefined,
+      issueFormatIds: parseIssueFormatIds(sp.get(ISSUE_FORMAT_FILTER_PARAM)),
     });
     return NextResponse.json({ items });
   } catch {
