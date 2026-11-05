@@ -19,6 +19,7 @@ describe("free-extra filters (#2423)", () => {
     conditionIds: ["none", "used"],
     certificateStatusIds: ["none"],
     formatIds: ["single", "block"],
+    issueFormatIds: ["stamp", "bl"],
   };
 
   it("reads back what it writes", () => {
@@ -38,6 +39,7 @@ describe("free-extra filters (#2423)", () => {
       { conditionIds: ["used"] },
       { certificateStatusIds: ["none"] },
       { formatIds: ["single"] },
+      { issueFormatIds: ["stamp"] },
     ]) {
       assert.equal(freeExtraFiltersNarrow({ ...NO_FREE_EXTRA_FILTERS, ...patch }), true);
     }

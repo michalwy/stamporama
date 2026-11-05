@@ -13,6 +13,7 @@ import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vend
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
@@ -79,6 +80,8 @@ export function WantsListPanel({
   const [status, setStatus] = useState<StatusFilter>("open");
   const [priorities, setPriorities] = useState<WantPriority[]>([]);
   const [conditionIds, setConditionIds] = useState<string[]>([]);
+  // The wanted stamp's issue format (#2440), screen state like the condition beside it.
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   /**
    * One stamp's wants, when the list was opened from a want chip (#1244) — the chip's click lands
    * here in a new tab with `?stampId=`. In the address bar, unlike every other filter on this screen,
@@ -192,6 +195,7 @@ export function WantsListPanel({
       status,
       priorities: priorities.length > 0 ? priorities : undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
+      issueFormatIds: issueFormatIds.length > 0 ? issueFormatIds : undefined,
       areaIds: filterAreaIds ?? undefined,
       search: searchText || undefined,
       searchCatalogNumber,
@@ -199,7 +203,7 @@ export function WantsListPanel({
       searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
+    [status, priorities, conditionIds, issueFormatIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
   );
   const listFilters: WantListFilters = useMemo(
     () => ({ ...facetFilters, year: year || undefined }),
@@ -219,6 +223,7 @@ export function WantsListPanel({
       status,
       priorities: priorities.length > 0 ? priorities : undefined,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
+      issueFormatIds: issueFormatIds.length > 0 ? issueFormatIds : undefined,
       year: year || undefined,
       search: searchText || undefined,
       searchCatalogNumber,
@@ -226,7 +231,7 @@ export function WantsListPanel({
       searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
+    [status, priorities, conditionIds, issueFormatIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
   );
   const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
 
@@ -273,6 +278,7 @@ export function WantsListPanel({
     status !== "open" ||
     priorities.length > 0 ||
     conditionIds.length > 0 ||
+    issueFormatIds.length > 0 ||
     query.trim().length > 0 ||
     !!filterAreaId ||
     !!year ||
@@ -474,6 +480,12 @@ export function WantsListPanel({
           allLabel="Any condition"
           itemNoun="conditions"
           ariaLabel="Filter by acceptable condition"
+        />
+
+        <IssueFormatFilter
+          collectionId={collectionId}
+          selected={issueFormatIds}
+          onChange={setIssueFormatIds}
         />
 
         <button

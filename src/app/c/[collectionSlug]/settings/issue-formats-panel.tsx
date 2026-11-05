@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { issueFormatsQueryKey } from "@/app/c/[collectionSlug]/shared/use-issue-formats";
 import { LabelWithError } from "@/app/dialog-shell";
 import {
   createStampIssueFormatAction,
@@ -55,7 +57,12 @@ export function IssueFormatsPanel({
   defaultLanguage,
 }: IssueFormatsPanelProps) {
   const router = useRouter();
-  const refresh = () => router.refresh();
+  const queryClient = useQueryClient();
+  // The filters read the dictionary through a client query (#2440), so a change here refreshes it too.
+  const refresh = () => {
+    router.refresh();
+    void queryClient.invalidateQueries({ queryKey: issueFormatsQueryKey(collectionId) });
+  };
   const list = useReorderable(
     initialIssueFormats,
     (ids) => reorderStampIssueFormatsAction(collectionId, ids),

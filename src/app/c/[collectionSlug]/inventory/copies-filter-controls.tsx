@@ -17,6 +17,7 @@ import { SubtreeScopeToggle } from "@/app/c/[collectionSlug]/shared/subtree-scop
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
 import { NO_FAULTS } from "@/lib/fault-filter";
@@ -91,6 +92,9 @@ export const FILTER_WIDTH = {
   /** Sized for `All subtypes` and `3 subtypes`; a single subtype's own name is the collector's
    *  dictionary text (*Perforation variety*) and ellipsises. */
   subtypes: "9.5rem",
+  /** Sized for `All issue formats` and `3 issue formats`; one value's own name (*Stamp from a
+   *  souvenir sheet*) is the collector's dictionary text and ellipsises (#2440). */
+  issueFormats: "11rem",
   /** The widest of the six, and not because its default label is: its options are whole sentences
    *  (*Include no longer held*, *Include sold & traded*) that differ only at the end, so a trigger
    *  that ellipsised one would read the same as the other. */
@@ -134,6 +138,8 @@ export interface CopiesFilterControlsProps {
   certificateStatusIds: string[];
   formatIds: string[];
   subtypeIds: string[];
+  /** The stamps' issue formats (#2440), `ORDINARY_STAMP_ISSUE_FORMAT` among them for ordinary stamps. */
+  issueFormatIds: string[];
   multiStamp: MultiStampFilter | undefined;
   /** The issue's completeness (#1884); absent is *All*. */
   complete: CompletenessFilter | undefined;
@@ -166,6 +172,7 @@ export function CopiesFilterControls({
   certificateStatusIds,
   formatIds,
   subtypeIds,
+  issueFormatIds,
   multiStamp,
   complete,
   held,
@@ -317,6 +324,18 @@ export function CopiesFilterControls({
           />
         </FilterSlot>
       )}
+
+      {/* The stamp's issue format (#2440) — souvenir sheet, booklet pane… — the shared control
+          every stamp and copy filter carries. Always drawn: the dictionary is seeded, and
+          *Stamp (none)* is a choice even before it loads. */}
+      <FilterSlot width={FILTER_WIDTH.issueFormats}>
+        <IssueFormatFilter
+          fullWidth
+          collectionId={collectionId}
+          selected={issueFormatIds}
+          onChange={(ids) => updateParams({ issueFormatIds: ids.join(",") })}
+        />
+      </FilterSlot>
 
       {/* Pieces carrying several stamps (#748; ADR-0044 §7) — covers, fragments, FDCs. They
           have no screen of their own, so this is how the list is narrowed to them or rid of

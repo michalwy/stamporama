@@ -6,6 +6,7 @@ import type { WantPriority } from "@/lib/want-rules";
 import type { AreaFacet } from "@/lib/area-facets";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import type { WantSearchField } from "@/lib/want-search-fields";
+import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 
 interface WantsPage {
   items: WantListItem[];
@@ -18,6 +19,8 @@ export interface WantListFilters {
   status?: "open" | "closed" | "all";
   priorities?: WantPriority[];
   conditionIds?: string[];
+  /** The wanted stamp's issue format (#2440). */
+  issueFormatIds?: string[];
   areaIds?: string[];
   /** "none" for the no-year bucket, otherwise a numeric year string. */
   year?: string;
@@ -62,6 +65,7 @@ function toParams(filters: WantListFilters): URLSearchParams {
   if (filters.status) params.set("status", filters.status);
   if (filters.priorities?.length) params.set("priorities", filters.priorities.join(","));
   if (filters.conditionIds?.length) params.set("conditionIds", filters.conditionIds.join(","));
+  appendIssueFormatParam(params, filters.issueFormatIds);
   if (filters.areaIds?.length) params.set("areaIds", filters.areaIds.join(","));
   if (filters.year) params.set("year", filters.year);
   if (filters.issueId) params.set("issueId", filters.issueId);

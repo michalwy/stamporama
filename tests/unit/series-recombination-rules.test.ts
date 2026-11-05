@@ -553,13 +553,16 @@ describe("combination helpers (#1265)", () => {
 
   it("round-trips the criteria through the address, and keeps the default address bare", () => {
     const criteria = parseSeriesCriteria(
-      new URLSearchParams("conditionIds=mnh,mh&formatIds=single&subtypeIds=none&mixCertificates=true&mixFormats=yes")
+      new URLSearchParams(
+        "conditionIds=mnh,mh&formatIds=single&subtypeIds=none&issueFormatIds=stamp,bl&mixCertificates=true&mixFormats=yes"
+      )
     );
     assert.deepEqual(criteria, {
       conditionIds: ["mnh", "mh"],
       certificateStatusIds: [],
       formatIds: ["single"],
       subtypeIds: ["none"],
+      issueFormatIds: ["stamp", "bl"],
       mixing: { condition: false, certificate: true, format: false },
     });
     assert.deepEqual(parseSeriesCriteria(new URLSearchParams(seriesCriteriaParams(criteria))), criteria);

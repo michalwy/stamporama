@@ -30,6 +30,7 @@ import {
   type StampYearFacetFilters,
   type StampAreaFacetFilters,
 } from "./use-stamps-query";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { tagFilterFromParams, DEFAULT_TAG_FILTER_MODE, type TagFilterOpts } from "@/lib/tag-filter";
@@ -393,6 +394,13 @@ export function StampsListPanel({
                 />
               );
             })}
+            {/* The issue format (#2440) — the form the stamp was issued in, after the four
+                dictionaries it travels with in the URL. */}
+            <IssueFormatFilter
+              collectionId={collectionId}
+              selected={attributeFilters.issueFormatIds ?? []}
+              onChange={(ids) => updateParams({ issueFormatIds: ids.join(",") })}
+            />
             {/* The collector's own labels (#1182), last on the line: an invented vocabulary rather
                 than a catalogue fact, so it reads after the four dictionaries that are. */}
             <TagFilterControl

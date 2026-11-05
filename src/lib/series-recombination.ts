@@ -187,7 +187,7 @@ interface RecombinationPool {
   sets: { setId: string; offerId: string; itemIds: string[] }[];
 }
 
-/** The screen's four filters as the copy reads spell them (#1265). An empty filter is no filter. */
+/** The screen's filters as the copy reads spell them (#1265). An empty filter is no filter. */
 function criteriaFilters(criteria: SeriesCriteria): ItemListFiltersPaginated {
   return {
     ...(criteria.conditionIds.length > 0 ? { conditionIds: criteria.conditionIds } : {}),
@@ -196,6 +196,7 @@ function criteriaFilters(criteria: SeriesCriteria): ItemListFiltersPaginated {
       : {}),
     ...(criteria.formatIds.length > 0 ? { formatIds: criteria.formatIds } : {}),
     ...(criteria.subtypeIds.length > 0 ? { subtypeIds: criteria.subtypeIds } : {}),
+    ...(criteria.issueFormatIds.length > 0 ? { issueFormatIds: criteria.issueFormatIds } : {}),
   };
 }
 

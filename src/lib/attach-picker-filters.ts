@@ -72,6 +72,8 @@ export interface AttachPickerFilters {
   certificateStatusIds: string[];
   /** Format ids, `"single"` among them for the copies with no format. */
   formatIds: string[];
+  /** The stamps' issue formats (#2440), `"stamp"` among them for the ordinary stamps. */
+  issueFormatIds: string[];
   purchase: AttachPurchaseValue[];
   states: AttachState[];
   /** A location id, {@link NO_LOCATION} for the copies filed nowhere, or `""` for every location
@@ -90,6 +92,7 @@ export const DEFAULT_ATTACH_FILTERS: AttachPickerFilters = {
   conditionIds: [],
   certificateStatusIds: [],
   formatIds: [],
+  issueFormatIds: [],
   purchase: [],
   states: ["held"],
   locationId: "",
@@ -126,6 +129,7 @@ export function parseAttachFilters(raw: string | null): AttachPickerFilters {
     conditionIds: stringList(o.conditionIds),
     certificateStatusIds: stringList(o.certificateStatusIds),
     formatIds: stringList(o.formatIds),
+    issueFormatIds: stringList(o.issueFormatIds),
     purchase: oneOf(o.purchase, ATTACH_PURCHASE_VALUES),
     // A stored list with no recognised state is the default, not *every state*: only a list the
     // collector emptied themselves means that, and it is stored as `[]`.
@@ -175,6 +179,7 @@ export interface AttachReadQuery {
   conditionIds: string[];
   certificateStatusIds: string[];
   formatIds: string[];
+  issueFormatIds: string[];
   purchase: AttachPurchaseValue[];
   /** A location id or {@link NO_LOCATION}; null for every location (#2209). */
   locationId: string | null;
@@ -208,6 +213,7 @@ export function writeAttachQuery(
   for (const id of filters.conditionIds) params.append("condition", id);
   for (const id of filters.certificateStatusIds) params.append("certificate", id);
   for (const id of filters.formatIds) params.append("format", id);
+  for (const id of filters.issueFormatIds) params.append("issueFormat", id);
   for (const value of filters.purchase) params.append("purchase", value);
   if (filters.locationId) {
     params.set("location", filters.locationId);
@@ -232,6 +238,7 @@ export function readAttachQuery(sp: URLSearchParams, search: string | undefined)
     conditionIds: sp.getAll("condition").filter(Boolean),
     certificateStatusIds: sp.getAll("certificate").filter(Boolean),
     formatIds: sp.getAll("format").filter(Boolean),
+    issueFormatIds: sp.getAll("issueFormat").filter(Boolean),
     purchase: oneOf(sp.getAll("purchase"), ATTACH_PURCHASE_VALUES),
     locationId: location || null,
     locationExact: !!location && sp.get("locationExact") === "1",

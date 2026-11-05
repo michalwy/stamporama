@@ -1,5 +1,6 @@
 "use client";
 
+import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   SaleListItem,
@@ -145,10 +146,12 @@ export function useStockCopiesForSale(
   /** What `areaIds` was resolved from, so an area added under it keeps the rows drawn (#977). */
   areaSelection: AreaSelection,
   /** Only the copies on no open offer (#2338). */
-  notOnOpenOffer = false
+  notOnOpenOffer = false,
+  /** The stamps' issue formats (#2440), narrowed on the server; empty is every one. */
+  issueFormatIds: readonly string[] = []
 ) {
   const key = (ids: string[] | null) =>
-    ["sales", collectionId, "stock-copies", notOnOpenOffer, ids ?? []] as const;
+    ["sales", collectionId, "stock-copies", notOnOpenOffer, issueFormatIds, ids ?? []] as const;
   return useQuery<ItemListItem[]>({
     queryKey: key(areaIds),
     ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, key(null)),
@@ -156,6 +159,7 @@ export function useStockCopiesForSale(
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
       if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
+      appendIssueFormatParam(params, issueFormatIds);
       const res = await fetch(`/api/collections/${collectionId}/sales/stock-copies?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load copies");
       return (await res.json()).items;

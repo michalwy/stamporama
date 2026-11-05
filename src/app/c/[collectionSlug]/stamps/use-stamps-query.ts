@@ -8,7 +8,7 @@ import type { StampSearchField } from "@/lib/stamp-search-fields";
 import type { EditablePhotoSummary } from "@/lib/photos";
 import type { AreaFacet } from "@/lib/area-facets";
 import {
-  STAMP_ATTRIBUTE_FILTER_KEYS,
+  STAMP_LIST_CATALOGUE_FILTER_KEYS,
   type StampAttributeFilters,
 } from "@/lib/stamp-attribute-kinds";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
@@ -66,7 +66,7 @@ export interface StampAreaFacetFilters extends StampAttributeFilters, TagFilterO
 /** Writes the four attribute filters onto a request's query string, in the shape the API route
  *  reads back. Empty sets are left off entirely, so a request carries only what is narrowing. */
 function appendAttributeFilters(params: URLSearchParams, filters: StampAttributeFilters) {
-  for (const key of STAMP_ATTRIBUTE_FILTER_KEYS) {
+  for (const key of STAMP_LIST_CATALOGUE_FILTER_KEYS) {
     const ids = filters[key];
     if (ids && ids.length > 0) params.set(key, ids.join(","));
   }

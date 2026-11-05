@@ -121,6 +121,7 @@ import {
   resolveDisplayConditionId,
 } from "./pricing";
 import { foldChecklistPrices, type ChecklistPricePick } from "./catalog-price";
+import { issueFormatStampWhere } from "./issue-format-filter";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -1117,6 +1118,9 @@ export interface IssueListFilterOpts {
    *  it and never on what is hung on its stamps. */
   tagIds?: string[];
   tagMode?: TagFilterMode;
+  /** Keep the issues holding a stamp in any of these issue formats (#2440);
+   *  `ORDINARY_STAMP_ISSUE_FORMAT` is a stamp with none. Empty or omitted is every issue. */
+  issueFormatIds?: string[];
   /** List, count and value the issues' specialised checklists too (#1617). Off by default. */
   includeSpecialised?: boolean;
 }
@@ -1230,6 +1234,11 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
   // key would have the second spread silently replacing the first.
   const tags = tagFilterWhere(opts);
   if (tags) conditions.push(tags);
+
+  // The issue format (#2440): an issue is kept when one of its stamps is in a ticked format — the
+  // way the stamp-name and catalogue-number filters above reach an issue through its members.
+  const issueFormats = issueFormatStampWhere(opts.issueFormatIds);
+  if (issueFormats) conditions.push({ members: { some: { stamp: issueFormats } } });
 
   return {
     collectionId,

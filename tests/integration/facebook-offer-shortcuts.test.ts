@@ -362,6 +362,7 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
         yearTo: null,
         conditionIds: [],
         formatIds: [],
+        issueFormatIds: [],
         maxCatalogValue: null,
         countMin: 2,
         countMax: null,

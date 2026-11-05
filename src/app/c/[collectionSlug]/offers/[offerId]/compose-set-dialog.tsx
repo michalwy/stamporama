@@ -36,6 +36,7 @@ import type { ItemListItem } from "@/lib/items";
 import { useComposableCopies, useListedElsewhere, useOfferCollisions } from "../use-offers-query";
 import { ListedElsewhereNote } from "../listed-elsewhere-note";
 import { Icon } from "@/app/icons";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import type { OwnOffers } from "@/lib/copy-open-offers";
@@ -145,6 +146,8 @@ export function ComposeSetDialog({
   );
 
   const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
+  // The stamps' issue format (#2440), the picker's own and not remembered; narrowed on the server.
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const { data: copies = [], isLoading } = useComposableCopies(
     collectionId,
     offerId,
@@ -152,7 +155,8 @@ export function ComposeSetDialog({
     { areaId, includeSubAreas },
     true,
     newOffers ? platformId : null,
-    { notOnOpenOffer, except: ownOffers }
+    { notOnOpenOffer, except: ownOffers },
+    issueFormatIds
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -361,6 +365,11 @@ export function ComposeSetDialog({
               onChange={setNotOnOpenOffer}
               ownOffers={ownOffersNote(ownOffers)}
             />
+            <IssueFormatFilter
+              collectionId={collectionId}
+              selected={issueFormatIds}
+              onChange={setIssueFormatIds}
+            />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -368,7 +377,7 @@ export function ComposeSetDialog({
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
-                {copies.length === 0
+                {copies.length === 0 && issueFormatIds.length === 0
                   ? notOnOpenOffer
                     ? "No copies available on no open offer. Untick “Not on any open offer” to see the copies listed elsewhere too."
                     : newOffers

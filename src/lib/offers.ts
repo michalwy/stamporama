@@ -4070,6 +4070,7 @@ const LISTING_SETS_SELECT = {
               // The label select already carries the area links the grouping needs (#379).
               ...STAMP_LABEL_SELECT.stamp.select,
               issuedYear: true,
+              issueFormatId: true,
               colnectId: true,
               // Whether the stamp is an umbrella at all, which is what makes the derivation apply.
               variants: { select: VARIANT_FLAG_SELECT },
@@ -4077,6 +4078,9 @@ const LISTING_SETS_SELECT = {
           },
           // …or whether the copy is one of several candidates (#1651), which always does.
           candidates: { select: { stampId: true } },
+          // Every stamp the copy carries, for the issue-format filter (#2440): a several-stamp piece
+          // matches on any of them. An ordinary copy has its one entry.
+          stamps: { select: { stamp: { select: { issueFormatId: true } } } },
         },
       },
     },
@@ -4110,6 +4114,9 @@ export interface ListingWorkspaceOffer {
   /** The distinct (area, year) pairs across the offer's copies, for the grouping and the rail
    * (`listing-groups.ts`). One entry when every copy agrees. */
   areaYears: OfferAreaYear[];
+  /** Per copy, the issue formats of the stamps it carries (#2440; null an ordinary stamp) — what
+   *  the workspace's issue-format filter reads (`listing-groups.ts`). */
+  copyIssueFormats: (string | null)[][];
   /** Why this offer cannot be listed as it stands: the Assistant's own preconditions (#406) — the
    * same evaluation the listing-kit endpoint refuses on (#405), so the card and the endpoint can
    * never disagree — and the platform's listing-text caps (#636), which apply on every platform,
@@ -4213,6 +4220,12 @@ export async function listReadyOffersForListing(
     photoStatus: (row.photoGeneration?.status as OfferPhotoGenerationStatus) ?? "none",
     url: row.url,
     areaYears: distinctAreaYears(row.sets),
+    copyIssueFormats: row.sets.flatMap((set) =>
+      set.items.map(({ item }) => [
+        item.stamp.issueFormatId,
+        ...item.stamps.map((entry) => entry.stamp.issueFormatId),
+      ])
+    ),
     blockers: [
       ...listingBlockersFor(row.sets, platformModule, labeller, conditionMap, catalogIds, "ready"),
       ...evaluateListingTextLimits(row, textLimits),
@@ -6347,6 +6360,8 @@ export async function listComposableCopies(
     notOnOpenOffer?: boolean;
     ownOffers?: OwnOffers;
     areaIds?: string[];
+    /** The stamps' issue formats (#2440); empty is every one. */
+    issueFormatIds?: string[];
     search?: string;
     year?: number | "none";
   } = {}
@@ -6364,6 +6379,7 @@ export async function listComposableCopies(
         }
       : {}),
     areaIds: opts.areaIds,
+    issueFormatIds: opts.issueFormatIds,
     search: opts.search,
     year: opts.year,
     sortDir: "asc",

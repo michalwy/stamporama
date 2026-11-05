@@ -59,6 +59,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { NOT_ON_OPEN_OFFER_LABEL } from "@/app/c/[collectionSlug]/shared/not-on-open-offer";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -619,6 +620,15 @@ export function AttachCopiesDialog({
                 />
               </FilterSlot>
             )}
+            {/* The stamps' issue format (#2440), remembered with the rest of the picker's filters. */}
+            <FilterSlot width={FILTER_WIDTH.issueFormats}>
+              <IssueFormatFilter
+                fullWidth
+                collectionId={collectionId}
+                selected={filters.issueFormatIds}
+                onChange={(ids) => setFilters({ issueFormatIds: ids })}
+              />
+            </FilterSlot>
             {/* Location (#2209), the Copies list's control and its reading: a location brings the
                 ones nested in it unless *this location only* is set, *Not filed* is the copies
                 filed nowhere, and the dropdown stays open on a pick (#846). */}

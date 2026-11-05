@@ -1,4 +1,5 @@
 import { yearSelects } from "./list-area-year-filter";
+import { appendIssueFormatParam, ISSUE_FORMAT_FILTER_PARAM } from "./issue-format-filter";
 
 // The filters of *Add free extras* (#2423): area, year of issue, condition, certificate and format —
 // the Copies list's own facets, with the same values (`"none"` for no certificate, `"single"` for no
@@ -20,6 +21,8 @@ export interface FreeExtraFilters {
   conditionIds: string[];
   certificateStatusIds: string[];
   formatIds: string[];
+  /** The stamps' issue formats (#2440), `"stamp"` among them for the ordinary stamps. */
+  issueFormatIds: string[];
 }
 
 export const NO_FREE_EXTRA_FILTERS: FreeExtraFilters = {
@@ -28,6 +31,7 @@ export const NO_FREE_EXTRA_FILTERS: FreeExtraFilters = {
   conditionIds: [],
   certificateStatusIds: [],
   formatIds: [],
+  issueFormatIds: [],
 };
 
 /** Whether any filter narrows the candidates. */
@@ -37,7 +41,8 @@ export function freeExtraFiltersNarrow(filters: FreeExtraFilters): boolean {
     filters.year !== null ||
     filters.conditionIds.length > 0 ||
     filters.certificateStatusIds.length > 0 ||
-    filters.formatIds.length > 0
+    filters.formatIds.length > 0 ||
+    filters.issueFormatIds.length > 0
   );
 }
 
@@ -51,6 +56,7 @@ export function writeFreeExtraFilterQuery(filters: FreeExtraFilters): URLSearchP
     params.set("certificateStatusIds", filters.certificateStatusIds.join(","));
   }
   if (filters.formatIds.length > 0) params.set("formatIds", filters.formatIds.join(","));
+  appendIssueFormatParam(params, filters.issueFormatIds);
   return params;
 }
 
@@ -68,6 +74,7 @@ export function readFreeExtraFilterQuery(params: URLSearchParams): FreeExtraFilt
     conditionIds: list(params.get("conditionIds")),
     certificateStatusIds: list(params.get("certificateStatusIds")),
     formatIds: list(params.get("formatIds")),
+    issueFormatIds: list(params.get(ISSUE_FORMAT_FILTER_PARAM)),
   };
 }
 

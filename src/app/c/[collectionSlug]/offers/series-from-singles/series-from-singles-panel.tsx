@@ -31,6 +31,7 @@ import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { isListedState } from "@/lib/offer-listing-drift";
 import { Icon } from "@/app/icons";
 import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -294,6 +295,12 @@ export function SeriesFromSinglesPanel({
               ariaLabel="Filter by stamp subtype"
             />
           ) : null}
+          {/* The stamps' issue format (#2440), narrowing the candidates like the axes before it. */}
+          <IssueFormatFilter
+            collectionId={collectionId}
+            selected={criteria.issueFormatIds}
+            onChange={(ids) => updateParams({ issueFormatIds: ids.join(",") })}
+          />
           <span style={{ ...NOTE, marginLeft: "0.5rem" }}>A series may mix:</span>
           {/* One switch per axis, independent of each other — so *any certificate, but all MNH
               singles* can be said. An axis with nothing defined has only one value, so its switch

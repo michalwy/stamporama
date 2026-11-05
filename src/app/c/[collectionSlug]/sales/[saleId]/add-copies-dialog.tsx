@@ -27,6 +27,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useStockCopiesForSale } from "../use-sales-query";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import {
   NotOnOpenOfferToggle,
   useNotOnOpenOffer,
@@ -125,11 +126,14 @@ export function AddCopiesDialog({
   );
 
   const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
+  // The stamps' issue format (#2440), the picker's own and not remembered; narrowed on the server.
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const { data: copies = [], isLoading } = useStockCopiesForSale(
     collectionId,
     areaIds,
     { areaId, includeSubAreas },
-    notOnOpenOffer
+    notOnOpenOffer,
+    issueFormatIds
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -242,6 +246,11 @@ export function AddCopiesDialog({
               aria-label="Filter copies"
             />
             <NotOnOpenOfferToggle checked={notOnOpenOffer} onChange={setNotOnOpenOffer} />
+            <IssueFormatFilter
+              collectionId={collectionId}
+              selected={issueFormatIds}
+              onChange={setIssueFormatIds}
+            />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -249,7 +258,7 @@ export function AddCopiesDialog({
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
-                {copies.length === 0
+                {copies.length === 0 && issueFormatIds.length === 0
                   ? notOnOpenOffer
                     ? "No copies in stock here on no open offer. Untick “Not on any open offer” to see the copies listed somewhere too."
                     : "No copies in stock here. A copy that is sold, gone, or not yet in hand is not offered."

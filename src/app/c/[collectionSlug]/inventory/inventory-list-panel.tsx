@@ -423,6 +423,7 @@ export function InventoryListPanel({
   // to them (ADR-0049 §7). `"none"` is the base stamps, which carry no subtype (ADR-0010 §2): without
   // it as a tickable value, *everything but forgeries* could not be asked at all.
   const subtypeIds = useCsvValue(readFilterParam("subtypeIds"));
+  const issueFormatIds = useCsvValue(readFilterParam("issueFormatIds"));
   // Certificate is the fourth fact a copy carries that this list reasons about — it is a
   // duplicate-grouping axis, a valuation axis and a listing axis — and until #428 it was the one with
   // no filter at all. `"none"` is a tickable value, not the absence of the filter: null *is* a value
@@ -621,6 +622,7 @@ export function InventoryListPanel({
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       subtypeIds: subtypeIds.length > 0 ? subtypeIds : undefined,
+      issueFormatIds: issueFormatIds.length > 0 ? issueFormatIds : undefined,
       // The mode rides only with the ids, so an untouched filter keys the same cache entry whichever
       // reading was last left in the control.
       tagIds: tagIds.length > 0 ? tagIds : undefined,
@@ -648,7 +650,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
+    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -663,6 +665,7 @@ export function InventoryListPanel({
         certificateStatusIds.length > 0 ? certificateStatusIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       subtypeIds: subtypeIds.length > 0 ? subtypeIds : undefined,
+      issueFormatIds: issueFormatIds.length > 0 ? issueFormatIds : undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
       tagMode: tagIds.length > 0 ? tagMode : undefined,
       faultIds: faultIds.length > 0 ? faultIds : undefined,
@@ -685,7 +688,7 @@ export function InventoryListPanel({
       held,
       heldAxes,
     }),
-    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
+    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1288,6 +1291,7 @@ export function InventoryListPanel({
     certificateStatusIds.length > 0 ||
     formatIds.length > 0 ||
     subtypeIds.length > 0 ||
+    issueFormatIds.length > 0 ||
     tagIds.length > 0 ||
     faultIds.length > 0 ||
     !!locationId ||
@@ -1766,6 +1770,7 @@ export function InventoryListPanel({
                 certificateStatusIds={certificateStatusIds}
                 formatIds={formatIds}
                 subtypeIds={subtypeIds}
+                issueFormatIds={issueFormatIds}
                 multiStamp={multiStamp}
                 complete={complete}
                 held={held}

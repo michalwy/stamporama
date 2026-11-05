@@ -91,6 +91,7 @@ import { SelectableStampNode } from "./selectable-stamp-node";
 import { usePickerTreeState, type PickerTree } from "./use-picker-tree-state";
 import { PhotoThumb } from "./photo-thumb";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import {
@@ -328,6 +329,9 @@ export function StampPickerBrowser({
   // Persisted so the picker reopens on the filter it was left on (#183), debounced because every
   // keystroke would otherwise be a page request.
   const [filter, setFilter] = usePersistedSearch(`${collectionId}:issues`);
+  // The issue format (#2440): the issues holding a stamp in one of the ticked formats. Picker state
+  // only, not remembered, like every other picker's own filters.
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const search = useDebouncedValue(filter);
 
   const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
@@ -361,8 +365,9 @@ export function StampPickerBrowser({
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
       year: year || undefined,
+      issueFormatIds,
     }),
-    [areaIds, search, parsedSearch, year]
+    [areaIds, search, parsedSearch, year, issueFormatIds]
   );
 
   // The facets drop the year and keep everything else, so each count says what picking that year
@@ -373,8 +378,9 @@ export function StampPickerBrowser({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      issueFormatIds,
     }),
-    [areaIds, search, parsedSearch]
+    [areaIds, search, parsedSearch, issueFormatIds]
   );
 
   const { data: yearFacets = [], isLoading: yearsLoading } = useIssueYears(
@@ -391,8 +397,9 @@ export function StampPickerBrowser({
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
       year: year || undefined,
+      issueFormatIds,
     }),
-    [search, parsedSearch, year]
+    [search, parsedSearch, year, issueFormatIds]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -542,6 +549,8 @@ export function StampPickerBrowser({
               isLoading={isLoading}
               filter={filter}
               onFilterChange={setFilter}
+              issueFormatIds={issueFormatIds}
+              onIssueFormatIdsChange={setIssueFormatIds}
               search={search}
               hasMore={!!hasNextPage}
               isFetchingMore={isFetchingNextPage}
@@ -676,6 +685,8 @@ function IssueBrowser({
   isLoading,
   filter,
   onFilterChange,
+  issueFormatIds,
+  onIssueFormatIdsChange,
   search,
   hasMore,
   isFetchingMore,
@@ -703,6 +714,9 @@ function IssueBrowser({
   /** What is in the search box right now — the input's value. */
   filter: string;
   onFilterChange: (value: string) => void;
+  /** The issue-format filter (#2440), held by the picker beside the search it narrows with. */
+  issueFormatIds: string[];
+  onIssueFormatIdsChange: (ids: string[]) => void;
   /** The debounced text the loaded rows were actually fetched with; what a row measures its own
    *  match against, so a row never dims itself on a query the server has not answered yet. */
   search: string;
@@ -869,6 +883,11 @@ function IssueBrowser({
           aria-label="Filter issues"
           // Focus + select the remembered filter text on open, so typing overwrites it (#183).
           data-autofocus-select
+        />
+        <IssueFormatFilter
+          collectionId={collectionId}
+          selected={issueFormatIds}
+          onChange={onIssueFormatIdsChange}
         />
         <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
         {/* Specialised checklists (#1617): out of the rows, the branches and the set buttons until on. */}

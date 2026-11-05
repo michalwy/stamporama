@@ -237,6 +237,10 @@ right, from *which copies* to *how they are shown*.
   mean to sell them deliberately. It reads the copy's own stamp; a cover carrying several stamps
   answers for the first of them. Like the filters beside it, it is remembered between visits and the
   year panel, the area panel and the holdings totals follow it.
+- **Issue format** — show only copies of stamps issued as the [issue formats](collections.md#filtering-by-issue-format)
+  you tick — *Souvenir sheet*, *Booklet pane* and the rest — with **Stamp (none)** among them for the
+  ordinary stamps. Unlike the subtype, a cover carrying several stamps matches when **any** of them
+  does. Always on the bar, since every collection starts with the list.
 - **Several stamps** — *Any number of stamps* (the default), *Only several-stamp pieces* or *No
   several-stamp pieces*: narrow the list to the [covers and other pieces carrying several
   stamps](#covers-fragments-and-other-pieces-carrying-several-stamps), or set them aside. It is

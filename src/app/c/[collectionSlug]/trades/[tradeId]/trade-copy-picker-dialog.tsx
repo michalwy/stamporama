@@ -26,6 +26,7 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { addTradeGiveLinesAction } from "@/app/actions/trades";
 import { useOfferableCopies, useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import {
   NotOnOpenOfferToggle,
@@ -123,13 +124,16 @@ export function TradeCopyPickerDialog({
   );
 
   const [notOnOpenOffer, setNotOnOpenOffer] = useNotOnOpenOffer(collectionId);
+  // The stamps' issue format (#2440), the picker's own and not remembered; narrowed on the server.
+  const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const { data: copies = [], isLoading } = useOfferableCopies(
     collectionId,
     tradeId,
     areaIds,
     { areaId, includeSubAreas },
     forTradeOnly,
-    notOnOpenOffer
+    notOnOpenOffer,
+    issueFormatIds
   );
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
@@ -282,6 +286,11 @@ export function TradeCopyPickerDialog({
               Any held copy
             </label>
             <NotOnOpenOfferToggle checked={notOnOpenOffer} onChange={setNotOnOpenOffer} />
+            <IssueFormatFilter
+              collectionId={collectionId}
+              selected={issueFormatIds}
+              onChange={setIssueFormatIds}
+            />
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -289,7 +298,7 @@ export function TradeCopyPickerDialog({
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : visibleCopies.length === 0 ? (
               <p style={HINT_STYLE}>
-                {copies.length === 0
+                {copies.length === 0 && issueFormatIds.length === 0
                   ? notOnOpenOffer
                     ? "No copies here on no open offer. Untick “Not on any open offer” to see the copies listed somewhere too."
                     : forTradeOnly

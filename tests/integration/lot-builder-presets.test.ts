@@ -26,6 +26,7 @@ function recipe(overrides: Partial<LotRecipe> = {}): LotRecipe {
     yearTo: null,
     conditionIds: [],
     formatIds: [],
+    issueFormatIds: [],
     maxCatalogValue: null,
     countMin: null,
     countMax: null,
@@ -84,6 +85,7 @@ describe("the bulk-lot builder's saved criteria (#773)", () => {
       yearTo: 1960,
       conditionIds: ["cond-u", "cond-mnh"],
       formatIds: ["single", "fmt-block"],
+      issueFormatIds: ["stamp", "ifmt-bl"],
       // The money axes are `Decimal` columns and come back as objects; the criteria are made of
       // plain numbers, and a fractional ceiling is an ordinary thing to want.
       maxCatalogValue: 2.5,

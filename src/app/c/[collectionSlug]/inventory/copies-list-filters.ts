@@ -30,6 +30,7 @@ export const REMEMBERED_FILTER_KEYS = [
   "conditionIds",
   "formatIds",
   "subtypeIds",
+  "issueFormatIds",
   "certificateStatusIds",
   "deliveryStates",
   "locationId",

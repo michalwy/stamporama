@@ -1,5 +1,6 @@
 "use client";
 
+import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   keepRowsAcrossTreeChange,
@@ -78,8 +79,10 @@ export const tradeDetailKeys = {
     tradeId: string,
     areaIds: string[] | null,
     forTrade: boolean,
-    notOnOpenOffer = false
-  ) => ["trades", collectionId, "offerable", tradeId, areaIds, forTrade, notOnOpenOffer] as const,
+    notOnOpenOffer = false,
+    issueFormatIds: readonly string[] = []
+  ) =>
+    ["trades", collectionId, "offerable", tradeId, areaIds, forTrade, notOnOpenOffer, issueFormatIds] as const,
   candidates: (collectionId: string, tradeId: string, lineId: string) =>
     ["trades", collectionId, "candidates", tradeId, lineId] as const,
   balance: (collectionId: string, tradeId: string) =>
@@ -168,19 +171,22 @@ export function useOfferableCopies(
   areaSelection: AreaSelection,
   forTradeOnly: boolean,
   /** Only the copies on no open offer (#2338). */
-  notOnOpenOffer = false
+  notOnOpenOffer = false,
+  /** The stamps' issue formats (#2440), narrowed on the server; empty is every one. */
+  issueFormatIds: readonly string[] = []
 ) {
   return useQuery<ItemListItem[]>({
-    queryKey: tradeDetailKeys.offerable(collectionId, tradeId, areaIds, forTradeOnly, notOnOpenOffer),
+    queryKey: tradeDetailKeys.offerable(collectionId, tradeId, areaIds, forTradeOnly, notOnOpenOffer, issueFormatIds),
     ...keepRowsAcrossTreeChange<ItemListItem[]>(
       areaSelection,
-      tradeDetailKeys.offerable(collectionId, tradeId, null, forTradeOnly, notOnOpenOffer)
+      tradeDetailKeys.offerable(collectionId, tradeId, null, forTradeOnly, notOnOpenOffer, issueFormatIds)
     ),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
       if (!forTradeOnly) params.set("forTrade", "false");
       if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
+      appendIssueFormatParam(params, issueFormatIds);
       const res = await fetch(
         `/api/collections/${collectionId}/trades/${tradeId}/offerable-copies?${params.toString()}`
       );

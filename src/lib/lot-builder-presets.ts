@@ -54,6 +54,7 @@ const SELECT = {
   yearTo: true,
   conditionIds: true,
   formatIds: true,
+  issueFormatIds: true,
   maxCatalogValue: true,
   countMin: true,
   countMax: true,
@@ -76,6 +77,7 @@ type PresetRow = {
   yearTo: number | null;
   conditionIds: string[];
   formatIds: string[];
+  issueFormatIds: string[];
   maxCatalogValue: { toString(): string } | null;
   countMin: number | null;
   countMax: number | null;
@@ -120,6 +122,7 @@ function toData(row: PresetRow): LotBuilderPresetData {
       yearTo: row.yearTo,
       conditionIds: row.conditionIds,
       formatIds: row.formatIds,
+      issueFormatIds: row.issueFormatIds,
       maxCatalogValue: decimal(row.maxCatalogValue),
       countMin: row.countMin,
       countMax: row.countMax,
@@ -153,6 +156,7 @@ function toColumns(recipe: LotRecipe) {
     yearTo: recipe.yearTo,
     conditionIds: recipe.conditionIds,
     formatIds: recipe.formatIds,
+    issueFormatIds: recipe.issueFormatIds,
     maxCatalogValue: recipe.maxCatalogValue,
     countMin: recipe.countMin,
     countMax: recipe.countMax,

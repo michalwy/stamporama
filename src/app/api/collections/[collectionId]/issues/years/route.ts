@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueYearFacets } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
@@ -40,6 +41,8 @@ export async function GET(
       // The collector's own labels (#1182) — a filter like any other, so the list and both
       // facet rails narrow by it and their counts answer for it.
       ...tagFilterFromParams(sp),
+      // The issue format (#2440): issues holding a stamp in one of the ticked formats.
+      issueFormatIds: parseIssueFormatIds(sp.get(ISSUE_FORMAT_FILTER_PARAM)),
     });
     return NextResponse.json({ years });
   } catch {

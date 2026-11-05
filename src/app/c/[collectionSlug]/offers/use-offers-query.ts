@@ -59,6 +59,7 @@ import {
 } from "@/lib/offer-field-rereads";
 import { invalidateWithoutActionItems } from "../action-items-refresh";
 import type { OfferSearchField } from "@/lib/offer-search-fields";
+import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -705,7 +706,9 @@ export function useComposableCopies(
   notOfferedPlatformId: string | null = null,
   /** Only the copies on no open offer (#2338) — this offer, or the proposal's or post's own lots in
    *  `except`, not counting. */
-  openOffer: { notOnOpenOffer: boolean; except?: OwnOffers } = { notOnOpenOffer: false }
+  openOffer: { notOnOpenOffer: boolean; except?: OwnOffers } = { notOnOpenOffer: false },
+  /** The stamps' issue formats (#2440), narrowed on the server; empty is every one. */
+  issueFormatIds: readonly string[] = []
 ) {
   const notOnOpenOffer = openOffer.notOnOpenOffer;
   const exceptProposal = (notOnOpenOffer && openOffer.except?.proposalId) || null;
@@ -720,6 +723,7 @@ export function useComposableCopies(
       notOnOpenOffer,
       exceptProposal,
       exceptPost,
+      issueFormatIds,
       areaIds,
     ] as const,
     ...keepRowsAcrossTreeChange<ItemListItem[]>(areaSelection, [
@@ -731,10 +735,12 @@ export function useComposableCopies(
       notOnOpenOffer,
       exceptProposal,
       exceptPost,
+      issueFormatIds,
     ]),
     queryFn: async () => {
       const params = new URLSearchParams();
       for (const id of areaIds ?? []) params.append("areaId", id);
+      appendIssueFormatParam(params, issueFormatIds);
       if (!offerId && notOfferedPlatformId) params.set("notOfferedOn", notOfferedPlatformId);
       if (notOnOpenOffer) params.set("notOnOpenOffer", "true");
       if (exceptProposal) params.set("exceptProposal", exceptProposal);

@@ -2,6 +2,7 @@ import { isWantPriority, type WantListFilters, type WantPriority } from "@/lib/w
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
+import { ISSUE_FORMAT_FILTER_PARAM } from "@/lib/issue-format-filter";
 
 // One parser for the list route and the year-facet route beside it (#532). Shared so a facet can
 // never be counted against a different question than the page it sits next to — the two routes
@@ -26,6 +27,7 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     status: status === "open" || status === "closed" || status === "all" ? status : "all",
     priorities: list(params, "priorities")?.filter((p): p is WantPriority => isWantPriority(p)),
     conditionIds: list(params, "conditionIds"),
+    issueFormatIds: list(params, ISSUE_FORMAT_FILTER_PARAM),
     areaIds: list(params, "areaIds"),
     year: params.get("year") ?? undefined,
     issueId: params.get("issueId") ?? undefined,

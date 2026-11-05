@@ -87,6 +87,8 @@ import {
   type CatalogVendorOption,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
+import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
 import { tagFilterFromParams, DEFAULT_TAG_FILTER_MODE, type TagFilterOpts } from "@/lib/tag-filter";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
@@ -245,6 +247,9 @@ export function IssuesListPanel({
   // The tag filter (#1182) — the issue's **own** labels, nothing inherited from its stamps, which is
   // why it does not join `stampFilter` below.
   const tagFilter: TagFilterOpts = useMemo(() => tagFilterFromParams(searchParams), [searchParams]);
+  // The issue format (#2440), URL-backed beside the tags: the issues holding a stamp in one of them.
+  const issueFormatParam = searchParams.get(ISSUE_FORMAT_FILTER_PARAM);
+  const issueFormatIds = useMemo(() => parseIssueFormatIds(issueFormatParam), [issueFormatParam]);
 
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
@@ -296,13 +301,14 @@ export function IssuesListPanel({
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
+      issueFormatIds,
       year: year || undefined,
       displayConditionId: displayConditionId || undefined,
       displayFormatId: displayFormatId || undefined,
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   // The half of the filter set a stamp *inside* an issue can satisfy (#631). Handed to every row so
@@ -328,8 +334,9 @@ export function IssuesListPanel({
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
+      issueFormatIds,
     }),
-    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(
@@ -348,9 +355,10 @@ export function IssuesListPanel({
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
       ...tagFilter,
+      issueFormatIds,
       year: year || undefined,
     }),
-    [search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, year]
+    [search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds, year]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -783,6 +791,13 @@ export function IssuesListPanel({
                   })
                 }
               />
+              {/* The issue format (#2440): the issues holding a stamp in one of the ticked formats.
+                  Like the tags, it picks issues and leaves the expanded tree under a row whole. */}
+              <IssueFormatFilter
+                collectionId={collectionId}
+                selected={issueFormatIds}
+                onChange={(ids) => updateParams({ [ISSUE_FORMAT_FILTER_PARAM]: ids.join(",") })}
+              />
               {/* Specialised checklists (#1617): out of every chip, branch, badge and total until
                   on. A toggle chip among the filters, where it reads as one, rather than beside the
                   selects of the view (#2086). */}
@@ -873,7 +888,7 @@ export function IssuesListPanel({
               fontSize: "0.9375rem",
             }}
           >
-            {search || catalogNumber || year || (tagFilter.tagIds?.length ?? 0) > 0
+            {search || catalogNumber || year || (tagFilter.tagIds?.length ?? 0) > 0 || issueFormatIds.length > 0
               ? "No issues match your search."
               : filterAreaId
                 ? "No issues in this area."

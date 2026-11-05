@@ -9,6 +9,7 @@ import {
 import type { IssueListItem, IssueSortBy, StampNodeData, YearFacet } from "@/lib/issues";
 import type { AreaFacet } from "@/lib/area-facets";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
+import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import type { IssueSearchField } from "@/lib/issue-search-fields";
 import {
@@ -22,6 +23,8 @@ interface IssuesPage {
 }
 
 export interface IssueListFilters extends TagFilterOpts {
+  /** The issue format filter (#2440): issues holding a stamp in one of these. */
+  issueFormatIds?: string[];
   areaIds?: string[];
   search?: string;
   /** Vendor + bare number parsed out of the quick search text (#289), so a prefixed
@@ -45,6 +48,8 @@ export interface IssueListFilters extends TagFilterOpts {
 
 /** Filters that affect the year facet counts (everything except year itself). */
 export interface IssueYearFacetFilters extends TagFilterOpts {
+  /** The issue format filter (#2440): issues holding a stamp in one of these. */
+  issueFormatIds?: string[];
   areaIds?: string[];
   search?: string;
   searchCatalogVendorId?: string;
@@ -57,6 +62,8 @@ export interface IssueYearFacetFilters extends TagFilterOpts {
 /** Filters that affect the area facet counts (#843) — everything except the area selection itself,
  *  which is why `year` is in here and out of {@link IssueYearFacetFilters}. */
 export interface IssueAreaFacetFilters extends TagFilterOpts {
+  /** The issue format filter (#2440): issues holding a stamp in one of these. */
+  issueFormatIds?: string[];
   search?: string;
   searchCatalogVendorId?: string;
   searchCatalogNumber?: string;
@@ -119,6 +126,7 @@ export function useIssuesInfinite(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);
+      appendIssueFormatParam(params, filters.issueFormatIds);
       if (filters.year) params.set("year", filters.year);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
@@ -161,6 +169,7 @@ export function useIssueYears(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);
+      appendIssueFormatParam(params, filters.issueFormatIds);
       const res = await fetch(
         `/api/collections/${collectionId}/issues/years?${params.toString()}`
       );
@@ -188,6 +197,7 @@ export function useIssueAreaFacets(
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
       appendTagFilterParams(params, filters);
+      appendIssueFormatParam(params, filters.issueFormatIds);
       if (filters.year) params.set("year", filters.year);
       const res = await fetch(
         `/api/collections/${collectionId}/issues/areas?${params.toString()}`

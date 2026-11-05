@@ -14,6 +14,7 @@
 // single year to be filed under), yet it is still a Poland offer and appears under the area "Poland".
 // Narrowing by year is the stricter question, and such an offer answers no to every year.
 
+import { matchesIssueFormatFilter } from "./issue-format-filter";
 import type { AreaFacet } from "./area-facets";
 import { yearSelects } from "./list-area-year-filter";
 
@@ -30,6 +31,9 @@ export interface OfferAreaYear {
 /** The minimum a row must carry to be grouped and filtered. */
 export interface GroupableOffer {
   areaYears: OfferAreaYear[];
+  /** Per copy, its stamps' issue formats (#2440), for {@link offerMatchesFilters}. Absent is an
+   *  offer the issue-format filter has nothing to read on, so it is outside every narrowing. */
+  copyIssueFormats?: readonly (readonly (string | null)[])[];
 }
 
 /** The sentinel group for offers whose copies span areas or years. Not an area id — no id collides
@@ -81,8 +85,17 @@ export function offerGroupKey(offer: GroupableOffer): GroupKey {
  */
 export function offerMatchesFilters(
   offer: GroupableOffer,
-  filters: { areaIds?: string[] | null; year?: string | null; mixedOnly?: boolean }
+  filters: { areaIds?: string[] | null; year?: string | null; mixedOnly?: boolean; issueFormatIds?: readonly string[] }
 ): boolean {
+  // The issue format (#2440) narrows Mixed too: it is about what the copies are, not where they
+  // group. Every copy has to pass, the area's and the year's rule — a copy passing when any of the
+  // stamps it carries is in a ticked format.
+  if (filters.issueFormatIds && filters.issueFormatIds.length > 0) {
+    const ids = filters.issueFormatIds;
+    const copies = offer.copyIssueFormats ?? [];
+    if (copies.length === 0) return false;
+    if (!copies.every((formats) => matchesIssueFormatFilter(formats, ids))) return false;
+  }
   if (filters.mixedOnly) return offerGroupKey(offer).mixed;
   if (filters.areaIds && filters.areaIds.length > 0) {
     const allowed = new Set(filters.areaIds);
@@ -150,7 +163,7 @@ export interface YearCount {
  */
 export function offerYearFacets(
   offers: GroupableOffer[],
-  filters: { areaIds?: string[] | null; mixedOnly?: boolean } = {}
+  filters: { areaIds?: string[] | null; mixedOnly?: boolean; issueFormatIds?: readonly string[] } = {}
 ): YearCount[] {
   const counts = new Map<number | null, number>();
   for (const offer of offers) {
@@ -189,7 +202,7 @@ export function offerYearFacets(
  */
 export function offerAreaFacets(
   offers: GroupableOffer[],
-  filters: { year?: string | null; mixedOnly?: boolean } = {}
+  filters: { year?: string | null; mixedOnly?: boolean; issueFormatIds?: readonly string[] } = {}
 ): AreaFacet[] {
   const counts = new Map<string, number>();
   for (const offer of offers) {

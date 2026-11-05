@@ -92,6 +92,7 @@ import { roundAmount } from "./decimal-input";
 import { parseStampNoSearch } from "./quick-jump";
 import type { StampSearchField } from "./stamp-search-fields";
 import type { Prisma } from "@/generated/prisma/client";
+import { issueFormatStampWhere } from "./issue-format-filter";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -788,6 +789,9 @@ export interface StampListFilterOpts {
   watermarkIds?: string[];
   paperIds?: string[];
   printingIds?: string[];
+  /** The stamp's issue format (#2440): any of these, `ORDINARY_STAMP_ISSUE_FORMAT` matching the
+   *  stamps with none. Empty or omitted is every one. */
+  issueFormatIds?: string[];
   /** Narrow to the stamps carrying these tags (#1182), under `tagMode`'s reading — *any of them* by
    *  default, *all of them* on request. Empty or omitted is *every tag*. The stamp's **own** tags:
    *  nothing is inherited, so a variant matches on what is hung on the variant and never on its
@@ -843,6 +847,11 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
   ] as const) {
     if (ids && ids.length > 0) conditions.push({ [field]: { in: ids } });
   }
+
+  // The issue format (#2440) — the fifth catalogue set, null being a tickable value (an ordinary
+  // stamp), so it can be an `OR` and goes in the AND list.
+  const issueFormats = issueFormatStampWhere(opts.issueFormatIds);
+  if (issueFormats) conditions.push(issueFormats);
 
   // Catalog filter (#146): a number narrows to a vendor when one is set, else it
   // matches that number across every vendor. A vendor without a number does not

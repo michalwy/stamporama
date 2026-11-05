@@ -135,6 +135,7 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       yearTo: null,
       conditionIds: [],
       formatIds: [],
+      issueFormatIds: [],
       maxCatalogValue: null,
       countMin: null,
       countMax: null,
