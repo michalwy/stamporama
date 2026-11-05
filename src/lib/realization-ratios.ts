@@ -9,9 +9,12 @@ import {
 import { valuateItemRows, type ValuationRow } from "./items";
 import { buildEffectivePrimaryCatalogMap, getCollectionBaseCurrency } from "./pricing";
 import {
+  groupTrendLabel,
   learnedCatalogueRatio,
   ratioBucketLabel,
+  resolveGroupTrend,
   resolveRealizationRatio,
+  type GroupTrend,
   type RatioObservation,
   type RatioSubject,
   type ResolvedRatio,
@@ -194,6 +197,13 @@ function resolveSubject(
   };
 }
 
+/** A group's price trend with its bucket named (#2460) — what a stamp with too few results of its
+ * own borrows, and says it borrowed. */
+export interface BorrowedTrend extends GroupTrend {
+  /** e.g. `Polska Ludowa, MNH, 1945–1949`. */
+  bucketLabel: string;
+}
+
 /** A resolved ratio with the bucket named — what #511 renders and #510 anchors a line on. */
 export interface RealizationRatio extends ResolvedRatio {
   /** e.g. `Polska Ludowa, MNH, 1945–1949`. */
@@ -209,6 +219,9 @@ export interface RealizationRatio extends ResolvedRatio {
  */
 export interface RealizationRatioResolver {
   resolve(subject: LadderSubject): RealizationRatio;
+  /** The price trend of the subject's group (#2460) — area × condition × period, then area ×
+   * condition — or null when neither holds enough results. Read off the same loaded ratios. */
+  trend(subject: LadderSubject): BorrowedTrend | null;
   /** What one catalogue's own results say, with no minimum sample (#1828) — the learned figure the
    * catalogue settings show beside the manual factor. */
   learnedForCatalogue(catalogNameId: string): { ratio: number | null; n: number };
@@ -423,6 +436,7 @@ async function learnRealizationRatios(collectionId: string): Promise<Realization
       source: point.source,
       split: point.split,
       ratio: point.amount / catalogueValue,
+      at: point.at,
       areaId: primaryAreaIdOf(stamp.stampAreaLinks),
       conditionId: point.key.conditionId,
       issuedYear: stamp.issuedYear,
@@ -491,6 +505,17 @@ async function learnRealizationRatios(collectionId: string): Promise<Realization
         conditionName: conditionNames.get(subject.conditionId) ?? null,
       });
     },
+    trend(subject) {
+      const group = resolveGroupTrend(subject, observations);
+      if (group === null) return null;
+      return {
+        ...group,
+        bucketLabel: groupTrendLabel(group, {
+          areaName: subject.areaId ? (areaNames.get(subject.areaId) ?? null) : null,
+          conditionName: conditionNames.get(subject.conditionId) ?? null,
+        }),
+      };
+    },
   };
 }
 
@@ -505,6 +530,7 @@ function emptyResolver(
     describeLots: () => [],
     describeObservations: () => [],
     learnedForCatalogue: () => ({ ratio: null, n: 0 }),
+    trend: () => null,
     catalogueName: (catalogNameId) => catalogues.catalogues.get(catalogNameId)?.name ?? null,
     resolve(subject) {
       return resolveSubject(subject, [], fallbackPercent, catalogues, { areaName: null, conditionName: null });

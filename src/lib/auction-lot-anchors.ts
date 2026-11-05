@@ -16,7 +16,13 @@ import {
 } from "./market-values";
 import { countByMarket, type MarketCode, type MarketCount } from "./market-anchoring";
 import { getCollectionBaseCurrency } from "./pricing";
-import { loadRealizationRatios, type RealizationRatio } from "./realization-ratios";
+import { priceTrendOf, trendAdjustedMedian, type TrendPoint } from "./price-trend";
+import type { TrendBucketLevel } from "./realization-ratio";
+import {
+  loadRealizationRatios,
+  type RealizationRatio,
+  type RealizationRatioResolver,
+} from "./realization-ratios";
 
 // **What anchors a line** (#510; ADR-0029 §1, §5, §7) — the domain layer between the valuation
 // modules and the recommendation arithmetic in `bid-recommendation.ts`.
@@ -36,10 +42,19 @@ import { loadRealizationRatios, type RealizationRatio } from "./realization-rati
 // screen already computes (unknown-variant rollup #238, format factors ADR-0020), and the
 // realization ratio is #520's ladder. What this module does is put them in order:
 //
-//     anchor(line) = marketMedian(key)                 when the key has any datapoint
+//     anchor(line) = trendAdjusted(marketMedian(key))  when the key has any datapoint
 //                  | catalogueValue × learnedRatio     when the catalogue prices it
 //                  | plain × certificate% × learnedRatio  when it prices it only without the certificate
 //                  | none
+//
+// **The market rung follows the stamp's price trend** (#2460): each result is brought to today's
+// money by the yearly trend of its prices before the median is taken (`price-trend.ts`), so a stamp
+// whose price keeps rising is not bid at a median years behind its market. The trend is the key's
+// own when it has enough results, else borrowed from its group — the ratio ladder's area ×
+// condition × period, then area × condition, each result read as a share of catalogue — else there
+// is none and the anchor is the plain median, as before. The plain median is carried beside the
+// adjusted one (`AnchorMarketEvidence.median` and `.trend.fair`), and **market value everywhere
+// else stays the plain median**: the projection is made for a bid placed now and for nothing else.
 //
 // **The third rung is #1636's.** Catalogues print one price per condition and a certified copy is
 // worth that times the percentage the collector states on the status (#1242), so a certified line
@@ -88,8 +103,12 @@ import { loadRealizationRatios, type RealizationRatio } from "./realization-rati
 /** The market side of an anchor: ADR-0022's figures for the line's exact key, in the **base**
  * currency, with the evidence #511 renders beside them. */
 export interface AnchorMarketEvidence {
-  /** The headline (ADR-0022 §4), base currency, 2-dp. */
+  /** The headline (ADR-0022 §4), base currency, 2-dp — the **plain** median, shown beside the
+   * trend-adjusted fair the line is anchored on (#2460). */
   median: string;
+  /** How the results were brought to today's money (#2460); null when there is too little evidence
+   * for a trend, the stamp's own or its group's, and the line is anchored on {@link median}. */
+  trend: AnchorTrend | null;
   /** Datapoints behind it. At least 1 — a key with none carries no evidence at all. */
   n: number;
   /** Most recent result, and the oldest, so the span the evidence covers can be shown. */
@@ -101,6 +120,25 @@ export interface AnchorMarketEvidence {
   /** The results themselves, newest first — what `recommend_bid` lists with their source and
    * market so an agent can say what it rests on. */
   results: AnchorResult[];
+}
+
+/** A market anchor brought to today's money by its stamp's price trend (#2460). */
+export interface AnchorTrend {
+  /** The median of the key's results once each is brought to today — what the line is anchored on
+   * — base currency, 2-dp. */
+  fair: string;
+  /** The yearly rate applied, after the ±30% cap — `0.14` is +14% a year. */
+  rate: number;
+  /** The rate measured, before the cap. */
+  measuredRate: number;
+  capped: boolean;
+  /** Null when the key's own results gave the trend; the group it was borrowed from otherwise,
+   * named as its ratio bucket is. */
+  borrowed: { level: TrendBucketLevel; bucketLabel: string } | null;
+  /** The results the trend was measured over — the key's own, or the group's — and their span. */
+  n: number;
+  earliestAt: Date;
+  latestAt: Date;
 }
 
 /** One result behind a market anchor (#1634): where it was sold, and what it counted as. */
@@ -236,16 +274,15 @@ export interface AnchorContext {
   marketByStamp: Map<string, StampMarketValue[]>;
   /** The results left out of {@link marketByStamp} as from other markets (#1634). */
   hintsByStamp: Map<string, MarketValueHint[]>;
-  ratios: {
-    resolve(subject: {
-      areaId: string | null;
-      conditionId: string;
-      issuedYear: number | null;
-    }): RealizationRatio;
-  };
+  ratios: RatioLookup;
   /** Keyed by {@link stampConditionKey}. */
   owned: Map<string, number>;
+  /** What "today" is when results are brought to today's money (#2460). */
+  now: Date;
 }
+
+/** What anchoring asks of the ratio ladder: a line's ratio, and its group's price trend (#2460). */
+type RatioLookup = Pick<RealizationRatioResolver, "resolve" | "trend">;
 
 /**
  * Load {@link AnchorContext} for a set of stamps and the currencies the answers are wanted in.
@@ -268,7 +305,7 @@ export async function loadAnchorContext(
   ]);
   const marketByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.values]));
   const hintsByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.hints]));
-  return { baseCurrency, rates, marketByStamp, hintsByStamp, ratios, owned };
+  return { baseCurrency, rates, marketByStamp, hintsByStamp, ratios, owned, now: new Date() };
 }
 
 /**
@@ -301,6 +338,7 @@ export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAn
       market: findMarketValue(context.marketByStamp.get(line.stampId), atCondition),
       ratios: context.ratios,
       owned: context.owned.get(stampConditionKey(line.stampId, condition.conditionId)) ?? 0,
+      now: context.now,
     });
     return { ...answer, hintMarkets: hintMarketsAt(context.hintsByStamp.get(line.stampId), atCondition) };
   });
@@ -516,8 +554,9 @@ interface LineContext {
   /** Base → sale, current. Null when no rate could be had. */
   rate: number | null;
   market: StampMarketValue | null;
-  ratios: { resolve(subject: { areaId: string | null; conditionId: string; issuedYear: number | null }): RealizationRatio };
+  ratios: RatioLookup;
   owned: number;
+  now: Date;
 }
 
 function resolveLine(line: SettledLine, context: LineContext): LineAnchor {
@@ -550,6 +589,7 @@ function resolveLineAt(
   const market: AnchorMarketEvidence | null = context.market
     ? {
         median: context.market.median,
+        trend: marketTrendOf(context.market, line, context),
         n: context.market.n,
         latestAt: context.market.latestAt,
         earliestAt: context.market.earliestAt,
@@ -568,9 +608,10 @@ function resolveLineAt(
   const fromCatalogue: CatalogueAnchor = { ...catalogue, anchorHigh: catalogue.anchor };
 
   if (market) {
-    // A key with any datapoint is anchored on it, whatever the catalogue says. The median is in the
-    // base currency, so this is the one anchor that needs a rate.
-    const median = Number(market.median);
+    // A key with any datapoint is anchored on it, whatever the catalogue says — brought to today's
+    // money where a trend could be measured (#2460). The median is in the base currency, so this is
+    // the one anchor that needs a rate.
+    const median = Number(market.trend ? market.trend.fair : market.median);
     if (context.rate === null || !Number.isFinite(median)) {
       return {
         ...identity,
@@ -603,6 +644,36 @@ function resolveLineAt(
     source: catalogueSource,
     market: null,
     fromCatalogue,
+  };
+}
+
+/**
+ * The key's results brought to today's money (#2460): by the trend of its own results when they are
+ * enough for one, else by its group's, else not at all (null). The group is the ratio ladder's, so a
+ * stamp is compared with the very stamps its catalogue ratio would be learned from.
+ */
+function marketTrendOf(value: StampMarketValue, line: SettledLine, context: LineContext): AnchorTrend | null {
+  const points: TrendPoint[] = [
+    ...value.lots.map((lot) => ({ value: Number(lot.amount), at: lot.endsAt })),
+    ...value.observations.map((o) => ({ value: Number(o.amount), at: o.soldOn })),
+  ];
+  const own = priceTrendOf(points);
+  const group = own
+    ? null
+    : context.ratios.trend({ areaId: line.areaId, conditionId: line.conditionId, issuedYear: line.issuedYear });
+  const trend = own ?? group?.trend ?? null;
+  if (trend === null) return null;
+  const fair = trendAdjustedMedian(points, trend.rate, context.now);
+  if (fair === null) return null;
+  return {
+    fair: fair.toFixed(2),
+    rate: trend.rate,
+    measuredRate: trend.measuredRate,
+    capped: trend.capped,
+    borrowed: group ? { level: group.level, bucketLabel: group.bucketLabel } : null,
+    n: trend.n,
+    earliestAt: trend.earliestAt,
+    latestAt: trend.latestAt,
   };
 }
 

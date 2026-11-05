@@ -5,6 +5,7 @@ import type { AuctionLotComposition } from "@/lib/auction-lines";
 import type { AtRiskLine } from "@/lib/auction-duplicates";
 import type {
   AnchorMarketEvidence,
+  AnchorTrend,
   AuctionLotLineAnchor,
   LineAnchor,
 } from "@/lib/auction-lot-anchors";
@@ -257,7 +258,7 @@ export function useAuctionLotComposition(collectionId: string, lotId: string | n
 /** One line's anchor as the popover receives it — with an answer per possible condition while the
  * line's condition is not settled (#1623), each of the same shape. */
 export type LineAnchorView = Serialized<Omit<LineAnchor, "market" | "conditions">> & {
-  market: Serialized<AnchorMarketEvidence> | null;
+  market: (Serialized<Omit<AnchorMarketEvidence, "trend">> & { trend: Serialized<AnchorTrend> | null }) | null;
   conditions: LineAnchorView[] | null;
 };
 

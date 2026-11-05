@@ -1152,6 +1152,25 @@ have results for with one you have never seen:
    certificate × format`. The panel shows the median, how many results are behind it, the span of
    dates they cover, and a **confidence** badge built from sample size, how recent they are, how
    much they agree and how much of the evidence was a whole lot rather than a share of a mixed one.
+   - **Brought to today's money.** A stamp whose price keeps rising always has a median behind
+     today's market, so each result is first scaled to today by the stamp's **yearly trend**, and
+     the line is priced at the median of the scaled results. The panel shows both: *market 13.75 EUR
+     (median 9.75 · trend +14%/yr, 4 results 2022–2025)*. The trend works both ways — a stamp getting
+     cheaper is priced **below** its median.
+   - The trend is the **median of the yearly rates of change between every pair of results**, so
+     one wild result moves it no more than it moves the median. A stamp has a trend of its own once
+     it has **at least 4 results spread over at least 12 months**.
+   - With fewer, the trend is **borrowed** from the group the learned percentage in 2 uses — the
+     stamp's area, condition and issue period, then its area and condition — with each result read
+     as a share of its stamp's catalogue value, so stamps of different prices can be compared. The
+     panel says so: *trend +12%/yr, borrowed from Poland, MNH, 1948–1952 (9 results 2021–2025)*. When
+     the group has too few as well, there is no adjustment and the line is priced at the plain
+     median.
+   - The trend is held within **±30% a year**, so a short or noisy history cannot produce an absurd
+     figure; when that limit applies the panel says *capped* and shows the rate measured.
+   - **Floor and walk-away** are your percentages of the adjusted figure, and the **confidence**
+     badge is scored as before. **Market value** everywhere else — on holdings, copies, offers and
+     sales — stays the plain median: only the bid recommendation looks ahead.
 2. Otherwise **its catalogue value times a learned percentage** — see below. The panel names the
    percentage, the group it was learned from and how many results that group holds.
    - **A certificate with no price of its own.** When the line carries a certificate and the

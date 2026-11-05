@@ -596,6 +596,11 @@ Three things about that answer are worth knowing before you act on one:
   prices a stamp at all, when there *is* a price it cannot convert into the auction's currency, and
   when the premium alone eats the whole figure. The last one is the clearest *do not bother* there
   is, and reading it as zero would be the opposite of what it means.
+- **A figure from your results is brought to today's money.** Where a stamp's prices have been
+  rising (or falling), each result is scaled to today by the stamp's yearly trend before the median
+  is taken, exactly as on your lots screen — and the answer gives the plain median beside it with the
+  trend, so the agent can tell you *fair 13.75 € (median 9.75 € · trend +14%/yr, 4 results
+  2022–2025)*. A trend borrowed from the stamp's group is named as borrowed.
 - **Ask about one grade at a time.** A lot that is half mint and half used cannot be answered in one
   question, and two answers do not add up — a flat lot fee is charged once, not twice.
 - **A certificate with no price of its own is worked out, and said.** When the lot carries a

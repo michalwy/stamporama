@@ -54,6 +54,7 @@
 // better value from a worse one.
 
 import type { MarketDatapointSource } from "./market-value";
+import { priceTrendOf, type PriceTrend } from "./price-trend";
 
 /** Ratios a bucket must hold before it is preferred to the broader one beneath it.
  *
@@ -79,6 +80,8 @@ export interface RatioObservation {
   split: boolean;
   /** `perUnitMarketValue ÷ catalogueValue`, both in the base currency. Unitless. */
   ratio: number;
+  /** When it was sold — what a group's price trend is measured along (#2460). */
+  at: Date;
   /** Primary area of the stamp the datapoint is about; null when it is linked to none. */
   areaId: string | null;
   conditionId: string;
@@ -290,6 +293,59 @@ export function learnedCatalogueRatio(
   };
 }
 
+/** The two buckets a stamp with too few results of its own borrows its price trend from (#2460) —
+ * the narrowest two of the ratio ladder, and no broader: a whole area's trend, let alone the
+ * collection's, is not a statement about this stamp. */
+export type TrendBucketLevel = "area-condition-period" | "area-condition";
+
+/** A trend borrowed from a stamp's group (#2460), with the bucket it was measured in. */
+export interface GroupTrend {
+  level: TrendBucketLevel;
+  trend: PriceTrend;
+  /** The window the period bucket used, inclusive; null at `area-condition`. */
+  fromYear: number | null;
+  toYear: number | null;
+}
+
+/**
+ * The price trend of the group a stamp belongs to, for a stamp with too few results of its own
+ * (#2460): area × condition × period, then area × condition — the buckets #520 already draws —
+ * the first holding enough results for {@link priceTrendOf}. Null when neither does, which leaves
+ * the stamp's fair the plain median.
+ *
+ * **Each result is read as a share of its stamp's catalogue value**, which is what a ratio already
+ * is: a 2 € stamp and a 40 € one cannot be compared by amount, but both fetching a rising share of
+ * catalogue is one trend. Split lots count once per bucket, as in the ladder.
+ */
+export function resolveGroupTrend(
+  subject: Pick<RatioSubject, "areaId" | "conditionId" | "issuedYear">,
+  observations: RatioObservation[]
+): GroupTrend | null {
+  if (subject.areaId === null) return null;
+  const inAreaCondition = observations.filter(
+    (o) => isUsableRatio(o.ratio) && o.areaId === subject.areaId && o.conditionId === subject.conditionId
+  );
+  const fromYear = subject.issuedYear === null ? null : subject.issuedYear - RATIO_PERIOD_RADIUS;
+  const toYear = subject.issuedYear === null ? null : subject.issuedYear + RATIO_PERIOD_RADIUS;
+  const inPeriod =
+    fromYear === null || toYear === null
+      ? null
+      : inAreaCondition.filter((o) => o.issuedYear !== null && o.issuedYear >= fromYear && o.issuedYear <= toYear);
+
+  const rungs: { level: TrendBucketLevel; observations: RatioObservation[] | null }[] = [
+    { level: "area-condition-period", observations: inPeriod },
+    { level: "area-condition", observations: inAreaCondition },
+  ];
+  for (const rung of rungs) {
+    if (rung.observations === null) continue;
+    const trend = priceTrendOf(ratiosOf(rung.observations).map((o) => ({ value: o.ratio, at: o.at })));
+    if (trend === null) continue;
+    const period = rung.level === "area-condition-period";
+    return { level: rung.level, trend, fromYear: period ? fromYear : null, toYear: period ? toYear : null };
+  }
+  return null;
+}
+
 /** The names a bucket is stated with. Resolved by the domain layer, since only it knows what an
  * area and a condition are called. */
 export interface RatioBucketNames {
@@ -339,14 +395,30 @@ export function ratioBucketLabel(resolved: ResolvedRatio, names: RatioBucketName
     const factor = `your factor, catalogue ÷ ${formatCatalogueFactor(1 / resolved.ratio)}`;
     return catalogue ? `${catalogue} — ${factor}` : `This catalogue — ${factor}`;
   }
-  const parts: string[] = [];
-  if (resolved.level !== "collection" && resolved.level !== "fallback") {
-    if (names.areaName) parts.push(names.areaName);
-    if (resolved.level !== "area" && names.conditionName) parts.push(names.conditionName);
-    if (resolved.fromYear !== null && resolved.toYear !== null) {
-      parts.push(`${resolved.fromYear}–${resolved.toYear}`);
-    }
-  }
+  const parts = areaBucketParts(resolved, names);
   if (parts.length > 0) return parts.join(", ");
   return resolved.level === "fallback" ? "No recorded results" : "All recorded results";
+}
+
+/** What the group a trend was borrowed from is called (#2460) — `Polska Ludowa, MNH, 1945–1949`,
+ * the same words its ratio bucket is named with. */
+export function groupTrendLabel(group: GroupTrend, names: RatioBucketNames): string {
+  const parts = areaBucketParts(group, names);
+  return parts.length > 0 ? parts.join(", ") : "Results of this area";
+}
+
+/** The area, condition and period a bucket is drawn on, as far as its level uses them. */
+function areaBucketParts(
+  bucket: { level: RatioBucketLevel; fromYear: number | null; toYear: number | null },
+  names: RatioBucketNames
+): string[] {
+  const parts: string[] = [];
+  if (bucket.level !== "collection" && bucket.level !== "fallback") {
+    if (names.areaName) parts.push(names.areaName);
+    if (bucket.level !== "area" && names.conditionName) parts.push(names.conditionName);
+    if (bucket.fromYear !== null && bucket.toYear !== null) {
+      parts.push(`${bucket.fromYear}–${bucket.toYear}`);
+    }
+  }
+  return parts;
 }

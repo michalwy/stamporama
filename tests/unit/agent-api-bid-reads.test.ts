@@ -164,6 +164,78 @@ describe("bidLine — what an agent is told about one line (#1168)", () => {
     assert.equal(line.ratioPercent, undefined);
   });
 
+  it("gives a trend-adjusted market anchor its fair, the plain median and the trend (#2460)", () => {
+    const line = bidLine(
+      anchorOf({
+        source: "market",
+        ratio: null,
+        anchor: 13.75,
+        baseCurrency: "EUR",
+        market: {
+          n: 4,
+          median: "9.75",
+          trend: {
+            fair: "13.75",
+            rate: 0.15,
+            measuredRate: 0.15,
+            capped: false,
+            borrowed: null,
+            n: 4,
+            earliestAt: new Date("2022-06-01T00:00:00Z"),
+            latestAt: new Date("2025-06-01T00:00:00Z"),
+          },
+        },
+      }),
+      NAMING
+    );
+    assert.equal(line.unitValue, "13.75");
+    assert.equal(line.marketMedian, "9.75");
+    assert.equal(line.marketCurrency, "EUR");
+    assert.deepEqual(line.marketTrend, {
+      fair: "13.75",
+      ratePercent: 15,
+      results: 4,
+      fromYear: 2022,
+      toYear: 2025,
+      statement: "Fair 13.75 EUR (median 9.75 EUR · trend +15%/yr, 4 results 2022–2025).",
+    });
+  });
+
+  it("names a borrowed and capped trend as such, and gives no trend where none was measured (#2460)", () => {
+    const borrowed = bidLine(
+      anchorOf({
+        source: "market",
+        ratio: null,
+        anchor: 13,
+        baseCurrency: "EUR",
+        market: {
+          n: 1,
+          median: "10.00",
+          trend: {
+            fair: "13.00",
+            rate: 0.3,
+            measuredRate: 0.42,
+            capped: true,
+            borrowed: { bucketLabel: "Poland, MNH, 1948–1952" },
+            n: 7,
+            earliestAt: "2021-01-01T00:00:00.000Z",
+            latestAt: "2025-01-01T00:00:00.000Z",
+          },
+        },
+      }),
+      NAMING
+    );
+    assert.equal(borrowed.marketTrend?.borrowedFrom, "Poland, MNH, 1948–1952");
+    assert.equal(borrowed.marketTrend?.capped, true);
+    assert.equal(borrowed.marketTrend?.measuredRatePercent, 42);
+    const plain = bidLine(
+      anchorOf({ source: "market", ratio: null, anchor: 10, market: { n: 2, median: "10.00", trend: null } }),
+      NAMING
+    );
+    assert.equal(plain.marketMedian, "10.00");
+    assert.equal(plain.marketTrend, undefined);
+  });
+
   it("drops a null certificate and a null format rather than spelling them", () => {
     // #710's rule and not #712's: on a described line the null *is* the whole answer — no
     // certificate, a single — so its absence says exactly what a spelling would.

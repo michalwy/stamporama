@@ -39,6 +39,7 @@
 // the overstatement stops being silent, which is the part that was actually wrong.
 
 import { compact } from "./collection-reads";
+import { trendStatement } from "../price-trend";
 
 /** One of the three figures: the all-in valuation, and the hammer price to type to stay inside it. */
 export interface AgentBidLevel {
@@ -84,6 +85,20 @@ export interface AgentBidLine {
   /** Datapoints behind a market anchor, so a figure resting on one result is not read as a market. */
   readonly marketSampleSize?: number;
   /**
+   * The **plain** median of the results a market anchor rests on, in {@link marketCurrency} — what
+   * market value says everywhere else. The line is anchored on {@link marketTrend}'s `fair` instead
+   * when a trend could be measured (#2460); otherwise on this.
+   */
+  readonly marketMedian?: string;
+  /** What {@link marketMedian}, {@link marketTrend} and {@link marketResults} are stated in. */
+  readonly marketCurrency?: string;
+  /**
+   * How a market anchor was brought to today's money (#2460): each result scaled by the yearly trend
+   * of the stamp's prices, and `fair` the median of the scaled results. Absent when there was too
+   * little evidence for a trend — the line is then anchored on the plain {@link marketMedian}.
+   */
+  readonly marketTrend?: AgentMarketTrend;
+  /**
    * The results a market anchor rests on (#1634), newest first: each with its source, the market it
    * was sold in, and what it counted as per unit. Only results from markets that **anchor** the
    * stamp's area are here — the rest are {@link notCounted}.
@@ -110,6 +125,27 @@ export interface AgentBidLine {
    *  arithmetic** (ADR-0029 §7): it does not move a figure, because duplicates are bought
    *  deliberately for trade and a system-applied haircut would under-bid exactly that material. */
   readonly owned: number;
+}
+
+/** A market anchor's trend (#2460) — see {@link AgentBidLine.marketTrend}. */
+export interface AgentMarketTrend {
+  /** The median of the results once each is brought to today, in the line's `marketCurrency` — what
+   *  the line is anchored on. */
+  readonly fair: string;
+  /** The yearly rate applied, in percent, rounded: `14` is +14% a year, `-8` is −8%. */
+  readonly ratePercent: number;
+  /** Set when the measured rate was beyond ±30% a year and held there; then the rate measured. */
+  readonly capped?: true;
+  readonly measuredRatePercent?: number;
+  /** Set when the stamp had too few results of its own (fewer than 4, or within 12 months) and the
+   *  trend was borrowed from its group — named as the catalogue ratio's bucket is. */
+  readonly borrowedFrom?: string;
+  /** The results the trend was measured over — the stamp's own, or the group's — and their years. */
+  readonly results: number;
+  readonly fromYear: number;
+  readonly toYear: number;
+  /** The figures in one sentence, to quote rather than rephrase. */
+  readonly statement: string;
 }
 
 /** One result behind a market anchor (#1634). */
@@ -252,6 +288,19 @@ export function bidLine(
     unconvertible: boolean;
     market: {
       n: number;
+      /** The plain median, base currency; absent reads as not stated. */
+      median?: string;
+      /** #2460's trend; absent or null reads as none. */
+      trend?: {
+        fair: string;
+        rate: number;
+        measuredRate: number;
+        capped: boolean;
+        borrowed: { bucketLabel: string } | null;
+        n: number;
+        earliestAt: Date | string;
+        latestAt: Date | string;
+      } | null;
       /** #1634's results behind the median; absent reads as none listed. */
       results?: readonly {
         kind: "lot" | "observation";
@@ -298,6 +347,12 @@ export function bidLine(
     unitValueHigh: high,
     unconvertible: anchor.unconvertible ? (true as const) : undefined,
     marketSampleSize: anchor.market?.n,
+    marketMedian: anchor.market?.median,
+    marketCurrency: anchor.market && anchor.baseCurrency ? anchor.baseCurrency : undefined,
+    marketTrend:
+      anchor.market?.median !== undefined && anchor.market.trend
+        ? marketTrendOf(anchor.market.trend, anchor.market.median, anchor.baseCurrency ?? "")
+        : undefined,
     marketResults:
       anchor.market?.results && anchor.market.results.length > 0
         ? anchor.market.results.map(
@@ -324,6 +379,26 @@ export function bidLine(
     derivation: anchor.derivation ? derivationOf(anchor.derivation) : undefined,
     owned: anchor.owned,
   }) as AgentBidLine;
+}
+
+/** A market anchor's trend as the agent reads it (#2460). */
+function marketTrendOf(
+  trend: NonNullable<NonNullable<Parameters<typeof bidLine>[0]["market"]>["trend"]>,
+  median: string,
+  currency: string
+): AgentMarketTrend {
+  const unit = currency ? ` ${currency}` : "";
+  return compact({
+    fair: trend.fair,
+    ratePercent: Math.round(trend.rate * 100),
+    capped: trend.capped ? (true as const) : undefined,
+    measuredRatePercent: trend.capped ? Math.round(trend.measuredRate * 100) : undefined,
+    borrowedFrom: trend.borrowed?.bucketLabel,
+    results: trend.n,
+    fromYear: new Date(trend.earliestAt).getUTCFullYear(),
+    toYear: new Date(trend.latestAt).getUTCFullYear(),
+    statement: `Fair ${trend.fair}${unit} (median ${median}${unit} · ${trendStatement(trend)}).`,
+  }) as AgentMarketTrend;
 }
 
 /** The whole answer. */
