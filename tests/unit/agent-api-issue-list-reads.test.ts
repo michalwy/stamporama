@@ -139,6 +139,7 @@ describe("issueStamps (#2170)", () => {
     sortOrder,
     sortKey: null,
     catalogNumbers,
+    issueFormat: null as string | null,
   });
 
   it("tells every member in the issue's order, each variant under its parent, marked as one", () => {
@@ -157,6 +158,12 @@ describe("issueStamps (#2170)", () => {
   it("marks a variant whose parent is filed elsewhere, and tells it as a root", () => {
     assert.deepEqual(issueStamps([member("b", 1), member("a1", 0, "elsewhere")]).map((stamp) => stamp.stampId), ["a1", "b"]);
     assert.equal(issueStamps([member("a1", 0, "elsewhere")])[0].isVariant, true);
+  });
+
+  it("names a stamp's issue format, and says nothing of an ordinary stamp's (#2445)", () => {
+    const [sheet, ordinary] = issueStamps([{ ...member("Bl 1", 0), issueFormat: "Souvenir sheet" }, member("2", 1)]);
+    assert.equal(sheet.issueFormat, "Souvenir sheet");
+    assert.equal("issueFormat" in ordinary, false);
   });
 
   it("keeps a stamp with no number, its numbers an empty list", () => {

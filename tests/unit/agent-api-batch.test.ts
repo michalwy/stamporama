@@ -57,6 +57,21 @@ describe("parsePairFields", () => {
   });
 });
 
+describe("parsePairFields with fields of its own choice (#2445)", () => {
+  const FIELDS = ["stamp", "catalog_numbers", "issue_format"] as const;
+
+  it("asks only for the fields it is told are required, and still knows the rest", () => {
+    const parsed = parsePairFields("stamp=Mi Bl 12; issue_format=Souvenir sheet", FIELDS, "`e`", ["stamp"]);
+    assert.ok(parsed.ok);
+    assert.deepEqual(Object.fromEntries(parsed.fields), { stamp: "Mi Bl 12", issue_format: "Souvenir sheet" });
+    const missing = parsePairFields("issue_format=Bl", FIELDS, "`e`", ["stamp"]);
+    assert.equal(missing.ok, false);
+    if (!missing.ok) assert.match(missing.reason, /has no stamp\./);
+    const unknown = parsePairFields("stamp=st 1; format=Pair", FIELDS, "`e`", ["stamp"]);
+    assert.equal(unknown.ok, false);
+  });
+});
+
 describe("parseLineFields", () => {
   const SPECS: ParameterSpec[] = [
     { name: "area", in: "body", type: "string", required: true, description: "" },

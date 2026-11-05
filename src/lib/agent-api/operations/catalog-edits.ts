@@ -32,6 +32,8 @@ import {
   ISSUE_ENTRY_EXAMPLE,
   MAX_ISSUES_PER_CALL,
   MAX_STAMP_NUMBER_UPDATES,
+  STAMP_ISSUE_FORMAT_UPDATE_EXAMPLE,
+  STAMP_UPDATE_CHANGES,
   STAMP_UPDATE_EXAMPLE,
   STAMP_UPDATE_FIELDS,
   checkDatePart,
@@ -46,9 +48,11 @@ import {
   type PrefixCollision,
 } from "../catalog-edits";
 import { invalidRequest, isApiError, notFound } from "../errors";
+import { NO_ISSUE_FORMAT, resolveIssueFormatWrite } from "../issue-formats";
 import { optionalBoolean, optionalInteger, optionalString, parseParameters, requiredString, stringList } from "../params";
 import { presetVocabularyEntry } from "../size-reads";
 import { acceptedNames, resolveVocabularyValue, type VocabularyEntry, type VocabularyName } from "../vocabulary";
+import { loadIssueFormatEntries } from "./issue-formats";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { readIssue, readStamp } from "./records";
 import { loadStampLabels, resolveStampRefsEach, stampNoOf, stampIdFromRef } from "./stamp-refs";
@@ -659,6 +663,7 @@ async function loadStamp(context: OperationContext, stampId: string) {
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
       issueMemberships: { select: { issueId: true }, orderBy: { issueId: "asc" } },
+      issueFormatId: true,
     },
   });
   if (!stamp) {
@@ -936,6 +941,7 @@ const STAMP_CLEARABLE = [
   "perforation",
   ...STAMP_ATTRIBUTE_KINDS,
   "subtype",
+  "issue_format",
 ] as const;
 
 const ATTRIBUTE_FIELD: Record<StampAttributeKind, "colorId" | "watermarkId" | "paperId" | "printingId"> = {
@@ -1027,6 +1033,15 @@ export async function updateStampFromParams(
   for (const kind of STAMP_ATTRIBUTE_KINDS) {
     if (cleared.has(kind)) attributes[ATTRIBUTE_FIELD[kind]] = null;
   }
+  // The issue format (#2445) — the stamp form's select, on the form's rules: absent untouched, and
+  // cleared (or `none`) an ordinary stamp. It is the stamp's own and nothing inherits it (ADR-0010).
+  const issueFormatRef = optionalString(params, "issue_format");
+  refuseSentAndCleared("issue_format", issueFormatRef !== null, cleared);
+  if (issueFormatRef !== null) {
+    attributes.issueFormatId = resolveIssueFormatWrite(issueFormatRef, await loadIssueFormatEntries(context), "issue_format");
+  } else if (cleared.has("issue_format")) {
+    attributes.issueFormatId = null;
+  }
 
   // The subtype (#2138) is the stamp form's field, on the form's rules: it is offered only for a
   // stamp under another, so a top-level stamp is refused rather than silently left unclassified as
@@ -1047,7 +1062,7 @@ export async function updateStampFromParams(
   const changesDate = Object.values(date).some((value) => value !== null);
   if (name === null && !changesDate && cleared.size === 0 && !translations && entries.length === 0 && Object.keys(attributes).length === 0 && !managesSubtype) {
     throw invalidRequest(
-      'Nothing to change: send a field to set — "name", "names", "issued_year", "catalog_numbers", "denomination", "color", "subtype" and the rest — or "clear" / "clear_names".'
+      'Nothing to change: send a field to set — "name", "names", "issued_year", "catalog_numbers", "denomination", "color", "issue_format", "subtype" and the rest — or "clear" / "clear_names".'
     );
   }
 
@@ -1084,7 +1099,7 @@ export const updateStampOperation: Operation = {
   method: "PATCH",
   path: "/stamps/{stamp_id}",
   description:
-    "Correct a stamp — or a variant — the way the collector's stamp form does: its name and translated names, its date of issue, its number in any catalogue its area keeps, its catalogue attributes (denomination and perforation as printed; colour, watermark, paper and printing by name from `get_collection_vocabulary`), and a variant's subtype. Only what is sent changes. A catalogue number another stamp already has is refused with that stamp. Nothing here deletes a stamp, moves it to another issue or parent, or reorders it; its size is `set_stamp_size`'s.",
+    "Correct a stamp — or a variant — the way the collector's stamp form does: its name and translated names, its date of issue, its number in any catalogue its area keeps, its catalogue attributes (denomination and perforation as printed; colour, watermark, paper and printing by name from `get_collection_vocabulary`), its issue format, and a variant's subtype. Only what is sent changes. A catalogue number another stamp already has is refused with that stamp. Nothing here deletes a stamp, moves it to another issue or parent, or reorders it; its size is `set_stamp_size`'s.",
   writes: true,
   parameters: [
     { name: "stamp_id", in: "path", type: "string", required: true, description: "The stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it. A stamp may also be named by its short number, `st 123`." },
@@ -1103,6 +1118,14 @@ export const updateStampOperation: Operation = {
     { name: "watermark", in: "body", type: "string", required: false, description: "The watermark, by name or id from `watermarks` in the vocabulary." },
     { name: "paper", in: "body", type: "string", required: false, description: "The paper, by name or id from `papers` in the vocabulary." },
     { name: "printing", in: "body", type: "string", required: false, description: "The printing, by name or id from `printings` in the vocabulary." },
+    {
+      name: "issue_format",
+      in: "body",
+      type: "string",
+      required: false,
+      description:
+        "The form the stamp was issued in — a souvenir sheet, a booklet pane — by name, abbreviation or id from `issueFormats` in the vocabulary. An ordinary stamp has none: clear it, or send `none`. It is the stamp's own — its variants do not take it — and not a copy's `format`, which is how a piece was cut or kept.",
+    },
     {
       name: "subtype",
       in: "body",
@@ -1147,6 +1170,11 @@ export type AgentStampNumbersAnswer =
       readonly catalogNumbers: readonly string[];
       /** The numbers the write took off — each catalogue's former number — so they can be put back. */
       readonly replaced?: readonly string[];
+      /** The stamp's issue format after the call (#2445), by name; absent on an ordinary stamp. */
+      readonly issueFormat?: string;
+      /** The issue format the write replaced — its name, or `none` for an ordinary stamp — so it can
+       *  be put back. Absent when the issue format did not change. */
+      readonly replacedIssueFormat?: string;
     }
   | (BatchRefusal & { readonly entry: string });
 
@@ -1163,11 +1191,22 @@ export async function updateStampNumbersFromParams(
 ): Promise<AgentStampNumbersBatch> {
   const entries = stringList(params, "updates");
   checkBatchSize(entries, "updates", MAX_STAMP_NUMBER_UPDATES, "update", STAMP_UPDATE_EXAMPLE);
-  const parsed = entries.map((entry) => parsePairFields(entry, STAMP_UPDATE_FIELDS, STAMP_UPDATE_EXAMPLE));
-  const [stamps, world] = await Promise.all([
+  const parsed = entries.map((entry) => {
+    const p = parsePairFields(entry, STAMP_UPDATE_FIELDS, STAMP_UPDATE_EXAMPLE, ["stamp"]);
+    if (p.ok && !STAMP_UPDATE_CHANGES.some((field) => p.fields.has(field))) {
+      return {
+        ok: false as const,
+        reason: `The entry names a stamp and nothing to change. Add \`catalog_numbers\`, \`issue_format\` or both: ${STAMP_UPDATE_EXAMPLE}, ${STAMP_ISSUE_FORMAT_UPDATE_EXAMPLE}.`,
+      };
+    }
+    return p;
+  });
+  const [stamps, world, issueFormats] = await Promise.all([
     resolveStampRefsEach(context, parsed.flatMap((p) => (p.ok ? [p.fields.get("stamp")!] : []))),
     loadCatalogueWorld(context),
+    loadIssueFormatEntries(context),
   ]);
+  const issueFormatName = (id: string | null) => issueFormats.find((row) => row.id === id)?.name ?? null;
 
   const seen = new Map<string, number>();
   const updates: AgentStampNumbersAnswer[] = [];
@@ -1193,31 +1232,46 @@ export async function updateStampNumbersFromParams(
     seen.set(resolved.stampId, index);
     try {
       const stamp = await loadStamp(context, resolved.stampId);
-      const sent = splitCatalogNumberList(p.fields.get("catalog_numbers")!);
+      // The issue format first: a name it does not know refuses the item before anything is checked.
+      const issueFormatRef = p.fields.get("issue_format");
+      const issueFormatId =
+        issueFormatRef === undefined ? undefined : resolveIssueFormatWrite(issueFormatRef, issueFormats, "issue_format");
+      const changesIssueFormat = issueFormatId !== undefined && issueFormatId !== stamp.issueFormatId;
+      const numbersSent = p.fields.get("catalog_numbers");
       const before = await loadStampLabels(context, [stamp.id]);
-      const { numbers, changed } = await stampCatalogNumberWrites(context, world, stamp, sent);
-      if (changed) {
+      const numberWrites =
+        numbersSent === undefined
+          ? null
+          : await stampCatalogNumberWrites(context, world, stamp, splitCatalogNumberList(numbersSent));
+      const changesNumbers = numberWrites?.changed ?? false;
+      if (changesNumbers || changesIssueFormat) {
         // The stamp form's write, restating what it would otherwise overwrite — the name, the date and
-        // every other catalogue's number — as `update_stamp` does; nothing else is handed to it.
+        // every catalogue's number — as `update_stamp` does; the issue format only when it changes,
+        // since an attribute absent is an attribute untouched.
+        const numbers = numberWrites?.numbers ?? new Map(stamp.catalogNumbers.map((row) => [row.catalogVendorId, row.number]));
         await updateStampWithCatalog(context.ownerId, stamp.id, {
           name: stamp.name,
           issuedYear: stamp.issuedYear,
           issuedMonth: stamp.issuedMonth,
           issuedDay: stamp.issuedDay,
           catalogNumbers: [...numbers].map(([catalogVendorId, number]) => ({ catalogVendorId, number })),
+          ...(changesIssueFormat ? { issueFormatId } : {}),
         });
       }
-      const labels = changed ? await loadStampLabels(context, [stamp.id]) : before;
+      const labels = changesNumbers ? await loadStampLabels(context, [stamp.id]) : before;
       const now = labels.get(stamp.id)?.catalogNumbers ?? [];
       const gone = (before.get(stamp.id)?.catalogNumbers ?? []).filter((label) => !now.includes(label));
+      const issueFormatNow = issueFormatName(changesIssueFormat ? issueFormatId! : stamp.issueFormatId);
       updates.push({
         index,
         entry,
-        status: changed ? "written" : "unchanged",
+        status: changesNumbers || changesIssueFormat ? "written" : "unchanged",
         stampId: stamp.id,
         stampNo: stampNoOf(labels, stamp.id),
         catalogNumbers: now,
         ...(gone.length > 0 ? { replaced: gone } : {}),
+        ...(issueFormatNow ? { issueFormat: issueFormatNow } : {}),
+        ...(changesIssueFormat ? { replacedIssueFormat: issueFormatName(stamp.issueFormatId) ?? NO_ISSUE_FORMAT } : {}),
       });
     } catch (err) {
       if (!isApiError(err)) console.error("[api/v1] update_stamps update failed", err);
@@ -1232,7 +1286,7 @@ export const updateStampsOperation: Operation = {
   method: "PATCH",
   path: "/stamps",
   description:
-    "Correct the catalogue numbers of many stamps in one call — up to 100, as when a catalogue's numbering is checked against the stamps here. Each update names a stamp and its numbers, and follows `update_stamp`'s rules for catalogue numbers exactly: only the catalogues named change, each among those the stamp's area keeps, one number per catalogue, and a number another stamp already has is refused naming that stamp. Each stamp is answered on its own — written, unchanged when it already had every number sent, or refused with the reason — and a refused stamp does not stop the others. Updates are applied in the order sent. Anything else about a stamp is `update_stamp`'s.",
+    "Correct the catalogue numbers or set the issue format of many stamps in one call — up to 100, as when a catalogue's numbering is checked against the stamps here, or every souvenir sheet found with `list_stamps` is marked as one. Each update names a stamp and its numbers, its issue format or both, and follows `update_stamp`'s rules exactly: only the catalogues named change, each among those the stamp's area keeps, one number per catalogue, a number another stamp already has is refused naming that stamp, and an issue format is named from `issueFormats` in the vocabulary, or `none` for an ordinary stamp. Each stamp is answered on its own — written, unchanged when it already had everything sent, or refused with the reason — and a refused stamp does not stop the others. Updates are applied in the order sent. Anything else about a stamp is `update_stamp`'s.",
   writes: true,
   parameters: [
     {
@@ -1240,13 +1294,13 @@ export const updateStampsOperation: Operation = {
       in: "body",
       type: "string[]",
       required: true,
-      description: `One stamp per entry, at most ${MAX_STAMP_NUMBER_UPDATES}, as \`name=value\` pairs separated by \`;\`: ${STAMP_UPDATE_EXAMPLE}. \`stamp\` is the stamp's id, its short number (\`st 123\`) or a catalogue number naming only it; \`catalog_numbers\` its number in each catalogue named, \`catalogue: number\`, separated by commas.`,
+      description: `One stamp per entry, at most ${MAX_STAMP_NUMBER_UPDATES}, as \`name=value\` pairs separated by \`;\`: ${STAMP_UPDATE_EXAMPLE}, ${STAMP_ISSUE_FORMAT_UPDATE_EXAMPLE}. \`stamp\` is the stamp's id, its short number (\`st 123\`) or a catalogue number naming only it; \`catalog_numbers\` its number in each catalogue named, \`catalogue: number\`, separated by commas; \`issue_format\` the form it was issued in, by name, abbreviation or id, or \`${NO_ISSUE_FORMAT}\` to make it an ordinary stamp. An entry carries at least one of the two.`,
     },
   ],
   result: {
     kind: "object",
     description:
-      "The counts `written`, `unchanged` and `refused`, and `updates` in the order sent — each with its `index` and the `entry` as sent, and then `status` `written` or `unchanged` with the `stampId`, `stampNo`, its `catalogNumbers` as they now read and `replaced` with the numbers a write took off, or `status: refused` with the `reason` and, where it names stamps, their ids in `accepted`.",
+      "The counts `written`, `unchanged` and `refused`, and `updates` in the order sent — each with its `index` and the `entry` as sent, and then `status` `written` or `unchanged` with the `stampId`, `stampNo`, its `catalogNumbers` as they now read, `replaced` with the numbers a write took off, its `issueFormat` (absent on an ordinary stamp) and `replacedIssueFormat` — the former one, or `none` — where the write changed it, or `status: refused` with the `reason` and, where it names stamps, their ids in `accepted`.",
   },
   handler: async (context, params) => updateStampNumbersFromParams(context, params),
 };

@@ -15,8 +15,10 @@ import {
   type IssueStampSource,
 } from "../issue-list-reads";
 import { listResponse, parseListWindow, type ListResponse } from "../list";
-import { optionalBoolean, optionalInteger, optionalString } from "../params";
+import { issueFormatFilterParameter, resolveIssueFormatFilter } from "../issue-formats";
+import { optionalBoolean, optionalInteger, optionalString, stringList } from "../params";
 import { resolveVocabularyValue } from "../vocabulary";
+import { loadIssueFormatEntries } from "./issue-formats";
 import { areaEntries } from "./catalog-prices";
 import { includeSpecialisedParam, INCLUDE_SPECIALISED_PARAMETER } from "./checklist-type-params";
 import { collectionPath, loadCatalogLabelling, loadCollectionHeader, loadIssueLabelling } from "./reads-shared";
@@ -56,6 +58,7 @@ async function listIssues(
   const text = optionalString(params, "text")?.trim() || null;
   const yearFrom = optionalInteger(params, "year_from");
   const yearTo = optionalInteger(params, "year_to");
+  const issueFormatRefs = stringList(params, "issue_format");
   checkIssueListNarrowing({ area, text, yearFrom, yearTo });
   const header = await loadCollectionHeader(context);
 
@@ -90,8 +93,15 @@ async function listIssues(
     };
   }
 
+  // An issue matches when one of its stamps is in a format named (#2440's reading, the Issues list's).
+  const issueFormatIds =
+    issueFormatRefs.length > 0
+      ? resolveIssueFormatFilter(issueFormatRefs, await loadIssueFormatEntries(context), "issue_format")
+      : undefined;
+
   const filter = {
     areaIds,
+    issueFormatIds,
     ...search,
     numberedInVendorId,
     yearFrom: yearFrom ?? undefined,
@@ -162,6 +172,7 @@ async function loadIssueStamps(
             primaryCatalogSortKey: true,
             catalogNumbers: { select: { catalogVendorId: true, number: true } },
             stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+            issueFormat: { select: { name: true } },
           },
         },
       },
@@ -182,6 +193,7 @@ async function loadIssueStamps(
       sortOrder,
       sortKey: stamp.primaryCatalogSortKey,
       catalogNumbers: labels.map((label) => label.label),
+      issueFormat: stamp.issueFormat?.name ?? null,
     };
     const list = byIssue.get(issueId);
     if (list) list.push(source);
@@ -195,7 +207,7 @@ export const listIssuesOperation: Operation = {
   method: "GET",
   path: "/issues",
   description:
-    "List the issues (series) of an area, held or not — what is already catalogued there — in the Issues list's order: by year, then by the leading catalogue's number. Narrow by `area` (with its sub-areas unless `sub_areas` is false), by a span of years, by `catalogue`, and by `text` matching an issue's name, a stamp's name or a catalogue number, as the Issues list's search does; send at least `area` or `text`. With `include_numbers` each issue lists every stamp filed under it with its catalogue numbers — the stamps outside its declared range too — so the numbers already taken can be seen before writing. Pages run to 200 issues. Call `get_issue` to read one issue in full, and `list_holdings` with its `issue_id` for the copies themselves.",
+    "List the issues (series) of an area, held or not — what is already catalogued there — in the Issues list's order: by year, then by the leading catalogue's number. Narrow by `area` (with its sub-areas unless `sub_areas` is false), by a span of years, by `catalogue`, by `issue_format` (an issue with a stamp in it), and by `text` matching an issue's name, a stamp's name or a catalogue number, as the Issues list's search does; send at least `area` or `text`. With `include_numbers` each issue lists every stamp filed under it with its catalogue numbers — the stamps outside its declared range too — so the numbers already taken can be seen before writing. Pages run to 200 issues. Call `get_issue` to read one issue in full, and `list_holdings` with its `issue_id` for the copies themselves.",
   writes: false,
   parameters: [
     {
@@ -250,13 +262,14 @@ export const listIssuesOperation: Operation = {
       description:
         "true to add `stamps` to each issue: every stamp filed under it, variants included, with its catalogue numbers in every catalogue — including the stamps outside its declared range.",
     },
+    issueFormatFilterParameter("the issues with at least one stamp"),
     INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "list",
     maxLimit: ISSUE_LIST_MAX_LIMIT,
     description:
-      "Issues, each with `issueId`, `issueNo` (its short number, `#12`), `name` and `translatedNames` (by language code), `year`, `area` (the area it is filed under), `catalogRanges` — the range it declares per catalogue, `Mi·PL 1384–1388` — `prefixes`, the catalogue prefixes the issue sets itself in the spelling `update_issue` takes (`\"Mi: GG\"`; absent where it follows its area), `memberCount` (every stamp filed under it, variants included), `requiredCount` (distinct stamps on any of its checklists — standard ones only unless `include_specialised` is sent), `heldCopies` (copies held of any of its stamps — not sold, disposed of or traded away) and `heldByCondition`, the same copies by `condition` in the collection's order, only conditions held. With `include_numbers`, `stamps` lists every stamp filed under the issue in the issue's order — its variant tree depth first — each with `stampId`, `stampNo` (its short number, `st 123`), `catalogNumbers` (every catalogue, the area's primary first, labelled as everywhere else), `isVariant`, and `parentStampId` on a variant. `total` counts every matching issue.",
+      "Issues, each with `issueId`, `issueNo` (its short number, `#12`), `name` and `translatedNames` (by language code), `year`, `area` (the area it is filed under), `catalogRanges` — the range it declares per catalogue, `Mi·PL 1384–1388` — `prefixes`, the catalogue prefixes the issue sets itself in the spelling `update_issue` takes (`\"Mi: GG\"`; absent where it follows its area), `memberCount` (every stamp filed under it, variants included), `requiredCount` (distinct stamps on any of its checklists — standard ones only unless `include_specialised` is sent), `heldCopies` (copies held of any of its stamps — not sold, disposed of or traded away) and `heldByCondition`, the same copies by `condition` in the collection's order, only conditions held. With `include_numbers`, `stamps` lists every stamp filed under the issue in the issue's order — its variant tree depth first — each with `stampId`, `stampNo` (its short number, `st 123`), `catalogNumbers` (every catalogue, the area's primary first, labelled as everywhere else), `isVariant`, `parentStampId` on a variant, and `issueFormat` on a stamp that is not an ordinary stamp. `list_stamps` lists the stamps themselves. `total` counts every matching issue.",
   },
   handler: async (context, params) => listIssues(context, params),
 };

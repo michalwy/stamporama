@@ -12,6 +12,7 @@ import {
   searchCopy,
   searchStamp,
   stampDetail,
+  stampListRow,
   valuationSummary,
 } from "../../src/lib/agent-api/collection-reads";
 import type {
@@ -79,6 +80,7 @@ const SEARCH_STAMP: SearchStampRow = {
   catalogNumbers: CATALOG,
   photoId: "p1",
   subtype: { name: "Variant", isDefault: true },
+  issueFormat: null,
   hasVariants: true,
   isVariant: false,
   copies: 0,
@@ -156,6 +158,7 @@ const SEARCH_COPY: SearchCopyRow = {
   condition: { name: "Mint Never Hinged" },
   certificate: null,
   format: null,
+  issueFormat: null,
   locationRef: "A234",
   inCollection: true,
   forSale: false,
@@ -261,6 +264,7 @@ const STAMP_DETAIL: StampDetailRow = {
     printing: null,
   },
   size: { widthMm: 21.5, heightMm: null },
+  issueFormat: null,
 };
 
 describe("one stamp in full", () => {
@@ -431,6 +435,7 @@ const COPY: CopyRow = {
   conditionName: "Mint Never Hinged",
   certificateStatusName: null,
   formatName: null,
+  issueFormat: null,
   inCollection: true,
   forSale: false,
   forTrade: false,
@@ -689,5 +694,64 @@ describe("a copy with a candidate set (#1651)", () => {
     const row = copyDetail("col1", { ...COPY, unknownVariant: false }, COPY_CONTEXT);
     assert.equal("candidates" in row, false);
     assert.equal("variantToSettle" in row, false);
+  });
+});
+
+describe("a stamp's issue format on every read that names the stamp (#2445)", () => {
+  const SHEET = { name: "Souvenir sheet" };
+
+  it("is named on a stamp a search matched, a stamp in full and a stamp of the list — and absent on an ordinary stamp", () => {
+    assert.equal(searchStamp("col1", { ...SEARCH_STAMP, issueFormat: SHEET }).issueFormat, "Souvenir sheet");
+    assert.equal("issueFormat" in searchStamp("col1", SEARCH_STAMP), false);
+    const extra = { catalogNumbers: CATALOG, area: "Poland", path: "/c/pl/stamps/s1" };
+    assert.equal(stampDetail("col1", { ...STAMP_DETAIL, issueFormat: SHEET }, extra).issueFormat, "Souvenir sheet");
+    assert.equal("issueFormat" in stampDetail("col1", STAMP_DETAIL, extra), false);
+  });
+
+  it("is the stamp's on a copy, beside the copy's own format and never in place of it", () => {
+    const pair = { ...COPY, formatName: "Pair", issueFormat: { name: "Stamp from a souvenir sheet" } };
+    const context = { catalogNumbers: CATALOG, location: null, area: null, path: "/c/pl/inventory/i1" };
+    for (const row of [copyDetail("col1", pair, context), holding(pair, context)]) {
+      assert.equal(row.format, "Pair");
+      assert.equal(row.issueFormat, "Stamp from a souvenir sheet");
+    }
+    assert.equal(
+      searchCopy("col1", { ...SEARCH_COPY, issueFormat: { name: "Booklet pane" } }).issueFormat,
+      "Booklet pane"
+    );
+    assert.equal("issueFormat" in holding(COPY, context), false);
+  });
+
+  it("states a list row lean: which stamp, where, what it is, and the two copy figures apart", () => {
+    const row = stampListRow(
+      {
+        id: "s2",
+        stampNo: 77,
+        parentId: "s1",
+        name: null,
+        issuedYear: 1938,
+        subtype: { name: "Perforation", isDefault: false },
+        issueFormat: SHEET,
+        issues: [{ issueName: "Philatelic exhibition", issueYear: 1938 }],
+        copies: { total: 1 },
+        variantCopies: { total: 0 },
+      },
+      { catalogNumbers: CATALOG, area: "Poland", path: "/c/pl/stamps/s2" }
+    );
+    assert.deepEqual(row, {
+      stampId: "s2",
+      stampNo: 77,
+      issuedYear: 1938,
+      parentStampId: "s1",
+      subtype: "Perforation",
+      issueFormat: "Souvenir sheet",
+      catalogNumbers: catalogLabels(CATALOG),
+      area: "Poland",
+      issue: "Philatelic exhibition",
+      issueYear: 1938,
+      copies: 1,
+      variantCopies: 0,
+      path: "/c/pl/stamps/s2",
+    });
   });
 });

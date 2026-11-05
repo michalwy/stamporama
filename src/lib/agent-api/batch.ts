@@ -43,7 +43,10 @@ export function checkBatchSize(
 export function parsePairFields<F extends string>(
   entry: string,
   fields: readonly F[],
-  example: string
+  example: string,
+  /** The fields an entry must carry — every one by default. `update_stamps` (#2445) needs only its
+   *  stamp and checks the rest itself. */
+  required: readonly F[] = fields
 ): { ok: true; fields: Map<F, string> } | { ok: false; reason: string } {
   const out = new Map<F, string>();
   for (const part of entry.split(";")) {
@@ -60,7 +63,7 @@ export function parsePairFields<F extends string>(
     if (out.has(name as F)) return { ok: false, reason: `The entry names "${name}" twice.` };
     out.set(name as F, value);
   }
-  const missing = fields.filter((name) => !out.has(name));
+  const missing = required.filter((name) => !out.has(name));
   if (missing.length > 0) {
     return { ok: false, reason: `The entry has no ${missing.join(" and no ")}. Write it as ${example}.` };
   }

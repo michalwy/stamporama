@@ -185,6 +185,12 @@ import {
   updateStampsOperation,
 } from "./operations/catalog-edits";
 import { createSubtypeOperation, updateSubtypeOperation } from "./operations/subtypes";
+import {
+  createIssueFormatOperation,
+  setIssueFormatOrderOperation,
+  updateIssueFormatOperation,
+} from "./operations/issue-formats";
+import { listStampsOperation } from "./operations/stamp-list";
 import { deleteStampOperation, deleteStampVariantOperation, moveStampVariantOperation } from "./operations/variant-tree";
 import { deleteIssueOperation, moveStampToIssueOperation } from "./operations/issue-tree";
 import { setStampColnectIdOperation, setStampColnectIdsOperation } from "./operations/colnect-ids";
@@ -360,6 +366,11 @@ export const OPERATIONS: readonly Operation[] = [
   updateStampsOperation,
   createSubtypeOperation,
   updateSubtypeOperation,
+  // The issue-format dictionary and the stamp list (#2445).
+  createIssueFormatOperation,
+  updateIssueFormatOperation,
+  setIssueFormatOrderOperation,
+  listStampsOperation,
   moveStampVariantOperation,
   deleteStampVariantOperation,
   deleteStampOperation,

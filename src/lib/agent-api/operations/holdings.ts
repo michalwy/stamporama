@@ -5,7 +5,9 @@ import { countItems, countItemsByCondition, getHoldingsValuation, listItemsPagin
 import { conditionCounts, holding, valuationSummary } from "../collection-reads";
 import { notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
-import { optionalBoolean, optionalInteger, optionalString } from "../params";
+import { issueFormatFilterParameter, resolveIssueFormatFilter } from "../issue-formats";
+import { optionalBoolean, optionalInteger, optionalString, stringList } from "../params";
+import { loadIssueFormatEntries } from "./issue-formats";
 import { resolveVocabularyValue } from "../vocabulary";
 import { readCollectionVocabulary } from "./vocabulary";
 import { candidateLabelsFor, loadCatalogLabelling, loadLocationPaths } from "./reads-shared";
@@ -36,7 +38,8 @@ import { stampIdFromRef } from "./stamp-refs";
  * The scoping parameters, declared once and shared by both operations.
  *
  * **Six named scopes and not a filter surface**, which is #710's first decision — and a seventh since
- * #1651, *variant to settle*, which names the collector's own worklist of copies still to identify. Each names something
+ * #1651, *variant to settle*, which names the collector's own worklist of copies still to identify, and an eighth since #2445,
+ * *issue format* — *my souvenir sheets*. Each names something
  * a collector would say out loud — *what have I got from this series, from this country, from this
  * year, of this stamp, in this drawer, in this grade* — and they compose with AND. What is
  * deliberately **not** here is the rest of the Copies list's two dozen filters: an agent resolves a
@@ -104,6 +107,9 @@ const SCOPE_PARAMETERS: readonly ParameterSpec[] = [
     description:
       "`true` restricts to copies whose variant is still to be settled — filed on a stamp that has variants, or identified as one of several candidate stamps (`candidates` on the row); `false` to the rest. Leave it out for both.",
   },
+  // The eighth (#2445): the issue format of the copy's stamp — the Copies list's own filter (#2440),
+  // which a copy carrying several stamps matches when any of them is in a format named.
+  issueFormatFilterParameter("copies whose stamp — or any stamp the copy carries — is"),
 ];
 
 /** The scope as `items.ts` takes it. */
@@ -115,6 +121,7 @@ interface HoldingScope {
   readonly locationId?: string;
   readonly conditionIds?: string[];
   readonly variantToSettle?: boolean;
+  readonly issueFormatIds?: string[];
 }
 
 /**
@@ -145,6 +152,7 @@ async function resolveScope(
   const location = optionalString(params, "location");
   const condition = optionalString(params, "condition");
   const variantToSettle = optionalBoolean(params, "variant_to_settle");
+  const issueFormatRefs = stringList(params, "issue_format");
 
   const vocabulary: CollectionVocabulary | null =
     area !== null || location !== null || condition !== null
@@ -156,6 +164,15 @@ async function resolveScope(
     ...(stampId !== null ? { stampId } : {}),
     ...(year !== null ? { year } : {}),
     ...(variantToSettle !== null ? { variantToSettle } : {}),
+    ...(issueFormatRefs.length > 0
+      ? {
+          issueFormatIds: resolveIssueFormatFilter(
+            issueFormatRefs,
+            await loadIssueFormatEntries(context),
+            "issue_format"
+          ),
+        }
+      : {}),
     ...(condition !== null && vocabulary
       ? {
           conditionIds: [
@@ -280,13 +297,13 @@ export const listHoldingsOperation: Operation = {
   method: "GET",
   path: "/holdings",
   description:
-    "What the collection actually holds, narrowed to a series, a stamp, an area, a year, a storage location or a grade — any of them, in combination. Each row says which stamp it is, what condition it is in and where it is filed, so one call answers what is held and where it sits. This is the operation for `what do I have from …` questions; sold copies and ones written off are not in it.",
+    "What the collection actually holds, narrowed to a series, a stamp, an area, a year, a storage location, a grade or the stamp's issue format — any of them, in combination. Each row says which stamp it is, what condition it is in and where it is filed, so one call answers what is held and where it sits. This is the operation for `what do I have from …` questions; sold copies and ones written off are not in it.",
   writes: false,
   parameters: SCOPE_PARAMETERS,
   result: {
     kind: "list",
     description:
-      "The copies held in the scope asked for, in the order they were added to the collection. `byCondition` counts the **whole** match by grade, not just this page, so the question `in what condition` is answered even when the rows were trimmed. A cover or other piece — several stamps, or one on a format of kind on cover or on piece — has no condition: its row carries no `condition` and `byCondition` does not count it. A copy with no `certificate` carries none and one with no `format` is a single. `deliveryState` separates what is in hand (`delivered`, `to_sort`) from what is still on its way (`ordered`, `in_transit`) — both are held. `location` is the full filing path and `locationRef` the mark written on the shelf; a ref only means anything inside its own location. With no scope given this is the whole collection.",
+      "The copies held in the scope asked for, in the order they were added to the collection. `byCondition` counts the **whole** match by grade, not just this page, so the question `in what condition` is answered even when the rows were trimmed. A cover or other piece — several stamps, or one on a format of kind on cover or on piece — has no condition: its row carries no `condition` and `byCondition` does not count it. A copy with no `certificate` carries none and one with no `format` is a single; `issueFormat` is its stamp's — the form the stamp was issued in, a souvenir sheet or a booklet pane — and absent for an ordinary stamp. `deliveryState` separates what is in hand (`delivered`, `to_sort`) from what is still on its way (`ordered`, `in_transit`) — both are held. `location` is the full filing path and `locationRef` the mark written on the shelf; a ref only means anything inside its own location. With no scope given this is the whole collection.",
   },
   handler: async (context, params) => readHoldings(context, params),
 };

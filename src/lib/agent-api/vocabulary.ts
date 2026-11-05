@@ -133,6 +133,16 @@ export interface PlatformVocabularyEntry extends VocabularyEntry {
 export type ExchangePartnerVocabularyEntry = VocabularyEntry;
 
 /** A catalog book, flat, with its vendor as an id rather than as a nested object. */
+/**
+ * An issue format (#2439, through the API since #2445) — the form a stamp was issued in: a souvenir
+ * sheet, a booklet pane. Its `abbreviation` is always there (the dictionary requires one), and its
+ * chip `color`, one of the palette's hues, is omitted where the collector left the chip neutral.
+ */
+export interface IssueFormatVocabularyEntry extends VocabularyEntry {
+  readonly abbreviation: string;
+  readonly color?: string;
+}
+
 export interface CatalogVocabularyEntry extends VocabularyEntry {
   /** The vendor whose book this is — join against `catalogVendors` in the same response. */
   readonly vendorId: string;
@@ -221,6 +231,13 @@ export interface CollectionVocabulary {
   readonly watermarks: readonly VocabularyEntry[];
   readonly papers: readonly VocabularyEntry[];
   readonly printings: readonly VocabularyEntry[];
+  /**
+   * **The issue formats (#2439), added by #2445 on the same licence**, in the collector's order. A
+   * stamp with none is an ordinary stamp — there is no row for it, and the API spells it `none` in a
+   * filter. It is the stamp's, never a copy's: a copy's `format` (`formats` above) is how the piece
+   * was cut or kept, and a copy reads its stamp's issue format beside it.
+   */
+  readonly issueFormats: readonly IssueFormatVocabularyEntry[];
 }
 
 /** How a vocabulary is named in an error sentence — the agent reads these, so they are English. */
@@ -242,7 +259,8 @@ export type VocabularyName =
   | "color"
   | "watermark"
   | "paper"
-  | "printing";
+  | "printing"
+  | "issue format";
 
 /** Trim and case-fold, so that `"mnh"`, `" MNH "` and `"MNH"` are one value. */
 function fold(value: string): string {

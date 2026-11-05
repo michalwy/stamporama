@@ -120,6 +120,11 @@ export function invalidRequest(message: string, accepted?: readonly string[]): A
  * area name to a `condition` parameter has made a different mistake from one that misspelled a
  * condition, and the two are told apart by reading which vocabulary was being matched against.
  */
+/** "a condition", "an area", "an issue format" — the article the vocabulary's name takes. */
+function withArticle(noun: string): string {
+  return /^[aeiou]/i.test(noun) ? `an ${noun}` : `a ${noun}`;
+}
+
 export function unknownVocabularyValue(
   value: string,
   vocabulary: string,
@@ -129,8 +134,8 @@ export function unknownVocabularyValue(
   return new ApiError(
     "invalid_request",
     accepted.length === 0
-      ? `"${value}" is not a ${vocabulary} in this collection, and this collection has no ${vocabulary} configured at all. Ask the collector to add one in Settings.`
-      : `"${value}" is not a ${vocabulary} in this collection. Send one of the accepted names, or the id from \`get_collection_vocabulary\`, as "${parameter}".`,
+      ? `"${value}" is not ${withArticle(vocabulary)} in this collection, and this collection has no ${vocabulary} configured at all. Ask the collector to add one in Settings.`
+      : `"${value}" is not ${withArticle(vocabulary)} in this collection. Send one of the accepted names, or the id from \`get_collection_vocabulary\`, as "${parameter}".`,
     accepted
   );
 }

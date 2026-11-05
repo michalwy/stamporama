@@ -354,6 +354,21 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   acts as a variant unless the assistant says it is an entry of its own, such as a plate flaw. A name
   you already have, in any mix of capitals, is refused. Deleting a subtype, reordering them, choosing
   the default and changing whether one acts as a variant stay in Settings.
+- **set a stamp's [issue format](collections.md#issue-formats)** — souvenir sheet, stamp from a
+  souvenir sheet, booklet pane… — or take it off, which makes it an ordinary stamp again, exactly as
+  the stamp form's *Issue format* field does. It can do this for many stamps at once: asked to *set
+  Souvenir sheet on all my souvenir sheets*, it finds them, tells you what it would change, and on
+  your word changes up to a hundred in one go, each answered on its own. The issue format belongs to
+  the stamp, not to your copy of it: a pair cut from a souvenir sheet is still a *Pair*, of a stamp
+  whose issue format is *Stamp from a souvenir sheet*;
+- **list your stamps** — every stamp of an area, held or not, narrowed by years, by text and by
+  issue format, including the ones with **none**: *which of my Polish stamps have no issue format
+  yet?* is one question. Your copies and your issues can be narrowed by issue format the same way,
+  and everything it reads about a stamp or a copy says the stamp's issue format;
+- **add an issue format, and rename, recolour and reorder them**, as *Settings → Issue formats* does,
+  and translate their names with the other translations. A name or abbreviation one of your issue
+  formats already has, in any mix of capitals, is refused, and so is the word *none*, which is what
+  the assistant calls an ordinary stamp. Deleting an issue format stays in Settings.
 
 Only what it is told to change changes; a stamp's other catalogue numbers and fields stay as they
 are. A name in another language is accepted only in a language you list or print in.

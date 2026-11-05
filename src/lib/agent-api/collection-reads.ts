@@ -99,6 +99,9 @@ export interface AgentSearchStamp {
   readonly issueYear?: number;
   readonly catalogNumbers: string[];
   readonly subtype?: string;
+  /** The form the stamp was issued in (#2439) — `Souvenir sheet`, `Booklet pane` — by its name in
+   *  `issueFormats`. Absent on an ordinary stamp, which has none (#2445). */
+  readonly issueFormat?: string;
   readonly isVariant: boolean;
   readonly hasVariants: boolean;
   readonly copies: number;
@@ -127,6 +130,9 @@ export interface AgentSearchCopy {
   readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
+  /** The issue format of the stamp the copy is of (#2445) — the form it was **issued** in, never how
+   *  this piece was cut, which is {@link format}. Absent when the stamp is an ordinary stamp. */
+  readonly issueFormat?: string;
   readonly locationRef?: string;
   readonly inCollection: boolean;
   readonly forSale: boolean;
@@ -184,6 +190,8 @@ export interface SearchStampRow {
   readonly catalogNumbers: readonly CatalogLabelRow[];
   readonly photoId: string | null;
   readonly subtype: { readonly name: string; readonly isDefault: boolean } | null;
+  /** The stamp's issue format (#2439); null for an ordinary stamp. */
+  readonly issueFormat: AxisValueRow | null;
   readonly hasVariants: boolean;
   readonly isVariant: boolean;
   readonly copies: number;
@@ -215,6 +223,7 @@ export function searchStamp(collectionId: string, row: SearchStampRow): AgentSea
     issueYear: row.issueYear ?? undefined,
     catalogNumbers: catalogLabels(row.catalogNumbers),
     subtype: subtypeName(row.subtype) ?? undefined,
+    issueFormat: row.issueFormat?.name,
     isVariant: row.isVariant,
     hasVariants: row.hasVariants,
     copies: row.copies,
@@ -238,6 +247,8 @@ export interface SearchCopyRow {
   readonly condition: AxisValueRow | null;
   readonly certificate: AxisValueRow | null;
   readonly format: AxisValueRow | null;
+  /** The stamp's issue format (#2439); null for an ordinary stamp. */
+  readonly issueFormat: AxisValueRow | null;
   readonly locationRef: string | null;
   readonly inCollection: boolean;
   readonly forSale: boolean;
@@ -261,12 +272,77 @@ export function searchCopy(collectionId: string, row: SearchCopyRow): AgentSearc
     // `get_collection_vocabulary` and could not send back. The result description says so.
     certificate: row.certificate?.name ?? undefined,
     format: row.format?.name ?? undefined,
+    // The stamp's, absent on an ordinary stamp for the same reason a single has no `format` (#2445).
+    issueFormat: row.issueFormat?.name,
     locationRef: row.locationRef ?? undefined,
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,
     photoUrl: leadPhotoUrl(collectionId, row.photoId) ?? undefined,
     path: row.path,
+  });
+}
+
+// ── The stamp list (#2445) ───────────────────────────────────────────────────
+
+/**
+ * One stamp of `list_stamps` — the Stamps list's row, lean: which stamp, where it is filed, what it
+ * is (its subtype, its issue format) and how many copies are held of it. Everything else is one
+ * `get_stamp` away, as a holding is one `get_copy` away.
+ */
+export interface AgentStampListRow {
+  readonly stampId: string;
+  readonly stampNo: number;
+  readonly name?: string;
+  readonly issuedYear?: number;
+  readonly parentStampId?: string;
+  readonly subtype?: string;
+  /** The form it was issued in, by name; absent on an ordinary stamp. */
+  readonly issueFormat?: string;
+  readonly catalogNumbers: string[];
+  readonly area?: string;
+  readonly issue?: string;
+  readonly issueYear?: number;
+  /** Copies held of this stamp exactly, and under its variants — two figures, never summed (#348). */
+  readonly copies: number;
+  readonly variantCopies: number;
+  readonly path: string;
+}
+
+/** The row shape `listStampsPaginated` states a stamp in, narrowed to what is published. */
+export interface StampListRowSource {
+  readonly id: string;
+  readonly stampNo: number;
+  readonly parentId: string | null;
+  readonly name: string | null;
+  readonly issuedYear: number | null;
+  readonly subtype: { readonly name: string; readonly isDefault: boolean } | null;
+  readonly issueFormat: AxisValueRow | null;
+  readonly issues: readonly { readonly issueName: string | null; readonly issueYear: number | null }[];
+  readonly copies: { readonly total: number };
+  readonly variantCopies: { readonly total: number };
+}
+
+export function stampListRow(
+  row: StampListRowSource,
+  extra: { readonly catalogNumbers: readonly CatalogLabelRow[]; readonly area: string | null; readonly path: string }
+): AgentStampListRow {
+  const issue = row.issues[0];
+  return compact({
+    stampId: row.id,
+    stampNo: row.stampNo,
+    name: row.name ?? undefined,
+    issuedYear: row.issuedYear ?? undefined,
+    parentStampId: row.parentId ?? undefined,
+    subtype: subtypeName(row.subtype) ?? undefined,
+    issueFormat: row.issueFormat?.name,
+    catalogNumbers: catalogLabels(extra.catalogNumbers),
+    area: extra.area ?? undefined,
+    issue: issue?.issueName ?? undefined,
+    issueYear: issue?.issueYear ?? undefined,
+    copies: row.copies.total,
+    variantCopies: row.variantCopies.total,
+    path: extra.path,
   });
 }
 
@@ -363,6 +439,9 @@ export interface AgentStampDetail {
   readonly watermark?: string;
   readonly paper?: string;
   readonly printing?: string;
+  /** The form the stamp was issued in (#2439) — `Souvenir sheet`, `Booklet pane` — by its name in
+   *  `issueFormats`. Absent on an ordinary stamp, which has none (#2445). */
+  readonly issueFormat?: string;
   readonly widthMm?: number;
   readonly heightMm?: number;
   readonly copies: AgentCopyCounts;
@@ -410,6 +489,8 @@ export interface StampDetailRow {
     readonly printing: string | null;
   };
   readonly size: { readonly widthMm: number | null; readonly heightMm: number | null };
+  /** The stamp's issue format (#2439); null for an ordinary stamp. */
+  readonly issueFormat: AxisValueRow | null;
 }
 
 /** A list only when it has something in it — `compact` keeps an empty array, which would say "none"
@@ -462,6 +543,8 @@ export function stampDetail(
     watermark: row.attributes.watermark ?? undefined,
     paper: row.attributes.paper ?? undefined,
     printing: row.attributes.printing ?? undefined,
+    // Beside the attributes, and flattened for their reason: most stamps are ordinary (#2445).
+    issueFormat: row.issueFormat?.name,
     // The stamp's **own** figures. Nothing is resolved through the checklist here: a detail read
     // reports what the record holds, and the borrowed figure belongs to the surfaces that draw
     // boxes with it (#763).
@@ -775,6 +858,9 @@ export interface AgentCopyDetail {
   readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
+  /** The issue format of the stamp the copy is of (#2445) — the form it was **issued** in, never how
+   *  this piece was cut, which is {@link format}. Absent when the stamp is an ordinary stamp. */
+  readonly issueFormat?: string;
   readonly inCollection: boolean;
   readonly forSale: boolean;
   readonly forTrade: boolean;
@@ -811,6 +897,8 @@ export interface CopyRow extends CandidateSetRow {
   readonly conditionName: string | null;
   readonly certificateStatusName: string | null;
   readonly formatName: string | null;
+  /** The leading stamp's issue format (#2439); null for an ordinary stamp. */
+  readonly issueFormat: AxisValueRow | null;
   readonly inCollection: boolean;
   readonly forSale: boolean;
   readonly forTrade: boolean;
@@ -863,6 +951,7 @@ export function copyDetail(
     condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
+    issueFormat: row.issueFormat?.name,
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,
@@ -907,6 +996,9 @@ export interface AgentHolding {
   readonly condition?: string;
   readonly certificate?: string;
   readonly format?: string;
+  /** The issue format of the stamp the copy is of (#2445) — the form it was **issued** in, never how
+   *  this piece was cut, which is {@link format}. Absent when the stamp is an ordinary stamp. */
+  readonly issueFormat?: string;
   readonly location?: string;
   readonly locationRef?: string;
   /** `delivered`, `to_sort`, `ordered` or `in_transit`. A copy on its way is bought and is counted
@@ -932,6 +1024,7 @@ export function holding(row: CopyRow, context: HoldingContext): AgentHolding {
     condition: row.conditionName ?? undefined,
     certificate: row.certificateStatusName ?? undefined,
     format: row.formatName ?? undefined,
+    issueFormat: row.issueFormat?.name,
     location: context.location ?? undefined,
     locationRef: row.locationRef ?? undefined,
     deliveryState: row.deliveryState,

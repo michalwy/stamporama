@@ -208,9 +208,15 @@ export function duplicateCatalogNumbers(groups: readonly DuplicateIdentity[]): A
 /** The most stamps one `update_stamps` call corrects — the list cap, so the answer fits. */
 export const MAX_STAMP_NUMBER_UPDATES = 100;
 
-export const STAMP_UPDATE_FIELDS = ["stamp", "catalog_numbers"] as const;
+/** An update's fields: the stamp, and its catalogue numbers, its issue format (#2445) or both. */
+export const STAMP_UPDATE_FIELDS = ["stamp", "catalog_numbers", "issue_format"] as const;
+
+/** What an update must carry besides its stamp — at least one of them. */
+export const STAMP_UPDATE_CHANGES = ["catalog_numbers", "issue_format"] as const;
 
 export const STAMP_UPDATE_EXAMPLE = "`stamp=st 123; catalog_numbers=Mi: 124a, Fi: 456`";
+
+export const STAMP_ISSUE_FORMAT_UPDATE_EXAMPLE = "`stamp=Mi Bl 12; issue_format=Souvenir sheet`";
 
 /**
  * An update's `catalog_numbers`, `"Mi: 124a, Fi: 456"`, as `update_stamp`'s list of entries. It is

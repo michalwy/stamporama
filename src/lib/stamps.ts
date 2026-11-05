@@ -1064,6 +1064,17 @@ export async function listStampsPaginated(
   return { items, nextCursor };
 }
 
+/** How many stamps the Stamps list's filters match — the agent API's `list_stamps` total (#2445),
+ *  through the list's own `where`, so the count and the rows under it cannot disagree. */
+export async function countStamps(
+  ownerId: string,
+  collectionId: string,
+  opts: StampListFilterOpts
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.stamp.count({ where: buildStampListWhere(collectionId, opts) });
+}
+
 /**
  * One stamp enriched exactly as the flat Stamps list enriches a row — same headline price, same
  * copy counts, same photos. The stamp detail screen (#518) reads through this rather than through
