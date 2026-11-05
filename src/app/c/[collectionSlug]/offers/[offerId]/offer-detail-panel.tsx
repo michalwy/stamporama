@@ -1629,6 +1629,7 @@ export function OfferDetailPanel({
           market={offer.colnectMarket}
           assistantPresent={assistantPresent}
           editable={editable}
+          ownPrice={askingPrice}
           onApply={(amount) => patch(askingPriceField, amount)}
           onRecorded={onMarketRecorded}
         />

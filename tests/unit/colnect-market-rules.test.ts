@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  axisPosition,
   colnectMarketView,
   parseColnectMarketReadInput,
   priceUnder,
@@ -204,5 +205,59 @@ describe("colnectMarketView ticks (#2454)", () => {
     );
     const positions = view.ticks.map((t) => t.position);
     assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+  });
+});
+
+describe("colnectMarketView reads at a glance (#2464)", () => {
+  const view = (offers: ColnectMarketOfferInput[]) => {
+    const read = storeColnectMarketRead(input(offers), { currency: "EUR", rateTo: () => null, ownSaleCodes: new Set() });
+    assert.ok(read.ok);
+    return colnectMarketView(read.read, [{ colnectId: "60512", label: "x", grades: [] }], new Map());
+  };
+
+  it("draws several offers at one price as one dot with their count", () => {
+    const used = view([
+      offer({ saleCode: "a", amount: "0.40" }),
+      offer({ saleCode: "b", amount: "0.40", note: "Nice" }),
+      offer({ saleCode: "c", amount: "1.20" }),
+    ]).items[0].rows!.find((r) => r.key === "4")!;
+    assert.deepEqual(
+      used.groups.map((g) => [g.amount, g.count, g.notes]),
+      [
+        ["0.40", 2, ["Nice"]],
+        ["1.20", 1, []],
+      ]
+    );
+    assert.equal(used.dots.length, 3);
+    assert.equal(used.groups[0].position, used.dots[0].position);
+  });
+
+  it("gives a narrow read a scale of a few 1-2-5 values, never one", () => {
+    const v = view([offer({ amount: "1.00" })]);
+    assert.deepEqual(
+      v.ticks.map((t) => t.label),
+      ["0.5", "1", "2"]
+    );
+    assert.equal(v.ticks[0].position, 0);
+    assert.ok(Math.abs(v.ticks[2].position - 1) < 1e-9);
+  });
+
+  it("falls back to the decades where 1-2-5 would crowd the scale", () => {
+    const v = view([offer({ saleCode: "a", amount: "0.01" }), offer({ saleCode: "b", amount: "50.00" })]);
+    assert.deepEqual(
+      v.ticks.map((t) => t.label),
+      ["0.01", "0.1", "1", "10"]
+    );
+  });
+
+  it("places the offer's own price on the axis, at an end when outside it, nowhere without one", () => {
+    const v = view([offer({ saleCode: "a", amount: "0.10" }), offer({ saleCode: "b", amount: "1.00" })]);
+    const inside = axisPosition(v.axis, "0.10")!;
+    assert.equal(inside.outside, null);
+    assert.ok(Math.abs(inside.position - v.items[0].rows!.find((r) => r.key === "4")!.dots[0].position) < 1e-9);
+    assert.deepEqual(axisPosition(v.axis, "500.00"), { position: 1, outside: "above" });
+    assert.deepEqual(axisPosition(v.axis, "0.001"), { position: 0, outside: "below" });
+    assert.equal(axisPosition(v.axis, null), null);
+    assert.equal(axisPosition(v.axis, "0.00"), null);
   });
 });

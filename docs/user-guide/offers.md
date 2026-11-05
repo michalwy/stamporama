@@ -1534,19 +1534,27 @@ also carries a **Colnect market** card, under the description, which reads them 
 condition's listings of the offer's stamps on Colnect, in your own Colnect session, and the card shows
 where they sit. Nothing is read on its own — only when you press the button.
 
-Each condition is one row, and each row is a **strip of dots**: one dot per listing, on a price axis.
-A solid line marks the **lowest** price and a dashed one the **median**, and beside the strip are the
-lowest price, the median and how many offers there are. That tells a lone 0.01 among prices around
-1 € apart from a stamp that most sellers really do offer at 0.01. The axis is logarithmic — 0.01 and
-10 € fit on one strip — and it is the same for every row of the read, with a few round figures under
-it, so one condition can be compared with another at a glance.
+Each condition is one row, and each row is a **strip of dots** on a price axis. A dot is a price:
+one offer at it, or — with a small count beside it, *2*, *3* — several offers at the same price. A
+solid green line marks the **lowest** price and a dashed grey one the **median**, and a legend above
+the strips names every mark. Beside each strip the figures read *lowest · median · offers*, for
+example *0.40 · med 1.20 · 5*. That tells a lone 0.01 among prices around 1 € apart from a stamp
+that most sellers really do offer at 0.01. The axis is logarithmic — 0.01 and 10 € fit on one strip
+— and it is the same for every row of the read, so one condition can be compared with another at a
+glance. Its scale is printed above and below the strips, at round figures (0.05, 0.1, 0.2, 0.5, 1,
+2, 5…) chosen for the range of the read, with light gridlines through every row.
+
+**Your price** is an amber line across every row, labelled with the figure above the strips, so you
+see at once where it falls in each condition. An offer with no price yet has no line. A price far
+outside what Colnect asks sits at the end of the axis, its label pointing the way it lies (→).
 
 - **The rows are your conditions.** Each is named by the condition of yours that is
   [mapped](collections.md#colnect-condition-mapping) to that Colnect grade, with Colnect's grade
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
-  offer's copies are in is the **highlighted** row, and its lowest price — the one you price against —
+  offer's copies are in is the **highlighted** row, marked *this offer*, and its lowest price — the one you price against —
   is set larger and bold, so it is seen at once (*no offers* too, when nobody sells in it).
-- **A condition nobody is selling in** says *no offers*, with an empty strip. If no condition has any,
+- **A condition nobody is selling in** says *no offers*, with an empty strip — its line and
+  gridlines stay, so the rows stay in line. If no condition has any,
   the card says so.
 - **Your own Colnect listings are left out** of the strips and counted apart (*+1 yours*), so the
   offer never undercuts itself. A listing counts as yours when it is sold by the Colnect account the
@@ -1556,7 +1564,8 @@ it, so one condition can be compared with another at a glance.
 - **Prices are in the offer's currency.** Colnect shows every price in your own Colnect currency and
   converts the ones its sellers list in another; a price converted — by Colnect, or by Stamporama at
   the rate it already holds — has a dashed rim, and hovering it says what the seller asked.
-- **Hover a dot** to see its price and the seller's note about the piece, where they wrote one.
+- **Hover a dot** to see its price, how many offers are at it when there are several, the sellers'
+  notes about the piece where they wrote one, and the price a click would set.
 
 **Click a price to price the offer just under it.** A dot uses that listing's price, the **lowest**
 and **median** figures use theirs, and the offer's price becomes that price less the
