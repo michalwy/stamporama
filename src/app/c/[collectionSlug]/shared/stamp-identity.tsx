@@ -51,12 +51,7 @@ export function StampIdentity({
    */
   unnamed?: string | null;
 }) {
-  const primaryCN = primaryVendorId
-    ? (stamp.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
-    : null;
-  const secondaryCNs = stamp.catalogNumbers.filter(
-    (cn) => cn.catalogVendorId !== primaryVendorId
-  );
+  const { primaryCN } = splitCatalogNumbers(stamp.catalogNumbers, primaryVendorId);
   const searchQuery = colnectSearchQueryFor(
     primaryCN ?? stamp.catalogNumbers[0] ?? null,
     vendorMap
@@ -79,6 +74,57 @@ export function StampIdentity({
         minWidth: 0,
       }}
     >
+      <StampCatalogChips
+        catalogNumbers={stamp.catalogNumbers}
+        vendorMap={vendorMap}
+        primaryVendorId={primaryVendorId}
+      />
+      {stamp.name || unnamed ? (
+        href ? (
+          <Link href={href} style={{ ...nameStyle, textDecoration: "none" }}>
+            {stamp.name ?? unnamed}
+          </Link>
+        ) : (
+          <span style={nameStyle}>{stamp.name ?? unnamed}</span>
+        )
+      ) : null}
+      <SubtypeChip subtype={stamp.subtype ?? null} size={size} />
+      <ColnectChip colnectId={stamp.colnectId} searchQuery={searchQuery} size={size} />
+    </span>
+  );
+}
+
+function splitCatalogNumbers<T extends { catalogVendorId: string }>(
+  catalogNumbers: readonly T[],
+  primaryVendorId: string | null
+): { primaryCN: T | null; secondaryCNs: T[] } {
+  const primaryCN = primaryVendorId
+    ? (catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null)
+    : null;
+  return {
+    primaryCN,
+    secondaryCNs: catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId),
+  };
+}
+
+/**
+ * Every catalogue number a stamp carries, each with its catalogue and area prefix, the leading
+ * catalogue first — the chips {@link StampIdentity} opens with. Exported so a screen listing the
+ * numbers as a field (the copy's Details card, #2434) reads exactly as the identity line above it.
+ * Renders nothing for a stamp with no numbers.
+ */
+export function StampCatalogChips({
+  catalogNumbers,
+  vendorMap,
+  primaryVendorId,
+}: {
+  catalogNumbers: StampIdentityData["catalogNumbers"];
+  vendorMap: Map<string, AreaCatalogEntry>;
+  primaryVendorId: string | null;
+}) {
+  const { primaryCN, secondaryCNs } = splitCatalogNumbers(catalogNumbers, primaryVendorId);
+  return (
+    <>
       {primaryCN && (
         <CatalogNumberChip
           number={primaryCN.number}
@@ -94,17 +140,6 @@ export function StampIdentity({
           style={STAMP_SECONDARY_CHIP}
         />
       ))}
-      {stamp.name || unnamed ? (
-        href ? (
-          <Link href={href} style={{ ...nameStyle, textDecoration: "none" }}>
-            {stamp.name ?? unnamed}
-          </Link>
-        ) : (
-          <span style={nameStyle}>{stamp.name ?? unnamed}</span>
-        )
-      ) : null}
-      <SubtypeChip subtype={stamp.subtype ?? null} size={size} />
-      <ColnectChip colnectId={stamp.colnectId} searchQuery={searchQuery} size={size} />
-    </span>
+    </>
   );
 }
