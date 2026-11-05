@@ -9,7 +9,8 @@ observations as well as from the collector's own lots. **Amended by
 [ADR-0064](0064-markets-and-anchoring.md) §4** (#1634): only from datapoints sold in a market anchoring
 their own stamp's area. **Amended in place by #1828** (§2, §9): the catalogue is a bucket of the
 ladder, and each catalogue can carry a manual factor that stands in for `bidFallbackPercent` ahead of
-the collection bucket.
+the collection bucket. **Amended in place by #2460** (§1): the market median is brought to today's
+money by the stamp's price trend before it anchors a line.
 
 ## Context
 
@@ -53,6 +54,24 @@ Market first because it is a transaction and the catalogue is a list price — t
 ADR-0022. There is no blending of the two and no confidence-weighted crossfade: a figure that is
 part-measured and part-policy cannot be explained when it looks wrong, and the point of the evidence
 popover (§8) is that every number on it can be traced.
+
+**The market median follows the stamp's price trend** (#2460, amended in place, settled with the
+collector on 2026-11-05). A stamp whose price keeps rising always has a median behind today's market,
+so bidding at fair — or even at walk-away — loses every lot of it. Each recorded result is therefore
+scaled to today by the yearly trend of its prices, and the anchor is the median of the scaled
+results:
+
+- the trend is the median of the yearly rates of change between every pair of results (robust: one
+  wild result moves it no more than it moves the median), and works both ways;
+- a stamp has its own trend with at least 4 results spread over at least 12 months; with fewer it is
+  borrowed from the group the realization ratio already uses (§2) — area × condition × period, then
+  area × condition — each result read as a share of its stamp's catalogue value; with too few there
+  as well there is no adjustment;
+- the trend is capped at ±30% a year, and says so when the cap applies;
+- the plain median is shown beside the adjusted figure, with the trend and whether it was borrowed;
+- **market value stays the plain median everywhere else** — holdings, copies, offers, sales. It is
+  the measurement; the trend is a projection made for a bid placed now. The band (§4) is a percentage
+  of the adjusted fair, and confidence is scored as before.
 
 A line with neither a market datapoint nor a catalogue value is **unanchored**. It is counted and
 reported, never treated as zero — exactly as `summarizeLotComposition` already reports

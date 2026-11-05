@@ -1972,6 +1972,16 @@ query spells `resultMarket`'s order rather than filtering after the page.
 **`recommend_bid` already lists its evidence** (#1634: `marketResults`, `notCounted`); #1635 adds each
 result's `id`, so an observation a recommendation stood on can be corrected or deleted directly.
 
+**A market anchor follows the stamp's price trend** (#2460; `auctions.md`). `unitValue` on a
+market-anchored line is the median of its results **brought to today's money**, and the line says so:
+`marketMedian` is the plain median — market value as every other operation reports it — and
+`marketTrend` carries `fair`, `ratePercent`, `capped` with `measuredRatePercent`, `borrowedFrom` for a
+trend taken from the stamp's group, the `results` and years it was measured over, and a `statement`
+to quote. Both are in `marketCurrency`, the base currency `marketResults` is stated in. No
+`marketTrend` means no trend could be measured and the line stands on the plain median. The projection
+is `bid-reads.ts`'s, off the same `LineAnchor` the lots screen's popover reads, so the two state one
+trend.
+
 ## A copy that is one of several stamps (#1651)
 
 **A copy may be identified as a set of candidate stamps** (ADR-0065) — *Mi 123aI or 123bI*, or *Mi 85

@@ -27,6 +27,7 @@ function obs(
     source: { kind: "lot", lotId, lineId: `line-${++seq}` },
     split: false,
     ratio: 0.5,
+    at: new Date("2025-01-01T00:00:00Z"),
     areaId: "poland",
     conditionId: "mnh",
     issuedYear: 1950,

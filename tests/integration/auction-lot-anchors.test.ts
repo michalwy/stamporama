@@ -84,8 +84,13 @@ describe("auction lot line anchors (#510)", () => {
     saleId: string;
     finalPrice?: string | null;
     status?: string;
+    /** When it closed; twenty days ago unless a test about the price trend says otherwise (#2460). */
+    endsAt?: Date;
     lines: { stampId: string; quantity?: number }[];
   }
+
+  const YEAR_MS = 365.25 * 24 * 60 * 60 * 1000;
+  const yearsAgo = (years: number) => new Date(Date.now() - years * YEAR_MS);
 
   async function lot(spec: LotSpec): Promise<string> {
     const row = await prisma.auctionLot.create({
@@ -93,7 +98,7 @@ describe("auction lot line anchors (#510)", () => {
         auctionSaleId: spec.saleId,
         auctionLotNo: 9500 + ++seq,
         lotNo: String(seq),
-        endsAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+        endsAt: spec.endsAt ?? new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
         status: spec.status ?? "closed",
         finalPrice: spec.finalPrice ?? null,
         lines: {
@@ -229,9 +234,74 @@ describe("auction lot line anchors (#510)", () => {
     assert.equal(line.unconvertible, false);
     assert.equal(line.market?.median, "25.00");
     assert.equal(line.market?.n, 2);
+    // Two results on one day are no trend, and nothing in the group is either (#2460).
+    assert.equal(line.market?.trend, null);
     // The catalogue figure is still reported — it is evidence, it just is not the anchor.
     assert.equal(line.catalogueValue, "50.00");
     assert.equal(line.ratio, null);
+  });
+
+  it("brings a rising stamp's results to today before the median, the plain median beside it (#2460)", async () => {
+    const saleId = await sale();
+    // The issue's example: 8.00, 9.00, 10.50 and 12.00 a year apart, the last a year ago.
+    for (const [price, years] of [["8.00", 4], ["9.00", 3], ["10.50", 2], ["12.00", 1]] as const) {
+      await lot({ saleId, finalPrice: price, endsAt: yearsAgo(years), lines: [{ stampId: recordedStampId }] });
+    }
+    const targetId = await lot({ saleId, status: "open", lines: [{ stampId: recordedStampId }] });
+
+    const [line] = (await resolveAuctionLotAnchors(collectionId, [targetId])).get(targetId)!.lines;
+    assert.equal(line.source, "market");
+    assert.equal(line.market?.median, "9.75");
+    const trend = line.market!.trend!;
+    assert.equal(trend.borrowed, null);
+    assert.equal(trend.n, 4);
+    assert.equal(trend.capped, false);
+    assert.ok(trend.rate > 0.13 && trend.rate < 0.16, `rate ${trend.rate}`);
+    assert.ok(line.anchor! > 13.25 && line.anchor! < 14.25, `anchor ${line.anchor}`);
+    assert.equal(trend.fair, line.anchor!.toFixed(2));
+
+    // The band is a percentage of the adjusted fair (#508).
+    const recommendation = recommendBid(toBidLines([line]), { bidFloorPercent: 75, bidCeilingPercent: 125 });
+    assert.equal(recommendation.fair?.allIn, line.anchor!.toFixed(2));
+  });
+
+  it("gives a stamp whose prices fall a fair below its median (#2460)", async () => {
+    const saleId = await sale();
+    for (const [price, years] of [["12.00", 4], ["10.50", 3], ["9.00", 2], ["8.00", 1]] as const) {
+      await lot({ saleId, finalPrice: price, endsAt: yearsAgo(years), lines: [{ stampId: recordedStampId }] });
+    }
+    const targetId = await lot({ saleId, status: "open", lines: [{ stampId: recordedStampId }] });
+
+    const [line] = (await resolveAuctionLotAnchors(collectionId, [targetId])).get(targetId)!.lines;
+    assert.equal(line.market?.median, "9.75");
+    assert.ok(line.market!.trend!.rate < 0);
+    assert.ok(line.anchor! < 9.75, `anchor ${line.anchor}`);
+  });
+
+  it("borrows the trend of its area, condition and period when its own results are too few (#2460)", async () => {
+    const saleId = await sale();
+    // The group, as shares of a 100.00 catalogue: 40%, 45%, 50%, 56% a year apart.
+    const shares = [["40.00", 4], ["45.00", 3], ["50.00", 2], ["56.00", 1]] as const;
+    for (const [i, [price, years]] of shares.entries()) {
+      await lot({
+        saleId,
+        finalPrice: price,
+        endsAt: yearsAgo(years),
+        lines: [{ stampId: evidenceStampIds[i % evidenceStampIds.length] }],
+      });
+    }
+    // One result of its own, a year ago, at 56% of its 50.00 catalogue.
+    await lot({ saleId, finalPrice: "28.00", endsAt: yearsAgo(1), lines: [{ stampId: recordedStampId }] });
+    const targetId = await lot({ saleId, status: "open", lines: [{ stampId: recordedStampId }] });
+
+    const [line] = (await resolveAuctionLotAnchors(collectionId, [targetId])).get(targetId)!.lines;
+    assert.equal(line.market?.median, "28.00");
+    assert.equal(line.market?.n, 1);
+    const trend = line.market!.trend!;
+    assert.deepEqual(trend.borrowed, { level: "area-condition-period", bucketLabel: "Poland, MNH, 1948–1952" });
+    assert.ok(trend.n >= 4);
+    assert.ok(trend.rate > 0.05, `rate ${trend.rate}`);
+    assert.ok(line.anchor! > 28 * 1.05, `anchor ${line.anchor}`);
   });
 
   it("anchors an unrecorded line on catalogue × the ratio learned from other stamps", async () => {

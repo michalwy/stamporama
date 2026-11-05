@@ -8,6 +8,7 @@ import { Icon } from "@/app/icons";
 import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { formatDay } from "./auction-format";
 import { formatMarketCounts } from "@/lib/market-anchoring";
+import { trendStatement } from "@/lib/price-trend";
 import {
   useAuctionLotBidEvidence,
   type AuctionLotBidEvidenceView,
@@ -322,12 +323,27 @@ function AnchorEvidence({
       line.market.earliestAt === line.market.latestAt
         ? formatDay(line.market.latestAt)
         : `${formatDay(line.market.earliestAt)} – ${formatDay(line.market.latestAt)}`;
+    // Brought to today's money by the stamp's price trend (#2460): the figure is the adjusted one and
+    // the plain median stands beside it with the trend. A trend of the stamp's own already names its
+    // results and their years; a borrowed one names the group's, so the key's own are said as well.
+    const trend = line.market.trend;
+    const results = `${line.market.n} result${line.market.n === 1 ? "" : "s"} · ${span}`;
+    const markets = line.market.markets.length > 0 ? ` · ${formatMarketCounts(line.market.markets)}` : "";
     return (
       <span style={{ ...MUTED, display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
         <span>
-          market {line.market.median} {baseCurrency} · {line.market.n} result
-          {line.market.n === 1 ? "" : "s"} · {span}
-          {line.market.markets.length > 0 ? ` · ${formatMarketCounts(line.market.markets)}` : ""}
+          {trend ? (
+            <>
+              market {trend.fair} {baseCurrency} (median {line.market.median} · {trendStatement(trend)})
+              {trend.borrowed ? ` · ${results}` : ""}
+              {markets}
+            </>
+          ) : (
+            <>
+              market {line.market.median} {baseCurrency} · {results}
+              {markets}
+            </>
+          )}
         </span>
         <MarketConfidenceChip badge={line.market.confidence.badge} score={line.market.confidence.score} />
       </span>
