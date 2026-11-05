@@ -107,6 +107,8 @@ const titleCopy = (over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy => 
   watermark: null,
   paper: null,
   printing: null,
+  issueFormat: null,
+  issueFormatAbbr: null,
   issuedDate: null,
   issueName: "Rok Kopernikański",
   issueYear: 1972,

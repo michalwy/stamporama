@@ -45,6 +45,9 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
   "watermark:name": "Watermark",
   "paper:name": "Paper",
   "printing:name": "Printing method",
+  // A stamp's issue format, printed by `{issueFormat}` / `{issueFormatAbbr}` (#2442).
+  "issueFormat:name": "Issue format",
+  "issueFormat:abbreviation": "Issue format (abbr.)",
   // A copy's fault, printed by an offer's description (#1559).
   "fault:name": "Fault",
 };

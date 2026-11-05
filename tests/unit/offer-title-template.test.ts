@@ -14,6 +14,7 @@ import {
   listingEmptyAreaSymbols,
   DEFAULT_TITLE_TEMPLATE,
   AVAILABLE_TITLE_TOKENS,
+  AVAILABLE_LISTING_TOKENS,
   type TitleTemplateCopy,
   type TitleCatalogNumber,
   type TitleFallback,
@@ -33,6 +34,8 @@ function fb(field: string, over: Partial<TitleFallback> = {}): TitleFallback {
     area: { type: "area", field: "titleName" },
     issueName: { type: "issue", field: "name" },
     subtype: { type: "subtype", field: "name" },
+    issueFormat: { type: "issueFormat", field: "name" },
+    issueFormatAbbr: { type: "issueFormat", field: "abbreviation" },
   };
   const entity = entityByField[field];
   return {
@@ -83,6 +86,8 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     watermark: null,
     paper: null,
     printing: null,
+    issueFormat: null,
+    issueFormatAbbr: null,
     format: null,
     formatAbbr: null,
     issueName: null,
@@ -535,6 +540,47 @@ describe("renderTitleTemplate — issue & abbreviation tokens", () => {
       renderTitleTemplate("{color}, {watermark}, {paper}, {printing}", [c]),
       "Carmine, Lozenges, Thin paper, Photogravure"
     );
+  });
+
+  // The stamp's issue format (#2442): `{format}`'s terms on the stamp, empty on an ordinary stamp
+  // with nothing standing in for it (#1692).
+  it("resolves the issue format and its abbreviation", () => {
+    const c = copy({ name: "Mercury", issueFormat: "Souvenir sheet", issueFormatAbbr: "Bl" });
+    assert.equal(renderTitleTemplate("{name} {issueFormat}", [c]), "Mercury Souvenir sheet");
+    assert.equal(renderTitleTemplate("{name} {issueFormatAbbr}", [c]), "Mercury Bl");
+  });
+
+  it("renders nothing for an ordinary stamp's issue format, taking its separator with it", () => {
+    const c = copy({ name: "Mercury", condition: "Used" });
+    assert.equal(renderTitleTemplate("{name} - {issueFormat} - {condition}", [c]), "Mercury - Used");
+    assert.equal(renderTitleTemplate("{name} - {issueFormatAbbr} - {condition}", [c]), "Mercury - Used");
+    assert.equal(renderTitleTemplate("{name} {issueFormat}", [c]), "Mercury");
+  });
+
+  it("joins distinct issue formats across copies and skips the ordinary stamps", () => {
+    const copies = [
+      copy({ issueFormat: "Souvenir sheet", issueFormatAbbr: "Bl" }),
+      copy(),
+      copy({ issueFormat: "Booklet pane", issueFormatAbbr: "HBl" }),
+      copy({ issueFormat: "Souvenir sheet", issueFormatAbbr: "Bl" }),
+    ];
+    assert.equal(renderTitleTemplate("{issueFormat}", copies), "Souvenir sheet / Booklet pane");
+    assert.equal(renderTitleTemplate("{issueFormatAbbr}", copies), "Bl / HBl");
+    assert.equal(renderTitleTemplate("{issueFormat}", [copy(), copy()]), "");
+  });
+
+  it("flags each issue-format token by its own field, the name and abbreviation apart", () => {
+    const abbr = fb("issueFormatAbbr");
+    const c = copy({ issueFormat: "Blok", issueFormatAbbr: "Bl", fallbacks: [abbr] });
+    assert.deepEqual(titleFallbacks("{issueFormatAbbr}", [c]), [abbr]);
+    assert.deepEqual(titleFallbacks("{issueFormat}", [c]), []);
+  });
+
+  it("offers both issue-format tokens on every listing text", () => {
+    for (const token of ["{issueFormat}", "{issueFormatAbbr}"]) {
+      assert.ok(AVAILABLE_TITLE_TOKENS.some((t) => t.token === token), token);
+      assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === token), token);
+    }
   });
 
   it("renders nothing for an attribute the stamp does not state, taking its separator with it", () => {

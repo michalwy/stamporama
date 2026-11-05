@@ -335,6 +335,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         watermark: null,
         paper: null,
         printing: null,
+        issueFormat: null,
         variants: [],
         issueMemberships: [
           {

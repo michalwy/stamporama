@@ -93,6 +93,16 @@ export const TITLE_COPY_STAMP_SELECT = {
   watermark: { select: ATTRIBUTE_SELECT },
   paper: { select: ATTRIBUTE_SELECT },
   printing: { select: ATTRIBUTE_SELECT },
+  // The form the stamp was issued in (#2439), behind `{issueFormat}` / `{issueFormatAbbr}` (#2442):
+  // name and abbreviation with their translations, a format's shape.
+  issueFormat: {
+    select: {
+      id: true,
+      name: true,
+      abbreviation: true,
+      translations: { select: { language: true, name: true, abbreviation: true } },
+    },
+  },
   // The stamp's **direct** children, behind `{#unknownVariant}` and `{variants}` (#619): whether
   // any of them acts as a variant is what makes this copy an unidentified umbrella (ADR-0010 §3),
   // and their numbers are what the listing text says the piece might be. Direct children only —
@@ -250,6 +260,12 @@ export type TitleCopyStampRow = {
   watermark: AttributeRow | null;
   paper: AttributeRow | null;
   printing: AttributeRow | null;
+  issueFormat: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    translations: LabelTranslation[];
+  } | null;
   variants: {
     id: string;
     name: string | null;
@@ -606,6 +622,26 @@ export function toTitleCopy(
     watermark: attribute("watermark", row.stamp.watermark),
     paper: attribute("paper", row.stamp.paper),
     printing: attribute("printing", row.stamp.printing),
+    // The issue format (#2442), resolved as the copy's own format is, name and abbreviation falling
+    // back independently. No row is an ordinary stamp, and both tokens then render nothing (#1692).
+    issueFormat: row.stamp.issueFormat
+      ? resolve(
+          "issueFormat",
+          { type: "issueFormat", id: row.stamp.issueFormat.id, field: "name" },
+          row.stamp.issueFormat.translations,
+          (t: LabelTranslation) => t.name,
+          row.stamp.issueFormat.name
+        )
+      : null,
+    issueFormatAbbr: row.stamp.issueFormat
+      ? resolve(
+          "issueFormatAbbr",
+          { type: "issueFormat", id: row.stamp.issueFormat.id, field: "abbreviation" },
+          row.stamp.issueFormat.translations,
+          (t: LabelTranslation) => t.abbreviation,
+          row.stamp.issueFormat.abbreviation
+        )
+      : null,
     // Each fault resolved and reported on its own (#1559): one untranslated fault among three is one
     // gap, on that fault's row. A copy without any leaves the field absent rather than empty, the
     // shape every hand-built copy already has.
@@ -648,7 +684,7 @@ export function toTitleCopy(
  * generated title and reported per copy for the preview to flag (#298). Every translatable token
  * honours it: `{area}` (#293), `{condition}` / `{conditionAbbr}` / `{certificate}` /
  * `{certificateAbbr}` (#294), `{issueName}` (#295), `{name}` (#296), `{subtype}` (#338/#339),
- * `{format}` / `{formatAbbr}` (#344/#345) and the four dictionary attributes `{color}` /
+ * `{format}` / `{formatAbbr}` (#344/#345), `{issueFormat}` / `{issueFormatAbbr}` (#2442) and the four dictionary attributes `{color}` /
  * `{watermark}` / `{paper}` / `{printing}` (#738).
  *
  * A language equal to the collection's own `defaultLanguage` is the same thing as no language —
