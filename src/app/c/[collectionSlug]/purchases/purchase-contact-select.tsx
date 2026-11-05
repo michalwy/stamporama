@@ -21,50 +21,31 @@ const INPUT_STYLE: React.CSSProperties = {
 
 interface PurchaseContactSelectProps {
   collectionId: string;
-  /** Hidden input carrying the picked contact id — `contactId` (supplier) / `platformId`. */
+  /** Hidden input carrying the picked contact id — `contactId` (supplier), `buyerId`, … */
   idFieldName: string;
   /** Hidden input carrying the typed name, so the server can find-or-create on save —
-   * `contactName` (supplier) / `platformName`. */
+   * `contactName` (supplier), `buyerName`, … */
   nameFieldName: string;
   initialContactId?: string | null;
   initialContactName?: string | null;
   inputId?: string;
   placeholder: string;
   /** Narrows suggestions to contacts carrying this role, and (server-side) tags a newly
-   * created contact with it: `seller` for suppliers. `platform` suggests the switched-on platforms
-   * instead, and a new name becomes a generic platform (#1955). Omitted, every contact is suggested — a price observation's auction house (#1633) may be filed under `seller`
-   * from the collector's own bidding, and the role it gets on creation is the server's to set. */
-  role?: "platform" | "seller" | "buyer";
+   * created contact with it: `seller` for suppliers. Omitted, every contact is suggested — a price
+   * observation's auction house (#1633) may be filed under `seller` from the collector's own
+   * bidding, and the role it gets on creation is the server's to set. A platform is not a contact:
+   * its field is a `PlatformSelect` (#2432). */
+  role?: "seller" | "buyer";
   disabled?: boolean;
   /** The field's style, when it is not the desk form's — the phone's *Sell* (#2009) draws it at a
    *  thumb's height. */
   inputStyle?: React.CSSProperties;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
-   * edited to a name that has not been matched to a suggestion), the current text, and — when a
-   * suggestion was picked — what that contact says about *new offers on it*. Lets a parent react
-   * live to the choice: the offer dialog's collision check (#165), the derived-currency lock
-   * (#196), the fallback asking price (#362) and the default listing type (#449).
-   *
-   * The defaults arrive as one object rather than as a growing tail of positional arguments — they
-   * are one answer ("what this platform starts a listing as"), and `undefined` says the text was
-   * typed rather than picked, which is different from a platform stating none of them. */
-  onSelectionChange?: (
-    contactId: string,
-    name: string,
-    platform?: PlatformOfferDefaults
-  ) => void;
+   * edited to a name that has not been matched to a suggestion) and the current text. */
+  onSelectionChange?: (contactId: string, name: string) => void;
 }
 
-/** What a picked platform says a new offer on it starts as. Each member is `null` where the
- * platform states nothing. */
-export interface PlatformOfferDefaults {
-  platformCurrency: string | null;
-  defaultStartingPrice: string | null;
-  defaultListingType: string | null;
-}
-
-/** Create-on-type contact picker for the purchase dialog, shared by the supplier and
- * platform fields. A single always-editable text input: it searches existing contacts of
+/** Create-on-type contact picker — the supplier, seller, buyer and auction-house fields. A single always-editable text input: it searches existing contacts of
  * the given `role` (#107) and lets you pick one. You do NOT have to pick — whatever name is
  * left in the box is submitted alongside the picked id (if any), and the server resolves it
  * on save: an existing contact of that name is reused, otherwise a new one is created with
@@ -93,21 +74,16 @@ export function PurchaseContactSelect({
   );
 
   function handleValueChange(next: string) {
-    // Editing the text detaches any picked contact; the server will resolve the new name. The
-    // platform currency is unknown until a suggestion is matched, so it is left undefined (#196).
+    // Editing the text detaches any picked contact; the server will resolve the new name.
     setSelectedId("");
     setValue(next);
-    onSelectionChange?.("", next, undefined);
+    onSelectionChange?.("", next);
   }
 
-  function pick(contact: { id: string; name: string } & PlatformOfferDefaults) {
+  function pick(contact: { id: string; name: string }) {
     setSelectedId(contact.id);
     setValue(contact.name);
-    onSelectionChange?.(contact.id, contact.name, {
-      platformCurrency: contact.platformCurrency,
-      defaultStartingPrice: contact.defaultStartingPrice,
-      defaultListingType: contact.defaultListingType,
-    });
+    onSelectionChange?.(contact.id, contact.name);
   }
 
   return (
@@ -124,15 +100,7 @@ export function PurchaseContactSelect({
         renderItem={(c) => (
           <span style={{ fontWeight: c.id === selectedId ? 600 : 400 }}>{c.name}</span>
         )}
-        onSelect={(c) =>
-          pick({
-            id: c.id,
-            name: c.name,
-            platformCurrency: c.platformCurrency ?? null,
-            defaultStartingPrice: c.defaultStartingPrice ?? null,
-            defaultListingType: c.defaultListingType ?? null,
-          })
-        }
+        onSelect={(c) => pick({ id: c.id, name: c.name })}
         placeholder={placeholder}
         inputStyle={inputStyle}
         inputId={inputId}

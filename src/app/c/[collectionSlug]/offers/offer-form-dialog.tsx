@@ -20,9 +20,9 @@ import {
   priceLabel,
 } from "@/lib/offer-rules";
 import {
-  PurchaseContactSelect,
-  type PlatformOfferDefaults,
-} from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+  PlatformSelect,
+  type PlatformChoice,
+} from "@/app/c/[collectionSlug]/shared/platform-select";
 import type { ProposalTakingLots } from "@/lib/proposals";
 import { baseBtn } from "@/app/button-style";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -135,7 +135,7 @@ export interface OfferFormDialogProps {
    * the inventory path checks for (#513). Rendered above the fields, since it is about the whole
    * offer rather than any one of them, and never blocks the submit. */
   notice?: React.ReactNode;
-  /** Fires with the picked platform's id (empty for a typed, not-yet-existing one) whenever it
+  /** Fires with the chosen platform's id (empty while none is chosen) whenever it
    * changes, including on mount — what the collision check above is asked about. */
   onPlatformChange?: (platformId: string) => void;
   /** What is going into the offer, drawn beside the form (#1793) — the copies a create from a
@@ -164,7 +164,7 @@ export interface OfferFormDialogProps {
 /** What the Proposal field (#2304) is given: the choices, the choice, and the Direct platform a
  *  proposal's lots are on. */
 export interface OfferFormProposalField {
-  direct: { id: string; name: string } & PlatformOfferDefaults;
+  direct: PlatformChoice;
   /** The proposals being prepared — the only ones that take lots (#2307). */
   proposals: readonly ProposalTakingLots[];
   /** The proposal chosen, or "" for none. */
@@ -221,9 +221,6 @@ export function OfferFormDialog({
   // Mark ready, and Publish stamps the date. An edit shows the offer's own date, to correct it.
   const priceControlled = priceValue !== undefined;
   const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
-  // The platform field is the collector's own text box, so a proposal chosen (#2304) puts Direct in it
-  // by drawing it afresh, seeded with Direct.
-  const [platformSeed, setPlatformSeed] = useState<{ key: number; id: string; name: string } | null>(null);
 
   // ── Facebook (#1544; ADR-0061) ──────────────────────────────────────────────────────────────
   // Whether the picked platform is Facebook, and its groups, asked of the server whenever the
@@ -415,13 +412,14 @@ export function OfferFormDialog({
   });
   const shownTitle = typedTitle ?? (platformId && titleKey ? (generatedTitle ?? "") : "");
 
-  function choosePlatform(id: string, _name: string, platform?: PlatformOfferDefaults) {
+  function choosePlatform(platform: PlatformChoice | null) {
+    const id = platform?.id ?? "";
     setPlatformId(id);
     // A group belongs to its platform (#1544): another platform's is never carried over.
     if (id !== platformId) setFacebookGroupId("");
-    // A picked platform carries its currency (null when unset); a typed name is an
-    // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
-    if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
+    // A chosen platform carries its currency; one stating none has it prompted below. Ignored in
+    // edit mode.
+    if (!isEdit) setPlatformCurrency(platform ? platform.platformCurrency : undefined);
     // …how it sells by default (#449), re-seeded while the collector has not answered
     // the question themselves, so switching from an auction platform to a quick-buy one
     // does not leave the wrong format behind…
@@ -444,11 +442,7 @@ export function OfferFormDialog({
   const [seenProposal, setSeenProposal] = useState("");
   if (proposal && !isEdit && proposal.value !== seenProposal) {
     setSeenProposal(proposal.value);
-    if (proposal.value && platformId !== proposal.direct.id) {
-      const { direct } = proposal;
-      setPlatformSeed((prev) => ({ key: (prev?.key ?? 0) + 1, id: direct.id, name: direct.name }));
-      choosePlatform(direct.id, direct.name, direct);
-    }
+    if (proposal.value && platformId !== proposal.direct.id) choosePlatform(proposal.direct);
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -492,24 +486,20 @@ export function OfferFormDialog({
             {facebookLot && initialPlatform ? (
               <>
                 <input type="hidden" name="platformId" value={initialPlatform.id} />
-                <input type="hidden" name="platformName" value={initialPlatform.name} />
                 <div id="offer-platform" style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
                   {initialPlatform.name}
                 </div>
               </>
             ) : (
-            <PurchaseContactSelect
+            <PlatformSelect
               collectionId={collectionId}
-              idFieldName="platformId"
-              nameFieldName="platformName"
-              role="platform"
-              key={platformSeed?.key}
-              initialContactId={platformSeed?.id ?? offer?.platformId ?? initialPlatform?.id}
-              initialContactName={platformSeed?.name ?? offer?.platformName ?? initialPlatform?.name}
-              inputId="offer-platform"
-              placeholder="e.g. Delcampe, Allegro, Colnect…"
+              name="platformId"
+              id="offer-platform"
+              value={platformId}
+              valueName={offer?.platformName ?? initialPlatform?.name}
               disabled={isPending}
-              onSelectionChange={choosePlatform}
+              style={INPUT_STYLE}
+              onChange={choosePlatform}
             />
             )}
           </div>

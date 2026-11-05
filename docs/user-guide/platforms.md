@@ -39,8 +39,11 @@ selling at a fixed price, because a proposal's lots have nowhere else to go. Unt
 Assistant captures from Allegro has nowhere to land, for example. Switch one of your own platforms
 off when you stop using it: it leaves the pickers and keeps its history.
 
-Typing a platform's name into a platform field still works the way it always did: an existing
-platform of that name is used, and a new name becomes a new platform of your own.
+Every **Platform** field — on an offer, a purchase, a sale, a price observation, an auction lot and
+an auction sale — is a list to choose from: your switched-on platforms, module and your own, by
+name. Nothing typed anywhere makes a platform; you add one here, under **Settings → Platforms**. A
+record already on a platform you have since switched off still shows it as chosen, and saving the
+record keeps it.
 
 ## Deleting
 

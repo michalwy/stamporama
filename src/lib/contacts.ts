@@ -386,8 +386,8 @@ export async function getContactListItem(
  * login and looked for by the name you remember — typing "Bronisław" has to find `bronek_1980`, or
  * the full name is a field that only ever gets written. An empty query returns the first 20 contacts
  * by name. An optional `role` narrows to contacts carrying that role flag (e.g. `seller` for the
- * purchase supplier picker, #120). A platform is not a contact: its pickers search
- * `searchPlatforms` (#1955). */
+ * purchase supplier picker, #120). A platform is not a contact: its field is a select of the
+ * platforms (#1955, #2432). */
 export async function searchContacts(
   ownerId: string,
   collectionId: string,

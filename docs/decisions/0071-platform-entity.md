@@ -60,8 +60,11 @@ one no longer used leaves the pickers without its history being deleted. Delete 
 offer, sale, purchase, auction or price observation names a platform, as a contact's was; a module
 platform cannot be deleted at all.
 
-A typed platform name still resolves on save (#120's create-on-type): an existing platform of that
-name, any case, a module one included; failing that, a new generic platform.
+~~A typed platform name still resolves on save (#120's create-on-type): an existing platform of that
+name, any case, a module one included; failing that, a new generic platform.~~ **Superseded by
+#2432:** every Platform field is a select of the switched-on platforms (plus the one a record already
+names), and nothing typed creates a platform — one is added under Settings → Platforms only. A name
+sent by an import still resolves to an existing platform, any case; an unknown one resolves to none.
 
 ### 4. Counterparty and venue stay apart
 

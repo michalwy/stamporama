@@ -22,8 +22,8 @@ delivery method and the sold sets. You still review and save it yourself. See th
 
 Click **Record sale** and fill in:
 
-- **Platform** — the marketplace the sale happened on. Start typing to search your platform
-  [contacts](contacts.md). A sale is single-platform. When the sale list is [filtered to a
+- **Platform** — the marketplace the sale happened on, chosen from your switched-on
+  [platforms](platforms.md). A sale is single-platform. When the sale list is [filtered to a
   platform](#finding-a-sale), that platform is **pre-filled** — recording a sale while looking at
   one marketplace is nearly always a sale on it — and you can still change it.
 - **Buyer** — who bought (optional). Search or add a buyer contact; leave it blank if the buyer

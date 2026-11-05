@@ -31,11 +31,12 @@ through an aggregator such as philasearch is the seller; the aggregator is the p
 Click **Add lot**. You are never asked to pick a sale first — you know the seller and the platform,
 and the settlement follows from them:
 
-1. Name the **seller** and the **platform**. Either can be typed in; a name that does not exist yet
-   is created as a contact. Once you have tracked a lot with a seller, picking them again fills in
+1. Name the **seller** and choose the **platform**. The seller can be typed in; a name that does
+   not exist yet is created as a contact. The platform is one of your switched-on
+   [platforms](platforms.md). Once you have tracked a lot with a seller, picking them again fills in
    the **platform you last used for that seller** — a house that always comes through one
    aggregator never has to be told twice, and a seller you reach directly stays direct. It is only
-   a suggestion: type over it and it stays typed over. The memory is stored on the seller's
+   a suggestion: choose another and your choice stays. The memory is stored on the seller's
    [contact](contacts.md), so it holds on every device you sign in from, and it is kept apart from
    the platform the [offers](offers.md) screen remembers — where you *bid* and where you *list* are
    usually different marketplaces.

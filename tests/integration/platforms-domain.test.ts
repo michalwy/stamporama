@@ -10,7 +10,6 @@ import {
   PlatformInUseError,
   PlatformNameTakenError,
   resolvePlatform,
-  searchPlatforms,
   setPlatformEnabled,
   updatePlatform,
 } from "../../src/lib/platforms";
@@ -125,15 +124,12 @@ describe("Platforms (#1955)", () => {
     assert.equal(await prisma.shippingOption.count({ where: { platformId: forum.id } }), 0);
   });
 
-  it("offers a switched-off platform in no picker, while a record naming it still shows it", async () => {
+  it("keeps a switched-off platform on the records naming it", async () => {
     const ebay = (await listPlatforms(userId, collectionId, "generic")).find((p) => p.name === "eBay")!;
-    assert.ok((await searchPlatforms(userId, collectionId, "e")).some((p) => p.id === ebay.id));
-    // A module platform not switched on is not offered either.
-    assert.ok(!(await searchPlatforms(userId, collectionId, "")).some((p) => p.name === "Allegro"));
-    assert.ok((await searchPlatforms(userId, collectionId, "")).some((p) => p.name === "Delcampe"));
-
     await setPlatformEnabled(userId, ebay.id, false);
-    assert.ok(!(await searchPlatforms(userId, collectionId, "")).some((p) => p.id === ebay.id));
+    assert.equal((await listPlatforms(userId, collectionId)).find((p) => p.id === ebay.id)?.enabled, false);
+    // A record naming it still resolves to it, so saving the record keeps it (#2432).
+    assert.equal(await resolvePlatform(collectionId, { id: ebay.id }), ebay.id);
     const offer = await prisma.offer.findFirstOrThrow({
       where: { collectionId, platformId: ebay.id },
       select: { platform: { select: { name: true } } },
@@ -141,15 +137,12 @@ describe("Platforms (#1955)", () => {
     assert.equal(offer.platform.name, "eBay");
   });
 
-  it("resolves a typed platform name, creating a generic platform for a new one", async () => {
+  it("resolves a platform to an existing one and never creates one (#2432)", async () => {
     const delcampe = await getModulePlatformSettings(userId, collectionId, "delcampe");
     assert.equal(await resolvePlatform(collectionId, { name: "DELCAMPE" }), delcampe.id);
-    const created = await resolvePlatform(collectionId, { name: "Philasearch shop" });
-    assert.ok(created);
-    const row = await prisma.platform.findUniqueOrThrow({ where: { id: created } });
-    assert.equal(row.platformModule, null);
-    assert.equal(row.enabled, true);
-    assert.equal(await resolvePlatform(collectionId, { name: "philasearch shop" }), created);
+    const before = await prisma.platform.count({ where: { collectionId } });
+    assert.equal(await resolvePlatform(collectionId, { name: "Philasearch shop" }), null);
+    assert.equal(await prisma.platform.count({ where: { collectionId } }), before);
     // An id of another collection is not honoured; nothing at all is null.
     assert.equal(await resolvePlatform(collectionId, { id: "no-such-platform" }), null);
   });

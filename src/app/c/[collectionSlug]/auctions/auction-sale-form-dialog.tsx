@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { PlatformSelect } from "@/app/c/[collectionSlug]/shared/platform-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import {
@@ -71,8 +72,6 @@ export function AuctionSaleFormDialog({
   const [sellerName, setSellerName] = useState(sale?.sellerName ?? "");
   const [platformId, setPlatformId] = useState(sale?.platformId ?? "");
   const [platformName, setPlatformName] = useState(sale?.platformName ?? "");
-  /** Remounts the platform picker when one is poured in for the collector (see the lot dialog). */
-  const [platformSeed, setPlatformSeed] = useState(0);
   const [platformTouched, setPlatformTouched] = useState(false);
   /** The seller whose remembered platform has already been poured in (see the lot dialog). */
   const [platformSeededFor, setPlatformSeededFor] = useState("");
@@ -116,7 +115,6 @@ export function AuctionSaleFormDialog({
     setPlatformSeededFor(sellerId);
     setPlatformId(defaults.defaultPlatform.id);
     setPlatformName(defaults.defaultPlatform.name);
-    setPlatformSeed((n) => n + 1);
   }
 
   if (mode === "add" && defaults && !seeded) {
@@ -191,19 +189,15 @@ export function AuctionSaleFormDialog({
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <LabelWithError htmlFor="sale-platform">Platform</LabelWithError>
-              <PurchaseContactSelect
-                key={platformSeed}
+              <PlatformSelect
                 collectionId={collectionId}
-                idFieldName="platformId"
-                nameFieldName="platformName"
-                initialContactId={platformId}
-                initialContactName={platformName}
-                inputId="sale-platform"
-                placeholder="Where it is listed"
-                role="platform"
-                onSelectionChange={(id, contactName) => {
-                  setPlatformId(id);
-                  setPlatformName(contactName);
+                id="sale-platform"
+                value={platformId}
+                valueName={platformName}
+                style={INPUT_STYLE}
+                onChange={(platform) => {
+                  setPlatformId(platform?.id ?? "");
+                  setPlatformName(platform?.name ?? "");
                   setPlatformTouched(true);
                 }}
               />

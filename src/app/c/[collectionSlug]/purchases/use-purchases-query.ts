@@ -6,14 +6,10 @@ import type {
   PurchaseSortBy,
   PurchaseStatus,
 } from "@/lib/purchases";
-/** One suggestion of a party picker: a contact, or — on a platform field — a platform with what it
- *  says a new offer on it starts as (#196, #362, #449). */
+/** One suggestion of a party picker: a contact. A platform is chosen from a select (#2432). */
 export interface PartySuggestion {
   id: string;
   name: string;
-  platformCurrency?: string | null;
-  defaultStartingPrice?: string | null;
-  defaultListingType?: string | null;
 }
 import type { IntakeDocumentType } from "@/lib/purchase-kind";
 
@@ -88,19 +84,14 @@ export function useIntakeParties(collectionId: string) {
 export function usePurchaseContactSearch(
   collectionId: string,
   query: string,
-  role?: "platform" | "seller" | "buyer"
+  role?: "seller" | "buyer"
 ) {
   return useQuery<PartySuggestion[]>({
     queryKey: ["purchases", collectionId, "contactSearch", role ?? "any", query] as const,
     queryFn: async () => {
       const params = new URLSearchParams({ q: query });
-      // A platform is not a contact (#1955): its field searches the switched-on platforms.
-      if (role && role !== "platform") params.set("role", role);
-      const res = await fetch(
-        role === "platform"
-          ? `/api/collections/${collectionId}/platforms/search?${params.toString()}`
-          : `/api/collections/${collectionId}/contacts/search?${params.toString()}`
-      );
+      if (role) params.set("role", role);
+      const res = await fetch(`/api/collections/${collectionId}/contacts/search?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to search contacts");
       const data = await res.json();
       return data.items;

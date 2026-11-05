@@ -10,6 +10,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { PlatformSelect } from "@/app/c/[collectionSlug]/shared/platform-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
@@ -126,10 +127,7 @@ export function AuctionLotFormDialog({
   const [sellerName, setSellerName] = useState(lot?.sellerName ?? "");
   const [platformId, setPlatformId] = useState(lot?.platformId ?? "");
   const [platformName, setPlatformName] = useState(lot?.platformName ?? "");
-  /** Bumped whenever the platform is pre-filled for the collector: the picker is a create-on-type
-   * text input that seeds its own state once, so re-seeding it means remounting it. */
-  const [platformSeed, setPlatformSeed] = useState(0);
-  /** Set as soon as the collector types in or picks a platform themselves. A remembered platform is
+  /** Set as soon as the collector chooses a platform themselves. A remembered platform is
    * a suggestion, and a suggestion must never overwrite an answer. */
   const [platformTouched, setPlatformTouched] = useState(false);
   /** The seller whose remembered platform has already been poured in, so it happens once per
@@ -230,7 +228,6 @@ export function AuctionLotFormDialog({
     setPlatformSeededFor(sellerId);
     setPlatformId(rememberedPlatform.id);
     setPlatformName(rememberedPlatform.name);
-    setPlatformSeed((n) => n + 1);
   }
 
   // The settlement this lot is going into: the one the collector opened, the one proposed for the
@@ -238,11 +235,12 @@ export function AuctionLotFormDialog({
   const attachingTo =
     mode === "add" && !fixedSale && proposal && !startNewSale ? proposal : null;
 
-  // Both parties **named** — typed counts. A name with no id behind it is a contact that does not
-  // exist yet, which is a perfectly good answer to "who is this from": the server creates it. Only
-  // the *proposal* needs ids, and a seller who has never been tracked has no open sale anyway.
+  // Both parties **named** — a typed seller counts. A name with no id behind it is a contact that
+  // does not exist yet, which is a perfectly good answer to "who is this from": the server creates
+  // it. Only the *proposal* needs ids, and a seller who has never been tracked has no open sale
+  // anyway. A platform is chosen from the existing ones (#2432), so it always has an id.
   const hasSeller = !!(sellerId || sellerName.trim());
-  const hasPlatform = !!(platformId || platformName.trim());
+  const hasPlatform = !!platformId;
 
   // Pour in the seeded currency, once per seller + platform pair. Never over an answer.
   const currencySeedKey = `${sellerId}|${platformId}`;
@@ -381,21 +379,15 @@ export function AuctionLotFormDialog({
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <LabelWithError htmlFor="auction-platform">Platform</LabelWithError>
-                      <PurchaseContactSelect
-                        // Remounted when a remembered platform is poured in: the picker seeds its own
-                        // state from these props once, on mount.
-                        key={platformSeed}
+                      <PlatformSelect
                         collectionId={collectionId}
-                        idFieldName="platformId"
-                        nameFieldName="platformName"
-                        initialContactId={platformId}
-                        initialContactName={platformName}
-                        inputId="auction-platform"
-                        placeholder="Where it is listed"
-                        role="platform"
-                        onSelectionChange={(id, name) => {
-                          setPlatformId(id);
-                          setPlatformName(name);
+                        id="auction-platform"
+                        value={platformId}
+                        valueName={platformName}
+                        style={INPUT_STYLE}
+                        onChange={(platform) => {
+                          setPlatformId(platform?.id ?? "");
+                          setPlatformName(platform?.name ?? "");
                           setPlatformTouched(true);
                           setStartNewSale(false);
                         }}

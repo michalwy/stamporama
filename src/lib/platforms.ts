@@ -686,49 +686,13 @@ export async function deletePlatform(ownerId: string, platformId: string): Promi
   await prisma.platform.delete({ where: { id: platformId } });
 }
 
-/** What a platform picker shows for one suggestion: the platform and what it says a new offer on it
- *  starts as. */
-export interface PlatformOption {
-  id: string;
-  name: string;
-  platformCurrency: string | null;
-  defaultStartingPrice: string | null;
-  defaultListingType: string | null;
-}
-
 /**
- * The platforms a picker offers for a **new** record (#1955): switched on, matching `query` by name
- * case-insensitively, at most 20, name-ordered. A platform switched off is not among them; a record
- * that already names one shows it from the record itself.
- */
-export async function searchPlatforms(
-  ownerId: string,
-  collectionId: string,
-  query: string
-): Promise<PlatformOption[]> {
-  await assertCollectionOwner(ownerId, collectionId);
-  const rows = await prisma.platform.findMany({
-    where: { collectionId, enabled: true, name: { contains: query, mode: "insensitive" } },
-    select: {
-      id: true,
-      name: true,
-      platformCurrency: true,
-      defaultStartingPrice: true,
-      defaultListingType: true,
-    },
-    orderBy: { name: "asc" },
-    take: 20,
-  });
-  return rows.map((r) => ({ ...r, defaultStartingPrice: r.defaultStartingPrice?.toFixed(2) ?? null }));
-}
-
-/**
- * Resolve a platform field typed into a form to a platform id, creating a generic platform when the
- * name is new (#120's create-on-type, kept from the contact days).
+ * Resolve a platform named by a form or an import to a platform id (#2432). Nothing here creates a
+ * platform: one is added under Settings → Platforms only (#1955), so an unknown platform is null.
  *
- *  1. An explicit `id` is honoured only if it belongs to `collectionId`.
+ *  1. An explicit `id` is honoured only if it belongs to `collectionId` — a switched-off platform
+ *     included, since a record already naming one keeps it.
  *  2. A `name` matches an existing platform case-insensitively — a module platform's included.
- *  3. Failing both, a generic platform of that name is created. Null when neither is given.
  *
  * The caller must already have asserted ownership of `collectionId`.
  */
@@ -760,21 +724,7 @@ export async function resolvePlatform(
     await ensureModulePlatforms(collectionId);
     return (await findByName())?.id ?? null;
   }
-
-  try {
-    const created = await prisma.platform.create({
-      data: { collectionId, name },
-      select: { id: true },
-    });
-    return created.id;
-  } catch (err) {
-    // Lost a race (or an exact-case duplicate slipped past the insensitive match): re-read.
-    if (isUniqueViolation(err)) {
-      const again = await findByName();
-      if (again) return again.id;
-    }
-    throw err;
-  }
+  return null;
 }
 
 /** Prisma unique-constraint violation (P2002). */
