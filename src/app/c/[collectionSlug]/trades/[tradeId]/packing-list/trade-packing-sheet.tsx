@@ -37,6 +37,8 @@ import {
 // inert and the reason said once above them.
 
 const PREF_KEY = "stamporama:tradePackingList:columns:v1";
+/** The *Issue format* switch (#2444), off until turned on and remembered like the columns. */
+const ISSUE_FORMAT_KEY = "stamporama:tradePackingList:issueFormat:v1";
 
 /** The trade's own division of the list, as a **column** rather than a division of the paper (#643).
  *  Packing is a walk along the shelves and the shelf order is what governs it; grouped by section,
@@ -159,6 +161,7 @@ export function TradePackingSheet({
         list={list}
         columns={COLUMNS}
         prefKey={PREF_KEY}
+        issueFormatKey={ISSUE_FORMAT_KEY}
         empty="Nothing to pack — this trade promises no copies yet."
         tickTitle={(row) =>
           row.packed ? "Went in the envelope" : "Not answered for yet — tick it as you pack"

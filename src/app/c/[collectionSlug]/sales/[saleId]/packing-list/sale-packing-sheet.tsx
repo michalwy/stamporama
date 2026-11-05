@@ -5,6 +5,7 @@ import {
   PACKING_COLUMN,
   PackingSheet,
   SheetChip,
+  SheetChipsDivider,
   SheetChipsLabel,
   type PackingColumnSpec,
 } from "@/app/c/[collectionSlug]/shared/packing-sheet";
@@ -52,6 +53,9 @@ const SET_PINNED = [PACKING_COLUMN.location.key, PACKING_COLUMN.ref.key];
 // How the sheet is divided, remembered **globally** like the columns and for their reason: it is how
 // this person packs, not a property of one sale.
 const GROUP_BY_KEY = "stamporama:packingList:groupBy:v1";
+
+// The *Issue format* switch (#2444), remembered the same way.
+const ISSUE_FORMAT_KEY = "stamporama:packingList:issueFormat:v1";
 type GroupBy = "location" | "set";
 const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "location", label: "Location" },
@@ -91,7 +95,7 @@ export function SalePackingSheet({
           {o.label}
         </SheetChip>
       ))}
-      <span style={{ width: "1px", height: "1rem", background: "var(--color-border)", margin: "0 0.25rem" }} />
+      <SheetChipsDivider />
     </>
   );
 
@@ -103,6 +107,7 @@ export function SalePackingSheet({
       pinnedColumns={set ? SET_PINNED : undefined}
       controls={controls}
       prefKey={PREF_KEY}
+      issueFormatKey={ISSUE_FORMAT_KEY}
       empty="Nothing to pack — this sale has no copies on it yet."
       groupIcon={set ? "offers" : "location"}
       tickTitle={(row) => (row.packed ? "Packed" : "Not packed")}

@@ -708,6 +708,11 @@ The **Columns** chips pick what prints: **Photo**, **Ref**, **Copy no.**, **Cata
 always stays. Your selection is remembered globally, across every trade and every collection, and is
 kept separately from the sale packing list's — the two sheets are not the same list.
 
+Both trade sheets also have the sale packing list's **Issue format** switch, under **Show** in the
+chips row: turned on, a souvenir sheet's line reads `Mi·PL 200 Bl` — see
+[showing the issue format](sales.md#showing-the-issue-format). It starts off, and each sheet remembers
+it separately, as it does its columns.
+
 ### 📦 Enclosure — the sheet that goes in the envelope
 
 The same list, written for the person opening the parcel. **Every internal identifier comes off**: no

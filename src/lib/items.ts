@@ -11,6 +11,11 @@ import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { assertCopyFormatInCollection } from "./stamp-formats";
+import {
+  STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
+  stampIssueFormatLabel,
+} from "./stamp-issue-formats";
+import type { StampIssueFormatLabel } from "./stamp-issue-format-defaults";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY, TRADED_AWAY } from "./trade-exit";
 import {
@@ -2019,6 +2024,9 @@ export interface ItemListItem {
   conditionAbbreviation: string | null;
   certificateStatusId: string | null;
   certificateStatusName: string | null;
+  /** The form the copy's stamp was issued in (#2439) — souvenir sheet, booklet pane… — or null for
+   *  an ordinary stamp. The stamp's, never the copy's: {@link formatId} is the copy's own. */
+  issueFormat: StampIssueFormatLabel | null;
   /** Physical format; null = single. A multiple is one row, never N single rows. */
   formatId: string | null;
   formatName: string | null;
@@ -2333,6 +2341,8 @@ const ITEM_LIST_SELECT = {
       variants: { select: VARIANT_FLAG_SELECT },
       // The copy's own stamp's subtype, for the row's chip (#340).
       subtype: { select: { name: true, isDefault: true } },
+      // The stamp's issue format (#2439), which the packing list can print (#2444).
+      ...STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
       // Every membership rather than the first (#1382): the row is still listed under the first, and
       // the rest are what the row menu offers beside it. A stamp is filed in one issue far more
       // often than in two, so this is the same one narrow row almost always.
@@ -2443,6 +2453,7 @@ function toItemListItem(
     conditionAbbreviation: row.condition?.abbreviation ?? null,
     certificateStatusId: row.certificateStatus?.id ?? null,
     certificateStatusName: row.certificateStatus?.name ?? null,
+    issueFormat: stampIssueFormatLabel(row.stamp),
     formatId: row.format?.id ?? null,
     formatName: row.format?.name ?? null,
     formatAbbreviation: row.format?.abbreviation ?? null,

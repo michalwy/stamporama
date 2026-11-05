@@ -31,6 +31,8 @@ import {
 // look for rather than counting the envelope against a list two lines short.
 
 const PREF_KEY = "stamporama:tradeEnclosure:columns:v1";
+/** The *Issue format* switch (#2444), off until turned on and remembered like the columns. */
+const ISSUE_FORMAT_KEY = "stamporama:tradeEnclosure:issueFormat:v1";
 
 /** Money as the rest of the app prints it for a partner: a 2-dp figure with its currency code beside
  *  it, because a bare number on a sheet crossing a border is a number nobody can read. */
@@ -132,6 +134,7 @@ export function TradeEnclosureSheet({
       list={list}
       columns={COLUMNS}
       prefKey={PREF_KEY}
+      issueFormatKey={ISSUE_FORMAT_KEY}
       empty="This trade promises no copies yet, so there is nothing to enclose."
       groupIcon="group"
       // The sender's own ticks are withheld — see the note at the top of this file.
