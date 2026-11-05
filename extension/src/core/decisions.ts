@@ -41,7 +41,8 @@ export interface Candidate {
 export type AttributeStatus = "would-fill" | "filled" | "conflict" | "unmapped";
 
 export interface AttributeProposal {
-  /** Which of the six — `denomination`, `perforation`, `color`, `watermark`, `paper`, `printing`. */
+  /** Which of the six — `denomination`, `perforation`, `color`, `watermark`, `paper`, `printing` —
+   *  or the issue format, `issueFormat` (#2443). */
   field: string;
   /** How the attribute is named on screen, resolved by the instance so the window carries no
    *  vocabulary of its own. */

@@ -412,6 +412,18 @@ match itself is unaffected.
 
 Denomination and perforation need no mapping: they are recorded as printed on both sides.
 
+The stamp's [issue format](collections.md#issue-formats) is filled the same way, from what Colnect
+prints as its **Format** — *Souvenir Sheet*, *Miniature Sheet* — through the same tab, where your
+issue formats are the last list:
+
+> ☑ issue format `+ Souvenir sheet`
+
+Colnect's **Stamp** is an ordinary stamp, which is no issue format, so it adds nothing — and it is not
+a disagreement with an issue format you set yourself either, since a stamp taken from a souvenir
+sheet is a *Stamp* on Colnect. A format that maps to none of yours is reported like any other word
+(`Miniature Sheet — not mapped`), and one that differs from the issue format you set is a replacement
+you tick, as for every other attribute.
+
 ## Filling a sale form for you
 
 The Assistant also works the other way round: **⚡ List via Assistant** on a ready offer — in the

@@ -667,11 +667,16 @@ model StampIssueFormat {
   sortOrder    Int
   /** Chip colour: one of `TAG_COLORS`, or null for the neutral chip — as a condition's (#728). */
   color        String?
+  // What Colnect prints in a stamp's "Format" for this value (#2443), or null while nothing is
+  // mapped — the four attribute dictionaries' own column (#739). Colnect's "Stamp" is no issue
+  // format, so no row stands for it. Unique per collection so the lookup is unambiguous.
+  colnectValue String?
 
   collection   Collection                    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]
   translations StampIssueFormatTranslation[]
 
+  @@unique([collectionId, colnectValue])
   @@index([collectionId])
   @@map("stamp_issue_format")
 }

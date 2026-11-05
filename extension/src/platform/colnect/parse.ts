@@ -162,8 +162,8 @@ function issuedOnOf(root: Element | Document): string | undefined {
 }
 
 /**
- * What the page states about the stamp itself (#739) — the six attributes of #71, read out of the
- * same dt/dd rows everything else here is.
+ * What the page states about the stamp itself (#739) — the six attributes of #71 and its format
+ * (#2443), read out of the same dt/dd rows everything else here is.
  *
  * Each label is tried in the forms Colnect actually prints. `ddFor` matches a **prefix** of the
  * label, so `perforation` also catches "Perforation:" wherever the row carries a note after the
@@ -171,9 +171,9 @@ function issuedOnOf(root: Element | Document): string | undefined {
  * by a row reading "Printing type" when we want the method, so both are simply tried in turn and the
  * first hit wins.
  *
- * Values travel **verbatim**. The four dictionary attributes are Colnect's own words and are
- * translated by the collection's mapping on the instance; the two printed ones are stored as
- * printed. Nothing is normalised, split or title-cased here, for `issuedOn`'s reason: a second
+ * Values travel **verbatim**. The four dictionary attributes and the format are Colnect's own
+ * words and are translated by the collection's mapping on the instance; the two printed ones are
+ * stored as printed. Nothing is normalised, split or title-cased here, for `issuedOn`'s reason: a second
  * reading of the page is a second thing to keep in step with the first.
  */
 const ATTRIBUTE_LABELS: readonly { key: keyof ExtractedAttributes; labels: readonly string[] }[] = [
@@ -183,6 +183,9 @@ const ATTRIBUTE_LABELS: readonly { key: keyof ExtractedAttributes; labels: reado
   { key: "watermark", labels: ["watermark"] },
   { key: "paper", labels: ["paper"] },
   { key: "printing", labels: ["printing"] },
+  // The issue format (#2443) is Colnect's "Format": "Stamp" for an ordinary stamp, which the
+  // instance leaves alone, or "Souvenir Sheet", "Miniature Sheet" and the like, which it maps.
+  { key: "issueFormat", labels: ["format"] },
 ];
 
 function attributesOf(root: Element | Document): ExtractedAttributes | undefined {

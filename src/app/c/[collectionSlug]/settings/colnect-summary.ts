@@ -9,12 +9,17 @@
  *
  * **The unmapped attribute figure is the Attributes tab's own count** — both are
  * `unmappedAttributeCount` — and its tile opens that tab narrowed to those values.
+ *
+ * The tab maps **five** lists: the four attribute dictionaries and the issue formats (#2443), the
+ * last being what Colnect prints in a stamp's "Format". All five are counted alike.
  */
 
 import type { ColnectConditionMappingData, ColnectMappingData } from "@/lib/colnect";
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { StampAttributeData, StampAttributeLists } from "@/lib/stamp-attributes";
-import { STAMP_ATTRIBUTE_KINDS, type StampAttributeKind } from "@/lib/stamp-attribute-kinds";
+import type { StampIssueFormatData } from "@/lib/stamp-issue-formats";
+import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
+import { ISSUE_FORMAT_FIELD, type ColnectDictionaryKind } from "@/lib/colnect-attributes";
 import { platformTileWords, type PlatformTileFacts } from "./platform-summary";
 
 /** The Colnect page's tabs, in the order the setup happens in; the first is the default. */
@@ -37,25 +42,61 @@ export const COLNECT_UNMAPPED_PARAM = "unmapped";
 /** The address parameters that belong to the Attributes tab alone, dropped on leaving it. */
 export const COLNECT_VIEW_PARAMS = [COLNECT_KIND_PARAM, COLNECT_UNMAPPED_PARAM] as const;
 
+/** The Attributes tab's lists, in the order its switch offers them: the four attribute dictionaries,
+ * then the issue formats (#2443). */
+export const COLNECT_ATTRIBUTE_LIST_KINDS: readonly ColnectDictionaryKind[] = [
+  ...STAMP_ATTRIBUTE_KINDS,
+  ISSUE_FORMAT_FIELD,
+];
+
+/** Every list the Attributes tab maps, each as rows of one shape. */
+export type ColnectAttributeLists = Readonly<Record<ColnectDictionaryKind, StampAttributeData[]>>;
+
+/** How each of the tab's lists is named — the switch's heading and the plural its captions use. */
+export const COLNECT_ATTRIBUTE_LIST_LABELS: Readonly<
+  Record<ColnectDictionaryKind, { heading: string; plural: string }>
+> = {
+  ...STAMP_ATTRIBUTE_LABELS,
+  [ISSUE_FORMAT_FIELD]: { heading: "Issue formats", plural: "issue formats" },
+};
+
+/** The tab's five lists from what the Settings loader reads: the attribute dictionaries as they
+ * are, and the issue formats in the same row shape. */
+export function colnectAttributeLists(
+  attributes: StampAttributeLists,
+  issueFormats: readonly StampIssueFormatData[]
+): ColnectAttributeLists {
+  return {
+    ...attributes,
+    [ISSUE_FORMAT_FIELD]: issueFormats.map((f) => ({
+      id: f.id,
+      name: f.name,
+      nameByLanguage: f.nameByLanguage,
+      colnectValue: f.colnectValue,
+      sortOrder: f.sortOrder,
+    })),
+  };
+}
+
 /** A value with no Colnect word yet — a blank field is the unmapped state. */
 export function isUnmappedAttribute(row: StampAttributeData): boolean {
   return !row.colnectValue?.trim();
 }
 
-/** How many of one list's values, or of all four, still have no Colnect word. */
+/** How many of one list's values, or of all five, still have no Colnect word. */
 export function unmappedAttributeCount(
-  lists: StampAttributeLists,
-  kind?: StampAttributeKind
+  lists: ColnectAttributeLists,
+  kind?: ColnectDictionaryKind
 ): number {
-  const kinds: readonly StampAttributeKind[] = kind ? [kind] : STAMP_ATTRIBUTE_KINDS;
+  const kinds: readonly ColnectDictionaryKind[] = kind ? [kind] : COLNECT_ATTRIBUTE_LIST_KINDS;
   return kinds.reduce((n, k) => n + lists[k].filter(isUnmappedAttribute).length, 0);
 }
 
 export interface ColnectAttributeView {
   /** The lists that have any values — the kinds the tab offers. Empty when none has. */
-  kinds: StampAttributeKind[];
+  kinds: ColnectDictionaryKind[];
   /** The list shown, or null when there is none to show. */
-  kind: StampAttributeKind | null;
+  kind: ColnectDictionaryKind | null;
   unmappedOnly: boolean;
   /** The shown list's rows, narrowed when `unmappedOnly`. */
   rows: StampAttributeData[];
@@ -67,11 +108,11 @@ export interface ColnectAttributeView {
  * that still has some, so the tile's way in never opens on a list with nothing left to do.
  */
 export function colnectAttributeView(
-  lists: StampAttributeLists,
+  lists: ColnectAttributeLists,
   kindParam: string | null,
   unmappedOnly: boolean
 ): ColnectAttributeView {
-  const kinds = STAMP_ATTRIBUTE_KINDS.filter((k) => lists[k].length > 0);
+  const kinds = COLNECT_ATTRIBUTE_LIST_KINDS.filter((k) => lists[k].length > 0);
   const named = kinds.find((k) => k === kindParam);
   const kind =
     named ??
@@ -111,7 +152,7 @@ function names(list: readonly string[]): string {
 export function colnectSummary(
   catalogs: readonly ColnectMappingData[],
   conditions: readonly ColnectConditionMappingData[],
-  attributes: StampAttributeLists,
+  attributes: ColnectAttributeLists,
   lists: readonly ColnectListMappingData[],
   platform: PlatformTileFacts
 ): ColnectSummaryTile[] {
@@ -142,7 +183,7 @@ export function colnectSummary(
         : null,
   };
 
-  const values = STAMP_ATTRIBUTE_KINDS.reduce((n, k) => n + attributes[k].length, 0);
+  const values = COLNECT_ATTRIBUTE_LIST_KINDS.reduce((n, k) => n + attributes[k].length, 0);
   const unmapped = unmappedAttributeCount(attributes);
   const attributeTile: ColnectSummaryTile = {
     part: "attributes",

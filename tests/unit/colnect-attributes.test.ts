@@ -23,6 +23,11 @@ const DICTIONARIES: ColnectAttributeDictionaries = {
   watermark: [{ id: "w1", name: "Lozenges", colnectValue: "Lozenges" }],
   paper: [{ id: "p1", name: "Thin paper", colnectValue: "Thin" }],
   printing: [{ id: "r1", name: "Photogravure", colnectValue: "Photogravure" }],
+  issueFormat: [
+    { id: "f1", name: "Souvenir sheet", colnectValue: "Souvenir Sheet" },
+    { id: "f2", name: "Stamp from a souvenir sheet", colnectValue: null },
+    { id: "f3", name: "Miniature sheet", colnectValue: null },
+  ],
 };
 
 function stamp(over: Partial<CurrentStampAttributes> = {}): CurrentStampAttributes {
@@ -33,6 +38,7 @@ function stamp(over: Partial<CurrentStampAttributes> = {}): CurrentStampAttribut
     watermarkId: null,
     paperId: null,
     printingId: null,
+    issueFormatId: null,
     ...over,
   };
 }
@@ -167,12 +173,88 @@ describe("proposing a stamp's attributes", () => {
   });
 });
 
+// The issue format (#2443): Colnect's "Format", mapped like the four dictionaries, with its "Stamp"
+// standing for an ordinary stamp — no issue format at all.
+describe("proposing a stamp's issue format", () => {
+  it("fills a souvenir sheet once Souvenir sheet is mapped", () => {
+    const proposals = proposeStampAttributes(
+      { issueFormat: "souvenir  sheet" },
+      stamp(),
+      DICTIONARIES
+    );
+    assert.deepEqual(
+      proposals.map((p) => [p.field, p.fieldLabel, p.status, p.value, p.label]),
+      [["issueFormat", "Issue format", "would-fill", "f1", "Souvenir sheet"]]
+    );
+    assert.deepEqual(attributeWrites(proposals, ["would-fill"]), { issueFormatId: "f1" });
+  });
+
+  it("names an unmapped format and changes nothing", () => {
+    const proposals = proposeStampAttributes(
+      { issueFormat: "Miniature Sheet" },
+      stamp(),
+      DICTIONARIES
+    );
+    assert.deepEqual(
+      proposals.map((p) => [p.field, p.status, p.value, p.colnectLabel]),
+      [["issueFormat", "unmapped", null, "Miniature Sheet"]]
+    );
+    assert.deepEqual(attributeWrites(proposals, ["would-fill", "conflict"]), {});
+  });
+
+  // A stamp from a souvenir sheet is a "Stamp" on Colnect, so "Stamp" neither fills nor disagrees.
+  it("proposes nothing for Colnect's Stamp, whatever the stamp carries", () => {
+    assert.deepEqual(proposeStampAttributes({ issueFormat: "Stamp" }, stamp(), DICTIONARIES), []);
+    assert.deepEqual(
+      proposeStampAttributes({ issueFormat: " stamp " }, stamp({ issueFormatId: "f2" }), DICTIONARIES),
+      []
+    );
+  });
+
+  it("reports a format the collector set differently, and never writes it as a fill", () => {
+    const proposals = proposeStampAttributes(
+      { issueFormat: "Souvenir Sheet" },
+      stamp({ issueFormatId: "f2" }),
+      DICTIONARIES
+    );
+    assert.deepEqual(
+      proposals.map((p) => [p.status, p.currentLabel, p.colnectLabel]),
+      [["conflict", "Stamp from a souvenir sheet", "Souvenir Sheet"]]
+    );
+    assert.deepEqual(attributeWrites(proposals, ["would-fill"]), {});
+    assert.deepEqual(attributeWrites(proposals, ["conflict"]), { issueFormatId: "f1" });
+  });
+
+  it("says nothing where the stamp already carries the mapped format", () => {
+    assert.deepEqual(
+      proposeStampAttributes(
+        { issueFormat: "Souvenir Sheet" },
+        stamp({ issueFormatId: "f1" }),
+        DICTIONARIES
+      ),
+      []
+    );
+  });
+
+  it("comes after the six", () => {
+    const proposals = proposeStampAttributes(
+      { issueFormat: "Souvenir Sheet", denomination: "10 gr" },
+      stamp(),
+      DICTIONARIES
+    );
+    assert.deepEqual(
+      proposals.map((p) => p.field),
+      ["denomination", "issueFormat"]
+    );
+  });
+});
+
 describe("reading the attributes off a request body", () => {
-  it("keeps the six known keys, trimmed", () => {
-    assert.deepEqual(parseColnectAttributes({ color: " Carmine ", perforation: "11½" }), {
-      color: "Carmine",
-      perforation: "11½",
-    });
+  it("keeps the known keys, trimmed — the issue format among them", () => {
+    assert.deepEqual(
+      parseColnectAttributes({ color: " Carmine ", perforation: "11½", issueFormat: " Stamp " }),
+      { color: "Carmine", perforation: "11½", issueFormat: "Stamp" }
+    );
   });
 
   // Not a hard shape: an unreadable value is no attribute, and must never cost an item its match.

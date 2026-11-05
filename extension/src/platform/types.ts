@@ -8,8 +8,9 @@ export interface CatalogRef {
   number: string;
 }
 
-/** The six attributes a Colnect catalogue page prints about a stamp (#71/#739), as printed. Keyed
- *  exactly as the instance names them, so nothing translates on the way. */
+/** The six attributes a Colnect catalogue page prints about a stamp (#71/#739), and its format
+ *  (#2443), as printed. Keyed exactly as the instance names them, so nothing translates on the
+ *  way. */
 export interface ExtractedAttributes {
   denomination?: string;
   perforation?: string;
@@ -17,6 +18,9 @@ export interface ExtractedAttributes {
   watermark?: string;
   paper?: string;
   printing?: string;
+  /** Colnect's "Format" — Stamp, Souvenir Sheet, Miniature Sheet… — which the instance maps to the
+   *  stamp's issue format; its "Stamp" is an ordinary stamp and fills nothing. */
+  issueFormat?: string;
 }
 
 /** One item extracted from a marketplace page. `platformItemId` becomes the stamp's Colnect ID. */

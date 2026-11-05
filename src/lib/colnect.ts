@@ -651,24 +651,26 @@ interface PendingAttributes {
   proposals: ColnectAttributeProposal[];
 }
 
-/** The four dictionaries of a collection, with what Colnect calls each row (#739). Loaded once per
- * matcher run and only when the caller asked for the attribute sync at all — a page of two hundred
+/** The four dictionaries of a collection and its issue formats (#2443), with what Colnect calls
+ * each row (#739). Loaded once per matcher run and only when the caller asked for the attribute sync at all — a page of two hundred
  * stamps is one read, and a collection that has mapped nothing pays for none. */
 async function loadAttributeDictionaries(
   collectionId: string
 ): Promise<ColnectAttributeDictionaries> {
-  const [color, watermark, paper, printing] = await Promise.all([
+  const [color, watermark, paper, printing, issueFormat] = await Promise.all([
     prisma.stampColor.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
     prisma.stampWatermark.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
     prisma.stampPaper.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
     prisma.stampPrinting.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
+    prisma.stampIssueFormat.findMany({ where: { collectionId }, select: ATTRIBUTE_ROW_SELECT }),
   ]);
-  return { color, watermark, paper, printing };
+  return { color, watermark, paper, printing, issueFormat };
 }
 
 const ATTRIBUTE_ROW_SELECT = { id: true, name: true, colnectValue: true } as const;
 
-/** The six columns a stamp's attributes are compared and written through. */
+/** The six columns a stamp's attributes are compared and written through, and the issue format's
+ * (#2443). */
 const STAMP_ATTRIBUTE_SELECT = {
   denomination: true,
   perforation: true,
@@ -676,6 +678,7 @@ const STAMP_ATTRIBUTE_SELECT = {
   watermarkId: true,
   paperId: true,
   printingId: true,
+  issueFormatId: true,
 } as const;
 
 /** Nothing mapped and nothing to compare against — what a run that did not ask for the attribute
@@ -685,6 +688,7 @@ const NO_ATTRIBUTE_DICTIONARIES: ColnectAttributeDictionaries = {
   watermark: [],
   paper: [],
   printing: [],
+  issueFormat: [],
 };
 
 /**
@@ -1114,6 +1118,7 @@ export async function matchColnectItems(
         watermarkId: s.watermarkId,
         paperId: s.paperId,
         printingId: s.printingId,
+        issueFormatId: s.issueFormatId,
       },
       backfillStamp: {
         stampId: s.id,

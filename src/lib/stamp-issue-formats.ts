@@ -7,6 +7,7 @@ import {
 } from "./translations";
 import { isTagColor, type TagColor } from "./tag-colors";
 import { DEFAULT_ISSUE_FORMATS, type StampIssueFormatLabel } from "./stamp-issue-format-defaults";
+import { isColnectOrdinaryStamp, normalizeColnectAttribute } from "./colnect-attributes";
 
 // The issue-format dictionary (#2439) — the form a stamp was issued in: souvenir sheet, miniature
 // sheet, tête-bêche, booklet pane. Same shape and lifecycle as `stamp-formats.ts` (seeded on
@@ -30,6 +31,9 @@ export interface StampIssueFormatData {
   sortOrder: number;
   /** Chip colour, or null for the neutral chip. */
   color: TagColor | null;
+  /** What Colnect prints in a stamp's "Format" for this value (#2443), or null while nothing is
+   *  mapped — set on Settings → Colnect → Attributes beside the four attribute dictionaries. */
+  colnectValue: string | null;
   /** How many stamps carry this issue format — what the settings row says, and why a delete is
    *  refused while it is above nought. */
   stampCount: number;
@@ -119,6 +123,7 @@ export async function getStampIssueFormats(
       abbreviation: true,
       sortOrder: true,
       color: true,
+      colnectValue: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
       _count: { select: { stamps: true } },
     },
@@ -131,6 +136,7 @@ export async function getStampIssueFormats(
     abbreviationByLanguage: translationsByLanguage(f.translations, (t) => t.abbreviation),
     sortOrder: f.sortOrder,
     color: isTagColor(f.color) ? f.color : null,
+    colnectValue: f.colnectValue,
     stampCount: f._count.stamps,
   }));
 }
@@ -240,4 +246,55 @@ export async function reorderStampIssueFormats(
       prisma.stampIssueFormat.update({ where: { id }, data: { sortOrder: i } })
     )
   );
+}
+
+/** A Colnect word the issue-format mapping refuses, in words the collector can act on. */
+export class IssueFormatColnectValueError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IssueFormatColnectValueError";
+  }
+}
+
+/**
+ * Say what Colnect prints in "Format" for one issue format (#2443) — `setStampAttributeColnectValue`
+ * for the fifth mapped dictionary, on its rules: blank clears it, and two issue formats may not
+ * claim one Colnect word, compared the way the fill compares (trimmed, whitespace collapsed,
+ * case-insensitive), so a collision is a sentence rather than a constraint error.
+ *
+ * Colnect's **"Stamp"** is refused: it is an ordinary stamp, which is no issue format, and the fill
+ * never maps it — a row claiming it would be a mapping that silently does nothing.
+ */
+export async function setStampIssueFormatColnectValue(
+  ownerId: string,
+  issueFormatId: string,
+  colnectValue: string
+): Promise<void> {
+  const collectionId = await resolveIssueFormatCollection(issueFormatId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const value = colnectValue.trim();
+  if (value) {
+    if (isColnectOrdinaryStamp(value)) {
+      throw new IssueFormatColnectValueError(
+        "Colnect's “Stamp” is an ordinary stamp, which is no issue format — leave it unmapped."
+      );
+    }
+    const key = normalizeColnectAttribute(value);
+    const siblings = await prisma.stampIssueFormat.findMany({
+      where: { collectionId },
+      select: { id: true, colnectValue: true },
+    });
+    const clash = siblings.find(
+      (r) => r.id !== issueFormatId && normalizeColnectAttribute(r.colnectValue) === key
+    );
+    if (clash) {
+      throw new IssueFormatColnectValueError(
+        "Another issue format is already mapped to that Colnect word."
+      );
+    }
+  }
+  await prisma.stampIssueFormat.update({
+    where: { id: issueFormatId },
+    data: { colnectValue: value || null },
+  });
 }

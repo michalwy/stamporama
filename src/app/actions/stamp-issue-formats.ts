@@ -10,6 +10,8 @@ import {
   deleteStampIssueFormat,
   reorderStampIssueFormats,
   getStampIssueFormats,
+  setStampIssueFormatColnectValue,
+  IssueFormatColnectValueError,
   IssueFormatInUseError,
   type StampIssueFormatData,
   type StampIssueFormatInput,
@@ -114,5 +116,29 @@ export async function reorderStampIssueFormatsAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to reorder issue formats. Please try again." };
+  }
+}
+
+/**
+ * Say what Colnect prints in "Format" for one issue format (#2443) — the Settings → Colnect →
+ * Attributes field, one write per change as the attribute dictionaries' own. A refused word (a
+ * clash, or Colnect's "Stamp") is reported in its own words.
+ */
+export async function setStampIssueFormatColnectValueAction(
+  issueFormatId: string,
+  colnectValue: string
+): Promise<StampIssueFormatActionState> {
+  const session = await getSession();
+  try {
+    await setStampIssueFormatColnectValue(session.user.id, issueFormatId, colnectValue);
+    return { status: "success" };
+  } catch (err) {
+    return {
+      status: "error",
+      message:
+        err instanceof IssueFormatColnectValueError
+          ? err.message
+          : "Failed to map that issue format. Please try again.",
+    };
   }
 }

@@ -3,18 +3,24 @@
 import { useCallback, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { setStampAttributeColnectValueAction } from "@/app/actions/stamp-attributes";
-import { guessColnectAttributeValue } from "@/lib/colnect-attributes";
-import { STAMP_ATTRIBUTE_LABELS, type StampAttributeKind } from "@/lib/stamp-attribute-kinds";
-import type { StampAttributeData, StampAttributeLists } from "@/lib/stamp-attributes";
+import { setStampIssueFormatColnectValueAction } from "@/app/actions/stamp-issue-formats";
+import {
+  guessColnectAttributeValue,
+  ISSUE_FORMAT_FIELD,
+  type ColnectDictionaryKind,
+} from "@/lib/colnect-attributes";
+import type { StampAttributeData } from "@/lib/stamp-attributes";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import { ListPane } from "./list-detail";
 import {
+  COLNECT_ATTRIBUTE_LIST_LABELS,
   COLNECT_KIND_PARAM,
   COLNECT_UNMAPPED_PARAM,
   colnectAttributeView,
   unmappedAttributeCount,
+  type ColnectAttributeLists,
 } from "./colnect-summary";
 import { formControl } from "@/app/control-style";
 
@@ -65,6 +71,10 @@ const INPUT_STYLE: React.CSSProperties = {
  * identity match rather than a fuzzy one, since a wrong colour written onto a thousand stamps is far
  * worse than a blank left to be filled in.
  *
+ * The issue formats are a **fifth list** here (#2443): what Colnect prints in a stamp's "Format".
+ * Colnect's "Stamp" is an ordinary stamp, which is no issue format, so no row maps it — the field
+ * refuses the word.
+ *
  * **One list at a time** (#1480), chosen above it, rather than the four one under another: a
  * collection's colours alone can run to a long scroll. The list and the narrowing to the values
  * still without a word are in the address (`&kind=`, `&unmapped=1`), written with
@@ -72,18 +82,26 @@ const INPUT_STYLE: React.CSSProperties = {
  * narrowed and a click here does not re-run the Settings loader. The narrowing's count is
  * `unmappedAttributeCount`, the same the summary tile shows.
  */
-export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }) {
+/** One row's Colnect word written through its own list's action: the issue formats keep theirs on
+ * their own dictionary (#2443). */
+function writeColnectValue(kind: ColnectDictionaryKind, id: string, value: string) {
+  return kind === ISSUE_FORMAT_FIELD
+    ? setStampIssueFormatColnectValueAction(id, value)
+    : setStampAttributeColnectValueAction(kind, id, value);
+}
+
+export function ColnectAttributesPanel({ lists }: { lists: ColnectAttributeLists }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   /** The row being written, so only its own field is disabled while the action is in flight. */
   const [saving, setSaving] = useState<string | null>(null);
 
-  function save(kind: StampAttributeKind, attributeId: string, value: string) {
+  function save(kind: ColnectDictionaryKind, attributeId: string, value: string) {
     setError(undefined);
     setSaving(attributeId);
     startTransition(async () => {
-      const result = await setStampAttributeColnectValueAction(kind, attributeId, value);
+      const result = await writeColnectValue(kind, attributeId, value);
       setSaving(null);
       if (result.status === "error") setError(result.message);
       router.refresh();
@@ -94,13 +112,13 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
    * rather than concurrent: they are a handful of rows, and two rows guessing the same word have to
    * see each other's write — the second is then refused by the very check that keeps a lookup
    * unambiguous. */
-  function fillMatching(kind: StampAttributeKind, rows: StampAttributeData[]) {
+  function fillMatching(kind: ColnectDictionaryKind, rows: StampAttributeData[]) {
     setError(undefined);
     startTransition(async () => {
       for (const row of rows) {
         const guess = guessColnectAttributeValue(rows, row);
         if (!guess) continue;
-        const result = await setStampAttributeColnectValueAction(kind, row.id, guess);
+        const result = await writeColnectValue(kind, row.id, guess);
         if (result.status === "error") {
           setError(result.message);
           break;
@@ -116,14 +134,15 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
   if (!view.kind) {
     return (
       <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-        This collection has no colours, watermarks, papers or printing methods yet. Add them on the{" "}
-        <strong>Attributes</strong> page, then say what Colnect calls each of them here.
+        This collection has no colours, watermarks, papers, printing methods or issue formats yet.
+        Add them on the <strong>Attributes</strong> and <strong>Issue formats</strong> pages, then say
+        what Colnect calls each of them here.
       </p>
     );
   }
 
   const kind = view.kind;
-  const labels = STAMP_ATTRIBUTE_LABELS[kind];
+  const labels = COLNECT_ATTRIBUTE_LIST_LABELS[kind];
 
   return (
     <>
@@ -140,7 +159,7 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
           label="List"
           value={kind}
           onChange={chooseKind}
-          options={view.kinds.map((k) => ({ value: k, label: STAMP_ATTRIBUTE_LABELS[k].heading }))}
+          options={view.kinds.map((k) => ({ value: k, label: COLNECT_ATTRIBUTE_LIST_LABELS[k].heading }))}
         />
         <FilterChip
           label="Without a Colnect word"
@@ -162,7 +181,7 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
 
       <ListPane
         caption={`${unmappedAttributeCount(lists, kind)} of ${lists[kind].length} ${labels.plural} without a Colnect word`}
-        hint="Colnect prints a stamp's colour, watermark, paper and printing method as words of its own. Say which of your values each word means and the Assistant can fill those attributes from a catalogue page. Leave a value blank when Colnect has no word for it: a Colnect word that maps to nothing is reported rather than written, and nothing is ever created for you. Fill matching proposes each blank value's own name, where no other value in the list has that word already."
+        hint="Colnect prints a stamp's colour, watermark, paper, printing method and format as words of its own. Say which of your values each word means and the Assistant can fill those attributes from a catalogue page. Leave a value blank when Colnect has no word for it: a Colnect word that maps to nothing is reported rather than written, and nothing is ever created for you. Fill matching proposes each blank value's own name, where no other value in the list has that word already. Colnect's “Stamp” format is an ordinary stamp, which is no issue format, so it is never mapped."
         error={error}
         empty={
           view.rows.length === 0 && `Every one of your ${labels.plural} has a Colnect word.`
@@ -227,7 +246,7 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
 }
 
 /** The list shown and its narrowing, read from the address and written back without the router. */
-function useAttributeView(lists: StampAttributeLists) {
+function useAttributeView(lists: ColnectAttributeLists) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const view = colnectAttributeView(
@@ -249,7 +268,7 @@ function useAttributeView(lists: StampAttributeLists) {
 
   return {
     view,
-    chooseKind: (kind: StampAttributeKind) => write(COLNECT_KIND_PARAM, kind),
+    chooseKind: (kind: ColnectDictionaryKind) => write(COLNECT_KIND_PARAM, kind),
     setUnmappedOnly: (on: boolean) => write(COLNECT_UNMAPPED_PARAM, on ? "1" : null),
   };
 }
