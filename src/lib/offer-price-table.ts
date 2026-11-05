@@ -30,8 +30,14 @@
 // moved to their rows' tooltips. Minimum joined the rows that are always drawn — `—` on a platform
 // that sets none — and Cost became a price that can be clicked like the others. #2333 drew Cost always,
 // `—` with why when it is missing, and marked it *incl. opening value* when an opening value is under it.
+//
+// **#2461 added Market trend under Market**: the same copies' results, each brought to today by its
+// stamp's price trend (#2460's rule, `market-trend.ts`) — so a stamp whose price keeps rising is not
+// priced against a median years behind its market. Market itself stays the plain median. The row is
+// drawn only when a trend applies to at least one copy; it is not a suggestion — Estimated is.
 
 import { offerCostTotals, type OfferSetCost } from "./offer-cost";
+import { formatTrendRate, type TrendStatementInput } from "./price-trend";
 import { isStatedRatio, type RatioBucketLevel } from "./realization-ratio";
 
 /** One held copy's estimate: its catalogue value and the ratio its bucket resolved to. */
@@ -161,6 +167,83 @@ export function estimateSets(sets: readonly (readonly CopyEstimateInput[])[]): S
   };
 }
 
+/** One held copy with recorded results, as the Market trend row reads it (#2461). A copy with none is
+ *  absent, as it adds nothing to Market either. */
+export interface CopyMarketTrendInput {
+  /** What the copy counts as under Market — its plain median, lowered for its faults — base currency. */
+  market: number;
+  /** The same brought to today by its stamp's trend, lowered for its faults the same way; equal to
+   *  {@link market} when no trend applies, and the copy then counts at its plain median. */
+  trended: number;
+  /** The trend applied; null when there is none. */
+  trend: TrendStatementInput | null;
+}
+
+export interface SetsMarketTrend {
+  /** Average per set with results, base currency, unrounded — the divisor Market uses. */
+  averageBase: number;
+  valuedSets: number;
+  /** Copies with results behind the figure, and how many of them a trend moved. */
+  copies: number;
+  trendedCopies: number;
+  /** The distinct trends applied, steepest first. */
+  trends: TrendStatementInput[];
+}
+
+const trendKey = (t: TrendStatementInput) =>
+  [t.rate, t.capped, t.borrowed?.bucketLabel ?? "", t.n, String(t.earliestAt), String(t.latestAt)].join("\u0000");
+
+/**
+ * Market trend per set (#2461): each set's copies summed at their trend-adjusted figures, averaged
+ * over the sets with any recorded result — Market's own sets, so the two rows are over the same
+ * copies. A copy with results but no trend counts at its plain median. Null when no copy of any set
+ * has a trend, which is when the row is not drawn.
+ */
+export function marketTrendSets(sets: readonly (readonly CopyMarketTrendInput[])[]): SetsMarketTrend | null {
+  let sum = 0;
+  let valuedSets = 0;
+  let copies = 0;
+  let trendedCopies = 0;
+  const trends = new Map<string, TrendStatementInput>();
+  for (const set of sets) {
+    if (set.length === 0) continue;
+    for (const copy of set) {
+      sum += copy.trended;
+      if (copy.trend) {
+        trendedCopies++;
+        trends.set(trendKey(copy.trend), copy.trend);
+      }
+    }
+    copies += set.length;
+    valuedSets++;
+  }
+  if (trendedCopies === 0) return null;
+  return {
+    averageBase: sum / valuedSets,
+    valuedSets,
+    copies,
+    trendedCopies,
+    trends: [...trends.values()].sort((a, b) => b.rate - a.rate),
+  };
+}
+
+/**
+ * The Market trend row's note (#2461): the rate — `+14%/yr`, `borrowed, +9%/yr` when the trend comes
+ * from the stamp's group, `capped` where the ±30% cap held it. Copies trending differently give the
+ * range, `+5%/yr to +14%/yr`, and the tooltip names each.
+ */
+export function describeMarketTrendNote(trends: readonly TrendStatementInput[]): string {
+  if (trends.length === 0) return "";
+  const rates = [...new Set(trends.map((t) => formatTrendRate(t.rate)))];
+  if (rates.length > 1) {
+    const sorted = [...trends].sort((a, b) => a.rate - b.rate);
+    return `${formatTrendRate(sorted[0].rate)} to ${formatTrendRate(sorted[sorted.length - 1].rate)}`;
+  }
+  const borrowed = trends.every((t) => t.borrowed !== null);
+  const capped = trends.some((t) => t.capped);
+  return `${borrowed ? "borrowed, " : ""}${rates[0]}${capped ? ", capped" : ""}`;
+}
+
 /** What a price would make over what the copies cost: the difference, and that difference as a
  *  share of the cost — null where the cost is zero, which no share can be taken of. */
 export interface PriceMargin {
@@ -206,7 +289,7 @@ export function describeEstimateNote(ratio: number): string {
 }
 
 /** `own` is the offer's own price — the table's last row since #1839. */
-export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" | "cost" | "own";
+export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" | "marketTrend" | "cost" | "own";
 
 export interface OfferPriceRow {
   key: OfferPriceRowKey;
@@ -225,12 +308,23 @@ export interface OfferPriceFigures {
   catalogue: string | null;
   estimated: string | null;
   market: string | null;
+  /** Market brought to today by the price trend (#2461); null when no trend applies, and the row is
+   *  then not drawn. Absent reads as null. */
+  marketTrend?: string | null;
   cost: string | null;
   /** The offer's own price; null while it has none. */
   own: string | null;
 }
 
-const ROW_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
+const ROW_ORDER: readonly OfferPriceRowKey[] = [
+  "minimum",
+  "catalogue",
+  "estimated",
+  "market",
+  "marketTrend",
+  "cost",
+  "own",
+];
 
 /** The rows drawn whether or not they have a figure: Minimum (#1843), Market (#1839) and Cost (#2333),
  *  whose absence is itself worth saying — a missing cost says why — and the offer's own price, which is
@@ -250,7 +344,7 @@ export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
   const known = cost !== null && Number.isFinite(cost) && cost >= 0;
   const rows: OfferPriceRow[] = [];
   for (const key of ROW_ORDER) {
-    const amount = figures[key];
+    const amount = figures[key] ?? null;
     const value = amount === null ? NaN : Number(amount);
     if (key === "cost") {
       rows.push({ key, amount: known ? amount : null, margin: null });
@@ -279,6 +373,8 @@ export interface PriceFigureSet {
   /** The set's COST (#1736), base currency. */
   cost: OfferSetCost;
   estimates: readonly CopyEstimateInput[];
+  /** Its copies with recorded results, for Market trend (#2461). Absent reads as none. */
+  marketTrends?: readonly CopyMarketTrendInput[];
 }
 
 /** The price table's figures over an offer's sets, in the offer's currency — every one per set. */
@@ -295,6 +391,9 @@ export interface OfferPriceFigureSummary {
   catalogNames: string[];
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
+  /** Market brought to today by the price trend, per set (#2461); null when no trend applies to any
+   *  copy, or no rate converts it. */
+  marketTrendPrice: { amount: string; copies: number; trendedCopies: number; trends: TrendStatementInput[] } | null;
   /** The COST per set; null when no set's cost is known or no rate converts it. */
   costPrice: string | null;
   /** There is a COST, but no rate converts it into the offer's currency (#2436). */
@@ -353,6 +452,9 @@ export function offerPriceFigures(
   }
   const marketAmount = marketSets > 0 ? inOffer(sumSetMarket / marketSets) : null;
 
+  const trend = marketTrendSets(sets.map((s) => s.marketTrends ?? []));
+  const marketTrendAmount = trend ? inOffer(trend.averageBase) : null;
+
   const costAverageBase = offerCostTotals(sets.map((s) => s.cost)).average;
 
   return {
@@ -371,6 +473,15 @@ export function offerPriceFigures(
         ? null
         : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
     marketUnconvertible: marketSets > 0 && marketAmount === null,
+    marketTrendPrice:
+      trend === null || marketTrendAmount === null
+        ? null
+        : {
+            amount: marketTrendAmount,
+            copies: trend.copies,
+            trendedCopies: trend.trendedCopies,
+            trends: trend.trends,
+          },
     costPrice: inOffer(costAverageBase),
     costUnconvertible: costAverageBase !== null && toOffer === null,
     catalogue: { sumBase: sumSetCV, reductionBase: sumSetReduction, valuedSets },

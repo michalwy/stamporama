@@ -700,8 +700,9 @@ without opening an offer. Each lot's row carries:
 - **Its title**, a link that opens the lot's offer, as the offer's number beside it does. The pencil
   beside the title edits it in place, as on the offer's own screen. Emptying it gives the offer back
   its generated title.
-- **Its price table**, compact: *Minimum*, *Catalogue*, *Estimated*, *Market* and *Cost*, with the
-  profit each would make, and the lot's own price — an auction's **Starting price**, a quick buy's
+- **Its price table**, compact: *Minimum*, *Catalogue*, *Estimated*, *Market* and *Cost* — and
+  *Market trend* after Market when any lot's stamps have a price trend (see
+  [the price table](offers.md#the-price-table)) — with the profit each would make, and the lot's own price — an auction's **Starting price**, a quick buy's
   **Your price** — typed in the last column. **Enter** saves the price and moves to the next lot's,
   so a post is priced from top to bottom with the keyboard; **Tab** or a click elsewhere saves it too,
   **Esc** puts back what was saved, and a figure in the table clicked becomes the price. The post's

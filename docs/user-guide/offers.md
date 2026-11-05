@@ -265,6 +265,15 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
 - **Market** — what recorded results paid for copies like these; its hover says how many copies they
   cover. The row is **always there**: with nothing recorded it reads *—*, and its hover says there
   are no recorded results (or that none can be converted into the offer's currency).
+- **Market trend (+14%/yr)** — drawn under Market only when a stamp's prices have a **trend**: the
+  same recorded results, each brought to today's money by how fast the stamp's prices have been
+  moving, the way a [recommended bid](auctions.md) is. For a stamp whose price keeps rising, Market is
+  behind today's market and Market trend is above it; for one getting cheaper, below. The note gives
+  the yearly rate — *borrowed* when the stamp has too few results of its own and the trend is that of
+  stamps like it (same area, condition and period), *capped* when it was held at ±30% a year, or a
+  range when your copies trend differently. Its hover says each trend and how many results it rests
+  on. A copy with results but no trend counts at its median. It is **not** a suggestion — Estimated
+  is — and Market itself is unchanged: it stays the median, on this table and everywhere else.
 - **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open and
   **(incl. opening value)** when copies from an opening balance count at their opening value. The row
   is **always there**: with no cost known it reads *—*, and its note always says why — *3 copies with
@@ -284,7 +293,7 @@ and in the warning colour when it is a loss. A figure that does not exist is lef
 shown as 0.00 (Minimum, Market and Cost excepted), and so is every profit when the cost is unknown. Cost
 has no profit of its own — over itself it is always nothing.
 
-**Click a price to use it.** Minimum, Catalogue, Estimated, Market and Cost are drawn as links, and
+**Click a price to use it.** Minimum, Catalogue, Estimated, Market, Market trend and Cost are drawn as links, and
 hovering
 one says *Use as the offer's price*: clicking sets the asking price on a quick buy, and the
 **starting** price on an auction (*Use as the offer's starting price*), since that is the figure you
@@ -2047,6 +2056,8 @@ Each row shows:
   ([the price table](#the-price-table)), side by side: **Minimum**, **Catalogue**, **Estimated** (the
   suggestion, in colour), **Market** and **Cost**, each per set with the profit it would make over the
   cost underneath. Hover a name for what the figure is. A figure that does not exist shows **—**.
+  When any offer on the screen has a **Market trend**, every row shows that column after Market —
+  **—** where the offer has none — so the columns line up.
 - **Your price** — the field at the end of the row. On an auction it is the **starting price**.
 
 ### Correcting a title

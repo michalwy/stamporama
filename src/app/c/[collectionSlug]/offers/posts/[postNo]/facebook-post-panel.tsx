@@ -54,6 +54,7 @@ import {
   textFacts,
   type LotFact,
 } from "../../lots/lot-row";
+import { anyMarketTrend, PriceStripTrendColumn } from "../../[offerId]/offer-price-table";
 import { useLotGroupTools } from "../../lots/use-lot-group-tools";
 import { LotGroupSummaryBar } from "../../lots/lot-group-summary-bar";
 import { useFacebookPostStillForSale } from "./post-ui-state";
@@ -853,48 +854,50 @@ export function FacebookPostPanel({
                   window's bottom edge only while some lot is on screen. */}
               <div>
                 {lots.length === 0 && <p style={{ ...MUTED, margin: "0.75rem 0 0" }}>No lots yet.</p>}
-                <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
-                  {lotsInView.map((lot, index) => {
-                    const { photos, caption } = lotKit(lot);
-                    const pricing = tools.rowPricing(lot, {
-                      onPriceDraft: (text) => {
-                        const row = prepareRows?.[lot.offerId];
-                        if (!row) return;
-                        setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
-                      },
-                      onPriceSaved: (field, value) => void settlePostLotPrice(collectionId, postId, lot.offerId, field, value),
-                      onTitleChanged: () => void settlePostLot(collectionId, postId, lot.offerId),
-                    });
-                    return (
-                      <Fragment key={lot.offerId}>
-                        {showLineAt(drag, index) && <DropLine />}
-                        <GroupLotRow
-                          lotNo={tools.lotNoAt(lot, index)}
-                          drag={drag}
-                          index={index}
-                          rowRef={(el) => {
-                            if (el) rowRefs.current.set(lot.offerId, el);
-                            else rowRefs.current.delete(lot.offerId);
-                          }}
-                          collectionSlug={collectionSlug}
-                          lot={lot}
-                          photos={photos}
-                          // Captioned, the lot's one photo; as text, its upload set, wrapping within the row.
-                          photoStyle={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}
-                          caption={caption}
-                          facts={lotFacts(lot, !!pricing)}
-                          actions={lotActions(lot)}
-                          select={{
-                            ticked: isTerminalState(lot.state) ? null : ticked.has(lot.offerId),
-                            onToggle: () => toggleTicked(lot.offerId),
-                          }}
-                          pricing={pricing}
-                        />
-                      </Fragment>
-                    );
-                  })}
-                  {showLineAt(drag, lotsInView.length) && <DropLine />}
-                </ol>
+                <PriceStripTrendColumn.Provider value={anyMarketTrend(Object.values(prepareRows ?? {}))}>
+                  <ol style={LOT_LIST} {...(drag?.containerProps ?? {})}>
+                    {lotsInView.map((lot, index) => {
+                      const { photos, caption } = lotKit(lot);
+                      const pricing = tools.rowPricing(lot, {
+                        onPriceDraft: (text) => {
+                          const row = prepareRows?.[lot.offerId];
+                          if (!row) return;
+                          setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
+                        },
+                        onPriceSaved: (field, value) => void settlePostLotPrice(collectionId, postId, lot.offerId, field, value),
+                        onTitleChanged: () => void settlePostLot(collectionId, postId, lot.offerId),
+                      });
+                      return (
+                        <Fragment key={lot.offerId}>
+                          {showLineAt(drag, index) && <DropLine />}
+                          <GroupLotRow
+                            lotNo={tools.lotNoAt(lot, index)}
+                            drag={drag}
+                            index={index}
+                            rowRef={(el) => {
+                              if (el) rowRefs.current.set(lot.offerId, el);
+                              else rowRefs.current.delete(lot.offerId);
+                            }}
+                            collectionSlug={collectionSlug}
+                            lot={lot}
+                            photos={photos}
+                            // Captioned, the lot's one photo; as text, its upload set, wrapping within the row.
+                            photoStyle={{ flex: caption ? `0 0 ${PHOTO_SIZE}` : "0 1 auto", minWidth: PHOTO_SIZE }}
+                            caption={caption}
+                            facts={lotFacts(lot, !!pricing)}
+                            actions={lotActions(lot)}
+                            select={{
+                              ticked: isTerminalState(lot.state) ? null : ticked.has(lot.offerId),
+                              onToggle: () => toggleTicked(lot.offerId),
+                            }}
+                            pricing={pricing}
+                          />
+                        </Fragment>
+                      );
+                    })}
+                    {showLineAt(drag, lotsInView.length) && <DropLine />}
+                  </ol>
+                </PriceStripTrendColumn.Provider>
                 {prepareRows && tools.prepared.length > 0 && (
                   <PostPriceTotalsBar
                     totals={postPriceTotals(tools.prepared, priceDrafts, tools.prepared[0].currency)}

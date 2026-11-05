@@ -13,7 +13,13 @@ import {
   type ItemListItem,
 } from "./items";
 import { estimateCopiesByGroup } from "./copy-estimates";
-import { estimateSets, offerPriceFigures, type EstimateSource } from "./offer-price-table";
+import { marketTrendCopiesByGroup } from "./copy-market-trends";
+import {
+  estimateSets,
+  offerPriceFigures,
+  type EstimateSource,
+  type OfferPriceFigureSummary,
+} from "./offer-price-table";
 import { offerConditionCounts, type OfferConditionCount } from "./offer-condition-counts";
 import type { HoldingsSummary } from "./valuation";
 import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-basis";
@@ -4293,6 +4299,8 @@ export interface PrepareOffer {
   catalogFullPrice: string | null;
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
+  /** Market brought to today by the price trend (#2461); null when no trend applies. */
+  marketTrendPrice: OfferPriceFigureSummary["marketTrendPrice"];
   costPrice: string | null;
   costUnconvertible: boolean;
   setsTotals: PrepareSetsTotals;
@@ -4513,11 +4521,14 @@ async function buildPrepareOffers(
   );
   const setGroups = allSets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }));
   const anyConditions = rows.some((row) => usesPlatformConditions(row.platform.platformModule));
-  const [labeller, holdingsBySet, costEstimates, estimatesBySet, conditionMap, soldRows, titleGaps] = await Promise.all([
+  const [labeller, holdingsBySet, costEstimates, estimatesBySet, trendsBySet, conditionMap, soldRows, titleGaps] =
+    await Promise.all([
     makeOfferLabeller(collectionId),
     getHoldingsValuationByGroup(collectionId, setGroups),
     loadCostEstimates(collectionId, pendingCopies),
     estimateCopiesByGroup(collectionId, setGroups),
+    // Market trend (#2461): the copies' results brought to today by their stamps' price trend.
+    marketTrendCopiesByGroup(collectionId, setGroups),
     anyConditions ? loadColnectConditionMap(collectionId) : Promise.resolve(new Map<string, string>()),
     // Which copies sold, and through which set (#1876).
     allIds.length > 0
@@ -4593,7 +4604,12 @@ async function buildPrepareOffers(
       return { id: s.id, items, holdings, cost, soldElsewhere };
     });
     const figures = offerPriceFigures(
-      sets.map((s) => ({ holdings: s.holdings, cost: s.cost, estimates: estimatesBySet.get(s.id) ?? [] })),
+      sets.map((s) => ({
+        holdings: s.holdings,
+        cost: s.cost,
+        estimates: estimatesBySet.get(s.id) ?? [],
+        marketTrends: trendsBySet.get(s.id) ?? [],
+      })),
       toOfferRates.get(row.currency) ?? null
     );
     const textBlockers = evaluateListingTextLimits(row, {
@@ -4640,6 +4656,7 @@ async function buildPrepareOffers(
       catalogFullPrice: figures.catalogFullPrice,
       marketPrice: figures.marketPrice,
       marketUnconvertible: figures.marketUnconvertible,
+      marketTrendPrice: figures.marketTrendPrice,
       costPrice: figures.costPrice,
       costUnconvertible: figures.costUnconvertible,
       setsTotals: {
@@ -5394,6 +5411,10 @@ export interface OfferDetail {
    * the one reason {@link marketPrice} is null other than there being none, which the price table's
    * always-drawn Market row says (#1839). */
   marketUnconvertible: boolean;
+  /** Market per set with each copy's results brought to today by its stamp's price trend (#2461), in
+   * the offer's currency, with the trends applied. Null when no trend applies to any copy — the Market
+   * trend row is then not drawn — or no rate converts it. */
+  marketTrendPrice: OfferPriceFigureSummary["marketTrendPrice"];
   /** What the copies cost per set (#378, estimates included #1736), in the offer's currency. Null
    * when no set's cost is known or no rate is available. */
   costPrice: string | null;
@@ -5831,7 +5852,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       .filter((c) => resolveCostBasis(c).state === "pending")
   );
   const setGroups = offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }));
-  const [labeller, holdingsBySet, conditionMap, costEstimates, estimatesBySet] = await Promise.all([
+  const [labeller, holdingsBySet, conditionMap, costEstimates, estimatesBySet, trendsBySet] = await Promise.all([
     makeOfferLabeller(offer.collectionId),
     getHoldingsValuationByGroup(offer.collectionId, setGroups),
     loadColnectConditionMap(offer.collectionId),
@@ -5839,6 +5860,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // Estimated value, the price table's suggestion (#1829) — a second read of the copies, because
     // the holdings summary stays measurement-only (#602) and has no ratio to multiply by.
     estimateCopiesByGroup(offer.collectionId, setGroups),
+    // Market trend (#2461), a read of its own for the same reason: Market stays the plain median.
+    marketTrendCopiesByGroup(offer.collectionId, setGroups),
   ]);
   const pendingOpening = new Map(pendingCopies.map((c) => [c.id, c.openingBalance]));
   // What each copy is listed under (#616), resolved once for the screen and read by all four
@@ -5931,7 +5954,12 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // already in base converts 1:1, and a missing rate leaves no figure rather than one in the wrong
   // currency. A set counts as valued when *some* copy of it priced, which is what `pricedCount` says.
   const figures = offerPriceFigures(
-    sets.map((s) => ({ holdings: s.holdings, cost: s.cost, estimates: estimatesBySet.get(s.id) ?? [] })),
+    sets.map((s) => ({
+      holdings: s.holdings,
+      cost: s.cost,
+      estimates: estimatesBySet.get(s.id) ?? [],
+      marketTrends: trendsBySet.get(s.id) ?? [],
+    })),
     offer.currency === baseCurrency ? 1 : baseToOffer
   );
   const { sumBase: sumSetCV, reductionBase: sumSetReduction, valuedSets } = figures.catalogue;
@@ -6084,6 +6112,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     catalogFullPrice: figures.catalogFullPrice,
     marketPrice: figures.marketPrice,
     marketUnconvertible: figures.marketUnconvertible,
+    marketTrendPrice: figures.marketTrendPrice,
     costPrice: figures.costPrice,
     costUnconvertible: figures.costUnconvertible,
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,

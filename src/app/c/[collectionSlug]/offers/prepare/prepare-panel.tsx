@@ -30,6 +30,7 @@ import {
   type PrepareFilters,
 } from "../use-offers-query";
 import { OffersCoverWalk } from "../[offerId]/offer-cover-walk";
+import { anyMarketTrend, PriceStripTrendColumn } from "../[offerId]/offer-price-table";
 import { PrepareOfferRow } from "./prepare-offer-row";
 
 // The Prepare screen (#1894). Preparing offers used to be priced one at a time — filter the Offers
@@ -495,24 +496,26 @@ export function PreparePanel({
                 </div>
               )}
 
-              {rows.map((offer) => (
-                <PrepareOfferRow
-                  key={offer.id}
-                  ref={(el) => {
-                    if (el) inputs.current.set(offer.id, el);
-                    else inputs.current.delete(offer.id);
-                  }}
-                  collectionId={collectionId}
-                  collectionSlug={collectionSlug}
-                  areas={areas}
-                  offer={offer}
-                  selected={selection.has(offer.id)}
-                  onToggle={toggleSelected}
-                  onEnter={() => focusAfter(offer.id)}
-                  onSaved={(field, value) => void settlePreparePrice(collectionId, offer.id, field, value)}
-                  onChanged={() => void invalidateAll(collectionId)}
-                />
-              ))}
+              <PriceStripTrendColumn.Provider value={anyMarketTrend(rows)}>
+                {rows.map((offer) => (
+                  <PrepareOfferRow
+                    key={offer.id}
+                    ref={(el) => {
+                      if (el) inputs.current.set(offer.id, el);
+                      else inputs.current.delete(offer.id);
+                    }}
+                    collectionId={collectionId}
+                    collectionSlug={collectionSlug}
+                    areas={areas}
+                    offer={offer}
+                    selected={selection.has(offer.id)}
+                    onToggle={toggleSelected}
+                    onEnter={() => focusAfter(offer.id)}
+                    onSaved={(field, value) => void settlePreparePrice(collectionId, offer.id, field, value)}
+                    onChanged={() => void invalidateAll(collectionId)}
+                  />
+                ))}
+              </PriceStripTrendColumn.Provider>
               <InfiniteScrollSentinel
                 onLoadMore={fetchNextPage}
                 hasMore={!!hasNextPage}

@@ -17,9 +17,10 @@
 // any other and moves the median of them no further than it moves the plain median today. **It works
 // both ways**: a stamp getting cheaper gets a fair below its median.
 //
-// **Only the bid recommendation reads this.** Market value stays the plain median everywhere it is
-// shown — holdings, copies, offers, sales — because it is the measurement; the trend is a projection
-// made for one purpose, a bid placed now.
+// **Market value stays the plain median everywhere it is shown** — holdings, copies, offers, sales —
+// because it is the measurement; the trend is a projection made for a price set now: a bid's fair
+// (#2460), and the offer price table's *Market trend* row beside Market (#2461), both through
+// `market-trend.ts`.
 //
 // The constants are code, not settings, for #520's reason: they describe how thin this evidence is,
 // and a collector asked to tune them would have no way to tell a better value from a worse one.

@@ -70,8 +70,10 @@ results:
 - the trend is capped at ±30% a year, and says so when the cap applies;
 - the plain median is shown beside the adjusted figure, with the trend and whether it was borrowed;
 - **market value stays the plain median everywhere else** — holdings, copies, offers, sales. It is
-  the measurement; the trend is a projection made for a bid placed now. The band (§4) is a percentage
-  of the adjusted fair, and confidence is scored as before.
+  the measurement; the trend is a projection made for a price set now. The band (§4) is a percentage
+  of the adjusted fair, and confidence is scored as before. An offer's price table shows the same
+  projection in a **Market trend** row of its own beside Market (#2461), through the same function;
+  Market there is unchanged.
 
 A line with neither a market datapoint nor a catalogue value is **unanchored**. It is counted and
 reported, never treated as zero — exactly as `summarizeLotComposition` already reports

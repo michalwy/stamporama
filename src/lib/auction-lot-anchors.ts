@@ -16,8 +16,7 @@ import {
 } from "./market-values";
 import { countByMarket, type MarketCode, type MarketCount } from "./market-anchoring";
 import { getCollectionBaseCurrency } from "./pricing";
-import { priceTrendOf, trendAdjustedMedian, type TrendPoint } from "./price-trend";
-import type { TrendBucketLevel } from "./realization-ratio";
+import { marketTrendOf, type MarketTrend } from "./market-trend";
 import {
   loadRealizationRatios,
   type RealizationRatio,
@@ -54,7 +53,8 @@ import {
 // condition × period, then area × condition, each result read as a share of catalogue — else there
 // is none and the anchor is the plain median, as before. The plain median is carried beside the
 // adjusted one (`AnchorMarketEvidence.median` and `.trend.fair`), and **market value everywhere
-// else stays the plain median**: the projection is made for a bid placed now and for nothing else.
+// else stays the plain median**: the projection is made for a price set now — a bid, and beside
+// Market on an offer's price table (#2461, the same `market-trend.ts`) — never for a measurement.
 //
 // **The third rung is #1636's.** Catalogues print one price per condition and a certified copy is
 // worth that times the percentage the collector states on the status (#1242), so a certified line
@@ -122,24 +122,9 @@ export interface AnchorMarketEvidence {
   results: AnchorResult[];
 }
 
-/** A market anchor brought to today's money by its stamp's price trend (#2460). */
-export interface AnchorTrend {
-  /** The median of the key's results once each is brought to today — what the line is anchored on
-   * — base currency, 2-dp. */
-  fair: string;
-  /** The yearly rate applied, after the ±30% cap — `0.14` is +14% a year. */
-  rate: number;
-  /** The rate measured, before the cap. */
-  measuredRate: number;
-  capped: boolean;
-  /** Null when the key's own results gave the trend; the group it was borrowed from otherwise,
-   * named as its ratio bucket is. */
-  borrowed: { level: TrendBucketLevel; bucketLabel: string } | null;
-  /** The results the trend was measured over — the key's own, or the group's — and their span. */
-  n: number;
-  earliestAt: Date;
-  latestAt: Date;
-}
+/** A market anchor brought to today's money by its stamp's price trend (#2460) — `market-trend.ts`'s,
+ * which the offer's *Market trend* row reads too (#2461). */
+export type AnchorTrend = MarketTrend;
 
 /** One result behind a market anchor (#1634): where it was sold, and what it counted as. */
 export interface AnchorResult {
@@ -589,7 +574,7 @@ function resolveLineAt(
   const market: AnchorMarketEvidence | null = context.market
     ? {
         median: context.market.median,
-        trend: marketTrendOf(context.market, line, context),
+        trend: marketTrendOfLine(context.market, line, context),
         n: context.market.n,
         latestAt: context.market.latestAt,
         earliestAt: context.market.earliestAt,
@@ -647,34 +632,14 @@ function resolveLineAt(
   };
 }
 
-/**
- * The key's results brought to today's money (#2460): by the trend of its own results when they are
- * enough for one, else by its group's, else not at all (null). The group is the ratio ladder's, so a
- * stamp is compared with the very stamps its catalogue ratio would be learned from.
- */
-function marketTrendOf(value: StampMarketValue, line: SettledLine, context: LineContext): AnchorTrend | null {
-  const points: TrendPoint[] = [
-    ...value.lots.map((lot) => ({ value: Number(lot.amount), at: lot.endsAt })),
-    ...value.observations.map((o) => ({ value: Number(o.amount), at: o.soldOn })),
-  ];
-  const own = priceTrendOf(points);
-  const group = own
-    ? null
-    : context.ratios.trend({ areaId: line.areaId, conditionId: line.conditionId, issuedYear: line.issuedYear });
-  const trend = own ?? group?.trend ?? null;
-  if (trend === null) return null;
-  const fair = trendAdjustedMedian(points, trend.rate, context.now);
-  if (fair === null) return null;
-  return {
-    fair: fair.toFixed(2),
-    rate: trend.rate,
-    measuredRate: trend.measuredRate,
-    capped: trend.capped,
-    borrowed: group ? { level: group.level, bucketLabel: group.bucketLabel } : null,
-    n: trend.n,
-    earliestAt: trend.earliestAt,
-    latestAt: trend.latestAt,
-  };
+/** The key's results brought to today's money (#2460) — `market-trend.ts`'s rule, for this line. */
+function marketTrendOfLine(value: StampMarketValue, line: SettledLine, context: LineContext): AnchorTrend | null {
+  return marketTrendOf(
+    value,
+    { areaId: line.areaId, conditionId: line.conditionId, issuedYear: line.issuedYear },
+    context.ratios,
+    context.now
+  );
 }
 
 /**
