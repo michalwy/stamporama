@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   CLOSED_OFFER_PHOTO_TTL_FOREVER,
   DEFAULT_CLOSED_OFFER_PHOTO_TTL_DAYS,
+  closedOfferPhotoClockStart,
   closedOfferPhotoCutoff,
   closedOfferPhotoTtlMs,
   describeClosedOfferPhotoTtl,
@@ -51,6 +52,11 @@ describe("describeClosedOfferPhotoTtl (#512)", () => {
     assert.match(describeClosedOfferPhotoTtl(7 * DAY_MS), /^generated images are deleted 7 days /);
     assert.match(describeClosedOfferPhotoTtl(DAY_MS), /^generated images are deleted 1 day /);
     assert.match(describeClosedOfferPhotoTtl(DAY_MS / 2), /^generated images are deleted 0\.5 days /);
+  });
+
+  it("counts a sold offer from its sale being delivered (#2457)", () => {
+    assert.match(describeClosedOfferPhotoTtl(7 * DAY_MS), /after the sale is delivered, or the offer withdrawn$/);
+    assert.match(describeClosedOfferPhotoTtl(0), /after the sale is delivered, or the offer withdrawn$/);
   });
 
   it("says a zero TTL deletes at the next sweep, not 'after 0 days'", () => {
@@ -165,5 +171,77 @@ describe("resolveClosedOfferPhotoTtlMs (#577)", () => {
       assert.equal(resolveClosedOfferPhotoTtlMs(""), 30 * DAY_MS);
       assert.equal(resolveClosedOfferPhotoTtlMs("   "), 30 * DAY_MS);
     });
+  });
+});
+
+describe("closedOfferPhotoClockStart (#2457)", () => {
+  const closedAt = new Date("2026-11-01T10:00:00Z");
+  const later = new Date("2026-11-09T10:00:00Z");
+  const latest = new Date("2026-11-12T10:00:00Z");
+
+  it("runs from the withdrawal for a withdrawn offer, as before", () => {
+    assert.equal(closedOfferPhotoClockStart({ state: "withdrawn", closedAt, sales: [] }), closedAt);
+  });
+
+  it("runs from the sale for a sold offer with no sale behind it", () => {
+    assert.equal(closedOfferPhotoClockStart({ state: "sold", closedAt, sales: [] }), closedAt);
+  });
+
+  it("has not started while a sale is anything but Delivered — Sent included", () => {
+    for (const status of ["ordered", "paid", "packed", "sent"]) {
+      assert.equal(
+        closedOfferPhotoClockStart({ state: "sold", closedAt, sales: [{ status, deliveredAt: later }] }),
+        null,
+        status
+      );
+    }
+  });
+
+  it("runs from the delivery once the sale is Delivered", () => {
+    assert.deepEqual(
+      closedOfferPhotoClockStart({ state: "sold", closedAt, sales: [{ status: "received", deliveredAt: later }] }),
+      later
+    );
+  });
+
+  it("waits for every sale and runs from the latest delivery", () => {
+    assert.equal(
+      closedOfferPhotoClockStart({
+        state: "sold",
+        closedAt,
+        sales: [
+          { status: "received", deliveredAt: later },
+          { status: "sent", deliveredAt: null },
+        ],
+      }),
+      null
+    );
+    assert.deepEqual(
+      closedOfferPhotoClockStart({
+        state: "sold",
+        closedAt,
+        sales: [
+          { status: "received", deliveredAt: latest },
+          { status: "received", deliveredAt: later },
+        ],
+      }),
+      latest
+    );
+  });
+
+  it("never starts before the offer closed, and falls back on that when no delivery is recorded", () => {
+    const early = new Date("2026-10-20T10:00:00Z");
+    assert.deepEqual(
+      closedOfferPhotoClockStart({ state: "sold", closedAt, sales: [{ status: "received", deliveredAt: early }] }),
+      closedAt
+    );
+    assert.deepEqual(
+      closedOfferPhotoClockStart({ state: "sold", closedAt, sales: [{ status: "received", deliveredAt: null }] }),
+      closedAt
+    );
+  });
+
+  it("has not started for an offer that is not closed", () => {
+    assert.equal(closedOfferPhotoClockStart({ state: "sold", closedAt: null, sales: [] }), null);
   });
 });

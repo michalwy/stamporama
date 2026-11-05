@@ -15,7 +15,7 @@
 //   - the offer photo generation worker (#311) — drains the render queue one job at a time and
 //     requeues anything a previous process left mid-render;
 //   - the closed-offer photo purge (#512) — an hourly pass deleting the generated images of listings
-//     that have been sold or withdrawn longer than the grace period. Its own timer rather than a
+//     whose sale was delivered (#2457), or that were withdrawn, longer ago than the grace period. Its own timer rather than a
 //     branch of the sweep above: they answer to different TTLs, and either can be switched off
 //     without the other noticing;
 //   - the retained-scan sweep (#578) — an hourly pass deleting the card scans of batches finished

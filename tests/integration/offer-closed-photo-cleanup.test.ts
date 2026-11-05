@@ -15,7 +15,7 @@ import {
 } from "../../src/lib/offers";
 import { applyPhotoChangeSet, stageUpload } from "../../src/lib/photos";
 import { attachOfferUpload } from "../../src/lib/offer-photo-attachments";
-import { addSaleLines, createSale, deleteSale } from "../../src/lib/sales";
+import { addSaleLines, createSale, deleteSale, setSaleStatus } from "../../src/lib/sales";
 import {
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
@@ -343,6 +343,169 @@ describe("closed-offer photo cleanup (#512)", () => {
     });
     assert.equal(reopened.state, "active");
     assert.equal(reopened.closedAt, null, "an offer that is open again is not waiting to be purged");
+  });
+
+  // A sold offer waits for its sale to be Delivered (#2457): an unpaid order is cancelled and a
+  // cash-on-delivery parcel can come back, and either way the offer is open again. The period runs
+  // from the latest delivery of every sale the offer went into.
+  describe("a sold offer waits for its sale to be Delivered (#2457)", () => {
+    let soldOfferId: string;
+    let firstSaleId: string;
+    let secondSaleId: string;
+
+    /** A copy with a front scan, on a set of the given offer. */
+    async function copyOnOffer(target: string, red: number): Promise<{ itemId: string; setId: string }> {
+      const stamp = await prisma.stamp.create({
+        data: { collectionId, name: `Stamp delivered-${red}-${Date.now()}`, primaryCatalogSortKey: catalogSortKeyOf(String(red)) },
+      });
+      const item = await createItem(userId, collectionId, { stampId: stamp.id, conditionId, forSale: true });
+      const upload = await stageUpload(userId, collectionId, { bytes: await scan(red), mime: "image/png" });
+      await applyPhotoChangeSet(userId, item.id, {
+        add: [{ uploadId: upload.id, role: "front", title: null, sortOrder: 0 }],
+        update: [],
+        remove: [],
+      });
+      return { itemId: item.id, setId: await addOfferSet(userId, target, [item.id]) };
+    }
+
+    async function newSale(): Promise<string> {
+      return createSale(userId, collectionId, {
+        platformId,
+        buyerId: null,
+        externalRef: null,
+        transactionUrl: null,
+        soldAt: new Date(),
+        currency: "EUR",
+        buyerHandling: null,
+        buyerPaidTotal: null,
+        commission: null,
+      });
+    }
+
+    /** Pretend the sale was last marked Delivered at `at`. */
+    async function deliveredAt(saleId: string, at: Date): Promise<void> {
+      const latest = await prisma.saleStatusEvent.findFirstOrThrow({
+        where: { saleId, status: "received" },
+        orderBy: { changedAt: "desc" },
+      });
+      await prisma.saleStatusEvent.update({ where: { id: latest.id }, data: { changedAt: at } });
+    }
+
+    const generatedCount = () => prisma.photo.count({ where: { offerId: soldOfferId, kind: "generated" } });
+
+    before(async () => {
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, "7");
+      soldOfferId = await createOffer(userId, collectionId, {
+        platformId,
+        url: null,
+        price: "5.00",
+        currency: "EUR",
+        listingDate: null,
+      });
+      await updateOfferPhotoConfig(userId, soldOfferId, {
+        photoSides: "front",
+        preferSingles: false,
+        photoLabelLeftTemplate: null,
+        photoLabelRightTemplate: null,
+        collage: {
+          collageGridMode: "fixed" as const,
+          collageGridShape: "landscape" as const,
+          collageRows: 2,
+          collageColumns: 2,
+          collageGapPercent: 8,
+          collageBackground: "#ffffff",
+          collageLabelPercent: 16,
+        },
+      });
+      // Two sets sold to two buyers: the offer is done only when both parcels have arrived.
+      const first = await copyOnOffer(soldOfferId, 11);
+      const second = await copyOnOffer(soldOfferId, 12);
+      await enqueueOfferPhotoGeneration(userId, soldOfferId);
+      assert.equal(await claimNextOfferPhotoGeneration({ offerId: soldOfferId }), soldOfferId);
+      await runOfferPhotoGeneration(soldOfferId);
+      assert.ok((await generatedCount()) > 0, "the offer holds generated images");
+
+      await prisma.offer.update({ where: { id: soldOfferId }, data: { state: "active" } });
+      firstSaleId = await newSale();
+      await addSaleLines(userId, firstSaleId, [
+        { offerId: soldOfferId, offerSetId: first.setId, price: "5.00", itemIds: [first.itemId] },
+      ]);
+      secondSaleId = await newSale();
+      await addSaleLines(userId, secondSaleId, [
+        { offerId: soldOfferId, offerSetId: second.setId, price: "5.00", itemIds: [second.itemId] },
+      ]);
+      const sold = await prisma.offer.findUniqueOrThrow({ where: { id: soldOfferId }, select: { state: true } });
+      assert.equal(sold.state, "sold");
+    });
+
+    after(async () => {
+      await setCollectionClosedOfferPhotoTtl(userId, collectionId, null);
+    });
+
+    it("keeps the images however long ago it was sold while its sales are Ordered, Paid, Packed or Sent", async () => {
+      const before = await generatedCount();
+      for (const status of ["ordered", "paid", "packed", "sent"] as const) {
+        await setSaleStatus(userId, firstSaleId, status);
+        await setSaleStatus(userId, secondSaleId, status);
+        const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 365 * DAY_MS), { offerId: soldOfferId });
+        assert.deepEqual(freed, { offers: 0, photos: 0, bytes: 0 }, `nothing goes while the sales are ${status}`);
+      }
+      assert.equal(await generatedCount(), before);
+    });
+
+    it("keeps waiting while one of its sales is not Delivered yet", async () => {
+      await setSaleStatus(userId, firstSaleId, "received");
+      const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 365 * DAY_MS), { offerId: soldOfferId });
+      assert.deepEqual(freed, { offers: 0, photos: 0, bytes: 0 });
+    });
+
+    it("stops the clock again when a Delivered sale is moved back", async () => {
+      await setSaleStatus(userId, secondSaleId, "received");
+      await setSaleStatus(userId, secondSaleId, "sent");
+      const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 365 * DAY_MS), { offerId: soldOfferId });
+      assert.deepEqual(freed, { offers: 0, photos: 0, bytes: 0 });
+    });
+
+    it("counts the period from the latest delivery, and deletes once it has passed", async () => {
+      await setSaleStatus(userId, secondSaleId, "received");
+      const delivered = new Date(Date.now() + 20 * DAY_MS);
+      await deliveredAt(firstSaleId, new Date(Date.now() + 2 * DAY_MS));
+      await deliveredAt(secondSaleId, delivered);
+
+      // Well past the sale and the first delivery, but inside the week after the second.
+      const inside = await purgeClosedOfferPhotos(new Date(delivered.getTime() + 6 * DAY_MS), { offerId: soldOfferId });
+      assert.deepEqual(inside, { offers: 0, photos: 0, bytes: 0 });
+
+      const photos = await generatedCount();
+      const freed = await purgeClosedOfferPhotos(new Date(delivered.getTime() + 8 * DAY_MS), { offerId: soldOfferId });
+      assert.equal(freed.offers, 1);
+      assert.equal(freed.photos, photos);
+      assert.equal(await generatedCount(), 0);
+    });
+
+    it("keeps #512's rule for a sold offer with no sale behind it", async () => {
+      // Its sales gone, the offer is open again; the images come back (#2317) and the offer is then
+      // marked sold by hand, with nothing recorded about who bought it.
+      await deleteSale(userId, firstSaleId);
+      await deleteSale(userId, secondSaleId);
+      const run = await claimNextOfferPhotoGeneration({ offerId: soldOfferId });
+      if (run) await runOfferPhotoGeneration(soldOfferId);
+      else {
+        await enqueueOfferPhotoGeneration(userId, soldOfferId);
+        assert.equal(await claimNextOfferPhotoGeneration({ offerId: soldOfferId }), soldOfferId);
+        await runOfferPhotoGeneration(soldOfferId);
+      }
+      assert.ok((await generatedCount()) > 0);
+      await prisma.offer.update({ where: { id: soldOfferId }, data: { state: "sold", closedAt: new Date() } });
+
+      assert.deepEqual(
+        await purgeClosedOfferPhotos(new Date(Date.now() + 6 * DAY_MS), { offerId: soldOfferId }),
+        { offers: 0, photos: 0, bytes: 0 }
+      );
+      const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 8 * DAY_MS), { offerId: soldOfferId });
+      assert.equal(freed.offers, 1);
+      assert.equal(await generatedCount(), 0);
+    });
   });
 
   it("leaves the set alone — the purge only ever touches images", async () => {

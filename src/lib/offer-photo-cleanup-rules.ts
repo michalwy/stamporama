@@ -58,9 +58,9 @@ export function describeClosedOfferPhotoTtl(ttlMs: number | null): string {
     return "disabled — closed offers keep their generated images indefinitely";
   }
   if (ttlMs === 0) {
-    return "generated images are deleted at the next sweep after an offer is sold or withdrawn";
+    return "generated images are deleted at the next sweep after the sale is delivered, or the offer withdrawn";
   }
-  return `generated images are deleted ${retentionPeriodWords(ttlMs)} after an offer is sold or withdrawn`;
+  return `generated images are deleted ${retentionPeriodWords(ttlMs)} after the sale is delivered, or the offer withdrawn`;
 }
 
 /** What a collection stores in `closedOfferPhotoTtlDays` (#577): `null` = no opinion, defer to the
@@ -85,4 +85,47 @@ export function parseClosedOfferPhotoTtlSetting(
  */
 export function closedOfferPhotoCutoff(now: Date, ttlMs: number | null): Date | null {
   return retentionCutoff(now, ttlMs);
+}
+
+/** The fulfilment status a sale is in once its parcel has arrived — shown as *Delivered* (#191). */
+const DELIVERED_SALE_STATUS = "received";
+
+/** One sale a sold offer went into, as {@link closedOfferPhotoClockStart} reads it. */
+export interface ClosedOfferSale {
+  /** `Sale.status`. */
+  status: string;
+  /** When the sale was last marked *Delivered* — its latest `received` status event — or null when
+   * no such event is recorded. */
+  deliveredAt: Date | null;
+}
+
+/**
+ * When a closed offer's retention period starts, or `null` while it has not started (#2457).
+ *
+ * A **sold** offer that went into one or more sales waits for every one of them to be *Delivered*:
+ * a buyer who never pays has the order cancelled and the offer comes back, and a cash-on-delivery
+ * parcel can be returned, and either way the images would only be made again (#2317). Sent is not
+ * enough for that second reason. The clock then runs from the **latest** delivery — an offer with
+ * quantity sold to several buyers is done when the last parcel arrives — and a sale moved back from
+ * Delivered stops it again, since what is read is the status it is in now. There is no fallback:
+ * a sale never marked Delivered keeps its offers' images. The clock never starts before the offer
+ * itself closed.
+ *
+ * A **withdrawn** offer, and a sold one with no sale behind it, keep #512's rule: the period runs
+ * from `closedAt`. A delivered sale with no recorded event (none is expected) falls back on it too.
+ */
+export function closedOfferPhotoClockStart(offer: {
+  state: string;
+  closedAt: Date | null;
+  sales: readonly ClosedOfferSale[];
+}): Date | null {
+  const { closedAt } = offer;
+  if (closedAt == null) return null;
+  if (offer.state !== "sold" || offer.sales.length === 0) return closedAt;
+  let start = closedAt;
+  for (const sale of offer.sales) {
+    if (sale.status !== DELIVERED_SALE_STATUS) return null;
+    if (sale.deliveredAt && sale.deliveredAt > start) start = sale.deliveredAt;
+  }
+  return start;
 }

@@ -483,9 +483,11 @@ export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instan
         hint="Only the listing images Stamporama generated; Regenerate makes them again."
         tooltip={
           <>
-            After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
-            for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
-            plan stay. 0 days deletes them at the next sweep.
+            After the sale is delivered, or the offer withdrawn, Stamporama deletes the listing
+            images it generated for it. A sold offer keeps them until its sale is marked Delivered,
+            since an unpaid order or a returned parcel brings the offer back. Nothing else goes: your
+            own uploads, the copies&apos; scans and the whole photo plan stay. 0 days deletes them at
+            the next sweep.
           </>
         }
         daysLabel="Days a closed listing keeps its generated images"

@@ -1856,7 +1856,7 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 **Settings → Photos & storage** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up, together with the files attached to [conversation entries](sales.md#the-conversation-with-the-buyer). Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
 
-It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
+It also drops on its own: a week after an offer's sale is delivered, or the offer withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
 
 ### Local cache
 
@@ -1939,8 +1939,10 @@ Beside the storage figures, **Settings → Photos & storage** has **Keep closed 
 There are three answers:
 
 - **Follow this instance** — no opinion of your own; the collection uses whatever the person running this Stamporama configured, or a week if they configured nothing. This is how every collection starts.
-- **Delete after a number of days** — your own period. **0** means the images go at the next sweep, as soon as the listing is closed, which is the choice for a collection that is short of disk.
+- **Delete after a number of days** — your own period. **0** means the images go at the next sweep, as soon as the sale is delivered or the listing withdrawn, which is the choice for a collection that is short of disk.
 - **Keep for ever** — nothing is ever swept. Sensible for an archive of finished work, if you have the room.
+
+For a sold offer the period is counted from its sale being marked **Delivered**, not from the sale: an unpaid order or a returned parcel brings the offer back, and its images would only be made again. A sale never marked Delivered keeps its offers' images.
 
 Whichever you pick, the line underneath states in plain words what will actually happen, including what "follow this instance" currently works out to.
 
