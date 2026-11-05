@@ -93,6 +93,8 @@ export interface WantListItem {
   unknownVariant: boolean;
   subtype: SubtypeLabel | null;
   issuedYear: number | null;
+  /** The wanted stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   colnectId: string | null;
   /** Area the stamp is primarily linked to, for resolving catalog-vendor display. */
@@ -159,6 +161,7 @@ const WANT_SELECT = {
       parentId: true,
       name: true,
       issuedYear: true,
+      issueFormatId: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       colnectId: true,
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -191,6 +194,7 @@ function toWantListItem(
     unknownVariant: isUnknownVariantStamp(row.stamp),
     subtype: subtypeLabel(row.stamp),
     issuedYear: row.stamp.issuedYear,
+    issueFormatId: row.stamp.issueFormatId,
     catalogNumbers: row.stamp.catalogNumbers,
     colnectId: row.stamp.colnectId,
     areaId: primaryLink?.collectionAreaId ?? row.stamp.stampAreaLinks[0]?.collectionAreaId ?? null,

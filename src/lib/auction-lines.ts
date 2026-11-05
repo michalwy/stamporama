@@ -183,6 +183,8 @@ export interface AuctionLotLineItem extends AnchorableLine {
   /** Colnect Marketplace item id (#247/#290), for the chip beside the catalog numbers. */
   colnectId: string | null;
   subtype: SubtypeLabel | null;
+  /** The stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   photos: PhotoSummary[];
   /** The line points at a base stamp that has variants: "one of these, which one is not recorded".
    * Its value is a lowest-child estimate and is rendered as such (#238). */
@@ -241,6 +243,7 @@ const LINE_SELECT = {
     select: {
       name: true,
       colnectId: true,
+      issueFormatId: true,
       issuedDay: true,
       issuedMonth: true,
       issuedYear: true,
@@ -538,6 +541,7 @@ export async function valuateAuctionLotLines(
       colnectId: row.stamp.colnectId,
       areaId,
       subtype: subtypeLabel(row.stamp),
+      issueFormatId: row.stamp.issueFormatId,
       photos: row.stamp.photos.map(toPhotoSummary).sort((a, b) => a.sortOrder - b.sortOrder),
       unknownVariant: isUnknownVariantStamp(row.stamp),
       wants: wantsByStamp.get(row.stampId) ?? null,

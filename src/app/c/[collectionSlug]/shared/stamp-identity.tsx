@@ -5,9 +5,10 @@ import type { AreaCatalogEntry } from "@/lib/areas";
 import { CatalogNumberChip } from "./catalog-number-chip";
 import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip, type StampSubtypeLabel } from "./subtype-chip";
+import { IssueFormatChip } from "./issue-format-chip";
 import { STAMP_PRIMARY_CHIP, STAMP_SECONDARY_CHIP } from "./chip-styles";
 
-// The one line that says *which stamp this is* — catalog chips, name, subtype, Colnect. Shared by
+// The one line that says *which stamp this is* — catalog chips, issue format, name, subtype, Colnect. Shared by
 // the stamp detail screen (#518) and the copy detail screen (#517), which shows the stamp its copy
 // is of. The two would otherwise draw the same identity twice and drift.
 
@@ -16,9 +17,13 @@ export interface StampIdentityData {
   catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   colnectId: string | null;
   subtype?: StampSubtypeLabel | null;
+  /** The stamp's issue format (#2439), drawn as its chip beside the numbers (#2441); null or absent
+   *  is an ordinary stamp. Drawn only where {@link StampIdentity}'s `collectionId` is given. */
+  issueFormatId?: string | null;
 }
 
 export function StampIdentity({
+  collectionId,
   stamp,
   vendorMap,
   primaryVendorId,
@@ -26,6 +31,8 @@ export function StampIdentity({
   href,
   unnamed = "(unnamed)",
 }: {
+  /** The collection whose issue-format dictionary colours the stamp's chip (#2441). */
+  collectionId?: string;
   stamp: StampIdentityData;
   vendorMap: Map<string, AreaCatalogEntry>;
   primaryVendorId: string | null;
@@ -79,6 +86,9 @@ export function StampIdentity({
         vendorMap={vendorMap}
         primaryVendorId={primaryVendorId}
       />
+      {collectionId && (
+        <IssueFormatChip collectionId={collectionId} issueFormatId={stamp.issueFormatId} size={size} />
+      )}
       {stamp.name || unnamed ? (
         href ? (
           <Link href={href} style={{ ...nameStyle, textDecoration: "none" }}>

@@ -10,6 +10,7 @@ import {
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   ColnectChip,
@@ -293,6 +294,7 @@ export function DuplicateGroupRow({
                 style={STAMP_SECONDARY_CHIP}
               />
             ))}
+            <IssueFormatChip collectionId={collectionId} issueFormatId={group.issueFormatId} />
             <ColnectChip
               colnectId={group.colnectId}
               searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}

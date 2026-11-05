@@ -172,6 +172,8 @@ export interface StampNodeData {
   catalogNumbers: { catalogVendorId: string; number: string }[];
   /** Colnect Marketplace item-ID (#247), or null when unset. */
   colnectId: string | null;
+  /** The stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   mainCatalogPrice: MoneyDisplay | null;
   /** True when the displayed main price is on a non-latest edition of its catalog name. */
   mainCatalogPriceStale: boolean;
@@ -273,6 +275,7 @@ const MEMBER_SELECT = {
       issuedMonth: true,
       issuedYear: true,
       colnectId: true,
+      issueFormatId: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       catalogPrices: { select: HEADLINE_PRICE_SELECT },
       photos: { select: PHOTO_SUMMARY_SELECT },
@@ -357,6 +360,7 @@ function toStampNode(
       issuedMonth: number | null;
       issuedYear: number | null;
       colnectId: string | null;
+      issueFormatId: string | null;
       catalogNumbers: { catalogVendorId: string; number: string }[];
       catalogPrices: RawCatalogPrice[];
       photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
@@ -425,6 +429,7 @@ function toStampNode(
       : [],
     catalogNumbers: m.stamp.catalogNumbers,
     colnectId: m.stamp.colnectId,
+    issueFormatId: m.stamp.issueFormatId,
     mainCatalogPrice:
       main && pricing
         ? {

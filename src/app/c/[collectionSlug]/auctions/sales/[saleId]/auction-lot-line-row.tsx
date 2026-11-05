@@ -12,6 +12,7 @@ import {
   PRICE_CONVERTED,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
@@ -363,6 +364,7 @@ export function AuctionLotLineRow({
                 style={STAMP_SECONDARY_CHIP}
               />
             ))}
+            <IssueFormatChip collectionId={collectionId} issueFormatId={line.issueFormatId} />
             <ColnectChip
               colnectId={line.colnectId}
               searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}

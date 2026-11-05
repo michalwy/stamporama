@@ -1372,6 +1372,25 @@ Set it on the stamp form's **Details** tab, in the **Issue format** dropdown, wh
 sheet states its own issue format, as it states its own attributes. The stamp's page shows it at the
 top of its **Attributes** card. Valuation, holdings and copy formats do not read it.
 
+### The issue format chip
+
+A stamp with an issue format shows its abbreviation — *Bl*, *MS*, *HBl* — as a chip in the
+format's own colour, right after its catalogue numbers, with the full name on hover. It is on every
+row that shows the stamp or a copy of it: the Stamps list and each issue's stamp tree, the Copies
+list and its duplicate groups, the stamp pickers and copy pickers, offers, the Lot builder and
+Facebook posts, sales, trades, purchases, wants and auction lots, and the line at the top of the
+stamp's and the copy's own pages. A cover or other piece carrying
+[several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps) shows each
+stamp's own chip beside that stamp's number.
+
+- **An ordinary stamp shows no chip**, so the rows stay light; only the stamps issued in a form of
+  their own stand out.
+- **It is not the copy's format chip.** A copy's format — *Blk4*, a block of four — sits further
+  down, in grey, among the copy's condition and certificate; the issue format sits with the
+  catalogue numbers, in colour, because it is part of which stamp this is.
+- **Recolour an issue format** in **Settings → Issue formats** and its chip changes colour on every
+  screen.
+
 The [Assistant](assistant.md#colnects-words-and-yours) fills it from a stamp's Colnect page, from
 what Colnect prints as its **Format**, once you have said in **Settings → Colnect → Attributes** what
 Colnect calls each of your issue formats.

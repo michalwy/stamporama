@@ -568,7 +568,7 @@ describe("packingLocationLegend", () => {
 });
 
 describe("buildPackingList — issue format (#2444)", () => {
-  const SHEET = { name: "Souvenir sheet", abbreviation: "Bl", color: "indigo" };
+  const SHEET = { id: "if-bl", name: "Souvenir sheet", abbreviation: "Bl", color: "indigo" };
 
   it("carries the stamp's issue format abbreviation and name on the row", () => {
     const list = buildPackingList([copy({ issueFormat: SHEET })], AREAS, LOCATIONS, MAPS);
@@ -596,7 +596,7 @@ describe("buildPackingList — issue format (#2444)", () => {
         copy({ stampId: "sheet", issueFormat: SHEET }),
         copy({
           stampId: "ex",
-          issueFormat: { name: "Stamp from a souvenir sheet", abbreviation: "exBl", color: null },
+          issueFormat: { id: "if-exbl", name: "Stamp from a souvenir sheet", abbreviation: "exBl", color: null },
         }),
         copy({ stampId: "sheet", issueFormat: SHEET }),
       ],

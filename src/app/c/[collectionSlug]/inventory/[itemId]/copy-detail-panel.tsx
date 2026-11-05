@@ -188,11 +188,14 @@ export function CopyDetailPanel({
             <span style={ITEM_NO}>{formatItemNo(item.itemNo)}</span>
           </Tooltip>
           <StampIdentity
+            collectionId={collectionId}
             stamp={{
               name: item.stampName,
               catalogNumbers: item.catalogNumbers,
               colnectId: item.colnectId,
               subtype: item.subtype,
+              // A several-stamp piece names each stamp on its own line below, each with its own chip.
+              issueFormatId: item.multiStamp ? null : item.issueFormatId,
             }}
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}
@@ -509,11 +512,13 @@ export function CopyDetailPanel({
                       }}
                     >
                       <StampIdentity
+                        collectionId={collectionId}
                         stamp={{
                           name: entry.stampName,
                           catalogNumbers: entry.catalogNumbers,
                           colnectId: entry.colnectId,
                           subtype: entry.subtype,
+                          issueFormatId: entry.issueFormatId,
                         }}
                         vendorMap={maps.vendorMapFor(entry.areaId, entry.issueId)}
                         primaryVendorId={maps.primaryVendorByArea.get(entry.areaId ?? "") ?? null}

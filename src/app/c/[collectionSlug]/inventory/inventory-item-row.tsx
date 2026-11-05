@@ -34,6 +34,7 @@ import {
   PRICE_CONVERTED,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useRecordHref } from "@/app/c/[collectionSlug]/shared/use-record-href";
 import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
@@ -183,6 +184,7 @@ function CarriedStampChips({
             ) : (
               <span style={CARRIED_DETAIL}>{entry.stampName ?? "(stamp)"}</span>
             )}
+            <IssueFormatChip collectionId={collectionId} issueFormatId={entry.issueFormatId} />
             {/* The component's own format and how many of it — quiet at their defaults, a single
                 once, exactly as the copy's own screen spells them. */}
             {entry.formatAbbreviation && (
@@ -1064,6 +1066,11 @@ export function InventoryItemRow({
                   style={STAMP_SECONDARY_CHIP}
                 />
               ))}
+              <IssueFormatChip
+                collectionId={collectionId}
+                issueFormatId={item.issueFormatId}
+                fallback={item.issueFormat}
+              />
               <ColnectChip
                 colnectId={item.colnectId}
                 searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}

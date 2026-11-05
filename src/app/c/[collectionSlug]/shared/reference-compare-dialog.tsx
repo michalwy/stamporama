@@ -38,6 +38,7 @@ import {
 } from "@/lib/reference-candidates";
 import { ScanToolButton } from "./scan-tool-button";
 import { SubtypeChip } from "./subtype-chip";
+import { IssueFormatChip } from "./issue-format-chip";
 import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useSheetRegion } from "./use-sheet-region";
 import { useZoomPan } from "./use-zoom-pan";
@@ -1158,6 +1159,7 @@ function ReferenceList({
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {stampText(row)}
                 </span>
+                <IssueFormatChip collectionId={collectionId} issueFormatId={row.issueFormatId} />
                 <SubtypeChip subtype={row.subtype} />
               </div>
               {row.photos.length === 0 ? (

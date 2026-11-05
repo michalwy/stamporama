@@ -9,6 +9,7 @@ import type { StampSearchItem } from "@/lib/stamps";
 import { useStampPickerSearch } from "./use-inventory-query";
 import { issueLabel } from "./stamp-picker-shared";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -24,7 +25,7 @@ const INPUT_STYLE: React.CSSProperties = {
 
 /** Detailed suggestion row: catalog numbers + name on top, issue/area context
  * below, so a stamp is identifiable without opening it (#104). */
-function SuggestionRow({ item }: { item: StampSearchItem }) {
+function SuggestionRow({ collectionId, item }: { collectionId: string; item: StampSearchItem }) {
   const cat = item.catalogNumbers.join(", ");
   const context = [
     item.issueName || item.issueYear ? issueLabel(item.issueName, item.issueYear) : null,
@@ -59,6 +60,7 @@ function SuggestionRow({ item }: { item: StampSearchItem }) {
             <span style={{ color: "var(--color-text-muted)" }}>(unnamed stamp)</span>
           )}
         </span>
+        <IssueFormatChip collectionId={collectionId} issueFormatId={item.issueFormatId} />
         <SubtypeChip subtype={item.subtype} />
       </span>
       {context && (
@@ -91,7 +93,7 @@ export function StampPickerAutocomplete({
       onValueChange={setValue}
       items={suggestions}
       getItemKey={(s) => s.stampId}
-      renderItem={(s) => <SuggestionRow item={s} />}
+      renderItem={(s) => <SuggestionRow collectionId={collectionId} item={s} />}
       onSelect={(s) => {
         setValue("");
         onPick(s);

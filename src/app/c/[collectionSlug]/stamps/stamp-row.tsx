@@ -13,6 +13,7 @@ import {
   PRICE_CONVERTED,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -302,6 +303,12 @@ export function StampRow({
               style={STAMP_SECONDARY_CHIP}
             />
           ))}
+          <IssueFormatChip
+            collectionId={collectionId}
+            issueFormatId={stamp.issueFormat?.id}
+            fallback={stamp.issueFormat}
+            size="medium"
+          />
           <ColnectChip
             colnectId={stamp.colnectId}
             searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}

@@ -41,18 +41,19 @@ export interface StampIssueFormatData {
 
 /** The select that reads a stamp's issue format for display, beside the attribute fragments. */
 export const STAMP_ISSUE_FORMAT_DISPLAY_SELECT = {
-  issueFormat: { select: { name: true, abbreviation: true, color: true } },
+  issueFormat: { select: { id: true, name: true, abbreviation: true, color: true } },
 } as const;
 
 /** The shape {@link STAMP_ISSUE_FORMAT_DISPLAY_SELECT} returns. */
 export interface StampIssueFormatDisplayRow {
-  issueFormat: { name: string; abbreviation: string; color: string | null } | null;
+  issueFormat: { id: string; name: string; abbreviation: string; color: string | null } | null;
 }
 
 /** A selected stamp's issue format as the screens want it; null is an ordinary stamp. */
 export function stampIssueFormatLabel(row: StampIssueFormatDisplayRow): StampIssueFormatLabel | null {
   if (!row.issueFormat) return null;
   return {
+    id: row.issueFormat.id,
     name: row.issueFormat.name,
     abbreviation: row.issueFormat.abbreviation,
     color: isTagColor(row.issueFormat.color) ? row.issueFormat.color : null,

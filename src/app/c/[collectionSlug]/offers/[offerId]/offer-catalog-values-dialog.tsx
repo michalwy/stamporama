@@ -432,11 +432,13 @@ function CatalogValuesGrid({
                         }}
                       >
                         <StampIdentity
+                          collectionId={collectionId}
                           stamp={{
                             name: copy.stampName,
                             catalogNumbers: copy.catalogNumbers,
                             colnectId: copy.colnectId,
                             subtype: copy.subtype,
+                            issueFormatId: copy.issueFormatId,
                           }}
                           vendorMap={vendorMapFor(copy.areaId, copy.issueId)}
                           primaryVendorId={
