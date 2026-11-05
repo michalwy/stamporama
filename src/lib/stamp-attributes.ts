@@ -88,6 +88,8 @@ export interface StampAttributeValues {
   watermarkId: string | null;
   paperId: string | null;
   printingId: string | null;
+  /** The issue format (#2439), or null for an ordinary stamp. */
+  issueFormatId: string | null;
   /** The size (#763) as the field shows it — `21.5`, not `21.5000` — because the form's own state
    * is text and a number that round-trips through the input as a different string would look to
    * the collector like an edit they did not make. */
@@ -114,6 +116,7 @@ export async function getStampAttributeValues(
       watermarkId: true,
       paperId: true,
       printingId: true,
+      issueFormatId: true,
       ...STAMP_SIZE_SELECT,
     },
   });
@@ -127,6 +130,7 @@ export async function getStampAttributeValues(
     watermarkId: stamp.watermarkId,
     paperId: stamp.paperId,
     printingId: stamp.printingId,
+    issueFormatId: stamp.issueFormatId,
     widthMm: size.widthMm === null ? null : formatSizeMm(size.widthMm),
     heightMm: size.heightMm === null ? null : formatSizeMm(size.heightMm),
   };

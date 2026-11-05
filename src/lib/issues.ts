@@ -1,4 +1,5 @@
 import "server-only";
+import { assertIssueFormatInCollection } from "./stamp-issue-formats";
 import { stampSizeProfileWrite } from "./scanning-profiles";
 import { prisma, type DbTransaction } from "./db";
 import { refreshCandidateCopiesTx } from "./item-candidates";
@@ -2823,6 +2824,7 @@ export async function addStampToIssue(
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
+  await assertIssueFormatInCollection(collectionId, data.issueFormatId);
 
   if (data.parentStampId) {
     const parentMember = await prisma.issueMember.findUnique({
@@ -2872,7 +2874,8 @@ export async function addStampToIssue(
         subtypeId,
         actsAsVariantOverride,
         colnectId: data.colnectId || null,
-        // The six catalogue attributes (#736); an unsupplied one is simply not set.
+        // The six catalogue attributes (#736) and the issue format (#2439); an unsupplied one is
+        // simply not set.
         ...pickStampAttributeWrites(data),
         // A size accepted from a measurement records what it was measured with (#1443).
         ...(await stampSizeProfileWrite(tx, collectionId, null, data)),

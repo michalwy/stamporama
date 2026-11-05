@@ -14,6 +14,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getFaults } from "@/lib/faults";
 import { getStampAttributeLists } from "@/lib/stamp-attributes";
+import { getStampIssueFormats } from "@/lib/stamp-issue-formats";
 import { getStampSizePresets } from "@/lib/stamp-size-presets";
 import { listScanningProfiles } from "@/lib/scanning-profiles";
 import { getTags } from "@/lib/tags";
@@ -86,6 +87,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     subtypes,
     faults,
     attributes,
+    issueFormats,
     stampSizePresets,
     scanningProfiles,
     tags,
@@ -124,6 +126,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getStampSubtypes(session.user.id, collection.id),
     getFaults(session.user.id, collection.id),
     getStampAttributeLists(session.user.id, collection.id),
+    getStampIssueFormats(session.user.id, collection.id),
     getStampSizePresets(session.user.id, collection.id),
     listScanningProfiles(session.user.id, collection.id),
     getTags(session.user.id, collection.id),
@@ -192,6 +195,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           initialSubtypes={subtypes}
           initialFaults={faults}
           initialAttributes={attributes}
+          initialIssueFormats={issueFormats}
           initialStampSizePresets={stampSizePresets}
           initialTags={tags}
           initialCollageTemplates={collageTemplates}

@@ -61,6 +61,7 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   ],
   subtypes: [],
   attributes: [],
+  "issue-formats": [],
   "size-presets": [],
   duplicates: [
     { label: "Duplicate catalog numbers" },

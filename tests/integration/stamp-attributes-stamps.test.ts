@@ -95,6 +95,7 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: lozenges,
       paperId: thinPaper,
       printingId: photogravure,
+      issueFormatId: null,
       widthMm: null,
       heightMm: null,
     });
@@ -110,6 +111,7 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: null,
       paperId: null,
       printingId: null,
+      issueFormatId: null,
       widthMm: null,
       heightMm: null,
     });
@@ -139,6 +141,7 @@ describe("stamp attributes on stamps (#736, #737)", () => {
       watermarkId: null,
       paperId: thinPaper,
       printingId: null,
+      issueFormatId: null,
       widthMm: null,
       heightMm: null,
     });

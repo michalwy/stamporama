@@ -161,7 +161,9 @@ Purchase, Sale, Offers. Only Details is always there; the rest appear when the c
 - **Details** — area, issue date, subtype, and the copies held broken down by disposition, ending
   with the copies held of this stamp's variants when there are any
   ([Copies held](collections.md#copies-held-on-the-catalog-lists)).
-- **Attributes** — the six [stamp attributes](collections.md#stamp-attributes): denomination,
+- **Attributes** — the stamp's [issue format](collections.md#issue-formats) first (its abbreviation
+  in its colour and its name, or *— (stamp)* for an ordinary stamp), then the six
+  [stamp attributes](collections.md#stamp-attributes): denomination,
   perforation, colour, watermark, paper and printing method, and the stamp's
   [size](collections.md#the-stamps-size) as one figure (`21.5 × 25 mm`). The card appears only when
   the stamp states at least one of them, and then lists them all, so what is *not* recorded is

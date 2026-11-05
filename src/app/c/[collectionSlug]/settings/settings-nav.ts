@@ -46,6 +46,7 @@ export type SettingsEntryKey =
   | "valuation-methods"
   | "subtypes"
   | "attributes"
+  | "issue-formats"
   | "size-presets"
   | "duplicates"
   | "scanning"
@@ -170,6 +171,14 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
       key: kind,
       label: STAMP_ATTRIBUTE_LABELS[kind].heading,
     })),
+  },
+  {
+    // Beside the attributes (#2439), but an entry of its own: a seeded dictionary with an
+    // abbreviation and a chip colour, where every attribute list starts empty and is name-only.
+    key: "issue-formats",
+    group: "catalog",
+    label: "Issue formats",
+    hint: "The form a stamp was issued in — souvenir sheet, booklet pane, coil. A stamp with none is an ordinary stamp.",
   },
   {
     key: "size-presets",
