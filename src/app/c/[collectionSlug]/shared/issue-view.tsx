@@ -25,6 +25,7 @@ import {
   PRICE_CONVERTED,
 } from "./chip-styles";
 import { CatalogNumberChip } from "./catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { EntityNoChip } from "./entity-no-chip";
 import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
@@ -393,6 +394,7 @@ export function StampDetailLine({
           style={STAMP_SECONDARY_CHIP}
         />
       ))}
+      <IssueFormatChip collectionId={collectionId} issueFormatId={node.issueFormatId} />
       <ColnectChip
         colnectId={node.colnectId}
         searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}

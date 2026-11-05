@@ -127,7 +127,8 @@ export function StampDetailPanel({
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
           <EntityNoChip entity="stamp" no={stamp.stampNo} prefix="st" />
           <StampIdentity
-            stamp={stamp}
+            collectionId={collectionId}
+            stamp={{ ...stamp, issueFormatId: stamp.issueFormat?.id ?? null }}
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}
           />

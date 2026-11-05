@@ -543,7 +543,8 @@ function RelativeRow({
         {role}
       </span>
       <StampIdentity
-        stamp={stamp}
+        collectionId={collectionId}
+        stamp={{ ...stamp, issueFormatId: stamp.issueFormat?.id ?? null }}
         vendorMap={vendorMap}
         primaryVendorId={primaryVendorId}
         size="small"

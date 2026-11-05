@@ -277,11 +277,13 @@ export function WantReviewDialog({
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                       <StampIdentity
+                        collectionId={collectionId}
                         stamp={{
                           name: want.stampName,
                           catalogNumbers: want.catalogNumbers,
                           colnectId: want.colnectId,
                           subtype: want.subtype,
+                          issueFormatId: want.issueFormatId,
                         }}
                         vendorMap={vendorMapFor(want.areaId, want.issueId)}
                         primaryVendorId={

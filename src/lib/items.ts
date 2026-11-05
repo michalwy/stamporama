@@ -3029,6 +3029,8 @@ export interface CopyGroupRow {
   issuedDay: number | null;
   issuedMonth: number | null;
   issuedYear: number | null;
+  /** The group's stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   colnectId: string | null;
   areaId: string | null;
@@ -3095,6 +3097,7 @@ const GROUP_STAMP_SELECT = {
   issuedDay: true,
   issuedMonth: true,
   issuedYear: true,
+  issueFormatId: true,
   catalogNumbers: { select: { catalogVendorId: true, number: true } },
   colnectId: true,
   stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -3308,6 +3311,7 @@ export async function listItemDuplicateGroups(
       issuedDay: stamp.issuedDay,
       issuedMonth: stamp.issuedMonth,
       issuedYear: stamp.issuedYear,
+      issueFormatId: stamp.issueFormatId,
       catalogNumbers: stamp.catalogNumbers,
       colnectId: stamp.colnectId,
       areaId:
@@ -4615,6 +4619,8 @@ export interface ItemStampSummary {
   colnectId: string | null;
   unknownVariant: boolean;
   subtype: SubtypeLabel | null;
+  /** The stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   /** The stamp's primary area and first issue — the context a copy row shows, and what the catalog
    *  numbers are prefix-formatted against. */
   areaId: string | null;
@@ -4663,6 +4669,7 @@ export async function getItemStamps(ownerId: string, itemId: string): Promise<It
           select: {
             id: true,
             name: true,
+            issueFormatId: true,
             catalogNumbers: { select: { catalogVendorId: true, number: true } },
             colnectId: true,
             stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -4705,6 +4712,7 @@ export async function getItemStamps(ownerId: string, itemId: string): Promise<It
         colnectId: stamp?.colnectId ?? null,
         unknownVariant: stamp ? isUnknownVariantStamp(stamp) : false,
         subtype: stamp ? subtypeLabel(stamp) : null,
+        issueFormatId: stamp?.issueFormatId ?? null,
         areaId:
           primaryLink?.collectionAreaId ?? stamp?.stampAreaLinks[0]?.collectionAreaId ?? null,
         issueId: firstIssue?.id ?? null,

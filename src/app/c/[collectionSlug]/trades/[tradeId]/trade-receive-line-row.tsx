@@ -9,6 +9,7 @@ import {
   STAMP_SECONDARY_CHIP,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { CopyValue } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -234,6 +235,7 @@ export function TradeReceiveLineRow({
               style={STAMP_SECONDARY_CHIP}
             />
           ))}
+          <IssueFormatChip collectionId={collectionId} issueFormatId={line.issueFormatId} />
           <SubtypeChip subtype={line.subtype} />
           {/* **Is this one I am looking for** (#664; #532's chip). On the receive side the question
               can be answered exactly rather than approximately: the line carries the whole want key

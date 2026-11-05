@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createCollection } from "../../src/lib/collections";
-import { addStampToIssue, createIssue } from "../../src/lib/issues";
+import { addStampToIssue, createIssue, listIssueMembers } from "../../src/lib/issues";
 import { listStampsPaginated, updateStampWithCatalog } from "../../src/lib/stamps";
 import { getStampAttributeValues } from "../../src/lib/stamp-attributes";
 import {
@@ -98,11 +98,19 @@ describe("stamp issue formats (#2439)", () => {
     const { items } = await listStampsPaginated(userId, collectionId, { issueId });
     const byName = new Map(items.map((i) => [i.name, i]));
     assert.deepEqual(byName.get("Bl 1")?.issueFormat, {
+      id: bl,
       name: "Souvenir sheet",
       abbreviation: "Bl",
       color: "indigo",
     });
     assert.equal(byName.get("1")?.issueFormat, null);
+
+    // The issue's stamp tree carries the id its row chip looks the colour up by (#2441).
+    const members = new Map(
+      (await listIssueMembers(userId, collectionId, issueId)).map((m) => [m.name, m])
+    );
+    assert.equal(members.get("Bl 1")?.issueFormatId, bl);
+    assert.equal(members.get("1")?.issueFormatId, null);
   });
 
   it("changes and clears it on edit, and leaves it alone when the caller does not send it", async () => {

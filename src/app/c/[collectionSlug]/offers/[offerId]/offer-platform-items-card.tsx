@@ -22,6 +22,7 @@ import { useInvalidateOffers } from "../use-offers-query";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { IssueFormatChip } from "@/app/c/[collectionSlug]/shared/issue-format-chip";
 import {
   STAMP_PRIMARY_CHIP,
   STAMP_SECONDARY_CHIP,
@@ -957,6 +958,12 @@ export function OfferPlatformItemsCard({
                       {item.label}
                     </span>
                   )}
+                  {/* The stamp's issue format (#2441), read off one of the row's own copies — the
+                      copies carry it, and the row is keyed on the stamp they share. */}
+                  <IssueFormatChip
+                    collectionId={collectionId}
+                    issueFormatId={copyByStamp.get(item.stampId)?.issueFormatId}
+                  />
                 </span>
                 <span style={{ ...CELL, minWidth: 0 }}>
                   {item.stampName && (

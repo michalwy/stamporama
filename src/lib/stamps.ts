@@ -1263,6 +1263,8 @@ export interface StampSearchItem {
   catalogNumbers: string[];
   /** The stamp's subtype for display (#340), or null for a base stamp. */
   subtype: SubtypeLabel | null;
+  /** The stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
 }
 
 /** How many stamps a picker search returns — exported for a screen that says when it is full. */
@@ -1369,6 +1371,7 @@ export async function searchStampsForPicker(
     // The candidate's own subtype, for the result row's chip (#340) — `variants` above carries
     // the children's, which answers a different question (is this an umbrella?).
     subtype: { select: { name: true, isDefault: true } },
+    issueFormatId: true,
     // Pre-filtered to the matching copies only, so its presence *is* the location hit.
     items: { where: locationRefWhere, select: { id: true }, take: 1 },
   } as const;
@@ -1472,6 +1475,7 @@ export async function searchStampsForPicker(
         issueYear: membership?.issue.year ?? null,
         catalogNumbers: labels,
         subtype: subtypeLabel(s),
+        issueFormatId: s.issueFormatId,
       },
     });
   }

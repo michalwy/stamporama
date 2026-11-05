@@ -42,7 +42,37 @@ export const NO_ISSUE_FORMAT_LABEL = "— (stamp)";
 /** A stamp's issue format as the screens draw it — the default language's words and the chip
  * colour. Null is an ordinary stamp. */
 export interface StampIssueFormatLabel {
+  /** The dictionary row, so a chip can look its current colour up (#2441). */
+  id: string;
   name: string;
   abbreviation: string;
   color: string | null;
+}
+
+/** What a stamp's issue-format chip says (#2441): the abbreviation (the name where there is none),
+ *  the full name for the hover, and the colour. */
+export interface IssueFormatChipView {
+  label: string;
+  name: string;
+  color: string | null;
+}
+
+/**
+ * The chip a row draws for its stamp's issue format (#2441), or null for none.
+ *
+ * - **An ordinary stamp (no `issueFormatId`) draws nothing** — the unmarked case.
+ * - **The dictionary is the answer once it is in**, so a recolour or a rename in Settings reaches
+ *   every row; an id it does not hold draws nothing rather than a stale label.
+ * - **While the dictionary is still loading** (`formats` undefined) the row's own label bridges the
+ *   gap where it has one, so the chip does not appear late and move the row.
+ */
+export function issueFormatChipView(
+  issueFormatId: string | null | undefined,
+  formats: readonly { id: string; name: string; abbreviation: string; color: string | null }[] | undefined,
+  fallback?: StampIssueFormatLabel | null
+): IssueFormatChipView | null {
+  if (!issueFormatId) return null;
+  const shown = formats ? formats.find((f) => f.id === issueFormatId) : fallback;
+  if (!shown) return null;
+  return { label: shown.abbreviation || shown.name, name: shown.name, color: shown.color };
 }

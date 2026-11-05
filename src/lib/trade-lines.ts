@@ -241,6 +241,8 @@ export interface TradeReceiveLineData {
   issuedMonth: number | null;
   issuedYear: number | null;
   subtype: SubtypeLabel | null;
+  /** The stamp's issue format (#2439), drawn as its chip (#2441); null is an ordinary stamp. */
+  issueFormatId: string | null;
   /** The **collection's own** pictures of this stamp, ordered as the stamp orders them — not the
    *  partner's, who has photographed nothing and whose material is not here to photograph. They are
    *  what makes the two sides read alike: a give line shows the copy that is leaving, and this shows
@@ -305,6 +307,7 @@ const RECEIVE_SELECT = {
     select: {
       name: true,
       colnectId: true,
+      issueFormatId: true,
       issuedDay: true,
       issuedMonth: true,
       issuedYear: true,
@@ -435,6 +438,7 @@ async function enrichReceiveLines(
       issuedMonth: stamp.issuedMonth,
       issuedYear: stamp.issuedYear,
       subtype: subtypeLabel(stamp),
+      issueFormatId: stamp.issueFormatId,
       photos: stamp.photos.map(toPhotoSummary).sort((a, b) => a.sortOrder - b.sortOrder),
       unknownVariant: isUnknownVariantStamp(stamp),
       conditionId: row.conditionId!,
