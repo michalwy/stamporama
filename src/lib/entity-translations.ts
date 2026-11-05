@@ -128,6 +128,17 @@ async function loadEntity(
       const row = await stampAttributeTranslationStore(entityType).find(entityId);
       return row && { collectionId: row.collectionId, current: {} };
     }
+    // Two columns, so the stored abbreviation is carried along when the name is written (#2442).
+    case "issueFormat": {
+      const row = await prisma.stampIssueFormat.findUnique({
+        where: { id: entityId },
+        select: {
+          collectionId: true,
+          translations: { where: { language }, select: { name: true, abbreviation: true } },
+        },
+      });
+      return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
+    }
     // One translatable column, so — like the attributes above — nothing to carry along.
     case "fault": {
       const row = await prisma.fault.findUnique({
@@ -281,6 +292,22 @@ function handlers(entityType: TranslatableEntity, entityId: string) {
         },
       };
     }
+    case "issueFormat":
+      return {
+        upsert: async (language: string, fields: Record<string, string | null>) => {
+          const data = { name: fields.name ?? null, abbreviation: fields.abbreviation ?? null };
+          await prisma.stampIssueFormatTranslation.upsert({
+            where: { stampIssueFormatId_language: { stampIssueFormatId: entityId, language } },
+            create: { stampIssueFormatId: entityId, language, ...data },
+            update: data,
+          });
+        },
+        remove: async (language: string) => {
+          await prisma.stampIssueFormatTranslation.deleteMany({
+            where: { stampIssueFormatId: entityId, language },
+          });
+        },
+      };
     case "fault":
       return {
         upsert: async (language: string, fields: Record<string, string | null>) => {

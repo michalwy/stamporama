@@ -141,6 +141,13 @@ export interface TitleTemplateCopy {
   watermark: string | null;
   paper: string | null;
   printing: string | null;
+  /** The form the stamp was **issued** in (#2439/#2442) — `Souvenir sheet`, `Booklet pane` — and its
+   * abbreviation, resolved in the listing's language like `{format}`. A fact about the stamp, not the
+   * copy: a copy's own `{format}` is how the piece was cut or kept. **Null for an ordinary stamp**,
+   * which is most of them: there is no "Stamp" row, and no stand-in renders in its place (#1692) — the
+   * token comes out empty and the tidy pass takes its glue separator, as `{format}` does for a single. */
+  issueFormat: string | null;
+  issueFormatAbbr: string | null;
   /** What the catalogue records as the stamp's **issue date** (#71/#766): the year it already
    * carries above, plus the month and day where the collection recorded them. Null when no year is
    * known — a month without a year is not a date, so the whole value goes rather than half of it.
@@ -221,6 +228,9 @@ const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   watermark: "watermark",
   paper: "paper",
   printing: "printing",
+  // The stamp's issue format (#2442), name and abbreviation translated independently as `{format}`'s.
+  issueformat: "issueFormat",
+  issueformatabbr: "issueFormatAbbr",
   // A copy's faults (#1559). Several entities behind one token: each untranslated fault reports its
   // own row under this one field.
   faults: "faults",
@@ -257,6 +267,10 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{subtype}", label: "Subtype", example: "Overprint" },
   { token: "{format}", label: "Format", example: "Block of 4" },
   { token: "{formatAbbr}", label: "Format (abbr.)", example: "Blk4" },
+  // The form the *stamp* was issued in (#2442), beside the copy's own format so the two are read
+  // together and told apart: a buyer searching for "souvenir sheet" needs the word in the listing.
+  { token: "{issueFormat}", label: "Issue format", example: "Souvenir sheet" },
+  { token: "{issueFormatAbbr}", label: "Issue format (abbr.)", example: "Bl" },
   // What the catalogue says the stamp is (#738). Last in the legend because they are the detail a
   // title reaches for after it has said which stamp this is — and because a template that names all
   // six is a description rather than a title.
@@ -1050,6 +1064,13 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.format)).join(" / ");
     case "formatabbr":
       return distinct(copies.map((c) => c.formatAbbr)).join(" / ");
+    // The stamp's issue format (#2442), on `{format}`'s terms: an ordinary stamp's null drops out of
+    // `distinct`, so a set of a souvenir sheet and two ordinary stamps reads just "Souvenir sheet",
+    // and two different issue formats join with `/`.
+    case "issueformat":
+      return distinct(copies.map((c) => c.issueFormat)).join(" / ");
+    case "issueformatabbr":
+      return distinct(copies.map((c) => c.issueFormatAbbr)).join(" / ");
     // The six catalogue attributes (#738), each the plain per-copy token every other stamp fact is:
     // one value for one stamp, joined by `/` across a mixed offer, and empty for the stamps that
     // state nothing — which is most of them, and which the tidy pass is already there for.

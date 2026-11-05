@@ -61,6 +61,7 @@ export const TRANSLATION_KINDS = [
   "watermark",
   "paper",
   "printing",
+  "issue_format",
   "fault",
 ] as const;
 
@@ -79,6 +80,7 @@ const ENTITY_BY_KIND: Readonly<Record<TranslationKind, TranslatableEntity>> = {
   watermark: "watermark",
   paper: "paper",
   printing: "printing",
+  issue_format: "issueFormat",
   fault: "fault",
 };
 

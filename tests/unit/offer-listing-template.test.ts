@@ -56,6 +56,8 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     watermark: null,
     paper: null,
     printing: null,
+    issueFormat: null,
+    issueFormatAbbr: null,
     format: null,
     formatAbbr: null,
     issueName: null,

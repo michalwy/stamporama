@@ -383,6 +383,8 @@ function sampleCopy(checklist: SampleChecklist, stamp: SampleStamp): TitleTempla
     watermark: null,
     paper: null,
     printing: null,
+    issueFormat: null,
+    issueFormatAbbr: null,
     issuedDate: { year: checklist.year, month: checklist.month, day: checklist.day },
     issueName: checklist.issueName,
     issueYear: checklist.year,

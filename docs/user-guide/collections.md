@@ -1376,6 +1376,10 @@ The [Assistant](assistant.md#colnects-words-and-yours) fills it from a stamp's C
 what Colnect prints as its **Format**, once you have said in **Settings → Colnect → Attributes** what
 Colnect calls each of your issue formats.
 
+A listing text names it with `{issueFormat}` or `{issueFormatAbbr}` — see
+[listing templates](platforms.md#listing-templates) — so a buyer searching for *souvenir sheet* or
+*Block* finds the listing. On an ordinary stamp both print nothing.
+
 ## Tags
 
 The six attributes above are what the *catalogue* says about a stamp. A **tag** is what **you** say

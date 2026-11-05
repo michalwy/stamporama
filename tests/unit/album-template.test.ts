@@ -461,6 +461,8 @@ const baseCopy: TitleTemplateCopy = {
   watermark: null,
   paper: null,
   printing: null,
+  issueFormat: null,
+  issueFormatAbbr: null,
   issueName: null,
   issueYear: null,
   unknownVariant: false,

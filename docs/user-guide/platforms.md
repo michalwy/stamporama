@@ -264,6 +264,13 @@ language — and the preview re-reads at once; the line goes when nothing is lef
   disappears with it, and a line that says nothing else is dropped whole. A batch mixing formats
   lists the distinct ones, `/`-separated, the way every other per-copy token does; the singles in
   it simply contribute nothing.
+- `{issueFormat}` — the form the stamp was **issued** in ([issue formats](collections.md#issue-formats)):
+  `Souvenir sheet`, `Booklet pane`, …, and `{issueFormatAbbr}` for its abbreviation (`Bl`). Not the
+  copy's `{format}`: a block of four cut from a sheet has a format, a souvenir sheet has an issue
+  format. Both translate into the listing's language, each falling back to your own text on its own.
+  **Empty on an ordinary stamp**, which has no issue format — nothing such as *stamp* is printed in
+  its place — so the separator around it disappears with it. Across several stamps the distinct
+  values join with `/`, and the ordinary ones contribute nothing.
 - `{denomination}`, `{perforation}`, `{color}`, `{watermark}`, `{paper}`, `{printing}` — what the
   catalogue says the stamp **is** ([stamp attributes](collections.md#stamp-attributes)): `10 gr`,
   `11½`, `Carmine`, `Lozenges`, `Thin paper`, `Photogravure`. Each is empty on a stamp that states
