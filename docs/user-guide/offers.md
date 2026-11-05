@@ -1544,7 +1544,8 @@ it, so one condition can be compared with another at a glance.
 - **The rows are your conditions.** Each is named by the condition of yours that is
   [mapped](collections.md#colnect-condition-mapping) to that Colnect grade, with Colnect's grade
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
-  offer's copies are in is the **highlighted** row.
+  offer's copies are in is the **highlighted** row, and its lowest price — the one you price against —
+  is set larger and bold, so it is seen at once (*no offers* too, when nobody sells in it).
 - **A condition nobody is selling in** says *no offers*, with an empty strip. If no condition has any,
   the card says so.
 - **Your own Colnect listings are left out** of the strips and counted apart (*+1 yours*), so the
