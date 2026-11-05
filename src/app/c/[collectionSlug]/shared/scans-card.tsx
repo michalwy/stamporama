@@ -131,6 +131,7 @@ import {
 import { TextInput } from "./text-input";
 import { useToast } from "@/app/toast-provider";
 import { keyPatch, unmarkedCounts, type MarkPatch, type TileMark } from "@/lib/tile-marks";
+import { fillableTiles, sectionFill, sectionUnmarkedHint } from "@/lib/tile-mark-fill";
 import {
   TileMarkChips,
   TileMarkPicker,
@@ -505,6 +506,24 @@ export function ScansCard({
   /** Which side the tiles show (#2350) — the section's, and the cards switched on their own. */
   const stripSides: StripSides = { side: scansUi.side, cardSides: scansUi.cardSides };
   const anyBack = batches.some((b) => b.back != null);
+  /** The cards the strip draws, in card order. */
+  const drawnBatches = batches
+    // A batch with nothing matching the chip has nothing to show under it, and an empty
+    // bordered box saying so would be the noise the chip was pressed to get away from.
+    .filter((b) => !filtered || b.tiles.some((t) => matchesTileFilter(t, filter)))
+    // Worked-through batches are set aside until asked for — and come back **in place** when
+    // they are, never gathered at the end: batch order is card order, and the pile on the desk
+    // is in the same order.
+    //
+    // **Except under the discards chip** (#853), which is the one narrowing whose tiles live
+    // almost entirely on cards that are finished with — a card is *finished* precisely because
+    // every tile on it reached an end, and a discard is one of the two ends. Left in force, the
+    // pull list would answer the press with a blank screen on the ordinary case.
+    .filter((b) => showDone || b.doneAt == null || showsSetAsideBatches(filter));
+  /** *Mark all unmarked* over every card at once (#2456): each drawn card's open front tiles in
+   * view, folded cards included — a fold is not a filter. */
+  const fillAll = sectionFill(drawnBatches, filter);
+  const nothingUnmarkedAnywhere = fillAll.condition.tiles === 0 && fillAll.certificate.tiles === 0;
 
   /**
    * The tile a copy's scan marker asked for (#1924) — `?tile=<id>`, answered the way `?lot=` is
@@ -1363,6 +1382,33 @@ export function ScansCard({
             />
           </Tooltip>
         )}
+        {/* **Mark all unmarked, on every scan** (#2456) — a stockbook of MNH is many cards of one
+            condition, and the per-card pick repeated on each of them is the same answer given nine
+            times. The per-card rule over every card drawn (`sectionFill`), greyed out rather than
+            hidden once nothing in view is unmarked, as the per-card one is. */}
+        {open && fillAll.tileIds.length > 0 && !reachesFinishedBatches(filter) && (
+          <TileMarkPicker
+            collectionId={collectionId}
+            targets={fillAll.marks}
+            fill={{
+              condition: fillAll.condition.tiles,
+              certificate: fillAll.certificate.tiles,
+              noun: ["tile", "tiles"],
+            }}
+            disabled={pending || detecting || nothingUnmarkedAnywhere}
+            ariaLabel="Mark all unmarked tiles on every scan"
+            hint={sectionUnmarkedHint(fillAll, {
+              hiddenByChip: filtered,
+              preparing: preparingCount,
+            })}
+            triggerStyle={smallButtonStyle({
+              disabled: pending || detecting || nothingUnmarkedAnywhere,
+            })}
+            onPatch={(patch) => markTiles(fillAll.tileIds, patch, true)}
+          >
+            <Icon name="mark" size="sm" /> Mark all unmarked…
+          </TileMarkPicker>
+        )}
         <span style={{ flex: 1 }} />
         {/* A name for the card being added (#587), optional and never in the way: leave it blank
             and the flow is the single click it was. It sits beside the button rather than behind a
@@ -1591,20 +1637,7 @@ export function ScansCard({
         />
       )}
 
-      {batches
-        // A batch with nothing matching the chip has nothing to show under it, and an empty
-        // bordered box saying so would be the noise the chip was pressed to get away from.
-        .filter((b) => !filtered || b.tiles.some((t) => matchesTileFilter(t, filter)))
-        // Worked-through batches are set aside until asked for — and come back **in place** when
-        // they are, never gathered at the end: batch order is card order, and the pile on the desk
-        // is in the same order.
-        //
-        // **Except under the discards chip** (#853), which is the one narrowing whose tiles live
-        // almost entirely on cards that are finished with — a card is *finished* precisely because
-        // every tile on it reached an end, and a discard is one of the two ends. Left in force, the
-        // pull list would answer the press with a blank screen on the ordinary case.
-        .filter((b) => showDone || b.doneAt == null || showsSetAsideBatches(filter))
-        .map((batch) => (
+      {drawnBatches.map((batch) => (
         <BatchSection
           key={batch.batchNo}
           batch={batch}
@@ -2461,11 +2494,9 @@ function BatchSection({
   // select — a count taken off the whole batch would name pieces the chip is hiding, and the box
   // beside it would then act on a different set than the number it is standing next to.
   const selectableCount = shown.filter(isSelectableTile).length;
-  // What *Mark all unmarked* reaches (#1556): the card's tiles **in view** still to be identified,
-  // as every action on the strip is over what is on screen. **Never an unpaired back**: its mark
-  // meets its front's when it is dragged on, the one given last wins, and a fill given after the
-  // exceptions would undo them.
-  const fillable = frontTiles.filter(isSelectableTile);
+  // What *Mark all unmarked* reaches (#1556): the card's open front tiles **in view** — the rule
+  // the section header's fill over every card reads too (#2456, `tile-mark-fill.ts`).
+  const fillable = fillableTiles(batch.tiles, filter);
   const unmarked = unmarkedCounts(fillable.map((t) => t.mark));
   const nothingUnmarked = unmarked.condition === 0 && unmarked.certificate === 0;
   // The retention sweep has taken this batch's scans (#578). The tiles are all still here — what is

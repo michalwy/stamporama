@@ -261,6 +261,25 @@ describe("tile marks (#1550)", () => {
     );
   });
 
+  it("marks all unmarked tiles across every card of the purchase at once (#2456)", async () => {
+    const purchaseId = await newOrder();
+    const first = await upload(purchaseId, "front");
+    await commitCut(userId, first.id, BOXES);
+    const second = await upload(purchaseId, "front");
+    await commitCut(userId, second.id, BOXES);
+    const tiles = await tilesOf(purchaseId);
+    const sheets = new Set(tiles.map((t) => t.frontSheetId));
+    assert.equal(sheets.size, 2, "two cards");
+    const [exception] = tiles.filter((t) => t.frontSheetId === second.id);
+    await setTileMarks(userId, [exception.id], { conditionId: mng });
+
+    await setTileMarks(userId, tiles.map((t) => t.id), { conditionId: mnh }, { onlyUnmarked: true });
+    const after = await tilesOf(purchaseId);
+    for (const t of after) {
+      assert.equal(t.markConditionId, t.id === exception.id ? mng : mnh);
+    }
+  });
+
   it("refuses a tile already dealt with, another collection's condition, and someone else's tile", async () => {
     const purchaseId = await newOrder();
     const front = await upload(purchaseId, "front");
