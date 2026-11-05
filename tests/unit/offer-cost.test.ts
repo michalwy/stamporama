@@ -61,6 +61,33 @@ describe("an offer set's COST (#1736)", () => {
   });
 });
 
+describe("a copy on an opening balance that is still open (#2437)", () => {
+  it("counts at its estimate, marked as an estimate and as including an opening value", () => {
+    const cost = offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [
+      { label: "#7413", estimate: 0.26, openingBalance: true },
+    ]);
+    assert.equal(cost.amount, "0.26");
+    assert.equal(cost.estimated, true);
+    assert.equal(cost.opening, true);
+    assert.equal(cost.openingCount, 0);
+    assert.equal(offerCostTotals([cost]).opening, true);
+  });
+
+  it("does not mark a figure it is not counted in", () => {
+    const cost = offerSetCost({ total: "2.00", count: 1, noneCount: 0 }, [
+      { label: "#1", estimate: null, openingBalance: true },
+    ]);
+    assert.equal(cost.amount, "2.00");
+    assert.equal(cost.opening, false);
+    assert.deepEqual(cost.unestimated, ["#1"]);
+  });
+
+  it("leaves a purchase's pending copy unmarked as an opening value", () => {
+    const cost = offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [{ label: "A", estimate: 1 }]);
+    assert.equal(cost.opening, false);
+  });
+});
+
 describe("an offer's COST totals (#1736)", () => {
   it("sums the sets' figures and averages over the sets carrying one", () => {
     const totals = offerCostTotals([
@@ -167,6 +194,25 @@ describe("a proposed lot's cost (#1743)", () => {
     assert.equal(cost.noOpeningValueCount, 1);
     assert.equal(cost.noneCount, 1);
     assert.equal(cost.opening, false);
+  });
+
+  it("counts a copy on a still-open opening balance at its estimate, with both marks (#2437)", () => {
+    const openOpening = copy({
+      lotId: "L5",
+      lotStatus: "open",
+      lotValued: true,
+      openingBalance: true,
+      costEstimate: "0.26",
+      label: "#7413",
+    });
+    assert.deepEqual(copyCostFigure(openOpening), { kind: "estimate", amount: "0.26" });
+    const cost = copiesCost([openOpening]);
+    assert.equal(cost.amount, "0.26");
+    assert.equal(cost.estimatedCount, 1);
+    assert.equal(cost.estimated, true);
+    assert.equal(cost.opening, true);
+    assert.equal(cost.openingCount, 0);
+    assert.equal(describeCostMarks(cost), "estimate, incl. opening value");
   });
 
   it("has no figure when no copy carries one", () => {

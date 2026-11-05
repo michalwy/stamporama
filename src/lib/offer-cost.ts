@@ -12,7 +12,9 @@
 // asking price is set against, so it follows the sale's profit, not the spend: the opening value is
 // counted, and the figure is marked *incl. opening value* wherever one is under it, as an estimate is
 // marked, so it is never read as money spent. A copy on an opening balance with **no** opening value
-// stays out, counted as having no cost. **Where a cost is still missing the figure says why** — no cost
+// stays out, counted as having no cost. **A copy on an opening balance that is still open counts at its
+// estimate** (#2437), as a pending purchase copy does, and the figure carries both marks — *estimate* and
+// *incl. opening value* — since it is neither settled nor money spent. **Where a cost is still missing the figure says why** — no cost
 // recorded, on an open purchase with no estimate, on the opening balance with no value
 // ({@link offerCostNotes}, {@link describeCostGaps}).
 //
@@ -28,6 +30,9 @@ export interface OfferPendingCopy {
   label: string;
   /** Its estimated cost, base currency, or null when none can be made. */
   estimate: number | null;
+  /** Its lot is on an opening balance that is still open (#2437): the estimate is a share of an
+   *  opening value, never money spent, so a figure counting it is marked *incl. opening value* too. */
+  openingBalance?: boolean;
 }
 
 /** One set's COST under #1736's rule. Every amount is a base-currency 2-dp string. */
@@ -99,6 +104,7 @@ export function offerSetCost(
   let total = known.count > 0 ? cents(Number(known.total)) : 0;
   if (opening.count > 0) total += cents(Number(opening.total));
   let estimatedCount = 0;
+  let estimatedOpening = false;
   const unestimated: string[] = [];
   for (const copy of pending) {
     if (copy.estimate == null) {
@@ -106,6 +112,7 @@ export function offerSetCost(
     } else {
       total += cents(copy.estimate);
       estimatedCount++;
+      if (copy.openingBalance) estimatedOpening = true;
     }
   }
   const counted = known.count + opening.count + estimatedCount;
@@ -118,7 +125,7 @@ export function offerSetCost(
     openingCount: opening.count,
     noOpeningValueCount: opening.noValueCount,
     estimated: pending.length > 0,
-    opening: opening.count > 0,
+    opening: opening.count > 0 || estimatedOpening,
   };
 }
 
@@ -184,9 +191,9 @@ export function copiesCost(copies: readonly CopyCostInput[]): OfferSetCost {
       openingTotal += cents(Number(figure.amount));
       openingCount++;
     } else if (figure.kind === "estimate") {
-      pending.push({ label: copy.label, estimate: Number(figure.amount) });
+      pending.push({ label: copy.label, estimate: Number(figure.amount), openingBalance: copy.openingBalance });
     } else if (figure.why === "pending") {
-      pending.push({ label: copy.label, estimate: null });
+      pending.push({ label: copy.label, estimate: null, openingBalance: copy.openingBalance });
     } else if (figure.why === "no_opening_value") {
       noValueCount++;
     } else {

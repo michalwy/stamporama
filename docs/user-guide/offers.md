@@ -104,7 +104,9 @@ its **opening value** — the same figure a sale's profit or loss counts it at �
 it shows a profit or a loss. The cost is then labelled **cost incl. opening value**, because an opening
 value was never money spent, and the hover says how many copies are counted that way. Your holdings,
 money spent and the return on purchases still never count an opening value. A copy on an opening
-balance stated **without** a value has no cost and is left out.
+balance stated **without** a value has no cost and is left out. A copy on an opening balance that is
+**still open** counts at the estimate its own page shows, and the cost is then marked both ways — `~`
+for the estimate and **incl. opening value** — since it is neither settled nor money spent.
 
 **When a cost is missing, it says why.** The hover counts the copies left out: *with no cost
 recorded* (they came from no purchase, or were dropped from one), *on an open purchase with no

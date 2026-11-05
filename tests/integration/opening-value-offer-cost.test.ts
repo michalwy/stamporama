@@ -13,7 +13,8 @@ import { addOfferSet, createOffer, getOfferDetail, readPrepareOffers } from "../
 //  - an opening balance's lot valued at 6.00 over two copies of one stamp, closed — 3.00 each;
 //  - an opening balance's lot with no value, one copy;
 //  - a purchase lot of 4.00, closed, one copy;
-//  - a copy from no lot at all.
+//  - a copy from no lot at all;
+//  - an opening balance's lot valued at 5.00, still open, one copy — counted at its estimate (#2437).
 
 const TS = Date.now();
 
@@ -21,6 +22,7 @@ describe("an offer's cost counts opening values (#2333)", () => {
   let userId: string;
   let collectionId: string;
   let offerId: string;
+  let openOfferId: string;
 
   before(async () => {
     userId = `test-user-opencost-${TS}`;
@@ -91,6 +93,18 @@ describe("an offer's cost counts opening values (#2333)", () => {
     await addOfferSet(userId, offerId, [openingA, bought]);
     await addOfferSet(userId, offerId, [openingB, noValue]);
     await addOfferSet(userId, offerId, [loose]);
+
+    // An opening balance that is still open (#2437): its only copy has an estimate and no basis yet.
+    const openLot = await createLot(userId, opening.id, 5, null);
+    const stillOpen = await intake(openLot);
+    openOfferId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "10.00",
+      currency: "EUR",
+      listingDate: null,
+    });
+    await addOfferSet(userId, openOfferId, [stillOpen]);
   });
 
   after(async () => {
@@ -134,5 +148,24 @@ describe("an offer's cost counts opening values (#2333)", () => {
     assert.equal(row.setsTotals.costOpening, true);
     assert.equal(row.setsTotals.costEstimated, false);
     assert.deepEqual(row.setsTotals.costGaps, { unrecorded: 1, unestimated: 0, noOpeningValue: 1 });
+  });
+
+  it("counts a copy on a still-open opening balance at its estimate, with both marks (#2437)", async () => {
+    const detail = (await getOfferDetail(userId, openOfferId))!;
+    const [set] = detail.sets;
+    assert.equal(set.cost.amount, "5.00");
+    assert.equal(set.cost.estimatedCount, 1);
+    assert.equal(set.cost.estimated, true);
+    assert.equal(set.cost.opening, true);
+    assert.equal(set.cost.openingCount, 0);
+    assert.equal(detail.setsTotals.costTotal, "5.00");
+    assert.equal(detail.setsTotals.costEstimated, true);
+    assert.equal(detail.setsTotals.costOpening, true);
+    assert.equal(detail.costPrice, "5.00");
+
+    const [row] = await readPrepareOffers(userId, collectionId, [openOfferId], ["preparing"]);
+    assert.equal(row.costPrice, "5.00");
+    assert.equal(row.setsTotals.costEstimated, true);
+    assert.equal(row.setsTotals.costOpening, true);
   });
 });

@@ -4477,12 +4477,14 @@ async function buildPrepareOffers(
   const allSets = rows.flatMap((row) => row.sets);
   const allIds = allSets.flatMap((s) => s.items.map((li) => li.itemId));
 
-  // Copies whose cost is still pending (#1736), exactly as the offer's own screen picks them.
+  // Copies whose cost is still pending (#1736), exactly as the offer's own screen picks them — an
+  // opening balance that is still open included (#2437).
   const pendingCopies = allSets.flatMap((s) =>
     s.items
-      .filter((li) => isHeld(li.item) && !lotIsOpeningBalance(li.item.lot))
+      .filter((li) => isHeld(li.item))
       .map((li) => ({
         id: li.itemId,
+        openingBalance: lotIsOpeningBalance(li.item.lot),
         costBasis: li.item.costBasis == null ? null : li.item.costBasis.toString(),
         lotId: li.item.lotId,
         ...lotCostInputs(li.item.lot),
@@ -4508,7 +4510,7 @@ async function buildPrepareOffers(
     // (#1889) — once for the page, one copy read per listing language.
     offersPrintedTextGaps(ownerId, collectionId, new Map(rows.map((row) => [row.id, ["name"] as const]))),
   ]);
-  const pendingIds = new Set(pendingCopies.map((c) => c.id));
+  const pendingOpening = new Map(pendingCopies.map((c) => [c.id, c.openingBalance]));
   const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
 
   // What each copy is listed under (#616), derived once per platform module across the page — the
@@ -4557,8 +4559,12 @@ async function buildPrepareOffers(
       const cost = offerSetCost(
         parts.known,
         items
-          .filter((li) => pendingIds.has(li.itemId))
-          .map((li) => ({ label: labeller.copyOf(li.item), estimate: costEstimates.get(li.itemId)?.amount ?? null })),
+          .filter((li) => pendingOpening.has(li.itemId))
+          .map((li) => ({
+            label: labeller.copyOf(li.item),
+            estimate: costEstimates.get(li.itemId)?.amount ?? null,
+            openingBalance: pendingOpening.get(li.itemId),
+          })),
         parts.opening
       );
       const sold = s.saleLines.length > 0;
@@ -5767,13 +5773,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // (#669) is now drawn whatever the offer is being sold on, and the grade is what its market link
   // asks the question at. One small per-collection read for a screen that draws it either way.
   const platformModule = offer.platform.platformModule;
-  // The copies whose cost is still pending (#1736) — held, off an opening balance, on an open lot:
-  // exactly the ones the holdings summary counts as `cost.pendingCount` — and their estimates.
+  // The copies whose cost is still pending (#1736) — held, on an open lot: exactly the ones the
+  // holdings summary counts as `cost.pendingCount` plus `openingValue.pendingCount`, an opening balance
+  // that is still open included (#2437) — and their estimates.
   const pendingCopies = offer.sets.flatMap((s) =>
     s.items
-      .filter((li) => isHeld(li.item) && !lotIsOpeningBalance(li.item.lot))
+      .filter((li) => isHeld(li.item))
       .map((li) => ({
         id: li.itemId,
+        openingBalance: lotIsOpeningBalance(li.item.lot),
         costBasis: li.item.costBasis == null ? null : li.item.costBasis.toString(),
         lotId: li.item.lotId,
         ...lotCostInputs(li.item.lot),
@@ -5790,7 +5798,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     // the holdings summary stays measurement-only (#602) and has no ratio to multiply by.
     estimateCopiesByGroup(offer.collectionId, setGroups),
   ]);
-  const pendingIds = new Set(pendingCopies.map((c) => c.id));
+  const pendingOpening = new Map(pendingCopies.map((c) => [c.id, c.openingBalance]));
   // What each copy is listed under (#616), resolved once for the screen and read by all four
   // surfaces below — the two blocker lists, the ready gate and the item list — so the page cannot
   // say a stamp is unmatched in one place and link its variant's catalogue page in another. Derived
@@ -5823,10 +5831,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     const cost = offerSetCost(
       parts.known,
       items
-        .filter((li) => pendingIds.has(li.itemId))
+        .filter((li) => pendingOpening.has(li.itemId))
         .map((li) => ({
           label: labeller.copyOf(li.item),
           estimate: costEstimates.get(li.itemId)?.amount ?? null,
+          openingBalance: pendingOpening.get(li.itemId),
         })),
       parts.opening
     );
