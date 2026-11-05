@@ -27,6 +27,7 @@ import type {
   ExportTask,
 } from "./colnect-export-handoff";
 import type { CloseTask } from "./colnect-close-handoff";
+import type { MarketItemRead, MarketRead, MarketTask } from "./colnect-market-handoff";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -417,6 +418,30 @@ export type ColnectCloseSaleResponse =
   | { ok: true; status: number; body: string }
   | { ok: false; error: string };
 
+// instance content script (on an offer's own screen) → background: "read Colnect's market for this
+// offer's stamps" (#2454). Through the worker for the close's reason — the page has no colnect.com tab
+// to ask from — and answered in one message: a read of a few pages, over in seconds, which the page
+// then records.
+export interface ColnectMarketRequest {
+  type: "colnect-market";
+  task: MarketTask;
+  /** The handoff this is, echoed back so the page can tell an answer from a leftover. */
+  requestId: string;
+}
+export type ColnectMarketResponse = { ok: true; read: MarketRead } | { ok: false; error: string };
+
+// background → content script on a **colnect.com** page: read one item's market list, every page of
+// it (#2454). In the page because Colnect's anti-bot interstitial answers anything that is not the
+// collector's own browser session (#419); the pages are parsed there too, a service worker having no
+// DOM to parse them with.
+export interface ColnectMarketFetchRequest {
+  type: "colnect-market-fetch";
+  colnectId: string;
+}
+export type ColnectMarketFetchResponse =
+  | { ok: true; signedInAs: string | null; item: MarketItemRead }
+  | { ok: false; error: string };
+
 export type BackgroundRequest =
   | MatchRequest
   | ConfirmRequest
@@ -587,6 +612,7 @@ export type BackgroundMessage =
   | ColnectApplyRequest
   | ColnectExportRequest
   | ColnectCloseRequest
+  | ColnectMarketRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

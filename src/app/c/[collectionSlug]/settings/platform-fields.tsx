@@ -33,7 +33,12 @@ import {
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
-import { DIRECT_PLATFORM_MODULE, FACEBOOK_PLATFORM_MODULE, platformUsesSetting } from "@/lib/platform-modules";
+import {
+  COLNECT_PLATFORM_MODULE,
+  DIRECT_PLATFORM_MODULE,
+  FACEBOOK_PLATFORM_MODULE,
+  platformUsesSetting,
+} from "@/lib/platform-modules";
 import {
   DEFAULT_PHOTO_COVER_COLOR,
   DEFAULT_PHOTO_COVER_STYLE,
@@ -174,6 +179,7 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
   const isModule = !!platform?.platformModule;
   const isFacebook = platform?.platformModule === FACEBOOK_PLATFORM_MODULE;
   const isDirect = platform?.platformModule === DIRECT_PLATFORM_MODULE;
+  const isColnect = platform?.platformModule === COLNECT_PLATFORM_MODULE;
   // What this platform's module does not use is not offered (#1944): Delcampe and Allegro have no
   // private note (#1957, #1956); Colnect no listing type, description format or title cap (#1959).
   // Nothing stored is left to show: `platforms.ts` writes such a setting empty on every save.
@@ -456,6 +462,29 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
               Fills nothing on its own: click <strong>min</strong> beside an offer&rsquo;s price to apply it.
             </FieldNote>
           </div>
+
+          {/* How far under a Colnect market price a click on it prices an offer (#2454). */}
+          {isColnect && (
+            <div>
+              <LabelWithError htmlFor="platform-market-price-step">
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                  Market price step
+                  <InfoHint>
+                    Clicking a price on an offer&rsquo;s Colnect market card sets the offer&rsquo;s price
+                    this much under it. In the platform&rsquo;s currency; 0.01 when left blank.
+                  </InfoHint>
+                </span>
+              </LabelWithError>
+              <NumericInput
+                kind="amount"
+                id="platform-market-price-step"
+                name="marketPriceStep"
+                defaultValue={platform?.marketPriceStep ?? ""}
+                placeholder="0.01"
+                style={INPUT_STYLE}
+              />
+            </div>
+          )}
 
           {/* When a sale here is due free extras and how generous they are (#2409): they prefill the
               free-extras action on the sale (#2408), on every platform, Facebook's included. */}

@@ -79,6 +79,7 @@ function parsePlatformFields(formData: FormData): PlatformInput {
     titleLanguage: str(formData, "titleLanguage") || null,
     defaultStartingPrice: normalizeDecimalInput(str(formData, "defaultStartingPrice")) || null,
     minimumPrice: normalizeDecimalInput(str(formData, "minimumPrice")) || null,
+    marketPriceStep: normalizeDecimalInput(str(formData, "marketPriceStep")) || null,
     defaultListingType: str(formData, "defaultListingType") || null,
     refreshQuickBuysAfterDays: refresh !== "" ? Number(refresh) : null,
     freeExtrasMinimumOrder: normalizeDecimalInput(str(formData, "freeExtrasMinimumOrder")) || null,

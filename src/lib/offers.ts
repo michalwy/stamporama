@@ -121,6 +121,7 @@ import {
   type ListingMode,
 } from "./listing-preconditions";
 import {
+  COLNECT_PLATFORM_MODULE,
   FACEBOOK_PLATFORM_MODULE,
   hasListingModule,
   usesPlatformCatalogue,
@@ -213,6 +214,8 @@ import {
 import { facebookDefaultStartingPrice, isFacebookLotPosted } from "./facebook-post-rules";
 import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import type { PlanDrift } from "./offer-generator-rules";
+import { getOfferColnectMarket } from "./colnect-market";
+import type { OfferColnectMarket } from "./colnect-market-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -5467,6 +5470,9 @@ export interface OfferDetail {
   /** The offer's stamps as Colnect's catalogue knows them (#423), on every platform (#669) — empty
    * only for an offer holding no copies yet. See {@link OfferPlatformItem}. */
   platformItems: OfferPlatformItem[];
+  /** The Colnect market card (#2454): the last read of what Colnect's marketplace asks for this
+   *  offer's stamps, per condition. Null on every offer that is not on the Colnect platform. */
+  colnectMarket: OfferColnectMarket | null;
   /** The copies on this offer that are promised in an **agreed** trade (#639), each with the trade
    * holding it. Non-empty is what makes **Activate** refuse — stated on the screen so the refusal is
    * met before the button rather than by it, and reported at every state rather than only where it
@@ -5593,6 +5599,11 @@ export interface OfferPlatformItem {
    * itself is edited and not from a list of links — and on a row standing under no nameable entry at
    * all (#617's unpriced tree), where *which* variant this would be is exactly what is missing. */
   matchStampId: string | null;
+  /** The Colnect item this row is listed under (#616) — the stamp's own, or the variant's — null when
+   *  there is none. What a Colnect market read (#2454) asks about. */
+  colnectItemId: string | null;
+  /** The row's condition in Colnect's vocabulary (#404), null when unmapped or a piece. */
+  colnectGrade: string | null;
   /** How many of the offer's copies this row stands for. */
   copyCount: number;
 }
@@ -5628,6 +5639,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       platformId: true,
       url: true,
       colnectSaleId: true,
+      // The last read of Colnect's market for this offer (#2454), for its card.
+      colnectMarketRead: true,
+      colnectMarketReadAt: true,
       listingType: true,
       price: true,
       startingPrice: true,
@@ -5695,6 +5709,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           // screen's price suggestions (#1283): it is a *creation-time* seed everywhere else, and
           // those are the one surface that asks the pricing question again after the offer exists.
           defaultStartingPrice: true,
+          // The step a click on a Colnect market price undercuts by (#2454), read for the Colnect
+          // market card — only drawn on the Colnect platform.
+          marketPriceStep: true,
           // The floor (#731), read for the same suggestions — but on every offer here, not only an
           // auction still missing an opening figure: it is asked back by hand, so there is no state
           // in which showing it would undo a decision already made.
@@ -5984,6 +6001,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const platformSale =
     (await unrecordedPlatformSales(offer.collectionId, [offerId])).get(offerId) ?? null;
 
+  const platformItems = platformItemsFor(offer.sets, labeller, conditionMap, catalogIds);
+  // The Colnect market card (#2454), on an offer on Colnect only.
+  const colnectMarket =
+    platformModule === COLNECT_PLATFORM_MODULE
+      ? await getOfferColnectMarket(offer.collectionId, {
+          platformItems,
+          read: offer.colnectMarketRead,
+          readAt: offer.colnectMarketReadAt,
+          step: offer.platform.marketPriceStep?.toFixed(2) ?? null,
+          currency: offer.currency,
+        })
+      : null;
+
   // Asking price converted to base at the current rate (#208). Skipped when already in base or
   // unpriced; a missing rate leaves it null.
   const priceNum = Number(offer.price);
@@ -6135,7 +6165,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
             ),
           ]
         : [],
-    platformItems: platformItemsFor(offer.sets, labeller, conditionMap, catalogIds),
+    platformItems,
+    colnectMarket,
     // #639. Read off the sets this screen already has rather than by a query of its own, and asked
     // of every offer whatever its state: what it says is *true about the copies*, and an offer whose
     // stock is spoken for is worth knowing about while it is still being assembled.
@@ -6252,6 +6283,8 @@ function platformItemsFor(
             : resolved?.gap?.kind === "unmatched-variant"
               ? resolved.gap.stampId
               : item.stampId,
+        colnectItemId: colnectId,
+        colnectGrade: grade?.value ?? null,
         copyCount: 1,
       });
     }

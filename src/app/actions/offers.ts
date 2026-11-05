@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
+import { recordColnectMarketRead } from "@/lib/colnect-market";
 import {
   createOffer,
   duplicateOffer,
@@ -1299,6 +1300,21 @@ export async function markOfferListingSyncedAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to mark the listing as up to date.");
+  }
+}
+
+/** **Check Colnect market** (#2454): keep the read the Assistant took of Colnect's marketplace for
+ *  this offer's stamps, replacing the last one. The extension reads; this records (#407's rule). */
+export async function recordColnectMarketReadAction(
+  offerId: string,
+  read: unknown
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await recordColnectMarketRead(session.user.id, offerId, read);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to keep the Colnect market read.");
   }
 }
 

@@ -54,8 +54,17 @@ import type {
   ColnectExportFetchResponse,
   ColnectCloseSaleRequest,
   ColnectCloseSaleResponse,
+  ColnectMarketFetchRequest,
+  ColnectMarketFetchResponse,
 } from "../core/messages";
 import { colnectCloseSaleBody, colnectCloseSalePath } from "../platform/colnect/sale-close";
+import {
+  COLNECT_MARKET_INTERVAL_MS,
+  COLNECT_MARKET_MAX_PAGES,
+  colnectMarketPath,
+  readColnectMarketPage,
+  type ColnectMarketOfferRead,
+} from "../platform/colnect/market";
 import {
   COLNECT_LIST_WRITE_PATH,
   colnectCondQtyBody,
@@ -672,6 +681,19 @@ if (!window.__stamporamaAssistantLoaded) {
     }
   );
 
+  // Reading one item's market list (#2454). **This one only reads** — the pages Colnect shows anyone
+  // browsing its marketplace — and it happens here because Colnect's anti-bot interstitial answers
+  // everything that is not this browser's own session (#419). Parsed here too: the worker has no DOM.
+  chrome.runtime.onMessage.addListener(
+    (msg: ColnectMarketFetchRequest, _sender, sendResponse: (r: ColnectMarketFetchResponse) => void) => {
+      if (msg?.type !== "colnect-market-fetch") return;
+      void readColnectMarket(msg.colnectId).then(sendResponse, (e: unknown) =>
+        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) })
+      );
+      return true;
+    }
+  );
+
   chrome.runtime.onMessage.addListener(
     (msg: ExtractRequest, _sender, sendResponse: (r: ExtractResponse) => void) => {
       if (msg?.type !== "extract") return;
@@ -807,4 +829,48 @@ async function closeColnectSale(saleId: string): Promise<ColnectCloseSaleRespons
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Read one item's market list (#2454), every page of it up to `COLNECT_MARKET_MAX_PAGES`, on the
+ * collector's own session. What a page *says* is `platform/colnect/market.ts`'s answer; this only
+ * fetches, pages and adds up.
+ */
+async function readColnectMarket(colnectId: string): Promise<ColnectMarketFetchResponse> {
+  const offers: ColnectMarketOfferRead[] = [];
+  const seen = new Set<string>();
+  let lots = 0;
+  let unreadable = 0;
+  let signedInAs: string | null = null;
+  let lastPage = 1;
+  let page = 1;
+  for (; page <= Math.min(lastPage, COLNECT_MARKET_MAX_PAGES); page++) {
+    if (page > 1) await new Promise((resolve) => setTimeout(resolve, COLNECT_MARKET_INTERVAL_MS));
+    const res = await fetch(colnectMarketPath(colnectId, page), { credentials: "include" });
+    if (!res.ok) return { ok: false, error: `Colnect answered HTTP ${res.status}` };
+    const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+    const read = readColnectMarketPage(doc);
+    signedInAs ??= read.signedInAs;
+    lastPage = Math.max(lastPage, read.lastPage);
+    lots += read.lots;
+    unreadable += read.unreadable;
+    for (const offer of read.offers) {
+      // Paging a list sorted by price can repeat a listing at a page boundary.
+      if (offer.saleCode && seen.has(offer.saleCode)) continue;
+      if (offer.saleCode) seen.add(offer.saleCode);
+      offers.push(offer);
+    }
+  }
+  return {
+    ok: true,
+    signedInAs,
+    item: {
+      colnectId,
+      offers,
+      lots,
+      unreadable,
+      pages: page - 1,
+      truncated: lastPage > COLNECT_MARKET_MAX_PAGES,
+    },
+  };
 }
