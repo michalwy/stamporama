@@ -27,6 +27,7 @@ import type {
 import { inventoryKeys } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { auctionKeys } from "@/app/c/[collectionSlug]/auctions/use-auctions-query";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { PlatformSelect } from "./platform-select";
 import { NumericInput } from "./numeric-input";
 import { TextInput } from "./text-input";
 import { RowActionsMenu } from "./row-actions-menu";
@@ -667,18 +668,15 @@ function PriceObservationFormDialog({
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <LabelWithError htmlFor="obs-platform">Platform</LabelWithError>
-              <PurchaseContactSelect
+              <PlatformSelect
                 collectionId={collectionId}
-                idFieldName="platformId"
-                nameFieldName="platformName"
-                initialContactId={platformId}
-                initialContactName={platformName}
-                inputId="obs-platform"
-                placeholder="Where it was listed"
-                role="platform"
-                onSelectionChange={(id, name) => {
-                  setPlatformId(id);
-                  setPlatformName(name);
+                id="obs-platform"
+                value={platformId}
+                valueName={observation?.platformName}
+                style={INPUT_STYLE}
+                onChange={(platform) => {
+                  setPlatformId(platform?.id ?? "");
+                  setPlatformName(platform?.name ?? "");
                 }}
               />
             </div>

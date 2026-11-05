@@ -17,8 +17,8 @@ export async function GET(
   const query = readSearchParam(request.nextUrl.searchParams, "q") ?? "";
   // Role-filtering for the trading pickers: `seller` for the supplier field (#120), `buyer` for the
   // sale buyer field (#166), `exchangePartner` for the trade partner field (#646). Any other value is
-  // ignored so the endpoint stays a plain name search for its other callers. A platform field
-  // searches `/platforms/search` (#1955).
+  // ignored so the endpoint stays a plain name search for its other callers. A platform field is a
+  // select of the platforms (#2432), not a search.
   const roleParam = request.nextUrl.searchParams.get("role");
   const role =
     roleParam === "seller"

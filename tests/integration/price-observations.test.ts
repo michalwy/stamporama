@@ -363,24 +363,24 @@ describe("price observations (#1633)", () => {
     assert.equal(await prisma.priceObservation.count({ where: { collectionId } }), 0);
   });
 
-  it("creates a platform and a house typed by name, each with its role", async () => {
+  it("creates a house typed by name, with its role", async () => {
     const suffix = Date.now();
     await createPriceObservation(
       userId,
       stampId,
-      raw({
-        platformId: null,
-        platformName: `Delcampe ${suffix}`,
-        auctionHouseId: null,
-        auctionHouseName: `Rauhut ${suffix}`,
-      })
+      raw({ auctionHouseId: null, auctionHouseName: `Rauhut ${suffix}` })
     );
-    // The platform is a platform (#1955) — a generic one, switched on — and the house a contact.
-    const platform = await prisma.platform.findFirstOrThrow({ where: { collectionId, name: `Delcampe ${suffix}` } });
     const house = await prisma.contact.findFirstOrThrow({ where: { collectionId, name: `Rauhut ${suffix}` } });
-    assert.equal(platform.platformModule, null);
-    assert.equal(platform.enabled, true);
     assert.equal(house.auctionHouse, true);
+  });
+
+  it("never creates a platform from a name (#2432)", async () => {
+    const suffix = Date.now();
+    await assert.rejects(
+      createPriceObservation(userId, stampId, raw({ platformId: null, platformName: `Delcampe ${suffix}` })),
+      /Name the platform/
+    );
+    assert.equal(await prisma.platform.count({ where: { collectionId, name: `Delcampe ${suffix}` } }), 0);
   });
 
   it("proposes the house's own terms for a new observation", async () => {

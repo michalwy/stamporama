@@ -11,6 +11,7 @@ import {
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
+import { PlatformSelect } from "@/app/c/[collectionSlug]/shared/platform-select";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { SaleHeaderRaw } from "@/app/actions/sales";
@@ -347,25 +348,20 @@ export function SaleFormDialog({
               <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="sale-platform">Platform</LabelWithError>
-                  <PurchaseContactSelect
+                  <PlatformSelect
                     collectionId={collectionId}
-                    idFieldName="platformId"
-                    nameFieldName="platformName"
-                    role="platform"
-                    initialContactId={initial?.platformId ?? initialPlatform?.id}
-                    initialContactName={initial?.platformName ?? initialPlatform?.name}
-                    inputId="sale-platform"
-                    placeholder="e.g. Delcampe, Allegro…"
+                    id="sale-platform"
+                    value={platformId}
+                    valueName={initial?.platformName ?? initialPlatform?.name}
                     disabled={isPending || platformLocked}
-                    onSelectionChange={(id, name, platform) => {
-                      setPlatformId(id);
-                      setPlatformName(name);
-                      // A picked platform carries its fixed currency (null when unset); a typed name is
-                      // an unknown/new platform, so its currency is prompted below (#196). Editing keeps
-                      // the sale's snapshot, so the platform's currency is not tracked then.
-                      if (mode !== "edit") {
-                        setPlatformCurrency(id ? platform?.platformCurrency : undefined);
-                      }
+                    style={INPUT_STYLE}
+                    onChange={(platform) => {
+                      setPlatformId(platform?.id ?? "");
+                      setPlatformName(platform?.name ?? "");
+                      // A chosen platform carries its fixed currency; one stating none has it prompted
+                      // below (#196). Editing keeps the sale's snapshot, so the platform's currency is
+                      // not tracked then.
+                      if (mode !== "edit") setPlatformCurrency(platform ? platform.platformCurrency : undefined);
                     }}
                   />
                   {platformLocked && (

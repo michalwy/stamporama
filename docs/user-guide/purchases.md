@@ -253,8 +253,8 @@ Click **Add purchase**. (For stamps you already own, click **Add opening balance
    the purchase (tagged as a seller, so it is offered again next time). The picker only
    suggests suppliers, so platforms and other contacts never clutter it. Leave it blank if
    the seller is unknown.
-2. **Platform** — optional; works the same way, scoped to platforms. Type a new name (e.g.
-   *Allegro*) and it is saved as a platform on save, or pick an existing one.
+2. **Platform** — optional; choose one of your switched-on [platforms](platforms.md), or *None*.
+   A platform you do not have yet is added under **Settings → Platforms**.
 3. **Date**, **Currency**, and **Status** — the date defaults to today and the currency to
    your collection's base currency.
 4. **Shipping / shared cost** — optional; spread across the order's lines by price.

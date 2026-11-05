@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   DialogShell,
   DialogBody,
@@ -13,6 +13,7 @@ import type { PurchaseListItem } from "@/lib/purchases";
 import { PURCHASE_STATUSES, PURCHASE_STATUS_META } from "@/lib/purchase-status";
 import { OPENING_BALANCE_TITLE_MAX, type PurchaseKind } from "@/lib/purchase-kind";
 import { PurchaseContactSelect } from "./purchase-contact-select";
+import { PlatformSelect } from "@/app/c/[collectionSlug]/shared/platform-select";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 
@@ -84,6 +85,9 @@ export function PurchaseFormDialog({
   onClose,
   onSubmit,
 }: PurchaseFormDialogProps) {
+  // Optional, so the select has an empty choice (#2432).
+  const [platformId, setPlatformId] = useState(purchase?.platformId ?? "");
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     onSubmit(new FormData(e.currentTarget));
@@ -136,16 +140,16 @@ export function PurchaseFormDialog({
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="purchase-platform">Platform</LabelWithError>
-              <PurchaseContactSelect
+              <PlatformSelect
                 collectionId={collectionId}
-                idFieldName="platformId"
-                nameFieldName="platformName"
-                role="platform"
-                initialContactId={purchase?.platformId}
-                initialContactName={purchase?.platformName}
-                inputId="purchase-platform"
-                placeholder="e.g. Allegro, eBay…"
+                name="platformId"
+                id="purchase-platform"
+                value={platformId}
+                valueName={purchase?.platformName}
+                optional
                 disabled={isPending}
+                style={INPUT_STYLE}
+                onChange={(p) => setPlatformId(p?.id ?? "")}
               />
             </div>
           </div>
