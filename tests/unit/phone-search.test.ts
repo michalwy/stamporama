@@ -21,6 +21,7 @@ function stamp(over: Partial<CollectionSearchStamp> = {}): CollectionSearchStamp
     ],
     photoId: null,
     subtype: null,
+    issueFormat: null,
     hasVariants: false,
     isVariant: false,
     copies: 0,

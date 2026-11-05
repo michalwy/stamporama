@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals and #2379 a sale's note; both wrappers exist and the registry carries **one hundred and thirty-seven operations** (#2379's `set_sale_note` made it one more without the count here following) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note and #2445 the issue format; both wrappers exist and the registry carries **one hundred and forty-five operations** (measured off `OPERATIONS` when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #1168's bid recommendation, and #1037's catalog-number
-resolver. Twenty counts are quoted
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #1168's bid recommendation, and #1037's catalog-number
+resolver. Twenty-one counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,9 +21,9 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198) and *the registry carries one hundred and twenty-six operations* (from #2198 until #2204) and *the registry carries one hundred and twenty-seven operations* (from #2204 until #2303 — #2208's `follow_issue_order` made it one hundred and twenty-eight without the count here following).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198) and *the registry carries one hundred and twenty-six operations* (from #2198 until #2204) and *the registry carries one hundred and twenty-seven operations* (from #2204 until #2303 — #2208's `follow_issue_order` made it one hundred and twenty-eight without the count here following) and *the registry carries one hundred and thirty-seven operations* (from #2303 until #2445, four behind the registry by then).
 
-**Ninety of them write** since #2303 added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**Ninety-six of them write** since #2445 added three issue-format writes — its `list_stamps` reads — to the ninety-three the registry held by then; *ninety of them write* was the count from #2303, which added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following —, until then; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -150,6 +150,7 @@ src/lib/agent-api/
   proposal-reads.ts a proposal row and record, naming a proposal, an offer and a lot, the lots a buyer took (#2303)
   variant-tree.ts   what keeps a variant or a base stamp from being deleted, and the refusals (#2140, #2171)
   issue-tree.ts     an issue named in a sentence; the refusals for a move's prefix clash and an issue not empty (#2169, #2172)
+  issue-formats.ts  `none`, an issue format named to write or to filter by, the filter parameter, the refusal for a word already answered to (#2445)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -184,10 +185,12 @@ src/lib/agent-api/
     conversation-log.ts  the five conversation-log operations (#2149) and the two for files (#2150)  ← server-side
     sale-attachments.ts  a sale's files: list and add (#2198)  ← server-side
     proposals.ts    the three proposal reads and six writes (#2303)    ← server-side
+    issue-formats.ts  the issue-format dictionary: create, update, order (#2445)  ← server-side
+    stamp-list.ts   list_stamps, the Stamps list read (#2445)           ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `sale-attachment-reads.ts`, `proposal-reads.ts`, `variant-tree.ts`, `issue-tree.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `sale-attachment-reads.ts`, `proposal-reads.ts`, `variant-tree.ts`, `issue-tree.ts`, `issue-formats.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -2540,6 +2543,74 @@ itself. **`update_stamp` was refactored, not changed**: its catalogue-number hal
 `create_issues` and `update_stamps` joined the exact list of `/issues` and `/stamps` writes in
 `agent-api-catalog-edits.test.ts`; `tests/integration/agent-api-batch-writes.test.ts` drives all
 three.
+
+## The issue format (#2445)
+
+**A stamp's issue format (#2439) reaches the agent whole**: read on every stamp and copy, filtered by
+on the three lists, set on one stamp or a hundred, and the dictionary itself added to, corrected and
+ordered. The collector settled *full coverage* on 2026-11-05: *set Souvenir sheet on every souvenir
+sheet I have* is `list_stamps` (or `resolve_catalog_numbers`) to find them and one confirmed
+`update_stamps` to apply it.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_stamps` (`GET /stamps`) | no | the Stamps list — by area, years, text and issue format, `total` stated |
+| `create_issue_format` | yes | an issue format, at the end of the order, as *Settings → Issue formats* adds one |
+| `update_issue_format` | yes | its name, abbreviation or chip colour; `clear: ["color"]` makes the chip neutral |
+| `set_issue_format_order` | yes | the collector's order — those sent lead, the rest follow, as `set_area_order` |
+
+**`none` is an ordinary stamp, and it is the only spelling of one.** There is no "Stamp" row — a
+null `issueFormatId` *is* an ordinary stamp, as a null copy format is a single (ADR-0020) — so a read
+leaves `issueFormat` out on an ordinary stamp, a filter names them `none` (the lists' own
+`ORDINARY_STAMP_ISSUE_FORMAT`, ticked beside the others), `update_stamps` takes `issue_format=none`,
+and `update_stamp` takes `none` or `clear: ["issue_format"]`. The word is reserved: an issue format
+named or abbreviated `none` is refused, since nothing could name it. `agent-api/issue-formats.ts` is
+the one place for all of it.
+
+**It is the stamp's, and the API says so in every description that names it**: a copy's `format` is
+how the collector's piece was cut or kept, and a copy reads its stamp's `issueFormat` beside it —
+the leading stamp's on a copy of several (ADR-0044), while the copy *filter* matches any carried
+stamp, which is #2440's reading of the Copies list. Nothing inherits it down the variant tree
+(ADR-0010), and `update_stamp` is the stamp form's write, so a variant is set on its own.
+
+**Every read that names a stamp's attributes names it** — `get_stamp`, `search_collection`'s stamps,
+`list_stamps`, `list_issues`' `stamps` with `include_numbers`, and on the copy side `get_copy`,
+`list_holdings` and `search_collection`'s copies. `get_collection_vocabulary` carries `issueFormats`
+— `{id, name, abbreviation, label?, color?}` in the collector's order — on #708's licence.
+
+**The filter is the lists' own**, declared once (`issueFormatFilterParameter`) and resolved once
+(`resolveIssueFormatFilter`) into the `issueFormatIds` #2440 gave `listStampsPaginated`,
+`listItemsPaginated` and `listIssuesPaginated`, so a stamp, a copy and an issue match here exactly as
+on the Stamps, Copies and Issues lists. It is a `string[]` (repeated or comma-separated) on
+`list_stamps`, `list_holdings` — and `summarize_valuation`, which shares its scope — and `list_issues`,
+an issue matching when one of its stamps does. `search_collection` is not filtered: it finds by text,
+and the three lists are where a question about a kind of stamp goes.
+
+**`list_stamps` is new, and it is the stamp search the issue needed.** Until #2445 nothing listed
+catalogue entries — `search_collection` finds a few by text, capped at twenty, and `list_issues`
+lists series. *The stamps in Poland with no issue format* is a question about stamps, so the
+collector chose a list of its own over reading stamps through `list_issues` (2026-11-05). It is
+`listStampsPaginated` whole, the total `countStamps` over the same `where`; a text with a catalogue
+in front (`Mi 200`) is the list's catalogue filter, anything else its search box.
+
+**The batch is `update_stamps`, grown rather than doubled**: an entry now carries `catalog_numbers`,
+`issue_format` or both (`parsePairFields` gained a `required` list for it), under the same cap of a
+hundred, the same per-item answer and the same rule that a refused item stops nothing. *Unchanged*
+is everything sent being what the stamp already had; a changed issue format is answered with the one
+it replaced in `replacedIssueFormat` (`none` for an ordinary stamp), as `replaced` names numbers.
+
+**The dictionary writes are the panel's** — `createStampIssueFormat` (which now returns the new id;
+the panel ignores it), `updateStampIssueFormat` handed no translations, and
+`reorderStampIssueFormats` handed the whole order. What the API adds is `create_subtype`'s rule,
+widened: **a name or an abbreviation another issue format already answers to is refused**, by name
+or by abbreviation, since the resolver matches both. Translated names and abbreviations were already
+`set_translations`' (kind `issue_format`, #2439). **Nothing is deleted**: `ISSUE_FORMAT_BOUNDARY` in
+`tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteStampIssueFormat` out of every
+operation module, and `tests/integration/agent-api-issue-formats.test.ts` pins the operations under
+`/issue-formats` and drives the rest.
+
+**One sentence fixed in passing**: `unknownVocabularyValue` said *is not a area*, *a album* and
+would have said *a issue format*; the article now follows the noun.
 
 ## Pricing the catalogue
 

@@ -2,9 +2,11 @@ import "server-only";
 import { prisma } from "../../db";
 import { notFound } from "../errors";
 import { FACEBOOK_PLATFORM_MODULE } from "../../platform-modules";
+import { isTagColor } from "../../tag-colors";
 import type {
   CatalogVocabularyEntry,
   CollectionVocabulary,
+  IssueFormatVocabularyEntry,
   ConditionVocabularyEntry,
   PlatformVocabularyEntry,
   SubtypeVocabularyEntry,
@@ -113,6 +115,7 @@ export async function readCollectionVocabulary(
     watermarks,
     papers,
     printings,
+    issueFormats,
   ] = await Promise.all([
       prisma.stampCondition.findMany({
         where: { collectionId },
@@ -233,6 +236,19 @@ export async function readCollectionVocabulary(
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         select: { id: true, name: true, translations: { where: { language }, select: { name: true } } },
       }),
+      // The issue formats (#2439), for `update_stamp`, `update_stamps` and the stamp and copy
+      // filters (#2445), in the collector's order.
+      prisma.stampIssueFormat.findMany({
+        where: { collectionId },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          name: true,
+          abbreviation: true,
+          color: true,
+          translations: { where: { language }, select: { name: true } },
+        },
+      }),
     ]);
   const attribute = (row: { id: string; name: string; translations: { name: string | null }[] }) =>
     entry(row.id, row.name, null, labelFor(row.name, row.translations[0]?.name));
@@ -298,6 +314,11 @@ export async function readCollectionVocabulary(
     watermarks: watermarks.map(attribute),
     papers: papers.map(attribute),
     printings: printings.map(attribute),
+    issueFormats: issueFormats.map((row): IssueFormatVocabularyEntry => ({
+      ...entry(row.id, row.name, null, labelFor(row.name, row.translations[0]?.name)),
+      abbreviation: row.abbreviation,
+      ...(isTagColor(row.color) ? { color: row.color } : {}),
+    })),
   };
 }
 
@@ -321,13 +342,13 @@ export const getCollectionVocabularyOperation: Operation = {
   method: "GET",
   path: "/vocabulary",
   description:
-    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs, marketplaces, exchange partners and the stamp attributes (colours, watermarks, papers, printings) — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
+    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs, marketplaces, exchange partners, the stamp attributes (colours, watermarks, papers, printings) and the issue formats — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
   writes: false,
   parameters: [],
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one, and `priceOnly: true` where it is a price column only — a cover's FP, FW, FM — which the catalogue price tools accept and nothing describing a copy, a want or a line does. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one, and `priceOnly: true` where it is a price column only — a cover's FP, FW, FM — which the catalogue price tools accept and nothing describing a copy, a want or a line does. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `issueFormats` are the forms a stamp is issued in — a souvenir sheet, a booklet pane — each with its `abbreviation` and its chip `color` where it has one; a stamp with none is an ordinary stamp, which has no row and which a filter names `none`. An issue format is the stamp's, and differs from a copy's `format` (a single, a pair, a block), which is how the collector's piece was cut or kept. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

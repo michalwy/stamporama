@@ -17,6 +17,8 @@ export interface AgentIssueStamp {
   readonly isVariant: boolean;
   /** The stamp it is a variant of; absent on a stamp that is no one's variant. */
   readonly parentStampId?: string;
+  /** Its issue format (#2445) by name — `Souvenir sheet`; absent on an ordinary stamp. */
+  readonly issueFormat?: string;
 }
 
 /** Copies held of an issue's stamps in one condition. */
@@ -116,6 +118,8 @@ export interface IssueStampSource {
   readonly sortKey: string | null;
   /** Its catalogue numbers, already labelled. */
   readonly catalogNumbers: readonly string[];
+  /** Its issue format's name, or null for an ordinary stamp. */
+  readonly issueFormat: string | null;
 }
 
 /**
@@ -133,6 +137,7 @@ export function issueStamps(members: readonly IssueStampSource[]): AgentIssueSta
       catalogNumbers: [...member.catalogNumbers],
       isVariant: member.parentId !== null,
       parentStampId: member.parentId ?? undefined,
+      issueFormat: member.issueFormat ?? undefined,
     })
   );
 }

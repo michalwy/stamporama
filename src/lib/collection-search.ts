@@ -3,6 +3,8 @@ import { prisma } from "./db";
 import { searchStampsForPicker } from "./stamps";
 import { searchIssues } from "./issues";
 import { listItemsPaginated } from "./items";
+import { STAMP_ISSUE_FORMAT_DISPLAY_SELECT, stampIssueFormatLabel } from "./stamp-issue-formats";
+import type { StampIssueFormatLabel } from "./stamp-issue-format-defaults";
 import { loadStampCopyCounts } from "./copy-counts";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import type { WantPriority } from "./want-rules";
@@ -106,6 +108,9 @@ export interface CollectionSearchStamp {
    *  serving route addresses the bytes by, and the caller is the one holding the token. */
   photoId: string | null;
   subtype: SubtypeLabel | null;
+  /** The stamp's issue format (#2439) — souvenir sheet, booklet pane — or null for an ordinary
+   *  stamp. Read beside the numbers, for the agent API's rows (#2445). */
+  issueFormat: StampIssueFormatLabel | null;
   /** True for a base stamp that has variants — the copies below may be filed on a child. */
   hasVariants: boolean;
   isVariant: boolean;
@@ -158,6 +163,9 @@ export interface CollectionSearchCopy {
   certificate: CollectionSearchAxisValue | null;
   /** Null is *single* (ADR-0020) — no such dictionary row exists, so there is nothing to draw. */
   format: CollectionSearchAxisValue | null;
+  /** The issue format of the copy's leading stamp (#2439), or null for an ordinary stamp — the
+   *  form the stamp was issued in, never how this piece was cut, which is {@link format}. */
+  issueFormat: StampIssueFormatLabel | null;
   /** The shelf reference it is filed under (#303), or null. */
   locationRef: string | null;
   /**
@@ -259,12 +267,14 @@ export async function searchCollection(
             id: true,
             stampNo: true,
             catalogNumbers: { select: { catalogVendorId: true, number: true } },
+            ...STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
           },
         })
       : Promise.resolve([]),
   ]);
   const numbersByStamp = new Map(stampNumbers.map((s) => [s.id, s.catalogNumbers]));
   const stampNoByStamp = new Map(stampNumbers.map((s) => [s.id, s.stampNo]));
+  const issueFormatByStamp = new Map(stampNumbers.map((s) => [s.id, stampIssueFormatLabel(s)]));
 
   return {
     query: text,
@@ -284,6 +294,7 @@ export async function searchCollection(
       ),
       photoId: stampPhotos.get(s.stampId) ?? null,
       subtype: s.subtype,
+      issueFormat: issueFormatByStamp.get(s.stampId) ?? null,
       hasVariants: s.hasVariants,
       isVariant: s.isVariant,
       copies: counts.direct.get(s.stampId)?.total ?? 0,
@@ -318,6 +329,7 @@ export async function searchCollection(
             name: item.formatName ?? "?",
           }
         : null,
+      issueFormat: item.issueFormat,
       locationRef: item.locationRef,
       inCollection: item.inCollection,
       forSale: item.forSale,

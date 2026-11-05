@@ -171,11 +171,13 @@ export interface StampIssueFormatInput {
   translations?: TranslationValueMap;
 }
 
+/** Adds an issue format at the end of the collector's order; returns its id (the agent API answers
+ *  with it, #2445 — the Settings panel ignores it). */
 export async function createStampIssueFormat(
   ownerId: string,
   collectionId: string,
   data: StampIssueFormatInput
-): Promise<void> {
+): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const last = await prisma.stampIssueFormat.findFirst({
     where: { collectionId },
@@ -193,6 +195,7 @@ export async function createStampIssueFormat(
     select: { id: true },
   });
   await syncIssueFormatTranslations(created.id, data.translations);
+  return created.id;
 }
 
 export async function updateStampIssueFormat(

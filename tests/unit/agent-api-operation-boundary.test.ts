@@ -594,6 +594,41 @@ describe("the agent API's operation modules (#2139)", () => {
 });
 
 /**
+ * **The issue-format dictionary is added to, corrected and ordered, and never deleted** (#2445) —
+ * #1438's rule for every catalogue write. Deleting an issue format stays in Settings.
+ */
+const ISSUE_FORMAT_BOUNDARY = new Map<string, string>([["deleteStampIssueFormat", "deletes an issue format"]]);
+
+describe("the agent API's operation modules (#2445)", () => {
+  it("reach no domain function that deletes an issue format", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const why = ISSUE_FORMAT_BOUNDARY.get(name);
+        if (why) breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${why}`);
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent adds, corrects and orders issue formats, and never deletes one (#2445).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the issue-format writes that are allowed", () => {
+    const fixture = path.join(AGENT_API, "operations/issue-formats.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const allowed of ["createStampIssueFormat", "updateStampIssueFormat", "reorderStampIssueFormats"]) {
+      assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/issue-formats.ts`);
+    }
+    const domain = readFileSync(path.join(ROOT, "src/lib/stamp-issue-formats.ts"), "utf8");
+    for (const name of ISSUE_FORMAT_BOUNDARY.keys()) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of src/lib/stamp-issue-formats.ts any more`);
+    }
+  });
+});
+
+/**
  * **The catalogue writes create and correct, and never delete, move or reorder** (#1438). An issue,
  * a stamp or a variant is created and its names, numbers and attributes corrected; deleting one,
  * moving a stamp to another issue or under another parent, merging two issues, moving an issue to
