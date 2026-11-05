@@ -27,8 +27,10 @@ import {
   DETAIL_BUTTON,
   Field,
   FieldGrid,
+  FieldGroup,
+  FieldGroups,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
-import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
+import { StampCatalogChips, StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
@@ -297,142 +299,188 @@ export function CopyDetailPanel({
           {/* Left: the copy itself — its facts, what was written about it, what it looks
               like, what its stamp is worth. */}
           <DetailColumn>
+            {/* The copy's facts in four titled groups, general to specific (#2434): first where it
+                sits in the catalogue, then what state it is in, what it is worth, and where it is
+                kept. One ungrouped grid put Condition beside Value reduction and Ref beside Catalog
+                value, and finding one fact meant reading the whole card. */}
             <DetailCard title="Details">
-              <FieldGrid>
-                {/* Coloured exactly as the copies list colours it (#728) — a chip a collector
-                    learned to recognise on the list has to be the same chip on the copy's own
-                    screen, or the colour is a list convention rather than the entry's own. */}
-                {/* A piece has no condition (#2383): its state is its franking and its faults. */}
-                {item.conditionId && (
-                  <Field label="Condition">
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                      <ConditionChip
-                        collectionId={collectionId}
-                        conditionId={item.conditionId}
-                        label={item.conditionAbbreviation}
-                        tooltip={item.conditionName}
-                      />
-                      {item.conditionName}
-                    </span>
+              <FieldGroups>
+                <FieldGroup title="Catalogue">
+                  <Field label="Area">{areaPath}</Field>
+                  <Field label="Issue">
+                    {item.issueId ? (
+                      <Link
+                        href={`/c/${collectionSlug}/issues/${item.issueId}`}
+                        style={{ color: "var(--color-accent)", textDecoration: "none" }}
+                      >
+                        {[item.issueYear, item.issueName].filter(Boolean).join(", ") || "(unnamed issue)"}
+                      </Link>
+                    ) : null}
                   </Field>
-                )}
-                {/* What is wrong with the piece (#1557), beside the condition it qualifies — the
-                    chips the Copies row draws, from the same source. Edited in the copy dialog. */}
-                <Field label="Faults">
-                  {item.faults.length > 0 ? (
-                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
-                      <FaultChips faults={item.faults} size="medium" />
-                    </span>
-                  ) : null}
-                </Field>
-                {/* What those faults take off the copy's value (#1560), beside them. */}
-                <Field label="Value reduction">
-                  {item.faultReductionPercent !== null ? `${item.faultReductionPercent} %` : null}
-                </Field>
-                {/* The catalogue exception on this piece (#2357): the modifier with its note, and the
-                    catalogue figure it adjusts — the result is the Catalog value below. */}
-                <Field label="Value modifier">
-                  {item.valueModifier
-                    ? [
-                        valueModifierLabel(
-                          item.valueModifier,
-                          value.valueModifier ? value.currency : null
-                        ),
-                        item.valueModifier.note,
-                        value.valueModifier
-                          ? `catalogue ${value.valueModifier.fullAmount} ${value.currency}`
-                          : "no catalogue value to adjust",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : null}
-                </Field>
-                <Field label="Certificate">
-                  {item.certificateStatusName ? (
-                    <CertificateStatusChip
-                      collectionId={collectionId}
-                      certificateStatusId={item.certificateStatusId}
-                      label={item.certificateStatusName}
-                    />
-                  ) : null}
-                </Field>
-                <Field label="Format">{item.formatName ?? "Single"}</Field>
-                <Field label="Delivery">{deliveryStateLabel(item.deliveryState)}</Field>
-                <Field label="Area">{areaPath}</Field>
-                <Field label="Issue">
-                  {item.issueId ? (
-                    <Link
-                      href={`/c/${collectionSlug}/issues/${item.issueId}`}
-                      style={{ color: "var(--color-accent)", textDecoration: "none" }}
-                    >
-                      {[item.issueYear, item.issueName].filter(Boolean).join(", ") || "(unnamed issue)"}
-                    </Link>
-                  ) : null}
-                </Field>
-                <Field label="Location">{locationPath}</Field>
-                <Field label="Ref">{item.locationRef}</Field>
-                <Field label="Cost basis">
-                  {item.costBasis ? (
-                    `${item.costBasis} ${baseCurrency}`
-                  ) : resolveCostBasis(item).state === "pending" ? (
-                    <PendingCost item={item} baseCurrency={baseCurrency} />
-                  ) : item.lotId ? (
-                    <MissingFigure label="Pending" reason={costPendingHint(null)} />
-                  ) : null}
-                </Field>
-                {/* A piece's figure is computed by its valuation method (#2359), not read off one
-                    catalogue cell, and the label must not say otherwise. */}
-                <Field label={value.piece ? "Computed value" : "Catalog value"}>
-                  {value.unpriced ? (
-                    value.mark ? (
-                      <CatalogPriceMarkText mark={value.mark} full rolledUp={value.uncertain} />
-                    ) : null
-                  ) : value.faultReduction || value.valueModifier ? (
-                    // Adjusted by the copy's value modifier (#2357) and lowered for its faults
-                    // (#1560): the Copies row's marks, and the figures before each in the hover, from
-                    // the same valuation.
-                    <Tooltip
-                      content={[
-                        value.valueModifier
-                          ? valueModifierHint(
-                              value.valueModifier.fullAmount,
-                              value.currency,
-                              value.valueModifier
-                            )
-                          : null,
-                        value.faultReduction
-                          ? `Full ${faultReductionHint(
-                              value.faultReduction.fullAmount,
-                              value.currency,
-                              value.faultReduction.percent
-                            )}`
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" — ")}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
-                        {copyValueText(value, baseCurrency)}
-                        {value.valueModifier && (
-                          <ValueModifierMark modifier={value.valueModifier} currency={value.currency} />
-                        )}
-                        {value.faultReduction && (
-                          <FaultReductionMark percent={value.faultReduction.percent} />
-                        )}
-                      </span>
-                    </Tooltip>
-                  ) : (
-                    copyValueText(value, baseCurrency)
+                  {/* The stamp and its numbers repeat the identity band on purpose: the group is
+                      where the copy is placed in the catalogue, and it reads whole without the band.
+                      A piece carrying several stamps is a copy of none of them — the Stamps card
+                      below lists them, so the group stops at its area and issue. */}
+                  {!item.multiStamp && (
+                    <Field label="Stamp">
+                      <Link
+                        href={`/c/${collectionSlug}/stamps/${item.stampId}`}
+                        style={{
+                          textDecoration: "none",
+                          color: item.stampName ? "var(--color-accent)" : "var(--color-text-muted)",
+                          fontStyle: item.stampName ? undefined : "italic",
+                        }}
+                      >
+                        {item.stampName ?? "(unnamed)"}
+                      </Link>
+                    </Field>
                   )}
-                </Field>
-                <Field label="Added">{new Date(item.createdAt).toLocaleDateString()}</Field>
-                {item.disposedAt && (
-                  <Field label="Disposed">
-                    {new Date(item.disposedAt).toLocaleDateString()}
-                    {item.disposalNote ? ` — ${item.disposalNote}` : ""}
+                  {!item.multiStamp && (
+                    <Field label="Catalog numbers">
+                      {item.catalogNumbers.length > 0 ? (
+                        <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                          <StampCatalogChips
+                            catalogNumbers={item.catalogNumbers}
+                            vendorMap={vendorMap}
+                            primaryVendorId={primaryVendorId}
+                          />
+                        </span>
+                      ) : null}
+                    </Field>
+                  )}
+                </FieldGroup>
+
+                <FieldGroup title="State">
+                  {/* Coloured exactly as the copies list colours it (#728) — a chip a collector
+                      learned to recognise on the list has to be the same chip on the copy's own
+                      screen, or the colour is a list convention rather than the entry's own. */}
+                  {/* A piece has no condition (#2383): its state is its franking and its faults. */}
+                  {item.conditionId && (
+                    <Field label="Condition">
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                        <ConditionChip
+                          collectionId={collectionId}
+                          conditionId={item.conditionId}
+                          label={item.conditionAbbreviation}
+                          tooltip={item.conditionName}
+                        />
+                        {item.conditionName}
+                      </span>
+                    </Field>
+                  )}
+                  <Field label="Certificate">
+                    {item.certificateStatusName ? (
+                      <CertificateStatusChip
+                        collectionId={collectionId}
+                        certificateStatusId={item.certificateStatusId}
+                        label={item.certificateStatusName}
+                      />
+                    ) : null}
                   </Field>
-                )}
-              </FieldGrid>
+                  <Field label="Format">{item.formatName ?? "Single"}</Field>
+                  {/* What is wrong with the piece (#1557) — the chips the Copies row draws, from the
+                      same source. Edited in the copy dialog. */}
+                  <Field label="Faults">
+                    {item.faults.length > 0 ? (
+                      <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                        <FaultChips faults={item.faults} size="medium" />
+                      </span>
+                    ) : null}
+                  </Field>
+                </FieldGroup>
+
+                <FieldGroup title="Value">
+                  {/* A piece's figure is computed by its valuation method (#2359), not read off one
+                      catalogue cell, and the label must not say otherwise. */}
+                  <Field label={value.piece ? "Computed value" : "Catalog value"}>
+                    {value.unpriced ? (
+                      value.mark ? (
+                        <CatalogPriceMarkText mark={value.mark} full rolledUp={value.uncertain} />
+                      ) : null
+                    ) : value.faultReduction || value.valueModifier ? (
+                      // Adjusted by the copy's value modifier (#2357) and lowered for its faults
+                      // (#1560): the Copies row's marks, and the figures before each in the hover,
+                      // from the same valuation.
+                      <Tooltip
+                        content={[
+                          value.valueModifier
+                            ? valueModifierHint(
+                                value.valueModifier.fullAmount,
+                                value.currency,
+                                value.valueModifier
+                              )
+                            : null,
+                          value.faultReduction
+                            ? `Full ${faultReductionHint(
+                                value.faultReduction.fullAmount,
+                                value.currency,
+                                value.faultReduction.percent
+                              )}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" — ")}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
+                          {copyValueText(value, baseCurrency)}
+                          {value.valueModifier && (
+                            <ValueModifierMark modifier={value.valueModifier} currency={value.currency} />
+                          )}
+                          {value.faultReduction && (
+                            <FaultReductionMark percent={value.faultReduction.percent} />
+                          )}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      copyValueText(value, baseCurrency)
+                    )}
+                  </Field>
+                  {/* What the faults take off the copy's value (#1560). */}
+                  <Field label="Value reduction">
+                    {item.faultReductionPercent !== null ? `${item.faultReductionPercent} %` : null}
+                  </Field>
+                  {/* The catalogue exception on this piece (#2357): the modifier with its note, and
+                      the catalogue figure it adjusts — the result is the Catalog value beside it. */}
+                  <Field label="Value modifier">
+                    {item.valueModifier
+                      ? [
+                          valueModifierLabel(
+                            item.valueModifier,
+                            value.valueModifier ? value.currency : null
+                          ),
+                          item.valueModifier.note,
+                          value.valueModifier
+                            ? `catalogue ${value.valueModifier.fullAmount} ${value.currency}`
+                            : "no catalogue value to adjust",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : null}
+                  </Field>
+                  <Field label="Cost basis">
+                    {item.costBasis ? (
+                      `${item.costBasis} ${baseCurrency}`
+                    ) : resolveCostBasis(item).state === "pending" ? (
+                      <PendingCost item={item} baseCurrency={baseCurrency} />
+                    ) : item.lotId ? (
+                      <MissingFigure label="Pending" reason={costPendingHint(null)} />
+                    ) : null}
+                  </Field>
+                </FieldGroup>
+
+                <FieldGroup title="Storage">
+                  <Field label="Location">{locationPath}</Field>
+                  <Field label="Ref">{item.locationRef}</Field>
+                  <Field label="Delivery">{deliveryStateLabel(item.deliveryState)}</Field>
+                  <Field label="Added">{new Date(item.createdAt).toLocaleDateString()}</Field>
+                  {item.disposedAt && (
+                    <Field label="Disposed">
+                      {new Date(item.disposedAt).toLocaleDateString()}
+                      {item.disposalNote ? ` — ${item.disposalNote}` : ""}
+                    </Field>
+                  )}
+                </FieldGroup>
+              </FieldGroups>
             </DetailCard>
 
             {/* Beside the location it answers for: where the copy was before (#2277). */}

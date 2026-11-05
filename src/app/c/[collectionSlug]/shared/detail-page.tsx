@@ -103,6 +103,46 @@ export function FieldGrid({ children, min = "12rem" }: { children: ReactNode; mi
   );
 }
 
+/**
+ * A card's fields in titled groups (#2434), stacked in the order the screen lists them. For a card
+ * whose facts are many enough that one grid has no evident order — the copy's Details card.
+ */
+export function FieldGroups({ children }: { children: ReactNode }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: "1.125rem" }}>{children}</div>;
+}
+
+/**
+ * One titled group inside {@link FieldGroups}. It starts on a row of its own and wraps its own
+ * fields, so a narrow card keeps each group's title over the fields it names.
+ */
+export function FieldGroup({
+  title,
+  min,
+  children,
+}: {
+  title: string;
+  min?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", minWidth: 0 }}>
+      <h3
+        style={{
+          margin: 0,
+          paddingBottom: "0.25rem",
+          borderBottom: "1px solid var(--color-border)",
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        {title}
+      </h3>
+      <FieldGrid min={min}>{children}</FieldGrid>
+    </div>
+  );
+}
+
 /** One label/value pair. A blank value reads as an em dash rather than as an empty row — the
  *  field is part of the record whether or not it is filled in. */
 export function Field({ label, children }: { label: string; children?: ReactNode }) {

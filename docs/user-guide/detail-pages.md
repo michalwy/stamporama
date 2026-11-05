@@ -90,8 +90,15 @@ Purchase, Sale, Offers. Only Details is always there; the rest appear when the c
 - **State chips** — disposition (*In collection*, *For sale*, *For trade*), delivery state, *Sold*
   and any disposal. Your own [tags](tags.md) sit on the identity line above, the same chips the
   Copies list draws; they are changed in the copy form **Edit** opens.
-- **Details** — condition, certificate status, physical format, area, issue, storage location and
-  in-location ref, cost-basis, catalog value, and the date it was added.
+- **Details** — the copy's facts in four titled groups, from the general to the specific:
+  - **Catalogue** — area, issue, the stamp (click through to its page) and every catalog number it
+    carries, read the same as the identity line. A piece carrying several stamps shows only area and
+    issue here; its stamps are in the **Stamps on this piece** card.
+  - **State** — condition (never on a piece), certificate status, physical format and faults.
+  - **Value** — catalog value (*Computed value* on a piece), the value reduction for its faults, any
+    value modifier, and the cost basis.
+  - **Storage** — storage location and in-location ref, delivery state, the date it was added, and
+    the disposal date and note on a copy that has left your hands.
 - **Stamps on this piece** — only on a copy carrying more than one: every stamp on it in your own
   order, with each component's format and quantity where they are not the plain default. A **Several
   stamps** chip sits with the state chips, because that is what takes the piece out of every count
