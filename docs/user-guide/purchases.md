@@ -1204,6 +1204,12 @@ without one*), and nothing it does clears a mark.
 - **On the strip** it is on each card's header line, and it reaches the card's tiles **in view** that
   are still to be identified — a tile the chip above the strip is hiding is not marked, and neither is
   a tile already identified or discarded.
+- **On every scan at once** it is on the **Card scans** header too: a stockbook of MNH is many cards in
+  one condition, and one pick there marks the unmarked tiles in view on every card of the purchase,
+  folded cards included. Its hint says how many tiles it will mark and on how many scans — *Mark 214
+  unmarked tiles on 9 scans with a condition…* — and, as on a card, a tile the chip is hiding is not
+  marked. A card still being cut gives the tiles already cut; a scan still being prepared has none yet
+  and is named in the hint. The per-card action stays where it is.
 - **In the cut editor** it is in the toolbar beside **Mark…** and reaches every box of the card.
 - **Not on backs.** The back scan's editor and the unpaired backs on the strip do not offer it: a back
   is paired with its front only when the cut is made or the back is dragged on, and there the mark
