@@ -23,6 +23,7 @@ import { normalizeRole, sortPhotos } from "./photos";
 import {
   costGapsOf,
   holdingsCostParts,
+  notHeldCounts,
   offerCostTotals,
   offerSetCost,
   sumCostGaps,
@@ -4240,6 +4241,8 @@ export interface PreparePicture {
  *  leans on an estimate or includes opening values, and the copies it is still missing, by why. */
 export interface PrepareSetsTotals {
   setCount: number;
+  /** The copies on the offer's sets, held or not — a cost with none says *no copies* (#2436). */
+  copyCount: number;
   costEstimated: boolean;
   costOpening: boolean;
   costGaps: CostGaps;
@@ -4275,6 +4278,7 @@ export interface PrepareOffer {
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
   costPrice: string | null;
+  costUnconvertible: boolean;
   setsTotals: PrepareSetsTotals;
   pictures: PreparePicture[];
   /** {@link pictures} are the offer's generated listing images rather than the copies' photos. */
@@ -4565,7 +4569,8 @@ async function buildPrepareOffers(
             estimate: costEstimates.get(li.itemId)?.amount ?? null,
             openingBalance: pendingOpening.get(li.itemId),
           })),
-        parts.opening
+        parts.opening,
+        notHeldCounts(items.map((li) => li.item))
       );
       const sold = s.saleLines.length > 0;
       const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: items.map((li) => li.itemId) }, soldVia);
@@ -4620,8 +4625,10 @@ async function buildPrepareOffers(
       marketPrice: figures.marketPrice,
       marketUnconvertible: figures.marketUnconvertible,
       costPrice: figures.costPrice,
+      costUnconvertible: figures.costUnconvertible,
       setsTotals: {
         setCount: sets.length,
+        copyCount: sets.reduce((n, s) => n + s.items.length, 0),
         costEstimated: sets.some((s) => s.cost.estimated),
         costOpening: sets.some((s) => s.cost.opening),
         costGaps: sumCostGaps(sets.map((s) => costGapsOf(s.cost))),
@@ -5215,6 +5222,8 @@ export interface OfferDetailSet {
  */
 export interface OfferSetsTotals {
   setCount: number;
+  /** The copies on the offer's sets, held or not — a cost with none says *no copies* (#2436). */
+  copyCount: number;
   catalogTotal: string | null;
   catalogAverage: string | null;
   /** Sets carrying a catalogue value — the catalogue average's divisor. */
@@ -5372,6 +5381,9 @@ export interface OfferDetail {
   /** What the copies cost per set (#378, estimates included #1736), in the offer's currency. Null
    * when no set's cost is known or no rate is available. */
   costPrice: string | null;
+  /** True when there is a cost but no rate converts it into the offer's currency (#2436) — which the
+   * price table's Cost row says, naming the two currencies. */
+  costUnconvertible: boolean;
   /** The platform's configured opening figure for an auction (#362, narrowed in #449/#553), in the
    * platform's own currency; null where none is set or the platform lists quick buys. It seeded this
    * offer's starting price at creation and is **not** re-applied anywhere — the offer's screen
@@ -5837,7 +5849,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           estimate: costEstimates.get(li.itemId)?.amount ?? null,
           openingBalance: pendingOpening.get(li.itemId),
         })),
-      parts.opening
+      parts.opening,
+      notHeldCounts(items.map((li) => li.item))
     );
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
@@ -5908,6 +5921,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const costAverageNum = costTotals.average;
   const setsTotals: OfferSetsTotals = {
     setCount: sets.length,
+    copyCount: sets.reduce((n, s) => n + s.itemIds.length, 0),
     catalogTotal: money(catalogTotalNum),
     catalogAverage: money(catalogAverageNum),
     catalogValuedSets: valuedSets,
@@ -6028,6 +6042,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     marketPrice: figures.marketPrice,
     marketUnconvertible: figures.marketUnconvertible,
     costPrice: figures.costPrice,
+    costUnconvertible: figures.costUnconvertible,
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     platformMinimumPrice: offer.platform.minimumPrice?.toFixed(2) ?? null,
     sets,

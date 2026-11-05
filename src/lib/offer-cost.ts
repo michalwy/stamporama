@@ -16,13 +16,16 @@
 // estimate** (#2437), as a pending purchase copy does, and the figure carries both marks — *estimate* and
 // *incl. opening value* — since it is neither settled nor money spent. **Where a cost is still missing the figure says why** — no cost
 // recorded, on an open purchase with no estimate, on the opening balance with no value
-// ({@link offerCostNotes}, {@link describeCostGaps}).
+// ({@link offerCostNotes}, {@link describeCostGaps}). **A copy no longer held adds nothing** (#2436) —
+// disposed, or marked not delivered or damaged — and is named by why with the other gaps, so a cost
+// that is `—` because nothing under it is held still says so.
 //
 // Pure: `offers.ts` feeds it the frozen side (from the set's holdings summary, {@link holdingsCostParts})
 // and each pending copy's estimate (from `cost-estimates.ts`), so the unit suite can hold the rule. The
 // Lot builder's proposed lot is costed by the same rule from its copies' own fields (`copiesCost`, #1743).
 
 import { resolveCostBasis, type CostBasisInput, type CostBasisTotal } from "./cost-basis";
+import { isHeld, type HeldInput } from "./disposal";
 
 /** A pending copy of a set, as the offer's COST needs it. */
 export interface OfferPendingCopy {
@@ -52,6 +55,8 @@ export interface OfferSetCost {
   openingCount: number;
   /** Copies on an opening balance with no opening value — left out, counted as having no cost. */
   noOpeningValueCount: number;
+  /** Copies no longer held (#2436), by why — left out of {@link amount}, as everywhere (#396). */
+  notHeld: NotHeldCounts;
   /** {@link amount} leans on an open lot — an estimate, or a gap where one could not be made. */
   estimated: boolean;
   /** {@link amount} includes opening values (#2333) — never money spent, so it is marked. */
@@ -67,6 +72,29 @@ export interface OfferOpeningCost {
 }
 
 const NO_OPENING: OfferOpeningCost = { total: "0.00", count: 0, noValueCount: 0 };
+
+/** The copies of a set no longer held (#2436), by why: disposed after delivery (#394), or marked
+ *  not delivered or damaged on intake. Each a copy count. */
+export interface NotHeldCounts {
+  notDelivered: number;
+  damaged: number;
+  disposed: number;
+}
+
+export const NO_NOT_HELD: NotHeldCounts = { notDelivered: 0, damaged: 0, disposed: 0 };
+
+/** Counts the copies {@link isHeld} rejects, by why. A disposed copy counts as disposed whatever its
+ *  delivery state, the order `isHeld` asks in. */
+export function notHeldCounts(copies: readonly HeldInput[]): NotHeldCounts {
+  const counts = { ...NO_NOT_HELD };
+  for (const copy of copies) {
+    if (isHeld(copy)) continue;
+    if (copy.disposedAt != null) counts.disposed++;
+    else if (copy.deliveryState === "not_delivered") counts.notDelivered++;
+    else counts.damaged++;
+  }
+  return counts;
+}
 
 const cents = (amount: number) => Math.round(amount * 100);
 
@@ -94,12 +122,14 @@ export function holdingsCostParts(holdings: { cost: CostBasisTotal; openingValue
 
 /**
  * A set's COST: its frozen cost bases (`known.total` over `known.count` copies), its opening values
- * (#2333), plus the estimate of each pending copy that has one.
+ * (#2333), plus the estimate of each pending copy that has one. `notHeld` counts the copies left out
+ * because they are gone (#2436), so a figure can say why it is missing.
  */
 export function offerSetCost(
   known: { total: string; count: number; noneCount: number },
   pending: readonly OfferPendingCopy[],
-  opening: OfferOpeningCost = NO_OPENING
+  opening: OfferOpeningCost = NO_OPENING,
+  notHeld: NotHeldCounts = NO_NOT_HELD
 ): OfferSetCost {
   let total = known.count > 0 ? cents(Number(known.total)) : 0;
   if (opening.count > 0) total += cents(Number(opening.total));
@@ -124,6 +154,7 @@ export function offerSetCost(
     noneCount: known.noneCount,
     openingCount: opening.count,
     noOpeningValueCount: opening.noValueCount,
+    notHeld,
     estimated: pending.length > 0,
     opening: opening.count > 0 || estimatedOpening,
   };
@@ -247,8 +278,9 @@ export function offerCostTotals(sets: readonly OfferSetCost[]): OfferCostTotals 
   };
 }
 
-/** The copies a cost is still missing for, by why (#2333) — each a copy count. */
-export interface CostGaps {
+/** The copies a cost is still missing for, by why (#2333) — each a copy count. The copies no longer
+ *  held are among them (#2436): they add nothing to a cost, and a cost of nothing but them is `—`. */
+export interface CostGaps extends NotHeldCounts {
   /** No cost recorded: no purchase lot, or dropped from a closed one. */
   unrecorded: number;
   /** On an open purchase with no estimate. */
@@ -257,32 +289,35 @@ export interface CostGaps {
   noOpeningValue: number;
 }
 
-export const NO_COST_GAPS: CostGaps = { unrecorded: 0, unestimated: 0, noOpeningValue: 0 };
+export const NO_COST_GAPS: CostGaps = { unrecorded: 0, unestimated: 0, noOpeningValue: 0, ...NO_NOT_HELD };
 
 export function costGapsOf(cost: OfferSetCost): CostGaps {
-  return { unrecorded: cost.noneCount, unestimated: cost.unestimated.length, noOpeningValue: cost.noOpeningValueCount };
+  return {
+    unrecorded: cost.noneCount,
+    unestimated: cost.unestimated.length,
+    noOpeningValue: cost.noOpeningValueCount,
+    ...cost.notHeld,
+  };
 }
 
+const GAP_KEYS = ["unrecorded", "unestimated", "noOpeningValue", "notDelivered", "damaged", "disposed"] as const;
+
 export function sumCostGaps(gaps: readonly CostGaps[]): CostGaps {
-  return gaps.reduce(
-    (sum, g) => ({
-      unrecorded: sum.unrecorded + g.unrecorded,
-      unestimated: sum.unestimated + g.unestimated,
-      noOpeningValue: sum.noOpeningValue + g.noOpeningValue,
-    }),
-    NO_COST_GAPS
-  );
+  const sum = { ...NO_COST_GAPS };
+  for (const g of gaps) for (const k of GAP_KEYS) sum[k] += g[k];
+  return sum;
 }
 
 export function hasCostGaps(gaps: CostGaps): boolean {
-  return gaps.unrecorded + gaps.unestimated + gaps.noOpeningValue > 0;
+  return GAP_KEYS.some((k) => gaps[k] > 0);
 }
 
 const copiesWord = (n: number) => `${n} cop${n === 1 ? "y" : "ies"}`;
 
 /**
  * Why a cost is missing, a phrase per reason (#2333): *3 copies with no cost recorded*, *2 on open
- * purchases with no estimate*, *1 on the opening balance with no value*. Empty when nothing is missing.
+ * purchases with no estimate*, *1 on the opening balance with no value*, then the copies no longer held
+ * (#2436): *1 copy not delivered*, *1 copy damaged*, *1 copy disposed*. Empty when nothing is missing.
  */
 export function describeCostGaps(gaps: CostGaps): string[] {
   const out: string[] = [];
@@ -291,7 +326,29 @@ export function describeCostGaps(gaps: CostGaps): string[] {
     out.push(`${gaps.unestimated} on ${gaps.unestimated === 1 ? "an open purchase" : "open purchases"} with no estimate`);
   }
   if (gaps.noOpeningValue > 0) out.push(`${gaps.noOpeningValue} on the opening balance with no value`);
+  if (gaps.notDelivered > 0) out.push(`${copiesWord(gaps.notDelivered)} not delivered`);
+  if (gaps.damaged > 0) out.push(`${copiesWord(gaps.damaged)} damaged`);
+  if (gaps.disposed > 0) out.push(`${copiesWord(gaps.disposed)} disposed`);
   return out;
+}
+
+/**
+ * Why a cost has no figure at all (#2333, #2436), the note a `—` Cost carries: no rate converting it
+ * into the offer's currency (naming the two), the copies it is missing by why ({@link describeCostGaps},
+ * the copies no longer held among them), or *no copies* when the offer has none. Since every copy is
+ * counted, gapped or gone, one of these is always true of a `—`.
+ */
+export function describeMissingCost(cost: {
+  unconvertible: { from: string; to: string } | null;
+  gaps: CostGaps;
+  copyCount: number;
+}): string[] {
+  const why = [
+    ...(cost.unconvertible ? [`no rate from ${cost.unconvertible.from} to ${cost.unconvertible.to}`] : []),
+    ...describeCostGaps(cost.gaps),
+  ];
+  if (why.length === 0 && cost.copyCount === 0) why.push("no copies");
+  return why;
 }
 
 /** The note on a cost counting opening values (#2333): *4 copies at their opening value — not money
@@ -321,10 +378,18 @@ export function offerCostNotes(cost: {
   openingCount: number;
   noneCount: number;
   noOpeningValueCount: number;
+  notHeld?: NotHeldCounts;
 }): string[] {
   const notes = offerCostEstimateNotes(cost.estimatedCount, cost.unestimated);
   if (cost.openingCount > 0) notes.push(describeOpeningCount(cost.openingCount));
-  notes.push(...describeCostGaps({ unrecorded: cost.noneCount, unestimated: 0, noOpeningValue: cost.noOpeningValueCount }));
+  notes.push(
+    ...describeCostGaps({
+      unrecorded: cost.noneCount,
+      unestimated: 0,
+      noOpeningValue: cost.noOpeningValueCount,
+      ...(cost.notHeld ?? NO_NOT_HELD),
+    })
+  );
   return notes;
 }
 

@@ -297,6 +297,8 @@ export interface OfferPriceFigureSummary {
   marketUnconvertible: boolean;
   /** The COST per set; null when no set's cost is known or no rate converts it. */
   costPrice: string | null;
+  /** There is a COST, but no rate converts it into the offer's currency (#2436). */
+  costUnconvertible: boolean;
   /** The base-currency sums the catalogue figure was taken from, for the offer's totals (#378). */
   catalogue: { sumBase: number; reductionBase: number; valuedSets: number };
   /** The COST per set, base currency (#1736). */
@@ -370,6 +372,7 @@ export function offerPriceFigures(
         : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
     marketUnconvertible: marketSets > 0 && marketAmount === null,
     costPrice: inOffer(costAverageBase),
+    costUnconvertible: costAverageBase !== null && toOffer === null,
     catalogue: { sumBase: sumSetCV, reductionBase: sumSetReduction, valuedSets },
     costAverageBase,
   };

@@ -297,6 +297,7 @@ describe("the price table's figures over an offer's sets", () => {
       noneCount: 0,
       openingCount: 0,
       noOpeningValueCount: 0,
+      notHeld: { notDelivered: 0, damaged: 0, disposed: 0 },
       estimated: false,
       opening: false,
     },
@@ -340,5 +341,12 @@ describe("the price table's figures over an offer's sets", () => {
     assert.equal(figures.marketPrice, null);
     // Results exist; it is the rate that is missing — the Market row says so.
     assert.equal(figures.marketUnconvertible, true);
+    // So does the Cost row (#2436): there is a cost, only no rate into the offer's currency.
+    assert.equal(figures.costUnconvertible, true);
+  });
+
+  it("calls a missing cost unconvertible only when there is a cost to convert (#2436)", () => {
+    assert.equal(offerPriceFigures([set()], 1).costUnconvertible, false);
+    assert.equal(offerPriceFigures([set({ cost: null })], null).costUnconvertible, false);
   });
 });

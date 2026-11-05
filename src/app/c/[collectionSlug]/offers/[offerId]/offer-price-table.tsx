@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { describeCostGaps, describeCostMarks, type CostGaps } from "@/lib/offer-cost";
+import { describeCostGaps, describeCostMarks, describeMissingCost, type CostGaps } from "@/lib/offer-cost";
 import {
   describeCatalogueSource,
   describeEstimateBasis,
@@ -34,7 +34,8 @@ export interface OfferPriceTableOffer {
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
   costPrice: string | null;
-  setsTotals: { setCount: number; costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
+  costUnconvertible: boolean;
+  setsTotals: { setCount: number; copyCount: number; costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
 }
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)" };
@@ -113,7 +114,7 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
 
 /** The short note in brackets after a row's name (#1839): what the figure is, and nothing more. Since
  *  #1843 only Estimated, Cost and the offer's own price carry one; the catalogue's book and Market's
- *  reason for being empty are the tooltip's. A Cost with no figure says why instead (#2333). */
+ *  reason for being empty are the tooltip's. A Cost with no figure says why instead (#2333, #2436). */
 function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; warn: boolean } | null {
   switch (row.key) {
     case "estimated":
@@ -125,10 +126,14 @@ function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; 
           }
         : null;
     case "cost": {
-      // A missing cost says why (#2333); a figure says what is under it — an estimate, opening values.
+      // A missing cost says why (#2333, #2436); a figure says what is under it — an estimate, opening values.
       if (row.amount === null) {
-        const gaps = describeCostGaps(offer.setsTotals.costGaps);
-        return gaps.length > 0 ? { text: gaps.join(", "), warn: true } : null;
+        const why = describeMissingCost({
+          unconvertible: offer.costUnconvertible ? { from: offer.baseCurrency, to: offer.currency } : null,
+          gaps: offer.setsTotals.costGaps,
+          copyCount: offer.setsTotals.copyCount,
+        });
+        return why.length > 0 ? { text: why.join(", "), warn: true } : null;
       }
       const marks = describeCostMarks({
         estimated: offer.setsTotals.costEstimated,

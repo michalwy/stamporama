@@ -110,7 +110,8 @@ for the estimate and **incl. opening value** — since it is neither settled nor
 
 **When a cost is missing, it says why.** The hover counts the copies left out: *with no cost
 recorded* (they came from no purchase, or were dropped from one), *on an open purchase with no
-estimate*, or *on the opening balance with no value*.
+estimate*, or *on the opening balance with no value* — and the copies you no longer hold, which add
+nothing to a cost: *not delivered*, *damaged*, or *disposed*.
 
 In the Sets header band — the strip holding the heading, the grouping and sorting controls, and the
 **Add set** / **Collapse all** buttons — the same two figures are given for the **whole listing**:
@@ -266,9 +267,11 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
   are no recorded results (or that none can be converted into the offer's currency).
 - **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open and
   **(incl. opening value)** when copies from an opening balance count at their opening value. The row
-  is **always there**: with no cost known it reads *—*, and its note says why — *3 copies with no cost
-  recorded*, *2 on open purchases with no estimate*, *1 on the opening balance with no value*. Where
-  only some copies are missing, the hover names them.
+  is **always there**: with no cost known it reads *—*, and its note always says why — *3 copies with
+  no cost recorded*, *2 on open purchases with no estimate*, *1 on the opening balance with no value*;
+  *1 copy not delivered*, *1 copy damaged* or *1 copy disposed* for copies you no longer hold;
+  *no rate from PLN to EUR* when the cost cannot be converted into the offer's currency; or *no
+  copies* when the offer has none. Where only some copies are missing, the hover names them.
 - **Your price** — the offer's own price, last, with the base-currency equivalent in brackets
   (*≈ 0.22 PLN*) when the offer's currency differs from your collection's. It reads as plain text;
   **click it** to type a new one. On an auction this row is the **Current price** — where the
@@ -3318,7 +3321,7 @@ currency; a lot without a figure is left out of that figure and the line says **
 Copies from an opening balance count at their opening value, and the purchase cost then says **incl.
 opening value** (an **estimate** is marked the same way); copies still without a cost are counted by
 why — *with no cost recorded*, *on open purchases with no estimate*, *on the opening balance with no
-value*.
+value*, and copies no longer held as *not delivered*, *damaged* or *disposed*.
 Withdrawn lots are left out. Once lots have sold, a **Sold** line says what their sale brought in and
 the profit on them, beside the asking figures. Whether **More** is open is remembered, as on the Offers
 list.

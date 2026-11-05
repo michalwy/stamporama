@@ -3,10 +3,14 @@ import assert from "node:assert/strict";
 import type { CostBasisTotal } from "../../src/lib/cost-basis";
 import {
   copiesCost,
+  costGapsOf,
   copyCostFigure,
   describeCostGaps,
   describeCostMarks,
+  describeMissingCost,
   holdingsCostParts,
+  NO_COST_GAPS,
+  notHeldCounts,
   offerCostEstimateNotes,
   offerCostNotes,
   offerCostTotals,
@@ -292,19 +296,19 @@ describe("an offer set's opening values (#2333)", () => {
     assert.equal(totals.total, 7);
     assert.equal(totals.opening, true);
     assert.equal(totals.openingCount, 1);
-    assert.deepEqual(totals.gaps, { unrecorded: 1, unestimated: 1, noOpeningValue: 2 });
+    assert.deepEqual(totals.gaps, { unrecorded: 1, unestimated: 1, noOpeningValue: 2, notDelivered: 0, damaged: 0, disposed: 0 });
   });
 });
 
 describe("what a cost says beside it (#2333)", () => {
   it("names why a cost is missing, a phrase per reason", () => {
-    assert.deepEqual(describeCostGaps({ unrecorded: 0, unestimated: 0, noOpeningValue: 0 }), []);
-    assert.deepEqual(describeCostGaps({ unrecorded: 3, unestimated: 2, noOpeningValue: 1 }), [
+    assert.deepEqual(describeCostGaps({ ...NO_COST_GAPS }), []);
+    assert.deepEqual(describeCostGaps({ ...NO_COST_GAPS, unrecorded: 3, unestimated: 2, noOpeningValue: 1 }), [
       "3 copies with no cost recorded",
       "2 on open purchases with no estimate",
       "1 on the opening balance with no value",
     ]);
-    assert.deepEqual(describeCostGaps({ unrecorded: 1, unestimated: 1, noOpeningValue: 0 }), [
+    assert.deepEqual(describeCostGaps({ ...NO_COST_GAPS, unrecorded: 1, unestimated: 1 }), [
       "1 copy with no cost recorded",
       "1 on an open purchase with no estimate",
     ]);
@@ -330,5 +334,63 @@ describe("what a cost says beside it (#2333)", () => {
       "1 copy with no cost recorded",
       "1 on the opening balance with no value",
     ]);
+  });
+});
+
+describe("a cost is never — without saying why (#2436)", () => {
+  const held = { disposedAt: null, deliveryState: "delivered" };
+
+  it("counts the copies no longer held by why, a disposed copy as disposed", () => {
+    assert.deepEqual(
+      notHeldCounts([
+        held,
+        { disposedAt: null, deliveryState: "in_transit" },
+        { disposedAt: null, deliveryState: "not_delivered" },
+        { disposedAt: null, deliveryState: "damaged" },
+        { disposedAt: null, deliveryState: "damaged" },
+        { disposedAt: new Date("2026-10-01"), deliveryState: "delivered" },
+        { disposedAt: "2026-10-01", deliveryState: "damaged" },
+      ]),
+      { notDelivered: 1, damaged: 2, disposed: 2 }
+    );
+  });
+
+  it("leaves a set of copies no longer held at — and names them among its gaps", () => {
+    const cost = offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [], undefined, {
+      notDelivered: 1,
+      damaged: 0,
+      disposed: 0,
+    });
+    assert.equal(cost.amount, null);
+    assert.deepEqual(describeCostGaps(costGapsOf(cost)), ["1 copy not delivered"]);
+  });
+
+  it("sums the copies no longer held across sets, and names them in a figure's hover", () => {
+    const sets = [
+      offerSetCost({ total: "4.00", count: 1, noneCount: 0 }, [], undefined, { notDelivered: 0, damaged: 1, disposed: 0 }),
+      offerSetCost({ total: "0.00", count: 0, noneCount: 0 }, [], undefined, { notDelivered: 0, damaged: 0, disposed: 2 }),
+    ];
+    const totals = offerCostTotals(sets);
+    assert.equal(totals.total, 4);
+    assert.deepEqual(describeCostGaps(totals.gaps), ["1 copy damaged", "2 copies disposed"]);
+    assert.deepEqual(offerCostNotes(sets[0]), ["1 copy damaged"]);
+  });
+
+  it("names the two currencies when no rate converts the cost", () => {
+    assert.deepEqual(
+      describeMissingCost({ unconvertible: { from: "PLN", to: "EUR" }, gaps: NO_COST_GAPS, copyCount: 1 }),
+      ["no rate from PLN to EUR"]
+    );
+  });
+
+  it("says no copies when the offer has none", () => {
+    assert.deepEqual(describeMissingCost({ unconvertible: null, gaps: NO_COST_GAPS, copyCount: 0 }), ["no copies"]);
+  });
+
+  it("reads the existing reasons as before", () => {
+    assert.deepEqual(
+      describeMissingCost({ unconvertible: null, gaps: { ...NO_COST_GAPS, unrecorded: 1, noOpeningValue: 2 }, copyCount: 3 }),
+      ["1 copy with no cost recorded", "2 on the opening balance with no value"]
+    );
   });
 });
