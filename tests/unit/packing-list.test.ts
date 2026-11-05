@@ -566,3 +566,52 @@ describe("packingLocationLegend", () => {
     assert.deepEqual(packingLocationLegend([copy({ locationId: null })], LOCATIONS), []);
   });
 });
+
+describe("buildPackingList — issue format (#2444)", () => {
+  const SHEET = { name: "Souvenir sheet", abbreviation: "Bl", color: "indigo" };
+
+  it("carries the stamp's issue format abbreviation and name on the row", () => {
+    const list = buildPackingList([copy({ issueFormat: SHEET })], AREAS, LOCATIONS, MAPS);
+    const [row] = list.groups[0].rows;
+    assert.equal(row.issueFormat, "Bl");
+    assert.equal(row.issueFormatName, "Souvenir sheet");
+  });
+
+  it("leaves an ordinary stamp's row without one", () => {
+    const list = buildPackingList(
+      [copy({ issueFormat: null }), copy({ stampId: "s2" })],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    for (const row of list.groups[0].rows) {
+      assert.equal(row.issueFormat, null);
+      assert.equal(row.issueFormatName, null);
+    }
+  });
+
+  it("never merges a souvenir sheet with a stamp out of one", () => {
+    const list = buildPackingList(
+      [
+        copy({ stampId: "sheet", issueFormat: SHEET }),
+        copy({
+          stampId: "ex",
+          issueFormat: { name: "Stamp from a souvenir sheet", abbreviation: "exBl", color: null },
+        }),
+        copy({ stampId: "sheet", issueFormat: SHEET }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS
+    );
+    const rows = list.groups[0].rows.map((r) => ({ format: r.issueFormat, quantity: r.quantity }));
+    assert.equal(rows.length, 2);
+    assert.deepEqual(
+      rows.sort((a, b) => (a.format ?? "").localeCompare(b.format ?? "")),
+      [
+        { format: "Bl", quantity: 2 },
+        { format: "exBl", quantity: 1 },
+      ]
+    );
+  });
+});

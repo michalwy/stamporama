@@ -840,6 +840,20 @@ you like to pack, not something about one order. So set it once and every packin
 comes out the same way. (Adding the two number columns reset the remembered selection once, so that
 they actually show up — if you had customised the chips before, set them again.)
 
+### Showing the issue format
+
+A souvenir sheet and a stamp taken out of one are different things to pull off the shelf. The
+**Issue format** switch, under **Show** at the head of the chips row, prints each line's
+[issue format](collections.md#issue-formats) beside its catalogue number — a souvenir sheet's line reads
+`Mi·PL 200 Bl`. A stamp with no issue format is an ordinary stamp and prints nothing extra. The
+abbreviation prints as plain text, without its chip colour, so it reads the same in black and white;
+hover it on screen for the full name. It prints in the **Catalog** column, so it shows only while that
+column is on.
+
+The switch starts **off**, so the sheet reads as it always has until you turn it on, and is
+remembered the same way as the columns: once, for every sale. Lines that differ only in issue format
+are always different stamps, so they never merge into one line with a quantity.
+
 Copies you already ticked as **packed** in the app print with a **✓** in the box; the rest print
 empty, for ticking by hand. The sheet is a snapshot — ticking on paper doesn't change anything in
 Stamporama, so update the packed checkboxes on the detail screen when you're back at the computer.

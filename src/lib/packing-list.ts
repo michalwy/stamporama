@@ -32,6 +32,11 @@ import { compareLocationRef } from "./location-ref";
 // collector's own storage names. The codes are explained by a legend printed apart from it ({@link packingLocationLegend}). Shelf order is still the order of the
 // paths — a code is a label, and collating the labels would reorder the walk.
 //
+// Every row carries its stamp's **issue format** (#2444) — a souvenir sheet and a stamp taken out of
+// one are different things to pull off the shelf — and the sheet prints it only when the collector
+// switches it on. It needs no place in the merge key: the issue format is the stamp's (#2439), and
+// the stamp is already in the key, so two rows differing in it are two stamps and never one row.
+//
 // A sheet the partner reads is the same shaping with the shelf taken out of it: the divisions are the
 // transaction's own (a trade's sections), and the rows inside them read by catalogue number, because
 // a walk along somebody else's shelves is not a thing the reader can do.
@@ -146,6 +151,8 @@ export interface PackingCopy {
   issueId: string | null;
   catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   issueName: string | null;
+  /** The stamp's issue format (#2439), or null — an ordinary stamp. Absent reads as null. */
+  issueFormat?: { name: string; abbreviation: string } | null;
   /** Null for a piece, which has no condition (#2383); its row prints none. */
   conditionId: string | null;
   conditionName: string | null;
@@ -182,6 +189,12 @@ export interface PackingListRow {
   /** Full path of the collection area the stamp sits in (`Polska › II RP`), or null. Like the
    * issue, it is a property of the stamp, so it is constant across a merged row. */
   areaPath: string | null;
+  /** The stamp's issue format abbreviation (#2444, `Bl`), or null for an ordinary stamp — printed
+   *  beside the catalogue number when the sheet's switch is on. The stamp's, so constant across a
+   *  merged row like the issue. */
+  issueFormat: string | null;
+  /** The issue format's full name, for the hover hint. */
+  issueFormatName: string | null;
   /** Condition abbreviation (e.g. `**`), falling back to the full name. Null for a piece (#2383). */
   condition: string | null;
   /** Full condition name, for the printed legend / tooltip. */
@@ -380,6 +393,8 @@ export function buildPackingList(
       stampName: copy.stampName,
       issueName: copy.issueName,
       areaPath: buildAreaPath(areas, copy.areaId),
+      issueFormat: copy.issueFormat?.abbreviation || copy.issueFormat?.name || null,
+      issueFormatName: copy.issueFormat?.name ?? null,
       condition: copy.conditionAbbreviation || copy.conditionName,
       conditionName: copy.conditionName,
       certificateStatusName: copy.certificateStatusName,

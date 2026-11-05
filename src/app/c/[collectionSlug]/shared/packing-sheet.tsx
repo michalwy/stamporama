@@ -1,7 +1,10 @@
 "use client";
 
 import type { PackingListData, PackingListGroup, PackingListRow } from "@/lib/packing-list";
-import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import {
+  usePersistentString,
+  usePersistentToggle,
+} from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatItemNo } from "@/lib/item-number";
@@ -27,6 +30,9 @@ import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb
 
 export interface PackingCellContext {
   collectionId: string;
+  /** The sheet's *Issue format* switch (#2444): print each row's issue format beside its catalogue
+   *  number. */
+  issueFormat: boolean;
 }
 
 export interface PackingColumnSpec {
@@ -137,17 +143,33 @@ export const PACKING_COLUMN = {
     nowrap: true,
     strong: true,
     // A free extra (#2408) is marked where the row is named, so no column choice can drop the mark.
-    render: (row) =>
-      row.freeExtra ? (
+    // The issue format (#2444), when the sheet's switch is on, is printed beside the number as plain
+    // text — no chip colour, so it reads the same in black and white. An ordinary stamp prints none.
+    render: (row, ctx) => {
+      const format = ctx.issueFormat ? row.issueFormat : null;
+      if (!format && !row.freeExtra) return row.catalog;
+      return (
         <>
-          {row.catalog}{" "}
-          <span style={{ fontWeight: 500, fontSize: "0.75em", color: "var(--color-text-secondary)" }}>
-            (free)
-          </span>
+          {row.catalog}
+          {format && (
+            <>
+              {" "}
+              <Tooltip content={row.issueFormatName ?? format}>
+                <span style={{ fontWeight: 500 }}>{format}</span>
+              </Tooltip>
+            </>
+          )}
+          {row.freeExtra && (
+            <>
+              {" "}
+              <span style={{ fontWeight: 500, fontSize: "0.75em", color: "var(--color-text-secondary)" }}>
+                (free)
+              </span>
+            </>
+          )}
         </>
-      ) : (
-        row.catalog
-      ),
+      );
+    },
   },
   area: {
     key: "area",
@@ -261,6 +283,11 @@ export function SheetChipsLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** The thin rule between two groups of screen-only chips. */
+export function SheetChipsDivider() {
+  return <span style={{ width: "1px", height: "1rem", background: "var(--color-border)", margin: "0 0.25rem" }} />;
+}
+
 /** One screen-only toggle chip over the sheet — a column, or a sheet's own switch. */
 export function SheetChip({
   on,
@@ -320,6 +347,9 @@ export interface PackingSheetProps {
    *  list names the columns that existed when it was saved, so a column added later would silently
    *  never appear for anyone who had ever touched the chips. */
   prefKey: string;
+  /** Where this printout's *Issue format* switch (#2444) is remembered — off until the collector
+   *  turns it on, and kept per printout, globally, as the columns are. */
+  issueFormatKey: string;
   /** Said in place of the table when there is nothing on the transaction to print. */
   empty: string;
   /** The heading's icon — the shelf for a walk-order sheet, the transaction's own division for a
@@ -360,6 +390,7 @@ export function PackingSheet({
   pinnedColumns = [],
   controls,
   prefKey,
+  issueFormatKey,
   empty,
   groupIcon = "location",
   ticks = "source",
@@ -373,6 +404,7 @@ export function PackingSheet({
   rowNote,
 }: PackingSheetProps) {
   const [raw, setRaw] = usePersistentString(prefKey, defaultPackingColumns(columns));
+  const [issueFormat, setIssueFormat] = usePersistentToggle(issueFormatKey, false);
   const selected = new Set(raw.split(",").filter(Boolean));
   const pinned = new Set(pinnedColumns);
   const enabled = columns.filter((c) => selected.has(c.key) || pinned.has(c.key));
@@ -402,6 +434,11 @@ export function PackingSheet({
         style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: "1rem 0 0", flexWrap: "wrap" }}
       >
         {controls}
+        <SheetChipsLabel>Show</SheetChipsLabel>
+        <SheetChip on={issueFormat} onClick={() => setIssueFormat(!issueFormat)}>
+          {issueFormat && <Icon name="check" size="xs" />} Issue format
+        </SheetChip>
+        <SheetChipsDivider />
         <SheetChipsLabel>Columns</SheetChipsLabel>
         {columns.map((column) => {
           const locked = pinned.has(column.key);
@@ -417,7 +454,7 @@ export function PackingSheet({
       {list.groups.map((group) => (
         <PackingSection
           key={group.key}
-          ctx={{ collectionId }}
+          ctx={{ collectionId, issueFormat }}
           icon={groupIcon}
           group={group}
           columns={enabled}
