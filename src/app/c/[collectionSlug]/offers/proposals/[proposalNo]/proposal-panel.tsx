@@ -27,6 +27,7 @@ import { ComposeSetDialog } from "../../[offerId]/compose-set-dialog";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { useInvalidateSales } from "../../../sales/use-sales-query";
 import { DropLine, GroupLotRow, LOT_LIST, priceFact, saleFact, stateFact, textFacts, type LotFact } from "../../lots/lot-row";
+import { anyMarketTrend, PriceStripTrendColumn } from "../../[offerId]/offer-price-table";
 import { useLotGroupTools, type ToolLot } from "../../lots/use-lot-group-tools";
 import {
   useProposalLotsPrepare,
@@ -407,44 +408,46 @@ export function ProposalPanel({
             list and choose this proposal in New offer or Generate offers.
           </p>
         ) : (
-          <ol style={{ ...LOT_LIST, padding: "0 1.25rem" }} {...(tools.drag?.containerProps ?? {})}>
-            {tools.lots.map((toolLot, index) => {
-              const lot = screen.lots.find((l) => l.offerId === toolLot.offerId)!;
-              const pricing = tools.rowPricing(toolLot, {
-                onPriceDraft: (text) => {
-                  const row = prepare?.[lot.offerId];
-                  if (!row) return;
-                  setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
-                },
-                onPriceSaved: (field, value) => void settleLotPrice(lot.offerId, field, value),
-                onTitleChanged: () => void settleLot(lot.offerId),
-              });
-              return (
-                <Fragment key={lot.offerId}>
-                  {showLineAt(tools.drag, index) && <DropLine />}
-                  <GroupLotRow
-                    lotNo={tools.lotNoAt(toolLot, index)}
-                    drag={tools.drag}
-                    index={index}
-                    collectionSlug={collectionSlug}
-                    lot={lot}
-                    photos={
-                      <LotPhotos
-                        collectionId={collectionId}
-                        lot={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
-                        copyPhotoId={lot.copyPhotoId}
-                      />
-                    }
-                    photoStyle={{ flex: "0 1 auto", minWidth: "6rem", maxWidth: "24rem" }}
-                    facts={lotFacts(lot, !!pricing)}
-                    actions={lotActions(lot)}
-                    pricing={pricing}
-                  />
-                </Fragment>
-              );
-            })}
-            {showLineAt(tools.drag, tools.lots.length) && <DropLine />}
-          </ol>
+          <PriceStripTrendColumn.Provider value={anyMarketTrend(Object.values(prepare ?? {}))}>
+            <ol style={{ ...LOT_LIST, padding: "0 1.25rem" }} {...(tools.drag?.containerProps ?? {})}>
+              {tools.lots.map((toolLot, index) => {
+                const lot = screen.lots.find((l) => l.offerId === toolLot.offerId)!;
+                const pricing = tools.rowPricing(toolLot, {
+                  onPriceDraft: (text) => {
+                    const row = prepare?.[lot.offerId];
+                    if (!row) return;
+                    setPriceDrafts((prev) => new Map(prev).set(lot.offerId, { text, from: statedPrice(row) }));
+                  },
+                  onPriceSaved: (field, value) => void settleLotPrice(lot.offerId, field, value),
+                  onTitleChanged: () => void settleLot(lot.offerId),
+                });
+                return (
+                  <Fragment key={lot.offerId}>
+                    {showLineAt(tools.drag, index) && <DropLine />}
+                    <GroupLotRow
+                      lotNo={tools.lotNoAt(toolLot, index)}
+                      drag={tools.drag}
+                      index={index}
+                      collectionSlug={collectionSlug}
+                      lot={lot}
+                      photos={
+                        <LotPhotos
+                          collectionId={collectionId}
+                          lot={open && lot.state !== "withdrawn" ? photos?.find((p) => p.offerId === lot.offerId) : undefined}
+                          copyPhotoId={lot.copyPhotoId}
+                        />
+                      }
+                      photoStyle={{ flex: "0 1 auto", minWidth: "6rem", maxWidth: "24rem" }}
+                      facts={lotFacts(lot, !!pricing)}
+                      actions={lotActions(lot)}
+                      pricing={pricing}
+                    />
+                  </Fragment>
+                );
+              })}
+              {showLineAt(tools.drag, tools.lots.length) && <DropLine />}
+            </ol>
+          </PriceStripTrendColumn.Provider>
         )}
         {/* Pinned to the window's bottom edge while the lots are priced (#2326), as a post's (#2218): it
             follows the prices as they are typed, the summary over the lots the saved ones. */}

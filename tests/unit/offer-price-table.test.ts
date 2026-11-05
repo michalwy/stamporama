@@ -5,15 +5,19 @@ import {
   describeEstimateBasis,
   describeEstimateNote,
   describeEstimateSource,
+  describeMarketTrendNote,
   estimateSets,
   formatPriceMargin,
   marginSign,
+  marketTrendSets,
   offerPriceFigures,
   offerPriceRows,
   priceMargin,
   type CopyEstimateInput,
+  type CopyMarketTrendInput,
   type PriceFigureSet,
 } from "../../src/lib/offer-price-table";
+import type { TrendStatementInput } from "../../src/lib/price-trend";
 
 // The offer's price table (#1829, made to read without its tooltips in #1839, its notes shrunk in
 // #1843): Estimated value per set, the source of its ratio, the notes, the margins, and which rows
@@ -348,5 +352,92 @@ describe("the price table's figures over an offer's sets", () => {
   it("calls a missing cost unconvertible only when there is a cost to convert (#2436)", () => {
     assert.equal(offerPriceFigures([set()], 1).costUnconvertible, false);
     assert.equal(offerPriceFigures([set({ cost: null })], null).costUnconvertible, false);
+  });
+});
+
+// Market trend (#2461): Market's copies, each brought to today by its stamp's price trend.
+describe("Market trend per set (#2461)", () => {
+  const trend = (over: Partial<TrendStatementInput> = {}): TrendStatementInput => ({
+    rate: 0.14,
+    measuredRate: 0.14,
+    capped: false,
+    n: 4,
+    earliestAt: new Date("2022-06-01T00:00:00Z"),
+    latestAt: new Date("2025-06-01T00:00:00Z"),
+    borrowed: null,
+    ...over,
+  });
+  const trended = (market: number, adjusted: number, t: TrendStatementInput | null = trend()): CopyMarketTrendInput => ({
+    market,
+    trended: adjusted,
+    trend: t,
+  });
+
+  it("sums each set's trend-adjusted copies, a copy with no trend at its median, over Market's sets", () => {
+    const result = marketTrendSets([[trended(10, 14), trended(5, 5, null)], [], [trended(8, 8, null)]]);
+    assert.ok(result);
+    // (14 + 5) and 8, over the two sets with results — the empty one is not a set worth nothing.
+    assert.equal(result.averageBase, 13.5);
+    assert.equal(result.valuedSets, 2);
+    assert.equal(result.copies, 3);
+    assert.equal(result.trendedCopies, 1);
+    assert.equal(result.trends.length, 1);
+  });
+
+  it("is null when no copy has a trend, so the row is not drawn", () => {
+    assert.equal(marketTrendSets([[trended(10, 10, null)]]), null);
+    assert.equal(marketTrendSets([]), null);
+  });
+
+  it("names the rate, borrowed and capped as such, and a range across copies", () => {
+    assert.equal(describeMarketTrendNote([trend()]), "+14%/yr");
+    assert.equal(describeMarketTrendNote([trend({ rate: 0.09, borrowed: { bucketLabel: "Polska Ludowa, MNH" } })]), "borrowed, +9%/yr");
+    assert.equal(describeMarketTrendNote([trend({ rate: 0.3, measuredRate: 0.45, capped: true })]), "+30%/yr, capped");
+    assert.equal(describeMarketTrendNote([trend({ rate: 0.05 }), trend(), trend({ rate: -0.08 })]), "−8%/yr to +14%/yr");
+  });
+
+  it("draws Market trend under Market with its profit over cost, and leaves it out with no figure", () => {
+    const figures = { minimum: null, catalogue: null, estimated: null, market: "10.00", cost: "8.00", own: null };
+    const rows = offerPriceRows({ ...figures, marketTrend: "14.00" });
+    assert.deepEqual(
+      rows.map((r) => r.key),
+      ["minimum", "market", "marketTrend", "cost", "own"]
+    );
+    assert.deepEqual(rows.find((r) => r.key === "marketTrend")?.margin, { amount: "6.00", percent: 75 });
+    assert.deepEqual(
+      offerPriceRows(figures).map((r) => r.key),
+      ["minimum", "market", "cost", "own"]
+    );
+  });
+
+  it("converts into the offer's currency and leaves Market as the plain median", () => {
+    const set: PriceFigureSet = {
+      holdings: {
+        pricedCount: 0,
+        totalBaseAmount: "0.00",
+        faultReductionBaseAmount: "0.00",
+        faultReducedCount: 0,
+        market: { valuedCount: 1, totalBaseAmount: "10.00", noEvidenceCount: 0 },
+      },
+      cost: {
+        amount: null,
+        knownCount: 0,
+        estimatedCount: 0,
+        unestimated: [],
+        noneCount: 1,
+        openingCount: 0,
+        noOpeningValueCount: 0,
+        notHeld: { notDelivered: 0, damaged: 0, disposed: 0 },
+        estimated: false,
+        opening: false,
+      },
+      estimates: [],
+      marketTrends: [trended(10, 14)],
+    };
+    const figures = offerPriceFigures([set], 2);
+    assert.equal(figures.marketPrice?.amount, "20.00");
+    assert.equal(figures.marketTrendPrice?.amount, "28.00");
+    assert.equal(offerPriceFigures([set], null).marketTrendPrice, null);
+    assert.equal(offerPriceFigures([{ ...set, marketTrends: [trended(10, 10, null)] }], 1).marketTrendPrice, null);
   });
 });

@@ -1,19 +1,23 @@
 "use client";
 
+import { createContext, useContext } from "react";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { describeCostGaps, describeCostMarks, describeMissingCost, type CostGaps } from "@/lib/offer-cost";
 import {
   describeCatalogueSource,
   describeEstimateBasis,
   describeEstimateNote,
+  describeMarketTrendNote,
   formatPriceMargin,
   isStatedSource,
   marginSign,
   offerPriceRows,
   type EstimateSource,
+  type OfferPriceFigureSummary,
   type OfferPriceRow,
   type OfferPriceRowKey,
 } from "@/lib/offer-price-table";
+import { trendStatement } from "@/lib/price-trend";
 
 /** The `OfferDetail` fields the table reads. */
 export interface OfferPriceTableOffer {
@@ -33,6 +37,8 @@ export interface OfferPriceTableOffer {
   catalogFullPrice: string | null;
   marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
   marketUnconvertible: boolean;
+  /** Market brought to today by the price trend (#2461); null when no trend applies. */
+  marketTrendPrice: OfferPriceFigureSummary["marketTrendPrice"];
   costPrice: string | null;
   costUnconvertible: boolean;
   setsTotals: { setCount: number; copyCount: number; costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
@@ -51,6 +57,9 @@ const FILL_LINK: React.CSSProperties = {
   cursor: "pointer",
 };
 const HEADING: React.CSSProperties = { ...MUTED, fontWeight: 500, justifySelf: "end" };
+
+/** How many trends the Market trend tooltip names before it counts the rest. */
+const TRENDS_NAMED = 3;
 
 const sets = (n: number) => `${n} set${n === 1 ? "" : "s"}`;
 const copies = (n: number) => `${n} cop${n === 1 ? "y" : "ies"}`;
@@ -96,6 +105,19 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
       const without = market.noEvidenceCopies > 0 ? `; ${copies(market.noEvidenceCopies)} without any` : "";
       return `What recorded results paid per set — ${copies(market.copies)} with results${without}`;
     }
+    case "marketTrend": {
+      const trend = offer.marketTrendPrice!;
+      const parts = [
+        "What recorded results paid per set, each result brought to today by its stamp's price trend — Market is the plain median",
+      ];
+      if (trend.trendedCopies < trend.copies) {
+        parts.push(`${trend.trendedCopies} of ${copies(trend.copies)} with results trended, the rest at their median`);
+      }
+      const shown = trend.trends.slice(0, TRENDS_NAMED).map(trendStatement);
+      const more = trend.trends.length - shown.length;
+      parts.push(more > 0 ? `${shown.join("; ")}; ${more} more` : shown.join("; "));
+      return parts.join(" — ");
+    }
     case "cost": {
       const parts = ["What the copies cost per set"];
       if (offer.setsTotals.costEstimated) parts.push("partly an estimate, while their lot is open");
@@ -125,6 +147,8 @@ function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; 
             warn: isStatedSource(offer.suggestedEstimate.source),
           }
         : null;
+    case "marketTrend":
+      return offer.marketTrendPrice ? { text: describeMarketTrendNote(offer.marketTrendPrice.trends), warn: false } : null;
     case "cost": {
       // A missing cost says why (#2333, #2436); a figure says what is under it — an estimate, opening values.
       if (row.amount === null) {
@@ -153,6 +177,7 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
   catalogue: "Catalogue",
   estimated: "Estimated",
   market: "Market",
+  marketTrend: "Market trend",
   cost: "Cost",
 };
 
@@ -160,7 +185,8 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
  * The offer's price area as a small table (#1829), made to read without its tooltips (#1839): three
  * headed columns — the row's name with a short note in brackets, *Price*, *Profit over cost* — the
  * platform's minimum, the catalogue value, Estimated value (the suggestion), what the market paid,
- * what the copies cost, and the offer's own price last. Every figure is per set and in the offer's
+ * Market trend under Market when a price trend applies (#2461), what the copies cost, and the offer's
+ * own price last. Every figure is per set and in the offer's
  * currency. A figure that does not exist is left out (#1184), except Minimum and Market, drawn `—`
  * (#1843), and the offer's own price, which is where it is set.
  *
@@ -199,6 +225,7 @@ export function OfferPriceTable({
     catalogue: offer.catalogPrice,
     estimated: offer.suggestedPrice,
     market: offer.marketPrice?.amount ?? null,
+    marketTrend: offer.marketTrendPrice?.amount ?? null,
     cost: offer.costPrice,
     own: offer.price === "0.00" ? null : offer.price,
   });
@@ -310,6 +337,28 @@ export function OfferPriceTable({
 }
 
 const STRIP_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estimated", "market", "cost", "own"];
+const STRIP_ORDER_WITH_TREND: readonly OfferPriceRowKey[] = [
+  "minimum",
+  "catalogue",
+  "estimated",
+  "market",
+  "marketTrend",
+  "cost",
+  "own",
+];
+
+/**
+ * Whether a list of price strips draws the Market trend column (#2461): on every row once any row of
+ * the list has a trend, `—` on the rest, so the columns still line up down the list — and on none
+ * when no row has, so the list reads as it did before.
+ */
+export const PriceStripTrendColumn = createContext(false);
+
+/** True when any of a list's offers has a Market trend — the value {@link PriceStripTrendColumn} takes. */
+export function anyMarketTrend(offers: Iterable<{ marketTrendPrice: unknown } | undefined> | null | undefined): boolean {
+  for (const offer of offers ?? []) if (offer?.marketTrendPrice) return true;
+  return false;
+}
 
 /**
  * The price table **in compact form** (#1894), for a row of the Prepare screen: the same figures in
@@ -324,6 +373,9 @@ const STRIP_ORDER: readonly OfferPriceRowKey[] = ["minimum", "catalogue", "estim
  * suggestion by its colour. Every price is a link writing the figure the seller states, as on the
  * table, and the margin under the offer's own price follows `ownAmount` — the figure being typed —
  * so what a price would give is read before it is saved.
+ *
+ * Market trend (#2461) is a column when {@link PriceStripTrendColumn} says the list has one, or this
+ * offer has a trend of its own.
  *
  * Given `onFillCatalogue`, a Catalogue drawn `—` is a link opening the window its missing values are
  * typed in (#2220) — on a Facebook post's lot whose copies have values to type.
@@ -354,13 +406,15 @@ export function OfferPriceStrip({
     catalogue: offer.catalogPrice,
     estimated: offer.suggestedPrice,
     market: offer.marketPrice?.amount ?? null,
+    marketTrend: offer.marketTrendPrice?.amount ?? null,
     cost: offer.costPrice,
     own: ownAmount,
   });
   // Every column on every row, a missing figure drawn `—`: down a list the columns are read across
   // rows, and one that came and went with its figure would put Market under Estimated on the next row.
   const byKey = new Map(rows.map((row) => [row.key, row]));
-  const columns = STRIP_ORDER.map((key) => byKey.get(key) ?? { key, amount: null, margin: null });
+  const trendColumn = useContext(PriceStripTrendColumn) || offer.marketTrendPrice !== null;
+  const columns = (trendColumn ? STRIP_ORDER_WITH_TREND : STRIP_ORDER).map((key) => byKey.get(key) ?? { key, amount: null, margin: null });
   return (
     <div
       style={{

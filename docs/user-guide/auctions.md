@@ -1170,7 +1170,8 @@ have results for with one you have never seen:
      figure; when that limit applies the panel says *capped* and shows the rate measured.
    - **Floor and walk-away** are your percentages of the adjusted figure, and the **confidence**
      badge is scored as before. **Market value** everywhere else — on holdings, copies, offers and
-     sales — stays the plain median: only the bid recommendation looks ahead.
+     sales — stays the plain median. Besides the bid, only an offer's price table looks ahead, in a
+     **Market trend** row of its own beside Market (see [the price table](offers.md#the-price-table)).
 2. Otherwise **its catalogue value times a learned percentage** — see below. The panel names the
    percentage, the group it was learned from and how many results that group holds.
    - **A certificate with no price of its own.** When the line carries a certificate and the
