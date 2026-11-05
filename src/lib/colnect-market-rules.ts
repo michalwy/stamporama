@@ -240,6 +240,22 @@ export interface MarketDot {
   note: string | null;
 }
 
+/**
+ * Listings at one price, drawn as **one dot** with their count beside it (#2464) rather than as dots
+ * over one another.
+ */
+export interface MarketDotGroup {
+  amount: string;
+  position: number;
+  count: number;
+  /** Whether any of them Colnect showed in another currency. */
+  converted: boolean;
+  /** The prices as Colnect showed them, for those converted. */
+  originals: string[];
+  /** The sellers' notes, those that have one. */
+  notes: string[];
+}
+
 /** One condition of one item. */
 export interface MarketRow {
   key: string;
@@ -250,6 +266,8 @@ export interface MarketRow {
   /** The offer's own condition for this item — the row drawn highlighted. */
   highlighted: boolean;
   dots: MarketDot[];
+  /** The same listings, one entry per price, cheapest first — what the strip draws (#2464). */
+  groups: MarketDotGroup[];
   lowest: string | null;
   median: string | null;
   /** Where the two marks sit on the axis, null with no listings. */
@@ -276,10 +294,19 @@ export interface MarketTick {
   position: number;
 }
 
+/** The shared logarithmic axis: the prices at its two ends. */
+export interface MarketAxis {
+  lo: number;
+  hi: number;
+}
+
 export interface ColnectMarketView {
   items: MarketItemView[];
   /** Round figures along the axis — 1, 2 and 5 of each decade, thinned to the ones that fit. */
   ticks: MarketTick[];
+  /** The axis every strip is drawn on — so a price that is not a listing (the offer's own) can be
+   * placed on it too (#2464). */
+  axis: MarketAxis;
   /** Whether any condition of any item has a listing — the card says so when none does. */
   anyListings: boolean;
 }
@@ -292,6 +319,55 @@ export interface MarketItemTarget {
   /** Colnect grades the offer's copies of this item are in — the rows drawn highlighted. */
   grades: readonly string[];
 }
+
+/**
+ * Where a price sits on the axis, 0–1 from the left; outside the read's range it is held at the
+ * nearer end, and `outside` says which way it lies. Null for no price — nothing, or not above zero.
+ */
+export function axisPosition(
+  axis: MarketAxis,
+  amount: string | null | undefined
+): { position: number; outside: "below" | "above" | null } | null {
+  const value = Number(amount);
+  if (amount == null || !Number.isFinite(value) || value <= 0) return null;
+  const position = (Math.log(value) - Math.log(axis.lo)) / (Math.log(axis.hi) - Math.log(axis.lo));
+  if (position < 0) return { position: 0, outside: "below" };
+  if (position > 1) return { position: 1, outside: "above" };
+  return { position, outside: null };
+}
+
+/** The 1-2-5 values next to `v`: the largest below it and the smallest above it. */
+function oneTwoFiveBelow(v: number): number {
+  const e = Math.floor(Math.log10(v));
+  for (const candidate of [5 * 10 ** e, 2 * 10 ** e, 10 ** e, 5 * 10 ** (e - 1)]) {
+    if (candidate < v * (1 - 1e-9)) return candidate;
+  }
+  return 5 * 10 ** (e - 1);
+}
+function oneTwoFiveAbove(v: number): number {
+  const e = Math.floor(Math.log10(v));
+  for (const candidate of [10 ** e, 2 * 10 ** e, 5 * 10 ** e, 10 ** (e + 1)]) {
+    if (candidate > v * (1 + 1e-9)) return candidate;
+  }
+  return 10 ** (e + 1);
+}
+
+/** The labelled values of the 1-2-5 sequence (or the decades alone) between `lo` and `hi`. */
+function oneTwoFiveTicks(lo: number, hi: number, multiples: readonly number[]): number[] {
+  const out: number[] = [];
+  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+    for (const m of multiples) {
+      const v = m * 10 ** e;
+      if (v >= lo * (1 - 1e-9) && v <= hi * (1 + 1e-9)) out.push(v);
+    }
+  }
+  return out;
+}
+
+/** A scale never shows fewer labelled lines than this, nor — 1-2-5 giving way to the decades — more
+ * than {@link MOST_TICKS} (#2464). */
+const FEWEST_TICKS = 3;
+const MOST_TICKS = 9;
 
 /** The median of sorted cents, rounded to a cent. */
 function medianCents(sorted: readonly number[]): number {
@@ -324,6 +400,12 @@ export function colnectMarketView(
   // read of one price still has an axis.
   lo = lo / 1.25;
   hi = hi * 1.25;
+  // A narrow read is widened to the 1-2-5 values around it until the scale has a few labelled lines
+  // (#2464) — a read of one price is otherwise a single line, and a scale of one figure says nothing.
+  while (oneTwoFiveTicks(lo, hi, [1, 2, 5]).length < FEWEST_TICKS) {
+    lo = oneTwoFiveBelow(lo);
+    hi = oneTwoFiveAbove(hi);
+  }
   const span = Math.log(hi) - Math.log(lo);
   const at = (amount: string | number) => (Math.log(Number(amount)) - Math.log(lo)) / span;
 
@@ -374,6 +456,7 @@ export function colnectMarketView(
           original: o.original,
           note: o.note,
         })),
+        groups: groupByPrice(listed, at),
         lowest,
         median,
         lowestPosition: lowest === null ? null : at(lowest),
@@ -391,19 +474,37 @@ export function colnectMarketView(
       truncated: item.truncated,
     };
   });
-  // 1-2-5 of every decade in range; with a long range, the decades alone.
+  // 1-2-5 of every decade in range; where that would crowd the scale, the decades alone.
   const ticks: MarketTick[] = [];
   if (anyListings) {
-    const multiples = Math.log10(hi / lo) > 3 ? [1] : [1, 2, 5];
-    for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
-      for (const m of multiples) {
-        const v = m * 10 ** e;
-        if (v < lo || v > hi) continue;
-        ticks.push({ label: v >= 1 ? String(Math.round(v)) : v.toFixed(Math.max(0, -e)), position: at(v) });
-      }
+    let values = oneTwoFiveTicks(lo, hi, [1, 2, 5]);
+    if (values.length > MOST_TICKS) values = oneTwoFiveTicks(lo, hi, [1]);
+    for (const v of values) {
+      const e = Math.floor(Math.log10(v) + 1e-9);
+      ticks.push({ label: v >= 1 ? String(Math.round(v)) : v.toFixed(Math.max(0, -e)), position: at(v) });
     }
   }
-  return { items, ticks, anyListings };
+  return { items, ticks, axis: { lo, hi }, anyListings };
+}
+
+/** Listings sorted cheapest first, one entry per price. */
+function groupByPrice(
+  listed: readonly StoredMarketOffer[],
+  at: (amount: string) => number
+): MarketDotGroup[] {
+  const groups: MarketDotGroup[] = [];
+  for (const o of listed) {
+    let group = groups.at(-1);
+    if (!group || cents(group.amount) !== cents(o.amount)) {
+      group = { amount: o.amount, position: at(o.amount), count: 0, converted: false, originals: [], notes: [] };
+      groups.push(group);
+    }
+    group.count += 1;
+    if (o.converted) group.converted = true;
+    if (o.converted && o.original) group.originals.push(o.original);
+    if (o.note) group.notes.push(o.note);
+  }
+  return groups;
 }
 
 /** The step a click undercuts by, where the platform states none. */

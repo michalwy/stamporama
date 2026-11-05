@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  axisPosition,
   priceUnder,
-  type MarketDot,
+  type MarketDotGroup,
   type MarketRow,
+  type MarketTick,
   type OfferColnectMarket,
 } from "@/lib/colnect-market-rules";
 import { recordColnectMarketReadAction } from "@/app/actions/offers";
@@ -16,10 +18,13 @@ import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-hando
 // **Colnect market** (#2454) — what Colnect's marketplace asks for this offer's stamps, per
 // condition, read by the Assistant on the collector's own Colnect session.
 //
-// Each condition is a **strip of dots**, one per listing, on a logarithmic axis shared by every row of
-// the read: a lone 0.01 among prices around 1 € reads as the outlier it is, and many listings at 0.01
-// read as what most sellers ask. The lowest price and the median are marked, and stated beside the
-// strip with the number of listings. The offer's own condition is the highlighted row.
+// Each condition is a **strip of dots** on a logarithmic axis shared by every row of the read: a lone
+// 0.01 among prices around 1 € reads as the outlier it is, and many listings at 0.01 read as what most
+// sellers ask. Drawn to be read at a glance (#2464): one dot per price, with the number of listings at
+// it beside the dot; the lowest a solid tick, the median a dashed one, both named in a legend; the
+// offer's own price an amber line through every row; the scale above and below, with gridlines through
+// every row. Beside the strip, lowest · median · offers. The offer's own condition is the highlighted
+// row, its lowest price larger and bold (#2463).
 //
 // A click on a price — a dot, or a figure beside the strip — sets the offer's price that price less
 // the platform's step, shown at once as a typed price is (#2413). Whether a price is absurd is the
@@ -69,92 +74,110 @@ const MUTED: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-te
  * height, so the row does not grow. */
 const LEAD_FIGURE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, lineHeight: 1 };
 
-/** How high a strip is, and how far apart stacked dots sit — listings at one price stack upward. */
-const STRIP_HEIGHT = 30;
-const DOT = 7;
-const STACK_STEP = 5;
-const MAX_STACK = 4;
+/** How high a strip is, and how big a dot — about 12 px, a ring of the card's background around it so
+ * neighbouring dots stay apart (#2464). */
+const STRIP_HEIGHT = 28;
+const DOT = 12;
+
+/** Room either side of the axis, so a label at either end is not cut off — the strips and both scales
+ * share it, so a position means the same place on all of them. */
+const AXIS_INSET = "1.25rem";
 
 const pct = (position: number) => `${(position * 100).toFixed(3)}%`;
 
-function dotTip(dot: MarketDot, currency: string, setsTo: string | null): React.ReactNode {
+const SCALE_LABEL: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--color-text-secondary)",
+  fontVariantNumeric: "tabular-nums",
+  lineHeight: 1,
+  whiteSpace: "nowrap",
+};
+
+/** The marks, one style each, so the legend draws exactly what the strips do. */
+const LOWEST_MARK = "2px solid var(--color-success)";
+const MEDIAN_MARK = "2px dashed var(--color-text-muted)";
+const OWN_PRICE_MARK = "2px solid var(--color-warning)";
+
+/** Where the offer's own price sits on the axis, and how it is labelled; null with no price. */
+interface OwnPriceMark {
+  position: number;
+  label: string;
+}
+
+function dotTip(group: MarketDotGroup, currency: string, setsTo: string | null): React.ReactNode {
   return (
     <span style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>
       <strong>
-        {dot.amount} {currency}
+        {group.amount} {currency}
       </strong>
-      {dot.converted && <span>Converted{dot.original ? ` from ${dot.original}` : ""}</span>}
-      {dot.note && <span>“{dot.note}”</span>}
+      {group.count > 1 && <span>{group.count} offers at this price</span>}
+      {group.converted && (
+        <span>Converted{group.originals.length > 0 ? ` from ${[...new Set(group.originals)].join(", ")}` : ""}</span>
+      )}
+      {group.notes.slice(0, 3).map((note, i) => (
+        <span key={i}>“{note}”</span>
+      ))}
       {setsTo && <span>Click to price this offer at {setsTo} {currency}</span>}
     </span>
   );
 }
 
+/** A vertical mark through a strip or a scale: a gridline, lowest, median or the offer's price. */
+function Mark({ position, border, z }: { position: number; border: string; z: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{ position: "absolute", left: pct(position), top: 0, bottom: 0, borderLeft: border, transform: "translateX(-50%)", zIndex: z }}
+    />
+  );
+}
+
 function Strip({
   row,
+  ticks,
+  ownPrice,
   currency,
   step,
   onApply,
 }: {
   row: MarketRow;
+  ticks: readonly MarketTick[];
+  ownPrice: OwnPriceMark | null;
   currency: string;
   step: string;
   onApply: ((amount: string) => void) | null;
 }) {
-  // Listings at one price stack upward rather than hiding one another; past a few, the rest overlap
-  // the top dot, and the count beside the strip says how many there are.
-  const stacks = new Map<string, number>();
+  // A row with no offers keeps its line and gridlines, so the rows stay aligned (#2464).
   return (
-    <div
-      style={{
-        position: "relative",
-        height: STRIP_HEIGHT,
-        borderBottom: "1px solid var(--color-border-strong)",
-      }}
-    >
-      {row.lowestPosition !== null && (
-        <span
-          aria-hidden
-          style={{
-            position: "absolute",
-            left: pct(row.lowestPosition),
-            bottom: -4,
-            height: STRIP_HEIGHT + 4,
-            borderLeft: "2px solid var(--color-success)",
-          }}
-        />
-      )}
-      {row.medianPosition !== null && (
-        <span
-          aria-hidden
-          style={{
-            position: "absolute",
-            left: pct(row.medianPosition),
-            bottom: -4,
-            height: STRIP_HEIGHT + 4,
-            borderLeft: "2px dashed var(--color-text-secondary)",
-          }}
-        />
-      )}
-      {row.dots.map((dot, i) => {
-        const key = dot.position.toFixed(3);
-        const level = stacks.get(key) ?? 0;
-        stacks.set(key, level + 1);
-        const setsTo = onApply ? priceUnder(dot.amount, step) : null;
+    <div style={{ position: "relative", height: STRIP_HEIGHT }}>
+      {ticks.map((t) => (
+        <Mark key={t.label} position={t.position} border="1px solid var(--color-border)" z={0} />
+      ))}
+      <span
+        aria-hidden
+        style={{ position: "absolute", left: 0, right: 0, top: "50%", borderTop: "1px solid var(--color-border-strong)", zIndex: 1 }}
+      />
+      {row.medianPosition !== null && <Mark position={row.medianPosition} border={MEDIAN_MARK} z={2} />}
+      {row.lowestPosition !== null && <Mark position={row.lowestPosition} border={LOWEST_MARK} z={2} />}
+      {ownPrice && <Mark position={ownPrice.position} border={OWN_PRICE_MARK} z={3} />}
+      {row.groups.map((group) => {
+        const setsTo = onApply ? priceUnder(group.amount, step) : null;
         return (
           <span
-            key={i}
+            key={group.amount}
             style={{
               position: "absolute",
-              left: pct(dot.position),
-              bottom: 2 + Math.min(level, MAX_STACK) * STACK_STEP,
-              transform: "translateX(-50%)",
+              left: pct(group.position),
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 4,
+              display: "block",
             }}
           >
-            <Tooltip content={dotTip(dot, currency, setsTo)}>
+            <Tooltip content={dotTip(group, currency, setsTo)}>
               <button
                 type="button"
-                aria-label={`${dot.amount} ${currency}`}
+                aria-label={`${group.amount} ${currency}${group.count > 1 ? `, ${group.count} offers` : ""}`}
                 disabled={!onApply}
                 onClick={() => setsTo && onApply?.(setsTo)}
                 style={{
@@ -162,14 +185,38 @@ function Strip({
                   width: DOT,
                   height: DOT,
                   padding: 0,
+                  boxSizing: "border-box",
                   borderRadius: "50%",
-                  border: dot.converted ? "1px dashed var(--color-text-primary)" : "1px solid var(--color-bg-elevated)",
-                  background: "var(--color-accent)",
-                  opacity: 0.8,
+                  border: group.converted ? "1px dashed var(--color-text-primary)" : "none",
+                  background: "var(--color-success)",
+                  boxShadow: "0 0 0 2px var(--color-bg-elevated)",
                   cursor: onApply ? "pointer" : "default",
                 }}
               />
             </Tooltip>
+            {/* Several offers at one price are one dot with their count beside it. */}
+            {group.count > 1 && (
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  left: DOT + 3,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: "var(--color-text-primary)",
+                  background: "var(--color-bg-elevated)",
+                  borderRadius: "0.25rem",
+                  padding: "0 0.125rem",
+                  pointerEvents: "none",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {group.count}
+              </span>
+            )}
           </span>
         );
       })}
@@ -177,15 +224,115 @@ function Strip({
   );
 }
 
+/**
+ * The scale, printed above and below the strips (#2464) at a readable size. Above, the offer's own
+ * price is labelled over its line, so the line can be read against every row at once.
+ */
+function Scale({
+  ticks,
+  ownPrice,
+  placement,
+}: {
+  ticks: readonly MarketTick[];
+  ownPrice: OwnPriceMark | null;
+  placement: "top" | "bottom";
+}) {
+  const labelOwn = placement === "top" && ownPrice;
+  return (
+    <div style={{ padding: `0 ${AXIS_INSET}` }}>
+      {labelOwn && (
+        <div style={{ position: "relative", height: "1.125rem" }}>
+          <span
+            style={{
+              ...SCALE_LABEL,
+              position: "absolute",
+              left: pct(ownPrice.position),
+              // The label's anchor slides with the line, so it never runs off either end.
+              transform: `translateX(-${(ownPrice.position * 100).toFixed(1)}%)`,
+              color: "var(--color-warning)",
+              fontWeight: 700,
+            }}
+          >
+            {ownPrice.label}
+          </span>
+        </div>
+      )}
+      <div style={{ position: "relative", height: "1rem" }}>
+        {ticks.map((t) => (
+          <span
+            key={t.label}
+            style={{
+              ...SCALE_LABEL,
+              position: "absolute",
+              left: pct(t.position),
+              top: placement === "top" ? 0 : 3,
+              transform: "translateX(-50%)",
+            }}
+          >
+            {t.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LegendItem({ swatch, label }: { swatch: React.ReactNode; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+      <span aria-hidden style={{ display: "inline-flex", alignItems: "center", height: 14 }}>
+        {swatch}
+      </span>
+      {label}
+    </span>
+  );
+}
+
+const LEGEND_DOT: React.CSSProperties = {
+  display: "inline-block",
+  width: DOT,
+  height: DOT,
+  borderRadius: "50%",
+  background: "var(--color-success)",
+};
+
+/** What each mark on the strips means (#2464); the offer's price only when it has one. */
+function Legend({ withOwnPrice }: { withOwnPrice: boolean }) {
+  const tick = (border: string) => <span style={{ display: "inline-block", height: 14, borderLeft: border }} />;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.375rem 1.25rem",
+        fontSize: "0.75rem",
+        color: "var(--color-text-secondary)",
+      }}
+    >
+      <LegendItem swatch={<span style={LEGEND_DOT} />} label="one offer" />
+      <LegendItem
+        swatch={
+          <>
+            <span style={LEGEND_DOT} />
+            <span style={{ marginLeft: 3, fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>2</span>
+          </>
+        }
+        label="same price, several offers"
+      />
+      <LegendItem swatch={tick(LOWEST_MARK)} label="lowest" />
+      <LegendItem swatch={tick(MEDIAN_MARK)} label="median" />
+      {withOwnPrice && <LegendItem swatch={tick(OWN_PRICE_MARK)} label="your price" />}
+    </div>
+  );
+}
+
 function Figure({
-  label,
   amount,
   currency,
   step,
   onApply,
   lead = false,
 }: {
-  label: string;
   amount: string;
   currency: string;
   step: string;
@@ -195,24 +342,19 @@ function Figure({
 }) {
   const emphasis = lead ? LEAD_FIGURE : undefined;
   if (!onApply) {
-    return (
-      <span>
-        {label} <span style={{ fontVariantNumeric: "tabular-nums", ...emphasis }}>{amount}</span>
-      </span>
-    );
+    return <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)", ...emphasis }}>{amount}</span>;
   }
   const setsTo = priceUnder(amount, step);
   return (
     <Tooltip content={`Price this offer at ${setsTo} ${currency}`}>
-      <span>
-        {label}{" "}
-        <button type="button" style={{ ...FIGURE_BTN, ...emphasis }} onClick={() => onApply(setsTo)}>
-          {amount}
-        </button>
-      </span>
+      <button type="button" style={{ ...FIGURE_BTN, ...emphasis }} onClick={() => onApply(setsTo)}>
+        {amount}
+      </button>
     </Tooltip>
   );
 }
+
+const DOT_SEP = <span style={{ color: "var(--color-text-muted)" }}>·</span>;
 
 export function OfferColnectMarketCard({
   collectionId,
@@ -220,6 +362,7 @@ export function OfferColnectMarketCard({
   market,
   assistantPresent,
   editable,
+  ownPrice,
   onApply,
   onRecorded,
 }: {
@@ -229,6 +372,8 @@ export function OfferColnectMarketCard({
   assistantPresent: string | null;
   /** Whether the offer's price may still be changed. */
   editable: boolean;
+  /** The offer's own price — what the seller states — or null while it has none (#2464). */
+  ownPrice: string | null;
   /** Set the offer's price — the same write a typed price makes. */
   onApply: (amount: string) => void;
   /** A read was kept: re-read the offer. */
@@ -262,6 +407,16 @@ export function OfferColnectMarketCard({
     : assistantHint({ blockerCount: 0, present: assistantPresent, busy: false, act: "read Colnect's market" });
   const apply = editable ? onApply : null;
   const { view, currency, step } = market;
+  const placed = axisPosition(view.axis, ownPrice);
+  const ownMark: OwnPriceMark | null = placed && {
+    position: placed.position,
+    label:
+      placed.outside === "below"
+        ? `← your price ${ownPrice} ${currency}`
+        : placed.outside === "above"
+          ? `your price ${ownPrice} ${currency} →`
+          : `your price ${ownPrice} ${currency}`,
+  };
 
   function check() {
     setError(null);
@@ -314,6 +469,8 @@ export function OfferColnectMarketCard({
         </p>
       )}
 
+      {market.readAt && view.anyListings && <Legend withOwnPrice={ownMark !== null} />}
+
       {market.readAt && view.anyListings &&
         view.items.map((item) => (
           <div key={item.colnectId} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
@@ -328,99 +485,109 @@ export function OfferColnectMarketCard({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(10rem, 14rem) minmax(16rem, 1fr) minmax(16rem, auto)",
+                  gridTemplateColumns: "minmax(10rem, 14rem) minmax(16rem, 1fr) minmax(14rem, auto)",
                   columnGap: "1rem",
-                  rowGap: "0.25rem",
-                  alignItems: "end",
+                  rowGap: "0.125rem",
+                  alignItems: "center",
                 }}
               >
-                {item.rows.map((row) => (
-                  <div
-                    key={row.key}
-                    style={{
-                      display: "contents",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.8125rem",
-                        padding: "0.25rem 0.5rem",
-                        borderRadius: "0.25rem",
-                        background: row.highlighted ? "var(--color-accent-soft)" : undefined,
-                        fontWeight: row.highlighted ? 600 : 400,
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      {row.name}
-                      {row.colnectGrade && <span style={{ ...MUTED, marginLeft: "0.375rem" }}>{row.colnectGrade}</span>}
-                    </div>
-                    <div
-                      style={{
-                        padding: "0 0.25rem",
-                        borderRadius: "0.25rem",
-                        background: row.highlighted ? "var(--color-accent-soft)" : undefined,
-                      }}
-                    >
-                      <Strip row={row} currency={currency} step={step} onApply={apply} />
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "var(--color-text-secondary)",
-                        display: "flex",
-                        gap: "0.75rem",
-                        flexWrap: "wrap",
-                        alignItems: "baseline",
-                        padding: "0.25rem 0",
-                      }}
-                    >
-                      {row.count === 0 ? (
-                        <span style={{ color: "var(--color-text-muted)", ...(row.highlighted ? LEAD_FIGURE : undefined) }}>
-                          no offers
-                        </span>
-                      ) : (
-                        <>
-                          <Figure
-                            label="lowest"
-                            amount={row.lowest!}
-                            currency={currency}
-                            step={step}
-                            onApply={apply}
-                            lead={row.highlighted}
-                          />
-                          <Figure label="median" amount={row.median!} currency={currency} step={step} onApply={apply} />
-                          <span>
-                            {row.count} offer{row.count === 1 ? "" : "s"}
-                          </span>
-                        </>
-                      )}
-                      {row.ownCount > 0 && (
-                        <Tooltip content="Your own Colnect offers in this condition — left out of the strip, so this offer never undercuts itself">
-                          <span style={{ color: "var(--color-text-muted)" }}>+{row.ownCount} yours</span>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {/* The shared axis, under the last row of each item. */}
+                {/* The scale above the strips, the offer's price labelled over it, and the figures'
+                    heading. */}
                 <div />
-                <div style={{ position: "relative", height: "1rem" }}>
-                  {view.ticks.map((t) => (
-                    <span
-                      key={t.label}
-                      style={{
-                        position: "absolute",
-                        left: pct(t.position),
-                        transform: "translateX(-50%)",
-                        ...MUTED,
-                        fontSize: "0.6875rem",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {t.label}
-                    </span>
-                  ))}
-                </div>
+                <Scale ticks={view.ticks} ownPrice={ownMark} placement="top" />
+                <div style={{ ...MUTED, alignSelf: "end" }}>lowest · median · offers</div>
+                {item.rows.map((row) => {
+                  const band = row.highlighted ? "var(--color-accent-soft)" : undefined;
+                  return (
+                    <div key={row.key} style={{ display: "contents" }}>
+                      <div
+                        style={{
+                          fontSize: "0.8125rem",
+                          padding: "0.25rem 0.5rem",
+                          borderRadius: "0.25rem",
+                          background: band,
+                          fontWeight: row.highlighted ? 700 : 400,
+                          color: "var(--color-text-primary)",
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "0.375rem",
+                          alignSelf: "stretch",
+                        }}
+                      >
+                        <span>{row.name}</span>
+                        {(row.colnectGrade || row.highlighted) && (
+                          <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
+                            {row.colnectGrade && <span style={{ ...MUTED, fontWeight: 400 }}>{row.colnectGrade}</span>}
+                            {row.highlighted && (
+                              <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-accent)" }}>
+                                this offer
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          padding: `0 ${AXIS_INSET}`,
+                          borderRadius: "0.25rem",
+                          background: band,
+                          alignSelf: "stretch",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Strip row={row} ticks={view.ticks} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "var(--color-text-secondary)",
+                          display: "flex",
+                          gap: "0.375rem",
+                          flexWrap: "wrap",
+                          alignItems: "baseline",
+                          padding: "0.25rem 0.5rem",
+                          borderRadius: "0.25rem",
+                          background: band,
+                          alignSelf: "stretch",
+                          alignContent: "center",
+                        }}
+                      >
+                        {row.count === 0 ? (
+                          <span style={{ color: "var(--color-text-muted)", ...(row.highlighted ? LEAD_FIGURE : undefined) }}>
+                            no offers
+                          </span>
+                        ) : (
+                          <>
+                            <Figure
+                              amount={row.lowest!}
+                              currency={currency}
+                              step={step}
+                              onApply={apply}
+                              lead={row.highlighted}
+                            />
+                            {DOT_SEP}
+                            <span>
+                              med{" "}
+                              <Figure amount={row.median!} currency={currency} step={step} onApply={apply} />
+                            </span>
+                            {DOT_SEP}
+                            <span style={{ fontVariantNumeric: "tabular-nums" }}>{row.count}</span>
+                          </>
+                        )}
+                        {row.ownCount > 0 && (
+                          <Tooltip content="Your own Colnect offers in this condition — left out of the strip, so this offer never undercuts itself">
+                            <span style={{ color: "var(--color-text-muted)", marginLeft: "0.375rem" }}>+{row.ownCount} yours</span>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* The same scale again under the last row. */}
+                <div />
+                <Scale ticks={view.ticks} ownPrice={ownMark} placement="bottom" />
                 <div style={MUTED}>{currency}</div>
               </div>
             )}
