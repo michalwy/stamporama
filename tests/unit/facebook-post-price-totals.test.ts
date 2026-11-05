@@ -166,7 +166,7 @@ describe("postPriceTotals — the cost's marks and gaps (#2333)", () => {
   const marks = (costEstimated: boolean, costOpening: boolean, gaps: [number, number, number]) => ({
     costEstimated,
     costOpening,
-    costGaps: { unrecorded: gaps[0], unestimated: gaps[1], noOpeningValue: gaps[2] },
+    costGaps: { unrecorded: gaps[0], unestimated: gaps[1], noOpeningValue: gaps[2], notDelivered: 0, damaged: 0, disposed: 0 },
   });
 
   it("marks the cost when any lot's includes opening values or leans on an estimate, and sums the gaps", () => {
@@ -182,7 +182,7 @@ describe("postPriceTotals — the cost's marks and gaps (#2333)", () => {
     assert.deepEqual(totals.cost, {
       estimated: true,
       opening: true,
-      gaps: { unrecorded: 2, unestimated: 1, noOpeningValue: 1 },
+      gaps: { unrecorded: 2, unestimated: 1, noOpeningValue: 1, notDelivered: 0, damaged: 0, disposed: 0 },
     });
     assert.equal(column(totals, "cost").amount, "9.00");
   });
@@ -193,6 +193,6 @@ describe("postPriceTotals — the cost's marks and gaps (#2333)", () => {
       none,
       "PLN"
     );
-    assert.deepEqual(totals.cost, { estimated: false, opening: false, gaps: { unrecorded: 0, unestimated: 0, noOpeningValue: 0 } });
+    assert.deepEqual(totals.cost, { estimated: false, opening: false, gaps: { unrecorded: 0, unestimated: 0, noOpeningValue: 0, notDelivered: 0, damaged: 0, disposed: 0 } });
   });
 });

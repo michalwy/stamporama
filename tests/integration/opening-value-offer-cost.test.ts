@@ -137,7 +137,7 @@ describe("an offer's cost counts opening values (#2333)", () => {
     assert.equal(t.costKnownSets, 2);
     assert.equal(t.costOpening, true);
     assert.equal(t.costOpeningCount, 2);
-    assert.deepEqual(t.costGaps, { unrecorded: 1, unestimated: 0, noOpeningValue: 1 });
+    assert.deepEqual(t.costGaps, { unrecorded: 1, unestimated: 0, noOpeningValue: 1, notDelivered: 0, damaged: 0, disposed: 0 });
     // The price table's Cost: per set over the two sets carrying one.
     assert.equal(detail.costPrice, "5.00");
   });
@@ -147,7 +147,7 @@ describe("an offer's cost counts opening values (#2333)", () => {
     assert.equal(row.costPrice, "5.00");
     assert.equal(row.setsTotals.costOpening, true);
     assert.equal(row.setsTotals.costEstimated, false);
-    assert.deepEqual(row.setsTotals.costGaps, { unrecorded: 1, unestimated: 0, noOpeningValue: 1 });
+    assert.deepEqual(row.setsTotals.costGaps, { unrecorded: 1, unestimated: 0, noOpeningValue: 1, notDelivered: 0, damaged: 0, disposed: 0 });
   });
 
   it("counts a copy on a still-open opening balance at its estimate, with both marks (#2437)", async () => {

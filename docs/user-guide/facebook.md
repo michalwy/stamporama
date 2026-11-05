@@ -754,7 +754,8 @@ of that figure's total; either says **over N of M lots** rather than counting th
 What the prices make against a figure is worked out over the lots that have both. Copies from an
 opening balance count at their opening value, and **Cost** then reads **Cost (incl. opening value)** —
 or **(estimate)** while a purchase lot is open; copies still without a cost are counted under it by why:
-*with no cost recorded*, *on open purchases with no estimate*, *on the opening balance with no value*.
+*with no cost recorded*, *on open purchases with no estimate*, *on the opening balance with no value*,
+and copies no longer held as *not delivered*, *damaged* or *disposed*.
 The bar is gone once the post is up.
 
 **The lots' summary** sits at the top of the lots whatever the post's state — before it goes up and
