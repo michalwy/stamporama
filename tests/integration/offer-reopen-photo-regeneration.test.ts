@@ -9,7 +9,7 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer, updateOfferPhotoConfig } from "../../src/lib/offers";
 import { applyPhotoChangeSet, stageUpload } from "../../src/lib/photos";
-import { addSaleLines, createSale, deleteSale, removeSaleLine } from "../../src/lib/sales";
+import { addSaleLines, createSale, deleteSale, removeSaleLine, setSaleStatus } from "../../src/lib/sales";
 import {
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
@@ -94,7 +94,7 @@ describe("cleaned-up images made again when an offer is back on sale (#2317)", (
 
   /**
    * One offer of one scanned copy with its images generated, sold through a sale of its own and —
-   * unless `purge` is false — swept once the grace period was up.
+   * unless `purge` is false — swept once the grace period after its delivery was up (#2457).
    */
   async function soldOffer(purge = true): Promise<{
     offerId: string;
@@ -159,9 +159,13 @@ describe("cleaned-up images made again when an offer is back on sale (#2317)", (
     const line = await prisma.saleLine.findFirstOrThrow({ where: { saleId }, select: { id: true } });
 
     if (purge) {
+      // A sold offer is swept only once its sale is Delivered (#2457); the sale is then put back to
+      // Ordered, so taking it apart below is the correction it would be on an order not yet sent.
+      await setSaleStatus(userId, saleId, "received");
       const freed = await purgeClosedOfferPhotos(new Date(Date.now() + 8 * DAY_MS), { offerId });
       assert.equal(freed.offers, 1, "the sold offer's images were cleaned up");
       assert.equal((await getOfferPhotoPlanState(userId, offerId)).status, "purged");
+      await setSaleStatus(userId, saleId, "ordered");
     }
     return { offerId, itemId: item.id, saleId, lineId: line.id };
   }

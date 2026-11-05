@@ -1121,14 +1121,23 @@ a photo to edit them there.
 
 ### When the listing is over
 
-A week after an offer is **Sold** or **Withdrawn**, Stamporama deletes its generated images and the
-card says **Cleaned up**. Nothing else about the offer changes: the sets, the photo settings, the
+A week after an offer's sale is **Delivered**, or the offer **Withdrawn**, Stamporama deletes its
+generated images and the card says **Cleaned up**. Nothing else about the offer changes: the sets, the photo settings, the
 plan order, your attachments and the copies' own scans all stay exactly where they are, and pressing
 **Regenerate** makes the images again from them. That is the whole reason this is safe to do —
 a generated image is the one photo in the app that can always be recreated, so a listing that is over
 has no reason to keep its collages sitting on disk. The images you [uploaded
 yourself](#attaching-your-own-images) are never deleted: those are originals, and nothing could make
 them again.
+
+A sold offer keeps its images until its sale is marked **Delivered**, however long ago it was sold —
+until then the card says *Kept until the sale is delivered*. A buyer who never pays has the order
+cancelled and a cash-on-delivery parcel can come back, and either way the offer is on sale again;
+**Sent** is not enough for that reason. When a sale holds several of an offer's sets, or the offer
+was sold to several buyers, the week starts when the last of those sales is Delivered. Moving a sale
+back from Delivered stops the clock again. There is no deadline: a sale you never mark Delivered
+keeps its offers' images. An offer marked Sold with no sale behind it is counted from when it was
+sold.
 
 The week is a grace period, in case you want to look at, download or re-post the images shortly
 after closing the listing. **You can change it for this collection** in **Settings → Photos & storage**,

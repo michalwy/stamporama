@@ -12,7 +12,7 @@ import {
 } from "./storage";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { CLOSED_OFFER_STATES, isOfferState, isTerminalState, offerFileSlug } from "./offer-rules";
-import { closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
+import { closedOfferPhotoClockStart, closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
 import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
 import { facebookLotPhotoFileName, facebookPostPhotoArchiveName } from "./facebook-post-rules";
@@ -2123,7 +2123,9 @@ export interface ClosedOfferPhotoPurge {
 
 /**
  * Purge the generated images of offers that have been **closed** longer than the grace period
- * (#512). An hourly sweep started from `instrumentation.ts` `register()`, alongside the staging-upload
+ * (#512) — for a sold offer, counted from its sale being **Delivered** rather than from the sale
+ * itself (#2457, `closedOfferPhotoClockStart`): an unpaid order is cancelled and a cash-on-delivery
+ * parcel can come back, and the offer would only have its images made again. An hourly sweep started from `instrumentation.ts` `register()`, alongside the staging-upload
  * orphan GC (#112) it is modelled on: idempotent, best-effort, and never anything but a delete.
  *
  * What goes is every `Photo` the offer owns with `kind: "generated"` — collage sides and rendered
@@ -2175,9 +2177,49 @@ export async function purgeClosedOfferPhotos(
           state: { in: [...CLOSED_OFFER_STATES] },
           closedAt: { lt: cutoff },
           photos: { some: { kind: "generated" } },
+          // A sold offer with a sale not yet Delivered is not due, so it is not read (#2457);
+          // `every` holds too for one with no sale behind it, which keeps #512's rule.
+          OR: [{ state: { not: "sold" } }, { saleLines: { every: { sale: { status: "received" } } } }],
         },
-        select: { id: true, photoGeneration: { select: { status: true } } },
-      }))
+        select: {
+          id: true,
+          state: true,
+          closedAt: true,
+          photoGeneration: { select: { status: true } },
+          // The sales a sold offer went into (#2457): its clock waits for every one to be
+          // Delivered, and runs from the latest delivery. Only the latest `received` event of each
+          // is wanted — one moved back and delivered again counts from the second time.
+          saleLines: {
+            select: {
+              sale: {
+                select: {
+                  id: true,
+                  status: true,
+                  statusEvents: {
+                    where: { status: "received" },
+                    orderBy: { changedAt: "desc" },
+                    take: 1,
+                    select: { changedAt: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })).filter((offer) => {
+        const sales = new Map(
+          offer.saleLines.map(({ sale }) => [
+            sale.id,
+            { status: sale.status, deliveredAt: sale.statusEvents[0]?.changedAt ?? null },
+          ])
+        );
+        const start = closedOfferPhotoClockStart({
+          state: offer.state,
+          closedAt: offer.closedAt,
+          sales: [...sales.values()],
+        });
+        return start != null && start < cutoff;
+      })
     );
   }
   if (candidates.length === 0) return empty;

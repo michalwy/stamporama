@@ -1232,6 +1232,9 @@ export function OfferPhotosCard({
                   // never having generated any — and the only place the collector is told why.
                   "The generated images were deleted: this listing has been closed a while, and generated images can always be made again."
                 : "No generated images yet."}{" "}
+            {/* #2457: a sold offer's images wait for its sale to arrive — an unpaid order or a
+                returned parcel would bring the offer back, and the images would be made again. */}
+            {offerState === "sold" && stored > 0 && "Kept until the sale is delivered. "}
             {planNote(plan)}
           </p>
 
