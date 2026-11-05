@@ -48,6 +48,7 @@ import { ValuationMethodPanel } from "./valuation-method-panel";
 import type { ValuationMethod } from "@/lib/piece-valuation";
 import type { ValuationMethodRoles } from "@/lib/valuation-method-roles";
 import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
+import { colnectAttributeLists } from "./colnect-summary";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
 import { ModulePlatformTab } from "./module-platform-tab";
@@ -414,7 +415,7 @@ function entrySummary(
             <ColnectSummary
               catalogs={props.initialColnectMappings}
               conditions={props.initialColnectConditionMappings}
-              attributes={props.initialAttributes}
+              attributes={colnectAttributeLists(props.initialAttributes, props.initialIssueFormats)}
               lists={props.initialColnectListMappings}
               platform={props.modulePlatforms[COLNECT_PLATFORM_MODULE]}
               active={part}
@@ -1061,7 +1062,7 @@ function SettingsEntryBody({
           }))}
           catalogs={initialColnectMappings}
           conditions={initialColnectConditionMappings}
-          attributes={initialAttributes}
+          attributes={colnectAttributeLists(initialAttributes, initialIssueFormats)}
           lists={initialColnectListMappings}
         />
       );

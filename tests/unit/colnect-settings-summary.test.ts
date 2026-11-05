@@ -2,12 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { ColnectConditionMappingData, ColnectMappingData } from "../../src/lib/colnect";
 import type { ColnectListMappingData } from "../../src/lib/colnect-list-sync";
-import type { StampAttributeData, StampAttributeLists } from "../../src/lib/stamp-attributes";
+import type { StampAttributeData } from "../../src/lib/stamp-attributes";
+import type { StampIssueFormatData } from "../../src/lib/stamp-issue-formats";
 import {
   COLNECT_UNMAPPED_PARAM,
+  colnectAttributeLists,
   colnectAttributeView,
   colnectSummary,
   unmappedAttributeCount,
+  type ColnectAttributeLists,
 } from "../../src/app/c/[collectionSlug]/settings/colnect-summary";
 
 /**
@@ -40,8 +43,8 @@ function value(name: string, colnectValue: string | null = null): StampAttribute
   return { id: name, name, nameByLanguage: {}, colnectValue, sortOrder: 0 };
 }
 
-function attributes(over: Partial<StampAttributeLists> = {}): StampAttributeLists {
-  return { color: [], watermark: [], paper: [], printing: [], ...over };
+function attributes(over: Partial<ColnectAttributeLists> = {}): ColnectAttributeLists {
+  return { color: [], watermark: [], paper: [], printing: [], issueFormat: [], ...over };
 }
 
 function list(lt: number, label: string, enabled: boolean): ColnectListMappingData {
@@ -217,5 +220,43 @@ describe("Colnect attribute view (#1480)", () => {
     assert.equal(view.kind, null);
     assert.deepEqual(view.kinds, []);
     assert.deepEqual(view.rows, []);
+  });
+});
+
+// The issue formats are the tab's fifth list (#2443): what Colnect prints in a stamp's "Format".
+describe("the issue formats on the Attributes tab (#2443)", () => {
+  function issueFormat(name: string, colnectValue: string | null): StampIssueFormatData {
+    return {
+      id: name,
+      name,
+      abbreviation: name.slice(0, 2),
+      nameByLanguage: {},
+      abbreviationByLanguage: {},
+      sortOrder: 0,
+      color: null,
+      colnectValue,
+      stampCount: 0,
+    };
+  }
+
+  const lists = colnectAttributeLists(
+    { color: [value("Carmine", "carmine")], watermark: [], paper: [], printing: [] },
+    [issueFormat("Souvenir sheet", "Souvenir Sheet"), issueFormat("Miniature sheet", null)]
+  );
+
+  it("is offered after the four attribute lists, in the same row shape", () => {
+    assert.deepEqual(colnectAttributeView(lists, null, false).kinds, ["color", "issueFormat"]);
+    assert.deepEqual(
+      colnectAttributeView(lists, "issueFormat", false).rows.map((r) => [r.name, r.colnectValue]),
+      [
+        ["Souvenir sheet", "Souvenir Sheet"],
+        ["Miniature sheet", null],
+      ]
+    );
+  });
+
+  it("counts its unmapped values with the rest, and the narrowing opens it", () => {
+    assert.equal(unmappedAttributeCount(lists), 1);
+    assert.equal(colnectAttributeView(lists, null, true).kind, "issueFormat");
   });
 });

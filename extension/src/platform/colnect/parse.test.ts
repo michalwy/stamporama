@@ -266,6 +266,7 @@ const ATTRIBUTE_CARDS = `
       <dt>Watermark:</dt><dd>Lozenges</dd>
       <dt>Paper:</dt><dd>Thin</dd>
       <dt>Printing:</dt><dd>Photogravure</dd>
+      <dt>Format:</dt><dd><a href="#">Souvenir Sheet</a></dd>
       <dt>Catalog codes:</dt><dd><strong>Mi:</strong>PL 1</dd>
     </dl>
   </div>
@@ -277,7 +278,7 @@ const ATTRIBUTE_CARDS = `
 </body></html>`;
 
 describe("the stamp attributes on a list page (#739)", () => {
-  it("reads all six, verbatim", () => {
+  it("reads all six and the format (#2443), verbatim", () => {
     const items = extractColnect(parseHTML(ATTRIBUTE_CARDS).document as unknown as Document);
     assert.deepEqual(items[0].attributes, {
       denomination: "10 Grosz",
@@ -286,6 +287,7 @@ describe("the stamp attributes on a list page (#739)", () => {
       watermark: "Lozenges",
       paper: "Thin",
       printing: "Photogravure",
+      issueFormat: "Souvenir Sheet",
     });
   });
 

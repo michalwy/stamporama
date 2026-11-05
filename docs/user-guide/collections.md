@@ -599,8 +599,8 @@ figures](platforms.md#the-platform-in-figures)):
   mapping](#colnect-catalog-mapping). The page opens on this tab.
 - **Conditions** — which of Colnect's grades each of your conditions means; see [Colnect condition
   mapping](#colnect-condition-mapping).
-- **Attributes** — what Colnect calls your colours, watermarks, papers and printing methods; see
-  [Colnect attribute mapping](#colnect-attribute-mapping).
+- **Attributes** — what Colnect calls your colours, watermarks, papers, printing methods and issue
+  formats; see [Colnect attribute mapping](#colnect-attribute-mapping).
 - **List sync** — what each of Colnect's own lists mirrors here; see [Colnect list
   sync](#colnect-list-sync).
 - **Platform** — the Colnect platform's own settings; see [Colnect platform](#colnect-platform).
@@ -681,6 +681,12 @@ matching** fills in every blank value of the list shown with the value's own nam
 value in that list has already taken the word; you correct the ones that are not right. Nothing is
 ever created from a Colnect page: a Colnect word that maps to none of your values is reported, and
 the Assistant fills in the rest.
+
+The last list is your [issue formats](#issue-formats): what Colnect prints as a stamp's
+**Format** — *Souvenir Sheet*, *Miniature Sheet*. **Fill matching** gets most of them right, since
+*Souvenir sheet* and Colnect's *Souvenir Sheet* are the same word. Colnect's **Stamp** means an
+ordinary stamp, which is no issue format, so it is never mapped: the field refuses it, and a page
+saying *Stamp* leaves the stamp's issue format as it is.
 
 ## Colnect list sync
 
@@ -1365,6 +1371,10 @@ Set it on the stamp form's **Details** tab, in the **Issue format** dropdown, wh
 **— (stamp)** when empty. A stamp has at most one. Nothing is inherited: a variant of a souvenir
 sheet states its own issue format, as it states its own attributes. The stamp's page shows it at the
 top of its **Attributes** card. Valuation, holdings and copy formats do not read it.
+
+The [Assistant](assistant.md#colnects-words-and-yours) fills it from a stamp's Colnect page, from
+what Colnect prints as its **Format**, once you have said in **Settings → Colnect → Attributes** what
+Colnect calls each of your issue formats.
 
 ## Tags
 

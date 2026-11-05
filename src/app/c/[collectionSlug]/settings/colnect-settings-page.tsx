@@ -2,11 +2,14 @@
 
 import type { ColnectConditionMappingData, ColnectMappingData } from "@/lib/colnect";
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
-import type { StampAttributeLists } from "@/lib/stamp-attributes";
 import type { PlatformListItem } from "@/lib/platforms";
 import { ModulePlatformTab } from "./module-platform-tab";
 import { SettingsSummaryStrip, SettingsSummaryTile } from "./settings-summary-strip";
-import { colnectSummary, type ColnectSettingsPart } from "./colnect-summary";
+import {
+  colnectSummary,
+  type ColnectAttributeLists,
+  type ColnectSettingsPart,
+} from "./colnect-summary";
 import { ColnectCatalogsPanel, type ColnectVendorOption } from "./colnect-catalogs-panel";
 import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectAttributesPanel } from "./colnect-attributes-panel";
@@ -35,7 +38,8 @@ const MAPPING_WIDTH = "56rem";
 interface ColnectData {
   catalogs: ColnectMappingData[];
   conditions: ColnectConditionMappingData[];
-  attributes: StampAttributeLists;
+  /** The Attributes tab's five lists — the attribute dictionaries and the issue formats (#2443). */
+  attributes: ColnectAttributeLists;
   lists: ColnectListMappingData[];
   /** The Colnect platform (#1955) — the Platform tab's, and the strip's last tile. */
   platform: PlatformListItem;
