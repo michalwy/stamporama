@@ -1996,16 +1996,22 @@ composing the series offer afterwards.
   more set**, so its quantity grows by one, instead of making a second offer the marketplace would
   refuse. An offer in **active bidding** never receives a set; the card names it and proposes a new
   offer instead.
-- **Check the outcome.** The dialog says what is about to happen: the series added to the offer that
-  already lists it — the **lowest-numbered** one when there are several, with a radio button to pick
-  another, and **Create a new Preparing offer instead** if you want them kept apart — or, when no offer
-  lists it, a new **Preparing** offer on the platform holding the series as **one set**. A new offer on
-  Facebook also asks for the **Facebook group**, and **Compose offer** waits until one is chosen
-  ([Facebook](facebook.md#without-the-form)). It also lists
-  every single offer that loses a set — whether it
-  keeps other sets or is left with nothing, whether it is **live** (Active or Paused), and what
-  happens to it: a live offer left empty says it **stays in its state and appears in Needs action**,
-  one never listed says it is **withdrawn**.
+- **Check the outcome.** The dialog names the series, its number of copies and the platform on one
+  line, then shows **where the series goes** as cards side by side, the chosen one outlined: **Add to
+  #N** for the offer that already lists it — with its status, its title, the quantity change
+  (*Quantity 1 → 2*) and, when it is live, that its listing needs updating — proposed on the
+  **lowest-numbered** one when there are several, and **New offer**, created as **Preparing**, if you
+  want them kept apart. Click a card to choose it. When no offer lists the series, **New offer** is the
+  only card. A new offer on Facebook also asks for the **Facebook group** inside its card, and
+  **Compose offer** waits until one is chosen ([Facebook](facebook.md#without-the-form)).
+  Below the cards, the **single offers the series is taken from** are a compact table — offer number
+  (a link to the offer), title (cut to one line; hover to read it whole), status, and what is left
+  **After**: *empty*, *keeps 2 sets*, or *withdrawn*. What happens to them is said **once**, above
+  the table, naming how many offers it covers — *All 8 are live and end up empty. They stay Active
+  and appear in Needs action: take each listing down on Colnect, then withdraw the offer.* When the
+  offers differ, each kind gets its own note (live and emptied, live and keeping other sets, never
+  listed and withdrawn); an offer that is not live and keeps other sets needs no note. A long table
+  scrolls inside the dialog, so the cards and the buttons stay in view.
 - **Compose.** The series goes into the offer — the new one, or the one it was added to, which
   is flagged **Changed since listed** if it is live — holding exactly the copies you chose — from a collapsed line or
   an opened one alike. For every chosen copy that came from a single offer, only **its
