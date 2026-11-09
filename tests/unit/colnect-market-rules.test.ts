@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   axisPosition,
   colnectMarketView,
+  dotAreaScale,
+  dotDiameter,
+  dotLegendCounts,
   parseColnectMarketReadInput,
   priceUnder,
   storeColnectMarketRead,
@@ -276,5 +279,55 @@ describe("colnectMarketView reads at a glance (#2464)", () => {
     assert.deepEqual(axisPosition(v.axis, "0.001"), { position: 0, outside: "below" });
     assert.equal(axisPosition(v.axis, null), null);
     assert.equal(axisPosition(v.axis, "0.00"), null);
+  });
+});
+
+describe("colnectMarketView dot sizes (#2473)", () => {
+  /** `count` listings at each price, every one in grade `grade`. */
+  const listings = (groups: readonly (readonly [string, number, string?])[]) =>
+    groups.flatMap(([amount, n, grade = "4"], g) =>
+      Array.from({ length: n }, (_, i) => offer({ saleCode: `${g}-${i}`, amount, grade }))
+    );
+  const view = (offers: ColnectMarketOfferInput[]) => {
+    const read = storeColnectMarketRead(input(offers), { currency: "EUR", rateTo: () => null, ownSaleCodes: new Set() });
+    assert.ok(read.ok);
+    return colnectMarketView(read.read, [{ colnectId: "60512", label: "x", grades: ["4"] }], new Map());
+  };
+
+  it("scales to the largest group of the read, not to fixed thresholds", () => {
+    const small = view(listings([["0.10", 1], ["0.20", 3]]));
+    assert.equal(small.largestGroup, 3);
+    assert.equal(dotAreaScale(3, small.largestGroup), 1);
+    const large = view(listings([["0.10", 1], ["0.20", 3], ["0.50", 40]]));
+    assert.equal(large.largestGroup, 40);
+    assert.ok(dotAreaScale(3, large.largestGroup) < 0.1);
+    assert.equal(dotAreaScale(40, large.largestGroup), 1);
+    assert.equal(dotAreaScale(1, large.largestGroup), 0);
+  });
+
+  it("shares one scale across every row of the read, receded rows included", () => {
+    const v = view(listings([["0.10", 2, "4"], ["1.00", 7, "1"]]));
+    assert.equal(v.largestGroup, 7);
+  });
+
+  it("grows a dot's area, not its width, in proportion to its count", () => {
+    assert.equal(dotDiameter(0, 12, 24), 12);
+    assert.equal(dotDiameter(1, 12, 24), 24);
+    const half = dotDiameter(0.5, 12, 24);
+    assert.ok(Math.abs(half ** 2 - (12 ** 2 + 24 ** 2) / 2) < 1e-9);
+  });
+
+  it("draws every dot the smallest when every group is one offer", () => {
+    const v = view(listings([["0.10", 1], ["0.20", 1]]));
+    assert.equal(v.largestGroup, 1);
+    assert.equal(dotAreaScale(1, v.largestGroup), 0);
+    assert.deepEqual(dotLegendCounts(1), [1]);
+  });
+
+  it("names one offer, about half the largest group and the largest in the legend, each once", () => {
+    assert.deepEqual(dotLegendCounts(40), [1, 20, 40]);
+    assert.deepEqual(dotLegendCounts(3), [1, 2, 3]);
+    assert.deepEqual(dotLegendCounts(2), [1, 2]);
+    assert.deepEqual(dotLegendCounts(0), [1]);
   });
 });
