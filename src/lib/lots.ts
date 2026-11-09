@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { settleCopyConditionsTx } from "./item-condition";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
@@ -1495,7 +1496,7 @@ export async function intakeStamps(
       select: {
         name: true,
         // The copies come out in the order the set reads (#764).
-        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+        stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       },
     });
     if (!checklist) throw new Error("Checklist not found in this collection.");

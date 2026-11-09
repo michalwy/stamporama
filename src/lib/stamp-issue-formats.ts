@@ -16,7 +16,7 @@ import { isColnectOrdinaryStamp, normalizeColnectAttribute } from "./colnect-att
 // It belongs to the **stamp**, never the copy — a copy's format is how the collector's piece was cut
 // or kept and is untouched by this. There is no "Stamp" row: a null `issueFormatId` **is** an
 // ordinary stamp. Not inherited down the variant tree (ADR-0010), and nothing in valuation, holdings
-// or copy formats reads it.
+// or copy formats reads it. What does read it is a series: `countsTowardsSeries` (#2470).
 
 export interface StampIssueFormatData {
   id: string;
@@ -34,6 +34,8 @@ export interface StampIssueFormatData {
   /** What Colnect prints in a stamp's "Format" for this value (#2443), or null while nothing is
    *  mapped — set on Settings → Colnect → Attributes beside the four attribute dictionaries. */
   colnectValue: string | null;
+  /** Whether entries in it count towards the series (#2470, ADR-0080). */
+  countsTowardsSeries: boolean;
   /** How many stamps carry this issue format — what the settings row says, and why a delete is
    *  refused while it is above nought. */
   stampCount: number;
@@ -106,6 +108,7 @@ export async function seedDefaultIssueFormats(
       abbreviation: f.abbreviation,
       color: f.color,
       sortOrder: i,
+      countsTowardsSeries: f.countsTowardsSeries ?? true,
     })),
   });
 }
@@ -125,6 +128,7 @@ export async function getStampIssueFormats(
       sortOrder: true,
       color: true,
       colnectValue: true,
+      countsTowardsSeries: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
       _count: { select: { stamps: true } },
     },
@@ -138,6 +142,7 @@ export async function getStampIssueFormats(
     sortOrder: f.sortOrder,
     color: isTagColor(f.color) ? f.color : null,
     colnectValue: f.colnectValue,
+    countsTowardsSeries: f.countsTowardsSeries,
     stampCount: f._count.stamps,
   }));
 }
@@ -169,6 +174,7 @@ export interface StampIssueFormatInput {
   name: string;
   abbreviation: string;
   color: TagColor | null;
+  countsTowardsSeries: boolean;
   translations?: TranslationValueMap;
 }
 
@@ -191,6 +197,7 @@ export async function createStampIssueFormat(
       name: data.name,
       abbreviation: data.abbreviation,
       color: data.color,
+      countsTowardsSeries: data.countsTowardsSeries,
       sortOrder: last ? last.sortOrder + 1 : 0,
     },
     select: { id: true },
@@ -208,7 +215,12 @@ export async function updateStampIssueFormat(
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.stampIssueFormat.update({
     where: { id: issueFormatId },
-    data: { name: data.name, abbreviation: data.abbreviation, color: data.color },
+    data: {
+      name: data.name,
+      abbreviation: data.abbreviation,
+      color: data.color,
+      countsTowardsSeries: data.countsTowardsSeries,
+    },
   });
   await syncIssueFormatTranslations(issueFormatId, data.translations);
 }

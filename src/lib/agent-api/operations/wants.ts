@@ -482,7 +482,7 @@ export async function readChecklistGaps(
     },
   });
   const byId = new Map(stamps.map((stamp) => [stamp.id, stamp]));
-  const sizeById = new Map(checklists.map((list) => [list.id, list.stampIds.length]));
+  const sizeById = new Map(checklists.map((list) => [list.id, list.countingStampIds.length]));
 
   return {
     issueId: issue.id,

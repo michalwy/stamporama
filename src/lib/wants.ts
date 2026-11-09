@@ -1,4 +1,6 @@
 import "server-only";
+import { SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
@@ -1314,7 +1316,7 @@ export async function createWant(
       select: {
         name: true,
         // The wants come out in the order the set reads (#764).
-        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+        stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       },
     });
     if (!checklist) throw new Error("Checklist not found in this collection.");
@@ -1775,12 +1777,12 @@ async function mapChecklistsToDepth<T extends { stamps: { stampId: string }[] }>
     for (const set of descendants.values()) for (const id of set) subtree.add(id);
     const rows = await prisma.stamp.findMany({
       where: { id: { in: [...subtree] }, collectionId },
-      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT, ...SERIES_FLAG_SELECT },
       orderBy: [{ primaryCatalogSortKey: { sort: "asc", nulls: "last" } }, { name: "asc" }, { id: "asc" }],
     });
     const variantChildren = new Map<string, string[]>();
     for (const row of rows) {
-      if (row.parentId === null || !childIsVariant(row)) continue;
+      if (row.parentId === null || !childIsVariant(row) || !stampCountsTowardsSeries(row)) continue;
       const children = variantChildren.get(row.parentId);
       if (children) children.push(row.id);
       else variantChildren.set(row.parentId, [row.id]);
@@ -1831,7 +1833,7 @@ export async function previewIssueMissingWants(
   const checklists = await prisma.checklist.findMany({
     where: { collectionId, issueId, ...shownChecklistWhere(includeSpecialised) },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
+    select: { id: true, name: true, kind: true, stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } },
   });
 
   const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
@@ -1894,7 +1896,7 @@ export async function createWantsForIssue(
     // goal of the issue this was raised from, whoever sent it. Null matches only the checklists
     // spanning issues, so an issue's own cannot be reached through that door either.
     where: { collectionId, issueId, id: { in: checklistIds } },
-    select: { id: true, stamps: { select: { stampId: true } } },
+    select: { id: true, stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } },
   });
   if (checklists.length === 0) {
     throw new Error(

@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { satisfiedMember } from "./checklist-completeness-rules";
@@ -39,6 +40,7 @@ export async function loadChecklistSlots(
     where: {
       stampId: { in: [...chainIds] },
       checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
+      ...COUNTING_CHECKLIST_MEMBER,
     },
     select: { checklistId: true, stampId: true, sortOrder: true },
   });

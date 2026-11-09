@@ -235,6 +235,7 @@ describe("the issue formats on the Attributes tab (#2443)", () => {
       sortOrder: 0,
       color: null,
       colnectValue,
+      countsTowardsSeries: true,
       stampCount: 0,
     };
   }

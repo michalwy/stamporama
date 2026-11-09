@@ -1,4 +1,5 @@
 import "server-only";
+import { SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
 import { prisma } from "./db";
 import { buildDescendantMap } from "./pricing";
 import { satisfiedMember, type VariantChain } from "./checklist-completeness-rules";
@@ -66,10 +67,11 @@ export async function loadChecklistVariantRollup(
 
   const rows = await prisma.stamp.findMany({
     where: { id: { in: [...ids] }, collectionId },
-    select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+    select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT, ...SERIES_FLAG_SELECT },
   });
   const parentOf = new Map(rows.map((r) => [r.id, r.parentId]));
-  const isVariant = new Map(rows.map((r) => [r.id, childIsVariant(r)]));
+  // An entry that does not count towards the series (#2470) answers for no member above it either.
+  const isVariant = new Map(rows.map((r) => [r.id, childIsVariant(r) && stampCountsTowardsSeries(r)]));
 
   const chains = new Map<string, VariantChain>();
   for (const row of rows) {
@@ -130,12 +132,13 @@ export async function loadVariantChains(
   for (let depth = 0; depth < MAX_VARIANT_DEPTH && frontier.size > 0; depth += 1) {
     const rows = await prisma.stamp.findMany({
       where: { id: { in: [...frontier.keys()] }, collectionId },
-      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT },
+      select: { id: true, parentId: true, ...VARIANT_FLAG_SELECT, ...SERIES_FLAG_SELECT },
     });
     const next = new Map<string, Set<string>>();
     for (const row of rows) {
       // A child that does not act as a variant is a stamp in its own right: the chain ends at it.
-      if (row.parentId === null || !childIsVariant(row)) continue;
+      // …and so does one that does not count towards the series (#2470).
+      if (row.parentId === null || !childIsVariant(row) || !stampCountsTowardsSeries(row)) continue;
       const origins = frontier.get(row.id)!;
       for (const origin of origins) chains.get(origin)!.push(row.parentId);
       const carried = next.get(row.parentId) ?? new Set<string>();

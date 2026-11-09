@@ -177,6 +177,7 @@ describe("stamp issue formats (#2439)", () => {
       name: "Sheetlet",
       abbreviation: "KB",
       color: "red",
+      countsTowardsSeries: true,
       translations: { de: { name: "Kleinbogen", abbreviation: "" } },
     });
     let rows = await getStampIssueFormats(userId, collectionId);
@@ -190,6 +191,7 @@ describe("stamp issue formats (#2439)", () => {
       name: "Sheetlet of 10",
       abbreviation: "KB10",
       color: null,
+      countsTowardsSeries: true,
       translations: { de: { name: "Kleinbogen", abbreviation: "KB" } },
     });
     rows = await getStampIssueFormats(userId, collectionId);

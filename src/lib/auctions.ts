@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { forgetRealizationRatios } from "./realization-ratio-cache";
@@ -3569,7 +3570,7 @@ export async function resolveAuctionLineStamps(
       select: {
         name: true,
         // The lot's lines come out in the order the set reads (#764).
-        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+        stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       },
     });
     if (!checklist) {

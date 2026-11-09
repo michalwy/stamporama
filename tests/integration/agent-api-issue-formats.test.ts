@@ -28,6 +28,7 @@ interface IssueFormatAnswer {
   name: string;
   abbreviation: string;
   color?: string;
+  countsTowardsSeries: boolean;
   stampCount: number;
 }
 
@@ -176,7 +177,7 @@ describe("the issue format through the agent API (#2445)", () => {
       });
       assert.deepEqual(
         { ...sheet, id: undefined },
-        { id: undefined, name: "Souvenir sheet", abbreviation: "Bl", color: "indigo", stampCount: 0 }
+        { id: undefined, name: "Souvenir sheet", abbreviation: "Bl", color: "indigo", countsTowardsSeries: true, stampCount: 0 }
       );
       sheetId = sheet.id;
       exSheetId = (
@@ -190,9 +191,9 @@ describe("the issue format through the agent API (#2445)", () => {
         "/vocabulary"
       );
       assert.deepEqual(vocabulary.issueFormats, [
-        { id: sheetId, name: "Souvenir sheet", abbreviation: "Bl", color: "indigo" },
-        { id: exSheetId, name: "Stamp from a souvenir sheet", abbreviation: "exBl" },
-        { id: vocabulary.issueFormats[2].id, name: "Booklet pane", abbreviation: "HBl", color: "amber" },
+        { id: sheetId, name: "Souvenir sheet", abbreviation: "Bl", color: "indigo", countsTowardsSeries: true },
+        { id: exSheetId, name: "Stamp from a souvenir sheet", abbreviation: "exBl", countsTowardsSeries: true },
+        { id: vocabulary.issueFormats[2].id, name: "Booklet pane", abbreviation: "HBl", color: "amber", countsTowardsSeries: true },
       ]);
     });
 
@@ -217,6 +218,14 @@ describe("the issue format through the agent API (#2445)", () => {
       const neutral = await ok<IssueFormatAnswer>(token, "PATCH", "/issue-formats/Booklet pane (se-tenant)", { clear: ["color"] });
       assert.equal(neutral.color, undefined);
       assert.equal(neutral.name, "Booklet pane (se-tenant)");
+
+      // Whether its stamps count towards the series (#2470): read back, set, and put back.
+      const off = await ok<IssueFormatAnswer>(token, "PATCH", "/issue-formats/HBl", { counts_towards_series: false });
+      assert.equal(off.countsTowardsSeries, false);
+      assert.equal(off.name, "Booklet pane (se-tenant)", "only what is sent changes");
+      const offVocabulary = await ok<{ issueFormats: { abbreviation: string; countsTowardsSeries: boolean }[] }>(token, "GET", "/vocabulary");
+      assert.equal(offVocabulary.issueFormats.find((f) => f.abbreviation === "HBl")?.countsTowardsSeries, false);
+      await ok(token, "PATCH", "/issue-formats/HBl", { counts_towards_series: true });
 
       const clash = await refused(token, "PATCH", `/issue-formats/${renamed.id}`, { abbreviation: "exbl" });
       assert.deepEqual(clash.error.accepted, [exSheetId]);

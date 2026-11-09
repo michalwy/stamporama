@@ -671,6 +671,11 @@ model StampIssueFormat {
   // mapped — the four attribute dictionaries' own column (#739). Colnect's "Stamp" is no issue
   // format, so no row stands for it. Unique per collection so the lookup is unambiguous.
   colnectValue String?
+  // Whether entries in this issue format count towards the series (#2470, ADR-0080). Off for a piece
+  // a catalogue prices as a whole — an FDC, postal stationery — which can still be held, wanted
+  // individually, valued and offered. Read wherever a checklist is read as a series
+  // (`issue-format-series.ts`); the checklist's own rows are left alone.
+  countsTowardsSeries Boolean @default(true)
 
   collection   Collection                    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamps       Stamp[]

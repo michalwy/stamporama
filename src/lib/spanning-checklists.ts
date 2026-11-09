@@ -1,4 +1,5 @@
 import "server-only";
+import { SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
 import { prisma } from "./db";
 import { getSpanningChecklistsCompleteness } from "./checklist-completeness";
 import { headlineCompleteness, type CompletenessRow } from "./checklist-completeness-rules";
@@ -59,7 +60,7 @@ export async function getSpanningChecklistOverview(
       name: true,
       kind: true,
       translations: { select: { language: true, name: true } },
-      stamps: { select: { stampId: true, sortOrder: true } },
+      stamps: { select: { stampId: true, sortOrder: true, stamp: { select: SERIES_FLAG_SELECT } } },
       albumEntries: {
         select: { album: { select: { id: true, name: true } } },
         orderBy: { album: { name: "asc" } },
@@ -71,7 +72,14 @@ export async function getSpanningChecklistOverview(
   const lists = rows.map((r) => ({ id: r.id, stampIds: orderedChecklistStampIds(r.stamps) }));
   const allStampIds = [...new Set(lists.flatMap((l) => l.stampIds))];
   const [totals, memberships] = await Promise.all([
-    getSpanningChecklistTotals(collectionId, lists),
+    // The total is the series'; `stampIds` below stays the whole membership, for its editor (#2470).
+    getSpanningChecklistTotals(
+      collectionId,
+      rows.map((r) => ({
+        id: r.id,
+        stampIds: orderedChecklistStampIds(r.stamps.filter((s) => stampCountsTowardsSeries(s.stamp))),
+      }))
+    ),
     allStampIds.length === 0
       ? Promise.resolve([])
       : prisma.issueMember.findMany({

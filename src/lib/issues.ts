@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { assertIssueFormatInCollection } from "./stamp-issue-formats";
 import { stampSizeProfileWrite } from "./scanning-profiles";
 import { prisma, type DbTransaction } from "./db";
@@ -267,7 +268,7 @@ const MEMBER_SELECT = {
       // Every checklist the stamp is on, anywhere in the collection (#531). The mapper narrows
       // them to the issue being rendered — a static select cannot name the issue it will be run
       // for, and a stamp sits on a handful of checklists at most.
-      checklistEntries: { select: { checklistId: true } },
+      checklistEntries: { where: COUNTING_CHECKLIST_MEMBER, select: { checklistId: true } },
       stampNo: true,
       parentId: true,
       name: true,
@@ -550,7 +551,7 @@ export async function getIssueHeadersByIds(
       members: { select: { stampId: true } },
       checklists: {
         where: shownChecklistWhere(includeSpecialised),
-        select: { stamps: { select: { stampId: true } } },
+        select: { stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } },
       },
     },
   });
@@ -674,7 +675,7 @@ const ISSUE_LIST_SELECT = {
       kind: true,
       sortOrder: true,
       createdAt: true,
-      stamps: { select: { stampId: true } },
+      stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } },
     },
   },
   // The collector's own labels on the issue itself (#152). The issue's tags are the issue's: they
@@ -1618,7 +1619,7 @@ export async function getChecklistPriceDetails(
   const [members, conditions, certificateStatuses, baseCurrency, latestYearByName] =
     await Promise.all([
       prisma.checklistStamp.findMany({
-        where: { checklistId },
+        where: { checklistId, ...COUNTING_CHECKLIST_MEMBER },
         select: {
           stamp: {
             select: {
@@ -2627,6 +2628,7 @@ export async function getIssueRangeSuggestions(
           where: { kind: "standard" },
           select: {
             stamps: {
+              where: COUNTING_CHECKLIST_MEMBER,
               select: {
                 stamp: { select: { catalogNumbers: { select: { catalogVendorId: true, number: true } } } },
               },

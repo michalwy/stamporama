@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
@@ -1186,7 +1187,7 @@ export async function resolveTradeLineStamps(
       select: {
         // The trade's lines come out in the order the set reads (#764).
         name: true,
-        stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+        stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       },
     });
     if (!checklist) throw new Error("That checklist no longer exists.");

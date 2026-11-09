@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { COPY_CONDITION_WHERE } from "./condition-price-only";
 import { NOT_TRADED_AWAY } from "./trade-exit";
@@ -108,7 +109,7 @@ async function completenessOf(
     prisma.checklist.findMany({
       where: { collectionId, issueId: scope.issueId, ...shownChecklistWhere(includeSpecialised) },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
+      select: { id: true, name: true, kind: true, stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } },
     }),
     prisma.stampCondition.findMany({
       where: { collectionId, ...COPY_CONDITION_WHERE },

@@ -1352,7 +1352,8 @@ catalogue identity, the same for every copy of the stamp, and it is what catalog
 Manage the list under **Settings → Issue formats**, beside **Attributes**. A new collection starts
 with *Souvenir sheet* (Bl), *Stamp from a souvenir sheet* (exBl), *Miniature sheet* (MS),
 *Tête-bêche* (TB), *Se-tenant* (ST), *Booklet* (MH), *Booklet pane* (HBl), *Stamp from a booklet*
-(exMH), *Coil stamp* (Coil) and *Postal stationery* (PS), each in a colour of its own.
+(exMH), *Coil stamp* (Coil), *Postal stationery* (PS) and *FDC*, the first ten each in a colour of
+its own and FDC in the neutral chip.
 
 - **No issue format means an ordinary stamp.** There is no *Stamp* entry and none is needed, just as
   there is no *Single* format. Every stamp you had before the list existed reads as an ordinary stamp
@@ -1398,6 +1399,27 @@ Colnect calls each of your issue formats.
 A listing text names it with `{issueFormat}` or `{issueFormatAbbr}` — see
 [listing templates](platforms.md#listing-templates) — so a buyer searching for *souvenir sheet* or
 *Block* finds the listing. On an ordinary stamp both print nothing.
+
+### Entries that are not part of the series
+
+Catalogues price some pieces as a whole: postal stationery, or an FDC with a set. Catalogue such a
+piece as an **ordinary entry in its issue**, with its own numbers and prices, and give it the issue
+format *Postal stationery* or *FDC*. Your piece is then an ordinary copy of that entry.
+
+Each issue format has a **Counts towards the series** switch in **Settings → Issue formats**. It is
+off for *FDC* and *Postal stationery* and on for every other value. An entry whose issue format does
+not count:
+
+- **stays in its issue**, marked by its chip, and can be held, wanted on its own, valued and offered;
+- **is valued from its own catalogue prices** — with no price it has no value, and nothing is added up
+  from the stamps of the issue;
+- **is left out of the series**: an issue with all its stamps and no FDC reads as complete, the set's
+  price does not include it, wanting the whole set does not want it, and it never makes or breaks a
+  complete set, Series from singles or free extras. Album pages built from a checklist do not print a
+  box for it.
+
+Turning the switch on again puts the entry back exactly where it was: it stays ticked in the
+checklist's editor all along.
 
 ### Filtering by issue format
 

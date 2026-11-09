@@ -9,16 +9,18 @@ import { parseStampAttributes, pickStampAttributeWrites } from "../../src/lib/st
 // The issue formats a collection starts with (#2439), and the stamp form's field for them.
 
 describe("default issue formats (#2439)", () => {
-  it("seeds the ten values the collector settled, with no row for an ordinary stamp", () => {
+  it("seeds the values the collector settled, with no row for an ordinary stamp", () => {
     assert.deepEqual(
       DEFAULT_ISSUE_FORMATS.map((f) => f.abbreviation),
-      ["Bl", "exBl", "MS", "TB", "ST", "MH", "HBl", "exMH", "Coil", "PS"]
+      ["Bl", "exBl", "MS", "TB", "ST", "MH", "HBl", "exMH", "Coil", "PS", "FDC"]
     );
     assert.ok(!DEFAULT_ISSUE_FORMATS.some((f) => /^(stamp|ordinary stamp|single)$/i.test(f.name)));
   });
 
   it("gives each a palette colour no other value has", () => {
-    const colors = DEFAULT_ISSUE_FORMATS.map((f) => f.color);
+    // FDC (#2470) has no colour: the palette's ten hues are taken, and the neutral chip is its own.
+    const colors = DEFAULT_ISSUE_FORMATS.flatMap((f) => (f.color ? [f.color] : []));
+    assert.equal(colors.length, DEFAULT_ISSUE_FORMATS.length - 1);
     for (const c of colors) assert.ok((TAG_COLORS as readonly string[]).includes(c), c);
     assert.equal(new Set(colors).size, colors.length);
   });
@@ -36,8 +38,26 @@ describe("default issue formats (#2439)", () => {
     }));
     assert.deepEqual(
       rows,
-      DEFAULT_ISSUE_FORMATS.map((f, i) => ({ ...f, sortOrder: i }))
+      DEFAULT_ISSUE_FORMATS.slice(0, 10).map(({ name, abbreviation, color }, i) => ({
+        name,
+        abbreviation,
+        color,
+        sortOrder: i,
+      }))
     );
+  });
+
+  it("keeps only FDC and Postal stationery out of the series (#2470), and backfills them", () => {
+    assert.deepEqual(
+      DEFAULT_ISSUE_FORMATS.filter((f) => f.countsTowardsSeries === false).map((f) => f.name),
+      ["Postal stationery", "FDC"]
+    );
+    const dir = join(process.cwd(), "prisma", "migrations");
+    const name = readdirSync(dir).find((d) => d.endsWith("_issue_format_counts_towards_series"));
+    assert.ok(name, "the switch's migration exists");
+    const sql = readFileSync(join(dir, name, "migration.sql"), "utf8");
+    assert.match(sql, /'FDC',\s*'FDC'/);
+    assert.match(sql, /"name" = 'Postal stationery'/);
   });
 });
 

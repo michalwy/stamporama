@@ -45,6 +45,8 @@ function parseFields(formData: FormData): StampIssueFormatInput {
     name: ((formData.get("name") as string | null) ?? "").trim(),
     abbreviation: ((formData.get("abbreviation") as string | null) ?? "").trim(),
     color: isTagColor(color) ? color : null,
+    // Sent either way by the form's hidden field; only an explicit "false" switches it off.
+    countsTowardsSeries: formData.get("countsTowardsSeries") !== "false",
     translations: parseTranslationValues(formData, ISSUE_FORMAT_TRANSLATION_FIELDS),
   };
 }

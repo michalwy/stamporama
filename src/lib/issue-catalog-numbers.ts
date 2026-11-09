@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps } from "./area-vendor";
@@ -102,7 +103,7 @@ export async function getIssueCatalogNumberGrid(
       year: true,
       collection: { select: { duplicateCatalogMode: true } },
       checklists: {
-        select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
+        select: { id: true, name: true, kind: true, stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } },
       },
     },
   });
@@ -274,6 +275,7 @@ export async function refreshIssueDeclaredRange(
         where: { kind: "standard" },
         select: {
           stamps: {
+            where: COUNTING_CHECKLIST_MEMBER,
             select: {
               stampId: true,
               stamp: {

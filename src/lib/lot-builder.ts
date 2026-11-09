@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { areaSubtreeIds } from "./areas";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
@@ -243,6 +244,7 @@ export async function loadPoolChecklists(
     where: {
       stampId: { in: [...chainIds] },
       checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
+      ...COUNTING_CHECKLIST_MEMBER,
     },
     select: { checklistId: true },
     distinct: ["checklistId"],
@@ -250,7 +252,7 @@ export async function loadPoolChecklists(
   if (touched.length === 0) return [];
 
   const members = await prisma.checklistStamp.findMany({
-    where: { checklistId: { in: touched.map((t) => t.checklistId) } },
+    where: { checklistId: { in: touched.map((t) => t.checklistId) }, ...COUNTING_CHECKLIST_MEMBER },
     select: { checklistId: true, stampId: true },
     orderBy: [{ checklistId: "asc" }, { sortOrder: "asc" }],
   });

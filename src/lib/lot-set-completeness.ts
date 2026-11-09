@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_PIECE } from "./multi-stamp";
@@ -151,7 +152,7 @@ export async function getLotSetCompleteness(
       name: true,
       kind: true,
       // The stamps a set is still missing are named in the order the set reads (#764).
-      stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       issue: { select: { collectionAreaId: true } },
     },
   });

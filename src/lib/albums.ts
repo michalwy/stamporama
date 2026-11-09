@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { assertAlbumFrameOrnament } from "./album-ornament-store";
@@ -533,7 +534,7 @@ const ENTRY_SELECT = {
           translations: { select: { language: true, name: true } },
         },
       },
-      stamps: { select: { stampId: true, sortOrder: true } },
+      stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true, sortOrder: true } },
     },
   },
 } satisfies Prisma.AlbumEntrySelect;
@@ -753,7 +754,7 @@ export async function setAlbumEntryStampOrder(
   await assertCollectionOwner(ownerId, collectionId);
   const entry = await prisma.albumEntry.findUnique({
     where: { id: entryId },
-    select: { checklist: { select: { stamps: { select: { stampId: true } } } } },
+    select: { checklist: { select: { stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } } } },
   });
   if (!entry) throw new Error("Album entry not found.");
   const members = new Set(entry.checklist.stamps.map((s) => s.stampId));
@@ -873,7 +874,7 @@ export async function setAlbumBoxAdjustment(
   await assertCollectionOwner(ownerId, collectionId);
   const entry = await prisma.albumEntry.findUnique({
     where: { id: entryId },
-    select: { checklist: { select: { stamps: { select: { stampId: true } } } } },
+    select: { checklist: { select: { stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } } } },
   });
   if (!entry) throw new Error("Album entry not found.");
   if (!entry.checklist.stamps.some((s) => s.stampId === stampId)) {
@@ -914,7 +915,7 @@ export async function setAlbumRowBreak(
   await assertCollectionOwner(ownerId, collectionId);
   const entry = await prisma.albumEntry.findUnique({
     where: { id: entryId },
-    select: { checklist: { select: { stamps: { select: { stampId: true } } } } },
+    select: { checklist: { select: { stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } } } } },
   });
   if (!entry) throw new Error("Album entry not found.");
   if (!entry.checklist.stamps.some((s) => s.stampId === stampId)) {

@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { COUNTED_COPY_WHERE } from "./checklist-completeness";
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
@@ -83,7 +84,7 @@ export async function getCompletenessReport(
       name: true,
       kind: true,
       issue: { select: { id: true, issueNo: true, name: true, year: true } },
-      stamps: { select: { stampId: true } },
+      stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } },
     },
   });
   const held = await heldMembers(
@@ -130,6 +131,7 @@ export async function getChecklistMissingStamps(
       issueId: true,
       issue: { select: { collectionAreaId: true } },
       stamps: {
+        where: COUNTING_CHECKLIST_MEMBER,
         select: {
           stampId: true,
           stamp: {
