@@ -16,6 +16,7 @@ import {
   collapsedChoice,
   composeTargetOf,
   composeTargets,
+  compositionConsequences,
   compositionOutcome,
   isLiveForRecombination,
   offersToChangeGiven,
@@ -24,6 +25,7 @@ import {
   SERIES_MIXING_PARAMS,
   seriesCriteriaParams,
   type ComposeTargets,
+  type CompositionConsequence,
   type CompositionOfferChange,
 } from "@/lib/series-recombination-rules";
 import { formatItemNo } from "@/lib/item-number";
@@ -39,10 +41,10 @@ import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import {
   DialogActions,
-  DialogBody,
   DialogPrimaryButton,
   DialogSecondaryButton,
   DialogShell,
+  FORM_DIALOG_COLUMNS_WIDTH,
 } from "@/app/dialog-shell";
 import { OfferStateChip } from "../offer-badges";
 import {
@@ -761,116 +763,169 @@ function ComposeSeriesDialog({
     });
   }
 
+  const hasMatches = targets.matches.length > 0;
+  const changes = outcome.flatMap((change) => {
+    const offer = offerRefs.get(change.offerId);
+    return offer ? [{ change, offer }] : [];
+  });
+  const consequences = compositionConsequences(outcome);
+  const facebookGroup = asksGroup ? (
+    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>Facebook group</span>
+      <FacebookGroupSelect
+        ariaLabel="Facebook group the new offer is in"
+        groups={facebook.groups}
+        value={facebook.groupId}
+        onChange={facebook.choose}
+        disabled={pending}
+        style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
+      />
+    </label>
+  ) : null;
+
   return (
-    <DialogShell title="Compose the series as one offer" onClose={onClose} maxWidth="40rem">
-      <DialogBody>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem", fontSize: "0.875rem" }}>
-          {target ? (
-            <p style={{ margin: 0, color: "var(--color-text-primary)", lineHeight: 1.5 }}>
-              <strong>{series.checklistName}</strong> as one more set of {chosen.length}{" "}
-              {chosen.length === 1 ? "copy" : "copies"} in the offer on {platformName} that already lists it —
-              its quantity goes from {target.setCount} to {target.setCount + 1}.
-            </p>
-          ) : (
-            <p style={{ margin: 0, color: "var(--color-text-primary)", lineHeight: 1.5 }}>
-              A new <strong>Preparing</strong> offer on {platformName} holding <strong>{series.checklistName}</strong>{" "}
-              as one set of {chosen.length} {chosen.length === 1 ? "copy" : "copies"}.
-            </p>
-          )}
-          {asksGroup && (
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-              <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>Facebook group</span>
-              <FacebookGroupSelect
-                ariaLabel="Facebook group the new offer is in"
-                groups={facebook.groups}
-                value={facebook.groupId}
-                onChange={facebook.choose}
-                disabled={pending}
-                style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
-              />
-            </label>
-          )}
-          {targets.matches.length > 0 ? (
-            <div role="radiogroup" aria-label="Where the series goes" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {targets.matches.map((offerId) => {
-                const offer = similarById.get(offerId);
-                if (!offer) return null;
-                const id = `${radioName}-${offerId}`;
-                return (
-                  <div key={offerId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <input
-                      id={id}
-                      type="radio"
-                      name={radioName}
-                      checked={targetId === offerId}
-                      onChange={() => setPicked(offerId)}
-                      style={{ margin: 0 }}
-                    />
-                    <label htmlFor={id} style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", cursor: "pointer" }}>
-                      <span>Add to</span>
-                      <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
-                      <span style={{ color: "var(--color-text-primary)" }}>{offer.label}</span>
-                      <OfferStateChip state={offer.state} />
-                      <span style={NOTE}>
-                        {offer.setCount === 1 ? "1 set" : `${offer.setCount} sets`} → {offer.setCount + 1}
-                      </span>
-                    </label>
-                    {targetId === offerId && isListedState(offer.state) ? (
-                      <span style={{ ...NOTE, color: "var(--color-warning)" }}>
-                        Live: flagged as changed — update the listing on {platformName}.
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <input
-                  id={`${radioName}-new`}
-                  type="radio"
-                  name={radioName}
-                  checked={targetId === null}
-                  onChange={() => setPicked(null)}
-                  style={{ margin: 0 }}
-                />
-                <label htmlFor={`${radioName}-new`} style={{ cursor: "pointer" }}>
-                  Create a new <strong>Preparing</strong> offer instead
-                </label>
-              </div>
-            </div>
-          ) : null}
-          {targets.biddingMatches.map((offerId) => {
+    <DialogShell title="Compose the series as one offer" onClose={onClose} maxWidth={FORM_DIALOG_COLUMNS_WIDTH}>
+      {/* Not `DialogBody`: that scrolls as one block, and here only the table of single offers
+          scrolls (#2472) — the destination and the buttons stay in view however many offers it is. */}
+      <div style={COMPOSE_BODY}>
+        <p style={{ margin: 0, color: "var(--color-text-primary)", flexShrink: 0 }}>
+          <strong>{series.checklistName}</strong>
+          <span style={{ color: "var(--color-text-muted)" }}>
+            {" · "}
+            {chosen.length} {chosen.length === 1 ? "copy" : "copies"} · {platformName}
+          </span>
+        </p>
+        <div
+          role={hasMatches ? "radiogroup" : undefined}
+          aria-label={hasMatches ? "Where the series goes" : undefined}
+          style={DESTINATIONS}
+        >
+          {targets.matches.map((offerId) => {
             const offer = similarById.get(offerId);
-            return offer ? (
-              <span key={offerId} style={{ ...NOTE, display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
-                <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
-                {offer.label} already lists this series but is in active bidding, so it receives nothing.
-              </span>
-            ) : null;
+            if (!offer) return null;
+            return (
+              <DestinationCard
+                key={offerId}
+                id={`${radioName}-${offerId}`}
+                radioName={radioName}
+                chosen={targetId === offerId}
+                onChoose={() => setPicked(offerId)}
+                heading={
+                  <>
+                    Add to <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
+                    <OfferStateChip state={offer.state} />
+                  </>
+                }
+              >
+                <OneLine text={offer.label} />
+                <span style={NOTE}>
+                  Quantity {offer.setCount} → {offer.setCount + 1}
+                </span>
+                {isListedState(offer.state) ? (
+                  <span style={{ ...NOTE, color: "var(--color-warning)" }}>
+                    Live: flagged as changed — update the listing on {platformName}.
+                  </span>
+                ) : null}
+              </DestinationCard>
+            );
           })}
-          {outcome.length === 0 ? (
-            <span style={NOTE}>Every chosen copy is available, so no other offer changes.</span>
-          ) : (
-            <>
-              <span style={NOTE}>
-                Each chosen single leaves its offer; the other sets in that offer stay where they are.
-              </span>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {outcome.map((change) => {
-                  const offer = offerRefs.get(change.offerId);
-                  return offer ? (
-                    <OutcomeLine
-                      key={change.offerId}
-                      offer={offer}
-                      change={change}
-                      platformName={platformName}
-                    />
-                  ) : null;
-                })}
-              </div>
-            </>
-          )}
+          <DestinationCard
+            id={`${radioName}-new`}
+            radioName={hasMatches ? radioName : undefined}
+            chosen={targetId === null}
+            onChoose={() => setPicked(null)}
+            heading="New offer"
+          >
+            <span style={NOTE}>
+              Created as <strong>Preparing</strong> on {platformName}, holding the series as one set.
+            </span>
+            {facebookGroup}
+          </DestinationCard>
         </div>
-      </DialogBody>
+        {targets.biddingMatches.map((offerId) => {
+          const offer = similarById.get(offerId);
+          return offer ? (
+            <span
+              key={offerId}
+              style={{ ...NOTE, display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap", flexShrink: 0 }}
+            >
+              <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
+              {offer.label} already lists this series but is in active bidding, so it receives nothing.
+            </span>
+          ) : null;
+        })}
+        {changes.length === 0 ? (
+          <span style={{ ...NOTE, flexShrink: 0 }}>Every chosen copy is available, so no other offer changes.</span>
+        ) : (
+          <>
+            {consequences.map((group) => (
+              <div key={group.kind} style={{ flexShrink: 0 }}>
+                <Callout tone={group.kind === "withdrawn" ? "neutral" : "warning"}>
+                  {consequenceNote(
+                    group.kind,
+                    group.offerIds.flatMap((id) => offerRefs.get(id) ?? []),
+                    changes.length,
+                    platformName
+                  )}
+                </Callout>
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>
+                Taken from {changes.length === 1 ? "1 single offer" : `${changes.length} single offers`}
+              </span>
+              <span style={NOTE}>
+                {changes.length === 1
+                  ? "— its other sets stay where they are."
+                  : "— the other sets in them stay where they are."}
+              </span>
+            </div>
+            <div style={OFFERS_TABLE_SCROLL}>
+              <table style={OFFERS_TABLE}>
+                <colgroup>
+                  <col style={{ width: "6rem" }} />
+                  <col />
+                  <col style={{ width: "8rem" }} />
+                  <col style={{ width: "10rem" }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={OFFERS_TH}>Offer</th>
+                    <th style={OFFERS_TH}>Title</th>
+                    <th style={OFFERS_TH}>Status</th>
+                    <th style={OFFERS_TH}>After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {changes.map(({ change, offer }) => (
+                    <tr key={change.offerId}>
+                      <td style={OFFERS_TD}>
+                        <Link href={`/c/${collectionSlug}/offers/${offer.offerId}`} style={LINK}>
+                          <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
+                        </Link>
+                      </td>
+                      <td style={OFFERS_TD}>
+                        <OneLine text={offer.label} />
+                      </td>
+                      <td style={OFFERS_TD}>
+                        <OfferStateChip state={offer.state} />
+                      </td>
+                      <td
+                        style={{
+                          ...OFFERS_TD,
+                          color: change.live && change.emptied ? "var(--color-warning)" : "var(--color-text-secondary)",
+                        }}
+                      >
+                        {afterLabel(change)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
       <DialogActions
         actionLabel={pending ? "Composing…" : target ? "Add to the offer" : "Compose offer"}
         onCancel={onClose}
@@ -887,38 +942,161 @@ function ComposeSeriesDialog({
   );
 }
 
-function OutcomeLine({
-  offer,
-  change,
-  platformName,
+// The compose dialog's layout (#2472, from the mockup approved on 2026-11-09). The body is a column
+// whose only shrinking, scrolling part is the table of single offers.
+const COMPOSE_BODY: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.875rem",
+  padding: "1.5rem",
+  fontSize: "0.875rem",
+};
+
+const DESTINATIONS: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "0.75rem",
+  flexShrink: 0,
+};
+
+const OFFERS_TABLE_SCROLL: React.CSSProperties = {
+  flex: "0 1 auto",
+  minHeight: "6rem",
+  overflowY: "auto",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.5rem",
+};
+
+const OFFERS_TABLE: React.CSSProperties = {
+  width: "100%",
+  tableLayout: "fixed",
+  borderCollapse: "collapse",
+  fontSize: "0.8125rem",
+};
+
+const OFFERS_TH: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  padding: "0.375rem 0.75rem",
+  textAlign: "left",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-subtle)",
+  borderBottom: "1px solid var(--color-border)",
+};
+
+const OFFERS_TD: React.CSSProperties = {
+  padding: "0.375rem 0.75rem",
+  borderBottom: "1px solid var(--color-border)",
+  verticalAlign: "middle",
+};
+
+/** One destination the series can go to, a card outlined when chosen (#2472). With a single
+ *  destination there is nothing to choose, so it draws no radio. */
+function DestinationCard({
+  id,
+  radioName,
+  chosen,
+  onChoose,
+  heading,
+  children,
 }: {
-  offer: RecombinationOfferRef;
-  change: CompositionOfferChange;
-  platformName: string;
+  id: string;
+  radioName: string | undefined;
+  chosen: boolean;
+  onChoose: () => void;
+  heading: React.ReactNode;
+  children: React.ReactNode;
 }) {
-  const lost = change.setsLost === 1 ? "1 set" : `${change.setsLost} sets`;
-  const left = change.setsLeft === 1 ? "1 set" : `${change.setsLeft} sets`;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-      <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
-      <span style={{ color: "var(--color-text-primary)" }}>{offer.label}</span>
-      <OfferStateChip state={offer.state} />
-      <span style={NOTE}>
-        {change.withdrawn
-          ? `loses ${lost} and is withdrawn — nothing is left in it`
-          : change.emptied
-            ? `loses ${lost} — nothing is left in it`
-            : `loses ${lost}, keeps ${left}`}
-      </span>
-      {change.live ? (
-        <span style={{ ...NOTE, color: "var(--color-warning)" }}>
-          {change.emptied
-            ? `Live: stays ${OFFER_STATE_LABEL[offer.state]}, empty, and appears in Needs action — take the listing down on ${platformName}, then withdraw the offer.`
-            : `Live: flagged as changed — update the listing on ${platformName}.`}
-        </span>
-      ) : null}
+    <div
+      onClick={radioName ? onChoose : undefined}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.375rem",
+        minWidth: 0,
+        padding: "0.75rem 0.875rem",
+        border: `1px solid ${chosen ? "var(--color-accent)" : "var(--color-border)"}`,
+        boxShadow: chosen ? "0 0 0 1px var(--color-accent)" : undefined,
+        borderRadius: "0.5rem",
+        background: chosen ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+        cursor: radioName ? "pointer" : undefined,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+        {radioName ? (
+          <input id={id} type="radio" name={radioName} checked={chosen} onChange={onChoose} style={{ margin: 0 }} />
+        ) : null}
+        <label
+          htmlFor={radioName ? id : undefined}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: radioName ? "pointer" : undefined }}
+        >
+          {heading}
+        </label>
+      </div>
+      {children}
     </div>
   );
+}
+
+/** A title cut to one line; a hover shows it whole (#2472). */
+function OneLine({ text }: { text: string }) {
+  return (
+    <Tooltip content={text} style={{ display: "block", minWidth: 0 }}>
+      <span
+        style={{
+          display: "block",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          color: "var(--color-text-primary)",
+        }}
+      >
+        {text}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** What a single offer is left with, under *After* (#2472). */
+function afterLabel(change: CompositionOfferChange): string {
+  const lost = change.setsLost > 1 ? `loses ${change.setsLost}, ` : "";
+  if (change.withdrawn) return `${lost}withdrawn`;
+  if (change.emptied) return `${lost}empty`;
+  return `${lost}keeps ${change.setsLeft === 1 ? "1 set" : `${change.setsLeft} sets`}`;
+}
+
+/**
+ * One consequence said once for the offers it covers (#2472), naming how many — *All 8 are live and
+ * end up empty…* — instead of under every offer.
+ */
+function consequenceNote(
+  kind: CompositionConsequence,
+  offers: readonly RecombinationOfferRef[],
+  total: number,
+  platformName: string
+): string {
+  const n = offers.length;
+  const one = n === 1;
+  const subject = n === total ? (one ? "The offer is" : `All ${n} are`) : one ? "1 is" : `${n} are`;
+  const pronoun = one ? "It" : "They";
+  const listing = one ? "the listing" : "each listing";
+  switch (kind) {
+    case "live-emptied": {
+      const states = [...new Set(offers.map((offer) => OFFER_STATE_LABEL[offer.state]))].join(" or ");
+      return `${subject} live and ${one ? "ends" : "end"} up empty. ${pronoun} ${one ? "stays" : "stay"} ${states} and ${one ? "appears" : "appear"} in Needs action: take ${listing} down on ${platformName}, then withdraw the offer.`;
+    }
+    case "live-kept":
+      return `${subject} live and ${one ? "keeps" : "keep"} other sets. ${pronoun} ${one ? "is" : "are"} flagged as changed: update ${listing} on ${platformName}.`;
+    case "withdrawn":
+      return `${subject} not listed yet and ${one ? "ends" : "end"} up empty, so ${one ? "it is" : "they are"} withdrawn.`;
+  }
 }
 
 function StampName({ stamp }: { stamp: RecombinationStampName }) {

@@ -699,6 +699,48 @@ export function compositionOutcome(
   });
 }
 
+/**
+ * What a single offer is left with, as the compose dialog says it in one kind (#2472). An offer that
+ * is **not live and keeps other sets** has nothing worth a note, so it has no kind.
+ */
+export type CompositionConsequence = "live-emptied" | "live-kept" | "withdrawn";
+
+export interface CompositionConsequenceGroup {
+  kind: CompositionConsequence;
+  /** The offers this kind covers, in the outcome's order. */
+  offerIds: string[];
+}
+
+/** The note order: what needs the collector on the platform first, then what the app does alone. */
+const CONSEQUENCE_ORDER: readonly CompositionConsequence[] = ["live-emptied", "live-kept", "withdrawn"];
+
+export function compositionConsequenceOf(change: CompositionOfferChange): CompositionConsequence | null {
+  if (change.live) return change.emptied ? "live-emptied" : "live-kept";
+  return change.withdrawn ? "withdrawn" : null;
+}
+
+/**
+ * The compose dialog's notes (#2472): **a consequence shared by several offers is said once**, naming
+ * how many it covers, rather than repeated under every offer. One group per kind present, in a fixed
+ * order; offers with no consequence add none.
+ */
+export function compositionConsequences(
+  outcome: readonly CompositionOfferChange[]
+): CompositionConsequenceGroup[] {
+  const byKind = new Map<CompositionConsequence, string[]>();
+  for (const change of outcome) {
+    const kind = compositionConsequenceOf(change);
+    if (!kind) continue;
+    const ids = byKind.get(kind) ?? [];
+    ids.push(change.offerId);
+    byKind.set(kind, ids);
+  }
+  return CONSEQUENCE_ORDER.flatMap((kind) => {
+    const offerIds = byKind.get(kind);
+    return offerIds ? [{ kind, offerIds }] : [];
+  });
+}
+
 // Adding the series to a similar offer (#1369) ---------------------------------------------------
 
 /** An offer on the platform that already holds a set like the composed one, as it was read. */

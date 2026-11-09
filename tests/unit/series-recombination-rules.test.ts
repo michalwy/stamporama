@@ -13,6 +13,8 @@ import {
   composeTargetDrift,
   composeTargetOf,
   composeTargets,
+  compositionConsequenceOf,
+  compositionConsequences,
   compositionOutcome,
   copyMatchesCombination,
   DEFAULT_SERIES_CRITERIA,
@@ -432,6 +434,44 @@ describe("compositionOutcome (#1211)", () => {
 
   it("changes nothing when every chosen copy is available", () => {
     assert.deepEqual(compositionOutcome([{ offerIds: [] }], offers({})), []);
+  });
+});
+
+describe("compositionConsequences (#2472)", () => {
+  const offers = (entries: Record<string, [OfferState, number]>) =>
+    new Map(Object.entries(entries).map(([id, [state, setCount]]) => [id, { state, setCount }]));
+
+  it("says a consequence shared by every offer once, covering all of them", () => {
+    const outcome = compositionOutcome(
+      [{ offerIds: ["o1"] }, { offerIds: ["o2"] }, { offerIds: ["o3"] }],
+      offers({ o1: ["active", 1], o2: ["active", 1], o3: ["paused", 1] })
+    );
+    assert.deepEqual(compositionConsequences(outcome), [
+      { kind: "live-emptied", offerIds: ["o1", "o2", "o3"] },
+    ]);
+  });
+
+  it("gives each kind its own group, live first, and leaves a quiet offer out", () => {
+    const outcome = compositionOutcome(
+      [{ offerIds: ["o1"] }, { offerIds: ["o2"] }, { offerIds: ["o3"] }, { offerIds: ["o4"] }, { offerIds: ["o5"] }],
+      offers({
+        o1: ["preparing", 1],
+        o2: ["active", 3],
+        o3: ["ready", 2],
+        o4: ["active", 1],
+        o5: ["paused", 2],
+      })
+    );
+    assert.deepEqual(compositionConsequences(outcome), [
+      { kind: "live-emptied", offerIds: ["o4"] },
+      { kind: "live-kept", offerIds: ["o2", "o5"] },
+      { kind: "withdrawn", offerIds: ["o1"] },
+    ]);
+    assert.equal(compositionConsequenceOf(outcome[2]), null);
+  });
+
+  it("has nothing to say when no offer changes", () => {
+    assert.deepEqual(compositionConsequences([]), []);
   });
 });
 
