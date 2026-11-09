@@ -24,7 +24,9 @@ import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-hando
 // it beside the dot; the lowest a solid tick, the median a dashed one, both named in a legend; the
 // offer's own price an amber line through every row; the scale above and below, with gridlines through
 // every row. Beside the strip, lowest · median · offers. The offer's own condition is the highlighted
-// row, its lowest price larger and bold (#2463).
+// row, its lowest price larger and bold (#2463); the other rows' dots, ticks and figures recede to
+// neutral grey, so a price is not read from the wrong row (#2469). A receded dot comes back to full
+// strength while the pointer is on it.
 //
 // A click on a price — a dot, or a figure beside the strip — sets the offer's price that price less
 // the platform's step, shown at once as a typed price is (#2413). Whether a price is absurd is the
@@ -78,6 +80,8 @@ const LEAD_FIGURE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, li
  * neighbouring dots stay apart (#2464). */
 const STRIP_HEIGHT = 28;
 const DOT = 12;
+/** A dot of a condition other than the offer's own (#2469) — the hit area stays {@link DOT}. */
+const RECEDED_DOT = 9;
 
 /** Room either side of the axis, so a label at either end is not cut off — the strips and both scales
  * share it, so a position means the same place on all of them. */
@@ -97,6 +101,9 @@ const SCALE_LABEL: React.CSSProperties = {
 const LOWEST_MARK = "2px solid var(--color-success)";
 const MEDIAN_MARK = "2px dashed var(--color-text-muted)";
 const OWN_PRICE_MARK = "2px solid var(--color-warning)";
+/** The same two marks on a row that is not the offer's own condition (#2469). */
+const RECEDED_LOWEST_MARK = "1px solid var(--color-text-muted)";
+const RECEDED_MEDIAN_MARK = "1px dashed var(--color-text-muted)";
 
 /** Where the offer's own price sits on the axis, and how it is labelled; null with no price. */
 interface OwnPriceMark {
@@ -132,6 +139,105 @@ function Mark({ position, border, z }: { position: number; border: string; z: nu
   );
 }
 
+/**
+ * One price on a strip. A receded dot (#2469) is drawn smaller and grey inside a button of the full
+ * size, so it is as easy to hit as any other, and is back to full strength while the pointer is on it.
+ * The pointer is watched on the wrapper because a button that is disabled — a closed offer's — fires
+ * no mouse events of its own.
+ */
+function Dot({
+  group,
+  receded,
+  currency,
+  step,
+  onApply,
+}: {
+  group: MarketDotGroup;
+  receded: boolean;
+  currency: string;
+  step: string;
+  onApply: ((amount: string) => void) | null;
+}) {
+  const [engaged, setEngaged] = useState(false);
+  const muted = receded && !engaged;
+  const setsTo = onApply ? priceUnder(group.amount, step) : null;
+  const size = muted ? RECEDED_DOT : DOT;
+  return (
+    <span
+      onMouseEnter={() => setEngaged(true)}
+      onMouseLeave={() => setEngaged(false)}
+      onFocus={() => setEngaged(true)}
+      onBlur={() => setEngaged(false)}
+      style={{
+        position: "absolute",
+        left: pct(group.position),
+        top: "50%",
+        transform: "translate(-50%, -50%)",
+        zIndex: 4,
+        display: "block",
+      }}
+    >
+      <Tooltip content={dotTip(group, currency, setsTo)}>
+        <button
+          type="button"
+          aria-label={`${group.amount} ${currency}${group.count > 1 ? `, ${group.count} offers` : ""}`}
+          disabled={!onApply}
+          onClick={() => setsTo && onApply?.(setsTo)}
+          style={{
+            display: "grid",
+            placeItems: "center",
+            width: DOT,
+            height: DOT,
+            padding: 0,
+            border: "none",
+            background: "none",
+            cursor: onApply ? "pointer" : "default",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "block",
+              width: size,
+              height: size,
+              boxSizing: "border-box",
+              borderRadius: "50%",
+              border: group.converted
+                ? `1px dashed var(${muted ? "--color-text-secondary" : "--color-text-primary"})`
+                : "none",
+              background: muted ? "var(--color-text-muted)" : "var(--color-success)",
+              boxShadow: "0 0 0 2px var(--color-bg-elevated)",
+            }}
+          />
+        </button>
+      </Tooltip>
+      {/* Several offers at one price are one dot with their count beside it. */}
+      {group.count > 1 && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: DOT + 3,
+            top: "50%",
+            transform: "translateY(-50%)",
+            fontSize: "0.6875rem",
+            fontWeight: muted ? 400 : 700,
+            lineHeight: 1,
+            color: muted ? "var(--color-text-muted)" : "var(--color-text-primary)",
+            background: "var(--color-bg-elevated)",
+            borderRadius: "0.25rem",
+            padding: "0 0.125rem",
+            pointerEvents: "none",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {group.count}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Strip({
   row,
   ticks,
@@ -157,69 +263,16 @@ function Strip({
         aria-hidden
         style={{ position: "absolute", left: 0, right: 0, top: "50%", borderTop: "1px solid var(--color-border-strong)", zIndex: 1 }}
       />
-      {row.medianPosition !== null && <Mark position={row.medianPosition} border={MEDIAN_MARK} z={2} />}
-      {row.lowestPosition !== null && <Mark position={row.lowestPosition} border={LOWEST_MARK} z={2} />}
+      {row.medianPosition !== null && (
+        <Mark position={row.medianPosition} border={row.receded ? RECEDED_MEDIAN_MARK : MEDIAN_MARK} z={2} />
+      )}
+      {row.lowestPosition !== null && (
+        <Mark position={row.lowestPosition} border={row.receded ? RECEDED_LOWEST_MARK : LOWEST_MARK} z={2} />
+      )}
       {ownPrice && <Mark position={ownPrice.position} border={OWN_PRICE_MARK} z={3} />}
-      {row.groups.map((group) => {
-        const setsTo = onApply ? priceUnder(group.amount, step) : null;
-        return (
-          <span
-            key={group.amount}
-            style={{
-              position: "absolute",
-              left: pct(group.position),
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 4,
-              display: "block",
-            }}
-          >
-            <Tooltip content={dotTip(group, currency, setsTo)}>
-              <button
-                type="button"
-                aria-label={`${group.amount} ${currency}${group.count > 1 ? `, ${group.count} offers` : ""}`}
-                disabled={!onApply}
-                onClick={() => setsTo && onApply?.(setsTo)}
-                style={{
-                  display: "block",
-                  width: DOT,
-                  height: DOT,
-                  padding: 0,
-                  boxSizing: "border-box",
-                  borderRadius: "50%",
-                  border: group.converted ? "1px dashed var(--color-text-primary)" : "none",
-                  background: "var(--color-success)",
-                  boxShadow: "0 0 0 2px var(--color-bg-elevated)",
-                  cursor: onApply ? "pointer" : "default",
-                }}
-              />
-            </Tooltip>
-            {/* Several offers at one price are one dot with their count beside it. */}
-            {group.count > 1 && (
-              <span
-                aria-hidden
-                style={{
-                  position: "absolute",
-                  left: DOT + 3,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  color: "var(--color-text-primary)",
-                  background: "var(--color-bg-elevated)",
-                  borderRadius: "0.25rem",
-                  padding: "0 0.125rem",
-                  pointerEvents: "none",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {group.count}
-              </span>
-            )}
-          </span>
-        );
-      })}
+      {row.groups.map((group) => (
+        <Dot key={group.amount} group={group} receded={row.receded} currency={currency} step={step} onApply={onApply} />
+      ))}
     </div>
   );
 }
@@ -332,6 +385,7 @@ function Figure({
   step,
   onApply,
   lead = false,
+  receded = false,
 }: {
   amount: string;
   currency: string;
@@ -339,15 +393,18 @@ function Figure({
   onApply: ((amount: string) => void) | null;
   /** The lowest price of the offer's own condition, set larger and bold (#2463). */
   lead?: boolean;
+  /** A condition other than the offer's own, muted so it is not read as the offer's (#2469). */
+  receded?: boolean;
 }) {
   const emphasis = lead ? LEAD_FIGURE : undefined;
+  const tone = receded ? { color: "var(--color-text-muted)" } : undefined;
   if (!onApply) {
-    return <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)", ...emphasis }}>{amount}</span>;
+    return <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)", ...tone, ...emphasis }}>{amount}</span>;
   }
   const setsTo = priceUnder(amount, step);
   return (
     <Tooltip content={`Price this offer at ${setsTo} ${currency}`}>
-      <button type="button" style={{ ...FIGURE_BTN, ...emphasis }} onClick={() => onApply(setsTo)}>
+      <button type="button" style={{ ...FIGURE_BTN, ...tone, ...emphasis }} onClick={() => onApply(setsTo)}>
         {amount}
       </button>
     </Tooltip>
@@ -542,7 +599,7 @@ export function OfferColnectMarketCard({
                       <div
                         style={{
                           fontSize: "0.8125rem",
-                          color: "var(--color-text-secondary)",
+                          color: row.receded ? "var(--color-text-muted)" : "var(--color-text-secondary)",
                           display: "flex",
                           gap: "0.375rem",
                           flexWrap: "wrap",
@@ -566,11 +623,12 @@ export function OfferColnectMarketCard({
                               step={step}
                               onApply={apply}
                               lead={row.highlighted}
+                              receded={row.receded}
                             />
                             {DOT_SEP}
                             <span>
                               med{" "}
-                              <Figure amount={row.median!} currency={currency} step={step} onApply={apply} />
+                              <Figure amount={row.median!} currency={currency} step={step} onApply={apply} receded={row.receded} />
                             </span>
                             {DOT_SEP}
                             <span style={{ fontVariantNumeric: "tabular-nums" }}>{row.count}</span>

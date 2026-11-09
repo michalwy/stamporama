@@ -1553,6 +1553,11 @@ outside what Colnect asks sits at the end of the axis, its label pointing the wa
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
   offer's copies are in is the **highlighted** row, marked *this offer*, and its lowest price — the one you price against —
   is set larger and bold, so it is seen at once (*no offers* too, when nobody sells in it).
+- **Only that row is drawn in full.** The dots of every other condition are smaller and grey, and
+  their lowest and median lines, counts and figures are muted, so a price is not read from the wrong
+  row. They still show the same hover and set the price on a click; a dot comes back to full strength
+  while the pointer is on it. If Colnect has no grade for the offer's condition, no row is highlighted
+  and every row is drawn in full.
 - **A condition nobody is selling in** says *no offers*, with an empty strip — its line and
   gridlines stay, so the rows stay in line. If no condition has any,
   the card says so.
