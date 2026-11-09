@@ -20,6 +20,7 @@ import {
   AddRowAction,
   DetailForm,
   DetailPlaceholder,
+  FieldNote,
   Fields,
   INPUT_STYLE,
   InfoHint,
@@ -28,6 +29,7 @@ import {
   ListRow,
   ListRows,
   RowName,
+  RowTag,
   TranslationRows,
   countLabel,
   useListSelection,
@@ -38,7 +40,8 @@ import {
 // sheet, tête-bêche, booklet pane — as a list beside the selected value (#1471). The conditions page
 // without the symbol and the price-column switch: a name and an abbreviation, both translatable, and
 // a chip colour (#728). Each row says how many stamps carry it, which is also why a delete can be
-// refused. There is no "Stamp" row — no issue format is an ordinary stamp.
+// refused. There is no "Stamp" row — no issue format is an ordinary stamp. Each value says whether
+// its entries count towards the series (#2470).
 
 interface IssueFormatsPanelProps {
   collectionId: string;
@@ -91,6 +94,7 @@ export function IssueFormatsPanel({
                   drag={list.drag(row.id)}
                 >
                   <RowName>{row.name}</RowName>
+                  {!row.countsTowardsSeries && <RowTag>Outside the series</RowTag>}
                   <span style={countStyle}>
                     {row.stampCount > 0 ? countLabel(row.stampCount, "stamp", "stamps") : "unused"}
                   </span>
@@ -170,6 +174,7 @@ function IssueFormatFields({
   const [name, setName] = useState(row?.name ?? "");
   const [abbreviation, setAbbreviation] = useState(row?.abbreviation ?? "");
   const [color, setColor] = useState<TagColor | null>(row ? row.color : newColor);
+  const [counts, setCounts] = useState(row?.countsTowardsSeries ?? true);
   const suffix = translatable ? ` — ${languageLabel(defaultLanguage)}` : "";
 
   return (
@@ -229,6 +234,21 @@ function IssueFormatFields({
         </LabelWithError>
         <TagColorPicker value={color} onChange={setColor} />
       </div>
+
+      {/* Sent either way, so unticking it is a change too (#2470). */}
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}>
+        <input type="hidden" name="countsTowardsSeries" value={counts ? "true" : "false"} />
+        <input
+          type="checkbox"
+          checked={counts}
+          onChange={(e) => setCounts(e.target.checked)}
+          style={{ marginTop: "0.15rem" }}
+        />
+        <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+          Counts towards the series
+          <FieldNote>Off for an FDC or postal stationery: still held, wanted and valued, but never part of a set.</FieldNote>
+        </span>
+      </label>
     </Fields>
   );
 }

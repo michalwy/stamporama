@@ -246,6 +246,7 @@ export async function readCollectionVocabulary(
           name: true,
           abbreviation: true,
           color: true,
+          countsTowardsSeries: true,
           translations: { where: { language }, select: { name: true } },
         },
       }),
@@ -318,6 +319,7 @@ export async function readCollectionVocabulary(
       ...entry(row.id, row.name, null, labelFor(row.name, row.translations[0]?.name)),
       abbreviation: row.abbreviation,
       ...(isTagColor(row.color) ? { color: row.color } : {}),
+      countsTowardsSeries: row.countsTowardsSeries,
     })),
   };
 }
@@ -348,7 +350,7 @@ export const getCollectionVocabularyOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one, and `priceOnly: true` where it is a price column only — a cover's FP, FW, FM — which the catalogue price tools accept and nothing describing a copy, a want or a line does. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `issueFormats` are the forms a stamp is issued in — a souvenir sheet, a booklet pane — each with its `abbreviation` and its chip `color` where it has one; a stamp with none is an ordinary stamp, which has no row and which a filter names `none`. An issue format is the stamp's, and differs from a copy's `format` (a single, a pair, a block), which is how the collector's piece was cut or kept. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one, and `priceOnly: true` where it is a price column only — a cover's FP, FW, FM — which the catalogue price tools accept and nothing describing a copy, a want or a line does. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to, and `enabled: false` where the collector has switched one off — still named by what was recorded on it, no longer offered for anything new. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `issueFormats` are the forms a stamp is issued in — a souvenir sheet, a booklet pane — each with its `abbreviation`, its chip `color` where it has one, and `countsTowardsSeries`, whether its stamps count towards the series — false for a piece a catalogue prices as a whole, such as an FDC, which is never part of a completeness figure, a set price, a complete set or a whole-set want; a stamp with none is an ordinary stamp, which has no row and which a filter names `none`. An issue format is the stamp's, and differs from a copy's `format` (a single, a pair, a block), which is how the collector's piece was cut or kept. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

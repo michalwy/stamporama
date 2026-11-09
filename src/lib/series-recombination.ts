@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { buildItemFilterWhere, type ItemListFiltersPaginated } from "./items";
 import { listableOnPlatformFilters, loadPoolChecklists } from "./lot-builder";
@@ -426,7 +427,7 @@ export async function composeSeriesOffer(
   );
   const checklist = await prisma.checklist.findFirst({
     where: { id: input.checklistId, collectionId },
-    select: { stamps: { select: { stampId: true }, orderBy: { sortOrder: "asc" } } },
+    select: { stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: { sortOrder: "asc" } } },
   });
   if (!checklist) throw new Error("Series not found.");
 

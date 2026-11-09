@@ -2560,7 +2560,8 @@ three.
 on the three lists, set on one stamp or a hundred, and the dictionary itself added to, corrected and
 ordered. The collector settled *full coverage* on 2026-11-05: *set Souvenir sheet on every souvenir
 sheet I have* is `list_stamps` (or `resolve_catalog_numbers`) to find them and one confirmed
-`update_stamps` to apply it.
+`update_stamps` to apply it. `countsTowardsSeries` (#2470, ADR-0080) is read in `issueFormats` and set
+as `counts_towards_series` on `create_issue_format` and `update_issue_format`.
 
 | operation | writes | what it is for |
 | --- | --- | --- |

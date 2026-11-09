@@ -6,6 +6,7 @@ import {
   type ValuationMethod,
 } from "./piece-valuation";
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
@@ -3759,7 +3760,7 @@ async function readIssueGroupCompleteness(
       name: true,
       kind: true,
       // The stamps a set is still missing are named in the order the set reads (#764).
-      stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
+      stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
     },
   });
   const byIssue: IssueGroupCompleteness = Object.fromEntries(ids.map((id) => [id, []]));

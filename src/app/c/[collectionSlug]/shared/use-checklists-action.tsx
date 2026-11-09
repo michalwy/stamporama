@@ -432,6 +432,7 @@ export function ChecklistsDialog({
               sortOrder: Math.max(-1, ...list.map((c) => c.sortOrder)) + 1,
               followsIssueOrder: !latest.ownOrder,
               stampIds: latest.stampIds,
+              countingStampIds: latest.stampIds,
             },
           ]);
           setDraft(null);

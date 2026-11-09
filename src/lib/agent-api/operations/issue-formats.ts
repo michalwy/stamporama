@@ -8,7 +8,7 @@ import {
 import { isTagColor, type TagColor } from "../../tag-colors";
 import { invalidRequest } from "../errors";
 import { ISSUE_FORMAT_COLORS, assertIssueFormatWordsFree } from "../issue-formats";
-import { optionalString, requiredString, stringList } from "../params";
+import { optionalBoolean, optionalString, requiredString, stringList } from "../params";
 import { resolveVocabularyValue, type IssueFormatVocabularyEntry } from "../vocabulary";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 
@@ -33,6 +33,7 @@ interface IssueFormatRow {
   readonly name: string;
   readonly abbreviation: string;
   readonly color: string | null;
+  readonly countsTowardsSeries: boolean;
 }
 
 /** The collection's issue formats in the collector's order — what the resolver names them by. */
@@ -40,7 +41,7 @@ export async function loadIssueFormatEntries(context: OperationContext): Promise
   return prisma.stampIssueFormat.findMany({
     where: { collectionId: context.collectionId },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, abbreviation: true, color: true },
+    select: { id: true, name: true, abbreviation: true, color: true, countsTowardsSeries: true },
   });
 }
 
@@ -52,6 +53,7 @@ function issueFormatAnswer(row: IssueFormatRow, stampCount: number): IssueFormat
     name: row.name,
     abbreviation: row.abbreviation,
     ...(isTagColor(row.color) ? { color: row.color } : {}),
+    countsTowardsSeries: row.countsTowardsSeries,
     stampCount,
   };
 }
@@ -59,7 +61,7 @@ function issueFormatAnswer(row: IssueFormatRow, stampCount: number): IssueFormat
 async function answerFor(context: OperationContext, issueFormatId: string) {
   const row = await prisma.stampIssueFormat.findFirstOrThrow({
     where: { id: issueFormatId, collectionId: context.collectionId },
-    select: { id: true, name: true, abbreviation: true, color: true, _count: { select: { stamps: true } } },
+    select: { id: true, name: true, abbreviation: true, color: true, countsTowardsSeries: true, _count: { select: { stamps: true } } },
   });
   return issueFormatAnswer(row, row._count.stamps);
 }
@@ -69,6 +71,8 @@ function colorParam(params: ParsedParams): TagColor | null {
   // The parameter's closed `values` refused anything else before the handler ran.
   return color !== null && isTagColor(color) ? color : null;
 }
+
+const COUNTS_DESCRIPTION = "Whether stamps of this issue format count towards the series, as the switch on *Settings → Issue formats* says. Left out of a new one, it is true. False for a piece a catalogue prices as a whole, such as an FDC or postal stationery: still held, wanted individually, valued and offered, but outside an issue's completeness and set prices, complete sets and whole-set wants and album pages.";
 
 const COLOR_DESCRIPTION = `The chip's colour, one of the palette's hues: ${ISSUE_FORMAT_COLORS.join(", ")}. Left out, the chip is neutral.`;
 
@@ -82,6 +86,7 @@ export async function addIssueFormat(context: OperationContext, params: ParsedPa
     name,
     abbreviation,
     color: colorParam(params),
+    countsTowardsSeries: optionalBoolean(params, "counts_towards_series") ?? true,
   });
   return answerFor(context, id);
 }
@@ -97,11 +102,12 @@ export const createIssueFormatOperation: Operation = {
     { name: "name", in: "body", type: "string", required: true, description: "The issue format's name in the collection's own language — `Souvenir sheet`, `Booklet pane`." },
     { name: "abbreviation", in: "body", type: "string", required: true, description: "Its abbreviation, as a chip and a listing text show it — `Bl`, `HBl`." },
     { name: "color", in: "body", type: "string", required: false, description: COLOR_DESCRIPTION, values: ISSUE_FORMAT_COLORS },
+    { name: "counts_towards_series", in: "body", type: "boolean", required: false, description: COUNTS_DESCRIPTION },
   ],
   result: {
     kind: "object",
     description:
-      "The new issue format as `issueFormats` in `get_collection_vocabulary` gives it — `id`, `name`, `abbreviation`, `color` where it has one — and `stampCount`, 0.",
+      "The new issue format as `issueFormats` in `get_collection_vocabulary` gives it — `id`, `name`, `abbreviation`, `color` where it has one, `countsTowardsSeries` — and `stampCount`, 0.",
   },
   handler: async (context, params) => addIssueFormat(context, params),
 };
@@ -126,24 +132,26 @@ export async function editIssueFormat(context: OperationContext, params: ParsedP
   const name = optionalString(params, "name");
   const abbreviation = optionalString(params, "abbreviation");
   const color = optionalString(params, "color");
+  const countsTowardsSeries = optionalBoolean(params, "counts_towards_series");
   const clear = new Set(stringList(params, "clear"));
   if (color !== null && clear.has("color")) {
     throw invalidRequest('"color" is both sent and in "clear". Send one of them.');
   }
-  if (name === null && abbreviation === null && color === null && clear.size === 0) {
-    throw invalidRequest('Nothing to change: send "name", "abbreviation", "color", or "clear": ["color"].');
+  if (name === null && abbreviation === null && color === null && countsTowardsSeries === null && clear.size === 0) {
+    throw invalidRequest('Nothing to change: send "name", "abbreviation", "color", "counts_towards_series", or "clear": ["color"].');
   }
   assertIssueFormatWordsFree(
     formats,
     { ...(name !== null ? { name } : {}), ...(abbreviation !== null ? { abbreviation } : {}) },
     issueFormatId
   );
-  // The panel's write sets all three fields, so each one not sent is handed back as it is; the
+  // The panel's write sets all four fields, so each one not sent is handed back as it is; the
   // translations are left alone — `updateStampIssueFormat` rewrites only the languages it is handed.
   await updateStampIssueFormat(context.ownerId, issueFormatId, {
     name: name ?? current.name,
     abbreviation: abbreviation ?? current.abbreviation,
     color: clear.has("color") ? null : color !== null ? colorParam(params) : isTagColor(current.color) ? current.color : null,
+    countsTowardsSeries: countsTowardsSeries ?? current.countsTowardsSeries,
   });
   return answerFor(context, issueFormatId);
 }
@@ -153,13 +161,14 @@ export const updateIssueFormatOperation: Operation = {
   method: "PATCH",
   path: "/issue-formats/{issue_format_id}",
   description:
-    "Correct an issue format's name, abbreviation or chip colour, as *Settings → Issue formats* does — only what is sent changes. Every stamp of it keeps it and reads under the new words. A name or an abbreviation another issue format already answers to, whatever its case, is refused with that issue format. Its names in other languages are `set_translations`'; `set_issue_format_order` orders them; nothing here deletes one — that stays with the collector, in Settings.",
+    "Correct an issue format's name, abbreviation or chip colour, or say whether its stamps count towards the series, as *Settings → Issue formats* does — only what is sent changes. Every stamp of it keeps it and reads under the new words. A name or an abbreviation another issue format already answers to, whatever its case, is refused with that issue format. Its names in other languages are `set_translations`'; `set_issue_format_order` orders them; nothing here deletes one — that stays with the collector, in Settings.",
   writes: true,
   parameters: [
     ISSUE_FORMAT_ID_PARAMETER,
     { name: "name", in: "body", type: "string", required: false, description: "The corrected name in the collection's own language." },
     { name: "abbreviation", in: "body", type: "string", required: false, description: "The corrected abbreviation." },
     { name: "color", in: "body", type: "string", required: false, description: "The chip's colour, one of the palette's hues.", values: ISSUE_FORMAT_COLORS },
+    { name: "counts_towards_series", in: "body", type: "boolean", required: false, description: COUNTS_DESCRIPTION },
     {
       name: "clear",
       in: "body",

@@ -6,17 +6,21 @@ import type { TagColor } from "./tag-colors";
 
 /**
  * The issue formats seeded into every new collection, in display order. Kept in sync with the
- * backfill in `20261105120000_stamp_issue_format`. The collector can add, rename, translate,
+ * backfills in `20261105120000_stamp_issue_format` and
+ * `20261109210000_issue_format_counts_towards_series`. The collector can add, rename, translate,
  * recolour, reorder and delete them afterwards.
  *
  * **There is no "Stamp" row**: no issue format means an ordinary stamp, as no format means a single.
- * The colours are the palette's ten hues, one each, so no two values share a chip colour; some share
- * a hue with a condition, as the collector chose.
+ * The first ten colours are the palette's ten hues, one each, so no two values share a chip colour;
+ * some share a hue with a condition, as the collector chose.
  */
 export const DEFAULT_ISSUE_FORMATS: ReadonlyArray<{
   name: string;
   abbreviation: string;
-  color: TagColor;
+  /** Null is the neutral chip. */
+  color: TagColor | null;
+  /** Off for a piece a catalogue prices as a whole (#2470); absent is on. */
+  countsTowardsSeries?: false;
 }> = [
   { name: "Souvenir sheet", abbreviation: "Bl", color: "indigo" },
   // A stamp taken out of a souvenir sheet is catalogued apart, and a copy of it is a copy of a stamp
@@ -29,7 +33,10 @@ export const DEFAULT_ISSUE_FORMATS: ReadonlyArray<{
   { name: "Booklet pane", abbreviation: "HBl", color: "amber" },
   { name: "Stamp from a booklet", abbreviation: "exMH", color: "teal" },
   { name: "Coil stamp", abbreviation: "Coil", color: "green" },
-  { name: "Postal stationery", abbreviation: "PS", color: "slate" },
+  { name: "Postal stationery", abbreviation: "PS", color: "slate", countsTowardsSeries: false },
+  // Added by #2470, with no colour: the palette's ten hues are taken, and the neutral chip is
+  // distinct from all of them. Backfilled by `20261109210000_issue_format_counts_towards_series`.
+  { name: "FDC", abbreviation: "FDC", color: null, countsTowardsSeries: false },
 ];
 
 /** The issue format's translatable fields, in the order the settings form shows them — a format's

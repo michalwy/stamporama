@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { prisma } from "./db";
 import { buildDescendantMap, getCollectionBaseCurrency } from "./pricing";
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
@@ -370,7 +371,7 @@ export async function getChecklistEstimatedValue(
   if (!checklist) throw new Error("Checklist not found.");
 
   const members = await prisma.checklistStamp.findMany({
-    where: { checklistId },
+    where: { checklistId, ...COUNTING_CHECKLIST_MEMBER },
     select: { stampId: true },
   });
   const { baseCurrency, byStamp } = await estimateStamps(

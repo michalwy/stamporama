@@ -141,6 +141,8 @@ export type ExchangePartnerVocabularyEntry = VocabularyEntry;
 export interface IssueFormatVocabularyEntry extends VocabularyEntry {
   readonly abbreviation: string;
   readonly color?: string;
+  /** Whether stamps of it count towards the series (#2470). */
+  readonly countsTowardsSeries: boolean;
 }
 
 export interface CatalogVocabularyEntry extends VocabularyEntry {

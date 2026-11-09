@@ -1,4 +1,5 @@
 import "server-only";
+import { COUNTING_CHECKLIST_MEMBER, SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
 import { prisma, type DbTransaction } from "./db";
 import { DEFAULT_CHECKLIST } from "./checklist-vocabulary";
 import {
@@ -69,9 +70,12 @@ export interface ChecklistData {
   /** Its stamps read in the issue's order (#2208): an issue's checklist never given an order of its
    *  own. False for one that has one, and always for a checklist spanning issues. */
   followsIssueOrder: boolean;
-  /** Stamps on the checklist — the set completeness, the price total and the range are all read
-   *  against — **in the order the set reads** (#764), which an album page then prints as a row. */
+  /** Every stamp on the checklist, **in the order the set reads** (#764) — the membership its editor
+   *  ticks and orders, which an entry that does not count towards the series stays part of (#2470). */
   stampIds: string[];
+  /** {@link stampIds} less the entries whose issue format does not count towards the series — the
+   *  set completeness, the price total and the range are read against, and what an album prints. */
+  countingStampIds: string[];
 }
 
 const CHECKLIST_SELECT = {
@@ -82,7 +86,7 @@ const CHECKLIST_SELECT = {
   ownOrder: true,
   translations: { select: { language: true, name: true } },
   sortOrder: true,
-  stamps: { select: { stampId: true, sortOrder: true } },
+  stamps: { select: { stampId: true, sortOrder: true, stamp: { select: SERIES_FLAG_SELECT } } },
 } as const;
 
 /** A checklist's translation rows, written the way every translatable entity writes them (#1308). */
@@ -136,7 +140,11 @@ function toChecklistData(row: {
   ownOrder: boolean;
   translations: { language: string; name: string | null }[];
   sortOrder: number;
-  stamps: { stampId: string; sortOrder: number }[];
+  stamps: {
+    stampId: string;
+    sortOrder: number;
+    stamp: { issueFormat: { countsTowardsSeries: boolean } | null };
+  }[];
 }): ChecklistData {
   return {
     id: row.id,
@@ -147,6 +155,7 @@ function toChecklistData(row: {
     sortOrder: row.sortOrder,
     followsIssueOrder: row.issueId !== null && !row.ownOrder,
     stampIds: orderedChecklistStampIds(row.stamps),
+    countingStampIds: orderedChecklistStampIds(row.stamps.filter((s) => stampCountsTowardsSeries(s.stamp))),
   };
 }
 
@@ -329,7 +338,7 @@ export async function getRunChecklist(
     name: data.name,
     kind: data.kind,
     issueId: data.issueId,
-    stampIds: data.stampIds,
+    stampIds: data.countingStampIds,
     issues: issues.map(({ id, name, year, collectionAreaId }) => ({
       id,
       name,
@@ -398,6 +407,7 @@ export async function listChecklistIdsByStamp(
     where: {
       stampId: { in: stampIds },
       checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
+      ...COUNTING_CHECKLIST_MEMBER,
     },
     select: { stampId: true, checklistId: true },
   });

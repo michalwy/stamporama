@@ -365,7 +365,8 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   issue format, including the ones with **none**: *which of my Polish stamps have no issue format
   yet?* is one question. Your copies and your issues can be narrowed by issue format the same way,
   and everything it reads about a stamp or a copy says the stamp's issue format;
-- **add an issue format, and rename, recolour and reorder them**, as *Settings → Issue formats* does,
+- **add an issue format, and rename, recolour and reorder them, or say whether its stamps
+  [count towards the series](collections.md#entries-that-are-not-part-of-the-series)**, as *Settings → Issue formats* does,
   and translate their names with the other translations. A name or abbreviation one of your issue
   formats already has, in any mix of capitals, is refused, and so is the word *none*, which is what
   the assistant calls an ordinary stamp. Deleting an issue format stays in Settings.
