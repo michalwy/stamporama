@@ -265,6 +265,9 @@ export interface MarketRow {
   colnectGrade: string | null;
   /** The offer's own condition for this item — the row drawn highlighted. */
   highlighted: boolean;
+  /** Another condition of an item that has a highlighted row: drawn toned down, so a price is not read
+   *  from the wrong row (#2469). False on every row of an item with no highlighted row. */
+  receded: boolean;
   dots: MarketDot[];
   /** The same listings, one entry per price, cheapest first — what the strip draws (#2464). */
   groups: MarketDotGroup[];
@@ -435,6 +438,8 @@ export function colnectMarketView(
       }
     }
 
+    const isOwn = (grade: string | null) => grade !== null && highlighted.has(grade);
+    const hasOwnRow = rowKeys.some((r) => isOwn(r.grade));
     const rows = rowKeys.map(({ key, grade, label }): MarketRow => {
       const inRow = item.offers.filter((o) => keyOf(o) === key);
       const listed = inRow.filter((o) => !o.own).sort((a, b) => cents(a.amount) - cents(b.amount));
@@ -448,7 +453,8 @@ export function colnectMarketView(
         key,
         name: mine.length > 0 ? mine.join(" / ") : (label ?? key),
         colnectGrade: mine.length > 0 && known ? known.abbrev : null,
-        highlighted: grade !== null && highlighted.has(grade),
+        highlighted: isOwn(grade),
+        receded: hasOwnRow && !isOwn(grade),
         dots: listed.map((o) => ({
           amount: o.amount,
           position: at(o.amount),

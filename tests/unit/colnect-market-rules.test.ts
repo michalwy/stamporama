@@ -143,6 +143,23 @@ describe("colnectMarketView (#2454)", () => {
     assert.deepEqual(view.items[0].rows!.filter((r) => r.highlighted).map((r) => r.key), ["4"]);
   });
 
+  it("recedes every condition but the offer's own (#2469)", () => {
+    const rows = colnectMarketView(stored(), [{ colnectId: "60512", label: "x", grades: ["4"] }], names).items[0].rows!;
+    assert.deepEqual(rows.filter((r) => !r.receded).map((r) => r.key), ["4"]);
+  });
+
+  it("keeps every row of several own conditions in full (#2469)", () => {
+    const rows = colnectMarketView(stored(), [{ colnectId: "60512", label: "x", grades: ["1", "4"] }], names).items[0].rows!;
+    assert.deepEqual(rows.filter((r) => !r.receded).map((r) => r.key), ["1", "4"]);
+  });
+
+  it("recedes nothing where the offer has no own row (#2469)", () => {
+    for (const grades of [[], ["99"]]) {
+      const rows = colnectMarketView(stored(), [{ colnectId: "60512", label: "x", grades }], names).items[0].rows!;
+      assert.equal(rows.some((r) => r.receded), false);
+    }
+  });
+
   it("gives lowest, median and count, the collector's own listings left out and counted apart", () => {
     const rows = colnectMarketView(stored(), [{ colnectId: "60512", label: "x", grades: [] }], names).items[0].rows!;
     const used = rows.find((r) => r.key === "4")!;
