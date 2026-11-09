@@ -312,6 +312,40 @@ export interface ColnectMarketView {
   axis: MarketAxis;
   /** Whether any condition of any item has a listing — the card says so when none does. */
   anyListings: boolean;
+  /** The most listings at one price in any row of the read — the largest dot (#2473); 0 with none. */
+  largestGroup: number;
+}
+
+/**
+ * How far a dot of `count` listings is from the smallest dot to the largest, 0–1, **by area**
+ * (#2473): a single listing is 0, the read's {@link ColnectMarketView.largestGroup} is 1, and every
+ * group between is proportional to its count. The scale is the read's, not fixed thresholds, so it
+ * stays useful for a handful of listings and for hundreds; a read of single listings is all 0.
+ */
+export function dotAreaScale(count: number, largestGroup: number): number {
+  if (largestGroup <= 1 || count <= 1) return 0;
+  return Math.min(1, (count - 1) / (largestGroup - 1));
+}
+
+/**
+ * The diameter of a dot whose area is `scale` of the way from a `smallest`-wide dot to a
+ * `largest`-wide one.
+ */
+export function dotDiameter(scale: number, smallest: number, largest: number): number {
+  return Math.sqrt(smallest ** 2 + (largest ** 2 - smallest ** 2) * scale);
+}
+
+/**
+ * The counts the legend draws a dot for (#2473): one listing, about half the largest group, and the
+ * largest group — each once, so a read whose largest group is 1 shows *1* alone, and one of 2 shows
+ * *1* and *2*.
+ */
+export function dotLegendCounts(largestGroup: number): number[] {
+  const out = [1];
+  for (const c of [Math.round(largestGroup / 2), largestGroup]) {
+    if (c > out.at(-1)!) out.push(c);
+  }
+  return out;
 }
 
 /** One of the offer's Colnect items, as the card is to show it. */
@@ -490,7 +524,14 @@ export function colnectMarketView(
       ticks.push({ label: v >= 1 ? String(Math.round(v)) : v.toFixed(Math.max(0, -e)), position: at(v) });
     }
   }
-  return { items, ticks, axis: { lo, hi }, anyListings };
+  // One dot scale for the whole read, as the axis is, so conditions compare by size too (#2473).
+  let largestGroup = 0;
+  for (const item of items) {
+    for (const row of item.rows ?? []) {
+      for (const group of row.groups) largestGroup = Math.max(largestGroup, group.count);
+    }
+  }
+  return { items, ticks, axis: { lo, hi }, anyListings, largestGroup };
 }
 
 /** Listings sorted cheapest first, one entry per price. */

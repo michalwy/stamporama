@@ -1535,9 +1535,15 @@ condition's listings of the offer's stamps on Colnect, in your own Colnect sessi
 where they sit. Nothing is read on its own — only when you press the button.
 
 Each condition is one row, and each row is a **strip of dots** on a price axis. A dot is a price:
-one offer at it, or — with a small count beside it, *2*, *3* — several offers at the same price. A
+one offer at it, or — with a small count beside it, *2*, *3* — several offers at the same price. **The
+more offers at a price, the bigger its dot**, so where most sellers sit stands out before you read a
+single count. The sizes are worked out from each read: a single offer is the smallest dot and the
+read's largest group the largest, whether that is 3 offers or 40, and the same sizes hold for every
+row, so conditions compare by size as well as by position. A Refresh works them out again. Where big
+dots overlap, the smaller one is drawn on top, so every dot can still be hovered and clicked. A
 solid green line marks the **lowest** price and a dashed grey one the **median**, and a legend above
-the strips names every mark. Beside each strip the figures read *lowest · median · offers*, for
+the strips names every mark — the dot sizes of the read too: one offer, about half the largest group
+and the largest group, each with its count. Beside each strip the figures read *lowest · median · offers*, for
 example *0.40 · med 1.20 · 5*. That tells a lone 0.01 among prices around 1 € apart from a stamp
 that most sellers really do offer at 0.01. The axis is logarithmic — 0.01 and 10 € fit on one strip
 — and it is the same for every row of the read, so one condition can be compared with another at a
@@ -1553,7 +1559,7 @@ outside what Colnect asks sits at the end of the axis, its label pointing the wa
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
   offer's copies are in is the **highlighted** row, marked *this offer*, and its lowest price — the one you price against —
   is set larger and bold, so it is seen at once (*no offers* too, when nobody sells in it).
-- **Only that row is drawn in full.** The dots of every other condition are smaller and grey, and
+- **Only that row is drawn in full.** The dots of every other condition are grey — the same sizes, and
   their lowest and median lines, counts and figures are muted, so a price is not read from the wrong
   row. They still show the same hover and set the price on a click; a dot comes back to full strength
   while the pointer is on it. If Colnect has no grade for the offer's condition, no row is highlighted

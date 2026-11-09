@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   axisPosition,
+  dotAreaScale,
+  dotDiameter,
+  dotLegendCounts,
   priceUnder,
   type MarketDotGroup,
   type MarketRow,
@@ -26,7 +29,8 @@ import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-hando
 // every row. Beside the strip, lowest · median · offers. The offer's own condition is the highlighted
 // row, its lowest price larger and bold (#2463); the other rows' dots, ticks and figures recede to
 // neutral grey, so a price is not read from the wrong row (#2469). A receded dot comes back to full
-// strength while the pointer is on it.
+// strength while the pointer is on it. A dot's area follows its number of offers, on a scale worked out
+// from the read and shared by every row, the legend showing it (#2473).
 //
 // A click on a price — a dot, or a figure beside the strip — sets the offer's price that price less
 // the platform's step, shown at once as a typed price is (#2413). Whether a price is absurd is the
@@ -76,12 +80,16 @@ const MUTED: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-te
  * height, so the row does not grow. */
 const LEAD_FIGURE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, lineHeight: 1 };
 
-/** How high a strip is, and how big a dot — about 12 px, a ring of the card's background around it so
- * neighbouring dots stay apart (#2464). */
+/** How high a strip is, and how big a dot, a ring of the card's background around it so neighbouring
+ * dots stay apart (#2464). A dot's area follows how many offers it stands for, on the read's own scale
+ * (#2473): a single offer is {@link SMALLEST_DOT}, the read's largest group {@link LARGEST_DOT} — never
+ * too small to see or click, never so big that it hides its neighbours or outgrows the strip. */
 const STRIP_HEIGHT = 28;
-const DOT = 12;
-/** A dot of a condition other than the offer's own (#2469) — the hit area stays {@link DOT}. */
-const RECEDED_DOT = 9;
+const SMALLEST_DOT = 12;
+const LARGEST_DOT = 24;
+
+const dotSize = (count: number, largestGroup: number) =>
+  dotDiameter(dotAreaScale(count, largestGroup), SMALLEST_DOT, LARGEST_DOT);
 
 /** Room either side of the axis, so a label at either end is not cut off — the strips and both scales
  * share it, so a position means the same place on all of them. */
@@ -140,19 +148,22 @@ function Mark({ position, border, z }: { position: number; border: string; z: nu
 }
 
 /**
- * One price on a strip. A receded dot (#2469) is drawn smaller and grey inside a button of the full
- * size, so it is as easy to hit as any other, and is back to full strength while the pointer is on it.
- * The pointer is watched on the wrapper because a button that is disabled — a closed offer's — fires
- * no mouse events of its own.
+ * One price on a strip, as big as the number of offers at it makes it (#2473). A receded dot (#2469)
+ * is the same size, drawn grey, and is back to full strength while the pointer is on it. The pointer
+ * is watched on the wrapper because a button that is disabled — a closed offer's — fires no mouse
+ * events of its own. Where dots overlap, the smaller is drawn on top, so every dot stays visible and
+ * clickable.
  */
 function Dot({
   group,
+  largestGroup,
   receded,
   currency,
   step,
   onApply,
 }: {
   group: MarketDotGroup;
+  largestGroup: number;
   receded: boolean;
   currency: string;
   step: string;
@@ -161,7 +172,7 @@ function Dot({
   const [engaged, setEngaged] = useState(false);
   const muted = receded && !engaged;
   const setsTo = onApply ? priceUnder(group.amount, step) : null;
-  const size = muted ? RECEDED_DOT : DOT;
+  const size = dotSize(group.count, largestGroup);
   return (
     <span
       onMouseEnter={() => setEngaged(true)}
@@ -173,7 +184,8 @@ function Dot({
         left: pct(group.position),
         top: "50%",
         transform: "translate(-50%, -50%)",
-        zIndex: 4,
+        // Above the marks (0–3); the fewer offers, the higher, so a small dot is never hidden.
+        zIndex: 4 + Math.max(0, largestGroup - group.count),
         display: "block",
       }}
     >
@@ -186,8 +198,8 @@ function Dot({
           style={{
             display: "grid",
             placeItems: "center",
-            width: DOT,
-            height: DOT,
+            width: size,
+            height: size,
             padding: 0,
             border: "none",
             background: "none",
@@ -217,7 +229,7 @@ function Dot({
           aria-hidden
           style={{
             position: "absolute",
-            left: DOT + 3,
+            left: size + 3,
             top: "50%",
             transform: "translateY(-50%)",
             fontSize: "0.6875rem",
@@ -241,6 +253,7 @@ function Dot({
 function Strip({
   row,
   ticks,
+  largestGroup,
   ownPrice,
   currency,
   step,
@@ -248,6 +261,7 @@ function Strip({
 }: {
   row: MarketRow;
   ticks: readonly MarketTick[];
+  largestGroup: number;
   ownPrice: OwnPriceMark | null;
   currency: string;
   step: string;
@@ -271,7 +285,15 @@ function Strip({
       )}
       {ownPrice && <Mark position={ownPrice.position} border={OWN_PRICE_MARK} z={3} />}
       {row.groups.map((group) => (
-        <Dot key={group.amount} group={group} receded={row.receded} currency={currency} step={step} onApply={onApply} />
+        <Dot
+          key={group.amount}
+          group={group}
+          largestGroup={largestGroup}
+          receded={row.receded}
+          currency={currency}
+          step={step}
+          onApply={onApply}
+        />
       ))}
     </div>
   );
@@ -341,16 +363,24 @@ function LegendItem({ swatch, label }: { swatch: React.ReactNode; label: string 
   );
 }
 
-const LEGEND_DOT: React.CSSProperties = {
-  display: "inline-block",
-  width: DOT,
-  height: DOT,
-  borderRadius: "50%",
-  background: "var(--color-success)",
-};
+/** A legend dot of `count` offers, drawn at the size a strip draws it, its count beside it. */
+function LegendDot({ count, largestGroup }: { count: number; largestGroup: number }) {
+  const size = dotSize(count, largestGroup);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+      <span
+        style={{ display: "inline-block", width: size, height: size, borderRadius: "50%", background: "var(--color-success)" }}
+      />
+      <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+        {count}
+      </span>
+    </span>
+  );
+}
 
-/** What each mark on the strips means (#2464); the offer's price only when it has one. */
-function Legend({ withOwnPrice }: { withOwnPrice: boolean }) {
+/** What each mark on the strips means (#2464) — the dot sizes this read's (#2473): one offer, about
+ * half the largest group and the largest group — and the offer's price only when it has one. */
+function Legend({ withOwnPrice, largestGroup }: { withOwnPrice: boolean; largestGroup: number }) {
   const tick = (border: string) => <span style={{ display: "inline-block", height: 14, borderLeft: border }} />;
   return (
     <div
@@ -362,15 +392,15 @@ function Legend({ withOwnPrice }: { withOwnPrice: boolean }) {
         color: "var(--color-text-secondary)",
       }}
     >
-      <LegendItem swatch={<span style={LEGEND_DOT} />} label="one offer" />
       <LegendItem
         swatch={
-          <>
-            <span style={LEGEND_DOT} />
-            <span style={{ marginLeft: 3, fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>2</span>
-          </>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+            {dotLegendCounts(largestGroup).map((count) => (
+              <LegendDot key={count} count={count} largestGroup={largestGroup} />
+            ))}
+          </span>
         }
-        label="same price, several offers"
+        label="offers at one price"
       />
       <LegendItem swatch={tick(LOWEST_MARK)} label="lowest" />
       <LegendItem swatch={tick(MEDIAN_MARK)} label="median" />
@@ -526,7 +556,7 @@ export function OfferColnectMarketCard({
         </p>
       )}
 
-      {market.readAt && view.anyListings && <Legend withOwnPrice={ownMark !== null} />}
+      {market.readAt && view.anyListings && <Legend withOwnPrice={ownMark !== null} largestGroup={view.largestGroup} />}
 
       {market.readAt && view.anyListings &&
         view.items.map((item) => (
@@ -594,7 +624,7 @@ export function OfferColnectMarketCard({
                           justifyContent: "center",
                         }}
                       >
-                        <Strip row={row} ticks={view.ticks} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
+                        <Strip row={row} ticks={view.ticks} largestGroup={view.largestGroup} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
                       </div>
                       <div
                         style={{
