@@ -12,10 +12,15 @@ import {
   isStatedSource,
   marginSign,
   offerPriceRows,
+  PRICE_SCALE_LABEL,
+  priceScale,
+  priceVsOwn,
   type EstimateSource,
   type OfferPriceFigureSummary,
   type OfferPriceRow,
   type OfferPriceRowKey,
+  type PriceMargin,
+  type PriceScaleKey,
 } from "@/lib/offer-price-table";
 import { trendStatement } from "@/lib/price-trend";
 
@@ -57,6 +62,13 @@ const FILL_LINK: React.CSSProperties = {
   cursor: "pointer",
 };
 const HEADING: React.CSSProperties = { ...MUTED, fontWeight: 500, justifySelf: "end" };
+
+/** A margin's colour, by its sign: a profit green, a loss the warning colour, nothing muted — for
+ *  *Profit over cost* and *Your price vs* alike (#2477). */
+function marginColor(margin: PriceMargin | null): string {
+  const sign = margin ? marginSign(margin) : 0;
+  return sign < 0 ? "var(--color-warning)" : sign > 0 ? "var(--color-success)" : "var(--color-text-muted)";
+}
 
 /** How many trends the Market trend tooltip names before it counts the rest. */
 const TRENDS_NAMED = 3;
@@ -182,8 +194,9 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
 };
 
 /**
- * The offer's price area as a small table (#1829), made to read without its tooltips (#1839): three
- * headed columns — the row's name with a short note in brackets, *Price*, *Profit over cost* — the
+ * The offer's price area as a small table (#1829), made to read without its tooltips (#1839): headed
+ * columns — the row's name with a short note in brackets, *Price*, *Profit over cost*, and since #2477
+ * *Your price vs* (the offer's own price against each row's, {@link priceVsOwn}) — the
  * platform's minimum, the catalogue value, Estimated value (the suggestion), what the market paid,
  * Market trend under Market when a price trend applies (#2461), what the copies cost, and the offer's
  * own price last. Every figure is per set and in the offer's
@@ -196,6 +209,10 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
  * be recording a bid nobody placed. A figure that already is that price is drawn plain, since
  * clicking it would change nothing; nothing is a link on an offer that is closed. The offer's own
  * price reads as text and turns into its field on click (`priceEditor`, the panel's `InlineText`).
+ *
+ * Under the rows sits the price scale (#2477, {@link PriceScaleBar}). The column and the scale both
+ * read the offer's own price from `offer.price`, which a typed price is written into the moment the
+ * field is left (#2413), so both follow it without a re-read.
  */
 export function OfferPriceTable({
   offer,
@@ -229,11 +246,13 @@ export function OfferPriceTable({
     cost: offer.costPrice,
     own: offer.price === "0.00" ? null : offer.price,
   });
+  const ownAmount = rows.find((row) => row.key === "own")?.amount ?? null;
+  const scale = priceScale(rows);
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "auto auto auto",
+        gridTemplateColumns: "auto auto auto auto",
         columnGap: "0.875rem",
         rowGap: "0.125rem",
         alignItems: "baseline",
@@ -246,12 +265,20 @@ export function OfferPriceTable({
         <span style={HEADING}>Price</span>
       </Tooltip>
       <span style={HEADING}>Profit over cost</span>
+      <Tooltip
+        content={`How far ${ownLabel.toLowerCase()} is above or below each price, and by what share of it`}
+        align="end"
+        style={{ justifySelf: "end" }}
+      >
+        <span style={HEADING}>{ownLabel} vs</span>
+      </Tooltip>
       {rows.map((row) => {
         const own = row.key === "own";
         const rowNote = note(row, offer);
         const linked =
           !own && row.amount !== null && Number(row.amount) > 0 && editable && askingPrice !== row.amount;
-        const sign = row.margin ? marginSign(row.margin) : 0;
+        // The offer's own row compares with nothing; with no price of its own the column is empty.
+        const vs = own ? null : priceVsOwn(ownAmount, row.amount);
         return (
           <div key={row.key} style={{ display: "contents" }}>
             {own && (
@@ -320,18 +347,147 @@ export function OfferPriceTable({
                 <span style={{ color: "var(--color-text-secondary)" }}>{row.amount}</span>
               )}
             </span>
-            <span
-              style={{
-                justifySelf: "end",
-                color:
-                  sign < 0 ? "var(--color-warning)" : sign > 0 ? "var(--color-success)" : "var(--color-text-muted)",
-              }}
-            >
+            <span style={{ justifySelf: "end", color: marginColor(row.margin) }}>
               {row.margin ? formatPriceMargin(row.margin) : ""}
+            </span>
+            <span style={{ justifySelf: "end", color: vs === "unknown" ? undefined : marginColor(vs) }}>
+              {vs === "unknown" ? <span style={MUTED}>—</span> : vs ? formatPriceMargin(vs) : ""}
             </span>
           </div>
         );
       })}
+      {scale && (
+        <PriceScaleBar
+          scale={scale}
+          currency={offer.currency}
+          ownLabel={ownLabel}
+          names={NAME}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Row heights of the price scale: a line of labels above the axis, the axis, a line below. */
+const SCALE_LABEL_LINE = 0.875;
+const SCALE_AXIS_BAND = 0.875;
+
+/**
+ * **The price scale under the price table** (#2477): a linear axis from 0 to the highest price on it,
+ * a labelled tick at every reference price that is known, the stretch below Cost shaded, and the offer's
+ * own price as an accent marker — so its place among the others reads at a glance. Where ticks sit
+ * close together their labels alternate above and below the axis ({@link priceScale}). A label is
+ * pulled in by its own position (`translateX(-position)`), so one at either end stays inside the
+ * table. Each label's hover gives the figure; the marker's names the offer's own price.
+ */
+function PriceScaleBar({
+  scale,
+  currency,
+  ownLabel,
+  names,
+}: {
+  scale: NonNullable<ReturnType<typeof priceScale>>;
+  currency: string;
+  ownLabel: string;
+  names: Record<PriceScaleKey, string>;
+}) {
+  const axisTop = SCALE_LABEL_LINE + SCALE_AXIS_BAND / 2;
+  const pct = (position: number) => `${position * 100}%`;
+  return (
+    <div
+      role="img"
+      aria-label={[
+        ...scale.ticks.map((tick) => `${names[tick.key]} ${tick.amount}`),
+        ...(scale.own ? [`${ownLabel} ${scale.own.amount}`] : []),
+      ].join(", ")}
+      style={{
+        gridColumn: "1 / -1",
+        position: "relative",
+        height: `${SCALE_LABEL_LINE * 2 + SCALE_AXIS_BAND}rem`,
+        marginTop: "0.375rem",
+        fontSize: "0.6875rem",
+      }}
+    >
+      {scale.costPosition !== null && scale.costPosition > 0 && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: 0,
+            width: pct(scale.costPosition),
+            top: `${SCALE_LABEL_LINE + 0.1875}rem`,
+            height: `${SCALE_AXIS_BAND - 0.375}rem`,
+            background: "var(--color-warning-soft)",
+            borderRadius: "2px",
+          }}
+        />
+      )}
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: `${axisTop}rem`,
+          height: "1px",
+          background: "var(--color-border-strong)",
+        }}
+      />
+      {scale.ticks.map((tick) => (
+        <div key={tick.key} style={{ display: "contents" }}>
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: pct(tick.position),
+              top: `${SCALE_LABEL_LINE + 0.1875}rem`,
+              height: `${SCALE_AXIS_BAND - 0.375}rem`,
+              width: "1px",
+              background: "var(--color-text-muted)",
+              transform: "translateX(-50%)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              left: pct(tick.position),
+              top: tick.side === "above" ? 0 : `${SCALE_LABEL_LINE + SCALE_AXIS_BAND}rem`,
+              transform: `translateX(-${tick.position * 100}%)`,
+              lineHeight: `${SCALE_LABEL_LINE}rem`,
+              whiteSpace: "nowrap",
+              color: tick.key === "cost" ? "var(--color-text-secondary)" : "var(--color-text-muted)",
+            }}
+          >
+            <Tooltip content={`${names[tick.key]} ${tick.amount} ${currency}`} align="end">
+              <span>{PRICE_SCALE_LABEL[tick.key]}</span>
+            </Tooltip>
+          </div>
+        </div>
+      ))}
+      {scale.own && (
+        <div
+          style={{
+            position: "absolute",
+            left: pct(scale.own.position),
+            top: `${axisTop}rem`,
+            transform: "translate(-50%, -50%)",
+            lineHeight: 0,
+          }}
+        >
+          <Tooltip content={`${ownLabel} ${scale.own.amount} ${currency}`} align="end">
+            <span
+              style={{
+                display: "inline-block",
+                width: "0.625rem",
+                height: "0.625rem",
+                background: "var(--color-accent)",
+                borderRadius: "2px",
+                transform: "rotate(45deg)",
+              }}
+            />
+          </Tooltip>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,7 +592,6 @@ export function OfferPriceStrip({
           .filter(Boolean)
           .join(" — ");
         const linked = !own && row.amount !== null && Number(row.amount) > 0 && ownAmount !== row.amount;
-        const sign = row.margin ? marginSign(row.margin) : 0;
         return (
           <div key={row.key} style={{ display: "contents" }}>
             <span
@@ -500,8 +655,7 @@ export function OfferPriceStrip({
               style={{
                 justifySelf: "end",
                 whiteSpace: "nowrap",
-                color:
-                  sign < 0 ? "var(--color-warning)" : sign > 0 ? "var(--color-success)" : "var(--color-text-muted)",
+                color: marginColor(row.margin),
               }}
             >
               {row.margin ? formatPriceMargin(row.margin) : " "}

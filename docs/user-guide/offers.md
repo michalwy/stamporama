@@ -293,6 +293,21 @@ and in the warning colour when it is a loss. A figure that does not exist is lef
 shown as 0.00 (Minimum, Market and Cost excepted), and so is every profit when the cost is unknown. Cost
 has no profit of its own — over itself it is always nothing.
 
+**Your price vs** compares your price with every other row, in the same form: *+0.14 (+280%)* when
+your price of 0.19 is above a Minimum of 0.05, *−0.95 (−83%)* when it is below a Catalogue of 1.14 —
+the percentage is a share of that row's price. It is green where your price is above and in the
+warning colour where it is below; a row with no price reads *—*, and the Your price row itself has
+nothing there. On an auction the column is **Current price vs**, comparing where the bidding stands.
+Until the offer has a price the column is empty.
+
+**The price scale** under the table draws the same figures along one line, from 0 on the left to the
+highest of them on the right: a labelled tick for each price that is known — **Min**, **Cost**,
+**Est.**, **Cat.**, **Market**, **Market trend** — and a marker for your price, so you see at a glance
+where it sits among them. The stretch below Cost is shaded: a price there sells at a loss. Where ticks
+sit close together their labels alternate above and below the line; hover a label for its figure.
+With no price yet the scale shows the ticks without the marker. The column and the scale follow your
+price as soon as you leave its field.
+
 **Click a price to use it.** Minimum, Catalogue, Estimated, Market, Market trend and Cost are drawn as links, and
 hovering
 one says *Use as the offer's price*: clicking sets the asking price on a quick buy, and the
