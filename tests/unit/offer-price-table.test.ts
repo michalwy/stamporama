@@ -13,6 +13,8 @@ import {
   offerPriceFigures,
   offerPriceRows,
   priceMargin,
+  priceScale,
+  priceVsOwn,
   type CopyEstimateInput,
   type CopyMarketTrendInput,
   type PriceFigureSet,
@@ -439,5 +441,81 @@ describe("Market trend per set (#2461)", () => {
     assert.equal(figures.marketTrendPrice?.amount, "28.00");
     assert.equal(offerPriceFigures([set], null).marketTrendPrice, null);
     assert.equal(offerPriceFigures([{ ...set, marketTrends: [trended(10, 10, null)] }], 1).marketTrendPrice, null);
+  });
+});
+
+describe("your price vs every other price (#2477)", () => {
+  // The issue's own example: your price 0.19, Minimum 0.05, Catalogue 1.14, Estimated 0.68, Cost 0.07,
+  // no Market.
+  const figures = { minimum: "0.05", catalogue: "1.14", estimated: "0.68", market: null, cost: "0.07", own: "0.19" };
+  const rows = offerPriceRows(figures);
+
+  it("reads as an amount and a percentage of that row's price, — where the row has none", () => {
+    assert.deepEqual(
+      rows
+        .filter((r) => r.key !== "own")
+        .map((r) => {
+          const vs = priceVsOwn(figures.own, r.amount);
+          return [r.key, vs === null || vs === "unknown" ? vs : formatPriceMargin(vs)];
+        }),
+      [
+        ["minimum", "+0.14 (+280%)"],
+        ["catalogue", "−0.95 (−83%)"],
+        ["estimated", "−0.49 (−72%)"],
+        ["market", "unknown"],
+        ["cost", "+0.12 (+171%)"],
+      ]
+    );
+  });
+
+  it("is empty while the offer has no price, and has no share against a reference of zero", () => {
+    assert.equal(priceVsOwn(null, "1.14"), null);
+    assert.equal(priceVsOwn("0.00", "1.14"), null);
+    assert.deepEqual(priceVsOwn("0.19", "0.00"), { amount: "0.19", percent: null });
+  });
+
+  it("puts a tick at every known price on a linear scale from zero, your price marked apart", () => {
+    const scale = priceScale(rows, 0)!;
+    assert.deepEqual(
+      scale.ticks.map((t) => [t.key, Number(t.position.toFixed(3))]),
+      [
+        ["minimum", 0.044],
+        ["cost", 0.061],
+        ["estimated", 0.596],
+        ["catalogue", 1],
+      ]
+    );
+    assert.equal(Number(scale.own!.position.toFixed(3)), 0.167);
+    assert.equal(Number(scale.costPosition!.toFixed(3)), 0.061);
+    // Between Cost and Estimated.
+    assert.ok(scale.own!.position > scale.costPosition! && scale.own!.position < 0.596);
+  });
+
+  it("alternates labels above and below the axis where ticks sit close together", () => {
+    assert.deepEqual(
+      priceScale(rows)!.ticks.map((t) => [t.key, t.side]),
+      [
+        ["minimum", "above"],
+        ["cost", "below"],
+        ["estimated", "above"],
+        ["catalogue", "above"],
+      ]
+    );
+  });
+
+  it("runs to your price when it is the highest, and draws no marker while there is none", () => {
+    const high = priceScale(offerPriceRows({ ...figures, own: "2.28" }))!;
+    assert.equal(high.own!.position, 1);
+    assert.equal(high.ticks.find((t) => t.key === "catalogue")!.position, 0.5);
+    const none = priceScale(offerPriceRows({ ...figures, own: null }))!;
+    assert.equal(none.own, null);
+    assert.equal(none.ticks.length, 4);
+  });
+
+  it("has nothing to draw with no price at all", () => {
+    assert.equal(
+      priceScale(offerPriceRows({ minimum: null, catalogue: null, estimated: null, market: null, cost: null, own: null })),
+      null
+    );
   });
 });

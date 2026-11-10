@@ -359,6 +359,105 @@ export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
   return rows;
 }
 
+/**
+ * **Your price vs** a reference row (#2477): how far the offer's own price is above or below that
+ * row's price, as an amount and that amount as a share of the row's price — `+0.14 (+280%)` for 0.19
+ * against a Minimum of 0.05 — in {@link PriceMargin}'s form, so it prints and colours as *Profit over
+ * cost* does (above is green, below is the warning colour).
+ *
+ * Null while the offer has no price of its own — the column is then empty — and `"unknown"` for a row
+ * whose price is not known, drawn `—`. A reference of zero (a cost of nothing) gives the amount with no
+ * share, as a margin over a zero cost does.
+ */
+export function priceVsOwn(own: string | null, reference: string | null): PriceMargin | "unknown" | null {
+  const ownValue = own === null ? NaN : Number(own);
+  if (!(Number.isFinite(ownValue) && ownValue > 0)) return null;
+  const value = reference === null ? NaN : Number(reference);
+  if (!(Number.isFinite(value) && value >= 0)) return "unknown";
+  return priceMargin(ownValue, value);
+}
+
+/** A reference row as the price scale names it — short, since its labels share one line. */
+export type PriceScaleKey = Exclude<OfferPriceRowKey, "own">;
+
+export const PRICE_SCALE_LABEL: Record<PriceScaleKey, string> = {
+  minimum: "Min",
+  catalogue: "Cat.",
+  estimated: "Est.",
+  market: "Market",
+  marketTrend: "Market trend",
+  cost: "Cost",
+};
+
+export interface PriceScaleTick {
+  key: PriceScaleKey;
+  amount: string;
+  /** Where on the axis, 0 at the left end (a price of zero) to 1 at the right (the highest price). */
+  position: number;
+  /** Which side of the axis its label sits on: close ticks alternate so no two labels overlap. */
+  side: "above" | "below";
+}
+
+export interface PriceScale {
+  ticks: PriceScaleTick[];
+  /** The offer's own price, marked apart from the ticks; null while it has none. */
+  own: { amount: string; position: number } | null;
+  /** Where Cost sits, the stretch below it shaded; null while the cost is not known. */
+  costPosition: number | null;
+}
+
+/** How close two ticks may sit, as a share of the axis, before their labels go to opposite sides. */
+export const PRICE_SCALE_MIN_GAP = 0.16;
+
+/**
+ * **The price scale under the table** (#2477): a linear axis from 0 to the highest price on it — the
+ * offer's own price included — with a tick for every reference row whose price is known and a marker
+ * for the offer's own price, so where it sits among them reads at a glance. A row with no price has no
+ * tick. Labels go above the axis unless the tick sits within `minGap` of the last label there, then
+ * below, so ticks close together alternate; ticks in price order, a tie in the table's order.
+ *
+ * Null when there is nothing to draw: no known price at all, or every price zero.
+ */
+export function priceScale(rows: readonly OfferPriceRow[], minGap = PRICE_SCALE_MIN_GAP): PriceScale | null {
+  const known = (amount: string | null) => {
+    const value = amount === null ? NaN : Number(amount);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  };
+  const references = rows
+    .filter((row): row is OfferPriceRow & { key: PriceScaleKey } => row.key !== "own")
+    .flatMap((row) => {
+      const value = known(row.amount);
+      return value === null ? [] : [{ key: row.key, amount: row.amount!, value }];
+    });
+  const ownRow = rows.find((row) => row.key === "own");
+  const ownValue = ownRow ? known(ownRow.amount) : null;
+  const own = ownValue !== null && ownValue > 0 ? { amount: ownRow!.amount!, value: ownValue } : null;
+  const max = Math.max(0, own?.value ?? 0, ...references.map((r) => r.value));
+  if (max <= 0) return null;
+  const at = (value: number) => value / max;
+
+  let lastAbove = -Infinity;
+  let lastBelow = -Infinity;
+  const ticks = [...references]
+    .sort((a, b) => a.value - b.value)
+    .map((reference): PriceScaleTick => {
+      const position = at(reference.value);
+      let side: PriceScaleTick["side"];
+      if (position - lastAbove >= minGap) side = "above";
+      else if (position - lastBelow >= minGap) side = "below";
+      else side = lastAbove <= lastBelow ? "above" : "below";
+      if (side === "above") lastAbove = position;
+      else lastBelow = position;
+      return { key: reference.key, amount: reference.amount, position, side };
+    });
+  const cost = references.find((r) => r.key === "cost");
+  return {
+    ticks,
+    own: own ? { amount: own.amount, position: at(own.value) } : null,
+    costPosition: cost ? at(cost.value) : null,
+  };
+}
+
 /** One set as {@link offerPriceFigures} reads it: the set's holdings summary (catalogue and market,
  *  base currency), its COST (#1736) and its copies' estimates (#1829). Structural, so this module
  *  stays pure. */
