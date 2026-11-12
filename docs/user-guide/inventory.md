@@ -1804,6 +1804,16 @@ Two choices:
     On Facebook only an offer **in the group chosen in the bar** receives sets; one in another
     group is left alone and a new offer is made in the chosen group.
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
+  - **One of each** — of identical sets (identical as *Multi-quantity* reads it) **only one is
+    listed**, as a new offer of its own; the rest stay where they are and are not handed to the other
+    mode either. Sets that differ in condition, certificate status or format are not identical: two
+    sets in one condition and a third in another make two offers. The set listed is the one with the fewest copies
+    already in an open offer on another platform, then the one with the lowest copy numbers. Where an
+    identical set is **already in an open offer on this platform** — bidding or not — no offer is made
+    for it at all. It works the same in *Singles*: of identical singles one is listed. The line under
+    the count says how many identical sets were left out and how many are already listed.
+
+  The choice is remembered for the next pass in this collection.
 
 The preview lists every offer on **one line**: its name, the condition
 in its colour — with the certificate status and format only when there is one; a mixed set names
