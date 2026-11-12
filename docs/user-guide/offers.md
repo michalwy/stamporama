@@ -2711,13 +2711,19 @@ For sale**, in **no open offer**, not already among the copies you are making, a
 never to be listed on the offer's platform. Among several, the one the Copies list puts first (the
 oldest added). Its **faults and certificate** follow the copy: a copy that differs on either is
 suggested only when no exact one is free, and the difference is named in brackets — *with Thin*,
-*without Crease*, *no certificate*. A copy with no such twin is only named. A piece of several stamps,
+*without Crease*, *no certificate*. A copy with no such twin is only named — *no other copy to swap in*. A piece of several stamps,
 or a copy whose stamp is one of several candidates, is only named too — *the same stamp* is not one
 stamp there.
 
 **Swap** puts the suggested copy in the listed one's place in what you are making; **Swap all** does
 every copy that has a suggestion. In New offer and the copy pickers, the twin replaces the copy in the
 list; in Generate offers the plan is made again with the twin in the copy's place.
+
+**Generate offers** does not list the copies: a pass of hundreds of offers could name hundreds. It
+says on one line how many copies, in how many of the offers, are already in an open offer and how
+many can be swapped, with **Swap all**; each offer holding such copies carries a marker — *2 on
+Colnect* — and opening it shows each copy's open offer, its twin and **Swap**. See [Generating offers
+in bulk](inventory.md).
 
 ## Copies promised in a trade
 

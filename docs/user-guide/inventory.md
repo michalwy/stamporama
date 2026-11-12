@@ -1822,10 +1822,17 @@ is named once: `Adolf Hitler (I)`. A single stamp adds its own name where it has
 A stamp with neither an issue name nor a name of its own shows no name: its catalogue numbers say
 what it is.
 
-A copy of a ticked offer that is **already in an open offer on another platform** is named above the
-list, with a copy of the same stamp listed nowhere to **Swap** in — the plan is then made again with
-that copy in its place. See [A copy already listed
-elsewhere](offers.md#a-copy-already-listed-elsewhere).
+A copy of a ticked offer that is **already in an open offer on another platform** is shown on that
+offer's own line, not in a list of its own — a pass of hundreds of offers would otherwise list
+hundreds of copies before its first offer. **One line above the list** counts them: *636 copies in 210
+of the offers are already in an open offer — 590 can be swapped for a copy listed nowhere*, with
+**Swap all (590)**. **Each line holding such copies carries a marker** beside its name — how many and
+the platforms they are on, *2 on Colnect* or *4 on Colnect, Allegro*; a line with none has no marker.
+Click the line, or its marker, to open it: under each such copy, the open offer it is on (*On Colnect
+#3196*), and the copy of the same stamp listed nowhere with **Swap**, or *no other copy to swap in*.
+A swap makes the plan again with that copy in its place; the marker and the count above the list
+follow at once, and the line stays open. Only ticked offers are counted and marked. See [A copy
+already listed elsewhere](offers.md#a-copy-already-listed-elsewhere).
 
 **Every proposed offer has a tick box, and all of them start ticked.** Untick an offer to leave it
 out of this pass; the box at the top of the list ticks or unticks them all at once. Only the ticked

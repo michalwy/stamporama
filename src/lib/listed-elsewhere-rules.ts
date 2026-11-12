@@ -118,13 +118,21 @@ export function twinDifference(copy: TwinCopy, twin: TwinCopy, names: TwinNames)
   return parts.length > 0 ? parts.join("; ") : null;
 }
 
-/** *#7375 is on Facebook #3012* — the copy and every open offer it is in. */
-export function listedElsewhereSentence(copy: ListedElsewhereCopy): string {
+/** *on Facebook #3012 and Allegro #3020* — every open offer a copy is in. */
+export function listedOnSentence(copy: Pick<ListedElsewhereCopy, "offers">): string {
   const offers = copy.offers.map((offer) => `${offer.platformName} #${offer.offerNo}`);
   const where =
     offers.length <= 1 ? (offers[0] ?? "") : `${offers.slice(0, -1).join(", ")} and ${offers[offers.length - 1]}`;
-  return `${formatItemNo(copy.itemNo)} is on ${where}`;
+  return `on ${where}`;
 }
+
+/** *#7375 is on Facebook #3012* — the copy and every open offer it is in. */
+export function listedElsewhereSentence(copy: ListedElsewhereCopy): string {
+  return `${formatItemNo(copy.itemNo)} is ${listedOnSentence(copy)}`;
+}
+
+/** What the note says of a listed copy with no twin (#2479). */
+export const NO_TWIN_SENTENCE = "no other copy to swap in";
 
 /** *#7401 is listed nowhere* — the twin, and how it differs when it does. */
 export function twinSentence(twin: ListedElsewhereTwin): string {
@@ -139,4 +147,42 @@ export function swapAllPairs(copies: readonly ListedElsewhereCopy[]): { from: st
 /** The copies with the swaps made: each swapped copy replaced by its twin where it stood. */
 export function applySwaps(itemIds: readonly string[], swaps: ReadonlyMap<string, string>): string[] {
   return itemIds.map((id) => swaps.get(id) ?? id);
+}
+
+/**
+ * The marker on a generator line (#2479): how many of its copies are already in an open offer, and the
+ * platforms they are on — *2 on Colnect*, *4 on Colnect, Allegro* — the platform with the most of them
+ * first, ties in the order met. Null when the line has none.
+ */
+export function listedElsewhereMarker(copies: readonly ListedElsewhereCopy[]): string | null {
+  if (copies.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const copy of copies) {
+    for (const platform of new Set(copy.offers.map((offer) => offer.platformName))) {
+      counts.set(platform, (counts.get(platform) ?? 0) + 1);
+    }
+  }
+  const platforms = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([platform]) => platform);
+  return `${copies.length} on ${platforms.join(", ")}`;
+}
+
+/**
+ * The generator's one line above its preview (#2479): how many copies, in how many of the offers, are
+ * already in an open offer, and how many of them have a twin to swap in.
+ */
+export function listedElsewhereSummary(copies: readonly ListedElsewhereCopy[], offers: number): string {
+  const swappable = copies.filter((copy) => copy.twin).length;
+  const inOffers = offers === 1 ? "one of the offers" : `${offers} of the offers`;
+  if (copies.length === 1) {
+    return `A copy in ${inOffers} is already in an open offer — ${swappable === 1 ? "it can be swapped for a copy listed nowhere" : NO_TWIN_SENTENCE}`;
+  }
+  const swap =
+    swappable === 0
+      ? "none"
+      : swappable < copies.length
+        ? `${swappable}`
+        : swappable === 2
+          ? "both"
+          : `all ${swappable}`;
+  return `${copies.length} copies in ${inOffers} are already in an open offer — ${swap} can be swapped for a copy listed nowhere`;
 }

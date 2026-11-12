@@ -31,7 +31,12 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
-import { ListedElsewhereNote } from "@/app/c/[collectionSlug]/offers/listed-elsewhere-note";
+import {
+  ListedElsewhereCopyNote,
+  ListedElsewhereMarker,
+  ListedElsewhereSummary,
+} from "@/app/c/[collectionSlug]/offers/listed-elsewhere-note";
+import type { ListedElsewhereCopy } from "@/lib/listed-elsewhere-rules";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { useProposalChoice } from "@/app/c/[collectionSlug]/offers/proposals/use-proposal-choice";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -215,6 +220,15 @@ const SELECT: React.CSSProperties = {
   background: "var(--color-bg-elevated)",
 };
 
+const NONE_LISTED: readonly ListedElsewhereCopy[] = [];
+
+/** A preview query with its swaps left out: what a swap keeps the plan on screen across (#2479). */
+function withoutSwaps(query: string): string {
+  const params = new URLSearchParams(query);
+  params.delete("swaps");
+  return params.toString();
+}
+
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -298,7 +312,13 @@ export function OfferGeneratorDialog({
   );
   // The preview's query never carries the ticks: a tick changes what is written, not the plan.
   const query = useMemo(() => generatorRequestParams(request).toString(), [request]);
-  const { data: preview, isLoading, isError } = useOfferGeneratorPreview(collectionId, query);
+  // A swap re-plans with the twin in (#2339), but the plan on screen stays until the new one is read,
+  // so an expanded line stays open where the Swap was clicked (#2479). Any other change shows the wait.
+  const { data: preview, isLoading, isError, isPlaceholderData } = useOfferGeneratorPreview(
+    collectionId,
+    query,
+    (previous) => withoutSwaps(previous) === withoutSwaps(query)
+  );
 
   const lines = useMemo(() => preview?.lines ?? [], [preview]);
   const selection = useMemo(() => generatorSelection(lines, skip), [lines, skip]);
@@ -323,7 +343,12 @@ export function OfferGeneratorDialog({
     ? generatorPostRefusal({ facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
     : null;
   const canConfirm =
-    !!preview && newOffers + changedOffers > 0 && !preview.creationBlock && !postRefusal && !isPending;
+    !!preview &&
+    !isPlaceholderData &&
+    newOffers + changedOffers > 0 &&
+    !preview.creationBlock &&
+    !postRefusal &&
+    !isPending;
   // Each ticked new offer's lot in the post, in the preview's order — the order the lots are written.
   const lotNos = useMemo(() => {
     const byLine = new Map<string, number>();
@@ -333,13 +358,29 @@ export function OfferGeneratorDialog({
     return byLine;
   }, [lines, skip]);
   const allTicked = lines.length > 0 && selection.leftOffers === 0;
-  // The note speaks of the copies the ticked lines would list (#2339).
-  const listedElsewhere = useMemo(() => {
-    const ticked = new Set(
-      lines.flatMap((line) => (skip.has(line.id) ? [] : line.sets.flatMap((set) => set.map((copy) => copy.id))))
-    );
-    return (preview?.listedElsewhere ?? []).filter((copy) => ticked.has(copy.itemId));
-  }, [lines, skip, preview]);
+  // The copies already in an open offer, by the line they are on: the ticked lines only, as the note
+  // spoke of the copies the ticked lines would list (#2339). A copy swapped out goes at once, before
+  // the plan with its twin is read (#2479).
+  const listedByLine = useMemo(() => {
+    const byItem = new Map((preview?.listedElsewhere ?? []).map((copy) => [copy.itemId, copy]));
+    const byLine = new Map<string, ListedElsewhereCopy[]>();
+    for (const line of lines) {
+      if (skip.has(line.id)) continue;
+      const listed = line.sets.flatMap((set) =>
+        set.flatMap((copy) => {
+          const entry = byItem.get(copy.id);
+          return entry && !(copy.id in swaps) ? [entry] : [];
+        })
+      );
+      if (listed.length > 0) byLine.set(line.id, listed);
+    }
+    return byLine;
+  }, [lines, skip, preview, swaps]);
+  const listedElsewhere = useMemo(() => [...listedByLine.values()].flat(), [listedByLine]);
+
+  function swap(pairs: { from: string; to: string }[]) {
+    setSwaps((prev) => ({ ...prev, ...Object.fromEntries(pairs.map(({ from, to }) => [from, to])) }));
+  }
 
   function toggleLine(lineId: string) {
     setSkip((prev) => {
@@ -540,12 +581,11 @@ export function OfferGeneratorDialog({
             <>
               <Summary preview={preview} selection={selection} mode={mode} />
               {preview.creationBlock && <Callout tone="warning">{preview.creationBlock}</Callout>}
-              <ListedElsewhereNote
+              <ListedElsewhereSummary
                 copies={listedElsewhere}
+                offers={listedByLine.size}
                 disabled={isPending}
-                onSwap={(pairs) =>
-                  setSwaps((prev) => ({ ...prev, ...Object.fromEntries(pairs.map(({ from, to }) => [from, to])) }))
-                }
+                onSwap={swap}
               />
               {preview.lines.length === 0 ? (
                 <Empty>
@@ -576,6 +616,8 @@ export function OfferGeneratorDialog({
                       ticked={!skip.has(line.id)}
                       lotNo={intoPost ? (lotNos.get(line.id) ?? null) : null}
                       resultingSetCount={keptResultingSetCount(lines, skip, line.id)}
+                      listed={listedByLine.get(line.id) ?? NONE_LISTED}
+                      onSwap={swap}
                       disabled={isPending}
                       onToggleTick={() => toggleLine(line.id)}
                       onChooseTarget={(offerId) => setTargets((prev) => ({ ...prev, [line.id]: offerId }))}
@@ -778,6 +820,8 @@ function Line({
   ticked,
   lotNo,
   resultingSetCount,
+  listed,
+  onSwap,
   disabled,
   onToggleTick,
   onChooseTarget,
@@ -793,6 +837,9 @@ function Line({
   lotNo: number | null;
   /** What the receiving offer will hold, the unticked lines before it left out. */
   resultingSetCount: number;
+  /** Its copies already in an open offer (#2479) — none while it is unticked. */
+  listed: readonly ListedElsewhereCopy[];
+  onSwap: (pairs: { from: string; to: string }[]) => void;
   disabled: boolean;
   onToggleTick: () => void;
   onChooseTarget: (offerId: string) => void;
@@ -830,9 +877,13 @@ function Line({
         >
           <Icon name={open ? "collapse" : "expand"} size="sm" />
         </button>
-        <Tooltip content={line.title} style={CELL}>
-          <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{line.title}</span>
-        </Tooltip>
+        {/* The marker sits beside the title; a click on it is the line's, so it expands it (#2479). */}
+        <span style={{ display: "flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}>
+          <Tooltip content={line.title} style={{ ...CELL, flex: "0 1 auto" }}>
+            <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{line.title}</span>
+          </Tooltip>
+          <ListedElsewhereMarker copies={listed} />
+        </span>
         <span style={{ display: "inline-flex", gap: "0.2rem", minWidth: 0, overflow: "hidden" }}>
           {line.kind === "carrier" && <span style={ROW_CHIP}>Several stamps</span>}
           {line.combination.map((part) => (
@@ -898,6 +949,9 @@ function Line({
           line={line}
           target={target}
           resultingSetCount={resultingSetCount}
+          listed={listed}
+          onSwap={onSwap}
+          disabled={disabled}
         />
       )}
     </div>
@@ -940,6 +994,9 @@ function LineCopies({
   line,
   target,
   resultingSetCount,
+  listed,
+  onSwap,
+  disabled,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
@@ -949,27 +1006,40 @@ function LineCopies({
   line: GeneratorLineView;
   target: GeneratorOfferRef | null;
   resultingSetCount: number;
+  listed: readonly ListedElsewhereCopy[];
+  onSwap: (pairs: { from: string; to: string }[]) => void;
+  disabled: boolean;
 }) {
+  const listedById = new Map(listed.map((copy) => [copy.itemId, copy]));
   return (
     <div style={{ background: "var(--color-bg-page)", padding: "0 0.75rem 0.625rem 3.75rem" }}>
       {line.sets.map((set, index) => (
         <div key={set.map((copy) => copy.id).join(",")}>
           {line.sets.length > 1 && <div style={{ ...HINT, padding: "0.5rem 0 0.25rem" }}>Set {index + 1}</div>}
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.375rem", overflow: "clip" }}>
-            {set.map((copy, i) => (
-              <InventoryItemRow
-                key={copy.id}
-                collectionId={collectionId}
-                item={copy}
-                areas={areas}
-                locations={locations}
-                baseCurrency={baseCurrency}
-                primaryVendorId={copy.areaId ? (vendorMaps.primaryVendorByArea.get(copy.areaId) ?? null) : null}
-                vendorMap={vendorMaps.vendorMapFor(copy.areaId, copy.issueId)}
-                isLast={i === set.length - 1}
-                readOnly
-              />
-            ))}
+            {set.map((copy, i) => {
+              const listedCopy = listedById.get(copy.id);
+              const isLast = i === set.length - 1;
+              return (
+                <div
+                  key={copy.id}
+                  style={{ borderBottom: listedCopy && !isLast ? "1px solid var(--color-border)" : undefined }}
+                >
+                  <InventoryItemRow
+                    collectionId={collectionId}
+                    item={copy}
+                    areas={areas}
+                    locations={locations}
+                    baseCurrency={baseCurrency}
+                    primaryVendorId={copy.areaId ? (vendorMaps.primaryVendorByArea.get(copy.areaId) ?? null) : null}
+                    vendorMap={vendorMaps.vendorMapFor(copy.areaId, copy.issueId)}
+                    isLast={isLast || !!listedCopy}
+                    readOnly
+                  />
+                  {listedCopy && <ListedElsewhereCopyNote copy={listedCopy} onSwap={onSwap} disabled={disabled} />}
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}

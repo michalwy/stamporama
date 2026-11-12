@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import {
   applySwaps,
   assignTwins,
+  listedElsewhereMarker,
   listedElsewhereSentence,
+  listedElsewhereSummary,
+  listedOnSentence,
+  NO_TWIN_SENTENCE,
   swapAllPairs,
   twinDifference,
   twinSentence,
@@ -130,5 +134,49 @@ describe("the generator's swaps (#2339)", () => {
     assert.deepEqual(parseGeneratorRequest(params)?.swaps, { a: "t", b: "u" });
     assert.equal(generatorRequestParams({ ...request, swaps: {} }).has("swaps"), false);
     assert.equal(parseGeneratorRequest(generatorRequestParams({ ...request, swaps: undefined }))?.swaps, undefined);
+  });
+});
+
+describe("the generator's summary and markers (#2479)", () => {
+  const on = (itemId: string, platforms: string[], twin: boolean): ListedElsewhereCopy => ({
+    itemId,
+    itemNo: 7000,
+    offers: platforms.map((platformName, i) => ({ offerId: `${itemId}-${i}`, offerNo: 3196 + i, platformName })),
+    twin: twin ? { itemId: `${itemId}-twin`, itemNo: 7401, difference: null } : null,
+  });
+
+  it("marks a line with its count and platforms, the platform with the most first", () => {
+    assert.equal(listedElsewhereMarker([]), null);
+    assert.equal(listedElsewhereMarker([on("a", ["Colnect"], true), on("b", ["Colnect"], false)]), "2 on Colnect");
+    assert.equal(
+      listedElsewhereMarker([
+        on("a", ["Allegro"], true),
+        on("b", ["Colnect", "Allegro"], true),
+        on("c", ["Colnect"], false),
+        on("d", ["Colnect", "Colnect"], false),
+      ]),
+      "4 on Colnect, Allegro"
+    );
+  });
+
+  it("says how many copies, in how many offers, and how many can be swapped, on one line", () => {
+    const copies = [on("a", ["Colnect"], true), on("b", ["Allegro"], false), on("c", ["Colnect"], true)];
+    assert.equal(
+      listedElsewhereSummary(copies, 2),
+      "3 copies in 2 of the offers are already in an open offer — 2 can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewhereSummary([copies[0]!, copies[2]!], 1),
+      "2 copies in one of the offers are already in an open offer — both can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewhereSummary([copies[1]!], 1),
+      `A copy in one of the offers is already in an open offer — ${NO_TWIN_SENTENCE}`
+    );
+  });
+
+  it("names the open offer alone for a copy's own note", () => {
+    assert.equal(listedOnSentence(on("a", ["Colnect"], true)), "on Colnect #3196");
+    assert.equal(NO_TWIN_SENTENCE, "no other copy to swap in");
   });
 });
