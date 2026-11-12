@@ -16,6 +16,7 @@ import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups
 import {
   effectiveFacebookGroupSettings,
   FACEBOOK_AUCTION_DAYS_MAX,
+  FACEBOOK_MAX_LOTS_PER_POST_MAX,
   FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
   FACEBOOK_MULTI_LOT_LAYOUTS,
   isFacebookGroupSetting,
@@ -353,6 +354,7 @@ function settingsInput(fd: FormData): FacebookPostingSettings {
     auctionCaptionTemplate: text("auctionCaptionTemplate"),
     quickBuyCaptionTemplate: text("quickBuyCaptionTemplate"),
     captionPostTemplate: text("captionPostTemplate"),
+    maxLotsPerPost: optionalNumber(text("maxLotsPerPost")),
   };
 }
 
@@ -490,6 +492,8 @@ function describeSetting(
       return s.refreshQuickBuysAfterDays == null
         ? "Never"
         : countLabel(s.refreshQuickBuysAfterDays, "day", "days");
+    case "maxLotsPerPost":
+      return s.maxLotsPerPost == null ? "No limit" : countLabel(s.maxLotsPerPost, "lot", "lots");
     case "currency":
       return platformCurrency ? `The platform's, ${platformCurrency}` : "The platform's";
   }
@@ -703,6 +707,9 @@ function FacebookSettingsTabs({
             onChange={setText("captionPostTemplate")}
           />
         )}
+        {slot("maxLotsPerPost", { label: MAX_LOTS_LABEL, note: MAX_LOTS_NOTE }, (
+          <MaxLotsPerPostField initial={start.maxLotsPerPost} />
+        ))}
       </>
     ),
     "buyer-messages": slot(
@@ -1405,6 +1412,26 @@ function RefreshDaysField({ initial }: { initial: number | null }) {
       step={1}
       defaultValue={initial == null ? "" : String(initial)}
       placeholder="Never"
+      style={INPUT_STYLE}
+    />
+  );
+}
+
+/** How many lots one post may hold (#2480): Generate offers splits its new offers into posts by it. */
+const MAX_LOTS_LABEL = "Max lots per post";
+const MAX_LOTS_NOTE = "Generate offers splits its new offers into posts of at most this many. Empty: no limit";
+
+function MaxLotsPerPostField({ initial }: { initial: number | null }) {
+  return (
+    <input
+      name="maxLotsPerPost"
+      aria-label={MAX_LOTS_LABEL}
+      type="number"
+      min={1}
+      max={FACEBOOK_MAX_LOTS_PER_POST_MAX}
+      step={1}
+      defaultValue={initial == null ? "" : String(initial)}
+      placeholder="No limit"
       style={INPUT_STYLE}
     />
   );

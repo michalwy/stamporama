@@ -1018,9 +1018,12 @@ function inPostOfSeveral(offer: Pick<FacebookPostCandidate, "facebookPostId" | "
 
 export function facebookPostRefusal(
   offers: readonly FacebookPostCandidate[],
-  group: { mixedListingTypes: boolean } = { mixedListingTypes: false }
+  group: { mixedListingTypes: boolean } = { mixedListingTypes: false },
+  /** The fewest lots asked of the post: two for *Post together*, one for the last post Generate offers
+   *  fills to its limit (#2480), whose remainder may be one lot. */
+  minLots = 2
 ): string | null {
-  if (offers.length < 2) return "A post with several lots needs at least two offers.";
+  if (offers.length < Math.max(1, minLots)) return "A post with several lots needs at least two offers.";
   const notFacebook = offers.filter((o) => o.facebookGroupId === null);
   if (notFacebook.length > 0) {
     return `${listOfferNos(notFacebook)} ${notFacebook.length === 1 ? "is" : "are"} not a Facebook offer.`;

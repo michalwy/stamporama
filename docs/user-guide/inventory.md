@@ -1863,6 +1863,18 @@ pass has **Open post**, the post's screen, where the lots are priced and put up 
 *Post together…* afterwards. The auctions among them share one closing time, as in any post.
 Untick it and the pass makes no post; on any other platform the option is not there.
 
+**A group's limit on lots splits the batch into several posts.** Beside the title, **Max lots per
+post** starts at the group's [own setting](facebook.md#several-lot-posts) and can be changed for this
+run alone — the group's setting stays as it is. Empty is no limit: one post, as above. With a limit,
+the new offers go into as many new posts as it needs, in the preview's order, and you choose how:
+**Fill to the limit** (chosen when the dialog opens) gives each post as many lots as the limit allows
+and the rest to the last one — with a limit of 40, 85 offers become 40, 40 and 5 — while **Even**
+makes the fewest posts the limit allows with the lots spread evenly — 29, 28 and 28. The posts take
+your title with *(1/3)*, *(2/3)*, *(3/3)* after it; a pass that fits in one post keeps the title as
+typed. Each post's lots are numbered from 1, and each new offer's line says *post 2 · lot 5*. The
+summary and the button say how many posts will be made, and the message after the pass opens the
+first of them. Only the new offers count towards the limit.
+
 Confirming creates **all of the ticked offers or none of them**. If anything changed since the
 preview in a ticked offer — a copy sold or went onto another offer, or an offer due to receive sets
 changed status — nothing is created and the message names the copy or the offer. The same holds for

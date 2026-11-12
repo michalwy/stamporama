@@ -209,6 +209,7 @@ export const FACEBOOK_GROUP_SETTINGS = [
   "auctionCaptionTemplate",
   "quickBuyCaptionTemplate",
   "captionPostTemplate",
+  "maxLotsPerPost",
 ] as const;
 export type FacebookGroupSetting = (typeof FACEBOOK_GROUP_SETTINGS)[number];
 
@@ -246,6 +247,8 @@ export interface FacebookPostingSettings {
   quickBuyCaptionTemplate: string;
   /** A captioned post's shared text (#1841). */
   captionPostTemplate: string;
+  /** How many lots one post may hold (#2480); null is no limit. */
+  maxLotsPerPost: number | null;
 }
 
 /** The platform's settings before anybody has stated any — what a platform with no row reads as.
@@ -267,6 +270,7 @@ export const FACEBOOK_BLANK_SETTINGS: FacebookPostingSettings = {
   auctionCaptionTemplate: "",
   quickBuyCaptionTemplate: "",
   captionPostTemplate: "",
+  maxLotsPerPost: null,
 };
 
 /** A group's values, as the editor holds them and the domain layer stores them. A setting not named
@@ -354,6 +358,21 @@ function cleanAuctionDays(value: number | null): number | null {
   return value;
 }
 
+/** The most lots a post may be given a limit of — far beyond any group's, there only so a typing slip
+ *  is not stored as a limit nobody meant. */
+export const FACEBOOK_MAX_LOTS_PER_POST_MAX = 1000;
+
+/** A limit on lots per post (#2480): a whole number from 1, or null for none. */
+export function cleanMaxLotsPerPost(value: number | null): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  if (!Number.isInteger(value) || value < 1 || value > FACEBOOK_MAX_LOTS_PER_POST_MAX) {
+    throw new Error(
+      `The most lots in one post must be a whole number between 1 and ${FACEBOOK_MAX_LOTS_PER_POST_MAX}, or empty for no limit.`
+    );
+  }
+  return value;
+}
+
 function cleanClosingTime(value: string | null): string | null {
   if (value == null || value.trim() === "") return null;
   const time = normalizeClosingTime(value);
@@ -389,6 +408,7 @@ export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookP
     auctionCaptionTemplate: input.auctionCaptionTemplate.trim(),
     quickBuyCaptionTemplate: input.quickBuyCaptionTemplate.trim(),
     captionPostTemplate: input.captionPostTemplate.trim(),
+    maxLotsPerPost: cleanMaxLotsPerPost(input.maxLotsPerPost),
   };
 }
 
@@ -435,6 +455,7 @@ export function cleanFacebookGroupValues(input: FacebookGroupValues): FacebookGr
     auctionCaptionTemplate: own("auctionCaptionTemplate") ? input.auctionCaptionTemplate : "",
     quickBuyCaptionTemplate: own("quickBuyCaptionTemplate") ? input.quickBuyCaptionTemplate : "",
     captionPostTemplate: own("captionPostTemplate") ? input.captionPostTemplate : "",
+    maxLotsPerPost: own("maxLotsPerPost") ? input.maxLotsPerPost : null,
   });
 
   let currency: string | null = null;
@@ -483,6 +504,7 @@ export function effectiveFacebookGroupSettings(
     auctionCaptionTemplate: from("auctionCaptionTemplate").auctionCaptionTemplate,
     quickBuyCaptionTemplate: from("quickBuyCaptionTemplate").quickBuyCaptionTemplate,
     captionPostTemplate: from("captionPostTemplate").captionPostTemplate,
+    maxLotsPerPost: from("maxLotsPerPost").maxLotsPerPost,
     currency: own("currency") ? group.currency : null,
   };
 }

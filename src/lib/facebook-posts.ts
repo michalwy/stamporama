@@ -173,7 +173,10 @@ export async function writeFacebookPost(
   tx: DbTransaction,
   collectionId: string,
   offerIds: readonly string[],
-  title: string
+  title: string,
+  /** One of the posts Generate offers splits its new offers into (#2480), which may be left a single
+   *  lot; every other caller asks for two. */
+  options: { allowOneLot?: boolean } = {}
 ): Promise<{ postId: string; postNo: number }> {
   const ids = [...new Set(offerIds)];
   const rows = await tx.offer.findMany({
@@ -184,9 +187,11 @@ export async function writeFacebookPost(
   const byId = new Map(rows.map((r) => [r.id, postCandidate(r)]));
   const lots = ids.map((id) => byId.get(id)!);
   const groupId = lots.find((l) => l.facebookGroupId !== null)?.facebookGroupId ?? null;
-  const refusal = facebookPostRefusal(lots, {
-    mixedListingTypes: groupId ? await facebookGroupMixesTypes(groupId) : false,
-  });
+  const refusal = facebookPostRefusal(
+    lots,
+    { mixedListingTypes: groupId ? await facebookGroupMixesTypes(groupId) : false },
+    options.allowOneLot ? 1 : 2
+  );
   if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
   await leavePostsOfOne(tx, lots);
 

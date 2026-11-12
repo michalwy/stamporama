@@ -42,6 +42,7 @@ const SETTING_CASE: Readonly<Record<FacebookGroupSetting, FacebookSettingsCase>>
   quickBuyCaptionTemplate: "quick-buys",
   multiLotLayout: "several-lots",
   captionPostTemplate: "several-lots",
+  maxLotsPerPost: "several-lots",
   buyerMessageTemplate: "buyer-messages",
 };
 

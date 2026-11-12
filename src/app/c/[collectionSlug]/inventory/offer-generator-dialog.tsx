@@ -3,12 +3,16 @@
 import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
+  generatorLotPlaces,
   generatorPostRefusal,
+  generatorPostSizes,
+  generatorPostTitles,
   generatorRequestParams,
   generatorSelection,
   keptResultingSetCount,
   type GeneratorMode,
   type GeneratorPackaging,
+  type GeneratorPostSplit,
   type GeneratorSelection,
   type MixPriority,
 } from "@/lib/offer-generator-rules";
@@ -88,8 +92,9 @@ export type OfferGeneratorInput =
 export interface OfferGeneratorOutcome {
   createdOffers: number;
   changedOffers: number;
-  /** The new post the created offers are the lots of (#2030), when one was asked for. */
-  post: { postNo: number } | null;
+  /** The new posts the created offers are the lots of (#2030), in order — several where the limit on
+   *  lots per post split them (#2480); empty when none was asked for. */
+  posts: { postNo: number }[];
   /** The proposal the created offers became lots of (#2287), when one was picked. */
   proposal: { proposalNo: number } | null;
 }
@@ -165,6 +170,17 @@ const OPTION: React.CSSProperties = {
 
 const HINT: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-secondary)" };
 
+/** The two ways the limit spreads the lots (#2480); the first is chosen when the dialog opens. */
+const POST_SPLITS: { value: GeneratorPostSplit; label: string }[] = [
+  { value: "fill", label: "Fill to the limit" },
+  { value: "even", label: "Even" },
+];
+
+/** 40, 40 and 5 — each post's lots, as the hint names them. */
+function listSizes(sizes: readonly number[]): string {
+  return sizes.length < 2 ? sizes.join("") : `${sizes.slice(0, -1).join(", ")} and ${sizes[sizes.length - 1]}`;
+}
+
 const TITLE_INPUT: React.CSSProperties = {
   ...formControl,
   width: "24rem",
@@ -175,6 +191,8 @@ const TITLE_INPUT: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
 };
+
+const LIMIT_INPUT: React.CSSProperties = { ...TITLE_INPUT, width: "5.5rem" };
 
 // Fixed columns, so fifty lines read as a table: tick, toggle, name, combination, catalogue, quantity,
 // outcome (#1368, the tick #1887). The tick is the copy list's own strip, so it runs from the row's
@@ -241,6 +259,7 @@ export function OfferGeneratorDialog({
   platformId,
   platformName,
   facebook,
+  groupMaxLotsPerPost = null,
   direct = false,
   input,
   onClose,
@@ -255,6 +274,8 @@ export function OfferGeneratorDialog({
   platformName: string;
   /** On Facebook, the group every new offer is in and when an auction there closes (#1663). */
   facebook: FacebookCreateChoice;
+  /** The group's *Max lots per post* (#2480), what this run's limit starts from; null is none. */
+  groupMaxLotsPerPost?: number | null;
   /** The platform is Direct, whose new offers may become the lots of a proposal (#2287). */
   direct?: boolean;
   input: OfferGeneratorInput;
@@ -282,6 +303,10 @@ export function OfferGeneratorDialog({
   // Null until the collector ticks, unticks or types: until then the plan decides (#2105).
   const [inPostChoice, setInPostChoice] = useState<boolean | null>(null);
   const [typedTitle, setTypedTitle] = useState<string | null>(null);
+  // The most lots in one post (#2480): the group's, changed here for this run only; empty is no limit.
+  const [limitText, setLimitText] = useState(groupMaxLotsPerPost == null ? "" : String(groupMaxLotsPerPost));
+  const [postSplit, setPostSplit] = useState<GeneratorPostSplit>("fill");
+  const maxLotsPerPost = limitText.trim() === "" ? null : Number(limitText);
   // Into a proposal (#2287): on Direct only, among the proposals being prepared (#2307); empty is none.
   // It starts on the proposal last chosen here or in *New offer* (#2304), and remembers the choice.
   const proposalChoice = useProposalChoice(collectionId, direct);
@@ -340,8 +365,13 @@ export function OfferGeneratorDialog({
   const postTitle = typedTitle ?? plan.title;
   const intoPost = offerPost && inPost;
   const postRefusal = intoPost
-    ? generatorPostRefusal({ facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle })
+    ? generatorPostRefusal({ facebookGroupId: facebook.facebookGroupId, newOffers, title: postTitle, maxLotsPerPost })
     : null;
+  // How many lots each new post takes (#2480): one post with no limit or a pass that fits under it.
+  const postSizes = useMemo(
+    () => (intoPost ? generatorPostSizes(newOffers, maxLotsPerPost, postSplit) : []),
+    [intoPost, newOffers, maxLotsPerPost, postSplit]
+  );
   const canConfirm =
     !!preview &&
     !isPlaceholderData &&
@@ -349,14 +379,19 @@ export function OfferGeneratorDialog({
     !preview.creationBlock &&
     !postRefusal &&
     !isPending;
-  // Each ticked new offer's lot in the post, in the preview's order — the order the lots are written.
-  const lotNos = useMemo(() => {
-    const byLine = new Map<string, number>();
+  // Each ticked new offer's lot, in the preview's order — the order the lots are written — and its post
+  // when the limit makes several (#2480), each post's lots numbered from 1.
+  const lotPlaces = useMemo(() => {
+    const places = generatorLotPlaces(postSizes);
+    const byLine = new Map<string, string>();
     for (const line of lines) {
-      if (line.target.kind === "new" && !skip.has(line.id)) byLine.set(line.id, byLine.size + 1);
+      if (line.target.kind !== "new" || skip.has(line.id)) continue;
+      const place = places[byLine.size];
+      if (!place) break;
+      byLine.set(line.id, postSizes.length > 1 ? `post ${place.post} · lot ${place.lot}` : `lot ${place.lot}`);
     }
     return byLine;
-  }, [lines, skip]);
+  }, [lines, skip, postSizes]);
   const allTicked = lines.length > 0 && selection.leftOffers === 0;
   // The copies already in an open offer, by the line they are on: the ticked lines only, as the note
   // spoke of the copies the ticked lines would list (#2339). A copy swapped out goes at once, before
@@ -395,7 +430,15 @@ export function OfferGeneratorDialog({
     setSkip(allTicked ? new Set(lines.map((line) => line.id)) : new Set());
   }
 
-  const created = `Create ${plural(newOffers, "offer", "offers")}${intoPost ? " in a new post" : intoProposal ? " in the proposal" : ""}`;
+  const created = `Create ${plural(newOffers, "offer", "offers")}${
+    intoPost
+      ? postSizes.length > 1
+        ? ` in ${postSizes.length} new posts`
+        : " in a new post"
+      : intoProposal
+        ? " in the proposal"
+        : ""
+  }`;
   const actionLabel =
     changedOffers > 0 && newOffers > 0
       ? `${created}, add to ${changedOffers}`
@@ -411,7 +454,9 @@ export function OfferGeneratorDialog({
     const commitQuery = generatorRequestParams({
       ...request,
       skip: lines.flatMap((line) => (skip.has(line.id) ? [line.id] : [])),
-      ...(intoPost ? { postTitle } : {}),
+      ...(intoPost
+        ? { postTitle, ...(maxLotsPerPost !== null ? { maxLotsPerPost, postSplit } : {}) }
+        : {}),
       ...(intoProposal ? { proposalId: intoProposal } : {}),
     }).toString();
     startTransition(async () => {
@@ -422,7 +467,7 @@ export function OfferGeneratorDialog({
         onDone({
           createdOffers: result.createdOffers,
           changedOffers: result.changedOffers,
-          post: result.post ? { postNo: result.post.postNo } : null,
+          posts: result.posts.map((post) => ({ postNo: post.postNo })),
           proposal: intoProposal
             ? { proposalNo: openProposals.find((p) => p.proposalId === intoProposal)!.proposalNo }
             : null,
@@ -541,7 +586,47 @@ export function OfferGeneratorDialog({
                     style={TITLE_INPUT}
                     {...NO_AUTOFILL}
                   />
-                  {postRefusal && <span style={HINT}>{postRefusal}</span>}
+                  <label style={{ ...OPTION, alignItems: "center" }}>
+                    <span>Max lots per post</span>
+                    <input
+                      type="number"
+                      aria-label="Max lots per post"
+                      min={1}
+                      step={1}
+                      value={limitText}
+                      onChange={(e) => setLimitText(e.target.value)}
+                      disabled={isPending}
+                      placeholder="No limit"
+                      style={LIMIT_INPUT}
+                    />
+                  </label>
+                  {maxLotsPerPost !== null && (
+                    <span role="radiogroup" aria-label="How the lots are split" style={{ display: "flex", gap: "0.75rem" }}>
+                      {POST_SPLITS.map((option) => (
+                        <label key={option.value} style={{ ...OPTION, alignItems: "center" }}>
+                          <input
+                            type="radio"
+                            name="generator-post-split"
+                            checked={postSplit === option.value}
+                            onChange={() => setPostSplit(option.value)}
+                            disabled={isPending}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </span>
+                  )}
+                  {postRefusal ? (
+                    <span style={HINT}>{postRefusal}</span>
+                  ) : (
+                    postSizes.length > 1 && (
+                      <span style={HINT}>
+                        — {postSizes.length} posts of {listSizes(postSizes)} lots, titled “
+                        {generatorPostTitles(postTitle, postSizes.length)[0]}” to “
+                        {generatorPostTitles(postTitle, postSizes.length)[postSizes.length - 1]}”.
+                      </span>
+                    )
+                  )}
                 </>
               )}
               {!inPost && preview && newOffers < 2 && (
@@ -579,7 +664,7 @@ export function OfferGeneratorDialog({
             <Callout tone="warning">The offers could not be planned. Close the dialog and try again.</Callout>
           ) : (
             <>
-              <Summary preview={preview} selection={selection} mode={mode} />
+              <Summary preview={preview} selection={selection} mode={mode} postSizes={postSizes} />
               {preview.creationBlock && <Callout tone="warning">{preview.creationBlock}</Callout>}
               <ListedElsewhereSummary
                 copies={listedElsewhere}
@@ -614,7 +699,7 @@ export function OfferGeneratorDialog({
                       vendorMaps={vendorMaps}
                       line={line}
                       ticked={!skip.has(line.id)}
-                      lotNo={intoPost ? (lotNos.get(line.id) ?? null) : null}
+                      lotPlace={intoPost ? (lotPlaces.get(line.id) ?? null) : null}
                       resultingSetCount={keptResultingSetCount(lines, skip, line.id)}
                       listed={listedByLine.get(line.id) ?? NONE_LISTED}
                       onSwap={swap}
@@ -711,10 +796,13 @@ function Summary({
   preview,
   selection,
   mode,
+  postSizes,
 }: {
   preview: NonNullable<ReturnType<typeof useOfferGeneratorPreview>["data"]>;
   selection: GeneratorSelection;
   mode: GeneratorMode;
+  /** The lots of each new post (#2480); empty when the new offers go into none. */
+  postSizes: readonly number[];
 }) {
   const { skipped, otherModeCopies } = preview;
   const skippedCount = skipped.reduce((n, entry) => n + entry.count, 0);
@@ -726,6 +814,7 @@ function Summary({
           `, ${plural(selection.changedOffers, "existing offer", "existing offers")} receiving sets`}
         {" · "}
         {plural(selection.sets, "set", "sets")} · {plural(selection.copies, "copy", "copies")}
+        {postSizes.length > 0 && ` · ${plural(postSizes.length, "new post", "new posts")}`}
       </div>
       {skippedCount > 0 && (
         <div style={HINT}>
@@ -818,7 +907,7 @@ function Line({
   vendorMaps,
   line,
   ticked,
-  lotNo,
+  lotPlace,
   resultingSetCount,
   listed,
   onSwap,
@@ -833,8 +922,9 @@ function Line({
   vendorMaps: VendorMaps;
   line: GeneratorLineView;
   ticked: boolean;
-  /** The new offer's lot in the new post (#2030), or null when there is no post or it is no lot. */
-  lotNo: number | null;
+  /** The new offer's lot in the new post (#2030) — *lot 5*, or *post 2 · lot 5* where the limit makes
+   *  several posts (#2480) — or null when there is no post or it is no lot. */
+  lotPlace: string | null;
   /** What the receiving offer will hold, the unticked lines before it left out. */
   resultingSetCount: number;
   /** Its copies already in an open offer (#2479) — none while it is unticked. */
@@ -929,7 +1019,7 @@ function Line({
           ) : (
             <>
               <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>New offer</span>
-              {lotNo !== null && <span style={HINT}>· lot {lotNo}</span>}
+              {lotPlace !== null && <span style={HINT}>· {lotPlace}</span>}
               {line.biddingMatches.length > 0 && (
                 <Tooltip content={biddingNote(line.biddingMatches)}>
                   <Icon name="warning" size="sm" color="var(--color-text-muted)" />

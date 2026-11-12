@@ -240,6 +240,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         auctionCaptionTemplate: " {title} from {startingPrice} ",
         quickBuyCaptionTemplate: " {title} {price} ",
         captionPostTemplate: " Lots {offer}\n{terms} ",
+        maxLotsPerPost: 40,
       }),
       {
         listingType: "fixed",
@@ -258,6 +259,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         auctionCaptionTemplate: "{title} from {startingPrice}",
         quickBuyCaptionTemplate: "{title} {price}",
         captionPostTemplate: "Lots {offer}\n{terms}",
+        maxLotsPerPost: 40,
       }
     );
     assert.throws(
@@ -280,6 +282,23 @@ describe("cleanFacebookDefaults (#1661)", () => {
       () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, refreshQuickBuysAfterDays: 0 }),
       /Refresh quick buys after/
     );
+    // A limit on lots per post is a whole number from 1 (#2480).
+    for (const maxLotsPerPost of [0, -3, 2.5, 1001]) {
+      assert.throws(
+        () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, maxLotsPerPost }),
+        /most lots in one post/
+      );
+    }
+    assert.equal(cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, maxLotsPerPost: 1 }).maxLotsPerPost, 1);
+  });
+
+  it("follows the platform's limit on lots per post unless the group holds its own (#2480)", () => {
+    const platform = { ...FACEBOOK_BLANK_SETTINGS, maxLotsPerPost: 40 };
+    const following = { ...FACEBOOK_BLANK_SETTINGS, maxLotsPerPost: 10, currency: null, custom: [] };
+    assert.equal(effectiveFacebookGroupSettings(following, platform).maxLotsPerPost, 40);
+    // A custom *no limit* where Facebook has one.
+    const none = { ...FACEBOOK_BLANK_SETTINGS, maxLotsPerPost: null, currency: null, custom: ["maxLotsPerPost"] };
+    assert.equal(effectiveFacebookGroupSettings(none, platform).maxLotsPerPost, null);
   });
 });
 
@@ -301,6 +320,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
     auctionCaptionTemplate: "Platform caption {startingPrice}",
     quickBuyCaptionTemplate: "Platform caption {price}",
     captionPostTemplate: "Platform lots {offer}",
+    maxLotsPerPost: 40,
   };
 
   it("reads every setting from the platform for a group that follows it throughout", () => {
@@ -318,6 +338,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       refreshQuickBuysAfterDays: 10,
       buyerMessageTemplate: "Group {total}",
       quickBuyCaptionTemplate: "Group caption {price}",
+      maxLotsPerPost: 25,
       custom: [
         "standingNote",
         "startingPrice",
@@ -329,6 +350,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
         "buyerMessageTemplate",
         "multiLotLayout",
         "quickBuyCaptionTemplate",
+        "maxLotsPerPost",
       ],
     };
     assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
@@ -349,6 +371,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       auctionCaptionTemplate: "Platform caption {startingPrice}",
       quickBuyCaptionTemplate: "Group caption {price}",
       captionPostTemplate: "Platform lots {offer}",
+      maxLotsPerPost: 25,
       currency: "EUR",
     });
   });

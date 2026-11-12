@@ -3032,6 +3032,11 @@ model FacebookGroup {
   // A followed setting like the rest (`refreshQuickBuysAfterDays` in `customSettings`).
   refreshQuickBuysAfterDays Int?
 
+  // ── How many lots one post may hold ───────────────────────────────────────────────────────────
+  // The group's limit on lots per post (#2480): Generate offers' *In a new post* splits its new
+  // offers into as many posts as it needs. Null is no limit. A followed setting like the rest.
+  maxLotsPerPost Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -3077,6 +3082,8 @@ model FacebookDefaults {
   closingTime        String?
   // After how many days an active quick buy needs posting again (#1718); null is never.
   refreshQuickBuysAfterDays Int?
+  // How many lots one post may hold (#2480); null is no limit, which every group follows to begin with.
+  maxLotsPerPost Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

@@ -600,6 +600,27 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   empty, and the refusal asks for a title as before. Unticked where fewer than two new offers, the
   box shows `generatorPostRefusal`'s reason beside it. Nothing reaches the server that did not before.
 
+- **Generate offers splits its new offers into posts by the group's *Max lots per post*** (#2480,
+  settled with the collector on 2026-11-12; the issue's *to be confirmed* points implemented as
+  written). `maxLotsPerPost` is a followed setting under #1661's rule (`FACEBOOK_GROUP_SETTINGS`, the
+  *Several-lot posts* tab, on `FacebookDefaults` and each group; null is no limit and the migration
+  stored null everywhere, so nothing changed until it is set). `FacebookGroupChoice` carries the
+  effective value, the quick offer bar hands it to the dialog when it opens, and the dialog's field
+  starts from it and is the run's own — the commit carries `maxLotsPerPost` + `postSplit` beside
+  `postTitle`, never written back. The split is pure (`offer-generator-rules.ts`):
+  `generatorPostSizes` (`fill` 40/40/5, the default; `even` 29/28/28, larger posts first),
+  `generatorLotPlaces` (each post's lots from 1, what the preview's *post 2 · lot 5* reads) and
+  `generatorPostTitles` (*(1/3)* after the typed title; one post keeps it as typed).
+  `commitOfferGeneration` cuts the created offers, in the preview's order, and calls
+  `writeFacebookPost` once per post inside the same transaction — so a refused post still rolls every
+  offer back — with `allowOneLot` (`facebookPostRefusal`'s `minLots`), since the remainder of *Fill to
+  the limit* may be a single lot; such a post is titled by the pass, not following its offer (#2116).
+  `generatorPostRefusal` still asks for at least two new offers in all and refuses a limit that is not
+  a whole number from 1. `OfferGeneratorResult.posts` lists them; the toast opens the first. The agent
+  API exposes no group settings, so it has nothing to read or set here. Tests: the split in
+  `tests/unit/offer-generator-rules.test.ts`, the posts in
+  `tests/integration/offer-generator-facebook-post.test.ts`.
+
 - **A post's lots can be reordered before it goes up** (#1986, raised on 2026-10-16; ADR-0061 §2 as
   amended). `reorderFacebookLots` (`facebook-posts.ts`) takes **every** lot's offer id in the new order
   and renumbers them in two passes (the unique index, `detachFacebookLot`'s shape); it refuses once a

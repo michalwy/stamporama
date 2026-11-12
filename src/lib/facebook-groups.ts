@@ -102,6 +102,7 @@ interface SettingsRow {
   auctionCaptionTemplate: string;
   quickBuyCaptionTemplate: string;
   captionPostTemplate: string;
+  maxLotsPerPost: number | null;
 }
 
 /** A settings row's columns as the plain values the rules and the client hold. */
@@ -124,6 +125,7 @@ export function toPostingSettings(row: SettingsRow): FacebookPostingSettings {
     auctionCaptionTemplate: row.auctionCaptionTemplate,
     quickBuyCaptionTemplate: row.quickBuyCaptionTemplate,
     captionPostTemplate: row.captionPostTemplate,
+    maxLotsPerPost: row.maxLotsPerPost,
   };
 }
 
@@ -167,6 +169,7 @@ const GROUP_SELECT = {
   auctionCaptionTemplate: true,
   quickBuyCaptionTemplate: true,
   captionPostTemplate: true,
+  maxLotsPerPost: true,
   currency: true,
   _count: { select: { offers: true } },
 } as const;
@@ -272,6 +275,7 @@ function settingsColumns(values: FacebookPostingSettings) {
     auctionCaptionTemplate: values.auctionCaptionTemplate,
     quickBuyCaptionTemplate: values.quickBuyCaptionTemplate,
     captionPostTemplate: values.captionPostTemplate,
+    maxLotsPerPost: values.maxLotsPerPost,
   };
 }
 

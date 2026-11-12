@@ -12,7 +12,10 @@ import {
   keptFingerprint,
   keptResultingSetCount,
   parseGeneratorRequest,
+  generatorLotPlaces,
   generatorPostRefusal,
+  generatorPostSizes,
+  generatorPostTitles,
   parsePlanFingerprint,
   planOffers,
   issueLineTitle,
@@ -652,6 +655,71 @@ describe("generating into a new post (#2030)", () => {
     assert.match(generatorPostRefusal({ ...asked, facebookGroupId: null })!, /Only Facebook offers/);
     assert.match(generatorPostRefusal({ ...asked, newOffers: 1 })!, /at least two new offers/);
     assert.match(generatorPostRefusal({ ...asked, title: "  " })!, /needs a title/);
+  });
+});
+
+describe("splitting the new offers into posts (#2480)", () => {
+  it("fills each post to the limit and leaves the rest to the last", () => {
+    assert.deepEqual(generatorPostSizes(85, 40, "fill"), [40, 40, 5]);
+    assert.deepEqual(generatorPostSizes(85, 40), [40, 40, 5], "fill is the default");
+    assert.deepEqual(generatorPostSizes(81, 40, "fill"), [40, 40, 1]);
+    assert.deepEqual(generatorPostSizes(80, 40, "fill"), [40, 40]);
+  });
+
+  it("spreads the lots evenly over the fewest posts the limit allows", () => {
+    assert.deepEqual(generatorPostSizes(85, 40, "even"), [29, 28, 28]);
+    assert.deepEqual(generatorPostSizes(81, 40, "even"), [27, 27, 27]);
+    assert.deepEqual(generatorPostSizes(7, 3, "even"), [3, 2, 2]);
+  });
+
+  it("makes one post with no limit, or when the pass fits under it", () => {
+    assert.deepEqual(generatorPostSizes(85, null), [85]);
+    assert.deepEqual(generatorPostSizes(85, undefined, "even"), [85]);
+    assert.deepEqual(generatorPostSizes(40, 40, "even"), [40]);
+    assert.deepEqual(generatorPostSizes(0, 40), []);
+  });
+
+  it("numbers the lots from 1 in each post", () => {
+    assert.deepEqual(generatorLotPlaces([2, 1]), [
+      { post: 1, lot: 1 },
+      { post: 1, lot: 2 },
+      { post: 2, lot: 1 },
+    ]);
+  });
+
+  it("titles several posts (1/3), (2/3)… and leaves one post's title as typed", () => {
+    assert.deepEqual(generatorPostTitles(" Germany 1960 ", 3), ["Germany 1960 (1/3)", "Germany 1960 (2/3)", "Germany 1960 (3/3)"]);
+    assert.deepEqual(generatorPostTitles("Germany 1960", 1), ["Germany 1960"]);
+  });
+
+  it("refuses a limit that is not a whole number from 1", () => {
+    const asked = { facebookGroupId: "g", newOffers: 5, title: "Germany" };
+    assert.equal(generatorPostRefusal({ ...asked, maxLotsPerPost: 1 }), null);
+    assert.equal(generatorPostRefusal({ ...asked, maxLotsPerPost: null }), null);
+    for (const maxLotsPerPost of [0, -1, 2.5, Number.NaN]) {
+      assert.match(generatorPostRefusal({ ...asked, maxLotsPerPost })!, /whole number from 1/);
+    }
+  });
+
+  it("carries the limit and the split to the commit only when asked", () => {
+    const base = {
+      platformId: "p",
+      mode: "singles" as const,
+      packaging: "multi" as const,
+      itemIds: ["a"],
+      filters: "",
+      targets: {},
+      skip: [],
+      facebook: { facebookGroupId: "g", endsAt: null },
+    };
+    const asked = parseGeneratorRequest(
+      generatorRequestParams({ ...base, postTitle: "T", maxLotsPerPost: 40, postSplit: "even" })
+    )!;
+    assert.equal(asked.maxLotsPerPost, 40);
+    assert.equal(asked.postSplit, "even");
+    const plain = parseGeneratorRequest(generatorRequestParams({ ...base, postTitle: "T" }))!;
+    assert.equal(plain.maxLotsPerPost, undefined);
+    assert.equal(plain.postSplit, undefined);
   });
 });
 
