@@ -914,7 +914,12 @@ export function useSeriesFromSingles(collectionId: string, platformId: string, c
  *  `generatorRequestParams`' output, so the key and the request cannot spell the choices differently.
  *  Not re-asked on focus: what the collector confirms is compared with a fresh plan on the server
  *  (#717), and a preview that changed under the cursor would make that comparison meaningless. */
-export function useOfferGeneratorPreview(collectionId: string, query: string) {
+export function useOfferGeneratorPreview(
+  collectionId: string,
+  query: string,
+  /** Whether the plan read for an earlier query stays on screen while this one is read (#2479). */
+  keepAcross?: (previousQuery: string) => boolean
+) {
   return useQuery<OfferGeneratorPreview>({
     queryKey: ["offers", collectionId, "generator", query] as const,
     queryFn: async () => {
@@ -922,6 +927,8 @@ export function useOfferGeneratorPreview(collectionId: string, query: string) {
       if (!res.ok) throw new Error("Failed to plan the offers");
       return res.json();
     },
+    placeholderData: (previous, previousQuery) =>
+      keepAcross && previousQuery && keepAcross(String(previousQuery.queryKey[3])) ? previous : undefined,
     refetchOnWindowFocus: false,
   });
 }
