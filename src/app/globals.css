@@ -206,10 +206,39 @@ html[data-page-scroll-locked] {
 }
 
 /* A list scrolled to its end stops there: inside a dialog it does not drag the dialog body along,
-   and in a popover or picker it does not move the page. The property only acts on an element that
-   actually scrolls, so it is safe to set on everything inside a dialog. */
+   and in a popover or picker it does not move the page (#1577).
+
+   Inside a dialog it is set only on what the collector can scroll — `overflow` `auto` or `scroll`,
+   on either axis — and never on everything (#2481). `overflow: hidden` also makes a box a scroll
+   container, one nobody can scroll, and a `contain` on it ends the wheel's search for something to
+   move right there: over a title cut short with an ellipsis, the wheel and the trackpad moved
+   nothing. Those cells are the ones carrying a tooltip, so it looked like the tooltip's doing.
+
+   The app's styles are inline, so the scrollers are found by what their `style` attribute says: the
+   browser's own spelling (`overflow-y: auto;`, and `overflow: hidden auto;` when both axes are set)
+   and the server's (`overflow-y:auto`). `tests/unit/page-scroll-lock.test.ts` holds both to it. */
 [role="dialog"],
-[role="dialog"] *,
+[role="dialog"]
+  :is(
+    [style*="overflow: auto"],
+    [style*="overflow: scroll"],
+    [style*="overflow: hidden auto"],
+    [style*="overflow: hidden scroll"],
+    [style*="overflow: clip auto"],
+    [style*="overflow: clip scroll"],
+    [style*="overflow: visible auto"],
+    [style*="overflow: visible scroll"],
+    [style*="overflow-x: auto"],
+    [style*="overflow-x: scroll"],
+    [style*="overflow-y: auto"],
+    [style*="overflow-y: scroll"],
+    [style*="overflow:auto"],
+    [style*="overflow:scroll"],
+    [style*="overflow-x:auto"],
+    [style*="overflow-x:scroll"],
+    [style*="overflow-y:auto"],
+    [style*="overflow-y:scroll"]
+  ),
 [role="listbox"],
 [role="menu"] {
   overscroll-behavior: contain;

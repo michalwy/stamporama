@@ -76,7 +76,8 @@ the form, next to the field that caused it, and stays there until you deal with 
 dialog to its end and keep going, and nothing else moves — not the page underneath, and not the
 dialog's own body when the list sits inside it. The same holds for a long dropdown or picker on a
 page: it stops at its last row rather than carrying the page along. Close the dialog and the page is
-exactly where you left it.
+exactly where you left it. Wherever the pointer rests in a dialog — on a name cut short, on something
+with a hint — the wheel and the trackpad scroll what is under it.
 
 ## Reduced motion
 
